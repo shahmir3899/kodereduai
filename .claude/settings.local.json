@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir:*)",
+      "Bash(npm install:*)",
+      "Bash(python manage.py makemigrations:*)",
+      "Bash(python:*)",
+      "Bash(.venvScriptspython.exe manage.py shell -c \"from attendance.models import AttendanceUpload; print\\(''Existing uploads:''\\); [print\\(f''  ID:{u.id} School:{u.school_id} Class:{u.class_obj_id} Date:{u.date} Status:{u.status}''\\) for u in AttendanceUpload.objects.all\\(\\)]; AttendanceUpload.objects.all\\(\\).delete\\(\\); print\\(''All uploads deleted.''\\)\")",
+      "Bash(cd:*)",
+      "Bash(venvScriptspython.exe manage.py shell -c \"from attendance.models import AttendanceUpload; print\\(''Existing uploads:''\\); [print\\(f''  ID:{u.id} School:{u.school_id} Class:{u.class_obj_id} Date:{u.date} Status:{u.status}''\\) for u in AttendanceUpload.objects.all\\(\\)]; AttendanceUpload.objects.all\\(\\).delete\\(\\); print\\(''All uploads deleted.''\\)\")",
+      "WebFetch(domain:docs.cloud.google.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:community.postman.com)",
+      "Bash(npx vite build:*)",
+      "Bash(npm run build:*)",
+      "Bash(xargs ls:*)",
+      "Bash(ls -la \"d:\\\\Personal\\\\smart-attendance\\\\backend\\\\core\"\" | grep \".py \")",
+      "Bash(ls -la \"d:\\\\Personal\\\\smart-attendance\"\" && echo \"=== FRONTEND ===\" && ls -la \"d:Personalsmart-attendancefrontend\" && echo \"=== BACKEND ===\" && ls -la \"d:Personalsmart-attendancebackend \")",
+      "Bash(ls:*)",
+      "Bash(git init:*)",
+      "Bash(git add:*)"
+    ]
+  }
+}

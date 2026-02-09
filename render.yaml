@@ -1,0 +1,121 @@
+# =============================================================================
+# Render Blueprint - KoderEduAI.pk Platform
+# =============================================================================
+#
+# QUICK DEPLOYMENT GUIDE
+# ======================
+#
+# STEP 1: Push to GitHub
+# ----------------------
+#   git init
+#   git add .
+#   git commit -m "Initial commit: KoderEduAI.pk Platform"
+#   git branch -M main
+#   git remote add origin https://github.com/YOUR_USERNAME/kodereduai.git
+#   git push -u origin main
+#
+# STEP 2: Deploy on Render
+# ------------------------
+#   Option A - Blueprint (Recommended):
+#     1. Go to https://dashboard.render.com
+#     2. Click "New" > "Blueprint"
+#     3. Connect your GitHub repo
+#     4. Render detects this render.yaml and creates both services
+#     5. Fill in the environment variables when prompted
+#
+#   Option B - Manual Setup:
+#     Backend (Web Service):
+#       1. New > Web Service > Connect repo
+#       2. Root Directory: backend
+#       3. Build Command: ./build.sh
+#       4. Start Command: gunicorn config.wsgi:application
+#       5. Add all env vars from backend/.env.example
+#       6. Set ENVIRONMENT=production
+#
+#     Frontend (Static Site):
+#       1. New > Static Site > Connect repo
+#       2. Root Directory: frontend
+#       3. Build Command: npm install && npm run build
+#       4. Publish Directory: dist
+#       5. Add env var: VITE_API_URL=https://YOUR-BACKEND.onrender.com
+#
+# STEP 3: Post-Deploy Checklist
+# -----------------------------
+#   1. Copy your backend URL (e.g. https://kodereduai-api.onrender.com)
+#   2. Set it as VITE_API_URL in the frontend service env vars
+#   3. Copy your frontend URL (e.g. https://kodereduai.onrender.com)
+#   4. Add it to CORS_ALLOWED_ORIGINS in backend env vars
+#   5. Add both URLs (without https://) to ALLOWED_HOSTS in backend env vars
+#   6. Redeploy frontend to pick up the new VITE_API_URL
+#
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Backend - Django API
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: kodereduai-api
+    runtime: python
+    region: oregon
+    plan: free
+    rootDir: backend
+    buildCommand: ./build.sh
+    startCommand: gunicorn config.wsgi:application
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: ALLOWED_HOSTS
+        sync: false
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        value: llama-3.3-70b-versatile
+      - key: GROQ_VISION_MODEL
+        value: llama-3.2-11b-vision-preview
+      - key: USE_VISION_PIPELINE
+        value: "True"
+      - key: VISION_PROVIDER
+        value: google
+      - key: GOOGLE_VISION_API_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: SUPABASE_BUCKET
+        value: atten-reg
+      - key: PYTHON_VERSION
+        value: "3.12.0"
+      - key: WEB_CONCURRENCY
+        value: "2"
+
+  # ---------------------------------------------------------------------------
+  # Frontend - React Static Site
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: kodereduai
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    headers:
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_URL
+        sync: false

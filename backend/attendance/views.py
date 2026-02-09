@@ -1,0 +1,684 @@
+"""
+Attendance views for upload, review, and confirmation workflow.
+"""
+
+import logging
+from rest_framework import viewsets, status
+from rest_framework.views import APIView
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.parsers import MultiPartParser, FormParser
+from django.utils import timezone
+from django.db.models import Count, Q
+
+from core.permissions import IsSchoolAdmin, HasSchoolAccess, CanConfirmAttendance
+from core.mixins import TenantQuerySetMixin, ensure_tenant_schools
+from .models import AttendanceUpload, AttendanceRecord
+from .serializers import (
+    AttendanceUploadSerializer,
+    AttendanceUploadDetailSerializer,
+    AttendanceUploadCreateSerializer,
+    AttendanceConfirmSerializer,
+    AttendanceRecordSerializer,
+)
+from students.models import Student
+
+logger = logging.getLogger(__name__)
+
+
+class ImageUploadView(APIView):
+    """
+    Upload attendance images to Supabase storage.
+    """
+    permission_classes = [IsAuthenticated, IsSchoolAdmin]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request):
+        """Upload image and return public URL."""
+        from core.storage import storage_service
+
+        if 'image' not in request.FILES:
+            return Response(
+                {'error': 'No image file provided'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        image = request.FILES['image']
+        school_id = request.data.get('school_id') or request.user.school_id
+        class_id = request.data.get('class_id', 0)
+
+        # Validate school access
+        if not request.user.is_super_admin:
+            tenant_schools = ensure_tenant_schools(request)
+            if int(school_id) not in tenant_schools:
+                return Response(
+                    {'error': 'Access denied to this school'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
+        # Validate file type
+        allowed_types = ['image/jpeg', 'image/png', 'image/webp']
+        if image.content_type not in allowed_types:
+            return Response(
+                {'error': f'Invalid file type. Allowed: {", ".join(allowed_types)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Validate file size (10MB max)
+        max_size = 10 * 1024 * 1024
+        if image.size > max_size:
+            return Response(
+                {'error': 'File too large. Maximum size is 10MB'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            url = storage_service.upload_attendance_image(image, school_id, class_id)
+            return Response({'url': url}, status=status.HTTP_201_CREATED)
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class AttendanceUploadViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
+    """
+    ViewSet for managing attendance uploads.
+
+    Workflow:
+    1. POST /uploads/ - Upload image (status = PROCESSING)
+    2. GET /uploads/{id}/ - Check status and view AI results
+    3. POST /uploads/{id}/confirm/ - Confirm attendance
+    """
+    queryset = AttendanceUpload.objects.all()
+    permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
+
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return AttendanceUploadCreateSerializer
+        if self.action == 'retrieve':
+            return AttendanceUploadDetailSerializer
+        if self.action == 'confirm':
+            return AttendanceConfirmSerializer
+        return AttendanceUploadSerializer
+
+    def create(self, request, *args, **kwargs):
+        """Override create to add detailed logging."""
+        logger.info(f"=== ATTENDANCE UPLOAD CREATE ===")
+        logger.info(f"User: {request.user} (school_id: {request.user.school_id})")
+        logger.info(f"Request data: {request.data}")
+
+        serializer = self.get_serializer(data=request.data)
+        if not serializer.is_valid():
+            logger.error(f"Validation errors: {serializer.errors}")
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        logger.info(f"Validated data: {serializer.validated_data}")
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        logger.info(f"Upload created successfully: {serializer.data}")
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
+    def get_queryset(self):
+        queryset = AttendanceUpload.objects.select_related(
+            'school', 'class_obj', 'created_by', 'confirmed_by'
+        )
+
+        # Apply tenant filtering
+        user = self.request.user
+        if not user.is_super_admin:
+            tenant_schools = ensure_tenant_schools(self.request)
+            if tenant_schools:
+                queryset = queryset.filter(school_id__in=tenant_schools)
+            else:
+                return queryset.none()
+
+        # Filter by school
+        school_id = self.request.query_params.get('school_id')
+        if school_id:
+            queryset = queryset.filter(school_id=school_id)
+
+        # Filter by class
+        class_id = self.request.query_params.get('class_id')
+        if class_id:
+            queryset = queryset.filter(class_obj_id=class_id)
+
+        # Filter by status
+        upload_status = self.request.query_params.get('status')
+        if upload_status:
+            queryset = queryset.filter(status=upload_status)
+
+        # Filter by date range
+        date_from = self.request.query_params.get('date_from')
+        date_to = self.request.query_params.get('date_to')
+        if date_from:
+            queryset = queryset.filter(date__gte=date_from)
+        if date_to:
+            queryset = queryset.filter(date__lte=date_to)
+
+        return queryset.order_by('-created_at')
+
+    def perform_create(self, serializer):
+        """Create upload and trigger processing task."""
+        upload = serializer.save(
+            created_by=self.request.user,
+            status=AttendanceUpload.Status.PROCESSING
+        )
+
+        # Try to use Celery if available, otherwise process synchronously
+        try:
+            from .tasks import process_attendance_upload
+            process_attendance_upload.delay(upload.id)
+        except Exception as e:
+            # Celery/Redis not available, process synchronously
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Celery not available, processing synchronously: {e}")
+            self._process_upload_sync(upload.id)
+
+    def _process_upload_sync(self, upload_id: int):
+        """Process attendance upload synchronously (fallback when Celery unavailable).
+
+        Note: For now, just mark as REVIEW_REQUIRED and skip AI processing
+        since Tesseract/Groq may not be configured.
+        """
+        from .models import AttendanceUpload
+        import logging
+        logger = logging.getLogger(__name__)
+
+        try:
+            upload = AttendanceUpload.objects.get(id=upload_id)
+        except AttendanceUpload.DoesNotExist:
+            logger.error(f"AttendanceUpload {upload_id} not found")
+            return
+
+        logger.info(f"Processing attendance upload {upload_id}")
+
+        # Use the new processing pipeline: OCR → Table → LLM Reasoning
+        try:
+            from .attendance_processor import AttendanceProcessor
+            processor = AttendanceProcessor(upload)
+            result = processor.process()
+
+            if result.success:
+                upload.ai_output_json = result.to_ai_output_json()
+                upload.confidence_score = result.confidence
+                upload.status = AttendanceUpload.Status.REVIEW_REQUIRED
+                upload.save()
+                logger.info(f"Upload {upload_id} processed successfully with AI pipeline")
+            else:
+                # AI failed, but still allow manual review
+                upload.status = AttendanceUpload.Status.REVIEW_REQUIRED
+                upload.error_message = f"AI processing failed at {result.error_stage}: {result.error}"
+                upload.ai_output_json = {'matched': [], 'unmatched': [], 'notes': 'AI processing unavailable'}
+                upload.save()
+                logger.warning(f"Upload {upload_id} AI failed, set for manual review: {result.error}")
+
+        except Exception as e:
+            logger.warning(f"AI processing error for upload {upload_id}: {e}")
+            # Still allow manual review even if AI fails
+            upload.status = AttendanceUpload.Status.REVIEW_REQUIRED
+            upload.error_message = f"AI unavailable: {str(e)[:200]}"
+            upload.ai_output_json = {'matched': [], 'unmatched': [], 'notes': 'AI processing unavailable'}
+            upload.save()
+            logger.info(f"Upload {upload_id} set for manual review (AI unavailable)")
+
+    def destroy(self, request, *args, **kwargs):
+        """
+        Delete an attendance upload.
+        Only non-confirmed uploads can be deleted.
+        """
+        upload = self.get_object()
+
+        if upload.status == AttendanceUpload.Status.CONFIRMED:
+            return Response(
+                {'error': 'Cannot delete a confirmed attendance upload. The records have already been created.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        logger.info(f"Deleting attendance upload {upload.id} (status: {upload.status})")
+
+        # Delete associated images from storage if needed
+        # (Supabase cascade should handle DB records)
+
+        return super().destroy(request, *args, **kwargs)
+
+    @action(detail=True, methods=['post'], permission_classes=[CanConfirmAttendance])
+    def confirm(self, request, pk=None):
+        """
+        Confirm attendance and create records.
+
+        This is the CRITICAL action that:
+        1. Creates AttendanceRecords for all students
+        2. Marks absent students based on confirmed list
+        3. Triggers WhatsApp notifications (if enabled)
+        """
+        upload = self.get_object()
+
+        # Validate upload can be confirmed
+        if upload.status == AttendanceUpload.Status.CONFIRMED:
+            return Response(
+                {'error': 'This upload has already been confirmed.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if upload.status not in [
+            AttendanceUpload.Status.REVIEW_REQUIRED,
+            AttendanceUpload.Status.PROCESSING
+        ]:
+            return Response(
+                {'error': f'Cannot confirm upload with status: {upload.get_status_display()}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Validate request data
+        serializer = AttendanceConfirmSerializer(
+            data=request.data,
+            context={'upload': upload, 'request': request}
+        )
+        serializer.is_valid(raise_exception=True)
+
+        absent_student_ids = set(serializer.validated_data['absent_student_ids'])
+        name_corrections = serializer.validated_data.get('name_corrections', [])
+        roll_corrections = serializer.validated_data.get('roll_corrections', [])
+
+        # Get all active students in the class
+        all_students = Student.objects.filter(
+            school=upload.school,
+            class_obj=upload.class_obj,
+            is_active=True
+        )
+
+        # Create attendance records
+        created_records = []
+        for student in all_students:
+            record, created = AttendanceRecord.objects.update_or_create(
+                student=student,
+                date=upload.date,
+                defaults={
+                    'school': upload.school,
+                    'status': (
+                        AttendanceRecord.AttendanceStatus.ABSENT
+                        if student.id in absent_student_ids
+                        else AttendanceRecord.AttendanceStatus.PRESENT
+                    ),
+                    'source': AttendanceRecord.Source.IMAGE_AI,
+                    'upload': upload,
+                }
+            )
+            created_records.append(record)
+
+        # Update upload status
+        upload.status = AttendanceUpload.Status.CONFIRMED
+        upload.confirmed_by = request.user
+        upload.confirmed_at = timezone.now()
+        upload.save()
+
+        # Record corrections for learning loop
+        try:
+            from .learning_service import LearningService
+            learning_service = LearningService(upload.school)
+            learning_stats = learning_service.record_corrections(
+                upload,
+                list(absent_student_ids),
+                name_corrections=name_corrections,
+                roll_corrections=roll_corrections,
+            )
+            logger.info(f"Learning feedback recorded: {learning_stats}")
+        except Exception as e:
+            logger.warning(f"Failed to record learning feedback: {e}")
+            learning_stats = {}
+
+        # Trigger WhatsApp notifications for absent students
+        if upload.school.get_enabled_module('whatsapp'):
+            from .tasks import send_whatsapp_notifications
+            send_whatsapp_notifications.delay(upload.id)
+
+        return Response({
+            'success': True,
+            'message': 'Attendance confirmed successfully.',
+            'total_students': len(created_records),
+            'absent_count': len(absent_student_ids),
+            'present_count': len(created_records) - len(absent_student_ids),
+            'learning_stats': learning_stats,
+        })
+
+    @action(detail=False, methods=['get'])
+    def pending_review(self, request):
+        """Get all uploads pending review."""
+        queryset = self.get_queryset().filter(
+            status=AttendanceUpload.Status.REVIEW_REQUIRED
+        )
+        serializer = AttendanceUploadSerializer(queryset, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['post'])
+    def reprocess(self, request, pk=None):
+        """
+        Manually trigger AI reprocessing for an upload.
+        Useful when AI processing failed initially.
+        """
+        upload = self.get_object()
+
+        if upload.status == AttendanceUpload.Status.CONFIRMED:
+            return Response(
+                {'error': 'Cannot reprocess a confirmed upload.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        logger.info(f"Reprocessing upload {upload.id}")
+        upload.status = AttendanceUpload.Status.PROCESSING
+        upload.error_message = ''
+        upload.save()
+
+        # Process synchronously
+        self._process_upload_sync(upload.id)
+
+        # Refresh from DB
+        upload.refresh_from_db()
+
+        return Response({
+            'success': True,
+            'status': upload.status,
+            'matched_count': upload.ai_output_json.get('matched_count', 0) if upload.ai_output_json else 0,
+            'error': upload.error_message or None,
+        })
+
+    @action(detail=True, methods=['get'])
+    def test_image(self, request, pk=None):
+        """
+        Test if the image URL is accessible.
+        Returns image info if successful.
+        """
+        import requests as req
+        from PIL import Image
+        from io import BytesIO
+
+        upload = self.get_object()
+
+        try:
+            logger.info(f"Testing image access: {upload.image_url}")
+            response = req.get(upload.image_url, timeout=30)
+            response.raise_for_status()
+
+            # Try to open as image
+            img = Image.open(BytesIO(response.content))
+
+            return Response({
+                'success': True,
+                'url': upload.image_url,
+                'size_bytes': len(response.content),
+                'dimensions': f"{img.width}x{img.height}",
+                'format': img.format,
+                'content_type': response.headers.get('content-type'),
+            })
+        except req.RequestException as e:
+            logger.error(f"Image fetch failed: {e}")
+            return Response({
+                'success': False,
+                'url': upload.image_url,
+                'error': str(e),
+            }, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            logger.error(f"Image test failed: {e}")
+            return Response({
+                'success': False,
+                'url': upload.image_url,
+                'error': str(e),
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class AIStatusView(APIView):
+    """
+    Returns the current AI processing configuration and status.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from django.conf import settings
+
+        # Check vision pipeline settings
+        use_vision = getattr(settings, 'USE_VISION_PIPELINE', True)
+        vision_provider = getattr(settings, 'VISION_PROVIDER', 'google')
+
+        # Check if required API keys are configured
+        google_key = getattr(settings, 'GOOGLE_VISION_API_KEY', '')
+        google_creds = getattr(settings, 'GOOGLE_APPLICATION_CREDENTIALS', '')
+        groq_key = getattr(settings, 'GROQ_API_KEY', '')
+        groq_vision_model = getattr(settings, 'GROQ_VISION_MODEL', 'llama-3.2-11b-vision-preview')
+
+        # Determine if AI is available
+        ai_available = False
+        provider_status = 'not_configured'
+        provider_name = 'None'
+        model_name = None
+
+        if use_vision:
+            if vision_provider == 'google':
+                if google_key or google_creds:
+                    ai_available = True
+                    provider_status = 'configured'
+                    provider_name = 'Google Cloud Vision'
+                    model_name = 'DOCUMENT_TEXT_DETECTION'
+                else:
+                    provider_status = 'missing_credentials'
+            else:  # groq
+                if groq_key:
+                    ai_available = True
+                    provider_status = 'configured'
+                    provider_name = 'Groq Vision'
+                    model_name = groq_vision_model
+                else:
+                    provider_status = 'missing_credentials'
+        else:
+            # Legacy Tesseract OCR
+            provider_name = 'Tesseract OCR (Legacy)'
+            provider_status = 'configured'
+            ai_available = True  # Tesseract doesn't need API keys
+
+        return Response({
+            'ai_available': ai_available,
+            'provider': vision_provider if use_vision else 'tesseract',
+            'provider_name': provider_name,
+            'model': model_name,
+            'status': provider_status,
+            'use_vision_pipeline': use_vision,
+        })
+
+
+class AttendanceRecordViewSet(TenantQuerySetMixin, viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for viewing attendance records.
+    """
+    queryset = AttendanceRecord.objects.all()
+    serializer_class = AttendanceRecordSerializer
+    permission_classes = [IsAuthenticated, HasSchoolAccess]
+
+    def get_queryset(self):
+        queryset = AttendanceRecord.objects.select_related(
+            'school', 'student', 'student__class_obj', 'upload'
+        )
+
+        # Apply tenant filtering
+        user = self.request.user
+        if not user.is_super_admin:
+            tenant_schools = ensure_tenant_schools(self.request)
+            if tenant_schools:
+                queryset = queryset.filter(school_id__in=tenant_schools)
+            else:
+                return queryset.none()
+
+        # Filter by school
+        school_id = self.request.query_params.get('school_id')
+        if school_id:
+            queryset = queryset.filter(school_id=school_id)
+
+        # Filter by class
+        class_id = self.request.query_params.get('class_id')
+        if class_id:
+            queryset = queryset.filter(student__class_obj_id=class_id)
+
+        # Filter by date (exact or range)
+        date = self.request.query_params.get('date')
+        if date:
+            queryset = queryset.filter(date=date)
+
+        date_from = self.request.query_params.get('date_from')
+        if date_from:
+            queryset = queryset.filter(date__gte=date_from)
+
+        date_to = self.request.query_params.get('date_to')
+        if date_to:
+            queryset = queryset.filter(date__lte=date_to)
+
+        # Filter by status
+        record_status = self.request.query_params.get('status')
+        if record_status:
+            queryset = queryset.filter(status=record_status)
+
+        return queryset.order_by('-date', 'student__class_obj', 'student__roll_number')
+
+    @action(detail=False, methods=['get'])
+    def daily_report(self, request):
+        """Get daily attendance report."""
+        date = request.query_params.get('date', timezone.now().date())
+        school_id = request.query_params.get('school_id') or request.user.school_id
+
+        if not school_id:
+            return Response({'error': 'school_id is required'}, status=400)
+
+        # Get counts
+        total = Student.objects.filter(school_id=school_id, is_active=True).count()
+        records = AttendanceRecord.objects.filter(school_id=school_id, date=date)
+
+        absent_records = records.filter(status=AttendanceRecord.AttendanceStatus.ABSENT)
+
+        return Response({
+            'date': date,
+            'total_students': total,
+            'present_count': records.filter(status=AttendanceRecord.AttendanceStatus.PRESENT).count(),
+            'absent_count': absent_records.count(),
+            'absent_students': AttendanceRecordSerializer(absent_records, many=True).data,
+        })
+
+    @action(detail=False, methods=['get'])
+    def chronic_absentees(self, request):
+        """Get students with high absence rates."""
+        school_id = request.query_params.get('school_id') or request.user.school_id
+        days = int(request.query_params.get('days', 30))
+        threshold = float(request.query_params.get('threshold', 20))  # % absent
+
+        if not school_id:
+            return Response({'error': 'school_id is required'}, status=400)
+
+        date_from = timezone.now().date() - timezone.timedelta(days=days)
+
+        # Get absence counts per student
+        from django.db.models import Count, F
+        from django.db.models.functions import Cast
+        from django.db.models import FloatField
+
+        students = Student.objects.filter(
+            school_id=school_id,
+            is_active=True
+        ).annotate(
+            absent_count=Count(
+                'attendance_records',
+                filter=Q(
+                    attendance_records__date__gte=date_from,
+                    attendance_records__status=AttendanceRecord.AttendanceStatus.ABSENT
+                )
+            ),
+            total_days=Count(
+                'attendance_records',
+                filter=Q(attendance_records__date__gte=date_from)
+            )
+        ).filter(
+            total_days__gt=0
+        )
+
+        # Calculate percentage and filter
+        chronic = []
+        for student in students:
+            if student.total_days > 0:
+                percentage = (student.absent_count / student.total_days) * 100
+                if percentage >= threshold:
+                    chronic.append({
+                        'student': {
+                            'id': student.id,
+                            'name': student.name,
+                            'roll_number': student.roll_number,
+                            'class_name': student.class_obj.name,
+                        },
+                        'absent_count': student.absent_count,
+                        'total_days': student.total_days,
+                        'absence_percentage': round(percentage, 1),
+                    })
+
+        # Sort by absence percentage descending
+        chronic.sort(key=lambda x: x['absence_percentage'], reverse=True)
+
+        return Response({
+            'period_days': days,
+            'threshold_percentage': threshold,
+            'chronic_absentees': chronic,
+        })
+
+    @action(detail=False, methods=['get'])
+    def accuracy_stats(self, request):
+        """
+        Get AI accuracy statistics for the current school.
+        Shows how often AI predictions match human confirmations.
+        """
+        from .learning_service import LearningService
+
+        school_id = request.query_params.get('school_id') or request.user.school_id
+        if not school_id:
+            return Response({'error': 'school_id is required'}, status=400)
+
+        try:
+            from schools.models import School
+            school = School.objects.get(id=school_id)
+        except School.DoesNotExist:
+            return Response({'error': 'School not found'}, status=404)
+
+        days = int(request.query_params.get('days', 30))
+
+        learning_service = LearningService(school)
+        stats = learning_service.get_school_accuracy_stats(days=days)
+        trend = learning_service.get_accuracy_trend(weeks=4)
+        common_errors = learning_service.get_common_ocr_errors(limit=10)
+
+        return Response({
+            'school_name': school.name,
+            'period_stats': stats,
+            'weekly_trend': trend,
+            'common_ocr_errors': common_errors,
+        })
+
+    @action(detail=False, methods=['get'])
+    def mapping_suggestions(self, request):
+        """
+        Get suggestions for improving mark mappings based on OCR errors.
+        """
+        from .learning_service import LearningService
+
+        school_id = request.query_params.get('school_id') or request.user.school_id
+        if not school_id:
+            return Response({'error': 'school_id is required'}, status=400)
+
+        try:
+            from schools.models import School
+            school = School.objects.get(id=school_id)
+        except School.DoesNotExist:
+            return Response({'error': 'School not found'}, status=404)
+
+        learning_service = LearningService(school)
+        suggestions = learning_service.suggest_mark_mapping_updates()
+
+        return Response({
+            'school_name': school.name,
+            **suggestions
+        })

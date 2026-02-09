@@ -1,0 +1,80 @@
+# ==============================
+# Python
+# ==============================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+dist/
+build/
+*.whl
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Virtual environments
+venv/
+env/
+.venv/
+ENV/
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# Django
+*.log
+db.sqlite3
+db.sqlite3-journal
+staticfiles/
+media/
+
+# ==============================
+# Node / Frontend
+# ==============================
+node_modules/
+frontend/dist/
+*.local
+.cache
+
+# ==============================
+# Environment variables
+# ==============================
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# ==============================
+# IDE / Editor
+# ==============================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# ==============================
+# OS
+# ==============================
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+nul
+
+# ==============================
+# Misc
+# ==============================
+*.bak
+*.tmp
+*.temp
+*.coverage
+htmlcov/
+.tox/
+.pytest_cache/
