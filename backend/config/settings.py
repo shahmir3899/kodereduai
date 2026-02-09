@@ -30,7 +30,7 @@ if IS_PRODUCTION and not SECRET_KEY:
 # DEBUG is derived from ENVIRONMENT — no separate toggle needed
 DEBUG = not IS_PRODUCTION
 
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+ALLOWED_HOSTS = [h.strip() for h in os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')]
 
 # Application definition
 INSTALLED_APPS = [
@@ -173,7 +173,7 @@ SIMPLE_JWT = {
 # =============================================================================
 # CORS Settings
 # =============================================================================
-CORS_ALLOWED_ORIGINS = os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:3000').split(',')
+CORS_ALLOWED_ORIGINS = [o.strip() for o in os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:3000').split(',')]
 CORS_ALLOW_CREDENTIALS = True
 
 # =============================================================================
