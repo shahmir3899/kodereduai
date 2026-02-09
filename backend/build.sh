@@ -26,4 +26,20 @@ if users.count() == 0:
     print('WARNING: No users found! You need to create one.')
 "
 
+# One-time password reset via env var (remove RESET_PASSWORD from Render after use)
+if [ -n "$RESET_PASSWORD" ]; then
+  echo "==> Resetting password for all users..."
+  python manage.py shell -c "
+from django.contrib.auth import get_user_model
+User = get_user_model()
+import os
+new_pw = os.environ['RESET_PASSWORD']
+for u in User.objects.all():
+    u.set_password(new_pw)
+    u.save()
+    print(f'  Password reset for: {u.username}')
+print('Done. REMOVE the RESET_PASSWORD env var now!')
+"
+fi
+
 echo "==> Build complete!"
