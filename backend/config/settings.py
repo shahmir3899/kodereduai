@@ -241,8 +241,9 @@ ATTENDANCE_AI_SETTINGS = {
 # Production Security Settings
 # =============================================================================
 if IS_PRODUCTION:
-    # HTTPS enforcement
-    SECURE_SSL_REDIRECT = True
+    # HTTPS: Render handles SSL at the load balancer — no redirect needed inside Django.
+    # SECURE_SSL_REDIRECT is intentionally False to avoid breaking Render health checks.
+    SECURE_SSL_REDIRECT = False
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
     # HSTS (HTTP Strict Transport Security)
