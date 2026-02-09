@@ -46,6 +46,10 @@ export function AuthProvider({ children }) {
 
     const { access, refresh, user: userData } = response.data
 
+    if (!userData) {
+      throw new Error('Login succeeded but server returned no user data.')
+    }
+
     // Normalize user object to ensure school_id and school_name are available
     if (!userData.school_id && userData.school) {
       userData.school_id = userData.school
