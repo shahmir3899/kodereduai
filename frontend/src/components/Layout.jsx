@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Outlet, Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import FinanceChatWidget from './FinanceChatWidget'
 
 // Icons (simple SVG components)
 const HomeIcon = () => (
@@ -16,6 +17,12 @@ const UploadIcon = () => (
 )
 
 const ClipboardIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+  </svg>
+)
+
+const ClipboardCheckIcon = () => (
   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
   </svg>
@@ -65,27 +72,162 @@ const LogoutIcon = () => (
   </svg>
 )
 
+const ChevronIcon = ({ className = '' }) => (
+  <svg className={`w-4 h-4 ${className}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+  </svg>
+)
+
+const CurrencyIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+  </svg>
+)
+
+const ReceiptIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z" />
+  </svg>
+)
+
+const WalletIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+  </svg>
+)
+
+const ReportIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+  </svg>
+)
+
+const ChatBotIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+  </svg>
+)
+
+const BanknotesIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z" />
+  </svg>
+)
+
+const FolderIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+  </svg>
+)
+
+// Collapsible sidebar group component
+function SidebarGroup({ group, onNavigate }) {
+  const location = useLocation()
+  // Sort children by href length descending so longer paths match first
+  const sortedChildren = [...group.children].sort((a, b) => b.href.length - a.href.length)
+
+  const isChildActive = (href) => {
+    // Check if this child is the best (longest) match
+    const matchingChild = sortedChildren.find(
+      c => location.pathname === c.href || location.pathname.startsWith(c.href + '/')
+    )
+    return matchingChild?.href === href
+  }
+
+  const hasActiveChild = group.children.some(child => isChildActive(child.href))
+  const [expanded, setExpanded] = useState(hasActiveChild)
+
+  useEffect(() => {
+    if (hasActiveChild) setExpanded(true)
+  }, [hasActiveChild])
+
+  return (
+    <div className="mb-1">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className={`flex items-center justify-between w-full px-4 py-2.5 rounded-lg transition-colors ${
+          hasActiveChild ? 'text-primary-700 bg-primary-50/50' : 'text-gray-600 hover:bg-gray-100'
+        }`}
+      >
+        <div className="flex items-center">
+          <group.icon />
+          <span className="ml-3 text-sm font-medium">{group.name}</span>
+        </div>
+        <ChevronIcon className={`transition-transform duration-200 ${expanded ? 'rotate-90' : ''}`} />
+      </button>
+
+      {expanded && (
+        <div className="ml-4 mt-0.5 space-y-0.5">
+          {group.children.map((child) => (
+            <Link
+              key={child.href}
+              to={child.href}
+              className={`flex items-center px-4 py-2 rounded-lg transition-colors text-sm ${
+                isChildActive(child.href)
+                  ? 'bg-primary-50 text-primary-700'
+                  : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
+              }`}
+              onClick={onNavigate}
+            >
+              <child.icon />
+              <span className="ml-3">{child.name}</span>
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function Layout() {
   const { user, logout, isSuperAdmin } = useAuth()
   const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
-  const navigation = [
-    { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
-    { name: 'Upload Attendance', href: '/attendance/upload', icon: UploadIcon },
-    { name: 'Review Attendance', href: '/attendance/review', icon: ClipboardIcon },
-    { name: 'Attendance Records', href: '/attendance/records', icon: TableIcon },
-    { name: 'Students', href: '/students', icon: UsersIcon },
-    { name: 'Classes', href: '/classes', icon: AcademicIcon },
-    { name: 'AI Accuracy', href: '/accuracy', icon: ChartIcon },
-    { name: 'Settings', href: '/settings', icon: SettingsIcon },
-  ]
-
-  if (isSuperAdmin) {
-    navigation.push({ name: 'Admin Panel', href: '/admin', icon: CogIcon })
-  }
-
   const isActive = (href) => location.pathname === href || location.pathname.startsWith(href + '/')
+
+  // Navigation structure: top-level items + collapsible groups
+  const navigationGroups = [
+    // Dashboard - always visible at top
+    { type: 'item', name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
+
+    // Attendance group (consolidated)
+    {
+      type: 'group',
+      name: 'Attendance',
+      icon: ClipboardIcon,
+      children: [
+        { name: 'Capture & Review', href: '/attendance', icon: UploadIcon },
+        { name: 'Register & Analytics', href: '/attendance/register', icon: TableIcon },
+      ],
+    },
+
+    // Finance group
+    {
+      type: 'group',
+      name: 'Finance',
+      icon: CurrencyIcon,
+      children: [
+        { name: 'Fee Collection', href: '/finance/fees', icon: ReceiptIcon },
+        { name: 'Accounts', href: '/finance/accounts', icon: BanknotesIcon },
+        { name: 'Expenses', href: '/finance/expenses', icon: WalletIcon },
+        { name: 'Reports', href: '/finance/reports', icon: ReportIcon },
+      ],
+    },
+
+    // Management group
+    {
+      type: 'group',
+      name: 'Management',
+      icon: FolderIcon,
+      children: [
+        { name: 'Students', href: '/students', icon: UsersIcon },
+        { name: 'Classes', href: '/classes', icon: AcademicIcon },
+      ],
+    },
+
+    // Settings removed — now lives under Attendance > Register & Analytics > Configuration tab
+  ]
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -109,22 +251,46 @@ export default function Layout() {
         </div>
 
         {/* Navigation */}
-        <nav className="mt-6 px-3">
-          {navigation.map((item) => (
+        <nav className="mt-4 px-3 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 180px)' }}>
+          {navigationGroups.map((item) =>
+            item.type === 'group' ? (
+              <SidebarGroup
+                key={item.name}
+                group={item}
+                onNavigate={() => setSidebarOpen(false)}
+              />
+            ) : (
+              <Link
+                key={item.name}
+                to={item.href}
+                className={`flex items-center px-4 py-2.5 mb-1 rounded-lg transition-colors text-sm ${
+                  isActive(item.href)
+                    ? 'bg-primary-50 text-primary-700'
+                    : 'text-gray-600 hover:bg-gray-100'
+                }`}
+                onClick={() => setSidebarOpen(false)}
+              >
+                <item.icon />
+                <span className="ml-3 font-medium">{item.name}</span>
+              </Link>
+            )
+          )}
+
+          {/* Admin Panel - conditional */}
+          {isSuperAdmin && (
             <Link
-              key={item.name}
-              to={item.href}
-              className={`flex items-center px-4 py-3 mb-1 rounded-lg transition-colors ${
-                isActive(item.href)
+              to="/admin"
+              className={`flex items-center px-4 py-2.5 mb-1 rounded-lg transition-colors text-sm ${
+                isActive('/admin')
                   ? 'bg-primary-50 text-primary-700'
                   : 'text-gray-600 hover:bg-gray-100'
               }`}
               onClick={() => setSidebarOpen(false)}
             >
-              <item.icon />
-              <span className="ml-3">{item.name}</span>
+              <CogIcon />
+              <span className="ml-3 font-medium">Admin Panel</span>
             </Link>
-          ))}
+          )}
         </nav>
 
         {/* User info & logout */}
@@ -142,10 +308,10 @@ export default function Layout() {
           </div>
           <button
             onClick={logout}
-            className="flex items-center w-full px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+            className="flex items-center w-full px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
           >
             <LogoutIcon />
-            <span className="ml-3">Logout</span>
+            <span className="ml-3 font-medium">Logout</span>
           </button>
         </div>
       </aside>
@@ -189,6 +355,9 @@ export default function Layout() {
           <Outlet />
         </main>
       </div>
+
+      {/* Floating AI Chat - only on finance pages */}
+      {location.pathname.startsWith('/finance') && <FinanceChatWidget />}
     </div>
   )
 }

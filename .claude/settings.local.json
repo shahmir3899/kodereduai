@@ -18,7 +18,18 @@
       "Bash(ls -la \"d:\\\\Personal\\\\smart-attendance\"\" && echo \"=== FRONTEND ===\" && ls -la \"d:Personalsmart-attendancefrontend\" && echo \"=== BACKEND ===\" && ls -la \"d:Personalsmart-attendancebackend \")",
       "Bash(ls:*)",
       "Bash(git init:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git branch:*)",
+      "Bash(git remote add:*)",
+      "Bash(git push:*)",
+      "WebFetch(domain:kodereduai-api.onrender.com)",
+      "Bash(curl:*)",
+      "Bash(pip install:*)",
+      "Bash(python3:*)",
+      "Bash(del \"d:\\\\Personal\\\\smart-attendance\\\\new_viewsets.txt\")",
+      "Bash(del \"d:\\\\Personal\\\\smart-attendance\\\\apply_views_changes.py\")",
+      "Bash(del \"d:\\\\Personal\\\\smart-attendance\\\\frontend\\\\src\\\\pages\\\\FeeCollectionPage.jsx\")"
     ]
   }
 }

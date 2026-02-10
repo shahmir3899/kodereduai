@@ -4,14 +4,15 @@ import { useAuth } from './contexts/AuthContext'
 // Pages
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
-import AttendanceUploadPage from './pages/AttendanceUploadPage'
-import AttendanceReviewPage from './pages/AttendanceReviewPage'
+import CaptureReviewPage from './pages/CaptureReviewPage'
+import RegisterPage from './pages/RegisterPage'
 import StudentsPage from './pages/StudentsPage'
 import ClassesPage from './pages/ClassesPage'
 import SuperAdminDashboard from './pages/SuperAdminDashboard'
-import SettingsPage from './pages/SettingsPage'
-import AccuracyDashboardPage from './pages/AccuracyDashboardPage'
-import AttendanceRecordsPage from './pages/AttendanceRecordsPage'
+import FeeCollectionPage from './pages/fee-collection/FeeCollectionPage'
+import ExpensesPage from './pages/ExpensesPage'
+import FinancialReportsPage from './pages/FinancialReportsPage'
+import AccountsPage from './pages/AccountsPage'
 
 // Components
 import Layout from './components/Layout'
@@ -59,14 +60,27 @@ function App() {
       >
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />
-        <Route path="attendance/upload" element={<AttendanceUploadPage />} />
-        <Route path="attendance/review" element={<AttendanceReviewPage />} />
-        <Route path="attendance/review/:id" element={<AttendanceReviewPage />} />
-        <Route path="attendance/records" element={<AttendanceRecordsPage />} />
+
+        {/* Attendance — consolidated into 2 pages */}
+        <Route path="attendance" element={<CaptureReviewPage />} />
+        <Route path="attendance/review/:id" element={<CaptureReviewPage />} />
+        <Route path="attendance/register" element={<RegisterPage />} />
+
+        {/* Redirects from old routes */}
+        <Route path="attendance/upload" element={<Navigate to="/attendance" replace />} />
+        <Route path="attendance/review" element={<Navigate to="/attendance?tab=review" replace />} />
+        <Route path="attendance/records" element={<Navigate to="/attendance/register" replace />} />
+        <Route path="settings" element={<Navigate to="/attendance/register?tab=config" replace />} />
+        <Route path="accuracy" element={<Navigate to="/attendance/register?tab=analytics" replace />} />
+
         <Route path="students" element={<StudentsPage />} />
         <Route path="classes" element={<ClassesPage />} />
-        <Route path="settings" element={<SettingsPage />} />
-        <Route path="accuracy" element={<AccuracyDashboardPage />} />
+
+        {/* Finance routes */}
+        <Route path="finance/fees" element={<FeeCollectionPage />} />
+        <Route path="finance/accounts" element={<AccountsPage />} />
+        <Route path="finance/expenses" element={<ExpensesPage />} />
+        <Route path="finance/reports" element={<FinancialReportsPage />} />
 
         {/* Super Admin routes */}
         <Route

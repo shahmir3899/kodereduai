@@ -32,6 +32,13 @@ def api_root(request):
                 'uploads': '/api/attendance/uploads/',
                 'records': '/api/attendance/records/',
             },
+            'finance': {
+                'fee_structures': '/api/finance/fee-structures/',
+                'fee_payments': '/api/finance/fee-payments/',
+                'expenses': '/api/finance/expenses/',
+                'reports': '/api/finance/reports/',
+                'ai_chat': '/api/finance/ai-chat/',
+            },
             'admin': {
                 'schools': '/api/admin/schools/',
             }
@@ -57,6 +64,9 @@ urlpatterns = [
 
     # Attendance
     path('api/attendance/', include('attendance.urls')),
+
+    # Finance
+    path('api/finance/', include('finance.urls')),
 ]
 
 # Serve media files in development

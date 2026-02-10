@@ -172,6 +172,61 @@ export const classesApi = {
   deleteClass: (id) => api.delete(`/api/classes/${id}/`),
 }
 
+// Finance API
+export const financeApi = {
+  // Fee Structures
+  getFeeStructures: (params) => api.get('/api/finance/fee-structures/', { params }),
+  createFeeStructure: (data) => api.post('/api/finance/fee-structures/', data),
+  updateFeeStructure: (id, data) => api.patch(`/api/finance/fee-structures/${id}/`, data),
+  deleteFeeStructure: (id) => api.delete(`/api/finance/fee-structures/${id}/`),
+  bulkSetFeeStructures: (data) => api.post('/api/finance/fee-structures/bulk_set/', data),
+
+  // Fee Payments
+  getFeePayments: (params) => api.get('/api/finance/fee-payments/', { params }),
+  recordPayment: (id, data) => api.patch(`/api/finance/fee-payments/${id}/`, data),
+  createPayment: (data) => api.post('/api/finance/fee-payments/', data),
+  generateMonthly: (data) => api.post('/api/finance/fee-payments/generate_monthly/', data),
+  getMonthlySummary: (params) => api.get('/api/finance/fee-payments/monthly_summary/', { params }),
+  getStudentLedger: (params) => api.get('/api/finance/fee-payments/student_ledger/', { params }),
+  deleteFeePayment: (id) => api.delete(`/api/finance/fee-payments/${id}/`),
+  bulkUpdatePayments: (data) => api.post('/api/finance/fee-payments/bulk_update/', data),
+  bulkDeletePayments: (data) => api.post('/api/finance/fee-payments/bulk_delete/', data),
+
+  // Other Income
+  getOtherIncome: (params) => api.get('/api/finance/other-income/', { params }),
+  createOtherIncome: (data) => api.post('/api/finance/other-income/', data),
+  updateOtherIncome: (id, data) => api.patch(`/api/finance/other-income/${id}/`, data),
+  deleteOtherIncome: (id) => api.delete(`/api/finance/other-income/${id}/`),
+
+  // Accounts
+  getAccounts: (params) => api.get('/api/finance/accounts/', { params }),
+  createAccount: (data) => api.post('/api/finance/accounts/', data),
+  updateAccount: (id, data) => api.patch(`/api/finance/accounts/${id}/`, data),
+  deleteAccount: (id) => api.delete(`/api/finance/accounts/${id}/`),
+  getAccountBalances: (params) => api.get('/api/finance/accounts/balances/', { params }),
+
+  // Transfers
+  getTransfers: (params) => api.get('/api/finance/transfers/', { params }),
+  createTransfer: (data) => api.post('/api/finance/transfers/', data),
+  deleteTransfer: (id) => api.delete(`/api/finance/transfers/${id}/`),
+
+  // Expenses
+  getExpenses: (params) => api.get('/api/finance/expenses/', { params }),
+  createExpense: (data) => api.post('/api/finance/expenses/', data),
+  updateExpense: (id, data) => api.patch(`/api/finance/expenses/${id}/`, data),
+  deleteExpense: (id) => api.delete(`/api/finance/expenses/${id}/`),
+  getExpenseCategorySummary: (params) => api.get('/api/finance/expenses/category_summary/', { params }),
+
+  // Reports
+  getFinanceSummary: (params) => api.get('/api/finance/reports/', { params }),
+  getMonthlyTrend: (params) => api.get('/api/finance/reports/', { params: { ...params, type: 'monthly_trend' } }),
+
+  // AI Chat
+  sendChatMessage: (data) => api.post('/api/finance/ai-chat/', data),
+  getChatHistory: () => api.get('/api/finance/ai-chat/'),
+  clearChatHistory: () => api.delete('/api/finance/ai-chat/'),
+}
+
 // Users API
 export const usersApi = {
   getUsers: (params) => api.get('/api/users/', { params }),

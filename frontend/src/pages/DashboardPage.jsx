@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../contexts/AuthContext'
-import { attendanceApi } from '../services/api'
+import { attendanceApi, financeApi } from '../services/api'
 import { Link } from 'react-router-dom'
 
 export default function DashboardPage() {
@@ -20,12 +20,21 @@ export default function DashboardPage() {
     enabled: !!user?.school_id,
   })
 
+  // Fetch finance summary for current month
+  const currentMonth = new Date().getMonth() + 1
+  const currentYear = new Date().getFullYear()
+  const { data: financeSummary } = useQuery({
+    queryKey: ['financeSummaryDashboard', currentMonth, currentYear],
+    queryFn: () => financeApi.getMonthlySummary({ month: currentMonth, year: currentYear }),
+    enabled: !!user?.school_id,
+  })
+
   const stats = [
     {
       name: 'Pending Reviews',
       value: pendingReviews?.data?.length || 0,
       color: 'bg-yellow-100 text-yellow-800',
-      link: '/attendance/review',
+      link: '/attendance?tab=review',
     },
     {
       name: "Today's Absent",
@@ -84,7 +93,7 @@ export default function DashboardPage() {
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Link
-            to="/attendance/upload"
+            to="/attendance"
             className="flex items-center p-4 bg-primary-50 rounded-lg hover:bg-primary-100 transition-colors"
           >
             <svg className="w-8 h-8 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -97,7 +106,7 @@ export default function DashboardPage() {
           </Link>
 
           <Link
-            to="/attendance/review"
+            to="/attendance?tab=review"
             className="flex items-center p-4 bg-yellow-50 rounded-lg hover:bg-yellow-100 transition-colors"
           >
             <svg className="w-8 h-8 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -123,6 +132,38 @@ export default function DashboardPage() {
           </Link>
         </div>
       </div>
+
+      {/* Finance Overview */}
+      {financeSummary?.data && (
+        <div className="card mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900">Finance Overview</h2>
+            <Link to="/finance/fees" className="text-sm text-primary-600 hover:text-primary-700">View Details</Link>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="p-4 bg-green-50 rounded-lg">
+              <p className="text-sm text-green-700">Fee Collected</p>
+              <p className="text-xl font-bold text-green-800">
+                {Number(financeSummary.data.total_collected || 0).toLocaleString()}
+              </p>
+            </div>
+            <div className="p-4 bg-orange-50 rounded-lg">
+              <p className="text-sm text-orange-700">Fee Pending</p>
+              <p className="text-xl font-bold text-orange-800">
+                {Number(financeSummary.data.total_pending || 0).toLocaleString()}
+              </p>
+            </div>
+            <div className="p-4 bg-blue-50 rounded-lg">
+              <p className="text-sm text-blue-700">Collection Rate</p>
+              <p className="text-xl font-bold text-blue-800">
+                {financeSummary.data.total_due > 0
+                  ? Math.round((financeSummary.data.total_collected / financeSummary.data.total_due) * 100)
+                  : 0}%
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Today's Absent List */}
       {dailyReport?.data?.absent_students?.length > 0 && (

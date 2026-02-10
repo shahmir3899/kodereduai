@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     'students',
     'attendance',
     'notifications',
+    'finance',
 ]
 
 MIDDLEWARE = [
@@ -272,10 +273,6 @@ LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
     'formatters': {
-        'verbose': {
-            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
-            'style': '{',
-        },
         'simple': {
             'format': '{levelname} {asctime} {module} {message}',
             'style': '{',
@@ -289,32 +286,47 @@ LOGGING = {
     },
     'root': {
         'handlers': ['console'],
-        'level': 'DEBUG' if not IS_PRODUCTION else 'WARNING',
+        'level': 'INFO' if not IS_PRODUCTION else 'WARNING',
     },
     'loggers': {
         'django': {
             'handlers': ['console'],
-            'level': 'DEBUG' if not IS_PRODUCTION else 'WARNING',
+            'level': 'INFO' if not IS_PRODUCTION else 'WARNING',
             'propagate': False,
         },
         'django.request': {
             'handlers': ['console'],
-            'level': 'DEBUG' if not IS_PRODUCTION else 'ERROR',
+            'level': 'WARNING' if not IS_PRODUCTION else 'ERROR',
+            'propagate': False,
+        },
+        'django.server': {
+            'handlers': ['console'],
+            'level': 'WARNING' if not IS_PRODUCTION else 'ERROR',
+            'propagate': False,
+        },
+        'django.db.backends': {
+            'handlers': ['console'],
+            'level': 'WARNING',
             'propagate': False,
         },
         'attendance': {
             'handlers': ['console'],
-            'level': 'DEBUG' if not IS_PRODUCTION else 'INFO',
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'finance': {
+            'handlers': ['console'],
+            'level': 'INFO',
             'propagate': False,
         },
         'schools': {
             'handlers': ['console'],
-            'level': 'DEBUG' if not IS_PRODUCTION else 'INFO',
+            'level': 'INFO',
             'propagate': False,
         },
         'users': {
             'handlers': ['console'],
-            'level': 'DEBUG' if not IS_PRODUCTION else 'INFO',
+            'level': 'INFO',
             'propagate': False,
         },
     },
