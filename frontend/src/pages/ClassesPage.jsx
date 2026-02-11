@@ -173,7 +173,7 @@ export default function ClassesPage() {
     setDeleteConfirm(cls)
   }
 
-  const classes = classesData?.data?.results || []
+  const classes = classesData?.data?.results || classesData?.data || []
   const schools = schoolsData?.data?.results || []
   const isSubmitting = addMutation.isPending || updateMutation.isPending
 

@@ -12,6 +12,7 @@
   "dependencies": {
     "@tanstack/react-query": "^5.60.0",
     "axios": "^1.7.9",
+    "compressorjs": "^1.2.1",
     "date-fns": "^4.1.0",
     "jspdf": "^4.1.0",
     "jspdf-autotable": "^5.0.7",

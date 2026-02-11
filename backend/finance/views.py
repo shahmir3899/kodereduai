@@ -14,7 +14,7 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 
 from core.permissions import IsSchoolAdmin, IsSchoolAdminOrStaffReadOnly, HasSchoolAccess
-from core.mixins import TenantQuerySetMixin
+from core.mixins import TenantQuerySetMixin, ensure_tenant_schools
 from students.models import Student, Class
 from .models import Account, Transfer, FeeStructure, FeePayment, Expense, OtherIncome, FinanceAIChatMessage, resolve_fee_amount
 from .serializers import (
@@ -93,7 +93,7 @@ class FeeStructureViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         queryset = FeeStructure.objects.select_related('school', 'class_obj', 'student')
         user = self.request.user
         if not user.is_super_admin:
-            tenant_schools = getattr(self.request, 'tenant_schools', [])
+            tenant_schools = ensure_tenant_schools(self.request)
             if tenant_schools:
                 queryset = queryset.filter(school_id__in=tenant_schools)
             else:
@@ -177,7 +177,7 @@ class FeePaymentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         )
         user = self.request.user
         if not user.is_super_admin:
-            tenant_schools = getattr(self.request, 'tenant_schools', [])
+            tenant_schools = ensure_tenant_schools(self.request)
             if tenant_schools:
                 queryset = queryset.filter(school_id__in=tenant_schools)
             else:
@@ -433,7 +433,7 @@ class ExpenseViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         queryset = Expense.objects.select_related('school', 'recorded_by', 'account')
         user = self.request.user
         if not user.is_super_admin:
-            tenant_schools = getattr(self.request, 'tenant_schools', [])
+            tenant_schools = ensure_tenant_schools(self.request)
             if tenant_schools:
                 queryset = queryset.filter(school_id__in=tenant_schools)
             else:
@@ -534,7 +534,7 @@ class OtherIncomeViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         queryset = OtherIncome.objects.select_related('school', 'recorded_by', 'account')
         user = self.request.user
         if not user.is_super_admin:
-            tenant_schools = getattr(self.request, 'tenant_schools', [])
+            tenant_schools = ensure_tenant_schools(self.request)
             if tenant_schools:
                 queryset = queryset.filter(school_id__in=tenant_schools)
             else:
@@ -582,7 +582,7 @@ class AccountViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         queryset = Account.objects.filter(is_active=True)
         user = self.request.user
         if not user.is_super_admin:
-            tenant_schools = getattr(self.request, 'tenant_schools', [])
+            tenant_schools = ensure_tenant_schools(self.request)
             if tenant_schools:
                 queryset = queryset.filter(school_id__in=tenant_schools)
             else:
@@ -696,7 +696,7 @@ class TransferViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         )
         user = self.request.user
         if not user.is_super_admin:
-            tenant_schools = getattr(self.request, 'tenant_schools', [])
+            tenant_schools = ensure_tenant_schools(self.request)
             if tenant_schools:
                 queryset = queryset.filter(school_id__in=tenant_schools)
             else:

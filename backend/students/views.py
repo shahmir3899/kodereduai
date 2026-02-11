@@ -9,7 +9,7 @@ from rest_framework.permissions import IsAuthenticated
 from django.db.models import Count
 
 from core.permissions import IsSchoolAdmin, HasSchoolAccess
-from core.mixins import TenantQuerySetMixin
+from core.mixins import TenantQuerySetMixin, ensure_tenant_schools
 from .models import Class, Student
 from .serializers import (
     ClassSerializer,
@@ -37,10 +37,10 @@ class ClassViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         # Note: Don't annotate student_count here - the model has a @property for it
         queryset = Class.objects.select_related('school')
 
-        # Apply tenant filtering
+        # Apply tenant filtering (ensure_tenant_schools handles JWT auth timing)
         user = self.request.user
         if not user.is_super_admin:
-            tenant_schools = getattr(self.request, 'tenant_schools', [])
+            tenant_schools = ensure_tenant_schools(self.request)
             if tenant_schools:
                 queryset = queryset.filter(school_id__in=tenant_schools)
             else:
@@ -89,10 +89,10 @@ class StudentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = Student.objects.select_related('school', 'class_obj')
 
-        # Apply tenant filtering
+        # Apply tenant filtering (ensure_tenant_schools handles JWT auth timing)
         user = self.request.user
         if not user.is_super_admin:
-            tenant_schools = getattr(self.request, 'tenant_schools', [])
+            tenant_schools = ensure_tenant_schools(self.request)
             if tenant_schools:
                 queryset = queryset.filter(school_id__in=tenant_schools)
             else:

@@ -3,9 +3,28 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch'
 import Cropper from 'react-easy-crop'
+import Compressor from 'compressorjs'
 import { useDropzone } from 'react-dropzone'
 import { useAuth } from '../contexts/AuthContext'
 import { attendanceApi, classesApi, studentsApi } from '../services/api'
+
+// Compress image before upload - keeps quality high enough for OCR
+const compressImage = (file) => {
+  return new Promise((resolve, reject) => {
+    new Compressor(file, {
+      quality: 0.8,
+      maxWidth: 2000,
+      maxHeight: 2000,
+      mimeType: 'image/jpeg',
+      success(result) {
+        const compressed = new File([result], file.name.replace(/\.\w+$/, '.jpg'), { type: 'image/jpeg' })
+        console.log(`Compressed: ${(file.size / 1024).toFixed(0)}KB → ${(compressed.size / 1024).toFixed(0)}KB`)
+        resolve(compressed)
+      },
+      error: reject,
+    })
+  })
+}
 
 // ─── Tab button ───
 function TabButton({ active, onClick, children, badge }) {
@@ -176,7 +195,8 @@ function UploadTab({ onUploadSuccess }) {
       const imageUrls = []
       for (let i = 0; i < uploadedFiles.length; i++) {
         setUploadProgress({ current: i + 1, total: uploadedFiles.length })
-        const fileToUpload = await getRotatedImageBlob(uploadedFiles[i])
+        const rotatedFile = await getRotatedImageBlob(uploadedFiles[i])
+        const fileToUpload = await compressImage(rotatedFile)
         const uploadResponse = await attendanceApi.uploadImageToStorage(fileToUpload, user?.school_id, selectedClass)
         imageUrls.push(uploadResponse.data.url)
       }
