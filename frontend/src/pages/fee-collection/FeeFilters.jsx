@@ -35,6 +35,7 @@ export default function FeeFilters({ month, setMonth, year, setYear, classFilter
             <option value="PAID">Paid</option>
             <option value="PARTIAL">Partial</option>
             <option value="UNPAID">Unpaid</option>
+            <option value="ADVANCE">Advance</option>
           </select>
         </div>
       </div>

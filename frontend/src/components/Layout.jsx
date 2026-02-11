@@ -180,7 +180,7 @@ function SidebarGroup({ group, onNavigate }) {
 }
 
 export default function Layout() {
-  const { user, logout, isSuperAdmin } = useAuth()
+  const { user, logout, isSuperAdmin, isStaffMember } = useAuth()
   const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
@@ -356,8 +356,8 @@ export default function Layout() {
         </main>
       </div>
 
-      {/* Floating AI Chat - only on finance pages */}
-      {location.pathname.startsWith('/finance') && <FinanceChatWidget />}
+      {/* Floating AI Chat - only on finance pages, not for staff */}
+      {location.pathname.startsWith('/finance') && !isStaffMember && <FinanceChatWidget />}
     </div>
   )
 }

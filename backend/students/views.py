@@ -26,6 +26,7 @@ class ClassViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
     """
     queryset = Class.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
+    pagination_class = None
 
     def get_serializer_class(self):
         if self.action == 'create':
@@ -76,6 +77,7 @@ class StudentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
     """
     queryset = Student.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
+    pagination_class = None
 
     def get_serializer_class(self):
         if self.action == 'create':

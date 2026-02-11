@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { financeApi } from '../services/api'
+import { useAuth } from '../contexts/AuthContext'
 
 const ACCOUNT_TYPES = [
   { value: 'CASH', label: 'Cash' },
@@ -30,6 +31,8 @@ const getErrorMessage = (error, fallback = 'Something went wrong') => {
 
 export default function AccountsPage() {
   const queryClient = useQueryClient()
+  const { isStaffMember } = useAuth()
+  const canWrite = !isStaffMember
   const [activeTab, setActiveTab] = useState('balances')
 
   // Balance filters
@@ -40,7 +43,7 @@ export default function AccountsPage() {
   const [showAccountModal, setShowAccountModal] = useState(false)
   const [editingAccount, setEditingAccount] = useState(null)
   const [accountForm, setAccountForm] = useState({
-    name: '', account_type: 'CASH', opening_balance: ''
+    name: '', account_type: 'CASH', opening_balance: '', staff_visible: true
   })
 
   // Transfer modal
@@ -122,7 +125,7 @@ export default function AccountsPage() {
   const closeAccountModal = () => {
     setShowAccountModal(false)
     setEditingAccount(null)
-    setAccountForm({ name: '', account_type: 'CASH', opening_balance: '' })
+    setAccountForm({ name: '', account_type: 'CASH', opening_balance: '', staff_visible: true })
   }
 
   const closeTransferModal = () => {
@@ -136,13 +139,18 @@ export default function AccountsPage() {
       name: account.name,
       account_type: account.account_type,
       opening_balance: account.opening_balance,
+      staff_visible: account.staff_visible !== false,
     })
     setShowAccountModal(true)
   }
 
   const handleAccountSubmit = (e) => {
     e.preventDefault()
-    const data = { ...accountForm, opening_balance: parseFloat(accountForm.opening_balance || 0) }
+    const data = {
+      ...accountForm,
+      opening_balance: parseFloat(accountForm.opening_balance || 0),
+      staff_visible: accountForm.staff_visible,
+    }
     if (editingAccount) {
       updateAccountMutation.mutate({ id: editingAccount.id, data })
     } else {
@@ -179,7 +187,7 @@ export default function AccountsPage() {
           <p className="text-sm text-gray-600">Track where money flows</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {activeTab === 'manage' && (
+          {canWrite && activeTab === 'manage' && (
             <button
               onClick={() => setShowAccountModal(true)}
               className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm"
@@ -187,7 +195,7 @@ export default function AccountsPage() {
               Add Account
             </button>
           )}
-          {activeTab === 'transfers' && (
+          {canWrite && activeTab === 'transfers' && (
             <button
               onClick={() => setShowTransferModal(true)}
               className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm"
@@ -330,16 +338,23 @@ export default function AccountsPage() {
                   <div key={account.id} className="border rounded-lg p-3">
                     <div className="flex items-center justify-between mb-2">
                       <span className="font-medium text-gray-900">{account.name}</span>
-                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${typeColors[account.account_type]}`}>
-                        {account.account_type}
-                      </span>
+                      <div className="flex items-center gap-1">
+                        {canWrite && !account.staff_visible && (
+                          <span className="px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">Hidden</span>
+                        )}
+                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${typeColors[account.account_type]}`}>
+                          {account.account_type}
+                        </span>
+                      </div>
                     </div>
                     <p className="text-sm text-gray-600">Opening Balance: {Number(account.opening_balance).toLocaleString()}</p>
                     <p className="text-xs text-gray-500">{account.is_active ? 'Active' : 'Inactive'}</p>
-                    <div className="flex gap-2 mt-2">
-                      <button onClick={() => openEditAccount(account)} className="text-xs text-primary-600 hover:underline">Edit</button>
-                      <button onClick={() => { if (confirm('Delete this account?')) deleteAccountMutation.mutate(account.id) }} className="text-xs text-red-600 hover:underline">Delete</button>
-                    </div>
+                    {canWrite && (
+                      <div className="flex gap-2 mt-2">
+                        <button onClick={() => openEditAccount(account)} className="text-xs text-primary-600 hover:underline">Edit</button>
+                        <button onClick={() => { if (confirm('Delete this account?')) deleteAccountMutation.mutate(account.id) }} className="text-xs text-red-600 hover:underline">Delete</button>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -353,7 +368,8 @@ export default function AccountsPage() {
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
                       <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Opening Balance</th>
                       <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Status</th>
-                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>
+                      {canWrite && <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Staff Visible</th>}
+                      {canWrite && <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>}
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
@@ -371,10 +387,19 @@ export default function AccountsPage() {
                             {account.is_active ? 'Active' : 'Inactive'}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-center">
-                          <button onClick={() => openEditAccount(account)} className="text-sm text-primary-600 hover:underline mr-3">Edit</button>
-                          <button onClick={() => { if (confirm('Delete this account?')) deleteAccountMutation.mutate(account.id) }} className="text-sm text-red-600 hover:underline">Delete</button>
-                        </td>
+                        {canWrite && (
+                          <td className="px-4 py-3 text-center">
+                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${account.staff_visible ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                              {account.staff_visible ? 'Yes' : 'Hidden'}
+                            </span>
+                          </td>
+                        )}
+                        {canWrite && (
+                          <td className="px-4 py-3 text-center">
+                            <button onClick={() => openEditAccount(account)} className="text-sm text-primary-600 hover:underline mr-3">Edit</button>
+                            <button onClick={() => { if (confirm('Delete this account?')) deleteAccountMutation.mutate(account.id) }} className="text-sm text-red-600 hover:underline">Delete</button>
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
@@ -420,12 +445,14 @@ export default function AccountsPage() {
                         <span className="font-bold text-gray-900">{Number(tfr.amount).toLocaleString()}</span>
                       </div>
                       <p className="text-xs text-gray-500">{tfr.date} {tfr.description && `— ${tfr.description}`}</p>
-                      <button
-                        onClick={() => { if (confirm('Delete this transfer?')) deleteTransferMutation.mutate(tfr.id) }}
-                        className="mt-2 text-xs text-red-600 hover:text-red-800"
-                      >
-                        Delete
-                      </button>
+                      {canWrite && (
+                        <button
+                          onClick={() => { if (confirm('Delete this transfer?')) deleteTransferMutation.mutate(tfr.id) }}
+                          className="mt-2 text-xs text-red-600 hover:text-red-800"
+                        >
+                          Delete
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -440,7 +467,7 @@ export default function AccountsPage() {
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">To</th>
                         <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Amount</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
-                        <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>
+                        {canWrite && <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>}
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
@@ -451,9 +478,11 @@ export default function AccountsPage() {
                           <td className="px-4 py-3 text-sm text-gray-900">{tfr.to_account_name}</td>
                           <td className="px-4 py-3 text-sm font-medium text-gray-900 text-right">{Number(tfr.amount).toLocaleString()}</td>
                           <td className="px-4 py-3 text-sm text-gray-600 max-w-xs truncate">{tfr.description || '—'}</td>
-                          <td className="px-4 py-3 text-center">
-                            <button onClick={() => { if (confirm('Delete this transfer?')) deleteTransferMutation.mutate(tfr.id) }} className="text-sm text-red-600 hover:underline">Delete</button>
-                          </td>
+                          {canWrite && (
+                            <td className="px-4 py-3 text-center">
+                              <button onClick={() => { if (confirm('Delete this transfer?')) deleteTransferMutation.mutate(tfr.id) }} className="text-sm text-red-600 hover:underline">Delete</button>
+                            </td>
+                          )}
                         </tr>
                       ))}
                     </tbody>
@@ -517,6 +546,18 @@ export default function AccountsPage() {
                     </label>
                   </div>
                 )}
+                <div>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={accountForm.staff_visible}
+                      onChange={(e) => setAccountForm(f => ({ ...f, staff_visible: e.target.checked }))}
+                      className="rounded"
+                    />
+                    Visible to Staff
+                  </label>
+                  <p className="text-xs text-gray-400 mt-1 ml-6">Staff members can see this account and its transactions</p>
+                </div>
                 <div className="flex gap-3 pt-2">
                   <button type="button" onClick={closeAccountModal} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">
                     Cancel

@@ -22,7 +22,8 @@ const categoryColors = {
 }
 
 export default function ExpensesPage() {
-  const { user } = useAuth()
+  const { user, isStaffMember } = useAuth()
+  const canWrite = !isStaffMember
   const queryClient = useQueryClient()
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
@@ -30,7 +31,7 @@ export default function ExpensesPage() {
   const [showModal, setShowModal] = useState(false)
   const [editingExpense, setEditingExpense] = useState(null)
   const [form, setForm] = useState({
-    category: 'SALARY', amount: '', date: new Date().toISOString().split('T')[0], description: '', account: ''
+    category: 'SALARY', amount: '', date: new Date().toISOString().split('T')[0], description: '', account: '', is_sensitive: false
   })
 
   const { data: accountsData } = useQuery({
@@ -84,7 +85,7 @@ export default function ExpensesPage() {
   const closeModal = () => {
     setShowModal(false)
     setEditingExpense(null)
-    setForm({ category: 'SALARY', amount: '', date: new Date().toISOString().split('T')[0], description: '', account: '' })
+    setForm({ category: 'SALARY', amount: '', date: new Date().toISOString().split('T')[0], description: '', account: '', is_sensitive: false })
   }
 
   const openEdit = (expense) => {
@@ -95,6 +96,7 @@ export default function ExpensesPage() {
       date: expense.date,
       description: expense.description || '',
       account: expense.account || '',
+      is_sensitive: expense.is_sensitive || false,
     })
     setShowModal(true)
   }
@@ -125,12 +127,14 @@ export default function ExpensesPage() {
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Expenses</h1>
           <p className="text-sm text-gray-600">Track school expenditures</p>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm"
-        >
-          Add Expense
-        </button>
+        {canWrite && (
+          <button
+            onClick={() => setShowModal(true)}
+            className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm"
+          >
+            Add Expense
+          </button>
+        )}
       </div>
 
       {/* Filters */}
@@ -208,10 +212,12 @@ export default function ExpensesPage() {
                   </div>
                   <p className="text-lg font-bold text-gray-900">{Number(expense.amount).toLocaleString()}</p>
                   {expense.description && <p className="text-sm text-gray-600 mt-1">{expense.description}</p>}
-                  <div className="flex gap-2 mt-2">
-                    <button onClick={() => openEdit(expense)} className="text-xs text-primary-600 hover:underline">Edit</button>
-                    <button onClick={() => { if (confirm('Delete this expense?')) deleteMutation.mutate(expense.id) }} className="text-xs text-red-600 hover:underline">Delete</button>
-                  </div>
+                  {canWrite && (
+                    <div className="flex gap-2 mt-2">
+                      <button onClick={() => openEdit(expense)} className="text-xs text-primary-600 hover:underline">Edit</button>
+                      <button onClick={() => { if (confirm('Delete this expense?')) deleteMutation.mutate(expense.id) }} className="text-xs text-red-600 hover:underline">Delete</button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -226,7 +232,7 @@ export default function ExpensesPage() {
                     <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Amount</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Recorded By</th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>
+                    {canWrite && <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>}
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -241,10 +247,12 @@ export default function ExpensesPage() {
                       <td className="px-4 py-3 text-sm font-medium text-gray-900 text-right">{Number(expense.amount).toLocaleString()}</td>
                       <td className="px-4 py-3 text-sm text-gray-600 max-w-xs truncate">{expense.description || '-'}</td>
                       <td className="px-4 py-3 text-sm text-gray-500">{expense.recorded_by_name || '-'}</td>
-                      <td className="px-4 py-3 text-center">
-                        <button onClick={() => openEdit(expense)} className="text-sm text-primary-600 hover:underline mr-3">Edit</button>
-                        <button onClick={() => { if (confirm('Delete this expense?')) deleteMutation.mutate(expense.id) }} className="text-sm text-red-600 hover:underline">Delete</button>
-                      </td>
+                      {canWrite && (
+                        <td className="px-4 py-3 text-center">
+                          <button onClick={() => openEdit(expense)} className="text-sm text-primary-600 hover:underline mr-3">Edit</button>
+                          <button onClick={() => { if (confirm('Delete this expense?')) deleteMutation.mutate(expense.id) }} className="text-sm text-red-600 hover:underline">Delete</button>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -314,6 +322,18 @@ export default function ExpensesPage() {
                     rows={3}
                     placeholder="Brief description of the expense..."
                   />
+                </div>
+                <div>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={form.is_sensitive}
+                      onChange={(e) => setForm(f => ({ ...f, is_sensitive: e.target.checked }))}
+                      className="rounded"
+                    />
+                    Mark as Sensitive
+                  </label>
+                  <p className="text-xs text-gray-400 mt-1 ml-6">Hidden from staff members</p>
                 </div>
                 <div className="flex gap-3 pt-2">
                   <button type="button" onClick={closeModal} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">

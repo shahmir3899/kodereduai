@@ -40,7 +40,7 @@ export default function StudentsPage() {
 
   // Set first school as default for Super Admin
   useEffect(() => {
-    if (isSuperAdmin && schoolsData?.data?.results?.length > 0 && !selectedSchoolId) {
+    if (isSuperAdmin && (schoolsData?.data?.results || schoolsData?.data)?.length > 0 && !selectedSchoolId) {
       setSelectedSchoolId(schoolsData.data.results[0].id)
     }
   }, [isSuperAdmin, schoolsData, selectedSchoolId])
@@ -48,7 +48,7 @@ export default function StudentsPage() {
   // Fetch classes (cached)
   const { data: classesData } = useQuery({
     queryKey: ['classes', selectedSchoolId],
-    queryFn: () => classesApi.getClasses({ school_id: selectedSchoolId, page_size: 100 }),
+    queryFn: () => classesApi.getClasses({ school_id: selectedSchoolId }),
     enabled: !!selectedSchoolId,
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
   })
@@ -58,7 +58,6 @@ export default function StudentsPage() {
     queryKey: ['students', selectedSchoolId],
     queryFn: () => studentsApi.getStudents({
       school_id: selectedSchoolId,
-      page_size: 1000, // Fetch all students at once
     }),
     enabled: !!selectedSchoolId,
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
@@ -186,10 +185,10 @@ export default function StudentsPage() {
 
   // Download Students Excel (or blank template if no students exist)
   const downloadExcelTemplate = () => {
-    const classes = classesData?.data?.results || []
+    const dlClasses = classesData?.data?.results || classesData?.data || []
     const selectedSchool = schools.find(s => s.id === selectedSchoolId)
 
-    if (classes.length === 0) {
+    if (dlClasses.length === 0) {
       showError('Please add classes before downloading')
       return
     }
@@ -199,13 +198,13 @@ export default function StudentsPage() {
     // Instruction rows + header (same format the upload parser expects)
     const sheetData = [
       [`School: ${selectedSchool?.name || 'Unknown'}`],
-      [`Classes: ${classes.map(c => c.name).join(' | ')}`],
+      [`Classes: ${dlClasses.map(c => c.name).join(' | ')}`],
       ['Phone (optional): Use dashes like 0300-1234567 - can be added later'],
       [], // Empty row separator
       ['class_name', 'roll_number', 'student_name', 'parent_phone', 'parent_name'],
     ]
 
-    const existingStudents = studentsData?.data?.results || []
+    const existingStudents = studentsData?.data?.results || studentsData?.data || []
 
     if (existingStudents.length > 0) {
       // Export real student data sorted by class then roll number
@@ -224,7 +223,7 @@ export default function StudentsPage() {
       })
     } else {
       // No students yet — generate blank template with sample rows
-      const sampleClasses = classes.slice(0, 2)
+      const sampleClasses = dlClasses.slice(0, 2)
       sampleClasses.forEach(cls => {
         sheetData.push([cls.name, '1', 'Student Name', '0300-1234567', 'Parent Name'])
       })
@@ -336,10 +335,10 @@ export default function StudentsPage() {
           return
         }
 
-        const classes = classesData?.data?.results || []
+        const uploadClasses = classesData?.data?.results || classesData?.data || []
         const classMap = {}
         const classMapNoSpace = {} // Fallback for matching without spaces
-        classes.forEach(cls => {
+        uploadClasses.forEach(cls => {
           const normalized = cls.name.toLowerCase().trim().replace(/\s+/g, ' ')
           classMap[normalized] = cls.id
           classMapNoSpace[normalized.replace(/\s/g, '')] = cls.id
@@ -471,9 +470,9 @@ export default function StudentsPage() {
     }
   }
 
-  const allStudents = studentsData?.data?.results || []
-  const schools = schoolsData?.data?.results || []
-  const classes = classesData?.data?.results || []
+  const allStudents = studentsData?.data?.results || studentsData?.data || []
+  const schools = schoolsData?.data?.results || schoolsData?.data || []
+  const classes = classesData?.data?.results || classesData?.data || []
 
   // Create a map of class_id to grade_level for proper sorting
   const classGradeMap = useMemo(() => {
@@ -518,6 +517,19 @@ export default function StudentsPage() {
     })
   }, [allStudents, selectedClass, search, classGradeMap])
 
+  // Stats computation
+  const stats = useMemo(() => {
+    const active = allStudents.filter(s => s.is_active).length
+    const inactive = allStudents.length - active
+    const byClass = {}
+    allStudents.forEach(s => {
+      const className = s.class_name || 'Unassigned'
+      if (!byClass[className]) byClass[className] = 0
+      byClass[className]++
+    })
+    return { total: allStudents.length, active, inactive, byClass }
+  }, [allStudents])
+
   return (
     <div>
       <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -554,6 +566,28 @@ export default function StudentsPage() {
           </button>
         </div>
       </div>
+
+      {/* Stats Cards */}
+      {selectedSchoolId && !isLoading && allStudents.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-6">
+          <div className="card !p-4">
+            <p className="text-xs font-medium text-gray-500 uppercase">Total Students</p>
+            <p className="text-2xl font-bold text-gray-900 mt-1">{stats.total}</p>
+          </div>
+          <div className="card !p-4">
+            <p className="text-xs font-medium text-gray-500 uppercase">Active</p>
+            <p className="text-2xl font-bold text-green-600 mt-1">{stats.active}</p>
+          </div>
+          <div className="card !p-4">
+            <p className="text-xs font-medium text-gray-500 uppercase">Inactive</p>
+            <p className="text-2xl font-bold text-gray-400 mt-1">{stats.inactive}</p>
+          </div>
+          <div className="card !p-4">
+            <p className="text-xs font-medium text-gray-500 uppercase">Classes</p>
+            <p className="text-2xl font-bold text-primary-600 mt-1">{Object.keys(stats.byClass).length}</p>
+          </div>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="card mb-6">

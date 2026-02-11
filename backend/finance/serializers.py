@@ -11,10 +11,17 @@ class AccountSerializer(serializers.ModelSerializer):
         model = Account
         fields = [
             'id', 'school', 'name', 'account_type',
-            'opening_balance', 'is_active',
+            'opening_balance', 'is_active', 'staff_visible',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def get_fields(self):
+        fields = super().get_fields()
+        request = self.context.get('request')
+        if request and hasattr(request.user, 'is_staff_member') and request.user.is_staff_member:
+            fields.pop('staff_visible', None)
+        return fields
 
 
 class AccountCreateSerializer(serializers.ModelSerializer):
@@ -36,9 +43,17 @@ class TransferSerializer(serializers.ModelSerializer):
             'to_account', 'to_account_name',
             'amount', 'date', 'description',
             'recorded_by', 'recorded_by_name',
+            'is_sensitive',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def get_fields(self):
+        fields = super().get_fields()
+        request = self.context.get('request')
+        if request and hasattr(request.user, 'is_staff_member') and request.user.is_staff_member:
+            fields.pop('is_sensitive', None)
+        return fields
 
 
 class TransferCreateSerializer(serializers.ModelSerializer):
@@ -171,9 +186,17 @@ class ExpenseSerializer(serializers.ModelSerializer):
             'amount', 'date', 'description',
             'recorded_by', 'recorded_by_name',
             'account', 'account_name',
+            'is_sensitive',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def get_fields(self):
+        fields = super().get_fields()
+        request = self.context.get('request')
+        if request and hasattr(request.user, 'is_staff_member') and request.user.is_staff_member:
+            fields.pop('is_sensitive', None)
+        return fields
 
     def validate(self, attrs):
         # On update, require account
@@ -213,9 +236,17 @@ class OtherIncomeSerializer(serializers.ModelSerializer):
             'amount', 'date', 'description',
             'recorded_by', 'recorded_by_name',
             'account', 'account_name',
+            'is_sensitive',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def get_fields(self):
+        fields = super().get_fields()
+        request = self.context.get('request')
+        if request and hasattr(request.user, 'is_staff_member') and request.user.is_staff_member:
+            fields.pop('is_sensitive', None)
+        return fields
 
 
 class OtherIncomeCreateSerializer(serializers.ModelSerializer):

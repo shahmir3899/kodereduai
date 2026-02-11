@@ -32,6 +32,10 @@ class Account(models.Model):
         help_text="Beginning Balance Forward (BBF)"
     )
     is_active = models.BooleanField(default=True)
+    staff_visible = models.BooleanField(
+        default=True,
+        help_text="Whether staff members can see this account and its transactions"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -83,6 +87,10 @@ class Transfer(models.Model):
         on_delete=models.SET_NULL,
         null=True,
         related_name='recorded_transfers'
+    )
+    is_sensitive = models.BooleanField(
+        default=False,
+        help_text="Hide this transfer from staff members"
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -204,6 +212,7 @@ class FeePayment(models.Model):
         PAID = 'PAID', 'Paid'
         PARTIAL = 'PARTIAL', 'Partial'
         UNPAID = 'UNPAID', 'Unpaid'
+        ADVANCE = 'ADVANCE', 'Advance'
 
     class PaymentMethod(models.TextChoices):
         CASH = 'CASH', 'Cash'
@@ -297,7 +306,10 @@ class FeePayment(models.Model):
 
     def save(self, *args, **kwargs):
         """Auto-compute status from amounts."""
-        if self.amount_paid >= self.amount_due:
+        if self.amount_due <= 0:
+            # Covered by advance from previous month
+            self.status = self.PaymentStatus.ADVANCE
+        elif self.amount_paid >= self.amount_due:
             self.status = self.PaymentStatus.PAID
         elif self.amount_paid > 0:
             self.status = self.PaymentStatus.PARTIAL
@@ -351,6 +363,10 @@ class Expense(models.Model):
         blank=True,
         related_name='expenses',
         help_text="Account from which this expense was paid"
+    )
+    is_sensitive = models.BooleanField(
+        default=False,
+        help_text="Hide this expense from staff members"
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -450,6 +466,10 @@ class OtherIncome(models.Model):
         blank=True,
         related_name='other_incomes',
         help_text="Account that received this income"
+    )
+    is_sensitive = models.BooleanField(
+        default=False,
+        help_text="Hide this income from staff members"
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

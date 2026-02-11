@@ -29,7 +29,12 @@
       "Bash(python3:*)",
       "Bash(del \"d:\\\\Personal\\\\smart-attendance\\\\new_viewsets.txt\")",
       "Bash(del \"d:\\\\Personal\\\\smart-attendance\\\\apply_views_changes.py\")",
-      "Bash(del \"d:\\\\Personal\\\\smart-attendance\\\\frontend\\\\src\\\\pages\\\\FeeCollectionPage.jsx\")"
+      "Bash(del \"d:\\\\Personal\\\\smart-attendance\\\\frontend\\\\src\\\\pages\\\\FeeCollectionPage.jsx\")",
+      "Bash(find:*)",
+      "Bash(npx vite)",
+      "Bash(npx vite:*)",
+      "Bash(pip show:*)",
+      "Bash(pip3 show:*)"
     ]
   }
 }

@@ -79,6 +79,7 @@ export function AuthProvider({ children }) {
     isAuthenticated: !!user,
     isSuperAdmin: user?.is_super_admin,
     isSchoolAdmin: user?.role === 'SCHOOL_ADMIN',
+    isStaffMember: user?.role === 'STAFF',
   }
 
   return (

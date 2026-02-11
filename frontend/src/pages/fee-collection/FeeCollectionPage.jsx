@@ -12,7 +12,8 @@ import {
 import { exportFeePDF } from './feeExport'
 
 export default function FeeCollectionPage() {
-  const { user } = useAuth()
+  const { user, isStaffMember } = useAuth()
+  const canWrite = !isStaffMember
   const now = new Date()
 
   // Filter state
@@ -225,18 +226,22 @@ export default function FeeCollectionPage() {
               Export PDF
             </button>
           )}
-          <button
-            onClick={() => setShowFeeStructureModal(true)}
-            className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 text-sm"
-          >
-            Set Fee Structure
-          </button>
-          <button
-            onClick={() => setShowGenerateModal(true)}
-            className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm"
-          >
-            Generate Records
-          </button>
+          {canWrite && (
+            <>
+              <button
+                onClick={() => setShowFeeStructureModal(true)}
+                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 text-sm"
+              >
+                Set Fee Structure
+              </button>
+              <button
+                onClick={() => setShowGenerateModal(true)}
+                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm"
+              >
+                Generate Records
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -278,23 +283,26 @@ export default function FeeCollectionPage() {
             isLoading={data.isLoading}
             month={month} year={year}
             selectedIds={selectedIds}
-            onToggleSelect={handleToggleSelect}
-            onToggleSelectAll={handleToggleSelectAll}
-            editingCell={editingCell} setEditingCell={setEditingCell}
+            onToggleSelect={canWrite ? handleToggleSelect : undefined}
+            onToggleSelectAll={canWrite ? handleToggleSelectAll : undefined}
+            editingCell={editingCell} setEditingCell={canWrite ? setEditingCell : () => {}}
             editValue={editValue} setEditValue={setEditValue}
-            onInlineUpdate={handleInlineUpdate}
-            onRecordPayment={handleOpenPayment}
-            onSetStudentFee={handleOpenStudentFee}
-            onDelete={(id) => setDeleteTarget(id)}
+            onInlineUpdate={canWrite ? handleInlineUpdate : undefined}
+            onRecordPayment={canWrite ? handleOpenPayment : undefined}
+            onSetStudentFee={canWrite ? handleOpenStudentFee : undefined}
+            onDelete={canWrite ? (id) => setDeleteTarget(id) : undefined}
+            canWrite={canWrite}
           />
 
-          <BulkActionsBar
-            selectedCount={selectedIds.size}
-            onBulkUpdate={handleBulkUpdate}
-            onBulkDelete={handleBulkDelete}
-            isPending={data.bulkUpdateMutation.isPending || data.bulkDeleteMutation.isPending}
-            accountsList={data.accountsList}
-          />
+          {canWrite && (
+            <BulkActionsBar
+              selectedCount={selectedIds.size}
+              onBulkUpdate={handleBulkUpdate}
+              onBulkDelete={handleBulkDelete}
+              isPending={data.bulkUpdateMutation.isPending || data.bulkDeleteMutation.isPending}
+              accountsList={data.accountsList}
+            />
+          )}
         </>
       )}
 
@@ -307,6 +315,7 @@ export default function FeeCollectionPage() {
           incomeLoading={data.incomeLoading}
           onAddIncome={() => setShowIncomeModal(true)}
           onDeleteIncome={(id) => data.deleteIncomeMutation.mutate(id)}
+          canWrite={canWrite}
         />
       )}
 
@@ -376,7 +385,7 @@ export default function FeeCollectionPage() {
 }
 
 // Other Income Section (kept inline since it's small)
-function OtherIncomeSection({ month, setMonth, year, setYear, incomeList, incomeLoading, onAddIncome, onDeleteIncome }) {
+function OtherIncomeSection({ month, setMonth, year, setYear, incomeList, incomeLoading, onAddIncome, onDeleteIncome, canWrite }) {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
@@ -394,9 +403,11 @@ function OtherIncomeSection({ month, setMonth, year, setYear, incomeList, income
             </select>
           </div>
         </div>
-        <button onClick={onAddIncome} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm">
-          Add Income
-        </button>
+        {canWrite && (
+          <button onClick={onAddIncome} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm">
+            Add Income
+          </button>
+        )}
       </div>
 
       <div className="card">
@@ -424,7 +435,7 @@ function OtherIncomeSection({ month, setMonth, year, setYear, incomeList, income
                     <span className="font-bold text-green-700">{Number(item.amount).toLocaleString()}</span>
                   </div>
                   <p className="text-xs text-gray-500">{item.date} {item.description && `\u2014 ${item.description}`}</p>
-                  <button onClick={() => onDeleteIncome(item.id)} className="mt-2 text-xs text-red-600 hover:text-red-800">Delete</button>
+                  {canWrite && <button onClick={() => onDeleteIncome(item.id)} className="mt-2 text-xs text-red-600 hover:text-red-800">Delete</button>}
                 </div>
               ))}
             </div>
@@ -438,7 +449,7 @@ function OtherIncomeSection({ month, setMonth, year, setYear, incomeList, income
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Amount</th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Action</th>
+                    {canWrite && <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Action</th>}
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -448,9 +459,11 @@ function OtherIncomeSection({ month, setMonth, year, setYear, incomeList, income
                       <td className="px-4 py-3 text-sm text-gray-900">{item.category_display}</td>
                       <td className="px-4 py-3 text-sm text-gray-500">{item.description || '\u2014'}</td>
                       <td className="px-4 py-3 text-sm font-medium text-green-700 text-right">{Number(item.amount).toLocaleString()}</td>
-                      <td className="px-4 py-3 text-center">
-                        <button onClick={() => onDeleteIncome(item.id)} className="text-sm text-red-600 hover:text-red-800">Delete</button>
-                      </td>
+                      {canWrite && (
+                        <td className="px-4 py-3 text-center">
+                          <button onClick={() => onDeleteIncome(item.id)} className="text-sm text-red-600 hover:text-red-800">Delete</button>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>

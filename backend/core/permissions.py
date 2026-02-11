@@ -104,6 +104,27 @@ class HasSchoolAccess(permissions.BasePermission):
         return school_id in tenant_schools
 
 
+class IsSchoolAdminOrStaffReadOnly(permissions.BasePermission):
+    """
+    School Admins get full access. Staff members get read-only access.
+    Used for finance endpoints where staff can view but not modify.
+    """
+    message = "Staff members have read-only access to finance data."
+
+    def has_permission(self, request, view):
+        if not request.user.is_authenticated:
+            return False
+
+        if request.user.is_super_admin or request.user.is_school_admin:
+            return True
+
+        # Staff can only read
+        if request.user.is_staff_member:
+            return request.method in permissions.SAFE_METHODS
+
+        return False
+
+
 class CanManageAttendance(permissions.BasePermission):
     """
     Permission for attendance-related operations.

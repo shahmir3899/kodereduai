@@ -13,7 +13,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 
-from core.permissions import IsSchoolAdmin, HasSchoolAccess
+from core.permissions import IsSchoolAdmin, IsSchoolAdminOrStaffReadOnly, HasSchoolAccess
 from core.mixins import TenantQuerySetMixin
 from students.models import Student, Class
 from .models import Account, Transfer, FeeStructure, FeePayment, Expense, OtherIncome, FinanceAIChatMessage, resolve_fee_amount
@@ -59,10 +59,30 @@ def _resolve_school_id(request):
     return None
 
 
+def _is_staff_user(request):
+    """Check if current user is a staff member (not admin/superadmin)."""
+    return (
+        request.user.is_authenticated and
+        request.user.is_staff_member and
+        not request.user.is_school_admin and
+        not request.user.is_super_admin
+    )
+
+
+def _get_staff_visible_accounts(school_id):
+    """Return account IDs that are visible to staff."""
+    return list(
+        Account.objects.filter(
+            school_id=school_id, is_active=True, staff_visible=True
+        ).values_list('id', flat=True)
+    )
+
+
 class FeeStructureViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
     """CRUD for fee structures (class-level and student-level)."""
     queryset = FeeStructure.objects.all()
-    permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, IsSchoolAdminOrStaffReadOnly, HasSchoolAccess]
+    pagination_class = None
 
     def get_serializer_class(self):
         if self.action == 'create':
@@ -141,7 +161,8 @@ class FeeStructureViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
 class FeePaymentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
     """CRUD + bulk generation + summaries for fee payments."""
     queryset = FeePayment.objects.all()
-    permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, IsSchoolAdminOrStaffReadOnly, HasSchoolAccess]
+    pagination_class = None
 
     def get_serializer_class(self):
         if self.action == 'create':
@@ -161,6 +182,15 @@ class FeePaymentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
                 queryset = queryset.filter(school_id__in=tenant_schools)
             else:
                 return queryset.none()
+
+        # Staff: restrict to payments linked to visible accounts (or no account)
+        if _is_staff_user(self.request):
+            school_id = _resolve_school_id(self.request)
+            if school_id:
+                visible_accounts = _get_staff_visible_accounts(school_id)
+                queryset = queryset.filter(
+                    Q(account_id__in=visible_accounts) | Q(account__isnull=True)
+                )
 
         # Filters
         month = self.request.query_params.get('month')
@@ -237,14 +267,13 @@ class FeePaymentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
                 continue
 
             # Compute carry-forward balance from previous month
+            # Positive = debt carried forward, Negative = advance/credit
             prev_balance = Decimal('0')
             prev_record = FeePayment.objects.filter(
                 school_id=school_id, student=student, month=prev_month, year=prev_year
             ).first()
             if prev_record:
-                remaining = prev_record.amount_due - prev_record.amount_paid
-                if remaining > 0:
-                    prev_balance = remaining
+                prev_balance = prev_record.amount_due - prev_record.amount_paid
 
             FeePayment.objects.create(
                 school_id=school_id,
@@ -360,10 +389,11 @@ class FeePaymentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
             'year': int(year),
             'total_due': total_due,
             'total_collected': total_collected,
-            'total_pending': total_due - total_collected,
+            'total_pending': max(Decimal('0'), total_due - total_collected),
             'paid_count': counts.get('PAID', 0),
             'partial_count': counts.get('PARTIAL', 0),
             'unpaid_count': counts.get('UNPAID', 0),
+            'advance_count': counts.get('ADVANCE', 0),
             'by_class': [
                 {
                     'class_id': item['student__class_obj__id'],
@@ -391,7 +421,8 @@ class FeePaymentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
 class ExpenseViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
     """CRUD + category summaries for school expenses."""
     queryset = Expense.objects.all()
-    permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, IsSchoolAdminOrStaffReadOnly, HasSchoolAccess]
+    pagination_class = None
 
     def get_serializer_class(self):
         if self.action == 'create':
@@ -407,6 +438,16 @@ class ExpenseViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
                 queryset = queryset.filter(school_id__in=tenant_schools)
             else:
                 return queryset.none()
+
+        # Staff: hide sensitive expenses and restrict to visible accounts
+        if _is_staff_user(self.request):
+            queryset = queryset.filter(is_sensitive=False)
+            school_id = _resolve_school_id(self.request)
+            if school_id:
+                visible_accounts = _get_staff_visible_accounts(school_id)
+                queryset = queryset.filter(
+                    Q(account_id__in=visible_accounts) | Q(account__isnull=True)
+                )
 
         # Filters
         category = self.request.query_params.get('category')
@@ -437,6 +478,14 @@ class ExpenseViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
             return Response({'detail': 'No school associated with your account. Please contact an administrator.'}, status=400)
 
         queryset = Expense.objects.filter(school_id=school_id)
+
+        # Staff: hide sensitive expenses and restrict to visible accounts
+        if _is_staff_user(request):
+            queryset = queryset.filter(is_sensitive=False)
+            visible_accounts = _get_staff_visible_accounts(school_id)
+            queryset = queryset.filter(
+                Q(account_id__in=visible_accounts) | Q(account__isnull=True)
+            )
 
         date_from = request.query_params.get('date_from')
         date_to = request.query_params.get('date_to')
@@ -473,7 +522,8 @@ class ExpenseViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
 class OtherIncomeViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
     """CRUD for non-student-linked income (book sales, donations, etc.)."""
     queryset = OtherIncome.objects.all()
-    permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, IsSchoolAdminOrStaffReadOnly, HasSchoolAccess]
+    pagination_class = None
 
     def get_serializer_class(self):
         if self.action == 'create':
@@ -489,6 +539,16 @@ class OtherIncomeViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
                 queryset = queryset.filter(school_id__in=tenant_schools)
             else:
                 return queryset.none()
+
+        # Staff: hide sensitive income and restrict to visible accounts
+        if _is_staff_user(self.request):
+            queryset = queryset.filter(is_sensitive=False)
+            school_id = _resolve_school_id(self.request)
+            if school_id:
+                visible_accounts = _get_staff_visible_accounts(school_id)
+                queryset = queryset.filter(
+                    Q(account_id__in=visible_accounts) | Q(account__isnull=True)
+                )
 
         category = self.request.query_params.get('category')
         date_from = self.request.query_params.get('date_from')
@@ -510,7 +570,8 @@ class OtherIncomeViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
 class AccountViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
     """CRUD for accounts + balance computation."""
     queryset = Account.objects.all()
-    permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, IsSchoolAdminOrStaffReadOnly, HasSchoolAccess]
+    pagination_class = None
 
     def get_serializer_class(self):
         if self.action == 'create':
@@ -526,6 +587,11 @@ class AccountViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
                 queryset = queryset.filter(school_id__in=tenant_schools)
             else:
                 return queryset.none()
+
+        # Staff can only see accounts marked as staff_visible
+        if _is_staff_user(self.request):
+            queryset = queryset.filter(staff_visible=True)
+
         return queryset
 
     def perform_create(self, serializer):
@@ -546,6 +612,12 @@ class AccountViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         date_to = request.query_params.get('date_to')
 
         accounts = Account.objects.filter(school_id=school_id, is_active=True)
+        is_staff = _is_staff_user(request)
+
+        # Staff only sees staff-visible accounts
+        if is_staff:
+            accounts = accounts.filter(staff_visible=True)
+
         results = []
 
         for account in accounts:
@@ -554,6 +626,13 @@ class AccountViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
             expense_qs = Expense.objects.filter(school_id=school_id, account=account)
             tfr_in_qs = Transfer.objects.filter(school_id=school_id, to_account=account)
             tfr_out_qs = Transfer.objects.filter(school_id=school_id, from_account=account)
+
+            # Staff cannot see sensitive transactions
+            if is_staff:
+                income_qs = income_qs.filter(is_sensitive=False)
+                expense_qs = expense_qs.filter(is_sensitive=False)
+                tfr_in_qs = tfr_in_qs.filter(is_sensitive=False)
+                tfr_out_qs = tfr_out_qs.filter(is_sensitive=False)
 
             if date_from:
                 fee_qs = fee_qs.filter(payment_date__gte=date_from)
@@ -603,7 +682,8 @@ class AccountViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
 class TransferViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
     """CRUD for inter-account transfers."""
     queryset = Transfer.objects.all()
-    permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, IsSchoolAdminOrStaffReadOnly, HasSchoolAccess]
+    pagination_class = None
 
     def get_serializer_class(self):
         if self.action == 'create':
@@ -621,6 +701,17 @@ class TransferViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
                 queryset = queryset.filter(school_id__in=tenant_schools)
             else:
                 return queryset.none()
+
+        # Staff: hide sensitive transfers and restrict to visible accounts
+        if _is_staff_user(self.request):
+            queryset = queryset.filter(is_sensitive=False)
+            school_id = _resolve_school_id(self.request)
+            if school_id:
+                visible_accounts = _get_staff_visible_accounts(school_id)
+                queryset = queryset.filter(
+                    from_account_id__in=visible_accounts,
+                    to_account_id__in=visible_accounts,
+                )
 
         account_id = self.request.query_params.get('account_id')
         date_from = self.request.query_params.get('date_from')
@@ -647,7 +738,7 @@ class TransferViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
 
 class FinanceReportsView(APIView):
     """Financial reports: summary and monthly trends."""
-    permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, IsSchoolAdminOrStaffReadOnly, HasSchoolAccess]
 
     def get(self, request):
         school_id = _resolve_school_id(request)
@@ -663,11 +754,29 @@ class FinanceReportsView(APIView):
     def _summary(self, request, school_id):
         date_from = request.query_params.get('date_from')
         date_to = request.query_params.get('date_to')
+        is_staff = _is_staff_user(request)
 
         # Income from fee payments
         fee_qs = FeePayment.objects.filter(school_id=school_id)
         expense_qs = Expense.objects.filter(school_id=school_id)
         other_income_qs = OtherIncome.objects.filter(school_id=school_id)
+
+        # Staff: filter to visible accounts and non-sensitive transactions
+        if is_staff:
+            visible_accounts = _get_staff_visible_accounts(school_id)
+            fee_qs = fee_qs.filter(
+                Q(account_id__in=visible_accounts) | Q(account__isnull=True)
+            )
+            expense_qs = expense_qs.filter(
+                is_sensitive=False
+            ).filter(
+                Q(account_id__in=visible_accounts) | Q(account__isnull=True)
+            )
+            other_income_qs = other_income_qs.filter(
+                is_sensitive=False
+            ).filter(
+                Q(account_id__in=visible_accounts) | Q(account__isnull=True)
+            )
 
         if date_from:
             fee_qs = fee_qs.filter(payment_date__gte=date_from)
@@ -697,6 +806,8 @@ class FinanceReportsView(APIView):
         """Get month-by-month income/expense data."""
         months_count = int(request.query_params.get('months', 6))
         today = date.today()
+        is_staff = _is_staff_user(request)
+        visible_accounts = _get_staff_visible_accounts(school_id) if is_staff else None
 
         trend = []
         for i in range(months_count - 1, -1, -1):
@@ -707,23 +818,31 @@ class FinanceReportsView(APIView):
                 m += 12
                 y -= 1
 
-            fee_income = FeePayment.objects.filter(
+            fee_qs = FeePayment.objects.filter(
                 school_id=school_id, month=m, year=y
-            ).aggregate(total=Sum('amount_paid'))['total'] or Decimal('0')
+            )
+            other_qs = OtherIncome.objects.filter(
+                school_id=school_id, date__year=y, date__month=m,
+            )
+            expense_qs = Expense.objects.filter(
+                school_id=school_id, date__year=y, date__month=m,
+            )
 
-            other_income = OtherIncome.objects.filter(
-                school_id=school_id,
-                date__year=y,
-                date__month=m,
-            ).aggregate(total=Sum('amount'))['total'] or Decimal('0')
+            if is_staff:
+                fee_qs = fee_qs.filter(
+                    Q(account_id__in=visible_accounts) | Q(account__isnull=True)
+                )
+                other_qs = other_qs.filter(is_sensitive=False).filter(
+                    Q(account_id__in=visible_accounts) | Q(account__isnull=True)
+                )
+                expense_qs = expense_qs.filter(is_sensitive=False).filter(
+                    Q(account_id__in=visible_accounts) | Q(account__isnull=True)
+                )
 
+            fee_income = fee_qs.aggregate(total=Sum('amount_paid'))['total'] or Decimal('0')
+            other_income = other_qs.aggregate(total=Sum('amount'))['total'] or Decimal('0')
             income = fee_income + other_income
-
-            expense = Expense.objects.filter(
-                school_id=school_id,
-                date__year=y,
-                date__month=m,
-            ).aggregate(total=Sum('amount'))['total'] or Decimal('0')
+            expense = expense_qs.aggregate(total=Sum('amount'))['total'] or Decimal('0')
 
             trend.append({
                 'month': m,
