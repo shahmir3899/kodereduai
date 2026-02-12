@@ -340,6 +340,13 @@ class FeePayment(models.Model):
             self.status = self.PaymentStatus.PARTIAL
         else:
             self.status = self.PaymentStatus.UNPAID
+
+        # Clear payment metadata when fee becomes UNPAID
+        if self.status == self.PaymentStatus.UNPAID:
+            self.payment_date = None
+            self.account = None
+            self.receipt_number = ''
+
         super().save(*args, **kwargs)
 
 
