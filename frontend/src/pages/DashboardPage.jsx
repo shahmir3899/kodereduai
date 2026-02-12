@@ -4,7 +4,7 @@ import { attendanceApi, financeApi } from '../services/api'
 import { Link } from 'react-router-dom'
 
 export default function DashboardPage() {
-  const { user } = useAuth()
+  const { user, activeSchool } = useAuth()
   const today = new Date().toISOString().split('T')[0]
 
   // Fetch pending reviews
@@ -15,9 +15,9 @@ export default function DashboardPage() {
 
   // Fetch today's report
   const { data: dailyReport } = useQuery({
-    queryKey: ['dailyReport', today],
-    queryFn: () => attendanceApi.getDailyReport(today, user?.school_id),
-    enabled: !!user?.school_id,
+    queryKey: ['dailyReport', today, activeSchool?.id],
+    queryFn: () => attendanceApi.getDailyReport(today, activeSchool?.id),
+    enabled: !!activeSchool?.id,
   })
 
   // Fetch finance summary for current month
@@ -26,7 +26,7 @@ export default function DashboardPage() {
   const { data: financeSummary } = useQuery({
     queryKey: ['financeSummaryDashboard', currentMonth, currentYear],
     queryFn: () => financeApi.getMonthlySummary({ month: currentMonth, year: currentYear }),
-    enabled: !!user?.school_id,
+    enabled: !!activeSchool?.id,
   })
 
   const stats = [
@@ -138,7 +138,7 @@ export default function DashboardPage() {
         <div className="card mb-8">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-gray-900">Finance Overview</h2>
-            <Link to="/finance/fees" className="text-sm text-primary-600 hover:text-primary-700">View Details</Link>
+            <Link to="/finance" className="text-sm text-primary-600 hover:text-primary-700">View Details</Link>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="p-4 bg-green-50 rounded-lg">

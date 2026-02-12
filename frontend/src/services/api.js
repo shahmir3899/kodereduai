@@ -9,12 +9,16 @@ const api = axios.create({
   },
 })
 
-// Request interceptor - add auth token
+// Request interceptor - add auth token + active school header
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('access_token')
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
+    }
+    const schoolId = localStorage.getItem('active_school_id')
+    if (schoolId) {
+      config.headers['X-School-ID'] = schoolId
     }
     return config
   },
@@ -137,6 +141,7 @@ export const schoolsApi = {
   createSchool: (data) => api.post('/api/admin/schools/', data),
   updateSchool: (id, data) => api.patch(`/api/admin/schools/${id}/`, data),
   getSchoolStats: (id) => api.get(`/api/admin/schools/${id}/stats/`),
+  getPlatformStats: () => api.get('/api/admin/schools/platform_stats/'),
   activateSchool: (id) => api.post(`/api/admin/schools/${id}/activate/`),
   deactivateSchool: (id) => api.post(`/api/admin/schools/${id}/deactivate/`),
 
@@ -187,6 +192,7 @@ export const financeApi = {
   createPayment: (data) => api.post('/api/finance/fee-payments/', data),
   generateMonthly: (data) => api.post('/api/finance/fee-payments/generate_monthly/', data),
   getMonthlySummary: (params) => api.get('/api/finance/fee-payments/monthly_summary/', { params }),
+  getMonthlySummaryAll: (params) => api.get('/api/finance/fee-payments/monthly_summary_all/', { params }),
   getStudentLedger: (params) => api.get('/api/finance/fee-payments/student_ledger/', { params }),
   deleteFeePayment: (id) => api.delete(`/api/finance/fee-payments/${id}/`),
   bulkUpdatePayments: (data) => api.post('/api/finance/fee-payments/bulk_update/', data),
@@ -204,6 +210,12 @@ export const financeApi = {
   updateAccount: (id, data) => api.patch(`/api/finance/accounts/${id}/`, data),
   deleteAccount: (id) => api.delete(`/api/finance/accounts/${id}/`),
   getAccountBalances: (params) => api.get('/api/finance/accounts/balances/', { params }),
+  getAccountBalancesAll: (params) => api.get('/api/finance/accounts/balances_all/', { params }),
+
+  // Monthly Closings
+  closeMonth: (data) => api.post('/api/finance/accounts/close_month/', data),
+  getClosings: () => api.get('/api/finance/accounts/closings/'),
+  reopenMonth: (id) => api.delete(`/api/finance/accounts/${id}/reopen/`),
 
   // Transfers
   getTransfers: (params) => api.get('/api/finance/transfers/', { params }),
@@ -225,6 +237,29 @@ export const financeApi = {
   sendChatMessage: (data) => api.post('/api/finance/ai-chat/', data),
   getChatHistory: () => api.get('/api/finance/ai-chat/'),
   clearChatHistory: () => api.delete('/api/finance/ai-chat/'),
+}
+
+// Auth API (school switching + profile)
+export const authApi = {
+  switchSchool: (schoolId) => api.post('/api/auth/switch-school/', { school_id: schoolId }),
+  updateProfile: (data) => api.patch('/api/auth/me/', data),
+  changePassword: (data) => api.post('/api/auth/change-password/', data),
+}
+
+// Organizations API (Super Admin)
+export const organizationsApi = {
+  getAll: (params) => api.get('/api/admin/organizations/', { params }),
+  create: (data) => api.post('/api/admin/organizations/', data),
+  update: (id, data) => api.patch(`/api/admin/organizations/${id}/`, data),
+  delete: (id) => api.delete(`/api/admin/organizations/${id}/`),
+}
+
+// Memberships API (Super Admin)
+export const membershipsApi = {
+  getAll: (params) => api.get('/api/admin/memberships/', { params }),
+  create: (data) => api.post('/api/admin/memberships/', data),
+  update: (id, data) => api.patch(`/api/admin/memberships/${id}/`, data),
+  delete: (id) => api.delete(`/api/admin/memberships/${id}/`),
 }
 
 // Users API

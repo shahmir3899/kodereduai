@@ -1,7 +1,9 @@
 import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../contexts/AuthContext'
 import { financeApi } from '../services/api'
+import TransferModal from '../components/TransferModal'
 
 const CATEGORIES = [
   { value: 'SALARY', label: 'Salary' },
@@ -25,6 +27,12 @@ export default function ExpensesPage() {
   const { user, isStaffMember } = useAuth()
   const canWrite = !isStaffMember
   const queryClient = useQueryClient()
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  const initialTab = searchParams.get('tab') === 'transfers' ? 'transfers' : 'expenses'
+  const [activeTab, setActiveTab] = useState(initialTab)
+
+  // Expense state
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
@@ -34,6 +42,21 @@ export default function ExpensesPage() {
     category: 'SALARY', amount: '', date: new Date().toISOString().split('T')[0], description: '', account: '', is_sensitive: false
   })
 
+  // Transfer state
+  const [tfrDateFrom, setTfrDateFrom] = useState('')
+  const [tfrDateTo, setTfrDateTo] = useState('')
+  const [showTransferModal, setShowTransferModal] = useState(false)
+
+  const handleTabChange = (tab) => {
+    setActiveTab(tab)
+    if (tab === 'transfers') {
+      setSearchParams({ tab: 'transfers' })
+    } else {
+      setSearchParams({})
+    }
+  }
+
+  // --- Expense Queries ---
   const { data: accountsData } = useQuery({
     queryKey: ['accounts'],
     queryFn: () => financeApi.getAccounts(),
@@ -54,8 +77,20 @@ export default function ExpensesPage() {
       ...(dateFrom && { date_from: dateFrom }),
       ...(dateTo && { date_to: dateTo }),
     }),
+    enabled: activeTab === 'expenses',
   })
 
+  // --- Transfer Queries ---
+  const { data: transfersData, isLoading: transfersLoading } = useQuery({
+    queryKey: ['transfers', tfrDateFrom, tfrDateTo],
+    queryFn: () => financeApi.getTransfers({
+      ...(tfrDateFrom && { date_from: tfrDateFrom }),
+      ...(tfrDateTo && { date_to: tfrDateTo }),
+    }),
+    enabled: activeTab === 'transfers',
+  })
+
+  // --- Expense Mutations ---
   const createMutation = useMutation({
     mutationFn: (data) => financeApi.createExpense(data),
     onSuccess: () => {
@@ -79,6 +114,15 @@ export default function ExpensesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['expenses'] })
       queryClient.invalidateQueries({ queryKey: ['expenseCategorySummary'] })
+    },
+  })
+
+  // --- Transfer Mutations ---
+  const deleteTransferMutation = useMutation({
+    mutationFn: (id) => financeApi.deleteTransfer(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['transfers'] })
+      queryClient.invalidateQueries({ queryKey: ['accountBalances'] })
     },
   })
 
@@ -119,148 +163,257 @@ export default function ExpensesPage() {
   const summaryCategories = categorySummary?.data?.categories || []
   const summaryTotal = categorySummary?.data?.total || 0
   const accountsList = accountsData?.data?.results || accountsData?.data || []
+  const transferList = transfersData?.data?.results || transfersData?.data || []
 
   return (
     <div>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Expenses</h1>
-          <p className="text-sm text-gray-600">Track school expenditures</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Expenses & Transfers</h1>
+          <p className="text-sm text-gray-600">Track expenditures and fund movements</p>
         </div>
-        {canWrite && (
-          <button
-            onClick={() => setShowModal(true)}
-            className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm"
-          >
-            Add Expense
-          </button>
-        )}
-      </div>
-
-      {/* Filters */}
-      <div className="card mb-6">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">From Date</label>
-            <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="input-field text-sm" />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">To Date</label>
-            <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="input-field text-sm" />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Category</label>
-            <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="input-field text-sm">
-              <option value="">All Categories</option>
-              {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-            </select>
-          </div>
+        <div className="flex flex-wrap gap-2">
+          {canWrite && activeTab === 'expenses' && (
+            <button onClick={() => setShowModal(true)} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm">
+              Add Expense
+            </button>
+          )}
+          {canWrite && activeTab === 'transfers' && (
+            <button onClick={() => setShowTransferModal(true)} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm">
+              Record Transfer
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Category Summary */}
-      {summaryCategories.length > 0 && (
-        <div className="card mb-6">
-          <h2 className="text-sm font-semibold text-gray-700 mb-3">Category Breakdown</h2>
-          <div className="space-y-2">
-            {summaryCategories.map((cat) => {
-              const pct = summaryTotal > 0 ? (cat.total_amount / summaryTotal * 100) : 0
-              return (
-                <div key={cat.category} className="flex items-center gap-3">
-                  <span className={`px-2 py-0.5 rounded text-xs font-medium w-24 text-center ${categoryColors[cat.category] || 'bg-gray-100'}`}>
-                    {cat.category_display}
-                  </span>
-                  <div className="flex-1 bg-gray-200 rounded-full h-4 overflow-hidden">
-                    <div
-                      className="bg-primary-500 h-full rounded-full transition-all"
-                      style={{ width: `${pct}%` }}
-                    />
-                  </div>
-                  <span className="text-sm font-medium text-gray-700 w-28 text-right">
-                    {Number(cat.total_amount).toLocaleString()}
-                  </span>
-                </div>
-              )
-            })}
-            <div className="flex items-center justify-between pt-2 border-t">
-              <span className="text-sm font-semibold text-gray-700">Total</span>
-              <span className="text-sm font-bold text-gray-900">{Number(summaryTotal).toLocaleString()}</span>
+      {/* Tabs */}
+      <div className="flex gap-1 mb-6 bg-gray-100 rounded-lg p-1 w-fit">
+        <button
+          onClick={() => handleTabChange('expenses')}
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+            activeTab === 'expenses' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+          }`}
+        >
+          Expenses
+        </button>
+        <button
+          onClick={() => handleTabChange('transfers')}
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+            activeTab === 'transfers' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
+          }`}
+        >
+          Transfers
+        </button>
+      </div>
+
+      {/* === Expenses Tab === */}
+      {activeTab === 'expenses' && (
+        <>
+          {/* Filters */}
+          <div className="card mb-6">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">From Date</label>
+                <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="input-field text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">To Date</label>
+                <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="input-field text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Category</label>
+                <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="input-field text-sm">
+                  <option value="">All Categories</option>
+                  {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                </select>
+              </div>
             </div>
           </div>
-        </div>
-      )}
 
-      {/* Expenses Table */}
-      <div className="card">
-        {isLoading ? (
-          <div className="text-center py-8 text-gray-500">Loading...</div>
-        ) : expenseList.length === 0 ? (
-          <div className="text-center py-8">
-            <p className="text-gray-500">No expenses recorded yet</p>
-          </div>
-        ) : (
-          <>
-            {/* Mobile card view */}
-            <div className="sm:hidden space-y-3">
-              {expenseList.map((expense) => (
-                <div key={expense.id} className="border rounded-lg p-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${categoryColors[expense.category]}`}>
-                      {expense.category_display}
-                    </span>
-                    <span className="text-sm text-gray-500">{expense.date}</span>
-                  </div>
-                  <p className="text-lg font-bold text-gray-900">{Number(expense.amount).toLocaleString()}</p>
-                  {expense.description && <p className="text-sm text-gray-600 mt-1">{expense.description}</p>}
-                  {canWrite && (
-                    <div className="flex gap-2 mt-2">
-                      <button onClick={() => openEdit(expense)} className="text-xs text-primary-600 hover:underline">Edit</button>
-                      <button onClick={() => { if (confirm('Delete this expense?')) deleteMutation.mutate(expense.id) }} className="text-xs text-red-600 hover:underline">Delete</button>
+          {/* Category Summary */}
+          {summaryCategories.length > 0 && (
+            <div className="card mb-6">
+              <h2 className="text-sm font-semibold text-gray-700 mb-3">Category Breakdown</h2>
+              <div className="space-y-2">
+                {summaryCategories.map((cat) => {
+                  const pct = summaryTotal > 0 ? (cat.total_amount / summaryTotal * 100) : 0
+                  return (
+                    <div key={cat.category} className="flex items-center gap-3">
+                      <span className={`px-2 py-0.5 rounded text-xs font-medium w-24 text-center ${categoryColors[cat.category] || 'bg-gray-100'}`}>
+                        {cat.category_display}
+                      </span>
+                      <div className="flex-1 bg-gray-200 rounded-full h-4 overflow-hidden">
+                        <div className="bg-primary-500 h-full rounded-full transition-all" style={{ width: `${pct}%` }} />
+                      </div>
+                      <span className="text-sm font-medium text-gray-700 w-28 text-right">
+                        {Number(cat.total_amount).toLocaleString()}
+                      </span>
                     </div>
-                  )}
+                  )
+                })}
+                <div className="flex items-center justify-between pt-2 border-t">
+                  <span className="text-sm font-semibold text-gray-700">Total</span>
+                  <span className="text-sm font-bold text-gray-900">{Number(summaryTotal).toLocaleString()}</span>
                 </div>
-              ))}
+              </div>
             </div>
+          )}
 
-            {/* Desktop table */}
-            <div className="hidden sm:block overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Amount</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Recorded By</th>
-                    {canWrite && <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>}
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+          {/* Expenses Table */}
+          <div className="card">
+            {isLoading ? (
+              <div className="text-center py-8 text-gray-500">Loading...</div>
+            ) : expenseList.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-gray-500">No expenses recorded yet</p>
+              </div>
+            ) : (
+              <>
+                {/* Mobile card view */}
+                <div className="sm:hidden space-y-3">
                   {expenseList.map((expense) => (
-                    <tr key={expense.id}>
-                      <td className="px-4 py-3 text-sm text-gray-900">{expense.date}</td>
-                      <td className="px-4 py-3">
+                    <div key={expense.id} className="border rounded-lg p-3">
+                      <div className="flex items-center justify-between mb-2">
                         <span className={`px-2 py-0.5 rounded text-xs font-medium ${categoryColors[expense.category]}`}>
                           {expense.category_display}
                         </span>
-                      </td>
-                      <td className="px-4 py-3 text-sm font-medium text-gray-900 text-right">{Number(expense.amount).toLocaleString()}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600 max-w-xs truncate">{expense.description || '-'}</td>
-                      <td className="px-4 py-3 text-sm text-gray-500">{expense.recorded_by_name || '-'}</td>
+                        <span className="text-sm text-gray-500">{expense.date}</span>
+                      </div>
+                      <p className="text-lg font-bold text-gray-900">{Number(expense.amount).toLocaleString()}</p>
+                      {expense.description && <p className="text-sm text-gray-600 mt-1">{expense.description}</p>}
                       {canWrite && (
-                        <td className="px-4 py-3 text-center">
-                          <button onClick={() => openEdit(expense)} className="text-sm text-primary-600 hover:underline mr-3">Edit</button>
-                          <button onClick={() => { if (confirm('Delete this expense?')) deleteMutation.mutate(expense.id) }} className="text-sm text-red-600 hover:underline">Delete</button>
-                        </td>
+                        <div className="flex gap-2 mt-2">
+                          <button onClick={() => openEdit(expense)} className="text-xs text-primary-600 hover:underline">Edit</button>
+                          <button onClick={() => { if (confirm('Delete this expense?')) deleteMutation.mutate(expense.id) }} className="text-xs text-red-600 hover:underline">Delete</button>
+                        </div>
                       )}
-                    </tr>
+                    </div>
                   ))}
-                </tbody>
-              </table>
+                </div>
+
+                {/* Desktop table */}
+                <div className="hidden sm:block overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Amount</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Recorded By</th>
+                        {canWrite && <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>}
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {expenseList.map((expense) => (
+                        <tr key={expense.id}>
+                          <td className="px-4 py-3 text-sm text-gray-900">{expense.date}</td>
+                          <td className="px-4 py-3">
+                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${categoryColors[expense.category]}`}>{expense.category_display}</span>
+                          </td>
+                          <td className="px-4 py-3 text-sm font-medium text-gray-900 text-right">{Number(expense.amount).toLocaleString()}</td>
+                          <td className="px-4 py-3 text-sm text-gray-600 max-w-xs truncate">{expense.description || '-'}</td>
+                          <td className="px-4 py-3 text-sm text-gray-500">{expense.recorded_by_name || '-'}</td>
+                          {canWrite && (
+                            <td className="px-4 py-3 text-center">
+                              <button onClick={() => openEdit(expense)} className="text-sm text-primary-600 hover:underline mr-3">Edit</button>
+                              <button onClick={() => { if (confirm('Delete this expense?')) deleteMutation.mutate(expense.id) }} className="text-sm text-red-600 hover:underline">Delete</button>
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* === Transfers Tab === */}
+      {activeTab === 'transfers' && (
+        <>
+          <div className="card mb-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">From Date</label>
+                <input type="date" value={tfrDateFrom} onChange={(e) => setTfrDateFrom(e.target.value)} className="input-field text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">To Date</label>
+                <input type="date" value={tfrDateTo} onChange={(e) => setTfrDateTo(e.target.value)} className="input-field text-sm" />
+              </div>
             </div>
-          </>
-        )}
-      </div>
+          </div>
+
+          <div className="card">
+            {transfersLoading ? (
+              <div className="text-center py-8 text-gray-500">Loading...</div>
+            ) : transferList.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-gray-500 mb-2">No transfers recorded</p>
+                <p className="text-sm text-gray-400">Click "Record Transfer" to move funds between accounts</p>
+              </div>
+            ) : (
+              <>
+                {/* Mobile */}
+                <div className="sm:hidden space-y-3">
+                  {transferList.map((tfr) => (
+                    <div key={tfr.id} className="border rounded-lg p-3">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-medium text-gray-900">{tfr.from_account_name} &rarr; {tfr.to_account_name}</span>
+                        <span className="font-bold text-gray-900">{Number(tfr.amount).toLocaleString()}</span>
+                      </div>
+                      <p className="text-xs text-gray-500">{tfr.date} {tfr.description && `— ${tfr.description}`}</p>
+                      {canWrite && (
+                        <button
+                          onClick={() => { if (confirm('Delete this transfer?')) deleteTransferMutation.mutate(tfr.id) }}
+                          className="mt-2 text-xs text-red-600 hover:text-red-800"
+                        >
+                          Delete
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Desktop */}
+                <div className="hidden sm:block overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">From</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">To</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Amount</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
+                        {canWrite && <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>}
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {transferList.map((tfr) => (
+                        <tr key={tfr.id}>
+                          <td className="px-4 py-3 text-sm text-gray-500">{tfr.date}</td>
+                          <td className="px-4 py-3 text-sm text-gray-900">{tfr.from_account_name}</td>
+                          <td className="px-4 py-3 text-sm text-gray-900">{tfr.to_account_name}</td>
+                          <td className="px-4 py-3 text-sm font-medium text-gray-900 text-right">{Number(tfr.amount).toLocaleString()}</td>
+                          <td className="px-4 py-3 text-sm text-gray-600 max-w-xs truncate">{tfr.description || '—'}</td>
+                          {canWrite && (
+                            <td className="px-4 py-3 text-center">
+                              <button onClick={() => { if (confirm('Delete this transfer?')) deleteTransferMutation.mutate(tfr.id) }} className="text-sm text-red-600 hover:underline">Delete</button>
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </div>
+        </>
+      )}
 
       {/* Add/Edit Expense Modal */}
       {showModal && (
@@ -271,79 +424,39 @@ export default function ExpensesPage() {
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-                  <select
-                    value={form.category}
-                    onChange={(e) => setForm(f => ({ ...f, category: e.target.value }))}
-                    className="input-field"
-                    required
-                  >
+                  <select value={form.category} onChange={(e) => setForm(f => ({ ...f, category: e.target.value }))} className="input-field" required>
                     {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={form.amount}
-                    onChange={(e) => setForm(f => ({ ...f, amount: e.target.value }))}
-                    className="input-field"
-                    required
-                  />
+                  <input type="number" step="0.01" value={form.amount} onChange={(e) => setForm(f => ({ ...f, amount: e.target.value }))} className="input-field" required />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
-                  <input
-                    type="date"
-                    value={form.date}
-                    onChange={(e) => setForm(f => ({ ...f, date: e.target.value }))}
-                    className="input-field"
-                    required
-                  />
+                  <input type="date" value={form.date} onChange={(e) => setForm(f => ({ ...f, date: e.target.value }))} className="input-field" required />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Account <span className="text-red-500">*</span></label>
-                  <select
-                    value={form.account}
-                    onChange={(e) => setForm(f => ({ ...f, account: e.target.value }))}
-                    className="input-field"
-                    required
-                  >
+                  <select value={form.account} onChange={(e) => setForm(f => ({ ...f, account: e.target.value }))} className="input-field" required>
                     <option value="">-- Select Account --</option>
                     {accountsList.filter(a => a.is_active).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                  <textarea
-                    value={form.description}
-                    onChange={(e) => setForm(f => ({ ...f, description: e.target.value }))}
-                    className="input-field"
-                    rows={3}
-                    placeholder="Brief description of the expense..."
-                  />
+                  <textarea value={form.description} onChange={(e) => setForm(f => ({ ...f, description: e.target.value }))} className="input-field" rows={3} placeholder="Brief description of the expense..." />
                 </div>
                 <div>
                   <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={form.is_sensitive}
-                      onChange={(e) => setForm(f => ({ ...f, is_sensitive: e.target.checked }))}
-                      className="rounded"
-                    />
+                    <input type="checkbox" checked={form.is_sensitive} onChange={(e) => setForm(f => ({ ...f, is_sensitive: e.target.checked }))} className="rounded" />
                     Mark as Sensitive
                   </label>
                   <p className="text-xs text-gray-400 mt-1 ml-6">Hidden from staff members</p>
                 </div>
                 <div className="flex gap-3 pt-2">
-                  <button type="button" onClick={closeModal} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={createMutation.isPending || updateMutation.isPending}
-                    className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50"
-                  >
+                  <button type="button" onClick={closeModal} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">Cancel</button>
+                  <button type="submit" disabled={createMutation.isPending || updateMutation.isPending} className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50">
                     {(createMutation.isPending || updateMutation.isPending) ? 'Saving...' : 'Save'}
                   </button>
                 </div>
@@ -355,6 +468,13 @@ export default function ExpensesPage() {
           </div>
         </div>
       )}
+
+      {/* Transfer Modal (reusable component) */}
+      <TransferModal
+        isOpen={showTransferModal}
+        onClose={() => setShowTransferModal(false)}
+        onSuccess={() => queryClient.invalidateQueries({ queryKey: ['transfers'] })}
+      />
     </div>
   )
 }

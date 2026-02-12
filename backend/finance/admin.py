@@ -1,5 +1,8 @@
 from django.contrib import admin
-from .models import Account, Transfer, FeeStructure, FeePayment, Expense, OtherIncome, FinanceAIChatMessage
+from .models import (
+    Account, Transfer, FeeStructure, FeePayment, Expense, OtherIncome,
+    FinanceAIChatMessage, MonthlyClosing, AccountSnapshot,
+)
 
 
 @admin.register(Account)
@@ -48,3 +51,17 @@ class OtherIncomeAdmin(admin.ModelAdmin):
 class FinanceAIChatMessageAdmin(admin.ModelAdmin):
     list_display = ['school', 'user', 'role', 'created_at']
     list_filter = ['school', 'role']
+
+
+@admin.register(MonthlyClosing)
+class MonthlyClosingAdmin(admin.ModelAdmin):
+    list_display = ['school', 'year', 'month', 'closed_by', 'closed_at']
+    list_filter = ['school', 'year']
+    ordering = ['-year', '-month']
+
+
+@admin.register(AccountSnapshot)
+class AccountSnapshotAdmin(admin.ModelAdmin):
+    list_display = ['closing', 'account', 'closing_balance', 'opening_balance_used']
+    list_filter = ['closing__school', 'closing__year', 'closing__month']
+    search_fields = ['account__name']

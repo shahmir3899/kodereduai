@@ -1,14 +1,14 @@
 import { createContext, useContext, useState, useEffect } from 'react'
-import api from '../services/api'
+import api, { authApi } from '../services/api'
 
 const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
+  const [activeSchool, setActiveSchool] = useState(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Check for existing token on mount
     const token = localStorage.getItem('access_token')
     if (token) {
       fetchCurrentUser()
@@ -17,10 +17,67 @@ export function AuthProvider({ children }) {
     }
   }, [])
 
+  const resolveActiveSchool = (userData) => {
+    const schools = userData.schools || []
+    const savedId = localStorage.getItem('active_school_id')
+
+    // Try saved school first
+    if (savedId) {
+      const saved = schools.find(s => String(s.id) === String(savedId))
+      if (saved) return saved
+    }
+
+    // Fall back to default membership
+    const defaultSchool = schools.find(s => s.is_default)
+    if (defaultSchool) return defaultSchool
+
+    // Fall back to first school
+    if (schools.length > 0) return schools[0]
+
+    // Legacy fallback for users without memberships
+    if (userData.school_id) {
+      return {
+        id: userData.school_id,
+        name: userData.school_name || userData.school_details?.name || 'School',
+        role: userData.role,
+        is_default: true,
+      }
+    }
+
+    return null
+  }
+
   const fetchCurrentUser = async () => {
     try {
       const response = await api.get('/api/auth/me/')
-      // Normalize user object to ensure school_id and school_name are available
+      const userData = response.data
+      // Normalize
+      if (!userData.school_id && userData.school) {
+        userData.school_id = userData.school
+      }
+      if (!userData.school_name && userData.school_details?.name) {
+        userData.school_name = userData.school_details.name
+      }
+      setUser(userData)
+
+      const school = resolveActiveSchool(userData)
+      setActiveSchool(school)
+      if (school) {
+        localStorage.setItem('active_school_id', school.id)
+      }
+    } catch (error) {
+      console.error('Failed to fetch user:', error)
+      localStorage.removeItem('access_token')
+      localStorage.removeItem('refresh_token')
+      localStorage.removeItem('active_school_id')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const refreshUser = async () => {
+    try {
+      const response = await api.get('/api/auth/me/')
       const userData = response.data
       if (!userData.school_id && userData.school) {
         userData.school_id = userData.school
@@ -29,12 +86,10 @@ export function AuthProvider({ children }) {
         userData.school_name = userData.school_details.name
       }
       setUser(userData)
+      return userData
     } catch (error) {
-      console.error('Failed to fetch user:', error)
-      localStorage.removeItem('access_token')
-      localStorage.removeItem('refresh_token')
-    } finally {
-      setLoading(false)
+      console.error('Failed to refresh user:', error)
+      throw error
     }
   }
 
@@ -50,7 +105,7 @@ export function AuthProvider({ children }) {
       throw new Error('Login succeeded but server returned no user data.')
     }
 
-    // Normalize user object to ensure school_id and school_name are available
+    // Normalize
     if (!userData.school_id && userData.school) {
       userData.school_id = userData.school
     }
@@ -62,24 +117,57 @@ export function AuthProvider({ children }) {
     localStorage.setItem('refresh_token', refresh)
     setUser(userData)
 
+    const school = resolveActiveSchool(userData)
+    setActiveSchool(school)
+    if (school) {
+      localStorage.setItem('active_school_id', school.id)
+    }
+
     return userData
   }
 
   const logout = () => {
     localStorage.removeItem('access_token')
     localStorage.removeItem('refresh_token')
+    localStorage.removeItem('active_school_id')
     setUser(null)
+    setActiveSchool(null)
   }
+
+  const switchSchool = async (schoolId) => {
+    try {
+      const response = await authApi.switchSchool(schoolId)
+      const { school_id, school_name, role } = response.data
+
+      const newSchool = { id: school_id, name: school_name, role }
+      setActiveSchool(newSchool)
+      localStorage.setItem('active_school_id', school_id)
+
+      // Reload to refresh all data for the new school context
+      window.location.reload()
+    } catch (error) {
+      console.error('Failed to switch school:', error)
+      throw error
+    }
+  }
+
+  // Determine role based on active school membership
+  const effectiveRole = activeSchool?.role || user?.role
+  const isSchoolAdmin = user?.is_super_admin || effectiveRole === 'SCHOOL_ADMIN' || effectiveRole === 'PRINCIPAL'
 
   const value = {
     user,
+    activeSchool,
     loading,
     login,
     logout,
+    switchSchool,
+    refreshUser,
     isAuthenticated: !!user,
     isSuperAdmin: user?.is_super_admin,
-    isSchoolAdmin: user?.role === 'SCHOOL_ADMIN',
-    isStaffMember: user?.role === 'STAFF',
+    isSchoolAdmin,
+    isPrincipal: effectiveRole === 'PRINCIPAL',
+    isStaffMember: effectiveRole === 'STAFF',
   }
 
   return (

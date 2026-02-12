@@ -5,6 +5,7 @@ User serializers for authentication and user management.
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.contrib.auth import get_user_model
+from schools.models import School
 
 User = get_user_model()
 
@@ -22,22 +23,64 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         token['username'] = user.username
         token['role'] = user.role
         token['school_id'] = user.school_id
+        if user.organization_id:
+            token['organization_id'] = user.organization_id
 
         return token
 
     def validate(self, attrs):
         data = super().validate(attrs)
 
-        # Add user info to response
+        user = self.user
+        default_mem = user.get_default_membership()
+
+        # Build schools list
+        schools = []
+        if user.is_super_admin:
+            # Super admin sees all active schools
+            for school in School.objects.filter(is_active=True):
+                schools.append({
+                    'id': school.id,
+                    'name': school.name,
+                    'role': 'SUPER_ADMIN',
+                    'is_default': school.id == (user.school_id or 0),
+                })
+            # Ensure at least one default
+            if schools and not any(s['is_default'] for s in schools):
+                schools[0]['is_default'] = True
+        else:
+            for mem in user.school_memberships.filter(is_active=True).select_related('school'):
+                schools.append({
+                    'id': mem.school_id,
+                    'name': mem.school.name,
+                    'role': mem.role,
+                    'is_default': mem.is_default,
+                })
+            # Legacy fallback: include user.school if not already in memberships
+            if user.school_id and not any(s['id'] == user.school_id for s in schools):
+                try:
+                    legacy_school = School.objects.get(id=user.school_id, is_active=True)
+                    schools.insert(0, {
+                        'id': legacy_school.id,
+                        'name': legacy_school.name,
+                        'role': user.role or 'STAFF',
+                        'is_default': not any(s['is_default'] for s in schools),
+                    })
+                except School.DoesNotExist:
+                    pass
+
         data['user'] = {
-            'id': self.user.id,
-            'username': self.user.username,
-            'email': self.user.email,
-            'role': self.user.role,
-            'role_display': self.user.get_role_display(),
-            'school_id': self.user.school_id,
-            'school_name': self.user.school.name if self.user.school else None,
-            'is_super_admin': self.user.is_super_admin,
+            'id': user.id,
+            'username': user.username,
+            'email': user.email,
+            'role': user.role,
+            'role_display': user.get_role_display(),
+            'school_id': default_mem.school_id if default_mem else user.school_id,
+            'school_name': default_mem.school.name if default_mem else (user.school.name if user.school else None),
+            'is_super_admin': user.is_super_admin,
+            'organization_id': user.organization_id,
+            'organization_name': user.organization.name if user.organization else None,
+            'schools': schools,
         }
 
         return data
@@ -98,7 +141,7 @@ class UserUpdateSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             'email', 'first_name', 'last_name',
-            'phone', 'profile_photo_url', 'is_active'
+            'role', 'phone', 'profile_photo_url', 'is_active'
         ]
 
 
@@ -124,6 +167,19 @@ class ChangePasswordSerializer(serializers.Serializer):
         return value
 
 
+class ProfileUpdateSerializer(serializers.ModelSerializer):
+    """Serializer for self-service profile updates. Excludes role, is_active, school, username."""
+    class Meta:
+        model = User
+        fields = ['first_name', 'last_name', 'email', 'phone', 'profile_photo_url']
+
+    def validate_email(self, value):
+        user = self.context['request'].user
+        if value and User.objects.filter(email=value).exclude(pk=user.pk).exists():
+            raise serializers.ValidationError("This email is already in use.")
+        return value
+
+
 class CurrentUserSerializer(serializers.ModelSerializer):
     """
     Serializer for the current authenticated user with full details.
@@ -131,6 +187,8 @@ class CurrentUserSerializer(serializers.ModelSerializer):
     role_display = serializers.CharField(source='get_role_display', read_only=True)
     school_details = serializers.SerializerMethodField()
     school_id = serializers.SerializerMethodField()
+    schools = serializers.SerializerMethodField()
+    organization_name = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -139,6 +197,7 @@ class CurrentUserSerializer(serializers.ModelSerializer):
             'role', 'role_display', 'school', 'school_id', 'school_details',
             'phone', 'profile_photo_url', 'is_super_admin',
             'is_school_admin', 'is_staff_member',
+            'organization', 'organization_name', 'schools',
             'created_at', 'last_login'
         ]
 
@@ -155,3 +214,42 @@ class CurrentUserSerializer(serializers.ModelSerializer):
                 'enabled_modules': obj.school.enabled_modules,
             }
         return None
+
+    def get_schools(self, obj):
+        if obj.is_super_admin:
+            schools = []
+            for school in School.objects.filter(is_active=True):
+                schools.append({
+                    'id': school.id,
+                    'name': school.name,
+                    'role': 'SUPER_ADMIN',
+                    'is_default': school.id == (obj.school_id or 0),
+                })
+            if schools and not any(s['is_default'] for s in schools):
+                schools[0]['is_default'] = True
+            return schools
+        schools = [
+            {
+                'id': mem.school_id,
+                'name': mem.school.name,
+                'role': mem.role,
+                'is_default': mem.is_default,
+            }
+            for mem in obj.school_memberships.filter(is_active=True).select_related('school')
+        ]
+        # Legacy fallback: include user.school if not already in memberships
+        if obj.school_id and not any(s['id'] == obj.school_id for s in schools):
+            try:
+                legacy_school = School.objects.get(id=obj.school_id, is_active=True)
+                schools.insert(0, {
+                    'id': legacy_school.id,
+                    'name': legacy_school.name,
+                    'role': obj.role or 'STAFF',
+                    'is_default': not any(s['is_default'] for s in schools),
+                })
+            except School.DoesNotExist:
+                pass
+        return schools
+
+    def get_organization_name(self, obj):
+        return obj.organization.name if obj.organization else None

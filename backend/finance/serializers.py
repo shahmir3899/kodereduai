@@ -3,7 +3,10 @@ Finance serializers for fee structures, payments, expenses, other income, and AI
 """
 
 from rest_framework import serializers
-from .models import Account, Transfer, FeeStructure, FeePayment, Expense, OtherIncome, FinanceAIChatMessage
+from .models import (
+    Account, Transfer, FeeStructure, FeePayment, Expense, OtherIncome,
+    FinanceAIChatMessage, MonthlyClosing, AccountSnapshot,
+)
 
 
 class AccountSerializer(serializers.ModelSerializer):
@@ -262,3 +265,24 @@ class OtherIncomeCreateSerializer(serializers.ModelSerializer):
 
 class FinanceAIChatInputSerializer(serializers.Serializer):
     message = serializers.CharField(max_length=1000)
+
+
+class CloseMonthSerializer(serializers.Serializer):
+    year = serializers.IntegerField(min_value=2020, max_value=2100)
+    month = serializers.IntegerField(min_value=1, max_value=12)
+    notes = serializers.CharField(required=False, allow_blank=True, default='')
+
+
+class MonthlyClosingSerializer(serializers.ModelSerializer):
+    closed_by_name = serializers.CharField(
+        source='closed_by.username', read_only=True, default=None
+    )
+
+    class Meta:
+        model = MonthlyClosing
+        fields = [
+            'id', 'school', 'year', 'month',
+            'closed_by', 'closed_by_name', 'closed_at',
+            'notes',
+        ]
+        read_only_fields = ['id', 'closed_at']

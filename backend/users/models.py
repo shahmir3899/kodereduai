@@ -40,6 +40,7 @@ class User(AbstractUser):
     class Role(models.TextChoices):
         SUPER_ADMIN = 'SUPER_ADMIN', 'Super Admin'
         SCHOOL_ADMIN = 'SCHOOL_ADMIN', 'School Admin'
+        PRINCIPAL = 'PRINCIPAL', 'Principal'
         STAFF = 'STAFF', 'Staff'
 
     # Role field
@@ -49,14 +50,24 @@ class User(AbstractUser):
         default=Role.STAFF
     )
 
-    # School association (nullable for Super Admin)
+    # Organization
+    organization = models.ForeignKey(
+        'schools.Organization',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='users',
+        help_text="Organization this user belongs to",
+    )
+
+    # School association — DEPRECATED: kept for backward compat, synced from default membership
     school = models.ForeignKey(
         'schools.School',
         on_delete=models.CASCADE,
         null=True,
         blank=True,
         related_name='users',
-        help_text="School this user belongs to (null for Super Admin)"
+        help_text="Deprecated: use school_memberships instead",
     )
 
     # Contact info
@@ -90,6 +101,11 @@ class User(AbstractUser):
         return self.role == self.Role.SCHOOL_ADMIN
 
     @property
+    def is_principal(self) -> bool:
+        """Check if user is a Principal."""
+        return self.role == self.Role.PRINCIPAL
+
+    @property
     def is_staff_member(self) -> bool:
         """Check if user is a Staff member."""
         return self.role == self.Role.STAFF
@@ -98,4 +114,39 @@ class User(AbstractUser):
         """Check if user can access a specific school's data."""
         if self.is_super_admin:
             return True
-        return self.school_id == school_id
+        return school_id in self.get_accessible_school_ids()
+
+    def get_default_membership(self):
+        """Return the user's default school membership (or first active one)."""
+        from schools.models import UserSchoolMembership
+        mem = UserSchoolMembership.objects.filter(
+            user=self, is_active=True, is_default=True,
+        ).select_related('school').first()
+        if not mem:
+            mem = UserSchoolMembership.objects.filter(
+                user=self, is_active=True,
+            ).select_related('school').first()
+        return mem
+
+    def get_accessible_school_ids(self):
+        """Return list of school IDs this user can access."""
+        if self.is_super_admin:
+            from schools.models import School
+            return list(School.objects.values_list('id', flat=True))
+        ids = list(
+            self.school_memberships.filter(is_active=True)
+            .values_list('school_id', flat=True)
+        )
+        # Legacy fallback: include user.school_id if not already covered by memberships
+        if self.school_id and self.school_id not in ids:
+            ids.append(self.school_id)
+        return ids
+
+    def get_role_for_school(self, school_id):
+        """Return the user's role for a specific school, or None."""
+        if self.is_super_admin:
+            return self.Role.SUPER_ADMIN
+        mem = self.school_memberships.filter(
+            school_id=school_id, is_active=True,
+        ).first()
+        return mem.role if mem else None

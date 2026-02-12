@@ -2,6 +2,10 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../contexts/AuthContext'
 import { financeApi } from '../services/api'
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, Legend,
+} from 'recharts'
 
 const PERIODS = [
   { label: 'This Month', getValue: () => { const d = new Date(); return { date_from: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`, date_to: d.toISOString().split('T')[0] } } },
@@ -48,11 +52,15 @@ export default function FinancialReportsPage() {
   const categories = categorySummary?.data?.categories || []
   const catTotal = categorySummary?.data?.total || 0
 
-  // Find max value for trend chart scaling
-  const maxTrendValue = Math.max(
-    ...trendData.map(t => Math.max(Number(t.income || 0), Number(t.expenses || 0))),
-    1
-  )
+  // Prepare chart data
+  const trendChartData = trendData.map(t => ({
+    name: `${MONTH_NAMES[t.month - 1]} ${t.year}`,
+    Income: Number(t.income || 0),
+    Expenses: Number(t.expenses || 0),
+    Balance: Number(t.balance || 0),
+  }))
+
+  const EXPENSE_COLORS = ['#dc2626', '#ea580c', '#f59e0b', '#8b5cf6', '#06b6d4', '#6b7280']
 
   return (
     <div>
@@ -126,54 +134,23 @@ export default function FinancialReportsPage() {
       )}
 
       {/* Monthly Trend */}
-      {trendData.length > 0 && (
+      {trendChartData.length > 0 && (
         <div className="card mb-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Monthly Trend (Last 6 Months)</h2>
-
-          {/* Legend */}
-          <div className="flex gap-4 mb-4 text-sm">
-            <div className="flex items-center gap-1">
-              <div className="w-3 h-3 bg-green-500 rounded" />
-              <span className="text-gray-600">Income</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <div className="w-3 h-3 bg-red-400 rounded" />
-              <span className="text-gray-600">Expenses</span>
-            </div>
-          </div>
-
-          {/* Bar chart */}
-          <div className="space-y-3">
-            {trendData.map((item) => {
-              const incomePct = (Number(item.income) / maxTrendValue) * 100
-              const expensePct = (Number(item.expenses) / maxTrendValue) * 100
-              return (
-                <div key={`${item.year}-${item.month}`}>
-                  <div className="flex items-center justify-between text-sm mb-1">
-                    <span className="text-gray-700 font-medium w-16">{MONTH_NAMES[item.month - 1]} {item.year}</span>
-                    <span className="text-xs text-gray-500">
-                      Balance: <span className={Number(item.balance) >= 0 ? 'text-green-600' : 'text-red-600'}>
-                        {Number(item.balance).toLocaleString()}
-                      </span>
-                    </span>
-                  </div>
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1 bg-gray-100 rounded-full h-3 overflow-hidden">
-                        <div className="bg-green-500 h-full rounded-full transition-all" style={{ width: `${incomePct}%` }} />
-                      </div>
-                      <span className="text-xs text-gray-600 w-20 text-right">{Number(item.income).toLocaleString()}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1 bg-gray-100 rounded-full h-3 overflow-hidden">
-                        <div className="bg-red-400 h-full rounded-full transition-all" style={{ width: `${expensePct}%` }} />
-                      </div>
-                      <span className="text-xs text-gray-600 w-20 text-right">{Number(item.expenses).toLocaleString()}</span>
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
+          <div className="h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={trendChartData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v} />
+                <Tooltip
+                  formatter={(value, name) => [value.toLocaleString(), name]}
+                  labelStyle={{ fontWeight: 'bold' }}
+                />
+                <Legend />
+                <Bar dataKey="Income" fill="#16a34a" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="Expenses" fill="#ef4444" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
         </div>
       )}
@@ -182,6 +159,30 @@ export default function FinancialReportsPage() {
       {categories.length > 0 && (
         <div className="card">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Expense Breakdown</h2>
+
+          {/* Pie Chart */}
+          <div className="h-64 mb-6">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={categories.map(c => ({ name: c.category_display, value: Number(c.total_amount) }))}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={45}
+                  outerRadius={80}
+                  paddingAngle={3}
+                  dataKey="value"
+                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                >
+                  {categories.map((_, i) => (
+                    <Cell key={i} fill={EXPENSE_COLORS[i % EXPENSE_COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip formatter={(value) => value.toLocaleString()} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">

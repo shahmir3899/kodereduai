@@ -10,10 +10,12 @@ import RegisterPage from './pages/RegisterPage'
 import StudentsPage from './pages/StudentsPage'
 import ClassesPage from './pages/ClassesPage'
 import SuperAdminDashboard from './pages/SuperAdminDashboard'
+import ProfilePage from './pages/ProfilePage'
 import FeeCollectionPage from './pages/fee-collection/FeeCollectionPage'
 import ExpensesPage from './pages/ExpensesPage'
 import FinancialReportsPage from './pages/FinancialReportsPage'
-import AccountsPage from './pages/AccountsPage'
+import FinanceDashboardPage from './pages/FinanceDashboardPage'
+import SettingsPage from './pages/SettingsPage'
 
 // Components
 import Layout from './components/Layout'
@@ -70,6 +72,21 @@ function ProtectedRoute({ children, requireSuperAdmin = false }) {
   return children
 }
 
+// Redirect root to role-appropriate dashboard
+function RootRedirect() {
+  const { isSuperAdmin } = useAuth()
+  return <Navigate to={isSuperAdmin ? '/admin' : '/dashboard'} replace />
+}
+
+// Guard: redirect SuperAdmin away from school-internal routes
+function SchoolRoute({ children }) {
+  const { isSuperAdmin } = useAuth()
+  if (isSuperAdmin) {
+    return <Navigate to="/admin" replace />
+  }
+  return children
+}
+
 function App() {
   const { loading } = useAuth()
 
@@ -92,29 +109,31 @@ function App() {
             </ProtectedRoute>
           }
         >
-          <Route index element={<Navigate to="/dashboard" replace />} />
-          <Route path="dashboard" element={<DashboardPage />} />
+          <Route index element={<RootRedirect />} />
+          <Route path="profile" element={<ProfilePage />} />
+          <Route path="dashboard" element={<SchoolRoute><DashboardPage /></SchoolRoute>} />
 
           {/* Attendance — consolidated into 2 pages */}
-          <Route path="attendance" element={<CaptureReviewPage />} />
-          <Route path="attendance/review/:id" element={<CaptureReviewPage />} />
-          <Route path="attendance/register" element={<RegisterPage />} />
+          <Route path="attendance" element={<SchoolRoute><CaptureReviewPage /></SchoolRoute>} />
+          <Route path="attendance/review/:id" element={<SchoolRoute><CaptureReviewPage /></SchoolRoute>} />
+          <Route path="attendance/register" element={<SchoolRoute><RegisterPage /></SchoolRoute>} />
 
           {/* Redirects from old routes */}
           <Route path="attendance/upload" element={<Navigate to="/attendance" replace />} />
           <Route path="attendance/review" element={<Navigate to="/attendance?tab=review" replace />} />
           <Route path="attendance/records" element={<Navigate to="/attendance/register" replace />} />
-          <Route path="settings" element={<Navigate to="/attendance/register?tab=config" replace />} />
+          <Route path="settings" element={<SchoolRoute><SettingsPage /></SchoolRoute>} />
           <Route path="accuracy" element={<Navigate to="/attendance/register?tab=analytics" replace />} />
 
-          <Route path="students" element={<StudentsPage />} />
-          <Route path="classes" element={<ClassesPage />} />
+          <Route path="students" element={<SchoolRoute><StudentsPage /></SchoolRoute>} />
+          <Route path="classes" element={<SchoolRoute><ClassesPage /></SchoolRoute>} />
 
           {/* Finance routes */}
-          <Route path="finance/fees" element={<FeeCollectionPage />} />
-          <Route path="finance/accounts" element={<AccountsPage />} />
-          <Route path="finance/expenses" element={<ExpensesPage />} />
-          <Route path="finance/reports" element={<FinancialReportsPage />} />
+          <Route path="finance" element={<SchoolRoute><FinanceDashboardPage /></SchoolRoute>} />
+          <Route path="finance/fees" element={<SchoolRoute><FeeCollectionPage /></SchoolRoute>} />
+          <Route path="finance/accounts" element={<Navigate to="/settings?tab=accounts" replace />} />
+          <Route path="finance/expenses" element={<SchoolRoute><ExpensesPage /></SchoolRoute>} />
+          <Route path="finance/reports" element={<SchoolRoute><FinancialReportsPage /></SchoolRoute>} />
 
           {/* Super Admin routes */}
           <Route
@@ -128,7 +147,7 @@ function App() {
         </Route>
 
         {/* Catch-all redirect */}
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        <Route path="*" element={<RootRedirect />} />
       </Routes>
     </ErrorBoundary>
   )

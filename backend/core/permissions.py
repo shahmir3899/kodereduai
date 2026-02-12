@@ -3,7 +3,32 @@ Custom permission classes for role-based and tenant-based access control.
 """
 
 from rest_framework import permissions
-from core.mixins import ensure_tenant_schools
+from core.mixins import ensure_tenant_schools, ensure_tenant_school_id
+
+# Roles that have admin-level access (full read + write).
+# Used across all permission classes to avoid repeating role tuples.
+ADMIN_ROLES = ('SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL')
+
+
+def get_effective_role(request):
+    """
+    Return the user's effective role for the current active school.
+    Uses membership role, falling back to User.role for backward compat.
+    """
+    user = request.user
+    if not user.is_authenticated:
+        return None
+    if user.is_super_admin:
+        return 'SUPER_ADMIN'
+
+    school_id = ensure_tenant_school_id(request)
+    if school_id:
+        role = user.get_role_for_school(school_id)
+        if role:
+            return role
+
+    # Fallback to User.role
+    return user.role
 
 
 class IsSuperAdmin(permissions.BasePermission):
@@ -22,8 +47,8 @@ class IsSuperAdmin(permissions.BasePermission):
 
 class IsSchoolAdmin(permissions.BasePermission):
     """
-    Permission class that allows School Admins (and Super Admins).
-    Use for school-level management endpoints.
+    Permission class that allows School Admins, Principals (and Super Admins).
+    Uses membership role for the active school.
     """
     message = "Only School Admins can perform this action."
 
@@ -31,15 +56,14 @@ class IsSchoolAdmin(permissions.BasePermission):
         if not request.user.is_authenticated:
             return False
 
-        return (
-            request.user.is_super_admin or
-            request.user.is_school_admin
-        )
+        role = get_effective_role(request)
+        return role in ADMIN_ROLES
 
 
 class IsSchoolAdminOrReadOnly(permissions.BasePermission):
     """
-    School Admins can edit, others can only read.
+    School Admins/Principals can edit, others can only read.
+    Uses membership role for the active school.
     """
     def has_permission(self, request, view):
         if not request.user.is_authenticated:
@@ -48,10 +72,8 @@ class IsSchoolAdminOrReadOnly(permissions.BasePermission):
         if request.method in permissions.SAFE_METHODS:
             return True
 
-        return (
-            request.user.is_super_admin or
-            request.user.is_school_admin
-        )
+        role = get_effective_role(request)
+        return role in ADMIN_ROLES
 
 
 class HasSchoolAccess(permissions.BasePermission):
@@ -106,7 +128,7 @@ class HasSchoolAccess(permissions.BasePermission):
 
 class IsSchoolAdminOrStaffReadOnly(permissions.BasePermission):
     """
-    School Admins get full access. Staff members get read-only access.
+    School Admins/Principals get full access. Staff members get read-only access.
     Used for finance endpoints where staff can view but not modify.
     """
     message = "Staff members have read-only access to finance data."
@@ -115,11 +137,12 @@ class IsSchoolAdminOrStaffReadOnly(permissions.BasePermission):
         if not request.user.is_authenticated:
             return False
 
-        if request.user.is_super_admin or request.user.is_school_admin:
+        role = get_effective_role(request)
+        if role in ADMIN_ROLES:
             return True
 
         # Staff can only read
-        if request.user.is_staff_member:
+        if role == 'STAFF':
             return request.method in permissions.SAFE_METHODS
 
         return False
@@ -128,7 +151,7 @@ class IsSchoolAdminOrStaffReadOnly(permissions.BasePermission):
 class CanManageAttendance(permissions.BasePermission):
     """
     Permission for attendance-related operations.
-    School Admins and Staff with attendance permissions can manage.
+    Admins/Principals get full access, Staff get read-only.
     """
     message = "You don't have permission to manage attendance."
 
@@ -136,11 +159,11 @@ class CanManageAttendance(permissions.BasePermission):
         if not request.user.is_authenticated:
             return False
 
-        if request.user.is_super_admin or request.user.is_school_admin:
+        role = get_effective_role(request)
+        if role in ADMIN_ROLES:
             return True
 
-        # Staff can view but not modify
-        if request.user.is_staff_member:
+        if role == 'STAFF':
             return request.method in permissions.SAFE_METHODS
 
         return False
@@ -148,7 +171,7 @@ class CanManageAttendance(permissions.BasePermission):
 
 class CanConfirmAttendance(permissions.BasePermission):
     """
-    Only School Admins can confirm attendance uploads.
+    Only Admins/Principals can confirm attendance uploads.
     This is a critical action that creates permanent records.
     """
     message = "Only School Admins can confirm attendance."
@@ -157,7 +180,5 @@ class CanConfirmAttendance(permissions.BasePermission):
         if not request.user.is_authenticated:
             return False
 
-        return (
-            request.user.is_super_admin or
-            request.user.is_school_admin
-        )
+        role = get_effective_role(request)
+        return role in ADMIN_ROLES

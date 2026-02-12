@@ -2,10 +2,12 @@
 Finance views for fee structures, payments, expenses, reports, and AI chat.
 """
 
+import calendar
 import logging
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
+from django.db import transaction
 from django.db.models import Sum, Count, Q
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
@@ -13,10 +15,13 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 
-from core.permissions import IsSchoolAdmin, IsSchoolAdminOrStaffReadOnly, HasSchoolAccess
-from core.mixins import TenantQuerySetMixin, ensure_tenant_schools
+from core.permissions import IsSchoolAdmin, IsSchoolAdminOrStaffReadOnly, HasSchoolAccess, get_effective_role
+from core.mixins import TenantQuerySetMixin, ensure_tenant_schools, ensure_tenant_school_id
 from students.models import Student, Class
-from .models import Account, Transfer, FeeStructure, FeePayment, Expense, OtherIncome, FinanceAIChatMessage, resolve_fee_amount
+from .models import (
+    Account, Transfer, FeeStructure, FeePayment, Expense, OtherIncome,
+    FinanceAIChatMessage, MonthlyClosing, AccountSnapshot,
+)
 from .serializers import (
     AccountSerializer, AccountCreateSerializer,
     TransferSerializer, TransferCreateSerializer,
@@ -26,6 +31,7 @@ from .serializers import (
     ExpenseSerializer, ExpenseCreateSerializer,
     OtherIncomeSerializer, OtherIncomeCreateSerializer,
     FinanceAIChatMessageSerializer, FinanceAIChatInputSerializer,
+    CloseMonthSerializer, MonthlyClosingSerializer,
 )
 
 logger = logging.getLogger(__name__)
@@ -33,14 +39,14 @@ logger = logging.getLogger(__name__)
 
 def _resolve_school_id(request):
     """
-    Resolve school_id from user or request params.
-    School admins use their own school. Super admins can pass school_id as a parameter.
+    Resolve school_id from: X-School-ID header → request params → user.school_id → fallback.
     """
-    school_id = request.user.school_id
-    if school_id:
-        return school_id
+    # 1. Active school from header (handles JWT auth timing)
+    tenant_sid = ensure_tenant_school_id(request)
+    if tenant_sid:
+        return tenant_sid
 
-    # Super admin: try to get from request params
+    # 2. Explicit request params (super admin use-case)
     school_id = (
         request.query_params.get('school_id')
         or request.data.get('school_id')
@@ -49,7 +55,11 @@ def _resolve_school_id(request):
     if school_id:
         return int(school_id)
 
-    # Super admin: if only one school exists, use it
+    # 3. User's school FK (deprecated but still works)
+    if request.user.school_id:
+        return request.user.school_id
+
+    # 4. Super admin fallback: if only one school exists, use it
     if request.user.is_super_admin:
         from schools.models import School
         schools = list(School.objects.filter(is_active=True).values_list('id', flat=True)[:2])
@@ -91,8 +101,12 @@ class FeeStructureViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = FeeStructure.objects.select_related('school', 'class_obj', 'student')
-        user = self.request.user
-        if not user.is_super_admin:
+
+        # Filter by active school (works for all users including super admin)
+        school_id = _resolve_school_id(self.request)
+        if school_id:
+            queryset = queryset.filter(school_id=school_id)
+        elif not self.request.user.is_super_admin:
             tenant_schools = ensure_tenant_schools(self.request)
             if tenant_schools:
                 queryset = queryset.filter(school_id__in=tenant_schools)
@@ -175,8 +189,12 @@ class FeePaymentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         queryset = FeePayment.objects.select_related(
             'school', 'student', 'student__class_obj', 'collected_by', 'account'
         )
-        user = self.request.user
-        if not user.is_super_admin:
+
+        # Filter by active school (works for all users including super admin)
+        school_id = _resolve_school_id(self.request)
+        if school_id:
+            queryset = queryset.filter(school_id=school_id)
+        elif not self.request.user.is_super_admin:
             tenant_schools = ensure_tenant_schools(self.request)
             if tenant_schools:
                 queryset = queryset.filter(school_id__in=tenant_schools)
@@ -185,7 +203,7 @@ class FeePaymentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
 
         # Staff: restrict to payments linked to visible accounts (or no account)
         if _is_staff_user(self.request):
-            school_id = _resolve_school_id(self.request)
+            school_id = school_id or _resolve_school_id(self.request)
             if school_id:
                 visible_accounts = _get_staff_visible_accounts(school_id)
                 queryset = queryset.filter(
@@ -236,46 +254,70 @@ class FeePaymentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         if not school_id:
             return Response({'detail': 'No school associated with your account. Please contact an administrator.'}, status=400)
 
-        # Get active students
-        students = Student.objects.filter(school_id=school_id, is_active=True)
+        # 1. Fetch all active students (1 query)
+        students = list(Student.objects.filter(school_id=school_id, is_active=True))
         if class_id:
-            students = students.filter(class_obj_id=class_id)
+            students = [s for s in students if s.class_obj_id == int(class_id)]
 
-        # Compute previous month/year for carry-forward
         prev_month = month - 1
         prev_year = year
         if prev_month == 0:
             prev_month = 12
             prev_year = year - 1
 
+        # 2. Existing records for this month — skip these (1 query)
+        existing_ids = set(
+            FeePayment.objects.filter(
+                school_id=school_id, month=month, year=year
+            ).values_list('student_id', flat=True)
+        )
+
+        # 3. Fee structures — build lookup in memory (1 query)
+        today = date.today()
+        fee_structures = FeeStructure.objects.filter(
+            school_id=school_id, is_active=True, effective_from__lte=today,
+        ).filter(
+            Q(effective_to__isnull=True) | Q(effective_to__gte=today)
+        ).order_by('-effective_from')
+
+        student_fees = {}
+        class_fees = {}
+        for fs in fee_structures:
+            if fs.student_id:
+                if fs.student_id not in student_fees:
+                    student_fees[fs.student_id] = fs.monthly_amount
+            elif fs.class_obj_id:
+                if fs.class_obj_id not in class_fees:
+                    class_fees[fs.class_obj_id] = fs.monthly_amount
+
+        # 4. Previous month balances for carry-forward (1 query)
+        prev_balances = {}
+        for fp in FeePayment.objects.filter(
+            school_id=school_id, month=prev_month, year=prev_year
+        ):
+            prev_balances[fp.student_id] = fp.amount_due - fp.amount_paid
+
+        # 5. Build all payment objects in memory (0 queries)
         created_count = 0
         skipped_count = 0
         no_fee_count = 0
+        to_create = []
 
         for student in students:
-            # Check if record already exists
-            if FeePayment.objects.filter(
-                school_id=school_id, student=student, month=month, year=year
-            ).exists():
+            if student.id in existing_ids:
                 skipped_count += 1
                 continue
 
-            # Resolve fee amount
-            monthly_fee = resolve_fee_amount(student)
+            monthly_fee = student_fees.get(student.id)
+            if monthly_fee is None:
+                monthly_fee = class_fees.get(student.class_obj_id)
             if monthly_fee is None:
                 no_fee_count += 1
                 continue
 
-            # Compute carry-forward balance from previous month
-            # Positive = debt carried forward, Negative = advance/credit
-            prev_balance = Decimal('0')
-            prev_record = FeePayment.objects.filter(
-                school_id=school_id, student=student, month=prev_month, year=prev_year
-            ).first()
-            if prev_record:
-                prev_balance = prev_record.amount_due - prev_record.amount_paid
+            prev_balance = prev_balances.get(student.id, Decimal('0'))
 
-            FeePayment.objects.create(
+            to_create.append(FeePayment(
                 school_id=school_id,
                 student=student,
                 month=month,
@@ -283,8 +325,12 @@ class FeePaymentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
                 previous_balance=prev_balance,
                 amount_due=prev_balance + monthly_fee,
                 amount_paid=0,
-            )
+            ))
             created_count += 1
+
+        # 6. Single bulk insert (1 query), atomic
+        with transaction.atomic():
+            FeePayment.objects.bulk_create(to_create)
 
         return Response({
             'created': created_count,
@@ -417,6 +463,49 @@ class FeePaymentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         serializer = FeePaymentSerializer(payments, many=True)
         return Response(serializer.data)
 
+    @action(detail=False, methods=['get'], url_path='monthly_summary_all')
+    def monthly_summary_all(self, request):
+        """Fee collection summary across all accessible schools in the org."""
+        from schools.models import School
+        month = int(request.query_params.get('month', date.today().month))
+        year = int(request.query_params.get('year', date.today().year))
+
+        school_ids = ensure_tenant_schools(request)
+        if not school_ids:
+            return Response({'detail': 'No schools accessible.'}, status=400)
+
+        schools = School.objects.filter(id__in=school_ids, is_active=True)
+
+        results = []
+        grand_due = grand_collected = Decimal('0')
+        for school in schools:
+            totals = FeePayment.objects.filter(
+                school=school, month=month, year=year
+            ).aggregate(
+                total_due=Sum('amount_due'),
+                total_collected=Sum('amount_paid'),
+            )
+            due = totals['total_due'] or Decimal('0')
+            collected = totals['total_collected'] or Decimal('0')
+            results.append({
+                'school_id': school.id,
+                'school_name': school.name,
+                'total_due': due,
+                'total_collected': collected,
+                'total_pending': max(Decimal('0'), due - collected),
+            })
+            grand_due += due
+            grand_collected += collected
+
+        return Response({
+            'month': month,
+            'year': year,
+            'schools': results,
+            'grand_total_due': grand_due,
+            'grand_total_collected': grand_collected,
+            'grand_total_pending': max(Decimal('0'), grand_due - grand_collected),
+        })
+
 
 class ExpenseViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
     """CRUD + category summaries for school expenses."""
@@ -431,8 +520,12 @@ class ExpenseViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = Expense.objects.select_related('school', 'recorded_by', 'account')
-        user = self.request.user
-        if not user.is_super_admin:
+
+        # Filter by active school (works for all users including super admin)
+        school_id = _resolve_school_id(self.request)
+        if school_id:
+            queryset = queryset.filter(school_id=school_id)
+        elif not self.request.user.is_super_admin:
             tenant_schools = ensure_tenant_schools(self.request)
             if tenant_schools:
                 queryset = queryset.filter(school_id__in=tenant_schools)
@@ -442,7 +535,6 @@ class ExpenseViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         # Staff: hide sensitive expenses and restrict to visible accounts
         if _is_staff_user(self.request):
             queryset = queryset.filter(is_sensitive=False)
-            school_id = _resolve_school_id(self.request)
             if school_id:
                 visible_accounts = _get_staff_visible_accounts(school_id)
                 queryset = queryset.filter(
@@ -532,8 +624,12 @@ class OtherIncomeViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = OtherIncome.objects.select_related('school', 'recorded_by', 'account')
-        user = self.request.user
-        if not user.is_super_admin:
+
+        # Filter by active school (works for all users including super admin)
+        school_id = _resolve_school_id(self.request)
+        if school_id:
+            queryset = queryset.filter(school_id=school_id)
+        elif not self.request.user.is_super_admin:
             tenant_schools = ensure_tenant_schools(self.request)
             if tenant_schools:
                 queryset = queryset.filter(school_id__in=tenant_schools)
@@ -543,7 +639,6 @@ class OtherIncomeViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         # Staff: hide sensitive income and restrict to visible accounts
         if _is_staff_user(self.request):
             queryset = queryset.filter(is_sensitive=False)
-            school_id = _resolve_school_id(self.request)
             if school_id:
                 visible_accounts = _get_staff_visible_accounts(school_id)
                 queryset = queryset.filter(
@@ -581,10 +676,27 @@ class AccountViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = Account.objects.filter(is_active=True)
         user = self.request.user
-        if not user.is_super_admin:
+
+        # Filter by active school + org-level shared accounts
+        school_id = _resolve_school_id(self.request)
+        if school_id:
+            from schools.models import School
+            try:
+                org_id = School.objects.values_list('organization_id', flat=True).get(id=school_id)
+            except School.DoesNotExist:
+                org_id = None
+            q = Q(school_id=school_id)
+            if org_id:
+                q |= Q(school__isnull=True, organization_id=org_id)
+            queryset = queryset.filter(q)
+        elif not user.is_super_admin:
             tenant_schools = ensure_tenant_schools(self.request)
             if tenant_schools:
-                queryset = queryset.filter(school_id__in=tenant_schools)
+                org_id = user.organization_id
+                q = Q(school_id__in=tenant_schools)
+                if org_id:
+                    q |= Q(school__isnull=True, organization_id=org_id)
+                queryset = queryset.filter(q)
             else:
                 return queryset.none()
 
@@ -601,9 +713,155 @@ class AccountViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
             raise ValidationError({'detail': 'No school associated with your account.'})
         serializer.save(school_id=school_id)
 
+    @staticmethod
+    def _find_prior_snapshot(account_id, school_id, before_year, before_month):
+        """Find the latest AccountSnapshot whose closing month is strictly
+        before the given (year, month). Returns snapshot or None."""
+        q = (
+            Q(closing__year__lt=before_year) |
+            Q(closing__year=before_year, closing__month__lt=before_month)
+        )
+        return (
+            AccountSnapshot.objects
+            .filter(q, account_id=account_id, closing__school_id=school_id)
+            .select_related('closing')
+            .order_by('-closing__year', '-closing__month')
+            .first()
+        )
+
+    @staticmethod
+    def _compute_account_balance(account, scope_ids, date_from=None, date_to=None,
+                                  is_staff=False, snapshot_school_id=None):
+        """Compute balance for a single account across given school IDs.
+
+        If snapshot_school_id is provided, attempts to use a prior monthly
+        snapshot as the BBF starting point to avoid scanning all historical
+        transactions. Falls back to account.opening_balance if no snapshot.
+        """
+        base_bbf = account.opening_balance
+        txn_start = None  # None = sum from beginning of time
+
+        # --- Snapshot lookup ---
+        if snapshot_school_id:
+            if date_from:
+                dt = date_from if isinstance(date_from, date) else date.fromisoformat(str(date_from))
+                snap_year, snap_month = dt.year, dt.month
+            else:
+                snap_year, snap_month = 9999, 12
+
+            snapshot = AccountViewSet._find_prior_snapshot(
+                account.id, snapshot_school_id, snap_year, snap_month
+            )
+            if snapshot:
+                base_bbf = snapshot.closing_balance
+                last_day = calendar.monthrange(snapshot.closing.year, snapshot.closing.month)[1]
+                snapshot_end = date(snapshot.closing.year, snapshot.closing.month, last_day)
+                txn_start = snapshot_end + timedelta(days=1)
+
+        # --- Build base querysets ---
+        fee_qs = FeePayment.objects.filter(school_id__in=scope_ids, account=account)
+        income_qs = OtherIncome.objects.filter(school_id__in=scope_ids, account=account)
+        expense_qs = Expense.objects.filter(school_id__in=scope_ids, account=account)
+        tfr_in_qs = Transfer.objects.filter(school_id__in=scope_ids, to_account=account)
+        tfr_out_qs = Transfer.objects.filter(school_id__in=scope_ids, from_account=account)
+
+        if is_staff:
+            income_qs = income_qs.filter(is_sensitive=False)
+            expense_qs = expense_qs.filter(is_sensitive=False)
+            tfr_in_qs = tfr_in_qs.filter(is_sensitive=False)
+            tfr_out_qs = tfr_out_qs.filter(is_sensitive=False)
+
+        # Apply date floor: txn_start (from snapshot) or date_from (user filter)
+        # When snapshot exists, txn_start is the floor (NULLs excluded — they're in snapshot).
+        # When no snapshot, date_from is the floor (original behavior).
+        effective_floor = txn_start or (date_from if date_from else None)
+        if effective_floor:
+            fee_qs = fee_qs.filter(payment_date__gte=effective_floor)
+            income_qs = income_qs.filter(date__gte=effective_floor)
+            expense_qs = expense_qs.filter(date__gte=effective_floor)
+            tfr_in_qs = tfr_in_qs.filter(date__gte=effective_floor)
+            tfr_out_qs = tfr_out_qs.filter(date__gte=effective_floor)
+
+        # Apply date_to ceiling
+        # Include NULL payment_dates for FeePayment (they have no date but are real payments)
+        if date_to:
+            fee_qs = fee_qs.filter(Q(payment_date__lte=date_to) | Q(payment_date__isnull=True))
+            income_qs = income_qs.filter(date__lte=date_to)
+            expense_qs = expense_qs.filter(date__lte=date_to)
+            tfr_in_qs = tfr_in_qs.filter(date__lte=date_to)
+            tfr_out_qs = tfr_out_qs.filter(date__lte=date_to)
+
+        # Compute totals for full range (txn_start..date_to)
+        all_receipts = (
+            (fee_qs.aggregate(t=Sum('amount_paid'))['t'] or Decimal('0')) +
+            (income_qs.aggregate(t=Sum('amount'))['t'] or Decimal('0'))
+        )
+        all_payments = expense_qs.aggregate(t=Sum('amount'))['t'] or Decimal('0')
+        all_tfr_in = tfr_in_qs.aggregate(t=Sum('amount'))['t'] or Decimal('0')
+        all_tfr_out = tfr_out_qs.aggregate(t=Sum('amount'))['t'] or Decimal('0')
+
+        # If date_from is set and there's a gap between txn_start and date_from,
+        # fold gap transactions into effective BBF so displayed columns only
+        # show the user's requested period.
+        if date_from and txn_start and str(txn_start) < str(date_from):
+            pre_end = (date.fromisoformat(str(date_from)) - timedelta(days=1)).isoformat()
+            pre_filters = {'date__gte': txn_start, 'date__lte': pre_end}
+
+            pre_fee = FeePayment.objects.filter(
+                school_id__in=scope_ids, account=account,
+                payment_date__gte=txn_start, payment_date__lte=pre_end,
+            )
+            pre_income = OtherIncome.objects.filter(school_id__in=scope_ids, account=account, **pre_filters)
+            pre_expense = Expense.objects.filter(school_id__in=scope_ids, account=account, **pre_filters)
+            pre_tfr_in = Transfer.objects.filter(school_id__in=scope_ids, to_account=account, **pre_filters)
+            pre_tfr_out = Transfer.objects.filter(school_id__in=scope_ids, from_account=account, **pre_filters)
+
+            if is_staff:
+                pre_income = pre_income.filter(is_sensitive=False)
+                pre_expense = pre_expense.filter(is_sensitive=False)
+                pre_tfr_in = pre_tfr_in.filter(is_sensitive=False)
+                pre_tfr_out = pre_tfr_out.filter(is_sensitive=False)
+
+            pre_receipts = (
+                (pre_fee.aggregate(t=Sum('amount_paid'))['t'] or Decimal('0')) +
+                (pre_income.aggregate(t=Sum('amount'))['t'] or Decimal('0'))
+            )
+            pre_payments = pre_expense.aggregate(t=Sum('amount'))['t'] or Decimal('0')
+            pre_tfr_in_amt = pre_tfr_in.aggregate(t=Sum('amount'))['t'] or Decimal('0')
+            pre_tfr_out_amt = pre_tfr_out.aggregate(t=Sum('amount'))['t'] or Decimal('0')
+
+            effective_bbf = base_bbf + pre_receipts - pre_payments + pre_tfr_in_amt - pre_tfr_out_amt
+            receipts = all_receipts - pre_receipts
+            payments = all_payments - pre_payments
+            transfers_in = all_tfr_in - pre_tfr_in_amt
+            transfers_out = all_tfr_out - pre_tfr_out_amt
+        else:
+            effective_bbf = base_bbf
+            receipts = all_receipts
+            payments = all_payments
+            transfers_in = all_tfr_in
+            transfers_out = all_tfr_out
+
+        return {
+            'id': account.id,
+            'name': account.name,
+            'account_type': account.account_type,
+            'opening_balance': effective_bbf,
+            'receipts': receipts,
+            'payments': payments,
+            'transfers_in': transfers_in,
+            'transfers_out': transfers_out,
+            'net_balance': effective_bbf + receipts - payments + transfers_in - transfers_out,
+            'is_shared': account.school_id is None,
+        }
+
     @action(detail=False, methods=['get'])
     def balances(self, request):
-        """Get all accounts with computed balances (the 'MS New' equivalent)."""
+        """Get all accounts with computed balances for the active school.
+
+        School-specific accounts: transactions filtered to that school only.
+        Org-level shared accounts (school=NULL): transactions across ALL schools in the org.
+        """
         school_id = _resolve_school_id(request)
         if not school_id:
             return Response({'detail': 'No school associated with your account.'}, status=400)
@@ -611,63 +869,39 @@ class AccountViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         date_from = request.query_params.get('date_from')
         date_to = request.query_params.get('date_to')
 
-        accounts = Account.objects.filter(school_id=school_id, is_active=True)
-        is_staff = _is_staff_user(request)
+        from schools.models import School
+        try:
+            school_obj = School.objects.select_related('organization').get(id=school_id)
+            org_id = school_obj.organization_id
+        except School.DoesNotExist:
+            org_id = None
 
-        # Staff only sees staff-visible accounts
+        # PRINCIPAL sees only their school's accounts (no shared/org-level)
+        # SCHOOL_ADMIN and SUPER_ADMIN see all (school + shared)
+        effective_role = get_effective_role(request)
+        is_principal = effective_role == 'PRINCIPAL'
+
+        q = Q(school_id=school_id, is_active=True)
+        if org_id and not is_principal:
+            q |= Q(school__isnull=True, organization_id=org_id, is_active=True)
+        accounts = Account.objects.filter(q)
+
+        is_staff = _is_staff_user(request)
         if is_staff:
             accounts = accounts.filter(staff_visible=True)
 
+        if org_id:
+            org_school_ids = list(School.objects.filter(organization_id=org_id).values_list('id', flat=True))
+        else:
+            org_school_ids = [school_id]
+
         results = []
-
         for account in accounts:
-            fee_qs = FeePayment.objects.filter(school_id=school_id, account=account)
-            income_qs = OtherIncome.objects.filter(school_id=school_id, account=account)
-            expense_qs = Expense.objects.filter(school_id=school_id, account=account)
-            tfr_in_qs = Transfer.objects.filter(school_id=school_id, to_account=account)
-            tfr_out_qs = Transfer.objects.filter(school_id=school_id, from_account=account)
-
-            # Staff cannot see sensitive transactions
-            if is_staff:
-                income_qs = income_qs.filter(is_sensitive=False)
-                expense_qs = expense_qs.filter(is_sensitive=False)
-                tfr_in_qs = tfr_in_qs.filter(is_sensitive=False)
-                tfr_out_qs = tfr_out_qs.filter(is_sensitive=False)
-
-            if date_from:
-                fee_qs = fee_qs.filter(payment_date__gte=date_from)
-                income_qs = income_qs.filter(date__gte=date_from)
-                expense_qs = expense_qs.filter(date__gte=date_from)
-                tfr_in_qs = tfr_in_qs.filter(date__gte=date_from)
-                tfr_out_qs = tfr_out_qs.filter(date__gte=date_from)
-            if date_to:
-                fee_qs = fee_qs.filter(payment_date__lte=date_to)
-                income_qs = income_qs.filter(date__lte=date_to)
-                expense_qs = expense_qs.filter(date__lte=date_to)
-                tfr_in_qs = tfr_in_qs.filter(date__lte=date_to)
-                tfr_out_qs = tfr_out_qs.filter(date__lte=date_to)
-
-            receipts = (
-                (fee_qs.aggregate(t=Sum('amount_paid'))['t'] or Decimal('0')) +
-                (income_qs.aggregate(t=Sum('amount'))['t'] or Decimal('0'))
-            )
-            payments = expense_qs.aggregate(t=Sum('amount'))['t'] or Decimal('0')
-            transfers_in = tfr_in_qs.aggregate(t=Sum('amount'))['t'] or Decimal('0')
-            transfers_out = tfr_out_qs.aggregate(t=Sum('amount'))['t'] or Decimal('0')
-
-            net_balance = account.opening_balance + receipts - payments + transfers_in - transfers_out
-
-            results.append({
-                'id': account.id,
-                'name': account.name,
-                'account_type': account.account_type,
-                'opening_balance': account.opening_balance,
-                'receipts': receipts,
-                'payments': payments,
-                'transfers_in': transfers_in,
-                'transfers_out': transfers_out,
-                'net_balance': net_balance,
-            })
+            scope_ids = org_school_ids if account.school_id is None else [account.school_id]
+            results.append(self._compute_account_balance(
+                account, scope_ids, date_from, date_to, is_staff,
+                snapshot_school_id=school_id,
+            ))
 
         grand_total = sum(r['net_balance'] for r in results)
 
@@ -677,6 +911,189 @@ class AccountViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
             'date_from': date_from,
             'date_to': date_to,
         })
+
+    @action(detail=False, methods=['get'], url_path='balances_all')
+    def balances_all(self, request):
+        """Get account balances across ALL accessible schools, grouped by school.
+
+        For admins with multiple schools: returns per-school sections + shared accounts.
+        Staff users get 403 — they should use the regular balances endpoint.
+        """
+        if _is_staff_user(request):
+            return Response({'detail': 'Staff members should use the regular balances endpoint.'}, status=403)
+
+        date_from = request.query_params.get('date_from')
+        date_to = request.query_params.get('date_to')
+
+        from schools.models import School
+        tenant_schools = ensure_tenant_schools(request)
+        if not tenant_schools:
+            return Response({'detail': 'No schools accessible.'}, status=400)
+
+        schools = School.objects.filter(id__in=tenant_schools, is_active=True).order_by('name')
+
+        # Determine org for shared accounts
+        org_ids = set(schools.values_list('organization_id', flat=True))
+        org_ids.discard(None)
+        if org_ids:
+            org_school_ids = list(School.objects.filter(organization_id__in=org_ids).values_list('id', flat=True))
+        else:
+            org_school_ids = list(tenant_schools)
+
+        # Build per-school groups
+        groups = []
+        seen_shared_ids = set()
+
+        for school_obj in schools:
+            school_accounts = Account.objects.filter(school_id=school_obj.id, is_active=True)
+            account_results = []
+            for account in school_accounts:
+                account_results.append(self._compute_account_balance(
+                    account, [account.school_id], date_from, date_to,
+                    snapshot_school_id=school_obj.id,
+                ))
+
+            subtotal = sum(r['net_balance'] for r in account_results)
+            groups.append({
+                'school_id': school_obj.id,
+                'school_name': school_obj.name,
+                'accounts': account_results,
+                'subtotal': subtotal,
+            })
+
+        # Shared (org-level) accounts
+        shared_accounts = Account.objects.filter(
+            school__isnull=True, organization_id__in=org_ids, is_active=True
+        ) if org_ids else Account.objects.none()
+
+        shared_results = []
+        for account in shared_accounts:
+            shared_results.append(self._compute_account_balance(
+                account, org_school_ids, date_from, date_to
+            ))
+
+        shared_subtotal = sum(r['net_balance'] for r in shared_results)
+        grand_total = sum(g['subtotal'] for g in groups) + shared_subtotal
+
+        return Response({
+            'groups': groups,
+            'shared': {
+                'accounts': shared_results,
+                'subtotal': shared_subtotal,
+            },
+            'grand_total': grand_total,
+            'date_from': date_from,
+            'date_to': date_to,
+        })
+
+    @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated, IsSchoolAdmin, HasSchoolAccess])
+    def close_month(self, request):
+        """Close a month: compute and store balance snapshots for all accounts."""
+        serializer = CloseMonthSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        year = serializer.validated_data['year']
+        month = serializer.validated_data['month']
+        notes = serializer.validated_data.get('notes', '')
+
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response({'detail': 'No school associated.'}, status=400)
+
+        last_day = calendar.monthrange(year, month)[1]
+        month_end = date(year, month, last_day).isoformat()
+
+        from schools.models import School
+        try:
+            school_obj = School.objects.select_related('organization').get(id=school_id)
+            org_id = school_obj.organization_id
+        except School.DoesNotExist:
+            org_id = None
+
+        q = Q(school_id=school_id, is_active=True)
+        if org_id:
+            q |= Q(school__isnull=True, organization_id=org_id, is_active=True)
+        accounts = Account.objects.filter(q)
+
+        if org_id:
+            org_school_ids = list(School.objects.filter(organization_id=org_id).values_list('id', flat=True))
+        else:
+            org_school_ids = [school_id]
+
+        from django.utils import timezone as tz
+        with transaction.atomic():
+            closing, created = MonthlyClosing.objects.update_or_create(
+                school_id=school_id, year=year, month=month,
+                defaults={
+                    'closed_by': request.user,
+                    'closed_at': tz.now(),
+                    'notes': notes,
+                },
+            )
+            if not created:
+                closing.snapshots.all().delete()
+
+            snapshots = []
+            for account in accounts:
+                scope_ids = org_school_ids if account.school_id is None else [account.school_id]
+                result = self._compute_account_balance(
+                    account, scope_ids,
+                    date_from=None, date_to=month_end,
+                    is_staff=False, snapshot_school_id=school_id,
+                )
+                snapshots.append(AccountSnapshot(
+                    closing=closing,
+                    account=account,
+                    closing_balance=result['net_balance'],
+                    opening_balance_used=result['opening_balance'],
+                    receipts=result['receipts'],
+                    payments=result['payments'],
+                    transfers_in=result['transfers_in'],
+                    transfers_out=result['transfers_out'],
+                ))
+            AccountSnapshot.objects.bulk_create(snapshots)
+
+        return Response({
+            'id': closing.id,
+            'year': year,
+            'month': month,
+            'accounts_closed': len(snapshots),
+            'closed_at': closing.closed_at.isoformat(),
+        })
+
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated, IsSchoolAdmin, HasSchoolAccess])
+    def closings(self, request):
+        """List all monthly closings for the active school."""
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response({'detail': 'No school associated.'}, status=400)
+
+        qs = (
+            MonthlyClosing.objects
+            .filter(school_id=school_id)
+            .select_related('closed_by')
+            .order_by('-year', '-month')
+        )
+        serializer = MonthlyClosingSerializer(qs, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['delete'], url_path='reopen',
+            permission_classes=[IsAuthenticated, IsSchoolAdmin, HasSchoolAccess])
+    def reopen_month(self, request, pk=None):
+        """Delete a monthly closing and its snapshots (reopen the month)."""
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response({'detail': 'No school associated.'}, status=400)
+
+        try:
+            closing = MonthlyClosing.objects.get(id=pk, school_id=school_id)
+        except MonthlyClosing.DoesNotExist:
+            return Response({'detail': 'Closing not found.'}, status=404)
+
+        year, month = closing.year, closing.month
+        closing.delete()
+
+        return Response({'detail': f'Month {year}/{month:02d} reopened.', 'year': year, 'month': month})
 
 
 class TransferViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
@@ -694,8 +1111,12 @@ class TransferViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         queryset = Transfer.objects.select_related(
             'from_account', 'to_account', 'recorded_by'
         )
-        user = self.request.user
-        if not user.is_super_admin:
+
+        # Filter by active school (works for all users including super admin)
+        school_id = _resolve_school_id(self.request)
+        if school_id:
+            queryset = queryset.filter(school_id=school_id)
+        elif not self.request.user.is_super_admin:
             tenant_schools = ensure_tenant_schools(self.request)
             if tenant_schools:
                 queryset = queryset.filter(school_id__in=tenant_schools)
@@ -705,7 +1126,6 @@ class TransferViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         # Staff: hide sensitive transfers and restrict to visible accounts
         if _is_staff_user(self.request):
             queryset = queryset.filter(is_sensitive=False)
-            school_id = _resolve_school_id(self.request)
             if school_id:
                 visible_accounts = _get_staff_visible_accounts(school_id)
                 queryset = queryset.filter(
@@ -729,10 +1149,30 @@ class TransferViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         return queryset
 
     def perform_create(self, serializer):
+        from rest_framework.exceptions import ValidationError
         school_id = _resolve_school_id(self.request)
         if not school_id:
-            from rest_framework.exceptions import ValidationError
             raise ValidationError({'detail': 'No school associated with your account.'})
+
+        # Validate that from_account and to_account are accessible
+        from schools.models import School
+        try:
+            org_id = School.objects.values_list('organization_id', flat=True).get(id=school_id)
+        except School.DoesNotExist:
+            org_id = None
+
+        accessible_q = Q(school_id=school_id, is_active=True)
+        if org_id:
+            accessible_q |= Q(school__isnull=True, organization_id=org_id, is_active=True)
+        accessible_ids = set(Account.objects.filter(accessible_q).values_list('id', flat=True))
+
+        from_id = serializer.validated_data['from_account'].id
+        to_id = serializer.validated_data['to_account'].id
+        if from_id not in accessible_ids:
+            raise ValidationError({'from_account': 'This account is not accessible for your school.'})
+        if to_id not in accessible_ids:
+            raise ValidationError({'to_account': 'This account is not accessible for your school.'})
+
         serializer.save(school_id=school_id, recorded_by=self.request.user)
 
 

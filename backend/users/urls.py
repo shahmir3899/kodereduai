@@ -12,6 +12,7 @@ from .views import (
     ChangePasswordView,
     UserViewSet,
     SuperAdminUserCreateView,
+    SwitchSchoolView,
 )
 
 router = DefaultRouter()
@@ -25,6 +26,7 @@ urlpatterns = [
     # Current user
     path('auth/me/', CurrentUserView.as_view(), name='current_user'),
     path('auth/change-password/', ChangePasswordView.as_view(), name='change_password'),
+    path('auth/switch-school/', SwitchSchoolView.as_view(), name='switch_school'),
 
     # Super Admin user creation
     path('admin/users/create/', SuperAdminUserCreateView.as_view(), name='admin_user_create'),

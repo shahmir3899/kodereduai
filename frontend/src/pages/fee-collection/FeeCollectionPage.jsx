@@ -3,6 +3,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useFeeData } from './useFeeData'
 import FeeFilters, { MONTHS } from './FeeFilters'
 import FeeSummaryCards from './FeeSummaryCards'
+import FeeCharts from './FeeCharts'
 import FeeTable from './FeeTable'
 import BulkActionsBar from './BulkActionsBar'
 import {
@@ -12,7 +13,7 @@ import {
 import { exportFeePDF } from './feeExport'
 
 export default function FeeCollectionPage() {
-  const { user, isStaffMember } = useAuth()
+  const { user, activeSchool, isStaffMember } = useAuth()
   const canWrite = !isStaffMember
   const now = new Date()
 
@@ -205,7 +206,7 @@ export default function FeeCollectionPage() {
       paymentList: data.paymentList,
       month, year,
       summaryData: data.summaryData,
-      schoolName: user?.school_name,
+      schoolName: activeSchool?.name || user?.school_name,
     })
   }
 
@@ -276,7 +277,9 @@ export default function FeeCollectionPage() {
             classList={data.classList}
           />
 
-          <FeeSummaryCards summaryData={data.summaryData} />
+          <FeeSummaryCards summaryData={data.summaryData} paymentList={data.paymentList} />
+
+          <FeeCharts summaryData={data.summaryData} />
 
           <FeeTable
             paymentList={data.paymentList}

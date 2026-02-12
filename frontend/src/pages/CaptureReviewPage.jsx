@@ -72,7 +72,7 @@ function AIStatusBadge({ status }) {
 // UPLOAD TAB
 // ═══════════════════════════════════════════
 function UploadTab({ onUploadSuccess }) {
-  const { user } = useAuth()
+  const { user, activeSchool } = useAuth()
   const queryClient = useQueryClient()
 
   const [selectedClass, setSelectedClass] = useState('')
@@ -87,9 +87,9 @@ function UploadTab({ onUploadSuccess }) {
   const [croppedAreaPixels, setCroppedAreaPixels] = useState(null)
 
   const { data: classesData } = useQuery({
-    queryKey: ['classes', user?.school_id],
-    queryFn: () => classesApi.getClasses({ school_id: user?.school_id }),
-    enabled: !!user?.school_id,
+    queryKey: ['classes', activeSchool?.id],
+    queryFn: () => classesApi.getClasses({ school_id: activeSchool?.id }),
+    enabled: !!activeSchool?.id,
   })
 
   const { data: aiStatusData } = useQuery({
@@ -197,11 +197,11 @@ function UploadTab({ onUploadSuccess }) {
         setUploadProgress({ current: i + 1, total: uploadedFiles.length })
         const rotatedFile = await getRotatedImageBlob(uploadedFiles[i])
         const fileToUpload = await compressImage(rotatedFile)
-        const uploadResponse = await attendanceApi.uploadImageToStorage(fileToUpload, user?.school_id, selectedClass)
+        const uploadResponse = await attendanceApi.uploadImageToStorage(fileToUpload, activeSchool?.id, selectedClass)
         imageUrls.push(uploadResponse.data.url)
       }
       setUploadStep('creating')
-      const createData = { school: user?.school_id, class_obj: parseInt(selectedClass), date: selectedDate }
+      const createData = { school: activeSchool?.id, class_obj: parseInt(selectedClass), date: selectedDate }
       if (imageUrls.length === 1) createData.image_url = imageUrls[0]
       else createData.image_urls = imageUrls
       createMutation.mutate(createData)

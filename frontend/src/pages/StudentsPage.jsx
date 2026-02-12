@@ -8,13 +8,13 @@ import * as XLSX from 'xlsx'
 // Phone format note: Use dashes (0300-1234567) to prevent Excel scientific notation
 
 export default function StudentsPage() {
-  const { user } = useAuth()
+  const { user, activeSchool } = useAuth()
   const queryClient = useQueryClient()
   const { showError, showSuccess, showWarning } = useToast()
   const isSuperAdmin = user?.role === 'SUPER_ADMIN'
   const fileInputRef = useRef(null)
 
-  const [selectedSchoolId, setSelectedSchoolId] = useState(user?.school_id || null)
+  const [selectedSchoolId, setSelectedSchoolId] = useState(activeSchool?.id || null)
   const [selectedClass, setSelectedClass] = useState('')
   const [search, setSearch] = useState('')
   const [showModal, setShowModal] = useState(false)

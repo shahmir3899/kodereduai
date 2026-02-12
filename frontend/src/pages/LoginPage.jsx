@@ -8,12 +8,12 @@ export default function LoginPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  const { login, isAuthenticated } = useAuth()
+  const { login, isAuthenticated, isSuperAdmin } = useAuth()
   const navigate = useNavigate()
 
   // Redirect if already logged in
   if (isAuthenticated) {
-    navigate('/dashboard', { replace: true })
+    navigate(isSuperAdmin ? '/admin' : '/dashboard', { replace: true })
     return null
   }
 
@@ -23,8 +23,8 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      await login(username, password)
-      navigate('/dashboard', { replace: true })
+      const userData = await login(username, password)
+      navigate(userData.is_super_admin ? '/admin' : '/dashboard', { replace: true })
     } catch (err) {
       console.error('Login failed:', err)
       setError(

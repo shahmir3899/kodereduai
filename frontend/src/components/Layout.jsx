@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Outlet, Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import FinanceChatWidget from './FinanceChatWidget'
+import SchoolSwitcher from './SchoolSwitcher'
 
 // Icons (simple SVG components)
 const HomeIcon = () => (
@@ -180,7 +181,7 @@ function SidebarGroup({ group, onNavigate }) {
 }
 
 export default function Layout() {
-  const { user, logout, isSuperAdmin, isStaffMember } = useAuth()
+  const { user, logout, isSuperAdmin, isStaffMember, isPrincipal } = useAuth()
   const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
@@ -208,10 +209,12 @@ export default function Layout() {
       name: 'Finance',
       icon: CurrencyIcon,
       children: [
+        { name: 'Dashboard', href: '/finance', icon: ChartIcon },
         { name: 'Fee Collection', href: '/finance/fees', icon: ReceiptIcon },
-        { name: 'Accounts', href: '/finance/accounts', icon: BanknotesIcon },
         { name: 'Expenses', href: '/finance/expenses', icon: WalletIcon },
-        { name: 'Reports', href: '/finance/reports', icon: ReportIcon },
+        ...(!isPrincipal && !isStaffMember
+          ? [{ name: 'Reports', href: '/finance/reports', icon: ReportIcon }]
+          : []),
       ],
     },
 
@@ -226,8 +229,14 @@ export default function Layout() {
       ],
     },
 
-    // Settings removed — now lives under Attendance > Register & Analytics > Configuration tab
+    // Settings - admin only (SCHOOL_ADMIN, not Principal/Staff)
+    ...(!isPrincipal && !isStaffMember
+      ? [{ type: 'item', name: 'Settings', href: '/settings', icon: CogIcon }]
+      : []),
   ]
+
+  // SuperAdmin only sees the Admin Panel link — no school-internal nav
+  const visibleNavGroups = isSuperAdmin ? [] : navigationGroups
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -252,7 +261,7 @@ export default function Layout() {
 
         {/* Navigation */}
         <nav className="mt-4 px-3 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 180px)' }}>
-          {navigationGroups.map((item) =>
+          {visibleNavGroups.map((item) =>
             item.type === 'group' ? (
               <SidebarGroup
                 key={item.name}
@@ -295,7 +304,11 @@ export default function Layout() {
 
         {/* User info & logout */}
         <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200">
-          <div className="flex items-center mb-3">
+          <Link
+            to="/profile"
+            className="flex items-center mb-3 p-2 -m-2 rounded-lg hover:bg-gray-50 transition-colors"
+            onClick={() => setSidebarOpen(false)}
+          >
             <div className="w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center">
               <span className="text-primary-700 font-medium">
                 {user?.username?.charAt(0).toUpperCase()}
@@ -305,7 +318,7 @@ export default function Layout() {
               <p className="text-sm font-medium text-gray-900">{user?.username}</p>
               <p className="text-xs text-gray-500">{user?.role_display}</p>
             </div>
-          </div>
+          </Link>
           <button
             onClick={logout}
             className="flex items-center w-full px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
@@ -331,22 +344,24 @@ export default function Layout() {
               </svg>
             </button>
 
-            {/* School name */}
+            {/* School name / switcher */}
             <div className="flex-1 lg:ml-0 ml-4">
-              <h2 className="text-lg font-semibold text-gray-800 truncate">
-                {user?.school_name || 'KoderEduAI Platform'}
-              </h2>
+              {isSuperAdmin ? (
+                <span className="text-sm font-medium text-gray-700">Platform Admin</span>
+              ) : (
+                <SchoolSwitcher />
+              )}
             </div>
 
             {/* User avatar */}
-            <div className="hidden lg:flex items-center">
+            <Link to="/profile" className="hidden lg:flex items-center hover:opacity-80 transition-opacity">
               <span className="text-sm text-gray-600 mr-3">{user?.username}</span>
               <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center">
                 <span className="text-primary-700 font-medium text-sm">
                   {user?.username?.charAt(0).toUpperCase()}
                 </span>
               </div>
-            </div>
+            </Link>
           </div>
         </header>
 

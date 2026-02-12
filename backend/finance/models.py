@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils import timezone
 
 
 class Account(models.Model):
@@ -14,7 +15,18 @@ class Account(models.Model):
     school = models.ForeignKey(
         'schools.School',
         on_delete=models.CASCADE,
-        related_name='accounts'
+        null=True,
+        blank=True,
+        related_name='accounts',
+        help_text="School this account belongs to (null = shared across org)",
+    )
+    organization = models.ForeignKey(
+        'schools.Organization',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='accounts',
+        help_text="Organization this account belongs to (for shared accounts)",
     )
     name = models.CharField(
         max_length=100,
@@ -40,12 +52,23 @@ class Account(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = ('school', 'name')
         ordering = ['name']
         verbose_name = 'Account'
         verbose_name_plural = 'Accounts'
         indexes = [
             models.Index(fields=['school', 'is_active']),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['school', 'name'],
+                condition=models.Q(school__isnull=False),
+                name='unique_account_name_per_school',
+            ),
+            models.UniqueConstraint(
+                fields=['organization', 'name'],
+                condition=models.Q(school__isnull=True),
+                name='unique_account_name_per_org',
+            ),
         ]
 
     def __str__(self):
@@ -306,7 +329,9 @@ class FeePayment(models.Model):
 
     def save(self, *args, **kwargs):
         """Auto-compute status from amounts."""
-        if self.amount_due <= 0:
+        if self.amount_due == 0 and self.amount_paid == 0:
+            self.status = self.PaymentStatus.PAID
+        elif self.amount_due <= 0:
             # Covered by advance from previous month
             self.status = self.PaymentStatus.ADVANCE
         elif self.amount_paid >= self.amount_due:
@@ -485,3 +510,77 @@ class OtherIncome(models.Model):
 
     def __str__(self):
         return f"{self.get_category_display()} - {self.amount} ({self.date})"
+
+
+class MonthlyClosing(models.Model):
+    """
+    Represents the closing of a calendar month for a school.
+    Creates AccountSnapshot records with pre-computed balances so that
+    future balance queries only need to sum transactions after the snapshot.
+    """
+    school = models.ForeignKey(
+        'schools.School',
+        on_delete=models.CASCADE,
+        related_name='monthly_closings',
+    )
+    year = models.IntegerField(help_text="Calendar year, e.g. 2026")
+    month = models.IntegerField(help_text="Calendar month (1-12)")
+    closed_by = models.ForeignKey(
+        'users.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='closed_months',
+    )
+    closed_at = models.DateTimeField(default=timezone.now)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        unique_together = ('school', 'year', 'month')
+        ordering = ['-year', '-month']
+        verbose_name = 'Monthly Closing'
+        verbose_name_plural = 'Monthly Closings'
+
+    def __str__(self):
+        return f"{self.school} - {self.year}/{self.month:02d}"
+
+
+class AccountSnapshot(models.Model):
+    """
+    Per-account balance snapshot at the end of a closed month.
+    closing_balance is the net balance as of the last day of the month.
+    """
+    closing = models.ForeignKey(
+        MonthlyClosing,
+        on_delete=models.CASCADE,
+        related_name='snapshots',
+    )
+    account = models.ForeignKey(
+        Account,
+        on_delete=models.CASCADE,
+        related_name='snapshots',
+    )
+    closing_balance = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        help_text="Net balance as of last day of the closed month",
+    )
+    opening_balance_used = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=0,
+        help_text="BBF used to compute this snapshot",
+    )
+    receipts = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    payments = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    transfers_in = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    transfers_out = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('closing', 'account')
+        ordering = ['account__name']
+        verbose_name = 'Account Snapshot'
+        verbose_name_plural = 'Account Snapshots'
+
+    def __str__(self):
+        return f"{self.account.name} @ {self.closing.year}/{self.closing.month:02d}: {self.closing_balance}"

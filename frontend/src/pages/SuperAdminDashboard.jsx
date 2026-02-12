@@ -1,22 +1,26 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { schoolsApi, usersApi } from '../services/api'
+import { schoolsApi, usersApi, organizationsApi, membershipsApi } from '../services/api'
 
 export default function SuperAdminDashboard() {
   const queryClient = useQueryClient()
-  const [activeTab, setActiveTab] = useState('schools')
+  const [activeTab, setActiveTab] = useState('overview')
 
+  // ── School state ──────────────────────────────────────────────────────────
   const [showAddModal, setShowAddModal] = useState(false)
+  const [editingSchool, setEditingSchool] = useState(null)
   const [newSchool, setNewSchool] = useState({
     name: '',
     subdomain: '',
     contact_email: '',
     contact_phone: '',
     address: '',
+    organization: '',
   })
 
-  // User management state
+  // ── User state ────────────────────────────────────────────────────────────
   const [showUserModal, setShowUserModal] = useState(false)
+  const [editingUser, setEditingUser] = useState(null)
   const [newUser, setNewUser] = useState({
     username: '',
     email: '',
@@ -25,623 +29,1167 @@ export default function SuperAdminDashboard() {
     first_name: '',
     last_name: '',
     role: 'SCHOOL_ADMIN',
-    school: '',
+    schools: [],
     phone: '',
   })
 
-  // Fetch all schools
+  // ── Organization state ────────────────────────────────────────────────────
+  const [showOrgModal, setShowOrgModal] = useState(false)
+  const [editingOrg, setEditingOrg] = useState(null)
+  const [newOrg, setNewOrg] = useState({ name: '', slug: '', logo: '' })
+
+  // ── Membership state ──────────────────────────────────────────────────────
+  const [showMemModal, setShowMemModal] = useState(false)
+  const [editingMem, setEditingMem] = useState(null)
+  const [newMembership, setNewMembership] = useState({
+    user: '',
+    school: '',
+    role: 'STAFF',
+    is_default: false,
+  })
+
+  // ── Queries ───────────────────────────────────────────────────────────────
+  const { data: platformStatsData } = useQuery({
+    queryKey: ['platformStats'],
+    queryFn: () => schoolsApi.getPlatformStats(),
+  })
+  const pStats = platformStatsData?.data || {}
+
   const { data: schoolsData, isLoading: schoolsLoading } = useQuery({
     queryKey: ['adminSchools'],
     queryFn: () => schoolsApi.getAllSchools(),
   })
 
-  // Fetch all users
   const { data: usersData, isLoading: usersLoading } = useQuery({
     queryKey: ['adminUsers'],
     queryFn: () => usersApi.getUsers({ page_size: 100 }),
   })
 
-  // Create school mutation
+  const { data: orgsData, isLoading: orgsLoading } = useQuery({
+    queryKey: ['adminOrgs'],
+    queryFn: () => organizationsApi.getAll(),
+  })
+
+  const { data: membershipsData, isLoading: membershipsLoading } = useQuery({
+    queryKey: ['adminMemberships'],
+    queryFn: () => membershipsApi.getAll(),
+  })
+
+  // ── Mutations ─────────────────────────────────────────────────────────────
+
+  // School
   const createSchoolMutation = useMutation({
     mutationFn: (data) => schoolsApi.createSchool(data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['adminSchools'])
+      queryClient.invalidateQueries({ queryKey: ['adminSchools'] })
       setShowAddModal(false)
-      setNewSchool({ name: '', subdomain: '', contact_email: '', contact_phone: '', address: '' })
+      setEditingSchool(null)
+      setNewSchool({ name: '', subdomain: '', contact_email: '', contact_phone: '', address: '', organization: '' })
     },
   })
 
-  // Toggle school status mutation
+  const updateSchoolMutation = useMutation({
+    mutationFn: ({ id, data }) => schoolsApi.updateSchool(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['adminSchools'] })
+      setShowAddModal(false)
+      setEditingSchool(null)
+      setNewSchool({ name: '', subdomain: '', contact_email: '', contact_phone: '', address: '', organization: '' })
+    },
+  })
+
   const toggleMutation = useMutation({
     mutationFn: ({ id, isActive }) =>
       isActive ? schoolsApi.deactivateSchool(id) : schoolsApi.activateSchool(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries(['adminSchools'])
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['adminSchools'] }),
   })
 
-  // Create user mutation
+  // User
+  const userDefaults = { username: '', email: '', password: '', confirm_password: '', first_name: '', last_name: '', role: 'SCHOOL_ADMIN', schools: [], phone: '' }
+
   const createUserMutation = useMutation({
-    mutationFn: (data) => usersApi.createUser(data),
+    mutationFn: async ({ selectedSchools, ...userData }) => {
+      const role = userData.role
+      // Set first school as primary
+      if (selectedSchools.length > 0) {
+        userData.school = selectedSchools[0]
+      }
+      const response = await usersApi.createUser(userData)
+      const userId = response.data.id
+
+      // Auto-create memberships for all selected schools
+      if (selectedSchools.length > 0) {
+        await Promise.all(selectedSchools.map((schoolId, i) =>
+          membershipsApi.create({
+            user: userId,
+            school: Number(schoolId),
+            role: role,
+            is_default: i === 0,
+          }).catch(() => {}) // Ignore if membership already exists
+        ))
+      }
+      return response
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries(['adminUsers'])
+      queryClient.invalidateQueries({ queryKey: ['adminUsers'] })
+      queryClient.invalidateQueries({ queryKey: ['adminMemberships'] })
       setShowUserModal(false)
-      setNewUser({
-        username: '',
-        email: '',
-        password: '',
-        confirm_password: '',
-        first_name: '',
-        last_name: '',
-        role: 'SCHOOL_ADMIN',
-        school: '',
-        phone: '',
-      })
+      setEditingUser(null)
+      setNewUser(userDefaults)
     },
   })
 
-  // Toggle user active status mutation
-  const toggleUserMutation = useMutation({
-    mutationFn: ({ id, isActive }) =>
-      usersApi.updateUser(id, { is_active: !isActive }),
+  const updateUserMutation = useMutation({
+    mutationFn: ({ id, data }) => usersApi.updateUser(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['adminUsers'])
+      queryClient.invalidateQueries({ queryKey: ['adminUsers'] })
+      setShowUserModal(false)
+      setEditingUser(null)
+      setNewUser(userDefaults)
     },
   })
 
-  const handleCreateSchool = () => {
-    createSchoolMutation.mutate({
-      ...newSchool,
-      enabled_modules: { attendance_ai: true, whatsapp: false },
-    })
-  }
+  const toggleUserMutation = useMutation({
+    mutationFn: ({ id, isActive }) => usersApi.updateUser(id, { is_active: !isActive }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['adminUsers'] }),
+  })
 
-  const handleCreateUser = () => {
-    const userData = { ...newUser }
-    if (!userData.school) {
-      delete userData.school
+  // Organization
+  const createOrgMutation = useMutation({
+    mutationFn: (data) => organizationsApi.create(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['adminOrgs'] })
+      setShowOrgModal(false)
+      setEditingOrg(null)
+      setNewOrg({ name: '', slug: '', logo: '' })
+    },
+  })
+
+  const updateOrgMutation = useMutation({
+    mutationFn: ({ id, data }) => organizationsApi.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['adminOrgs'] })
+      setShowOrgModal(false)
+      setEditingOrg(null)
+      setNewOrg({ name: '', slug: '', logo: '' })
+    },
+  })
+
+  const deleteOrgMutation = useMutation({
+    mutationFn: (id) => organizationsApi.delete(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['adminOrgs'] }),
+  })
+
+  // Membership
+  const createMemMutation = useMutation({
+    mutationFn: (data) => membershipsApi.create(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['adminMemberships'] })
+      setShowMemModal(false)
+      setEditingMem(null)
+      setNewMembership({ user: '', school: '', role: 'STAFF', is_default: false })
+    },
+  })
+
+  const updateMemMutation = useMutation({
+    mutationFn: ({ id, data }) => membershipsApi.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['adminMemberships'] })
+      setShowMemModal(false)
+      setEditingMem(null)
+      setNewMembership({ user: '', school: '', role: 'STAFF', is_default: false })
+    },
+  })
+
+  const deleteMemMutation = useMutation({
+    mutationFn: (id) => membershipsApi.delete(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['adminMemberships'] }),
+  })
+
+  // ── Handlers ──────────────────────────────────────────────────────────────
+  const handleSaveSchool = () => {
+    const payload = { ...newSchool }
+    if (!payload.organization) payload.organization = null
+    if (editingSchool) {
+      updateSchoolMutation.mutate({ id: editingSchool.id, data: payload })
+    } else {
+      payload.enabled_modules = { attendance_ai: true, whatsapp: false }
+      createSchoolMutation.mutate(payload)
     }
-    createUserMutation.mutate(userData)
   }
 
+  const openEditSchool = (school) => {
+    setEditingSchool(school)
+    setNewSchool({
+      name: school.name,
+      subdomain: school.subdomain,
+      contact_email: school.contact_email || '',
+      contact_phone: school.contact_phone || '',
+      address: school.address || '',
+      organization: school.organization || '',
+    })
+    setShowAddModal(true)
+  }
+
+  const handleSaveUser = () => {
+    if (editingUser) {
+      updateUserMutation.mutate({
+        id: editingUser.id,
+        data: {
+          email: newUser.email,
+          first_name: newUser.first_name,
+          last_name: newUser.last_name,
+          role: newUser.role,
+          phone: newUser.phone,
+        },
+      })
+    } else {
+      const { schools: selectedSchools, ...rest } = newUser
+      createUserMutation.mutate({
+        ...rest,
+        selectedSchools,
+      })
+    }
+  }
+
+  const openEditUser = (user) => {
+    setEditingUser(user)
+    setNewUser({
+      username: user.username,
+      email: user.email || '',
+      password: '',
+      confirm_password: '',
+      first_name: user.first_name || '',
+      last_name: user.last_name || '',
+      role: user.role,
+      schools: [],
+      phone: user.phone || '',
+    })
+    setShowUserModal(true)
+  }
+
+  const handleSaveOrg = () => {
+    const payload = { ...newOrg }
+    if (!payload.logo) delete payload.logo
+    if (editingOrg) {
+      updateOrgMutation.mutate({ id: editingOrg.id, data: payload })
+    } else {
+      createOrgMutation.mutate(payload)
+    }
+  }
+
+  const handleSaveMembership = () => {
+    if (editingMem) {
+      updateMemMutation.mutate({
+        id: editingMem.id,
+        data: {
+          user: editingMem.user,
+          school: editingMem.school,
+          role: newMembership.role,
+          is_default: newMembership.is_default,
+        },
+      })
+    } else {
+      createMemMutation.mutate({
+        ...newMembership,
+        user: Number(newMembership.user),
+        school: Number(newMembership.school),
+      })
+    }
+  }
+
+  const openEditMem = (mem) => {
+    setEditingMem(mem)
+    setNewMembership({
+      user: String(mem.user),
+      school: String(mem.school),
+      role: mem.role,
+      is_default: mem.is_default,
+    })
+    setShowMemModal(true)
+  }
+
+  // ── Derived data ──────────────────────────────────────────────────────────
   const schools = schoolsData?.data?.results || schoolsData?.data || []
   const users = usersData?.data?.results || usersData?.data || []
+  const orgs = orgsData?.data?.results || orgsData?.data || []
+  const memberships = membershipsData?.data?.results || membershipsData?.data || []
 
-  // Calculate stats
-  const activeSchools = schools.filter((s) => s.is_active).length
-  const totalStudents = schools.reduce((acc, s) => acc + (s.student_count || 0), 0)
-  const totalUsers = schools.reduce((acc, s) => acc + (s.user_count || 0), 0)
+  const tabs = [
+    { key: 'overview', label: 'Overview' },
+    { key: 'schools', label: 'Schools' },
+    { key: 'users', label: 'Users' },
+    { key: 'organizations', label: 'Organizations' },
+    { key: 'memberships', label: 'Memberships' },
+  ]
 
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Admin Dashboard</h1>
-          <p className="text-sm sm:text-base text-gray-600">Manage all schools and users on the platform</p>
-        </div>
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-8">
-        <div className="card">
-          <p className="text-sm text-gray-500">Total Schools</p>
-          <p className="text-2xl sm:text-3xl font-bold text-gray-900">{schools.length}</p>
-        </div>
-        <div className="card">
-          <p className="text-sm text-gray-500">Active Schools</p>
-          <p className="text-2xl sm:text-3xl font-bold text-green-600">{activeSchools}</p>
-        </div>
-        <div className="card">
-          <p className="text-sm text-gray-500">Total Students</p>
-          <p className="text-2xl sm:text-3xl font-bold text-gray-900">{totalStudents}</p>
-        </div>
-        <div className="card">
-          <p className="text-sm text-gray-500">Total Users</p>
-          <p className="text-2xl sm:text-3xl font-bold text-gray-900">{users.length || totalUsers}</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Platform Administration</h1>
+          <p className="text-sm sm:text-base text-gray-600">Manage schools, users, and organizations</p>
         </div>
       </div>
 
       {/* Tabs */}
       <div className="border-b border-gray-200 mb-6">
         <nav className="-mb-px flex space-x-4 sm:space-x-8 overflow-x-auto">
-          <button
-            onClick={() => setActiveTab('schools')}
-            className={`py-2 px-1 border-b-2 font-medium text-sm ${
-              activeTab === 'schools'
-                ? 'border-primary-500 text-primary-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
-          >
-            Schools
-          </button>
-          <button
-            onClick={() => setActiveTab('users')}
-            className={`py-2 px-1 border-b-2 font-medium text-sm ${
-              activeTab === 'users'
-                ? 'border-primary-500 text-primary-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            }`}
-          >
-            Users
-          </button>
+          {tabs.map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`py-2 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
+                activeTab === tab.key
+                  ? 'border-primary-500 text-primary-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
         </nav>
       </div>
 
-      {/* Schools Tab */}
+      {/* ════════════════════ Overview Tab ════════════════════ */}
+      {activeTab === 'overview' && (
+        <div>
+          {/* Platform Stats */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-6">
+            <div className="card">
+              <p className="text-sm text-gray-500">Active Schools</p>
+              <p className="text-2xl sm:text-3xl font-bold text-gray-900">{pStats.active_schools || 0}</p>
+              <p className="text-xs text-gray-400">{pStats.total_schools || 0} total</p>
+            </div>
+            <div className="card">
+              <p className="text-sm text-gray-500">Total Students</p>
+              <p className="text-2xl sm:text-3xl font-bold text-gray-900">{(pStats.total_students || 0).toLocaleString()}</p>
+            </div>
+            <div className="card">
+              <p className="text-sm text-gray-500">Total Users</p>
+              <p className="text-2xl sm:text-3xl font-bold text-gray-900">{pStats.total_users || 0}</p>
+            </div>
+            <div className="card">
+              <p className="text-sm text-gray-500">Uploads This Month</p>
+              <p className="text-2xl sm:text-3xl font-bold text-gray-900">{pStats.uploads_this_month || 0}</p>
+            </div>
+          </div>
+
+          {/* Recent Activity */}
+          <div className="card mb-6">
+            <h3 className="text-base font-semibold text-gray-900 mb-3">Recent Activity (30 days)</h3>
+            <div className="flex gap-6 text-sm text-gray-600">
+              <span>{pStats.recent_schools || 0} new schools</span>
+              <span>{pStats.recent_users || 0} new users</span>
+            </div>
+          </div>
+
+          {/* Per-school breakdown */}
+          {pStats.school_breakdown?.length > 0 && (
+            <div className="card">
+              <h3 className="text-base font-semibold text-gray-900 mb-4">School Breakdown</h3>
+              {/* Mobile */}
+              <div className="sm:hidden space-y-3">
+                {pStats.school_breakdown.map((s) => (
+                  <div key={s.id} className="p-3 border border-gray-200 rounded-lg">
+                    <p className="font-medium text-sm text-gray-900">{s.name}</p>
+                    <div className="flex gap-4 mt-1 text-xs text-gray-600">
+                      <span>{s.student_count} students</span>
+                      <span>{s.user_count} users</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {/* Desktop */}
+              <div className="hidden sm:block overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <TH>School</TH>
+                      <TH>Students</TH>
+                      <TH>Users</TH>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {pStats.school_breakdown.map((s) => (
+                      <tr key={s.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 font-medium text-gray-900">{s.name}</td>
+                        <td className="px-4 py-3 text-sm text-gray-900">{s.student_count}</td>
+                        <td className="px-4 py-3 text-sm text-gray-900">{s.user_count}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ════════════════════ Schools Tab ════════════════════ */}
       {activeTab === 'schools' && (
         <div className="card">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-gray-900">Schools</h2>
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="btn btn-primary"
-            >
+            <button onClick={() => {
+              setEditingSchool(null)
+              setNewSchool({ name: '', subdomain: '', contact_email: '', contact_phone: '', address: '', organization: '' })
+              setShowAddModal(true)
+            }} className="btn btn-primary">
               Add School
             </button>
           </div>
 
           {schoolsLoading ? (
-            <div className="text-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
-            </div>
+            <Spinner />
           ) : schools.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              No schools yet. Add your first school to get started.
-            </div>
+            <Empty text="No schools yet. Add your first school to get started." />
           ) : (
             <>
-            {/* Mobile card view */}
-            <div className="sm:hidden space-y-3">
-              {schools.map((school) => (
-                <div key={school.id} className="p-3 border border-gray-200 rounded-lg">
-                  <div className="flex items-center justify-between mb-1">
-                    <p className="font-medium text-sm text-gray-900">{school.name}</p>
-                    <span className={`px-2 py-0.5 rounded-full text-xs ${
-                      school.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                    }`}>
-                      {school.is_active ? 'Active' : 'Inactive'}
-                    </span>
+              {/* Mobile card view */}
+              <div className="sm:hidden space-y-3">
+                {schools.map((school) => (
+                  <div key={school.id} className="p-3 border border-gray-200 rounded-lg">
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="font-medium text-sm text-gray-900">{school.name}</p>
+                      <StatusBadge active={school.is_active} />
+                    </div>
+                    <p className="text-xs text-gray-500">{school.subdomain}.kodereduai.pk</p>
+                    {school.organization_name && (
+                      <p className="text-xs text-purple-600 mt-0.5">{school.organization_name}</p>
+                    )}
+                    <div className="flex gap-4 mt-1 text-xs text-gray-600">
+                      <span>{school.student_count || 0} students</span>
+                      <span>{school.user_count || 0} users</span>
+                    </div>
+                    <div className="flex gap-3 mt-2">
+                      <button
+                        onClick={() => openEditSchool(school)}
+                        className="text-xs text-blue-600 font-medium"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => toggleMutation.mutate({ id: school.id, isActive: school.is_active })}
+                        className={`text-xs font-medium ${school.is_active ? 'text-red-600' : 'text-green-600'}`}
+                      >
+                        {school.is_active ? 'Deactivate' : 'Activate'}
+                      </button>
+                    </div>
                   </div>
-                  <p className="text-xs text-gray-500">{school.subdomain}.kodereduai.pk</p>
-                  <div className="flex gap-4 mt-1 text-xs text-gray-600">
-                    <span>{school.student_count || 0} students</span>
-                    <span>{school.user_count || 0} users</span>
-                  </div>
-                  <button
-                    onClick={() => toggleMutation.mutate({ id: school.id, isActive: school.is_active })}
-                    className={`mt-2 text-xs font-medium ${school.is_active ? 'text-red-600' : 'text-green-600'}`}
-                  >
-                    {school.is_active ? 'Deactivate' : 'Activate'}
-                  </button>
-                </div>
-              ))}
-            </div>
-            {/* Desktop table view */}
-            <div className="hidden sm:block overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">School</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Subdomain</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Students</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Users</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {schools.map((school) => (
-                    <tr key={school.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3">
-                        <div>
+                ))}
+              </div>
+              {/* Desktop table */}
+              <div className="hidden sm:block overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <TH>School</TH>
+                      <TH>Subdomain</TH>
+                      <TH>Organization</TH>
+                      <TH>Students</TH>
+                      <TH>Users</TH>
+                      <TH>Status</TH>
+                      <TH>Actions</TH>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {schools.map((school) => (
+                      <tr key={school.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3">
                           <p className="font-medium text-gray-900">{school.name}</p>
                           <p className="text-sm text-gray-500">{school.contact_email}</p>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-500">
-                        {school.subdomain}.kodereduai.pk
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-900">{school.student_count || 0}</td>
-                      <td className="px-4 py-3 text-sm text-gray-900">{school.user_count || 0}</td>
-                      <td className="px-4 py-3">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          school.is_active
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-red-100 text-red-800'
-                        }`}>
-                          {school.is_active ? 'Active' : 'Inactive'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <button
-                          onClick={() => toggleMutation.mutate({ id: school.id, isActive: school.is_active })}
-                          className={`text-sm font-medium ${
-                            school.is_active
-                              ? 'text-red-600 hover:text-red-700'
-                              : 'text-green-600 hover:text-green-700'
-                          }`}
-                        >
-                          {school.is_active ? 'Deactivate' : 'Activate'}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-500">{school.subdomain}.kodereduai.pk</td>
+                        <td className="px-4 py-3 text-sm text-gray-500">{school.organization_name || '-'}</td>
+                        <td className="px-4 py-3 text-sm text-gray-900">{school.student_count || 0}</td>
+                        <td className="px-4 py-3 text-sm text-gray-900">{school.user_count || 0}</td>
+                        <td className="px-4 py-3"><StatusBadge active={school.is_active} /></td>
+                        <td className="px-4 py-3 flex gap-3">
+                          <button
+                            onClick={() => openEditSchool(school)}
+                            className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => toggleMutation.mutate({ id: school.id, isActive: school.is_active })}
+                            className={`text-sm font-medium ${school.is_active ? 'text-red-600 hover:text-red-700' : 'text-green-600 hover:text-green-700'}`}
+                          >
+                            {school.is_active ? 'Deactivate' : 'Activate'}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </>
           )}
         </div>
       )}
 
-      {/* Users Tab */}
+      {/* ════════════════════ Users Tab ════════════════════ */}
       {activeTab === 'users' && (
         <div className="card">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-gray-900">Users</h2>
-            <button
-              onClick={() => setShowUserModal(true)}
-              className="btn btn-primary"
-            >
+            <button onClick={() => {
+              setEditingUser(null)
+              setNewUser(userDefaults)
+              setShowUserModal(true)
+            }} className="btn btn-primary">
               Add User
             </button>
           </div>
 
           {usersLoading ? (
-            <div className="text-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
-            </div>
+            <Spinner />
           ) : users.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              No users yet. Add your first user to get started.
-            </div>
+            <Empty text="No users yet." />
           ) : (
             <>
-            {/* Mobile card view */}
-            <div className="sm:hidden space-y-3">
-              {users.map((user) => (
-                <div key={user.id} className="p-3 border border-gray-200 rounded-lg">
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium text-sm text-gray-900 truncate">{user.first_name} {user.last_name}</p>
-                      <p className="text-xs text-gray-500 truncate">{user.email || user.username}</p>
+              {/* Mobile */}
+              <div className="sm:hidden space-y-3">
+                {users.map((user) => (
+                  <div key={user.id} className="p-3 border border-gray-200 rounded-lg">
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-sm text-gray-900 truncate">{user.first_name} {user.last_name}</p>
+                        <p className="text-xs text-gray-500 truncate">{user.email || user.username}</p>
+                      </div>
+                      <StatusBadge active={user.is_active} />
                     </div>
-                    <span className={`px-2 py-0.5 rounded-full text-xs flex-shrink-0 ml-2 ${
-                      user.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                    }`}>
-                      {user.is_active ? 'Active' : 'Inactive'}
-                    </span>
+                    <div className="flex items-center gap-2 mt-1">
+                      <RoleBadge role={user.role} display={user.role_display} />
+                      {user.school_name && <span className="text-xs text-gray-500">{user.school_name}</span>}
+                    </div>
+                    <div className="flex gap-3 mt-2">
+                      <button
+                        onClick={() => openEditUser(user)}
+                        className="text-xs text-blue-600 font-medium"
+                      >
+                        Edit
+                      </button>
+                      {user.role !== 'SUPER_ADMIN' && (
+                        <button
+                          onClick={() => toggleUserMutation.mutate({ id: user.id, isActive: user.is_active })}
+                          className={`text-xs font-medium ${user.is_active ? 'text-red-600' : 'text-green-600'}`}
+                        >
+                          {user.is_active ? 'Deactivate' : 'Activate'}
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                      user.role === 'SUPER_ADMIN' ? 'bg-purple-100 text-purple-800' :
-                      user.role === 'SCHOOL_ADMIN' ? 'bg-blue-100 text-blue-800' :
-                      'bg-gray-100 text-gray-800'
-                    }`}>
-                      {user.role_display || user.role}
-                    </span>
-                    {user.school_name && <span className="text-xs text-gray-500">{user.school_name}</span>}
-                  </div>
-                  {user.role !== 'SUPER_ADMIN' && (
-                    <button
-                      onClick={() => toggleUserMutation.mutate({ id: user.id, isActive: user.is_active })}
-                      className={`mt-2 text-xs font-medium ${user.is_active ? 'text-red-600' : 'text-green-600'}`}
-                    >
-                      {user.is_active ? 'Deactivate' : 'Activate'}
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-            {/* Desktop table view */}
-            <div className="hidden sm:block overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">User</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">School</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {users.map((user) => (
-                    <tr key={user.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3">
-                        <div>
-                          <p className="font-medium text-gray-900">
-                            {user.first_name} {user.last_name}
-                          </p>
-                          <p className="text-sm text-gray-500">{user.email || user.username}</p>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          user.role === 'SUPER_ADMIN'
-                            ? 'bg-purple-100 text-purple-800'
-                            : user.role === 'SCHOOL_ADMIN'
-                            ? 'bg-blue-100 text-blue-800'
-                            : 'bg-gray-100 text-gray-800'
-                        }`}>
-                          {user.role_display || user.role}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-500">
-                        {user.school_name || '-'}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          user.is_active
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-red-100 text-red-800'
-                        }`}>
-                          {user.is_active ? 'Active' : 'Inactive'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        {user.role !== 'SUPER_ADMIN' && (
-                          <button
-                            onClick={() => toggleUserMutation.mutate({ id: user.id, isActive: user.is_active })}
-                            className={`text-sm font-medium ${
-                              user.is_active
-                                ? 'text-red-600 hover:text-red-700'
-                                : 'text-green-600 hover:text-green-700'
-                            }`}
-                          >
-                            {user.is_active ? 'Deactivate' : 'Activate'}
-                          </button>
-                        )}
-                      </td>
+                ))}
+              </div>
+              {/* Desktop */}
+              <div className="hidden sm:block overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <TH>User</TH>
+                      <TH>Role</TH>
+                      <TH>School</TH>
+                      <TH>Status</TH>
+                      <TH>Actions</TH>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {users.map((user) => (
+                      <tr key={user.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3">
+                          <p className="font-medium text-gray-900">{user.first_name} {user.last_name}</p>
+                          <p className="text-sm text-gray-500">{user.email || user.username}</p>
+                        </td>
+                        <td className="px-4 py-3"><RoleBadge role={user.role} display={user.role_display} /></td>
+                        <td className="px-4 py-3 text-sm text-gray-500">{user.school_name || '-'}</td>
+                        <td className="px-4 py-3"><StatusBadge active={user.is_active} /></td>
+                        <td className="px-4 py-3 flex gap-3">
+                          <button
+                            onClick={() => openEditUser(user)}
+                            className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                          >
+                            Edit
+                          </button>
+                          {user.role !== 'SUPER_ADMIN' && (
+                            <button
+                              onClick={() => toggleUserMutation.mutate({ id: user.id, isActive: user.is_active })}
+                              className={`text-sm font-medium ${user.is_active ? 'text-red-600 hover:text-red-700' : 'text-green-600 hover:text-green-700'}`}
+                            >
+                              {user.is_active ? 'Deactivate' : 'Activate'}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </>
           )}
         </div>
       )}
 
-      {/* Add School Modal */}
-      {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-md mx-4">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Add School</h2>
-
-            <div className="space-y-4">
-              <div>
-                <label className="label">School Name</label>
-                <input
-                  type="text"
-                  className="input"
-                  value={newSchool.name}
-                  onChange={(e) => setNewSchool({ ...newSchool, name: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="label">Subdomain</label>
-                <div className="flex flex-col sm:flex-row">
-                  <input
-                    type="text"
-                    className="input rounded-b-none sm:rounded-b-lg sm:rounded-r-none"
-                    placeholder="focus"
-                    value={newSchool.subdomain}
-                    onChange={(e) => setNewSchool({ ...newSchool, subdomain: e.target.value.toLowerCase() })}
-                    required
-                  />
-                  <span className="inline-flex items-center px-3 py-2 bg-gray-100 border border-t-0 sm:border-t sm:border-l-0 border-gray-300 rounded-b-lg sm:rounded-b-none sm:rounded-r-lg text-sm text-gray-500">
-                    .kodereduai.pk
-                  </span>
-                </div>
-              </div>
-
-              <div>
-                <label className="label">Contact Email</label>
-                <input
-                  type="email"
-                  className="input"
-                  value={newSchool.contact_email}
-                  onChange={(e) => setNewSchool({ ...newSchool, contact_email: e.target.value })}
-                />
-              </div>
-
-              <div>
-                <label className="label">Contact Phone</label>
-                <input
-                  type="text"
-                  className="input"
-                  value={newSchool.contact_phone}
-                  onChange={(e) => setNewSchool({ ...newSchool, contact_phone: e.target.value })}
-                />
-              </div>
-
-              <div>
-                <label className="label">Address</label>
-                <textarea
-                  className="input"
-                  rows={2}
-                  value={newSchool.address}
-                  onChange={(e) => setNewSchool({ ...newSchool, address: e.target.value })}
-                />
-              </div>
-            </div>
-
-            {createSchoolMutation.error && (
-              <div className="mt-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
-                {createSchoolMutation.error.response?.data?.subdomain?.[0] || 'Failed to create school'}
-              </div>
-            )}
-
-            <div className="flex justify-end space-x-3 mt-6">
-              <button
-                onClick={() => setShowAddModal(false)}
-                className="btn btn-secondary"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleCreateSchool}
-                disabled={createSchoolMutation.isPending || !newSchool.name || !newSchool.subdomain}
-                className="btn btn-primary"
-              >
-                {createSchoolMutation.isPending ? 'Creating...' : 'Create School'}
-              </button>
-            </div>
+      {/* ════════════════════ Organizations Tab ════════════════════ */}
+      {activeTab === 'organizations' && (
+        <div className="card">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900">Organizations</h2>
+            <button
+              onClick={() => {
+                setEditingOrg(null)
+                setNewOrg({ name: '', slug: '', logo: '' })
+                setShowOrgModal(true)
+              }}
+              className="btn btn-primary"
+            >
+              Add Organization
+            </button>
           </div>
+
+          {orgsLoading ? (
+            <Spinner />
+          ) : orgs.length === 0 ? (
+            <Empty text="No organizations yet. Create one to group schools." />
+          ) : (
+            <>
+              {/* Mobile */}
+              <div className="sm:hidden space-y-3">
+                {orgs.map((org) => (
+                  <div key={org.id} className="p-3 border border-gray-200 rounded-lg">
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="font-medium text-sm text-gray-900">{org.name}</p>
+                      <StatusBadge active={org.is_active} />
+                    </div>
+                    <p className="text-xs text-gray-500">{org.slug}</p>
+                    <p className="text-xs text-gray-600 mt-1">{org.school_count || 0} school(s)</p>
+                    <div className="flex gap-3 mt-2">
+                      <button
+                        onClick={() => {
+                          setEditingOrg(org)
+                          setNewOrg({ name: org.name, slug: org.slug, logo: org.logo || '' })
+                          setShowOrgModal(true)
+                        }}
+                        className="text-xs text-blue-600 font-medium"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => { if (confirm(`Delete "${org.name}"?`)) deleteOrgMutation.mutate(org.id) }}
+                        className="text-xs text-red-600 font-medium"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {/* Desktop */}
+              <div className="hidden sm:block overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <TH>Name</TH>
+                      <TH>Slug</TH>
+                      <TH>Schools</TH>
+                      <TH>Status</TH>
+                      <TH>Actions</TH>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {orgs.map((org) => (
+                      <tr key={org.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 font-medium text-gray-900">{org.name}</td>
+                        <td className="px-4 py-3 text-sm text-gray-500">{org.slug}</td>
+                        <td className="px-4 py-3 text-sm text-gray-900">{org.school_count || 0}</td>
+                        <td className="px-4 py-3"><StatusBadge active={org.is_active} /></td>
+                        <td className="px-4 py-3 flex gap-3">
+                          <button
+                            onClick={() => {
+                              setEditingOrg(org)
+                              setNewOrg({ name: org.name, slug: org.slug, logo: org.logo || '' })
+                              setShowOrgModal(true)
+                            }}
+                            className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => { if (confirm(`Delete "${org.name}"?`)) deleteOrgMutation.mutate(org.id) }}
+                            className="text-sm text-red-600 hover:text-red-700 font-medium"
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
         </div>
       )}
 
-      {/* Add User Modal */}
+      {/* ════════════════════ Memberships Tab ════════════════════ */}
+      {activeTab === 'memberships' && (
+        <div className="card">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900">User-School Memberships</h2>
+            <button onClick={() => {
+              setEditingMem(null)
+              setNewMembership({ user: '', school: '', role: 'STAFF', is_default: false })
+              setShowMemModal(true)
+            }} className="btn btn-primary">
+              Add Membership
+            </button>
+          </div>
+
+          {membershipsLoading ? (
+            <Spinner />
+          ) : memberships.length === 0 ? (
+            <Empty text="No memberships yet. Assign a user to a school." />
+          ) : (
+            <>
+              {/* Mobile */}
+              <div className="sm:hidden space-y-3">
+                {memberships.map((mem) => (
+                  <div key={mem.id} className="p-3 border border-gray-200 rounded-lg">
+                    <p className="font-medium text-sm text-gray-900">{mem.user_full_name || mem.user_username}</p>
+                    <p className="text-xs text-gray-500">{mem.school_name}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <RoleBadge role={mem.role} />
+                      {mem.is_default && (
+                        <span className="px-2 py-0.5 bg-yellow-100 text-yellow-800 text-xs rounded-full">Default</span>
+                      )}
+                    </div>
+                    <div className="flex gap-3 mt-2">
+                      <button
+                        onClick={() => openEditMem(mem)}
+                        className="text-xs text-blue-600 font-medium"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => { if (confirm('Remove this membership?')) deleteMemMutation.mutate(mem.id) }}
+                        className="text-xs text-red-600 font-medium"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {/* Desktop */}
+              <div className="hidden sm:block overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <TH>User</TH>
+                      <TH>School</TH>
+                      <TH>Role</TH>
+                      <TH>Default</TH>
+                      <TH>Actions</TH>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {memberships.map((mem) => (
+                      <tr key={mem.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3">
+                          <p className="font-medium text-gray-900">{mem.user_full_name || mem.user_username}</p>
+                          <p className="text-sm text-gray-500">{mem.user_username}</p>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-500">{mem.school_name}</td>
+                        <td className="px-4 py-3"><RoleBadge role={mem.role} /></td>
+                        <td className="px-4 py-3 text-sm">
+                          {mem.is_default ? (
+                            <span className="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full font-medium">Default</span>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 flex gap-3">
+                          <button
+                            onClick={() => openEditMem(mem)}
+                            className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => { if (confirm('Remove this membership?')) deleteMemMutation.mutate(mem.id) }}
+                            className="text-sm text-red-600 hover:text-red-700 font-medium"
+                          >
+                            Remove
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ════════════════════ MODALS ════════════════════ */}
+
+      {/* Add/Edit School Modal */}
+      {showAddModal && (
+        <Modal title={editingSchool ? 'Edit School' : 'Add School'} onClose={() => { setShowAddModal(false); setEditingSchool(null) }} scroll>
+          <div className="space-y-4">
+            <Field label="School Name *">
+              <input type="text" className="input" value={newSchool.name}
+                onChange={(e) => setNewSchool({ ...newSchool, name: e.target.value })} required />
+            </Field>
+
+            <Field label="Subdomain">
+              <div className="flex flex-col sm:flex-row">
+                <input type="text" className={`input rounded-b-none sm:rounded-b-lg sm:rounded-r-none ${editingSchool ? 'bg-gray-50 text-gray-500' : ''}`}
+                  placeholder="focus"
+                  value={newSchool.subdomain}
+                  onChange={(e) => setNewSchool({ ...newSchool, subdomain: e.target.value.toLowerCase() })}
+                  disabled={!!editingSchool}
+                  required />
+                <span className="inline-flex items-center px-3 py-2 bg-gray-100 border border-t-0 sm:border-t sm:border-l-0 border-gray-300 rounded-b-lg sm:rounded-b-none sm:rounded-r-lg text-sm text-gray-500">
+                  .kodereduai.pk
+                </span>
+              </div>
+              {editingSchool && <p className="text-xs text-gray-400 mt-1">Subdomain cannot be changed after creation</p>}
+            </Field>
+
+            <Field label="Organization">
+              <select className="input" value={newSchool.organization}
+                onChange={(e) => setNewSchool({ ...newSchool, organization: e.target.value })}>
+                <option value="">None (standalone)</option>
+                {orgs.map((org) => (
+                  <option key={org.id} value={org.id}>{org.name}</option>
+                ))}
+              </select>
+            </Field>
+
+            <Field label="Contact Email">
+              <input type="email" className="input" value={newSchool.contact_email}
+                onChange={(e) => setNewSchool({ ...newSchool, contact_email: e.target.value })} />
+            </Field>
+
+            <Field label="Contact Phone">
+              <input type="text" className="input" value={newSchool.contact_phone}
+                onChange={(e) => setNewSchool({ ...newSchool, contact_phone: e.target.value })} />
+            </Field>
+
+            <Field label="Address">
+              <textarea className="input" rows={2} value={newSchool.address}
+                onChange={(e) => setNewSchool({ ...newSchool, address: e.target.value })} />
+            </Field>
+          </div>
+
+          <MutationError mutation={editingSchool ? updateSchoolMutation : createSchoolMutation} fields={['subdomain', 'name']} />
+
+          <ModalFooter
+            onCancel={() => { setShowAddModal(false); setEditingSchool(null) }}
+            onSubmit={handleSaveSchool}
+            disabled={(editingSchool ? updateSchoolMutation : createSchoolMutation).isPending || !newSchool.name || (!editingSchool && !newSchool.subdomain)}
+            loading={(editingSchool ? updateSchoolMutation : createSchoolMutation).isPending}
+            label={editingSchool ? 'Save Changes' : 'Create School'}
+          />
+        </Modal>
+      )}
+
+      {/* Add/Edit User Modal */}
       {showUserModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Add User</h2>
+        <Modal title={editingUser ? 'Edit User' : 'Add User'} onClose={() => { setShowUserModal(false); setEditingUser(null) }} scroll>
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+              <Field label="First Name">
+                <input type="text" className="input" value={newUser.first_name}
+                  onChange={(e) => setNewUser({ ...newUser, first_name: e.target.value })} />
+              </Field>
+              <Field label="Last Name">
+                <input type="text" className="input" value={newUser.last_name}
+                  onChange={(e) => setNewUser({ ...newUser, last_name: e.target.value })} />
+              </Field>
+            </div>
 
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                <div>
-                  <label className="label">First Name</label>
-                  <input
-                    type="text"
-                    className="input"
-                    value={newUser.first_name}
-                    onChange={(e) => setNewUser({ ...newUser, first_name: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="label">Last Name</label>
-                  <input
-                    type="text"
-                    className="input"
-                    value={newUser.last_name}
-                    onChange={(e) => setNewUser({ ...newUser, last_name: e.target.value })}
-                  />
-                </div>
-              </div>
+            <Field label="Username *">
+              <input type="text" className={`input ${editingUser ? 'bg-gray-50 text-gray-500' : ''}`}
+                value={newUser.username}
+                onChange={(e) => setNewUser({ ...newUser, username: e.target.value })}
+                disabled={!!editingUser} required />
+              {editingUser && <p className="text-xs text-gray-400 mt-1">Username cannot be changed</p>}
+            </Field>
 
-              <div>
-                <label className="label">Username *</label>
-                <input
-                  type="text"
-                  className="input"
-                  value={newUser.username}
-                  onChange={(e) => setNewUser({ ...newUser, username: e.target.value })}
-                  required
-                />
-              </div>
+            <Field label="Email">
+              <input type="email" className="input" value={newUser.email}
+                onChange={(e) => setNewUser({ ...newUser, email: e.target.value })} />
+            </Field>
 
-              <div>
-                <label className="label">Email</label>
-                <input
-                  type="email"
-                  className="input"
-                  value={newUser.email}
-                  onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
-                />
-              </div>
+            <Field label="Role *">
+              <select className="input" value={newUser.role}
+                onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}>
+                <option value="SCHOOL_ADMIN">School Admin</option>
+                <option value="PRINCIPAL">Principal</option>
+                <option value="STAFF">Staff</option>
+                <option value="SUPER_ADMIN">Super Admin</option>
+              </select>
+            </Field>
 
-              <div>
-                <label className="label">Password *</label>
-                <input
-                  type="password"
-                  className="input"
-                  value={newUser.password}
-                  onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-                  required
-                />
-              </div>
+            {!editingUser && (
+              <>
+                <Field label="Password *">
+                  <input type="password" className="input" value={newUser.password}
+                    onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} required />
+                </Field>
 
-              <div>
-                <label className="label">Confirm Password *</label>
-                <input
-                  type="password"
-                  className="input"
-                  value={newUser.confirm_password}
-                  onChange={(e) => setNewUser({ ...newUser, confirm_password: e.target.value })}
-                  required
-                />
-              </div>
+                <Field label="Confirm Password *">
+                  <input type="password" className="input" value={newUser.confirm_password}
+                    onChange={(e) => setNewUser({ ...newUser, confirm_password: e.target.value })} required />
+                </Field>
 
-              <div>
-                <label className="label">Role *</label>
-                <select
-                  className="input"
-                  value={newUser.role}
-                  onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
-                >
-                  <option value="SCHOOL_ADMIN">School Admin</option>
-                  <option value="STAFF">Staff</option>
-                  <option value="SUPER_ADMIN">Super Admin</option>
-                </select>
-              </div>
+                {newUser.role !== 'SUPER_ADMIN' && (
+                  <Field label="Schools * (select one or more)">
+                    <div className="space-y-2 max-h-40 overflow-y-auto border border-gray-300 rounded-lg p-3">
+                      {schools.length === 0 ? (
+                        <p className="text-sm text-gray-400">No schools available</p>
+                      ) : schools.map((school) => (
+                        <label key={school.id} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={newUser.schools.includes(String(school.id))}
+                            onChange={(e) => {
+                              const id = String(school.id)
+                              setNewUser({
+                                ...newUser,
+                                schools: e.target.checked
+                                  ? [...newUser.schools, id]
+                                  : newUser.schools.filter(s => s !== id)
+                              })
+                            }}
+                            className="rounded border-gray-300"
+                          />
+                          {school.name}
+                        </label>
+                      ))}
+                    </div>
+                    {newUser.schools.length > 1 && (
+                      <p className="text-xs text-blue-600 mt-1">
+                        Memberships will be auto-created for all {newUser.schools.length} selected schools
+                      </p>
+                    )}
+                  </Field>
+                )}
+              </>
+            )}
 
-              {newUser.role !== 'SUPER_ADMIN' && (
-                <div>
-                  <label className="label">School *</label>
-                  <select
-                    className="input"
-                    value={newUser.school}
-                    onChange={(e) => setNewUser({ ...newUser, school: e.target.value })}
-                  >
-                    <option value="">Select a school...</option>
-                    {schools.map((school) => (
-                      <option key={school.id} value={school.id}>
-                        {school.name}
+            <Field label="Phone">
+              <input type="text" className="input" value={newUser.phone}
+                onChange={(e) => setNewUser({ ...newUser, phone: e.target.value })} />
+            </Field>
+          </div>
+
+          <MutationError mutation={editingUser ? updateUserMutation : createUserMutation} fields={['username', 'email', 'password', 'confirm_password']} />
+
+          <ModalFooter
+            onCancel={() => { setShowUserModal(false); setEditingUser(null) }}
+            onSubmit={handleSaveUser}
+            disabled={
+              (editingUser ? updateUserMutation : createUserMutation).isPending ||
+              (!editingUser && (!newUser.username || !newUser.password || !newUser.confirm_password || (newUser.role !== 'SUPER_ADMIN' && newUser.schools.length === 0)))
+            }
+            loading={(editingUser ? updateUserMutation : createUserMutation).isPending}
+            label={editingUser ? 'Save Changes' : 'Create User'}
+          />
+        </Modal>
+      )}
+
+      {/* Add/Edit Organization Modal */}
+      {showOrgModal && (
+        <Modal title={editingOrg ? 'Edit Organization' : 'Add Organization'} onClose={() => { setShowOrgModal(false); setEditingOrg(null) }}>
+          <div className="space-y-4">
+            <Field label="Organization Name *">
+              <input type="text" className="input" value={newOrg.name}
+                onChange={(e) => setNewOrg({ ...newOrg, name: e.target.value })} required />
+            </Field>
+
+            <Field label="Slug">
+              <input type="text" className="input" placeholder="auto-generated from name"
+                value={newOrg.slug}
+                onChange={(e) => setNewOrg({ ...newOrg, slug: e.target.value.toLowerCase() })} />
+              <p className="text-xs text-gray-400 mt-1">Leave empty to auto-generate from name</p>
+            </Field>
+
+            <Field label="Logo URL">
+              <input type="url" className="input" placeholder="https://..." value={newOrg.logo}
+                onChange={(e) => setNewOrg({ ...newOrg, logo: e.target.value })} />
+            </Field>
+          </div>
+
+          <MutationError mutation={editingOrg ? updateOrgMutation : createOrgMutation} fields={['name', 'slug']} />
+
+          <ModalFooter
+            onCancel={() => { setShowOrgModal(false); setEditingOrg(null) }}
+            onSubmit={handleSaveOrg}
+            disabled={(editingOrg ? updateOrgMutation : createOrgMutation).isPending || !newOrg.name}
+            loading={(editingOrg ? updateOrgMutation : createOrgMutation).isPending}
+            label={editingOrg ? 'Save Changes' : 'Create Organization'}
+          />
+        </Modal>
+      )}
+
+      {/* Add/Edit Membership Modal */}
+      {showMemModal && (
+        <Modal title={editingMem ? 'Edit Membership' : 'Add Membership'} onClose={() => { setShowMemModal(false); setEditingMem(null) }}>
+          <div className="space-y-4">
+            {editingMem ? (
+              <>
+                <Field label="User">
+                  <input type="text" className="input bg-gray-50 text-gray-500"
+                    value={editingMem.user_full_name || editingMem.user_username} disabled />
+                </Field>
+                <Field label="School">
+                  <input type="text" className="input bg-gray-50 text-gray-500"
+                    value={editingMem.school_name} disabled />
+                </Field>
+              </>
+            ) : (
+              <>
+                <Field label="User *">
+                  <select className="input" value={newMembership.user}
+                    onChange={(e) => setNewMembership({ ...newMembership, user: e.target.value })}>
+                    <option value="">Select a user...</option>
+                    {users.filter(u => u.role !== 'SUPER_ADMIN').map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.first_name} {user.last_name} ({user.username})
                       </option>
                     ))}
                   </select>
-                </div>
-              )}
+                </Field>
 
-              <div>
-                <label className="label">Phone</label>
-                <input
-                  type="text"
-                  className="input"
-                  value={newUser.phone}
-                  onChange={(e) => setNewUser({ ...newUser, phone: e.target.value })}
-                />
-              </div>
-            </div>
-
-            {createUserMutation.error && (
-              <div className="mt-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
-                {createUserMutation.error.response?.data?.username?.[0] ||
-                  createUserMutation.error.response?.data?.email?.[0] ||
-                  createUserMutation.error.response?.data?.password?.[0] ||
-                  createUserMutation.error.response?.data?.confirm_password?.[0] ||
-                  createUserMutation.error.response?.data?.detail ||
-                  'Failed to create user'}
-              </div>
+                <Field label="School *">
+                  <select className="input" value={newMembership.school}
+                    onChange={(e) => setNewMembership({ ...newMembership, school: e.target.value })}>
+                    <option value="">Select a school...</option>
+                    {schools.map((school) => (
+                      <option key={school.id} value={school.id}>{school.name}</option>
+                    ))}
+                  </select>
+                </Field>
+              </>
             )}
 
-            <div className="flex justify-end space-x-3 mt-6">
-              <button
-                onClick={() => setShowUserModal(false)}
-                className="btn btn-secondary"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleCreateUser}
-                disabled={
-                  createUserMutation.isPending ||
-                  !newUser.username ||
-                  !newUser.password ||
-                  !newUser.confirm_password ||
-                  (newUser.role !== 'SUPER_ADMIN' && !newUser.school)
-                }
-                className="btn btn-primary"
-              >
-                {createUserMutation.isPending ? 'Creating...' : 'Create User'}
-              </button>
-            </div>
+            <Field label="Role *">
+              <select className="input" value={newMembership.role}
+                onChange={(e) => setNewMembership({ ...newMembership, role: e.target.value })}>
+                <option value="SCHOOL_ADMIN">School Admin</option>
+                <option value="PRINCIPAL">Principal</option>
+                <option value="STAFF">Staff</option>
+              </select>
+            </Field>
+
+            <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+              <input type="checkbox" checked={newMembership.is_default}
+                onChange={(e) => setNewMembership({ ...newMembership, is_default: e.target.checked })}
+                className="rounded border-gray-300" />
+              Set as default school (loads on login)
+            </label>
           </div>
-        </div>
+
+          <MutationError mutation={editingMem ? updateMemMutation : createMemMutation} fields={['user', 'school', 'non_field_errors']} />
+
+          <ModalFooter
+            onCancel={() => { setShowMemModal(false); setEditingMem(null) }}
+            onSubmit={handleSaveMembership}
+            disabled={(editingMem ? updateMemMutation : createMemMutation).isPending || (!editingMem && (!newMembership.user || !newMembership.school))}
+            loading={(editingMem ? updateMemMutation : createMemMutation).isPending}
+            label={editingMem ? 'Save Changes' : 'Create Membership'}
+          />
+        </Modal>
       )}
+    </div>
+  )
+}
+
+// ── Shared Components ─────────────────────────────────────────────────────────
+
+function TH({ children }) {
+  return <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{children}</th>
+}
+
+function Spinner() {
+  return (
+    <div className="text-center py-8">
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+    </div>
+  )
+}
+
+function Empty({ text }) {
+  return <div className="text-center py-8 text-gray-500">{text}</div>
+}
+
+function StatusBadge({ active }) {
+  return (
+    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+      active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+    }`}>
+      {active ? 'Active' : 'Inactive'}
+    </span>
+  )
+}
+
+function RoleBadge({ role, display }) {
+  const cls = role === 'SUPER_ADMIN' ? 'bg-purple-100 text-purple-800'
+    : role === 'SCHOOL_ADMIN' ? 'bg-blue-100 text-blue-800'
+    : 'bg-gray-100 text-gray-800'
+  return (
+    <span className={`px-2 py-1 rounded-full text-xs font-medium ${cls}`}>
+      {display || (role === 'SCHOOL_ADMIN' ? 'School Admin' : role === 'STAFF' ? 'Staff' : role)}
+    </span>
+  )
+}
+
+function Field({ label, children }) {
+  return (
+    <div>
+      <label className="label">{label}</label>
+      {children}
+    </div>
+  )
+}
+
+function Modal({ title, onClose, children, scroll }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+      <div className={`bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-md mx-4 ${scroll ? 'max-h-[90vh] overflow-y-auto' : ''}`}>
+        <h2 className="text-xl font-bold text-gray-900 mb-4">{title}</h2>
+        {children}
+      </div>
+    </div>
+  )
+}
+
+function MutationError({ mutation, fields = [] }) {
+  if (!mutation.error) return null
+  const data = mutation.error.response?.data
+  const msg = fields.map(f => data?.[f]?.[0]).find(Boolean)
+    || data?.non_field_errors?.[0]
+    || data?.detail
+    || 'An error occurred'
+  return (
+    <div className="mt-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+      {msg}
+    </div>
+  )
+}
+
+function ModalFooter({ onCancel, onSubmit, disabled, loading, label }) {
+  return (
+    <div className="flex justify-end space-x-3 mt-6">
+      <button onClick={onCancel} className="btn btn-secondary">Cancel</button>
+      <button onClick={onSubmit} disabled={disabled} className="btn btn-primary">
+        {loading ? 'Saving...' : label}
+      </button>
     </div>
   )
 }

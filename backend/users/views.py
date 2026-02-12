@@ -10,13 +10,14 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from django.contrib.auth import get_user_model
 
 from core.permissions import IsSuperAdmin, IsSchoolAdmin, HasSchoolAccess
-from core.mixins import TenantQuerySetMixin
+from core.mixins import TenantQuerySetMixin, ensure_tenant_school_id
 from .serializers import (
     CustomTokenObtainPairSerializer,
     UserSerializer,
     UserCreateSerializer,
     UserUpdateSerializer,
     ChangePasswordSerializer,
+    ProfileUpdateSerializer,
     CurrentUserSerializer,
 )
 
@@ -32,13 +33,26 @@ class CustomTokenObtainPairView(TokenObtainPairView):
 
 class CurrentUserView(APIView):
     """
-    Get the currently authenticated user's information.
+    Get or update the currently authenticated user's information.
+    GET  - returns full profile via CurrentUserSerializer
+    PATCH - updates safe self-editable fields via ProfileUpdateSerializer
     """
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         serializer = CurrentUserSerializer(request.user)
         return Response(serializer.data)
+
+    def patch(self, request):
+        serializer = ProfileUpdateSerializer(
+            request.user,
+            data=request.data,
+            partial=True,
+            context={'request': request}
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(CurrentUserSerializer(request.user).data)
 
 
 class ChangePasswordView(APIView):
@@ -84,9 +98,14 @@ class UserViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         if self.request.user.is_super_admin:
             return queryset
 
-        # School admins can only see users in their school
-        if self.request.user.school_id:
-            return queryset.filter(school_id=self.request.user.school_id)
+        # Show users who share any of the same schools via memberships
+        school_ids = self.request.user.get_accessible_school_ids()
+        if school_ids:
+            from schools.models import UserSchoolMembership
+            user_ids = UserSchoolMembership.objects.filter(
+                school_id__in=school_ids, is_active=True,
+            ).values_list('user_id', flat=True).distinct()
+            return queryset.filter(id__in=user_ids)
 
         return queryset.none()
 
@@ -94,19 +113,54 @@ class UserViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         """Set school_id when creating users."""
         user = self.request.user
 
-        # Get school from request or use user's school
         school_id = (
             self.request.data.get('school') or
             self.request.data.get('school_id')
         )
 
         if not school_id and not user.is_super_admin:
-            school_id = user.school_id
+            school_id = ensure_tenant_school_id(self.request) or user.school_id
 
         if school_id:
             serializer.save(school_id=school_id)
         else:
             serializer.save()
+
+
+class SwitchSchoolView(APIView):
+    """
+    POST /api/auth/switch-school/  {school_id: 2}
+    Validates the user has access to the school and returns updated info.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        school_id = request.data.get('school_id')
+        if not school_id:
+            return Response({'error': 'school_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            school_id = int(school_id)
+        except (ValueError, TypeError):
+            return Response({'error': 'Invalid school_id'}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = request.user
+        if not user.can_access_school(school_id):
+            return Response({'error': 'No access to this school'}, status=status.HTTP_403_FORBIDDEN)
+
+        from schools.models import School
+        try:
+            school = School.objects.get(id=school_id, is_active=True)
+        except School.DoesNotExist:
+            return Response({'error': 'School not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        role = user.get_role_for_school(school_id)
+
+        return Response({
+            'school_id': school.id,
+            'school_name': school.name,
+            'role': role,
+        })
 
 
 class SuperAdminUserCreateView(generics.CreateAPIView):

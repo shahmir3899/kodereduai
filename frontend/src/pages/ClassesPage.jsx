@@ -22,12 +22,12 @@ const STANDARD_CLASSES = [
 ]
 
 export default function ClassesPage() {
-  const { user } = useAuth()
+  const { user, activeSchool } = useAuth()
   const queryClient = useQueryClient()
   const { showError, showSuccess } = useToast()
   const isSuperAdmin = user?.role === 'SUPER_ADMIN'
 
-  const [selectedSchoolId, setSelectedSchoolId] = useState(user?.school_id || null)
+  const [selectedSchoolId, setSelectedSchoolId] = useState(activeSchool?.id || null)
   const [showModal, setShowModal] = useState(false)
   const [editingClass, setEditingClass] = useState(null)
   const [classForm, setClassForm] = useState({ name: '', grade_level: '' })

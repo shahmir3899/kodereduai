@@ -9,7 +9,7 @@ from rest_framework.permissions import IsAuthenticated
 from django.db.models import Count
 
 from core.permissions import IsSchoolAdmin, HasSchoolAccess
-from core.mixins import TenantQuerySetMixin, ensure_tenant_schools
+from core.mixins import TenantQuerySetMixin, ensure_tenant_schools, ensure_tenant_school_id
 from .models import Class, Student
 from .serializers import (
     ClassSerializer,
@@ -37,16 +37,18 @@ class ClassViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         # Note: Don't annotate student_count here - the model has a @property for it
         queryset = Class.objects.select_related('school')
 
-        # Apply tenant filtering (ensure_tenant_schools handles JWT auth timing)
-        user = self.request.user
-        if not user.is_super_admin:
+        # Filter by active school (works for all users including super admin)
+        active_school_id = ensure_tenant_school_id(self.request)
+        if active_school_id:
+            queryset = queryset.filter(school_id=active_school_id)
+        elif not self.request.user.is_super_admin:
             tenant_schools = ensure_tenant_schools(self.request)
             if tenant_schools:
                 queryset = queryset.filter(school_id__in=tenant_schools)
             else:
                 return queryset.none()
 
-        # Filter by school if provided
+        # Filter by school if provided (overrides active school)
         school_id = self.request.query_params.get('school_id')
         if school_id:
             queryset = queryset.filter(school_id=school_id)
@@ -61,8 +63,10 @@ class ClassViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
     def perform_create(self, serializer):
         """Set school_id from request if not provided."""
         school_id = self.request.data.get('school')
-        if not school_id and self.request.user.school_id:
-            serializer.save(school_id=self.request.user.school_id)
+        if not school_id:
+            school_id = ensure_tenant_school_id(self.request) or self.request.user.school_id
+        if school_id:
+            serializer.save(school_id=school_id)
         else:
             serializer.save()
 
@@ -89,16 +93,18 @@ class StudentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = Student.objects.select_related('school', 'class_obj')
 
-        # Apply tenant filtering (ensure_tenant_schools handles JWT auth timing)
-        user = self.request.user
-        if not user.is_super_admin:
+        # Filter by active school (works for all users including super admin)
+        active_school_id = ensure_tenant_school_id(self.request)
+        if active_school_id:
+            queryset = queryset.filter(school_id=active_school_id)
+        elif not self.request.user.is_super_admin:
             tenant_schools = ensure_tenant_schools(self.request)
             if tenant_schools:
                 queryset = queryset.filter(school_id__in=tenant_schools)
             else:
                 return queryset.none()
 
-        # Filter by school if provided
+        # Filter by school if provided (overrides active school)
         school_id = self.request.query_params.get('school_id')
         if school_id:
             queryset = queryset.filter(school_id=school_id)
@@ -126,8 +132,10 @@ class StudentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
     def perform_create(self, serializer):
         """Set school_id from request if not provided."""
         school_id = self.request.data.get('school')
-        if not school_id and self.request.user.school_id:
-            serializer.save(school_id=self.request.user.school_id)
+        if not school_id:
+            school_id = ensure_tenant_school_id(self.request) or self.request.user.school_id
+        if school_id:
+            serializer.save(school_id=school_id)
         else:
             serializer.save()
 
@@ -152,7 +160,7 @@ class StudentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def by_class(self, request):
         """Get students grouped by class."""
-        school_id = request.query_params.get('school_id') or request.user.school_id
+        school_id = request.query_params.get('school_id') or ensure_tenant_school_id(request) or request.user.school_id
 
         if not school_id:
             return Response({'error': 'school_id is required'}, status=400)

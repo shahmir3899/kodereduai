@@ -31,6 +31,15 @@ export default function FeeTable({
     headerCheckboxRef.current.indeterminate = someSelected
   }
 
+  // Sort by class name then numeric roll number (must be before early returns to satisfy hooks rules)
+  const sortedList = useMemo(() => {
+    return [...paymentList].sort((a, b) => {
+      const classCompare = (a.class_name || '').localeCompare(b.class_name || '')
+      if (classCompare !== 0) return classCompare
+      return (parseInt(a.student_roll) || 0) - (parseInt(b.student_roll) || 0)
+    })
+  }, [paymentList])
+
   if (isLoading) {
     return <div className="card"><div className="text-center py-8 text-gray-500">Loading...</div></div>
   }
@@ -45,15 +54,6 @@ export default function FeeTable({
       </div>
     )
   }
-
-  // Sort by class name then numeric roll number
-  const sortedList = useMemo(() => {
-    return [...paymentList].sort((a, b) => {
-      const classCompare = (a.class_name || '').localeCompare(b.class_name || '')
-      if (classCompare !== 0) return classCompare
-      return (parseInt(a.student_roll) || 0) - (parseInt(b.student_roll) || 0)
-    })
-  }, [paymentList])
 
   const handleCellClick = (id, field, currentValue) => {
     setEditingCell({ id, field })

@@ -57,7 +57,7 @@ function AIStatusBadge({ status }) {
 }
 
 export default function AttendanceUploadPage() {
-  const { user } = useAuth()
+  const { user, activeSchool } = useAuth()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
@@ -74,9 +74,9 @@ export default function AttendanceUploadPage() {
 
   // Fetch classes
   const { data: classesData } = useQuery({
-    queryKey: ['classes', user?.school_id],
-    queryFn: () => classesApi.getClasses({ school_id: user?.school_id }),
-    enabled: !!user?.school_id,
+    queryKey: ['classes', activeSchool?.id],
+    queryFn: () => classesApi.getClasses({ school_id: activeSchool?.id }),
+    enabled: !!activeSchool?.id,
   })
 
   // Fetch AI status
@@ -258,7 +258,7 @@ export default function AttendanceUploadPage() {
         const fileToUpload = await compressImage(rotatedFile)
         const uploadResponse = await attendanceApi.uploadImageToStorage(
           fileToUpload,
-          user?.school_id,
+          activeSchool?.id,
           selectedClass
         )
         imageUrls.push(uploadResponse.data.url)
@@ -269,7 +269,7 @@ export default function AttendanceUploadPage() {
       setUploadStep('creating')
 
       const createData = {
-        school: user?.school_id,
+        school: activeSchool?.id,
         class_obj: parseInt(selectedClass),
         date: selectedDate,
       }

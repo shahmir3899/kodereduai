@@ -34,7 +34,13 @@
       "Bash(npx vite)",
       "Bash(npx vite:*)",
       "Bash(pip show:*)",
-      "Bash(pip3 show:*)"
+      "Bash(pip3 show:*)",
+      "Bash(ping:*)",
+      "WebFetch(domain:www.grtech.com)",
+      "WebFetch(domain:mozon-tech.com)",
+      "Bash(set DJANGO_SETTINGS_MODULE=config.settings:*)",
+      "Bash(DJANGO_SETTINGS_MODULE=config.settings python:*)",
+      "Bash(DJANGO_SETTINGS_MODULE=core.settings python:*)"
     ]
   }
 }

@@ -13,7 +13,7 @@ from django.utils import timezone
 from django.db.models import Count, Q
 
 from core.permissions import IsSchoolAdmin, HasSchoolAccess, CanConfirmAttendance
-from core.mixins import TenantQuerySetMixin, ensure_tenant_schools
+from core.mixins import TenantQuerySetMixin, ensure_tenant_schools, ensure_tenant_school_id
 from .models import AttendanceUpload, AttendanceRecord
 from .serializers import (
     AttendanceUploadSerializer,
@@ -45,7 +45,7 @@ class ImageUploadView(APIView):
             )
 
         image = request.FILES['image']
-        school_id = request.data.get('school_id') or request.user.school_id
+        school_id = request.data.get('school_id') or ensure_tenant_school_id(request) or request.user.school_id
         class_id = request.data.get('class_id', 0)
 
         # Validate school access
@@ -107,7 +107,7 @@ class AttendanceUploadViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         """Override create to add detailed logging."""
         logger.info(f"=== ATTENDANCE UPLOAD CREATE ===")
-        logger.info(f"User: {request.user} (school_id: {request.user.school_id})")
+        logger.info(f"User: {request.user} (school_id: {ensure_tenant_school_id(request) or request.user.school_id})")
         logger.info(f"Request data: {request.data}")
 
         serializer = self.get_serializer(data=request.data)
@@ -126,16 +126,18 @@ class AttendanceUploadViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
             'school', 'class_obj', 'created_by', 'confirmed_by'
         )
 
-        # Apply tenant filtering
-        user = self.request.user
-        if not user.is_super_admin:
+        # Filter by active school (works for all users including super admin)
+        active_school_id = ensure_tenant_school_id(self.request)
+        if active_school_id:
+            queryset = queryset.filter(school_id=active_school_id)
+        elif not self.request.user.is_super_admin:
             tenant_schools = ensure_tenant_schools(self.request)
             if tenant_schools:
                 queryset = queryset.filter(school_id__in=tenant_schools)
             else:
                 return queryset.none()
 
-        # Filter by school
+        # Filter by school if provided (overrides active school)
         school_id = self.request.query_params.get('school_id')
         if school_id:
             queryset = queryset.filter(school_id=school_id)
@@ -501,16 +503,18 @@ class AttendanceRecordViewSet(TenantQuerySetMixin, viewsets.ReadOnlyModelViewSet
             'school', 'student', 'student__class_obj', 'upload'
         )
 
-        # Apply tenant filtering
-        user = self.request.user
-        if not user.is_super_admin:
+        # Filter by active school (works for all users including super admin)
+        active_school_id = ensure_tenant_school_id(self.request)
+        if active_school_id:
+            queryset = queryset.filter(school_id=active_school_id)
+        elif not self.request.user.is_super_admin:
             tenant_schools = ensure_tenant_schools(self.request)
             if tenant_schools:
                 queryset = queryset.filter(school_id__in=tenant_schools)
             else:
                 return queryset.none()
 
-        # Filter by school
+        # Filter by school if provided (overrides active school)
         school_id = self.request.query_params.get('school_id')
         if school_id:
             queryset = queryset.filter(school_id=school_id)
@@ -544,7 +548,7 @@ class AttendanceRecordViewSet(TenantQuerySetMixin, viewsets.ReadOnlyModelViewSet
     def daily_report(self, request):
         """Get daily attendance report."""
         date = request.query_params.get('date', timezone.now().date())
-        school_id = request.query_params.get('school_id') or request.user.school_id
+        school_id = request.query_params.get('school_id') or ensure_tenant_school_id(request) or request.user.school_id
 
         if not school_id:
             return Response({'error': 'school_id is required'}, status=400)
@@ -566,7 +570,7 @@ class AttendanceRecordViewSet(TenantQuerySetMixin, viewsets.ReadOnlyModelViewSet
     @action(detail=False, methods=['get'])
     def chronic_absentees(self, request):
         """Get students with high absence rates."""
-        school_id = request.query_params.get('school_id') or request.user.school_id
+        school_id = request.query_params.get('school_id') or ensure_tenant_school_id(request) or request.user.school_id
         days = int(request.query_params.get('days', 30))
         threshold = float(request.query_params.get('threshold', 20))  # % absent
 
@@ -634,7 +638,7 @@ class AttendanceRecordViewSet(TenantQuerySetMixin, viewsets.ReadOnlyModelViewSet
         """
         from .learning_service import LearningService
 
-        school_id = request.query_params.get('school_id') or request.user.school_id
+        school_id = request.query_params.get('school_id') or ensure_tenant_school_id(request) or request.user.school_id
         if not school_id:
             return Response({'error': 'school_id is required'}, status=400)
 
@@ -665,7 +669,7 @@ class AttendanceRecordViewSet(TenantQuerySetMixin, viewsets.ReadOnlyModelViewSet
         """
         from .learning_service import LearningService
 
-        school_id = request.query_params.get('school_id') or request.user.school_id
+        school_id = request.query_params.get('school_id') or ensure_tenant_school_id(request) or request.user.school_id
         if not school_id:
             return Response({'error': 'school_id is required'}, status=400)
 

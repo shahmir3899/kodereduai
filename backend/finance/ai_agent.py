@@ -399,16 +399,35 @@ class FinanceAIAgent:
 
     def _get_account_balances(self, date_from=None, date_to=None):
         from .models import Account, FeePayment, Expense, OtherIncome, Transfer
+        from schools.models import School
+        from django.db.models import Q
 
-        accounts = Account.objects.filter(school_id=self.school_id, is_active=True)
+        # Include school-specific + org-level shared accounts
+        try:
+            school_obj = School.objects.select_related('organization').get(id=self.school_id)
+            org_id = school_obj.organization_id
+        except School.DoesNotExist:
+            org_id = None
+
+        q = Q(school_id=self.school_id, is_active=True)
+        if org_id:
+            q |= Q(school__isnull=True, organization_id=org_id, is_active=True)
+            org_school_ids = list(School.objects.filter(organization_id=org_id).values_list('id', flat=True))
+        else:
+            org_school_ids = [self.school_id]
+
+        accounts = Account.objects.filter(q)
         result = []
 
         for account in accounts:
-            fee_qs = FeePayment.objects.filter(school_id=self.school_id, account=account)
-            other_qs = OtherIncome.objects.filter(school_id=self.school_id, account=account)
-            exp_qs = Expense.objects.filter(school_id=self.school_id, account=account)
-            tfr_in_qs = Transfer.objects.filter(school_id=self.school_id, to_account=account)
-            tfr_out_qs = Transfer.objects.filter(school_id=self.school_id, from_account=account)
+            # Shared accounts sum across all org schools
+            scope_ids = org_school_ids if account.school_id is None else [account.school_id]
+
+            fee_qs = FeePayment.objects.filter(school_id__in=scope_ids, account=account)
+            other_qs = OtherIncome.objects.filter(school_id__in=scope_ids, account=account)
+            exp_qs = Expense.objects.filter(school_id__in=scope_ids, account=account)
+            tfr_in_qs = Transfer.objects.filter(school_id__in=scope_ids, to_account=account)
+            tfr_out_qs = Transfer.objects.filter(school_id__in=scope_ids, from_account=account)
 
             if date_from:
                 fee_qs = fee_qs.filter(payment_date__gte=date_from)
