@@ -199,3 +199,36 @@ class TimetableEntryCreateSerializer(serializers.ModelSerializer):
                     f'at this time slot.'
                 )
         return data
+
+
+# ── AI Request Serializers ──────────────────────────────────────────────────
+
+class AutoGenerateRequestSerializer(serializers.Serializer):
+    class_id = serializers.IntegerField()
+
+
+class ConflictResolutionRequestSerializer(serializers.Serializer):
+    teacher = serializers.IntegerField()
+    day = serializers.CharField(max_length=3)
+    slot = serializers.IntegerField()
+    class_id = serializers.IntegerField()
+    subject = serializers.IntegerField(required=False)
+
+
+class SubstituteRequestSerializer(serializers.Serializer):
+    teacher = serializers.IntegerField()
+    date = serializers.DateField()
+
+
+# ── AI Chat Serializers ─────────────────────────────────────────────────────
+
+class AcademicsAIChatMessageSerializer(serializers.ModelSerializer):
+    class Meta:
+        from .models import AcademicsAIChatMessage
+        model = AcademicsAIChatMessage
+        fields = ['id', 'role', 'content', 'created_at']
+        read_only_fields = ['id', 'created_at']
+
+
+class AcademicsAIChatInputSerializer(serializers.Serializer):
+    message = serializers.CharField(max_length=500)

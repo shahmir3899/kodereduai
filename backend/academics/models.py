@@ -150,3 +150,30 @@ class TimetableEntry(models.Model):
     def __str__(self):
         subject_name = self.subject.name if self.subject else self.slot.name
         return f"{self.class_obj.name} {self.get_day_display()} {self.slot.name}: {subject_name}"
+
+
+class AcademicsAIChatMessage(models.Model):
+    """Chat messages for Academics AI assistant."""
+    class Role(models.TextChoices):
+        USER = 'user', 'User'
+        ASSISTANT = 'assistant', 'Assistant'
+
+    school = models.ForeignKey(
+        'schools.School',
+        on_delete=models.CASCADE,
+        related_name='academics_chat_messages',
+    )
+    user = models.ForeignKey(
+        'users.User',
+        on_delete=models.CASCADE,
+        related_name='academics_chat_messages',
+    )
+    role = models.CharField(max_length=10, choices=Role.choices)
+    content = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"{self.user} ({self.role}): {self.content[:50]}"

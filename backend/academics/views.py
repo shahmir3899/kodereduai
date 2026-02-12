@@ -1,12 +1,16 @@
 """
-Academics module views: Subjects, Class Assignments, Timetable.
+Academics module views: Subjects, Class Assignments, Timetable, AI features.
 """
+
+import logging
+from datetime import datetime
 
 from django.db.models import Q
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.views import APIView
 
 from core.permissions import HasSchoolAccess, IsSchoolAdminOrReadOnly
 from core.mixins import TenantQuerySetMixin, ensure_tenant_schools, ensure_tenant_school_id
@@ -16,7 +20,11 @@ from .serializers import (
     ClassSubjectSerializer, ClassSubjectCreateSerializer,
     TimetableSlotSerializer, TimetableSlotCreateSerializer,
     TimetableEntrySerializer, TimetableEntryCreateSerializer,
+    AutoGenerateRequestSerializer, SubstituteRequestSerializer,
+    AcademicsAIChatMessageSerializer, AcademicsAIChatInputSerializer,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _resolve_school_id(request):
@@ -95,6 +103,16 @@ class SubjectViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         instance.is_active = False
         instance.save()
 
+    @action(detail=False, methods=['get'])
+    def gap_analysis(self, request):
+        """AI: Analyze curriculum gaps across all classes."""
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response({'detail': 'No school selected.'}, status=400)
+        from .ai_engine import CurriculumGapAnalyzer
+        analyzer = CurriculumGapAnalyzer(school_id)
+        return Response(analyzer.analyze())
+
 
 # ── ClassSubject ViewSet ─────────────────────────────────────────────────────
 
@@ -170,6 +188,16 @@ class ClassSubjectViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         serializer = ClassSubjectSerializer(qs, many=True)
         return Response(serializer.data)
 
+    @action(detail=False, methods=['get'])
+    def workload_analysis(self, request):
+        """AI: Analyze teacher workload distribution."""
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response({'detail': 'No school selected.'}, status=400)
+        from .ai_engine import WorkloadAnalyzer
+        analyzer = WorkloadAnalyzer(school_id)
+        return Response(analyzer.analyze())
+
 
 # ── TimetableSlot ViewSet ────────────────────────────────────────────────────
 
@@ -224,7 +252,7 @@ class TimetableSlotViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
 # ── TimetableEntry ViewSet ───────────────────────────────────────────────────
 
 class TimetableEntryViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
-    """CRUD for timetable entries with grid view and bulk save."""
+    """CRUD for timetable entries with grid view, bulk save, and AI features."""
     queryset = TimetableEntry.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
     pagination_class = None
@@ -387,3 +415,218 @@ class TimetableEntryViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
             'has_conflict': conflicts.exists(),
             'conflicts': TimetableEntrySerializer(conflicts, many=True).data,
         })
+
+    # ── AI Actions ───────────────────────────────────────────────────────────
+
+    @action(detail=False, methods=['post'])
+    def auto_generate(self, request):
+        """AI: Auto-generate a timetable for a class using CSP algorithm."""
+        serializer = AutoGenerateRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response({'detail': 'No school selected.'}, status=400)
+
+        class_id = serializer.validated_data['class_id']
+
+        from .ai_engine import TimetableGenerator
+        generator = TimetableGenerator(school_id, class_id)
+        result = generator.generate()
+
+        if not result.success:
+            return Response({'detail': result.error}, status=400)
+
+        return Response({
+            'grid': result.grid,
+            'score': result.score,
+            'warnings': result.warnings,
+        })
+
+    @action(detail=False, methods=['get'])
+    def suggest_resolution(self, request):
+        """AI: Suggest conflict resolution alternatives."""
+        school_id = _resolve_school_id(request)
+        teacher_id = request.query_params.get('teacher')
+        day = request.query_params.get('day')
+        slot_id = request.query_params.get('slot')
+        class_id = request.query_params.get('class_id')
+        subject_id = request.query_params.get('subject')
+
+        if not all([school_id, teacher_id, day, slot_id, class_id]):
+            return Response(
+                {'detail': 'teacher, day, slot, and class_id params required.'},
+                status=400
+            )
+
+        from .ai_engine import ConflictResolver
+        resolver = ConflictResolver(school_id)
+        resolution = resolver.suggest_resolution(
+            int(teacher_id), day.upper(), int(slot_id), int(class_id),
+            int(subject_id) if subject_id else None
+        )
+
+        return Response({
+            'alternative_teachers': resolution.alternative_teachers,
+            'alternative_slots': resolution.alternative_slots,
+            'swap_suggestions': resolution.swap_suggestions,
+        })
+
+    @action(detail=False, methods=['get'])
+    def quality_score(self, request):
+        """AI: Get quality score for current timetable of a class."""
+        school_id = _resolve_school_id(request)
+        class_id = request.query_params.get('class_id')
+        if not school_id or not class_id:
+            return Response({'detail': 'class_id required.'}, status=400)
+
+        from .ai_engine import TimetableQualityScorer
+        scorer = TimetableQualityScorer(school_id, int(class_id))
+        result = scorer.score()
+
+        return Response({
+            'overall_score': result.overall_score,
+            'teacher_idle_gaps': result.teacher_idle_gaps,
+            'subject_distribution': result.subject_distribution,
+            'break_placement': result.break_placement,
+            'workload_balance': result.workload_balance,
+            'constraint_satisfaction': result.constraint_satisfaction,
+            'details': result.details,
+        })
+
+    @action(detail=False, methods=['get'])
+    def suggest_substitute(self, request):
+        """AI: Suggest substitute teachers for an absent teacher."""
+        school_id = _resolve_school_id(request)
+        teacher_id = request.query_params.get('teacher')
+        date_str = request.query_params.get('date')
+
+        if not all([school_id, teacher_id, date_str]):
+            return Response(
+                {'detail': 'teacher and date params required.'},
+                status=400
+            )
+
+        try:
+            date_obj = datetime.strptime(date_str, '%Y-%m-%d').date()
+        except ValueError:
+            return Response(
+                {'detail': 'Invalid date format. Use YYYY-MM-DD.'},
+                status=400
+            )
+
+        from .ai_engine import SubstituteTeacherFinder
+        finder = SubstituteTeacherFinder(school_id)
+        return Response(finder.suggest(int(teacher_id), date_obj))
+
+
+# ── AI Chat View ─────────────────────────────────────────────────────────────
+
+class AcademicsAIChatView(APIView):
+    """AI chat assistant for academic scheduling queries."""
+    permission_classes = [IsAuthenticated, HasSchoolAccess]
+
+    def get(self, request):
+        """Get chat history."""
+        from .models import AcademicsAIChatMessage
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response({'detail': 'No school selected.'}, status=400)
+
+        messages = AcademicsAIChatMessage.objects.filter(
+            school_id=school_id, user=request.user
+        ).order_by('created_at')[:100]
+
+        serializer = AcademicsAIChatMessageSerializer(messages, many=True)
+        return Response(serializer.data)
+
+    def post(self, request):
+        """Send a message and get AI response."""
+        from .models import AcademicsAIChatMessage
+        serializer = AcademicsAIChatInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        user_message = serializer.validated_data['message']
+        school_id = _resolve_school_id(request)
+
+        if not school_id:
+            return Response({'detail': 'No school selected.'}, status=400)
+
+        # Save user message
+        AcademicsAIChatMessage.objects.create(
+            school_id=school_id,
+            user=request.user,
+            role='user',
+            content=user_message,
+        )
+
+        # Get AI response
+        try:
+            from .ai_engine import AcademicsAIAgent
+            agent = AcademicsAIAgent(school_id=school_id)
+            response_text = agent.process_query(user_message)
+        except Exception as e:
+            logger.error(f"Academics AI agent error: {e}")
+            response_text = "I'm sorry, I encountered an error processing your question. Please try again."
+
+        # Save assistant message
+        assistant_msg = AcademicsAIChatMessage.objects.create(
+            school_id=school_id,
+            user=request.user,
+            role='assistant',
+            content=response_text,
+        )
+
+        return Response({
+            'response': response_text,
+            'message': AcademicsAIChatMessageSerializer(assistant_msg).data,
+        })
+
+    def delete(self, request):
+        """Clear chat history for the current user."""
+        from .models import AcademicsAIChatMessage
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response({'detail': 'No school selected.'}, status=400)
+
+        AcademicsAIChatMessage.objects.filter(
+            school_id=school_id, user=request.user
+        ).delete()
+
+        return Response({'detail': 'Chat history cleared.'})
+
+
+# ── Analytics View ───────────────────────────────────────────────────────────
+
+class AcademicsAnalyticsView(APIView):
+    """Predictive analytics for academics."""
+    permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
+
+    def get(self, request):
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response({'detail': 'No school selected.'}, status=400)
+
+        report_type = request.query_params.get('type', 'overview')
+        date_from = request.query_params.get('date_from')
+        date_to = request.query_params.get('date_to')
+
+        from .analytics import AcademicsAnalytics
+        analytics = AcademicsAnalytics(school_id)
+
+        if report_type == 'subject_attendance':
+            return Response(analytics.subject_attendance_by_slot(date_from, date_to))
+        elif report_type == 'teacher_effectiveness':
+            return Response(analytics.teacher_effectiveness(date_from, date_to))
+        elif report_type == 'slot_recommendations':
+            return Response(analytics.optimal_slot_recommendations())
+        elif report_type == 'trends':
+            months = int(request.query_params.get('months', 6))
+            return Response(analytics.attendance_trends(months))
+        else:
+            return Response({
+                'subject_attendance': analytics.subject_attendance_by_slot(date_from, date_to),
+                'teacher_effectiveness': analytics.teacher_effectiveness(date_from, date_to),
+                'slot_recommendations': analytics.optimal_slot_recommendations(),
+                'trends': analytics.attendance_trends(),
+            })

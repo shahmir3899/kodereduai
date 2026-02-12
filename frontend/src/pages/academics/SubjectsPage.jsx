@@ -2,6 +2,13 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { academicsApi, classesApi, hrApi } from '../../services/api'
 
+const SEVERITY_STYLES = {
+  red: { bg: 'bg-red-50', border: 'border-red-200', badge: 'bg-red-100 text-red-700', icon: 'text-red-500' },
+  orange: { bg: 'bg-orange-50', border: 'border-orange-200', badge: 'bg-orange-100 text-orange-700', icon: 'text-orange-500' },
+  yellow: { bg: 'bg-yellow-50', border: 'border-yellow-200', badge: 'bg-yellow-100 text-yellow-700', icon: 'text-yellow-500' },
+  blue: { bg: 'bg-blue-50', border: 'border-blue-200', badge: 'bg-blue-100 text-blue-700', icon: 'text-blue-500' },
+}
+
 const EMPTY_SUBJECT = { name: '', code: '', description: '', is_elective: false }
 const EMPTY_ASSIGNMENT = { class_obj: '', subject: '', teacher: '', periods_per_week: 1 }
 
@@ -45,10 +52,28 @@ export default function SubjectsPage() {
     queryFn: () => hrApi.getStaff({ employment_status: 'ACTIVE', page_size: 500 }),
   })
 
+  // AI Insights queries
+  const { data: workloadRes, isLoading: workloadLoading } = useQuery({
+    queryKey: ['workloadAnalysis'],
+    queryFn: () => academicsApi.getWorkloadAnalysis(),
+    enabled: tab === 'insights',
+  })
+
+  const { data: gapRes, isLoading: gapLoading } = useQuery({
+    queryKey: ['gapAnalysis'],
+    queryFn: () => academicsApi.getGapAnalysis(),
+    enabled: tab === 'insights',
+  })
+
   const subjects = subjectRes?.data?.results || subjectRes?.data || []
   const assignments = assignRes?.data?.results || assignRes?.data || []
   const classes = classesData?.data?.results || classesData?.data || []
   const staffList = staffData?.data?.results || staffData?.data || []
+  const workloadData = workloadRes?.data || {}
+  const gapData = gapRes?.data || {}
+
+  // Collapsible sections for gap analysis
+  const [expandedGap, setExpandedGap] = useState({ red: true, orange: true, yellow: true, blue: true })
 
   // Subject mutations
   const createSubjectMut = useMutation({
@@ -145,6 +170,12 @@ export default function SubjectsPage() {
           className={`px-4 py-2 text-sm rounded-md transition-colors ${tab === 'assignments' ? 'bg-white shadow text-primary-700 font-medium' : 'text-gray-600 hover:text-gray-800'}`}
         >
           Class Assignments
+        </button>
+        <button
+          onClick={() => setTab('insights')}
+          className={`px-4 py-2 text-sm rounded-md transition-colors ${tab === 'insights' ? 'bg-white shadow text-indigo-700 font-medium' : 'text-gray-600 hover:text-gray-800'}`}
+        >
+          AI Insights
         </button>
       </div>
 
@@ -429,6 +460,175 @@ export default function SubjectsPage() {
                     </button>
                   </div>
                 </form>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ─── AI Insights Tab ─── */}
+      {tab === 'insights' && (
+        <>
+          {(workloadLoading || gapLoading) ? (
+            <div className="text-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto mb-3"></div>
+              <p className="text-sm text-gray-500">Analyzing academic data...</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+              {/* Left: Workload Analysis */}
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  <h2 className="text-lg font-semibold text-gray-900">Teacher Workload</h2>
+                </div>
+
+                {(!workloadData.teachers || workloadData.teachers.length === 0) ? (
+                  <div className="card text-center py-8 text-gray-500 text-sm">
+                    No teacher assignments found. Assign teachers to subjects first.
+                  </div>
+                ) : (
+                  <>
+                    {/* Desktop Table */}
+                    <div className="hidden md:block overflow-x-auto">
+                      <table className="min-w-full bg-white rounded-xl shadow-sm border border-gray-200">
+                        <thead>
+                          <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
+                            <th className="px-3 py-2.5 text-left">Teacher</th>
+                            <th className="px-3 py-2.5 text-center">Assigned</th>
+                            <th className="px-3 py-2.5 text-center">Timetabled</th>
+                            <th className="px-3 py-2.5 text-center">Max/Day</th>
+                            <th className="px-3 py-2.5 text-center">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {workloadData.teachers.map((t, i) => {
+                            const maxDay = t.periods_per_day ? Math.max(...Object.values(t.periods_per_day), 0) : 0
+                            return (
+                              <tr key={i} className="hover:bg-gray-50">
+                                <td className="px-3 py-2 text-sm">
+                                  <p className="font-medium text-gray-900">{t.teacher_name}</p>
+                                  <p className="text-xs text-gray-500">{t.subjects_taught} subjects · {t.classes_taught} classes</p>
+                                </td>
+                                <td className="px-3 py-2 text-sm text-center">{t.assigned_periods_week}/wk</td>
+                                <td className="px-3 py-2 text-sm text-center">{t.timetabled_periods_week}/wk</td>
+                                <td className="px-3 py-2 text-sm text-center">{maxDay}</td>
+                                <td className="px-3 py-2 text-center">
+                                  {t.overloaded ? (
+                                    <span className="inline-block px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-xs font-medium">Overloaded</span>
+                                  ) : t.underloaded ? (
+                                    <span className="inline-block px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium">Underloaded</span>
+                                  ) : (
+                                    <span className="inline-block px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-medium">Balanced</span>
+                                  )}
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Mobile Cards */}
+                    <div className="md:hidden space-y-2">
+                      {workloadData.teachers.map((t, i) => {
+                        const maxDay = t.periods_per_day ? Math.max(...Object.values(t.periods_per_day), 0) : 0
+                        return (
+                          <div key={i} className="card">
+                            <div className="flex items-start justify-between">
+                              <div>
+                                <p className="font-medium text-gray-900 text-sm">{t.teacher_name}</p>
+                                <p className="text-xs text-gray-500">{t.subjects_taught} subjects · {t.classes_taught} classes</p>
+                              </div>
+                              {t.overloaded ? (
+                                <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-xs">Overloaded</span>
+                              ) : t.underloaded ? (
+                                <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded-full text-xs">Underloaded</span>
+                              ) : (
+                                <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs">Balanced</span>
+                              )}
+                            </div>
+                            <div className="flex gap-4 mt-2 text-xs text-gray-600">
+                              <span>Assigned: {t.assigned_periods_week}/wk</span>
+                              <span>Timetabled: {t.timetabled_periods_week}/wk</span>
+                              <span>Max/Day: {maxDay}</span>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+
+                    {/* Redistribution Suggestions */}
+                    {workloadData.redistribution_suggestions?.length > 0 && (
+                      <div className="mt-4">
+                        <h3 className="text-sm font-medium text-gray-700 mb-2">Redistribution Suggestions</h3>
+                        <div className="space-y-2">
+                          {workloadData.redistribution_suggestions.map((s, i) => (
+                            <div key={i} className="p-3 bg-indigo-50 border border-indigo-200 rounded-lg text-xs text-indigo-800">
+                              <span className="font-medium">{s.subject_name}</span> in <span className="font-medium">{s.class_name}</span>:
+                              Move from <span className="text-red-600 font-medium">{s.from_teacher}</span> ({s.from_load} periods)
+                              → <span className="text-green-600 font-medium">{s.to_teacher}</span> ({s.to_load} periods)
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {/* Right: Gap Analysis */}
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                  </svg>
+                  <h2 className="text-lg font-semibold text-gray-900">Curriculum Gap Analysis</h2>
+                </div>
+
+                {[
+                  { key: 'red', title: 'Missing Required Subjects', items: gapData.missing_required_subjects || [], desc: (it) => `${it.class_name} is missing ${it.subject_name} (${it.subject_code})` },
+                  { key: 'orange', title: 'Unmet Period Requirements', items: gapData.unmet_periods || [], desc: (it) => `${it.class_name} — ${it.subject_name}: ${it.actual} of ${it.required} periods scheduled` },
+                  { key: 'yellow', title: 'Unassigned Teachers', items: gapData.unassigned_teachers || [], desc: (it) => `${it.class_name} — ${it.subject_name}: No teacher assigned` },
+                  { key: 'blue', title: 'Qualification Concerns', items: gapData.qualification_mismatches || [], desc: (it) => `${it.teacher_name} teaches ${it.subject_name} in ${it.class_name} — no matching qualification found` },
+                ].map(({ key, title, items, desc }) => {
+                  const style = SEVERITY_STYLES[key]
+                  return (
+                    <div key={key} className={`mb-3 rounded-lg border ${style.border} overflow-hidden`}>
+                      <button
+                        onClick={() => setExpandedGap(p => ({ ...p, [key]: !p[key] }))}
+                        className={`w-full flex items-center justify-between px-4 py-2.5 ${style.bg} text-left`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className={`inline-block w-2 h-2 rounded-full ${style.badge.split(' ')[0]}`}></span>
+                          <span className="text-sm font-medium text-gray-900">{title}</span>
+                          <span className={`text-xs px-1.5 py-0.5 rounded-full ${style.badge}`}>{items.length}</span>
+                        </div>
+                        <svg className={`w-4 h-4 text-gray-500 transition-transform ${expandedGap[key] ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+                      {expandedGap[key] && (
+                        <div className="px-4 py-2 bg-white">
+                          {items.length === 0 ? (
+                            <p className="text-xs text-gray-400 py-1">No issues found</p>
+                          ) : (
+                            <ul className="space-y-1">
+                              {items.map((it, i) => (
+                                <li key={i} className="text-xs text-gray-700 flex items-start gap-1.5 py-0.5">
+                                  <span className={`mt-1 w-1.5 h-1.5 rounded-full flex-shrink-0 ${style.badge.split(' ')[0]}`}></span>
+                                  {desc(it)}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             </div>
           )}

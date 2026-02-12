@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Outlet, Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import FinanceChatWidget from './FinanceChatWidget'
+import AcademicsChatWidget from './AcademicsChatWidget'
 import SchoolSwitcher from './SchoolSwitcher'
 
 // Icons (simple SVG components)
@@ -262,6 +263,15 @@ export default function Layout() {
       children: [
         { name: 'Subjects', href: '/academics/subjects', icon: AcademicIcon },
         { name: 'Timetable', href: '/academics/timetable', icon: ClockIcon },
+        { name: 'Sessions', href: '/academics/sessions', icon: CalendarIcon },
+        { name: 'Promotion', href: '/academics/promotion', icon: UsersIcon },
+        { name: 'Exam Types', href: '/academics/exam-types', icon: FolderIcon },
+        { name: 'Exams', href: '/academics/exams', icon: ClipboardIcon },
+        { name: 'Marks Entry', href: '/academics/marks-entry', icon: DocumentIcon },
+        { name: 'Results', href: '/academics/results', icon: ChartIcon },
+        { name: 'Report Cards', href: '/academics/report-cards', icon: ReportIcon },
+        { name: 'Grade Scale', href: '/academics/grade-scale', icon: SettingsIcon },
+        { name: 'AI Analytics', href: '/academics/analytics', icon: ChartIcon },
       ],
     },
 
@@ -291,6 +301,7 @@ export default function Layout() {
       name: 'Management',
       icon: FolderIcon,
       children: [
+        { name: 'Grades & Sections', href: '/grades', icon: TableIcon },
         { name: 'Students', href: '/students', icon: UsersIcon },
         { name: 'Classes', href: '/classes', icon: AcademicIcon },
       ],
@@ -438,8 +449,9 @@ export default function Layout() {
         </main>
       </div>
 
-      {/* Floating AI Chat - only on finance pages, not for staff-level roles */}
+      {/* Floating AI Chat widgets - context-specific */}
       {location.pathname.startsWith('/finance') && !isStaffLevel && <FinanceChatWidget />}
+      {location.pathname.startsWith('/academics') && <AcademicsChatWidget />}
     </div>
   )
 }

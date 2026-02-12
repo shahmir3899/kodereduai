@@ -28,6 +28,16 @@ import PerformanceAppraisalPage from './pages/hr/PerformanceAppraisalPage'
 import StaffDocumentsPage from './pages/hr/StaffDocumentsPage'
 import SubjectsPage from './pages/academics/SubjectsPage'
 import TimetablePage from './pages/academics/TimetablePage'
+import AcademicsAnalyticsPage from './pages/academics/AcademicsAnalyticsPage'
+import AcademicYearsPage from './pages/sessions/AcademicYearsPage'
+import PromotionPage from './pages/sessions/PromotionPage'
+import GradesPage from './pages/GradesPage'
+import ExamTypesPage from './pages/examinations/ExamTypesPage'
+import ExamsPage from './pages/examinations/ExamsPage'
+import MarksEntryPage from './pages/examinations/MarksEntryPage'
+import ResultsPage from './pages/examinations/ResultsPage'
+import ReportCardPage from './pages/examinations/ReportCardPage'
+import GradeScalePage from './pages/examinations/GradeScalePage'
 
 // Components
 import Layout from './components/Layout'
@@ -156,6 +166,18 @@ function App() {
           {/* Academics routes */}
           <Route path="academics/subjects" element={<SchoolRoute><SubjectsPage /></SchoolRoute>} />
           <Route path="academics/timetable" element={<SchoolRoute><TimetablePage /></SchoolRoute>} />
+          <Route path="academics/analytics" element={<SchoolRoute><AcademicsAnalyticsPage /></SchoolRoute>} />
+          <Route path="academics/sessions" element={<SchoolRoute><AcademicYearsPage /></SchoolRoute>} />
+          <Route path="academics/promotion" element={<SchoolRoute><PromotionPage /></SchoolRoute>} />
+          <Route path="academics/exam-types" element={<SchoolRoute><ExamTypesPage /></SchoolRoute>} />
+          <Route path="academics/exams" element={<SchoolRoute><ExamsPage /></SchoolRoute>} />
+          <Route path="academics/marks-entry" element={<SchoolRoute><MarksEntryPage /></SchoolRoute>} />
+          <Route path="academics/results" element={<SchoolRoute><ResultsPage /></SchoolRoute>} />
+          <Route path="academics/report-cards" element={<SchoolRoute><ReportCardPage /></SchoolRoute>} />
+          <Route path="academics/grade-scale" element={<SchoolRoute><GradeScalePage /></SchoolRoute>} />
+
+          {/* Grades */}
+          <Route path="grades" element={<SchoolRoute><GradesPage /></SchoolRoute>} />
 
           {/* Finance routes */}
           <Route path="finance" element={<SchoolRoute><FinanceDashboardPage /></SchoolRoute>} />

@@ -56,6 +56,8 @@ INSTALLED_APPS = [
     'finance',
     'hr',
     'academics',
+    'academic_sessions',
+    'examinations',
 ]
 
 MIDDLEWARE = [

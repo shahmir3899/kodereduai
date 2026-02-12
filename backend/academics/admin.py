@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Subject, ClassSubject, TimetableSlot, TimetableEntry
+from .models import Subject, ClassSubject, TimetableSlot, TimetableEntry, AcademicsAIChatMessage
 
 
 @admin.register(Subject)
@@ -28,3 +28,9 @@ class TimetableEntryAdmin(admin.ModelAdmin):
     list_display = ['class_obj', 'day', 'slot', 'subject', 'teacher', 'school']
     list_filter = ['school', 'class_obj', 'day']
     raw_id_fields = ['class_obj', 'slot', 'subject', 'teacher']
+
+
+@admin.register(AcademicsAIChatMessage)
+class AcademicsAIChatMessageAdmin(admin.ModelAdmin):
+    list_display = ['school', 'user', 'role', 'created_at']
+    list_filter = ['school', 'role']

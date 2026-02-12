@@ -40,7 +40,9 @@
       "WebFetch(domain:mozon-tech.com)",
       "Bash(set DJANGO_SETTINGS_MODULE=config.settings:*)",
       "Bash(DJANGO_SETTINGS_MODULE=config.settings python:*)",
-      "Bash(DJANGO_SETTINGS_MODULE=core.settings python:*)"
+      "Bash(DJANGO_SETTINGS_MODULE=core.settings python:*)",
+      "Bash(del \"d:\\\\Personal\\\\smart-attendance\\\\mindmap_*.png\")",
+      "Bash(venvScriptspython.exe manage.py makemigrations:*)"
     ]
   }
 }

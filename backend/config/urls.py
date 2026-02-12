@@ -51,6 +51,20 @@ def api_root(request):
                 'timetable_slots': '/api/academics/timetable-slots/',
                 'timetable_entries': '/api/academics/timetable-entries/',
             },
+            'sessions': {
+                'academic_years': '/api/sessions/academic-years/',
+                'terms': '/api/sessions/terms/',
+                'enrollments': '/api/sessions/enrollments/',
+            },
+            'examinations': {
+                'exam_types': '/api/examinations/exam-types/',
+                'exams': '/api/examinations/exams/',
+                'exam_subjects': '/api/examinations/exam-subjects/',
+                'marks': '/api/examinations/marks/',
+                'grade_scales': '/api/examinations/grade-scales/',
+                'report_card': '/api/examinations/report-card/',
+            },
+            'grades': '/api/grades/',
             'admin': {
                 'schools': '/api/admin/schools/',
             }
@@ -85,6 +99,12 @@ urlpatterns = [
 
     # Academics (Subjects & Timetable)
     path('api/academics/', include('academics.urls')),
+
+    # Academic Sessions
+    path('api/sessions/', include('academic_sessions.urls')),
+
+    # Examinations & Results
+    path('api/examinations/', include('examinations.urls')),
 ]
 
 # Serve media files in development

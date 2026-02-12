@@ -1,22 +1,60 @@
 """
-Student and Class serializers.
+Student, Class, and Grade serializers.
 """
 
 from rest_framework import serializers
-from .models import Class, Student
+from .models import Grade, Class, Student
 
+
+# ── Grade ─────────────────────────────────────────────────────
+
+class GradeSerializer(serializers.ModelSerializer):
+    class_count = serializers.IntegerField(read_only=True, default=0)
+    school_name = serializers.CharField(source='school.name', read_only=True)
+
+    class Meta:
+        model = Grade
+        fields = [
+            'id', 'school', 'school_name', 'name', 'numeric_level',
+            'class_count', 'is_active', 'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'school', 'created_at', 'updated_at']
+
+
+class GradeCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Grade
+        fields = ['name', 'numeric_level']
+
+    def validate(self, attrs):
+        school_id = self.context.get('school_id')
+        numeric_level = attrs.get('numeric_level')
+        if school_id and numeric_level is not None:
+            qs = Grade.objects.filter(school_id=school_id, numeric_level=numeric_level)
+            if self.instance:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                raise serializers.ValidationError(
+                    {'numeric_level': 'A grade with this level already exists.'}
+                )
+        return attrs
+
+
+# ── Class ─────────────────────────────────────────────────────
 
 class ClassSerializer(serializers.ModelSerializer):
-    """
-    Serializer for Class model.
-    """
     student_count = serializers.IntegerField(read_only=True)
     school_name = serializers.CharField(source='school.name', read_only=True)
+    grade_name = serializers.CharField(source='grade.name', read_only=True, default=None)
+    grade_numeric_level = serializers.IntegerField(
+        source='grade.numeric_level', read_only=True, default=None,
+    )
 
     class Meta:
         model = Class
         fields = [
             'id', 'school', 'school_name', 'name',
+            'grade', 'grade_name', 'grade_numeric_level', 'section',
             'grade_level', 'is_active', 'student_count',
             'created_at', 'updated_at'
         ]
@@ -24,19 +62,18 @@ class ClassSerializer(serializers.ModelSerializer):
 
 
 class ClassCreateSerializer(serializers.ModelSerializer):
-    """
-    Serializer for creating classes.
-    """
     class Meta:
         model = Class
-        fields = ['school', 'name', 'grade_level']
+        fields = ['school', 'name', 'grade', 'section', 'grade_level']
 
     def validate(self, attrs):
-        """Ensure class name is unique within the school."""
         school = attrs.get('school')
         name = attrs.get('name')
 
-        if Class.objects.filter(school=school, name=name).exists():
+        qs = Class.objects.filter(school=school, name=name)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
             raise serializers.ValidationError({
                 'name': f"A class named '{name}' already exists in this school."
             })
@@ -44,10 +81,9 @@ class ClassCreateSerializer(serializers.ModelSerializer):
         return attrs
 
 
+# ── Student ───────────────────────────────────────────────────
+
 class StudentSerializer(serializers.ModelSerializer):
-    """
-    Serializer for Student model.
-    """
     class_name = serializers.CharField(source='class_obj.name', read_only=True)
     school_name = serializers.CharField(source='school.name', read_only=True)
 
@@ -64,9 +100,6 @@ class StudentSerializer(serializers.ModelSerializer):
 
 
 class StudentCreateSerializer(serializers.ModelSerializer):
-    """
-    Serializer for creating students.
-    """
     class Meta:
         model = Student
         fields = [
@@ -75,18 +108,15 @@ class StudentCreateSerializer(serializers.ModelSerializer):
         ]
 
     def validate(self, attrs):
-        """Ensure roll number is unique within the class."""
         school = attrs.get('school')
         class_obj = attrs.get('class_obj')
         roll_number = attrs.get('roll_number')
 
-        # Ensure class belongs to the school
         if class_obj.school_id != school.id:
             raise serializers.ValidationError({
                 'class_obj': "The selected class does not belong to this school."
             })
 
-        # Check for duplicate roll number
         if Student.objects.filter(
             school=school,
             class_obj=class_obj,
@@ -100,9 +130,6 @@ class StudentCreateSerializer(serializers.ModelSerializer):
 
 
 class StudentBulkCreateSerializer(serializers.Serializer):
-    """
-    Serializer for bulk creating students.
-    """
     school_id = serializers.IntegerField()
     class_id = serializers.IntegerField()
     students = serializers.ListField(
@@ -112,20 +139,17 @@ class StudentBulkCreateSerializer(serializers.Serializer):
     )
 
     def validate_school_id(self, value):
-        """Validate school exists."""
         from schools.models import School
         if not School.objects.filter(id=value).exists():
             raise serializers.ValidationError("School not found.")
         return value
 
     def validate_class_id(self, value):
-        """Validate class exists."""
         if not Class.objects.filter(id=value).exists():
             raise serializers.ValidationError("Class not found.")
         return value
 
     def validate(self, attrs):
-        """Validate class belongs to school."""
         school_id = attrs.get('school_id')
         class_id = attrs.get('class_id')
 
@@ -137,14 +161,12 @@ class StudentBulkCreateSerializer(serializers.Serializer):
         return attrs
 
     def validate_students(self, value):
-        """Validate each student in the list."""
         errors = []
         for i, student in enumerate(value):
             if 'roll_number' not in student:
                 errors.append(f"Student {i+1}: roll_number is required")
             if 'name' not in student:
                 errors.append(f"Student {i+1}: name is required")
-            # parent_phone is now optional - can be added later by school admin
 
         if errors:
             raise serializers.ValidationError(errors)
@@ -152,7 +174,6 @@ class StudentBulkCreateSerializer(serializers.Serializer):
         return value
 
     def create(self, validated_data):
-        """Bulk create or update students (upsert by school + class + roll_number)."""
         school_id = validated_data['school_id']
         class_id = validated_data['class_id']
         students_data = validated_data['students']

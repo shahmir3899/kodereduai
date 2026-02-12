@@ -349,6 +349,105 @@ export const academicsApi = {
   bulkSaveTimetable: (data) => api.post('/api/academics/timetable-entries/bulk_save/', data),
   checkTeacherConflicts: (params) =>
     api.get('/api/academics/timetable-entries/teacher_conflicts/', { params }),
+
+  // AI Features
+  autoGenerateTimetable: (data) =>
+    api.post('/api/academics/timetable-entries/auto_generate/', data),
+  suggestConflictResolution: (params) =>
+    api.get('/api/academics/timetable-entries/suggest_resolution/', { params }),
+  getTimetableQualityScore: (classId) =>
+    api.get('/api/academics/timetable-entries/quality_score/', { params: { class_id: classId } }),
+  suggestSubstitute: (params) =>
+    api.get('/api/academics/timetable-entries/suggest_substitute/', { params }),
+  getWorkloadAnalysis: () =>
+    api.get('/api/academics/class-subjects/workload_analysis/'),
+  getGapAnalysis: () =>
+    api.get('/api/academics/subjects/gap_analysis/'),
+  getAnalytics: (params) =>
+    api.get('/api/academics/analytics/', { params }),
+
+  // AI Chat
+  sendChatMessage: (data) => api.post('/api/academics/ai-chat/', data),
+  getChatHistory: () => api.get('/api/academics/ai-chat/'),
+  clearChatHistory: () => api.delete('/api/academics/ai-chat/'),
+}
+
+// Academic Sessions API
+export const sessionsApi = {
+  // Academic Years
+  getAcademicYears: (params) => api.get('/api/sessions/academic-years/', { params }),
+  getAcademicYear: (id) => api.get(`/api/sessions/academic-years/${id}/`),
+  createAcademicYear: (data) => api.post('/api/sessions/academic-years/', data),
+  updateAcademicYear: (id, data) => api.patch(`/api/sessions/academic-years/${id}/`, data),
+  deleteAcademicYear: (id) => api.delete(`/api/sessions/academic-years/${id}/`),
+  setCurrentYear: (id) => api.post(`/api/sessions/academic-years/${id}/set_current/`),
+  getYearSummary: (id) => api.get(`/api/sessions/academic-years/${id}/summary/`),
+
+  // Terms
+  getTerms: (params) => api.get('/api/sessions/terms/', { params }),
+  getTerm: (id) => api.get(`/api/sessions/terms/${id}/`),
+  createTerm: (data) => api.post('/api/sessions/terms/', data),
+  updateTerm: (id, data) => api.patch(`/api/sessions/terms/${id}/`, data),
+  deleteTerm: (id) => api.delete(`/api/sessions/terms/${id}/`),
+
+  // Enrollments
+  getEnrollments: (params) => api.get('/api/sessions/enrollments/', { params }),
+  createEnrollment: (data) => api.post('/api/sessions/enrollments/', data),
+  updateEnrollment: (id, data) => api.patch(`/api/sessions/enrollments/${id}/`, data),
+  deleteEnrollment: (id) => api.delete(`/api/sessions/enrollments/${id}/`),
+  getEnrollmentsByClass: (params) => api.get('/api/sessions/enrollments/by_class/', { params }),
+  bulkPromote: (data) => api.post('/api/sessions/enrollments/bulk_promote/', data),
+}
+
+// Grades API
+export const gradesApi = {
+  getGrades: (params) => api.get('/api/grades/', { params }),
+  getGrade: (id) => api.get(`/api/grades/${id}/`),
+  createGrade: (data) => api.post('/api/grades/', data),
+  updateGrade: (id, data) => api.patch(`/api/grades/${id}/`, data),
+  deleteGrade: (id) => api.delete(`/api/grades/${id}/`),
+  getGradeClasses: (id) => api.get(`/api/grades/${id}/classes/`),
+}
+
+// Examinations API
+export const examinationsApi = {
+  // Exam Types
+  getExamTypes: (params) => api.get('/api/examinations/exam-types/', { params }),
+  createExamType: (data) => api.post('/api/examinations/exam-types/', data),
+  updateExamType: (id, data) => api.patch(`/api/examinations/exam-types/${id}/`, data),
+  deleteExamType: (id) => api.delete(`/api/examinations/exam-types/${id}/`),
+
+  // Exams
+  getExams: (params) => api.get('/api/examinations/exams/', { params }),
+  getExam: (id) => api.get(`/api/examinations/exams/${id}/`),
+  createExam: (data) => api.post('/api/examinations/exams/', data),
+  updateExam: (id, data) => api.patch(`/api/examinations/exams/${id}/`, data),
+  deleteExam: (id) => api.delete(`/api/examinations/exams/${id}/`),
+  publishExam: (id) => api.post(`/api/examinations/exams/${id}/publish/`),
+  getExamResults: (id) => api.get(`/api/examinations/exams/${id}/results/`),
+  getClassSummary: (id) => api.get(`/api/examinations/exams/${id}/class_summary/`),
+
+  // Exam Subjects
+  getExamSubjects: (params) => api.get('/api/examinations/exam-subjects/', { params }),
+  createExamSubject: (data) => api.post('/api/examinations/exam-subjects/', data),
+  updateExamSubject: (id, data) => api.patch(`/api/examinations/exam-subjects/${id}/`, data),
+  deleteExamSubject: (id) => api.delete(`/api/examinations/exam-subjects/${id}/`),
+
+  // Marks
+  getMarks: (params) => api.get('/api/examinations/marks/', { params }),
+  createMark: (data) => api.post('/api/examinations/marks/', data),
+  updateMark: (id, data) => api.patch(`/api/examinations/marks/${id}/`, data),
+  bulkEntryMarks: (data) => api.post('/api/examinations/marks/bulk_entry/', data),
+  getMarksByStudent: (params) => api.get('/api/examinations/marks/by_student/', { params }),
+
+  // Grade Scales
+  getGradeScales: (params) => api.get('/api/examinations/grade-scales/', { params }),
+  createGradeScale: (data) => api.post('/api/examinations/grade-scales/', data),
+  updateGradeScale: (id, data) => api.patch(`/api/examinations/grade-scales/${id}/`, data),
+  deleteGradeScale: (id) => api.delete(`/api/examinations/grade-scales/${id}/`),
+
+  // Report Card
+  getReportCard: (params) => api.get('/api/examinations/report-card/', { params }),
 }
 
 // Auth API (school switching + profile)
