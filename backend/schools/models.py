@@ -30,6 +30,9 @@ class UserSchoolMembership(models.Model):
     class Role(models.TextChoices):
         SCHOOL_ADMIN = 'SCHOOL_ADMIN', 'School Admin'
         PRINCIPAL = 'PRINCIPAL', 'Principal'
+        HR_MANAGER = 'HR_MANAGER', 'HR Manager'
+        ACCOUNTANT = 'ACCOUNTANT', 'Accountant'
+        TEACHER = 'TEACHER', 'Teacher'
         STAFF = 'STAFF', 'Staff'
 
     user = models.ForeignKey(

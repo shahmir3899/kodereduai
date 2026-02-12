@@ -41,6 +41,9 @@ class User(AbstractUser):
         SUPER_ADMIN = 'SUPER_ADMIN', 'Super Admin'
         SCHOOL_ADMIN = 'SCHOOL_ADMIN', 'School Admin'
         PRINCIPAL = 'PRINCIPAL', 'Principal'
+        HR_MANAGER = 'HR_MANAGER', 'HR Manager'
+        ACCOUNTANT = 'ACCOUNTANT', 'Accountant'
+        TEACHER = 'TEACHER', 'Teacher'
         STAFF = 'STAFF', 'Staff'
 
     # Role field
@@ -109,6 +112,21 @@ class User(AbstractUser):
     def is_staff_member(self) -> bool:
         """Check if user is a Staff member."""
         return self.role == self.Role.STAFF
+
+    @property
+    def is_hr_manager(self) -> bool:
+        """Check if user is an HR Manager."""
+        return self.role == self.Role.HR_MANAGER
+
+    @property
+    def is_teacher(self) -> bool:
+        """Check if user is a Teacher."""
+        return self.role == self.Role.TEACHER
+
+    @property
+    def is_accountant(self) -> bool:
+        """Check if user is an Accountant."""
+        return self.role == self.Role.ACCOUNTANT
 
     def can_access_school(self, school_id: int) -> bool:
         """Check if user can access a specific school's data."""

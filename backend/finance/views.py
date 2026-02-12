@@ -70,13 +70,10 @@ def _resolve_school_id(request):
 
 
 def _is_staff_user(request):
-    """Check if current user is a staff member (not admin/superadmin)."""
-    return (
-        request.user.is_authenticated and
-        request.user.is_staff_member and
-        not request.user.is_school_admin and
-        not request.user.is_super_admin
-    )
+    """Check if current user is a staff-level member (not admin/superadmin)."""
+    from core.permissions import STAFF_LEVEL_ROLES
+    role = get_effective_role(request)
+    return role in STAFF_LEVEL_ROLES
 
 
 def _get_staff_visible_accounts(school_id):

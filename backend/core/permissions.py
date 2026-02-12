@@ -9,6 +9,10 @@ from core.mixins import ensure_tenant_schools, ensure_tenant_school_id
 # Used across all permission classes to avoid repeating role tuples.
 ADMIN_ROLES = ('SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL')
 
+# Roles that are staff-level (non-admin). These get read-only access to
+# existing modules (finance, attendance) and are subject to sensitive-data filtering.
+STAFF_LEVEL_ROLES = ('STAFF', 'TEACHER', 'HR_MANAGER', 'ACCOUNTANT')
+
 
 def get_effective_role(request):
     """
@@ -141,8 +145,8 @@ class IsSchoolAdminOrStaffReadOnly(permissions.BasePermission):
         if role in ADMIN_ROLES:
             return True
 
-        # Staff can only read
-        if role == 'STAFF':
+        # Staff-level roles can only read
+        if role in STAFF_LEVEL_ROLES:
             return request.method in permissions.SAFE_METHODS
 
         return False
@@ -151,7 +155,7 @@ class IsSchoolAdminOrStaffReadOnly(permissions.BasePermission):
 class CanManageAttendance(permissions.BasePermission):
     """
     Permission for attendance-related operations.
-    Admins/Principals get full access, Staff get read-only.
+    Admins/Principals get full access, Staff-level roles get read-only.
     """
     message = "You don't have permission to manage attendance."
 
@@ -163,7 +167,7 @@ class CanManageAttendance(permissions.BasePermission):
         if role in ADMIN_ROLES:
             return True
 
-        if role == 'STAFF':
+        if role in STAFF_LEVEL_ROLES:
             return request.method in permissions.SAFE_METHODS
 
         return False

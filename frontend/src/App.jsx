@@ -16,6 +16,18 @@ import ExpensesPage from './pages/ExpensesPage'
 import FinancialReportsPage from './pages/FinancialReportsPage'
 import FinanceDashboardPage from './pages/FinanceDashboardPage'
 import SettingsPage from './pages/SettingsPage'
+import HRDashboardPage from './pages/hr/HRDashboardPage'
+import StaffDirectoryPage from './pages/hr/StaffDirectoryPage'
+import StaffFormPage from './pages/hr/StaffFormPage'
+import DepartmentsPage from './pages/hr/DepartmentsPage'
+import SalaryManagementPage from './pages/hr/SalaryManagementPage'
+import PayrollPage from './pages/hr/PayrollPage'
+import LeaveManagementPage from './pages/hr/LeaveManagementPage'
+import StaffAttendancePage from './pages/hr/StaffAttendancePage'
+import PerformanceAppraisalPage from './pages/hr/PerformanceAppraisalPage'
+import StaffDocumentsPage from './pages/hr/StaffDocumentsPage'
+import SubjectsPage from './pages/academics/SubjectsPage'
+import TimetablePage from './pages/academics/TimetablePage'
 
 // Components
 import Layout from './components/Layout'
@@ -127,6 +139,23 @@ function App() {
 
           <Route path="students" element={<SchoolRoute><StudentsPage /></SchoolRoute>} />
           <Route path="classes" element={<SchoolRoute><ClassesPage /></SchoolRoute>} />
+
+          {/* HR routes */}
+          <Route path="hr" element={<SchoolRoute><HRDashboardPage /></SchoolRoute>} />
+          <Route path="hr/staff" element={<SchoolRoute><StaffDirectoryPage /></SchoolRoute>} />
+          <Route path="hr/staff/new" element={<SchoolRoute><StaffFormPage /></SchoolRoute>} />
+          <Route path="hr/staff/:id/edit" element={<SchoolRoute><StaffFormPage /></SchoolRoute>} />
+          <Route path="hr/departments" element={<SchoolRoute><DepartmentsPage /></SchoolRoute>} />
+          <Route path="hr/salary" element={<SchoolRoute><SalaryManagementPage /></SchoolRoute>} />
+          <Route path="hr/payroll" element={<SchoolRoute><PayrollPage /></SchoolRoute>} />
+          <Route path="hr/leave" element={<SchoolRoute><LeaveManagementPage /></SchoolRoute>} />
+          <Route path="hr/attendance" element={<SchoolRoute><StaffAttendancePage /></SchoolRoute>} />
+          <Route path="hr/appraisals" element={<SchoolRoute><PerformanceAppraisalPage /></SchoolRoute>} />
+          <Route path="hr/documents" element={<SchoolRoute><StaffDocumentsPage /></SchoolRoute>} />
+
+          {/* Academics routes */}
+          <Route path="academics/subjects" element={<SchoolRoute><SubjectsPage /></SchoolRoute>} />
+          <Route path="academics/timetable" element={<SchoolRoute><TimetablePage /></SchoolRoute>} />
 
           {/* Finance routes */}
           <Route path="finance" element={<SchoolRoute><FinanceDashboardPage /></SchoolRoute>} />

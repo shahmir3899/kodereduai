@@ -154,6 +154,7 @@ export function AuthProvider({ children }) {
   // Determine role based on active school membership
   const effectiveRole = activeSchool?.role || user?.role
   const isSchoolAdmin = user?.is_super_admin || effectiveRole === 'SCHOOL_ADMIN' || effectiveRole === 'PRINCIPAL'
+  const isStaffLevel = ['STAFF', 'TEACHER', 'HR_MANAGER', 'ACCOUNTANT'].includes(effectiveRole)
 
   const value = {
     user,
@@ -168,6 +169,11 @@ export function AuthProvider({ children }) {
     isSchoolAdmin,
     isPrincipal: effectiveRole === 'PRINCIPAL',
     isStaffMember: effectiveRole === 'STAFF',
+    isHRManager: effectiveRole === 'HR_MANAGER',
+    isTeacher: effectiveRole === 'TEACHER',
+    isAccountant: effectiveRole === 'ACCOUNTANT',
+    isStaffLevel,
+    effectiveRole,
   }
 
   return (

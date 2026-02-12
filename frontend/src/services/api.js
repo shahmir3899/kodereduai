@@ -239,6 +239,118 @@ export const financeApi = {
   clearChatHistory: () => api.delete('/api/finance/ai-chat/'),
 }
 
+// HR & Staff Management API
+export const hrApi = {
+  // Dashboard
+  getDashboardStats: () => api.get('/api/hr/staff/dashboard_stats/'),
+
+  // Staff Members
+  getStaff: (params) => api.get('/api/hr/staff/', { params }),
+  getStaffMember: (id) => api.get(`/api/hr/staff/${id}/`),
+  createStaff: (data) => api.post('/api/hr/staff/', data),
+  updateStaff: (id, data) => api.patch(`/api/hr/staff/${id}/`, data),
+  deleteStaff: (id) => api.delete(`/api/hr/staff/${id}/`),
+
+  // Departments
+  getDepartments: (params) => api.get('/api/hr/departments/', { params }),
+  createDepartment: (data) => api.post('/api/hr/departments/', data),
+  updateDepartment: (id, data) => api.patch(`/api/hr/departments/${id}/`, data),
+  deleteDepartment: (id) => api.delete(`/api/hr/departments/${id}/`),
+
+  // Designations
+  getDesignations: (params) => api.get('/api/hr/designations/', { params }),
+  createDesignation: (data) => api.post('/api/hr/designations/', data),
+  updateDesignation: (id, data) => api.patch(`/api/hr/designations/${id}/`, data),
+  deleteDesignation: (id) => api.delete(`/api/hr/designations/${id}/`),
+
+  // Salary Structures
+  getSalaryStructures: (params) => api.get('/api/hr/salary-structures/', { params }),
+  getSalaryStructure: (id) => api.get(`/api/hr/salary-structures/${id}/`),
+  createSalaryStructure: (data) => api.post('/api/hr/salary-structures/', data),
+  updateSalaryStructure: (id, data) => api.patch(`/api/hr/salary-structures/${id}/`, data),
+  deleteSalaryStructure: (id) => api.delete(`/api/hr/salary-structures/${id}/`),
+  getCurrentSalary: (staffMemberId) => api.get('/api/hr/salary-structures/current/', { params: { staff_member: staffMemberId } }),
+
+  // Payslips / Payroll
+  getPayslips: (params) => api.get('/api/hr/payslips/', { params }),
+  getPayslip: (id) => api.get(`/api/hr/payslips/${id}/`),
+  generatePayslips: (data) => api.post('/api/hr/payslips/generate_payslips/', data),
+  approvePayslip: (id) => api.post(`/api/hr/payslips/${id}/approve/`),
+  markPayslipPaid: (id, data) => api.post(`/api/hr/payslips/${id}/mark_paid/`, data),
+  getPayrollSummary: (params) => api.get('/api/hr/payslips/payroll_summary/', { params }),
+
+  // Leave Policies
+  getLeavePolicies: (params) => api.get('/api/hr/leave-policies/', { params }),
+  createLeavePolicy: (data) => api.post('/api/hr/leave-policies/', data),
+  updateLeavePolicy: (id, data) => api.patch(`/api/hr/leave-policies/${id}/`, data),
+  deleteLeavePolicy: (id) => api.delete(`/api/hr/leave-policies/${id}/`),
+
+  // Leave Applications
+  getLeaveApplications: (params) => api.get('/api/hr/leave-applications/', { params }),
+  createLeaveApplication: (data) => api.post('/api/hr/leave-applications/', data),
+  approveLeave: (id, data) => api.post(`/api/hr/leave-applications/${id}/approve/`, data),
+  rejectLeave: (id, data) => api.post(`/api/hr/leave-applications/${id}/reject/`, data),
+  cancelLeave: (id) => api.post(`/api/hr/leave-applications/${id}/cancel/`),
+  getLeaveBalance: (staffMemberId) => api.get('/api/hr/leave-applications/leave_balance/', { params: { staff_member: staffMemberId } }),
+
+  // Staff Attendance
+  getStaffAttendance: (params) => api.get('/api/hr/attendance/', { params }),
+  createStaffAttendance: (data) => api.post('/api/hr/attendance/', data),
+  updateStaffAttendance: (id, data) => api.patch(`/api/hr/attendance/${id}/`, data),
+  bulkMarkAttendance: (data) => api.post('/api/hr/attendance/bulk_mark/', data),
+  getAttendanceSummary: (params) => api.get('/api/hr/attendance/summary/', { params }),
+
+  // Performance Appraisals
+  getAppraisals: (params) => api.get('/api/hr/appraisals/', { params }),
+  getAppraisal: (id) => api.get(`/api/hr/appraisals/${id}/`),
+  createAppraisal: (data) => api.post('/api/hr/appraisals/', data),
+  updateAppraisal: (id, data) => api.patch(`/api/hr/appraisals/${id}/`, data),
+  deleteAppraisal: (id) => api.delete(`/api/hr/appraisals/${id}/`),
+
+  // Staff Qualifications
+  getQualifications: (params) => api.get('/api/hr/qualifications/', { params }),
+  createQualification: (data) => api.post('/api/hr/qualifications/', data),
+  updateQualification: (id, data) => api.patch(`/api/hr/qualifications/${id}/`, data),
+  deleteQualification: (id) => api.delete(`/api/hr/qualifications/${id}/`),
+
+  // Staff Documents
+  getDocuments: (params) => api.get('/api/hr/documents/', { params }),
+  createDocument: (data) => api.post('/api/hr/documents/', data),
+  deleteDocument: (id) => api.delete(`/api/hr/documents/${id}/`),
+}
+
+// Academics (Subjects & Timetable) API
+export const academicsApi = {
+  // Subjects
+  getSubjects: (params) => api.get('/api/academics/subjects/', { params }),
+  getSubject: (id) => api.get(`/api/academics/subjects/${id}/`),
+  createSubject: (data) => api.post('/api/academics/subjects/', data),
+  updateSubject: (id, data) => api.patch(`/api/academics/subjects/${id}/`, data),
+  deleteSubject: (id) => api.delete(`/api/academics/subjects/${id}/`),
+
+  // Class-Subject Assignments
+  getClassSubjects: (params) => api.get('/api/academics/class-subjects/', { params }),
+  createClassSubject: (data) => api.post('/api/academics/class-subjects/', data),
+  updateClassSubject: (id, data) => api.patch(`/api/academics/class-subjects/${id}/`, data),
+  deleteClassSubject: (id) => api.delete(`/api/academics/class-subjects/${id}/`),
+  getClassSubjectsByClass: (classId) =>
+    api.get('/api/academics/class-subjects/by_class/', { params: { class_id: classId } }),
+
+  // Timetable Slots
+  getTimetableSlots: (params) => api.get('/api/academics/timetable-slots/', { params }),
+  createTimetableSlot: (data) => api.post('/api/academics/timetable-slots/', data),
+  updateTimetableSlot: (id, data) => api.patch(`/api/academics/timetable-slots/${id}/`, data),
+  deleteTimetableSlot: (id) => api.delete(`/api/academics/timetable-slots/${id}/`),
+
+  // Timetable Entries
+  getTimetableEntries: (params) => api.get('/api/academics/timetable-entries/', { params }),
+  getTimetableByClass: (classId) =>
+    api.get('/api/academics/timetable-entries/by_class/', { params: { class_id: classId } }),
+  bulkSaveTimetable: (data) => api.post('/api/academics/timetable-entries/bulk_save/', data),
+  checkTeacherConflicts: (params) =>
+    api.get('/api/academics/timetable-entries/teacher_conflicts/', { params }),
+}
+
 // Auth API (school switching + profile)
 export const authApi = {
   switchSchool: (schoolId) => api.post('/api/auth/switch-school/', { school_id: schoolId }),

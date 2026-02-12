@@ -39,6 +39,18 @@ def api_root(request):
                 'reports': '/api/finance/reports/',
                 'ai_chat': '/api/finance/ai-chat/',
             },
+            'hr': {
+                'staff': '/api/hr/staff/',
+                'departments': '/api/hr/departments/',
+                'designations': '/api/hr/designations/',
+                'dashboard_stats': '/api/hr/staff/dashboard_stats/',
+            },
+            'academics': {
+                'subjects': '/api/academics/subjects/',
+                'class_subjects': '/api/academics/class-subjects/',
+                'timetable_slots': '/api/academics/timetable-slots/',
+                'timetable_entries': '/api/academics/timetable-entries/',
+            },
             'admin': {
                 'schools': '/api/admin/schools/',
             }
@@ -67,6 +79,12 @@ urlpatterns = [
 
     # Finance
     path('api/finance/', include('finance.urls')),
+
+    # HR & Staff Management
+    path('api/hr/', include('hr.urls')),
+
+    # Academics (Subjects & Timetable)
+    path('api/academics/', include('academics.urls')),
 ]
 
 # Serve media files in development
