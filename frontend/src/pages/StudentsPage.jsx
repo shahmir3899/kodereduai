@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { studentsApi, classesApi, schoolsApi } from '../services/api'
 import { useToast } from '../components/Toast'
+import { exportStudentsPDF, exportStudentsPNG } from './studentExport'
 import * as XLSX from 'xlsx'
 
 // Phone format note: Use dashes (0300-1234567) to prevent Excel scientific notation
@@ -24,6 +25,8 @@ export default function StudentsPage() {
   const [showBulkModal, setShowBulkModal] = useState(false)
   const [bulkData, setBulkData] = useState({ class_id: '', students: [] })
   const [isUploading, setIsUploading] = useState(false)
+  const [showExportMenu, setShowExportMenu] = useState(false)
+  const exportRef = useRef(null)
   const [studentForm, setStudentForm] = useState({
     name: '',
     roll_number: '',
@@ -531,6 +534,44 @@ export default function StudentsPage() {
     return { total: allStudents.length, active, inactive, byClass }
   }, [allStudents])
 
+  // Close export menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (exportRef.current && !exportRef.current.contains(e.target)) {
+        setShowExportMenu(false)
+      }
+    }
+    if (showExportMenu) document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showExportMenu])
+
+  const getExportInfo = () => {
+    const schoolName = activeSchool?.name || schools.find(s => s.id === selectedSchoolId)?.name || ''
+    const selectedClassName = selectedClass ? classes.find(c => c.id === parseInt(selectedClass))?.name : null
+    const parts = []
+    if (selectedClassName) parts.push(`Class: ${selectedClassName}`)
+    if (search) parts.push(`Search: "${search}"`)
+    return { schoolName, filterInfo: parts.join(' | ') || null }
+  }
+
+  const handleExportPDF = () => {
+    const { schoolName, filterInfo } = getExportInfo()
+    exportStudentsPDF({ students, schoolName, filterInfo })
+    setShowExportMenu(false)
+    showSuccess('PDF downloaded!')
+  }
+
+  const handleExportPNG = async () => {
+    const { schoolName, filterInfo } = getExportInfo()
+    setShowExportMenu(false)
+    try {
+      await exportStudentsPNG({ students, schoolName, filterInfo })
+      showSuccess('PNG downloaded!')
+    } catch {
+      showError('Failed to export PNG')
+    }
+  }
+
   return (
     <div>
       <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -541,11 +582,50 @@ export default function StudentsPage() {
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           {selectedSchoolId && classes.length > 0 && (
             <>
+              {/* Export dropdown (PDF / PNG) */}
+              {students.length > 0 && (
+                <div className="relative" ref={exportRef}>
+                  <button
+                    onClick={() => setShowExportMenu(!showExportMenu)}
+                    className="btn btn-secondary flex items-center gap-1"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    Export
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  {showExportMenu && (
+                    <div className="absolute right-0 mt-1 w-44 bg-white border border-gray-200 rounded-lg shadow-lg z-20 py-1">
+                      <button
+                        onClick={handleExportPDF}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                      >
+                        <svg className="w-4 h-4 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
+                        </svg>
+                        Download PDF
+                      </button>
+                      <button
+                        onClick={handleExportPNG}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                      >
+                        <svg className="w-4 h-4 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
+                        </svg>
+                        Download PNG
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
               <button
                 onClick={downloadExcelTemplate}
                 className="btn btn-secondary"
               >
-                Download Students
+                Download Excel
               </button>
               <label className="btn btn-secondary cursor-pointer">
                 Upload Excel

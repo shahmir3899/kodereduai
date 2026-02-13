@@ -23,6 +23,9 @@ def _resolve_school_id(request):
     school_id = ensure_tenant_school_id(request)
     if school_id:
         return school_id
+    # If X-School-ID header was sent but rejected, don't fall back
+    if request.headers.get('X-School-ID'):
+        return None
     sid = (
         request.query_params.get('school_id')
         or request.data.get('school_id')

@@ -17,7 +17,7 @@ from rest_framework.permissions import IsAuthenticated
 
 from core.permissions import IsSchoolAdmin, IsSchoolAdminOrStaffReadOnly, HasSchoolAccess, get_effective_role, ModuleAccessMixin
 from core.mixins import TenantQuerySetMixin, ensure_tenant_schools, ensure_tenant_school_id
-from students.models import Student, Class, Grade
+from students.models import Student, Class
 from .models import (
     Account, Transfer, FeeStructure, FeePayment, Expense, OtherIncome,
     FinanceAIChatMessage, MonthlyClosing, AccountSnapshot,
@@ -1437,7 +1437,7 @@ class DiscountViewSet(ModuleAccessMixin, viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = Discount.objects.select_related(
-            'school', 'academic_year', 'target_grade', 'target_class',
+            'school', 'academic_year', 'target_class',
         )
         school_id = _resolve_school_id(self.request)
         if school_id:
@@ -1598,7 +1598,7 @@ class StudentDiscountViewSet(ModuleAccessMixin, viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'])
     def bulk_assign(self, request):
-        """Assign a discount to all students in a class or grade."""
+        """Assign a discount to all students in a class or grade level."""
         from django.utils import timezone as tz
 
         school_id = _resolve_school_id(request)
@@ -1608,7 +1608,7 @@ class StudentDiscountViewSet(ModuleAccessMixin, viewsets.ModelViewSet):
         discount_id = request.data.get('discount_id')
         scholarship_id = request.data.get('scholarship_id')
         class_id = request.data.get('class_id')
-        grade_id = request.data.get('grade_id')
+        grade_level = request.data.get('grade_level')
         academic_year_id = request.data.get('academic_year_id')
 
         if not discount_id and not scholarship_id:
@@ -1618,9 +1618,9 @@ class StudentDiscountViewSet(ModuleAccessMixin, viewsets.ModelViewSet):
             )
         if not academic_year_id:
             return Response({'detail': 'academic_year_id is required.'}, status=400)
-        if not class_id and not grade_id:
+        if not class_id and grade_level is None:
             return Response(
-                {'detail': 'Either class_id or grade_id is required.'},
+                {'detail': 'Either class_id or grade_level is required.'},
                 status=400,
             )
 
@@ -1628,8 +1628,8 @@ class StudentDiscountViewSet(ModuleAccessMixin, viewsets.ModelViewSet):
         students_qs = Student.objects.filter(school_id=school_id, is_active=True)
         if class_id:
             students_qs = students_qs.filter(class_obj_id=class_id)
-        elif grade_id:
-            students_qs = students_qs.filter(class_obj__grade_id=grade_id)
+        elif grade_level is not None:
+            students_qs = students_qs.filter(class_obj__grade_level=grade_level)
 
         now = tz.now()
         created_count = 0

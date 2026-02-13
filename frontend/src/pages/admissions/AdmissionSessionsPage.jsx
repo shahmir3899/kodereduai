@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { admissionsApi, sessionsApi, gradesApi } from '../../services/api'
+import { admissionsApi, sessionsApi } from '../../services/api'
 import { useToast } from '../../components/Toast'
+import { GRADE_PRESETS, GRADE_LEVEL_LABELS } from '../../constants/gradePresets'
 
 const EMPTY_SESSION = {
   name: '',
@@ -10,7 +11,7 @@ const EMPTY_SESSION = {
   start_date: '',
   end_date: '',
   is_active: true,
-  grades_open: [],
+  grade_levels_open: [],
 }
 
 export default function AdmissionSessionsPage() {
@@ -36,16 +37,8 @@ export default function AdmissionSessionsPage() {
     staleTime: 5 * 60 * 1000,
   })
 
-  // Grades for multi-select
-  const { data: gradesRes } = useQuery({
-    queryKey: ['grades'],
-    queryFn: () => gradesApi.getGrades(),
-    staleTime: 5 * 60 * 1000,
-  })
-
   const sessions = sessionsRes?.data?.results || sessionsRes?.data || []
   const years = yearsRes?.data?.results || yearsRes?.data || []
-  const grades = gradesRes?.data?.results || gradesRes?.data || []
 
   // Create mutation
   const createMut = useMutation({
@@ -116,7 +109,7 @@ export default function AdmissionSessionsPage() {
       start_date: session.start_date || '',
       end_date: session.end_date || '',
       is_active: session.is_active !== undefined ? session.is_active : true,
-      grades_open: session.grades_open || session.grades || [],
+      grade_levels_open: session.grade_levels_open || [],
     })
     setEditId(session.id)
     setFormErrors({})
@@ -130,12 +123,12 @@ export default function AdmissionSessionsPage() {
     setFormErrors({})
   }
 
-  const handleGradeToggle = (gradeId) => {
+  const handleGradeLevelToggle = (level) => {
     setForm((prev) => ({
       ...prev,
-      grades_open: prev.grades_open.includes(gradeId)
-        ? prev.grades_open.filter((g) => g !== gradeId)
-        : [...prev.grades_open, gradeId],
+      grade_levels_open: prev.grade_levels_open.includes(level)
+        ? prev.grade_levels_open.filter((l) => l !== level)
+        : [...prev.grade_levels_open, level],
     }))
   }
 
@@ -154,7 +147,7 @@ export default function AdmissionSessionsPage() {
       start_date: form.start_date || undefined,
       end_date: form.end_date || undefined,
       is_active: form.is_active,
-      grades_open: form.grades_open,
+      grade_levels_open: form.grade_levels_open,
     }
     if (form.academic_year) {
       payload.academic_year = parseInt(form.academic_year)
@@ -169,6 +162,11 @@ export default function AdmissionSessionsPage() {
 
   const isPending = createMut.isPending || updateMut.isPending
 
+  const formatGradeLevels = (levels) => {
+    if (!levels || levels.length === 0) return '-'
+    return levels.map(l => GRADE_LEVEL_LABELS[l] || `Level ${l}`).join(', ')
+  }
+
   return (
     <div>
       {/* Header */}
@@ -182,7 +180,7 @@ export default function AdmissionSessionsPage() {
             </Link>
             <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Admission Sessions</h1>
           </div>
-          <p className="text-sm text-gray-600 mt-1">Manage admission windows and open grades</p>
+          <p className="text-sm text-gray-600 mt-1">Manage admission windows and open grade levels</p>
         </div>
         <button
           onClick={openCreateModal}
@@ -254,11 +252,7 @@ export default function AdmissionSessionsPage() {
                       </button>
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-600">
-                      {session.grades_open_names
-                        ? session.grades_open_names.join(', ')
-                        : (session.grades_open || session.grades || []).length > 0
-                          ? `${(session.grades_open || session.grades || []).length} grade(s)`
-                          : '-'}
+                      {formatGradeLevels(session.grade_levels_open)}
                     </td>
                     <td className="px-4 py-3 text-sm text-center font-medium text-gray-900">
                       {session.enquiry_count ?? session.enquiries_count ?? '-'}
@@ -307,8 +301,8 @@ export default function AdmissionSessionsPage() {
                   <p>
                     {session.start_date || 'No start date'} - {session.end_date || 'No end date'}
                   </p>
-                  {(session.grades_open_names || []).length > 0 && (
-                    <p>Grades: {session.grades_open_names.join(', ')}</p>
+                  {(session.grade_levels_open || []).length > 0 && (
+                    <p>Grades: {formatGradeLevels(session.grade_levels_open)}</p>
                   )}
                   <p>Enquiries: {session.enquiry_count ?? session.enquiries_count ?? 0}</p>
                 </div>
@@ -423,45 +417,41 @@ export default function AdmissionSessionsPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Grades Open for Admission</label>
-                {grades.length === 0 ? (
-                  <p className="text-xs text-gray-500">No grades available. Create grades first.</p>
-                ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto p-2 bg-gray-50 rounded-lg">
-                    {grades.map((grade) => {
-                      const isSelected = form.grades_open.includes(grade.id)
-                      return (
-                        <button
-                          key={grade.id}
-                          type="button"
-                          onClick={() => handleGradeToggle(grade.id)}
-                          className={`px-3 py-2 text-xs rounded-lg border transition-colors text-left ${
-                            isSelected
-                              ? 'bg-primary-50 border-primary-300 text-primary-700 font-medium'
-                              : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
-                          }`}
-                        >
-                          <div className="flex items-center gap-1.5">
-                            <div className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center ${
-                              isSelected ? 'bg-primary-500 border-primary-500' : 'border-gray-300'
-                            }`}>
-                              {isSelected && (
-                                <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                </svg>
-                              )}
-                            </div>
-                            {grade.name}
+                <label className="block text-sm font-medium text-gray-700 mb-2">Grade Levels Open for Admission</label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto p-2 bg-gray-50 rounded-lg">
+                  {GRADE_PRESETS.map((preset) => {
+                    const isSelected = form.grade_levels_open.includes(preset.numeric_level)
+                    return (
+                      <button
+                        key={preset.numeric_level}
+                        type="button"
+                        onClick={() => handleGradeLevelToggle(preset.numeric_level)}
+                        className={`px-3 py-2 text-xs rounded-lg border transition-colors text-left ${
+                          isSelected
+                            ? 'bg-primary-50 border-primary-300 text-primary-700 font-medium'
+                            : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <div className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center ${
+                            isSelected ? 'bg-primary-500 border-primary-500' : 'border-gray-300'
+                          }`}>
+                            {isSelected && (
+                              <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                              </svg>
+                            )}
                           </div>
-                        </button>
-                      )
-                    })}
-                  </div>
+                          {preset.name}
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+                {form.grade_levels_open.length > 0 && (
+                  <p className="text-xs text-gray-500 mt-1">{form.grade_levels_open.length} grade level(s) selected</p>
                 )}
-                {form.grades_open.length > 0 && (
-                  <p className="text-xs text-gray-500 mt-1">{form.grades_open.length} grade(s) selected</p>
-                )}
-                {formErrors.grades_open && <p className="text-xs text-red-600 mt-1">{formErrors.grades_open}</p>}
+                {formErrors.grade_levels_open && <p className="text-xs text-red-600 mt-1">{formErrors.grade_levels_open}</p>}
               </div>
 
               <div className="flex justify-end gap-3 pt-2">

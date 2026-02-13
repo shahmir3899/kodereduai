@@ -28,10 +28,21 @@ logger = logging.getLogger(__name__)
 
 
 def _resolve_school_id(request):
-    """Resolve school_id from header -> params -> user fallback."""
+    """Resolve school_id from header -> params -> user fallback.
+
+    If X-School-ID header is explicitly set but the user doesn't have access
+    to that school, return None (don't fall back to user's default school).
+    This prevents data leakage from fallback schools.
+    """
     tenant_sid = ensure_tenant_school_id(request)
     if tenant_sid:
         return tenant_sid
+
+    # If X-School-ID header was explicitly sent but didn't resolve
+    # (user lacks access), don't fall back — return None for isolation.
+    if request.headers.get('X-School-ID'):
+        return None
+
     school_id = (
         request.query_params.get('school_id')
         or request.data.get('school_id')
@@ -42,6 +53,14 @@ def _resolve_school_id(request):
     if request.user.school_id:
         return request.user.school_id
     return None
+
+
+def _is_school_header_rejected(request):
+    """Return True if X-School-ID was sent but user lacks access to it."""
+    header = request.headers.get('X-School-ID')
+    if not header:
+        return False
+    return ensure_tenant_school_id(request) is None
 
 
 # ── Subject ViewSet ──────────────────────────────────────────────────────────
@@ -65,6 +84,8 @@ class SubjectViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
 
     def get_queryset(self):
         queryset = Subject.objects.select_related('school')
+        if _is_school_header_rejected(self.request):
+            return queryset.none()
         school_id = _resolve_school_id(self.request)
         if school_id:
             queryset = queryset.filter(school_id=school_id)
@@ -138,6 +159,8 @@ class ClassSubjectViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Model
         queryset = ClassSubject.objects.select_related(
             'school', 'class_obj', 'subject', 'teacher', 'academic_year',
         )
+        if _is_school_header_rejected(self.request):
+            return queryset.none()
         school_id = _resolve_school_id(self.request)
         if school_id:
             queryset = queryset.filter(school_id=school_id)
@@ -236,6 +259,8 @@ class TimetableSlotViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mode
 
     def get_queryset(self):
         queryset = TimetableSlot.objects.select_related('school')
+        if _is_school_header_rejected(self.request):
+            return queryset.none()
         school_id = _resolve_school_id(self.request)
         if school_id:
             queryset = queryset.filter(school_id=school_id)
@@ -290,6 +315,8 @@ class TimetableEntryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
             'school', 'class_obj', 'slot', 'subject', 'teacher',
             'academic_year',
         )
+        if _is_school_header_rejected(self.request):
+            return queryset.none()
         school_id = _resolve_school_id(self.request)
         if school_id:
             queryset = queryset.filter(school_id=school_id)

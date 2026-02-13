@@ -57,7 +57,7 @@ def cleanup():
 
 def run_tests():
     from schools.models import School
-    from students.models import Student, Class, Grade, StudentDocument
+    from students.models import Student, Class, StudentDocument
     from notifications.models import (
         NotificationTemplate, NotificationLog,
         NotificationPreference, SchoolNotificationConfig,

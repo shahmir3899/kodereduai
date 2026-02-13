@@ -1,5 +1,5 @@
 """
-Student, Class, and Grade views.
+Student and Class views.
 """
 
 from rest_framework import viewsets, status
@@ -18,10 +18,8 @@ from core.permissions import (
     IsStudent, IsStudentOrAdmin, get_effective_role, ADMIN_ROLES,
 )
 from core.mixins import TenantQuerySetMixin, ensure_tenant_schools, ensure_tenant_school_id
-from .models import Grade, Class, Student, StudentDocument, StudentProfile, StudentInvite
+from .models import Class, Student, StudentDocument, StudentProfile, StudentInvite
 from .serializers import (
-    GradeSerializer,
-    GradeCreateSerializer,
     ClassSerializer,
     ClassCreateSerializer,
     StudentSerializer,
@@ -49,42 +47,6 @@ def _resolve_school_id(request):
     return None
 
 
-class GradeViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
-    required_module = 'students'
-    queryset = Grade.objects.all()
-    permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
-    pagination_class = None
-
-    def get_serializer_class(self):
-        if self.action in ('create', 'update', 'partial_update'):
-            return GradeCreateSerializer
-        return GradeSerializer
-
-    def get_serializer_context(self):
-        ctx = super().get_serializer_context()
-        ctx['school_id'] = _resolve_school_id(self.request)
-        return ctx
-
-    def get_queryset(self):
-        qs = super().get_queryset().select_related('school')
-        is_active = self.request.query_params.get('is_active')
-        if is_active is not None:
-            qs = qs.filter(is_active=is_active.lower() == 'true')
-        else:
-            qs = qs.filter(is_active=True)
-        return qs
-
-    def perform_destroy(self, instance):
-        instance.is_active = False
-        instance.save()
-
-    @action(detail=True, methods=['get'])
-    def classes(self, request, pk=None):
-        grade = self.get_object()
-        classes = Class.objects.filter(grade=grade, is_active=True).order_by('section')
-        return Response(ClassSerializer(classes, many=True).data)
-
-
 class ClassViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     required_module = 'students'
     queryset = Class.objects.all()
@@ -97,7 +59,7 @@ class ClassViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet
         return ClassSerializer
 
     def get_queryset(self):
-        queryset = Class.objects.select_related('school', 'grade')
+        queryset = Class.objects.select_related('school')
 
         active_school_id = ensure_tenant_school_id(self.request)
         if active_school_id:
@@ -113,9 +75,9 @@ class ClassViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet
         if school_id:
             queryset = queryset.filter(school_id=school_id)
 
-        grade_id = self.request.query_params.get('grade_id')
-        if grade_id:
-            queryset = queryset.filter(grade_id=grade_id)
+        grade_level = self.request.query_params.get('grade_level')
+        if grade_level:
+            queryset = queryset.filter(grade_level=grade_level)
 
         section = self.request.query_params.get('section')
         if section:

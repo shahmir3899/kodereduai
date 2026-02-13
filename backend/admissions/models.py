@@ -16,10 +16,10 @@ class AdmissionSession(models.Model):
     name = models.CharField(max_length=100)
     start_date = models.DateField()
     end_date = models.DateField()
-    grades_open = models.ManyToManyField(
-        'students.Grade',
+    grade_levels_open = models.JSONField(
+        default=list,
         blank=True,
-        related_name='admission_sessions',
+        help_text="List of grade level integers open for admission, e.g. [0, 1, 2, 3]",
     )
     is_active = models.BooleanField(default=True)
     form_fields = models.JSONField(
@@ -91,12 +91,10 @@ class AdmissionEnquiry(models.Model):
     child_name = models.CharField(max_length=100)
     child_dob = models.DateField(null=True, blank=True)
     child_gender = models.CharField(max_length=10, blank=True, default='')
-    applying_for_grade = models.ForeignKey(
-        'students.Grade',
-        on_delete=models.SET_NULL,
+    applying_for_grade_level = models.IntegerField(
         null=True,
         blank=True,
-        related_name='admission_enquiries',
+        help_text="Grade level the child is applying for (e.g., 0=Playgroup, 3=Class 1)",
     )
     previous_school = models.CharField(max_length=200, blank=True, default='')
 

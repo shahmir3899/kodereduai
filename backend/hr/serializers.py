@@ -242,6 +242,19 @@ class PayslipCreateSerializer(serializers.ModelSerializer):
         year = data.get('year')
         if year is not None and (year < 2000 or year > 2100):
             raise serializers.ValidationError({'year': 'Year must be between 2000 and 2100.'})
+        # Check unique_together (school, staff_member, month, year)
+        school_id = self.context.get('school_id')
+        staff = data.get('staff_member')
+        if school_id and staff and month and year:
+            qs = Payslip.objects.filter(
+                school_id=school_id, staff_member=staff, month=month, year=year,
+            )
+            if self.instance:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                raise serializers.ValidationError(
+                    'A payslip already exists for this staff member for this month/year.'
+                )
         return data
 
 

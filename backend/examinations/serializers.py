@@ -68,6 +68,22 @@ class ExamCreateSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {'end_date': 'End date must be on or after start date.'}
                 )
+        # Check unique_together (school, exam_type, class_obj, term)
+        school_id = self.context.get('school_id')
+        exam_type = data.get('exam_type')
+        class_obj = data.get('class_obj')
+        term = data.get('term')
+        if school_id and exam_type and class_obj and term:
+            qs = Exam.objects.filter(
+                school_id=school_id, exam_type=exam_type,
+                class_obj=class_obj, term=term,
+            )
+            if self.instance:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                raise serializers.ValidationError(
+                    'An exam already exists for this type, class, and term.'
+                )
         return data
 
 
@@ -163,6 +179,16 @@ class StudentMarkCreateSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {'marks_obtained': f'Marks cannot exceed total marks ({exam_subject.total_marks}).'}
                 )
+        # Check unique_together (school, exam_subject, student)
+        school_id = self.context.get('school_id')
+        student = data.get('student')
+        if school_id and exam_subject and student and not self.instance:
+            if StudentMark.objects.filter(
+                school_id=school_id, exam_subject=exam_subject, student=student,
+            ).exists():
+                raise serializers.ValidationError(
+                    'A mark already exists for this student and exam subject.'
+                )
         return data
 
 
@@ -191,6 +217,16 @@ class GradeScaleCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = GradeScale
         fields = ['grade_label', 'min_percentage', 'max_percentage', 'gpa_points', 'order']
+
+    def validate_grade_label(self, value):
+        school_id = self.context.get('school_id')
+        if school_id:
+            qs = GradeScale.objects.filter(school_id=school_id, grade_label=value)
+            if self.instance:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                raise serializers.ValidationError('A grade with this label already exists.')
+        return value
 
     def validate(self, data):
         if data.get('min_percentage') is not None and data.get('max_percentage') is not None:

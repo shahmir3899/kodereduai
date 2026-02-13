@@ -64,8 +64,6 @@ def api_root(request):
                 'grade_scales': '/api/examinations/grade-scales/',
                 'report_card': '/api/examinations/report-card/',
             },
-            'grades': '/api/grades/',
-            'grades': '/api/grades/',
             'parents': {
                 'register': '/api/parents/register/',
                 'my_children': '/api/parents/my-children/',

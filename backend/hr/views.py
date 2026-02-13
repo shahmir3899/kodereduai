@@ -39,10 +39,19 @@ logger = logging.getLogger(__name__)
 
 
 def _resolve_school_id(request):
-    """Resolve school_id from header → params → user fallback."""
+    """Resolve school_id from header → params → user fallback.
+
+    If X-School-ID header is explicitly set but the user doesn't have access
+    to that school, return None (don't fall back to user's default school).
+    """
     tenant_sid = ensure_tenant_school_id(request)
     if tenant_sid:
         return tenant_sid
+
+    # If X-School-ID header was explicitly sent but didn't resolve
+    # (user lacks access), don't fall back — return None for isolation.
+    if request.headers.get('X-School-ID'):
+        return None
 
     school_id = (
         request.query_params.get('school_id')
@@ -62,6 +71,14 @@ def _resolve_school_id(request):
             return schools[0]
 
     return None
+
+
+def _is_school_header_rejected(request):
+    """Return True if X-School-ID was sent but user lacks access to it."""
+    header = request.headers.get('X-School-ID')
+    if not header:
+        return False
+    return ensure_tenant_school_id(request) is None
 
 
 # ── Department ViewSet ────────────────────────────────────────────────────────
@@ -87,6 +104,8 @@ class StaffDepartmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mo
 
     def get_queryset(self):
         queryset = StaffDepartment.objects.select_related('school').prefetch_related('staff_members')
+        if _is_school_header_rejected(self.request):
+            return queryset.none()
 
         school_id = _resolve_school_id(self.request)
         if school_id:
@@ -133,6 +152,8 @@ class StaffDesignationViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
 
     def get_queryset(self):
         queryset = StaffDesignation.objects.select_related('school', 'department')
+        if _is_school_header_rejected(self.request):
+            return queryset.none()
 
         school_id = _resolve_school_id(self.request)
         if school_id:
@@ -188,6 +209,8 @@ class StaffMemberViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
         queryset = StaffMember.objects.select_related(
             'school', 'department', 'designation', 'user',
         )
+        if _is_school_header_rejected(self.request):
+            return queryset.none()
 
         school_id = _resolve_school_id(self.request)
         if school_id:
@@ -356,6 +379,8 @@ class SalaryStructureViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mo
         queryset = SalaryStructure.objects.select_related(
             'school', 'staff_member', 'staff_member__department',
         )
+        if _is_school_header_rejected(self.request):
+            return queryset.none()
 
         school_id = _resolve_school_id(self.request)
         if school_id:
@@ -444,6 +469,8 @@ class PayslipViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         queryset = Payslip.objects.select_related(
             'school', 'staff_member', 'staff_member__department', 'generated_by',
         )
+        if _is_school_header_rejected(self.request):
+            return queryset.none()
 
         school_id = _resolve_school_id(self.request)
         if school_id:
@@ -633,6 +660,8 @@ class LeavePolicyViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
 
     def get_queryset(self):
         queryset = LeavePolicy.objects.filter()
+        if _is_school_header_rejected(self.request):
+            return queryset.none()
 
         school_id = _resolve_school_id(self.request)
         if school_id:
@@ -681,6 +710,8 @@ class LeaveApplicationViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
         queryset = LeaveApplication.objects.select_related(
             'school', 'staff_member', 'leave_policy', 'approved_by',
         )
+        if _is_school_header_rejected(self.request):
+            return queryset.none()
 
         school_id = _resolve_school_id(self.request)
         if school_id:
@@ -832,6 +863,8 @@ class StaffAttendanceViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mo
         queryset = StaffAttendance.objects.select_related(
             'school', 'staff_member', 'staff_member__department', 'marked_by',
         )
+        if _is_school_header_rejected(self.request):
+            return queryset.none()
 
         school_id = _resolve_school_id(self.request)
         if school_id:
@@ -960,6 +993,8 @@ class PerformanceAppraisalViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewse
         queryset = PerformanceAppraisal.objects.select_related(
             'school', 'staff_member', 'staff_member__department', 'reviewer',
         )
+        if _is_school_header_rejected(self.request):
+            return queryset.none()
 
         school_id = _resolve_school_id(self.request)
         if school_id:
@@ -1017,6 +1052,8 @@ class StaffQualificationViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets
         queryset = StaffQualification.objects.select_related(
             'school', 'staff_member',
         )
+        if _is_school_header_rejected(self.request):
+            return queryset.none()
 
         school_id = _resolve_school_id(self.request)
         if school_id:
@@ -1076,6 +1113,8 @@ class StaffDocumentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mode
         queryset = StaffDocument.objects.select_related(
             'school', 'staff_member',
         )
+        if _is_school_header_rejected(self.request):
+            return queryset.none()
 
         school_id = _resolve_school_id(self.request)
         if school_id:

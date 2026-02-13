@@ -621,7 +621,7 @@ class Discount(models.Model):
     ]
     APPLIES_TO_CHOICES = [
         ('ALL', 'All Students'),
-        ('GRADE', 'Specific Grade'),
+        ('GRADE_LEVEL', 'All classes at a grade level'),
         ('CLASS', 'Specific Class'),
         ('STUDENT', 'Individual Student'),
         ('SIBLING', 'Siblings (auto-detect)'),
@@ -643,12 +643,10 @@ class Discount(models.Model):
     discount_type = models.CharField(max_length=20, choices=DISCOUNT_TYPE_CHOICES)
     value = models.DecimalField(max_digits=10, decimal_places=2)
     applies_to = models.CharField(max_length=20, choices=APPLIES_TO_CHOICES, default='ALL')
-    target_grade = models.ForeignKey(
-        'students.Grade',
+    target_grade_level = models.IntegerField(
         null=True,
         blank=True,
-        on_delete=models.SET_NULL,
-        related_name='discounts',
+        help_text="Grade level to apply discount to (when applies_to=GRADE_LEVEL)",
     )
     target_class = models.ForeignKey(
         'students.Class',

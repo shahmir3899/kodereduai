@@ -68,7 +68,10 @@
       "Bash(del \"d:\\\\Personal\\\\smart-attendance\\\\frontend\\\\src\\\\pages\\\\GradesPage.jsx\")",
       "Bash(del \"d:\\\\Personal\\\\smart-attendance\\\\frontend\\\\src\\\\pages\\\\ClassesPage.jsx\")",
       "Bash(findstr:*)",
-      "Bash(serializers \")"
+      "Bash(serializers \")",
+      "Bash(for app in parents admissions lms transport library)",
+      "Bash(do echo \"=== $app ===\" echo \"Models:\" grep \"^class.*models.Model\" \"d:\\\\Personal\\\\smart-attendance\\\\backend$app\\\\models.py\")",
+      "Bash(done)"
     ]
   }
 }

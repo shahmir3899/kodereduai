@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { admissionsApi, gradesApi } from '../../services/api'
+import { admissionsApi } from '../../services/api'
 import { useToast } from '../../components/Toast'
+import { GRADE_PRESETS } from '../../constants/gradePresets'
 
 const SOURCES = [
   { value: 'WALK_IN', label: 'Walk-in' },
@@ -31,7 +32,7 @@ const INITIAL_FORM = {
   child_name: '',
   child_dob: '',
   child_gender: '',
-  grade_applied: '',
+  applying_for_grade_level: '',
   previous_school: '',
   // Parent info
   parent_name: '',
@@ -66,13 +67,6 @@ export default function EnquiryForm() {
     enabled: isEdit,
   })
 
-  // Grades
-  const { data: gradesRes } = useQuery({
-    queryKey: ['grades'],
-    queryFn: () => gradesApi.getGrades(),
-    staleTime: 5 * 60 * 1000,
-  })
-
   // Admission sessions for optional linking
   const { data: sessionsRes } = useQuery({
     queryKey: ['admissionSessions'],
@@ -80,7 +74,6 @@ export default function EnquiryForm() {
     staleTime: 5 * 60 * 1000,
   })
 
-  const grades = gradesRes?.data?.results || gradesRes?.data || []
   const sessions = sessionsRes?.data?.results || sessionsRes?.data || []
 
   // Populate form on edit
@@ -91,7 +84,7 @@ export default function EnquiryForm() {
         child_name: e.child_name || '',
         child_dob: e.child_dob || '',
         child_gender: e.child_gender || '',
-        grade_applied: e.grade_applied ? String(e.grade_applied) : '',
+        applying_for_grade_level: e.applying_for_grade_level != null ? String(e.applying_for_grade_level) : '',
         previous_school: e.previous_school || '',
         parent_name: e.parent_name || '',
         parent_phone: e.parent_phone || '',
@@ -183,9 +176,9 @@ export default function EnquiryForm() {
       }
     })
 
-    // Convert grade_applied to number if present
-    if (payload.grade_applied) {
-      payload.grade_applied = parseInt(payload.grade_applied)
+    // Convert applying_for_grade_level to number if present
+    if (payload.applying_for_grade_level) {
+      payload.applying_for_grade_level = parseInt(payload.applying_for_grade_level)
     }
     if (payload.admission_session) {
       payload.admission_session = parseInt(payload.admission_session)
@@ -283,16 +276,16 @@ export default function EnquiryForm() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Grade Applied For</label>
                 <select
-                  value={form.grade_applied}
-                  onChange={(e) => handleChange('grade_applied', e.target.value)}
+                  value={form.applying_for_grade_level}
+                  onChange={(e) => handleChange('applying_for_grade_level', e.target.value)}
                   className="input w-full"
                 >
                   <option value="">Select grade...</option>
-                  {grades.map((g) => (
-                    <option key={g.id} value={g.id}>{g.name}</option>
+                  {GRADE_PRESETS.map((p) => (
+                    <option key={p.numeric_level} value={p.numeric_level}>{p.name}</option>
                   ))}
                 </select>
-                {errors.grade_applied && <p className="text-xs text-red-600 mt-1">{errors.grade_applied}</p>}
+                {errors.applying_for_grade_level && <p className="text-xs text-red-600 mt-1">{errors.applying_for_grade_level}</p>}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Previous School</label>

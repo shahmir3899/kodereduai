@@ -59,6 +59,7 @@ import AdmissionSessionsPage from './pages/admissions/AdmissionSessionsPage'
 
 // Finance additions
 import DiscountsPage from './pages/finance/DiscountsPage'
+import PaymentGatewayPage from './pages/finance/PaymentGatewayPage'
 
 // LMS pages
 import LessonPlansPage from './pages/lms/LessonPlansPage'
@@ -233,7 +234,7 @@ function App() {
 
           <Route path="students" element={<SchoolRoute><ModuleRoute module="students"><StudentsPage /></ModuleRoute></SchoolRoute>} />
           <Route path="students/:id" element={<SchoolRoute><ModuleRoute module="students"><StudentProfilePage /></ModuleRoute></SchoolRoute>} />
-          <Route path="classes" element={<Navigate to="/grades" replace />} />
+          <Route path="classes" element={<SchoolRoute><ModuleRoute module="students"><ClassesGradesPage /></ModuleRoute></SchoolRoute>} />
 
           {/* HR routes */}
           <Route path="hr" element={<SchoolRoute><ModuleRoute module="hr"><HRDashboardPage /></ModuleRoute></SchoolRoute>} />
@@ -261,8 +262,8 @@ function App() {
           <Route path="academics/report-cards" element={<SchoolRoute><ModuleRoute module="examinations"><ReportCardPage /></ModuleRoute></SchoolRoute>} />
           <Route path="academics/grade-scale" element={<SchoolRoute><ModuleRoute module="examinations"><GradeScalePage /></ModuleRoute></SchoolRoute>} />
 
-          {/* Classes & Grades */}
-          <Route path="grades" element={<SchoolRoute><ModuleRoute module="students"><ClassesGradesPage /></ModuleRoute></SchoolRoute>} />
+          {/* Classes (legacy /grades redirects) */}
+          <Route path="grades" element={<Navigate to="/classes" replace />} />
 
           {/* Notifications */}
           <Route path="notifications" element={<SchoolRoute><ModuleRoute module="notifications"><NotificationsPage /></ModuleRoute></SchoolRoute>} />
@@ -274,6 +275,7 @@ function App() {
           <Route path="finance/expenses" element={<SchoolRoute><ModuleRoute module="finance"><ExpensesPage /></ModuleRoute></SchoolRoute>} />
           <Route path="finance/reports" element={<SchoolRoute><ModuleRoute module="finance"><FinancialReportsPage /></ModuleRoute></SchoolRoute>} />
           <Route path="finance/discounts" element={<SchoolRoute><ModuleRoute module="finance"><DiscountsPage /></ModuleRoute></SchoolRoute>} />
+          <Route path="finance/payment-gateways" element={<SchoolRoute><ModuleRoute module="finance"><PaymentGatewayPage /></ModuleRoute></SchoolRoute>} />
 
           {/* Parent Portal routes */}
           <Route path="parent/dashboard" element={<ParentRoute><ParentDashboard /></ParentRoute>} />

@@ -229,7 +229,7 @@ export default function SectionAllocator({ onClose }) {
               <div className="bg-gray-50 rounded-lg p-3 flex flex-wrap gap-4 text-xs">
                 <div>
                   <span className="text-gray-500">Source:</span>{' '}
-                  <span className="font-medium text-gray-900">{preview.grade_name}</span>
+                  <span className="font-medium text-gray-900">{preview.source_name || preview.grade_name}</span>
                 </div>
                 <div>
                   <span className="text-gray-500">Score Variance:</span>{' '}

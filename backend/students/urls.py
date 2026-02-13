@@ -6,14 +6,13 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 
 from .views import (
-    GradeViewSet, ClassViewSet, StudentViewSet,
+    ClassViewSet, StudentViewSet,
     StudentRegistrationView, StudentDashboardView,
     StudentAttendanceView, StudentFeesView, StudentTimetableView,
     StudentResultsView, StudentAssignmentsView, AdminStudentInviteView,
 )
 
 router = DefaultRouter()
-router.register(r'grades', GradeViewSet, basename='grade')
 router.register(r'classes', ClassViewSet, basename='class')
 router.register(r'students', StudentViewSet, basename='student')
 

@@ -33,7 +33,7 @@ class SectionAllocatorService:
         3. Sorts by performance (descending) and distributes using serpentine/snake order.
         4. Returns a preview with allocation details and balance metrics.
         """
-        from students.models import Grade, Class, Student
+        from students.models import Class, Student
         from academic_sessions.models import StudentEnrollment
 
         if num_sections < 2 or num_sections > 6:
@@ -77,37 +77,8 @@ class SectionAllocatorService:
                 for s in fallback_students:
                     enrollment_map[s.id] = None
 
-        elif grade_id:
-            # ── Grade-based allocation (legacy) ──
-            try:
-                grade = Grade.objects.get(id=grade_id, school_id=self.school_id)
-            except Grade.DoesNotExist:
-                return {'success': False, 'error': 'Grade not found for this school.'}
-
-            source_name = grade.name
-
-            enrollments = StudentEnrollment.objects.filter(
-                school_id=self.school_id,
-                academic_year_id=academic_year_id,
-                class_obj__grade_id=grade_id,
-                is_active=True,
-                status=StudentEnrollment.Status.ACTIVE,
-            ).select_related('student', 'class_obj')
-            student_ids = list(enrollments.values_list('student_id', flat=True))
-            for enr in enrollments:
-                enrollment_map[enr.student_id] = enr
-
-            if not student_ids:
-                fallback_students = Student.objects.filter(
-                    school_id=self.school_id,
-                    class_obj__grade_id=grade_id,
-                    is_active=True,
-                ).select_related('class_obj')
-                student_ids = list(fallback_students.values_list('id', flat=True))
-                for s in fallback_students:
-                    enrollment_map[s.id] = None
         else:
-            return {'success': False, 'error': 'Either class_id or grade_id is required.'}
+            return {'success': False, 'error': 'class_id is required.'}
 
         if not student_ids:
             return {
@@ -211,7 +182,7 @@ class SectionAllocatorService:
         return {
             'success': True,
             'total_students': len(students_info),
-            'grade_name': source_name,
+            'source_name': source_name,
             'source_class_id': class_id,
             'sections': section_results,
             'balance_metrics': {
@@ -224,33 +195,21 @@ class SectionAllocatorService:
                          allocation_data: dict = None, class_id: int = None) -> dict:
         """
         Apply the allocation preview: create/update Class records for each section
-        and update student assignments. Supports class_id or grade_id as source.
+        and update student assignments.
         """
-        from students.models import Grade, Class, Student
+        from students.models import Class, Student
         from academic_sessions.models import StudentEnrollment
 
-        # Resolve the source name, grade, and grade_level for new sections
-        source_name = None
-        grade = None
-        grade_level = None
+        if not class_id:
+            return {'success': False, 'error': 'class_id is required.'}
 
-        if class_id:
-            try:
-                source_class = Class.objects.get(id=class_id, school_id=self.school_id)
-            except Class.DoesNotExist:
-                return {'success': False, 'error': 'Class not found.'}
-            source_name = source_class.name
-            grade = source_class.grade
-            grade_level = source_class.grade_level
-        elif grade_id:
-            try:
-                grade = Grade.objects.get(id=grade_id, school_id=self.school_id)
-            except Grade.DoesNotExist:
-                return {'success': False, 'error': 'Grade not found.'}
-            source_name = grade.name
-            grade_level = grade.numeric_level
-        else:
-            return {'success': False, 'error': 'Either class_id or grade_id is required.'}
+        try:
+            source_class = Class.objects.get(id=class_id, school_id=self.school_id)
+        except Class.DoesNotExist:
+            return {'success': False, 'error': 'Class not found.'}
+
+        source_name = source_class.name
+        grade_level = source_class.grade_level
 
         sections_created = 0
         students_moved = 0
@@ -265,7 +224,6 @@ class SectionAllocatorService:
                 school_id=self.school_id,
                 name=class_name,
                 defaults={
-                    'grade': grade,
                     'section': section_name,
                     'grade_level': grade_level,
                     'is_active': True,

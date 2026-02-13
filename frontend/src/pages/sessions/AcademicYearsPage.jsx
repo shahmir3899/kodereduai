@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { sessionsApi } from '../../services/api'
+import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import SessionSetupWizard from './SessionSetupWizard'
 
 const EMPTY_YEAR = { name: '', start_date: '', end_date: '' }
@@ -8,6 +9,7 @@ const EMPTY_TERM = { academic_year: '', name: '', term_type: 'TERM', order: 1, s
 
 export default function AcademicYearsPage() {
   const queryClient = useQueryClient()
+  const { refresh: refreshAcademicYear } = useAcademicYear()
   const [tab, setTab] = useState('years')
 
   // Year state
@@ -71,7 +73,7 @@ export default function AcademicYearsPage() {
 
   const setCurrentMut = useMutation({
     mutationFn: (id) => sessionsApi.setCurrentYear(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['academicYears'] }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['academicYears'] }); refreshAcademicYear() },
   })
 
   // Term mutations

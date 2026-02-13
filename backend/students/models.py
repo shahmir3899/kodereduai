@@ -4,46 +4,11 @@ from django.conf import settings
 from django.utils import timezone
 
 
-class Grade(models.Model):
-    """
-    Represents a grade level in the school.
-    e.g., Playgroup (0), Nursery (1), Prep (2), Class 1 (3), ..., Class 10 (12)
-    Used for grouping classes/sections and grade-level reporting.
-    """
-    school = models.ForeignKey(
-        'schools.School',
-        on_delete=models.CASCADE,
-        related_name='grades',
-    )
-    name = models.CharField(
-        max_length=50,
-        help_text="Display name: 'Playgroup', 'Nursery', 'Class 1', etc.",
-    )
-    numeric_level = models.IntegerField(
-        help_text="Numeric sort order: Playgroup=0, Nursery=1, Prep=2, Class 1=3, ...",
-    )
-    is_active = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        unique_together = ('school', 'numeric_level')
-        ordering = ['numeric_level']
-        verbose_name = 'Grade'
-        verbose_name_plural = 'Grades'
-
-    def __str__(self):
-        return f"{self.name} - {self.school.name}"
-
-    @property
-    def class_count(self) -> int:
-        return self.classes.filter(is_active=True).count()
-
-
 class Class(models.Model):
     """
     Represents a class/section within a school.
-    Examples: "5-A", "PlayGroup", "Class 10"
+    Examples: "Class 5-A", "PlayGroup", "Class 10"
+    grade_level groups classes by level (0=Playgroup, 1=Nursery, 3=Class 1, etc.)
     """
     school = models.ForeignKey(
         'schools.School',
@@ -52,26 +17,17 @@ class Class(models.Model):
     )
     name = models.CharField(
         max_length=50,
-        help_text="Class name, e.g., '5-A', 'PlayGroup'"
-    )
-    grade = models.ForeignKey(
-        Grade,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='classes',
-        help_text="Grade this class belongs to (for grouping sections)",
+        help_text="Class name, e.g., 'Class 5-A', 'PlayGroup'"
     )
     section = models.CharField(
         max_length=10,
         blank=True,
         default='',
-        help_text="Section identifier: 'A', 'B', 'C', or '' for single-section grades",
+        help_text="Section identifier: 'A', 'B', 'C', or '' for single-section classes",
     )
     grade_level = models.IntegerField(
-        null=True,
-        blank=True,
-        help_text="Numeric grade level for sorting (e.g., 5 for Class 5)"
+        default=0,
+        help_text="Numeric grade level for sorting/grouping (e.g., 0=Playgroup, 3=Class 1, 12=Class 10)"
     )
     is_active = models.BooleanField(default=True)
 
@@ -81,14 +37,14 @@ class Class(models.Model):
 
     class Meta:
         unique_together = ('school', 'name')
-        ordering = ['grade_level', 'name']
+        ordering = ['grade_level', 'section', 'name']
         verbose_name = 'Class'
         verbose_name_plural = 'Classes'
         constraints = [
             models.UniqueConstraint(
-                fields=['school', 'grade', 'section'],
-                condition=models.Q(grade__isnull=False),
-                name='unique_grade_section_per_school',
+                fields=['school', 'grade_level', 'section'],
+                condition=models.Q(section__gt=''),
+                name='unique_level_section_per_school',
             ),
         ]
 

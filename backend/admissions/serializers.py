@@ -8,23 +8,14 @@ from .models import AdmissionSession, AdmissionEnquiry, AdmissionDocument, Admis
 
 # ── Admission Session ────────────────────────────────────────
 
-class GradeMinimalSerializer(serializers.Serializer):
-    """Lightweight read-only representation of a Grade for nested display."""
-    id = serializers.IntegerField()
-    name = serializers.CharField()
-
-
 class AdmissionSessionSerializer(serializers.ModelSerializer):
-    grades_open_detail = GradeMinimalSerializer(
-        source='grades_open', many=True, read_only=True,
-    )
     school_name = serializers.CharField(source='school.name', read_only=True)
 
     class Meta:
         model = AdmissionSession
         fields = [
             'id', 'school', 'school_name', 'academic_year', 'name',
-            'start_date', 'end_date', 'grades_open', 'grades_open_detail',
+            'start_date', 'end_date', 'grade_levels_open',
             'is_active', 'form_fields', 'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'school', 'created_at', 'updated_at']
@@ -72,9 +63,6 @@ class AdmissionEnquiryListSerializer(serializers.ModelSerializer):
     assigned_to_name = serializers.CharField(
         source='assigned_to.get_full_name', read_only=True, default=None,
     )
-    grade_name = serializers.CharField(
-        source='applying_for_grade.name', read_only=True, default=None,
-    )
     stage_display = serializers.CharField(
         source='get_stage_display', read_only=True,
     )
@@ -86,7 +74,7 @@ class AdmissionEnquiryListSerializer(serializers.ModelSerializer):
         model = AdmissionEnquiry
         fields = [
             'id', 'child_name', 'parent_name', 'parent_phone',
-            'applying_for_grade', 'grade_name',
+            'applying_for_grade_level',
             'stage', 'stage_display',
             'source', 'source_display',
             'priority', 'assigned_to', 'assigned_to_name',
@@ -99,9 +87,6 @@ class AdmissionEnquiryDetailSerializer(serializers.ModelSerializer):
     """Full serializer for detail/retrieve views."""
     assigned_to_name = serializers.CharField(
         source='assigned_to.get_full_name', read_only=True, default=None,
-    )
-    grade_name = serializers.CharField(
-        source='applying_for_grade.name', read_only=True, default=None,
     )
     stage_display = serializers.CharField(
         source='get_stage_display', read_only=True,
@@ -128,7 +113,7 @@ class AdmissionEnquiryDetailSerializer(serializers.ModelSerializer):
             'session', 'session_name',
             # Child info
             'child_name', 'child_dob', 'child_gender',
-            'applying_for_grade', 'grade_name', 'previous_school',
+            'applying_for_grade_level', 'previous_school',
             # Parent info
             'parent_name', 'parent_phone', 'parent_email',
             'parent_occupation', 'address',
@@ -160,7 +145,7 @@ class AdmissionEnquiryCreateSerializer(serializers.ModelSerializer):
             'session',
             # Child info
             'child_name', 'child_dob', 'child_gender',
-            'applying_for_grade', 'previous_school',
+            'applying_for_grade_level', 'previous_school',
             # Parent info
             'parent_name', 'parent_phone', 'parent_email',
             'parent_occupation', 'address',

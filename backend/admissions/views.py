@@ -60,7 +60,7 @@ class AdmissionSessionViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
     def get_queryset(self):
         queryset = super().get_queryset().select_related(
             'school', 'academic_year',
-        ).prefetch_related('grades_open')
+        )
 
         is_active = self.request.query_params.get('is_active')
         if is_active is not None:
@@ -109,7 +109,7 @@ class AdmissionEnquiryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
 
     def get_queryset(self):
         queryset = super().get_queryset().select_related(
-            'school', 'session', 'applying_for_grade',
+            'school', 'session',
             'assigned_to', 'converted_student',
         )
 
@@ -129,9 +129,9 @@ class AdmissionEnquiryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
         if stage:
             queryset = queryset.filter(stage=stage.upper())
 
-        grade = params.get('grade')
-        if grade:
-            queryset = queryset.filter(applying_for_grade_id=grade)
+        grade_level = params.get('grade_level')
+        if grade_level:
+            queryset = queryset.filter(applying_for_grade_level=grade_level)
 
         source = params.get('source')
         if source:
@@ -411,7 +411,7 @@ class FollowupView(ModuleAccessMixin, APIView):
             school_id=school_id,
         ).exclude(
             stage__in=['ENROLLED', 'REJECTED', 'WITHDRAWN', 'LOST'],
-        ).select_related('applying_for_grade', 'assigned_to')
+        ).select_related('assigned_to')
 
         today = date.today()
 

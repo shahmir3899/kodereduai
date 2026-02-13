@@ -1,43 +1,9 @@
 """
-Student, Class, and Grade serializers.
+Student and Class serializers.
 """
 
 from rest_framework import serializers
-from .models import Grade, Class, Student, StudentDocument
-
-
-# ── Grade ─────────────────────────────────────────────────────
-
-class GradeSerializer(serializers.ModelSerializer):
-    class_count = serializers.IntegerField(read_only=True, default=0)
-    school_name = serializers.CharField(source='school.name', read_only=True)
-
-    class Meta:
-        model = Grade
-        fields = [
-            'id', 'school', 'school_name', 'name', 'numeric_level',
-            'class_count', 'is_active', 'created_at', 'updated_at',
-        ]
-        read_only_fields = ['id', 'school', 'created_at', 'updated_at']
-
-
-class GradeCreateSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Grade
-        fields = ['name', 'numeric_level']
-
-    def validate(self, attrs):
-        school_id = self.context.get('school_id')
-        numeric_level = attrs.get('numeric_level')
-        if school_id and numeric_level is not None:
-            qs = Grade.objects.filter(school_id=school_id, numeric_level=numeric_level)
-            if self.instance:
-                qs = qs.exclude(pk=self.instance.pk)
-            if qs.exists():
-                raise serializers.ValidationError(
-                    {'numeric_level': 'A grade with this level already exists.'}
-                )
-        return attrs
+from .models import Class, Student, StudentDocument
 
 
 # ── Class ─────────────────────────────────────────────────────
@@ -45,17 +11,12 @@ class GradeCreateSerializer(serializers.ModelSerializer):
 class ClassSerializer(serializers.ModelSerializer):
     student_count = serializers.IntegerField(read_only=True)
     school_name = serializers.CharField(source='school.name', read_only=True)
-    grade_name = serializers.CharField(source='grade.name', read_only=True, default=None)
-    grade_numeric_level = serializers.IntegerField(
-        source='grade.numeric_level', read_only=True, default=None,
-    )
 
     class Meta:
         model = Class
         fields = [
             'id', 'school', 'school_name', 'name',
-            'grade', 'grade_name', 'grade_numeric_level', 'section',
-            'grade_level', 'is_active', 'student_count',
+            'section', 'grade_level', 'is_active', 'student_count',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
@@ -64,19 +25,21 @@ class ClassSerializer(serializers.ModelSerializer):
 class ClassCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Class
-        fields = ['school', 'name', 'grade', 'section', 'grade_level']
+        fields = ['school', 'name', 'section', 'grade_level']
 
     def validate(self, attrs):
-        school = attrs.get('school')
-        name = attrs.get('name')
+        # On update (PATCH), school isn't in attrs — use instance's school
+        school = attrs.get('school') or (self.instance.school if self.instance else None)
+        name = attrs.get('name') or (self.instance.name if self.instance else None)
 
-        qs = Class.objects.filter(school=school, name=name)
-        if self.instance:
-            qs = qs.exclude(pk=self.instance.pk)
-        if qs.exists():
-            raise serializers.ValidationError({
-                'name': f"A class named '{name}' already exists in this school."
-            })
+        if school and name:
+            qs = Class.objects.filter(school=school, name=name)
+            if self.instance:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                raise serializers.ValidationError({
+                    'name': f"A class named '{name}' already exists in this school."
+                })
 
         return attrs
 

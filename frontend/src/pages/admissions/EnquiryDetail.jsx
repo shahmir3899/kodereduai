@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../../contexts/AuthContext'
 import { admissionsApi, classesApi } from '../../services/api'
 import { useToast } from '../../components/Toast'
+import { GRADE_LEVEL_LABELS } from '../../constants/gradePresets'
 
 const ALL_STAGES_ORDERED = [
   { key: 'NEW', label: 'New' },
@@ -270,7 +271,7 @@ export default function EnquiryDetail() {
               <InfoField label="Full Name" value={enquiry.child_name} />
               <InfoField label="Date of Birth" value={enquiry.child_dob || 'Not provided'} />
               <InfoField label="Gender" value={enquiry.child_gender ? enquiry.child_gender.charAt(0).toUpperCase() + enquiry.child_gender.slice(1).toLowerCase() : 'Not provided'} />
-              <InfoField label="Grade Applied" value={enquiry.grade_applied_name || enquiry.grade_applied || 'Not specified'} />
+              <InfoField label="Grade Applied" value={GRADE_LEVEL_LABELS[enquiry.applying_for_grade_level] || 'Not specified'} />
               <InfoField label="Previous School" value={enquiry.previous_school || 'Not provided'} className="sm:col-span-2" />
             </div>
           </div>

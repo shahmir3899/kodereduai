@@ -315,7 +315,10 @@ export default function Layout() {
         { name: 'Fee Collection', href: '/finance/fees', icon: ReceiptIcon },
         { name: 'Expenses', href: '/finance/expenses', icon: WalletIcon },
         ...(!isStaffLevel
-          ? [{ name: 'Reports', href: '/finance/reports', icon: ReportIcon }]
+          ? [
+              { name: 'Reports', href: '/finance/reports', icon: ReportIcon },
+              { name: 'Payment Gateways', href: '/finance/payment-gateways', icon: CogIcon },
+            ]
           : []),
       ],
     }] : []),
@@ -372,7 +375,7 @@ export default function Layout() {
       name: 'Management',
       icon: FolderIcon,
       children: [
-        { name: 'Classes & Grades', href: '/grades', icon: TableIcon },
+        { name: 'Classes', href: '/classes', icon: TableIcon },
         { name: 'Students', href: '/students', icon: UsersIcon },
       ],
     }] : []),

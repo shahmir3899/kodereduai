@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { admissionsApi } from '../../services/api'
+import { GRADE_LEVEL_LABELS } from '../../constants/gradePresets'
 
 const STAGES = [
   { key: 'NEW', label: 'New', color: 'bg-blue-500' },
@@ -265,7 +266,7 @@ export default function AdmissionDashboard() {
                     </span>
                   </div>
                   <p className="text-xs text-gray-500">{enquiry.parent_name} | {enquiry.parent_phone}</p>
-                  <p className="text-xs text-gray-400 mt-1">{enquiry.grade_applied_name || enquiry.grade_applied || 'N/A'} | {enquiry.source}</p>
+                  <p className="text-xs text-gray-400 mt-1">{GRADE_LEVEL_LABELS[enquiry.applying_for_grade_level] || 'N/A'} | {enquiry.source}</p>
                 </Link>
               ))}
             </div>
@@ -289,7 +290,7 @@ export default function AdmissionDashboard() {
                       <td className="px-4 py-3 text-sm font-medium text-gray-900">{enquiry.child_name}</td>
                       <td className="px-4 py-3 text-sm text-gray-600">{enquiry.parent_name}</td>
                       <td className="px-4 py-3 text-sm text-gray-600">{enquiry.parent_phone}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600">{enquiry.grade_applied_name || enquiry.grade_applied || 'N/A'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{GRADE_LEVEL_LABELS[enquiry.applying_for_grade_level] || 'N/A'}</td>
                       <td className="px-4 py-3">
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${STAGE_BADGE_COLORS[enquiry.stage] || 'bg-gray-100 text-gray-700'}`}>
                           {(enquiry.stage || '').replace(/_/g, ' ')}

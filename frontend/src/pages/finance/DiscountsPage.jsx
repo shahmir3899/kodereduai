@@ -1,8 +1,9 @@
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../../contexts/AuthContext'
-import { discountApi, gradesApi, classesApi, studentsApi, sessionsApi } from '../../services/api'
+import { discountApi, classesApi, studentsApi, sessionsApi } from '../../services/api'
 import { useToast } from '../../components/Toast'
+import { GRADE_PRESETS, GRADE_LEVEL_LABELS } from '../../constants/gradePresets'
 
 // ── Badge color maps ──────────────────────────────────────────────────────────
 
@@ -32,7 +33,7 @@ const EMPTY_DISCOUNT = {
   type: 'PERCENTAGE',
   value: '',
   applies_to: 'ALL',
-  target_grade: '',
+  target_grade_level: '',
   target_class: '',
   start_date: '',
   end_date: '',
@@ -148,7 +149,7 @@ export default function DiscountsPage() {
     discount_id: '',
     scholarship_id: '',
     class_id: '',
-    grade_id: '',
+    grade_level: '',
     academic_year_id: '',
   })
   const [studentSearch, setStudentSearch] = useState('')
@@ -175,12 +176,6 @@ export default function DiscountsPage() {
     staleTime: 2 * 60 * 1000,
   })
 
-  const { data: gradesData } = useQuery({
-    queryKey: ['grades'],
-    queryFn: () => gradesApi.getGrades(),
-    staleTime: 5 * 60 * 1000,
-  })
-
   const { data: classesData } = useQuery({
     queryKey: ['classes'],
     queryFn: () => classesApi.getClasses(),
@@ -203,7 +198,6 @@ export default function DiscountsPage() {
   const allDiscounts = discountsData?.data?.results || discountsData?.data || []
   const allScholarships = scholarshipsData?.data?.results || scholarshipsData?.data || []
   const allAssignments = studentDiscountsData?.data?.results || studentDiscountsData?.data || []
-  const allGrades = gradesData?.data?.results || gradesData?.data || []
   const allClasses = classesData?.data?.results || classesData?.data || []
   const allStudents = studentsData?.data?.results || studentsData?.data || []
   const allSessions = sessionsData?.data?.results || sessionsData?.data || []
@@ -390,7 +384,7 @@ export default function DiscountsPage() {
       type: discount.type || 'PERCENTAGE',
       value: discount.value || '',
       applies_to: discount.applies_to || 'ALL',
-      target_grade: discount.target_grade || '',
+      target_grade_level: discount.target_grade_level != null ? String(discount.target_grade_level) : '',
       target_class: discount.target_class || '',
       start_date: discount.start_date || '',
       end_date: discount.end_date || '',
@@ -430,8 +424,8 @@ export default function DiscountsPage() {
       is_active: discountForm.is_active,
     }
 
-    if (discountForm.applies_to === 'GRADE' && discountForm.target_grade) {
-      payload.target_grade = parseInt(discountForm.target_grade)
+    if (discountForm.applies_to === 'GRADE_LEVEL' && discountForm.target_grade_level) {
+      payload.target_grade_level = parseInt(discountForm.target_grade_level)
     }
     if (discountForm.applies_to === 'CLASS' && discountForm.target_class) {
       payload.target_class = parseInt(discountForm.target_class)
@@ -567,7 +561,7 @@ export default function DiscountsPage() {
       discount_id: '',
       scholarship_id: '',
       class_id: '',
-      grade_id: '',
+      grade_level: '',
       academic_year_id: '',
     })
     setShowBulkAssignModal(true)
@@ -579,7 +573,7 @@ export default function DiscountsPage() {
       discount_id: '',
       scholarship_id: '',
       class_id: '',
-      grade_id: '',
+      grade_level: '',
       academic_year_id: '',
     })
   }
@@ -590,8 +584,8 @@ export default function DiscountsPage() {
       showError('Please select a discount or scholarship')
       return
     }
-    if (!bulkAssignForm.class_id && !bulkAssignForm.grade_id) {
-      showError('Please select a class or grade to target')
+    if (!bulkAssignForm.class_id && !bulkAssignForm.grade_level) {
+      showError('Please select a class or grade level to target')
       return
     }
     if (!bulkAssignForm.academic_year_id) {
@@ -605,7 +599,7 @@ export default function DiscountsPage() {
     if (bulkAssignForm.discount_id) payload.discount_id = parseInt(bulkAssignForm.discount_id)
     if (bulkAssignForm.scholarship_id) payload.scholarship_id = parseInt(bulkAssignForm.scholarship_id)
     if (bulkAssignForm.class_id) payload.class_id = parseInt(bulkAssignForm.class_id)
-    if (bulkAssignForm.grade_id) payload.grade_id = parseInt(bulkAssignForm.grade_id)
+    if (bulkAssignForm.grade_level) payload.grade_level = parseInt(bulkAssignForm.grade_level)
 
     bulkAssignMutation.mutate(payload)
   }
@@ -627,7 +621,7 @@ export default function DiscountsPage() {
 
   const formatAppliesToLabel = (discount) => {
     if (discount.applies_to === 'ALL') return 'All Students'
-    if (discount.applies_to === 'GRADE') return `Grade: ${discount.target_grade_name || discount.target_grade || '--'}`
+    if (discount.applies_to === 'GRADE_LEVEL') return `Grade: ${GRADE_LEVEL_LABELS[discount.target_grade_level] || discount.target_grade_level || '--'}`
     if (discount.applies_to === 'CLASS') return `Class: ${discount.target_class_name || discount.target_class || '--'}`
     if (discount.applies_to === 'SIBLING') return 'Siblings'
     return discount.applies_to || '--'
@@ -1200,26 +1194,26 @@ export default function DiscountsPage() {
                 <select
                   className="input"
                   value={discountForm.applies_to}
-                  onChange={(e) => setDiscountForm({ ...discountForm, applies_to: e.target.value, target_grade: '', target_class: '' })}
+                  onChange={(e) => setDiscountForm({ ...discountForm, applies_to: e.target.value, target_grade_level: '', target_class: '' })}
                 >
                   <option value="ALL">All Students</option>
-                  <option value="GRADE">Specific Grade</option>
+                  <option value="GRADE_LEVEL">All classes at a grade level</option>
                   <option value="CLASS">Specific Class</option>
                   <option value="SIBLING">Siblings</option>
                 </select>
               </div>
 
-              {discountForm.applies_to === 'GRADE' && (
+              {discountForm.applies_to === 'GRADE_LEVEL' && (
                 <div>
-                  <label className="label">Target Grade</label>
+                  <label className="label">Target Grade Level</label>
                   <select
                     className="input"
-                    value={discountForm.target_grade}
-                    onChange={(e) => setDiscountForm({ ...discountForm, target_grade: e.target.value })}
+                    value={discountForm.target_grade_level}
+                    onChange={(e) => setDiscountForm({ ...discountForm, target_grade_level: e.target.value })}
                   >
-                    <option value="">Select Grade</option>
-                    {allGrades.map((g) => (
-                      <option key={g.id} value={g.id}>{g.name}</option>
+                    <option value="">Select Grade Level</option>
+                    {GRADE_PRESETS.map((p) => (
+                      <option key={p.numeric_level} value={p.numeric_level}>{p.name}</option>
                     ))}
                   </select>
                 </div>
@@ -1631,19 +1625,19 @@ export default function DiscountsPage() {
                 </select>
               </div>
 
-              {/* Target: Grade or Class */}
+              {/* Target: Grade Level or Class */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="label">Grade</label>
+                  <label className="label">Grade Level</label>
                   <select
                     className="input"
-                    value={bulkAssignForm.grade_id}
-                    onChange={(e) => setBulkAssignForm({ ...bulkAssignForm, grade_id: e.target.value, class_id: '' })}
+                    value={bulkAssignForm.grade_level}
+                    onChange={(e) => setBulkAssignForm({ ...bulkAssignForm, grade_level: e.target.value, class_id: '' })}
                     disabled={!!bulkAssignForm.class_id}
                   >
-                    <option value="">-- Select Grade --</option>
-                    {allGrades.map((g) => (
-                      <option key={g.id} value={g.id}>{g.name}</option>
+                    <option value="">-- Select Grade Level --</option>
+                    {GRADE_PRESETS.map((p) => (
+                      <option key={p.numeric_level} value={p.numeric_level}>{p.name}</option>
                     ))}
                   </select>
                 </div>
@@ -1652,8 +1646,8 @@ export default function DiscountsPage() {
                   <select
                     className="input"
                     value={bulkAssignForm.class_id}
-                    onChange={(e) => setBulkAssignForm({ ...bulkAssignForm, class_id: e.target.value, grade_id: '' })}
-                    disabled={!!bulkAssignForm.grade_id}
+                    onChange={(e) => setBulkAssignForm({ ...bulkAssignForm, class_id: e.target.value, grade_level: '' })}
+                    disabled={!!bulkAssignForm.grade_level}
                   >
                     <option value="">-- Select Class --</option>
                     {allClasses.map((c) => (
@@ -1662,7 +1656,7 @@ export default function DiscountsPage() {
                   </select>
                 </div>
               </div>
-              <p className="text-xs text-gray-400 -mt-2">Choose either a grade or a specific class, not both.</p>
+              <p className="text-xs text-gray-400 -mt-2">Choose either a grade level or a specific class, not both.</p>
 
               {/* Academic Year */}
               <div>
@@ -1685,7 +1679,7 @@ export default function DiscountsPage() {
               {/* Warning */}
               <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
                 <p className="text-xs text-yellow-800">
-                  This will assign the selected discount/scholarship to every student in the chosen class/grade.
+                  This will assign the selected discount/scholarship to every student in the chosen class/grade level.
                   Students who already have this assignment will be skipped.
                 </p>
               </div>

@@ -85,6 +85,10 @@ class TenantQuerySetMixin:
             filter_kwargs = {self.tenant_field: active_school_id}
             return queryset.filter(**filter_kwargs)
 
+        # If X-School-ID header was sent but rejected, return empty
+        if self.request.headers.get('X-School-ID'):
+            return queryset.none()
+
         # Fallback: filter by all accessible schools
         if user.is_super_admin:
             return queryset

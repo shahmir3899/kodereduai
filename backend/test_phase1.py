@@ -53,7 +53,7 @@ def cleanup():
 
 def run_tests():
     from schools.models import School
-    from students.models import Grade, Class, Student
+    from students.models import Class, Student
     from academic_sessions.models import AcademicYear, Term, StudentEnrollment
     from attendance.models import AttendanceUpload, AttendanceRecord
     from finance.models import FeeStructure, FeePayment
@@ -477,10 +477,9 @@ try:
 finally:
     cleanup()
     # Final sanity check
-    from students.models import Student, Class, Grade
+    from students.models import Student, Class
     from academic_sessions.models import AcademicYear
     remaining_test = AcademicYear.objects.filter(name__startswith=TEST_PREFIX).count()
-    remaining_test += Grade.objects.filter(name__startswith=TEST_PREFIX).count()
     remaining_test += Class.objects.filter(name__startswith=TEST_PREFIX).count()
     remaining_test += Student.objects.filter(name__startswith=TEST_PREFIX).count()
     if remaining_test == 0:

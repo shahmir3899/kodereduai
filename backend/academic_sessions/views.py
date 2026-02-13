@@ -66,6 +66,10 @@ class AcademicYearViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def set_current(self, request, pk=None):
         year = self.get_object()
+        # Unset any other current year for this school first
+        AcademicYear.objects.filter(
+            school_id=year.school_id, is_current=True,
+        ).exclude(pk=year.pk).update(is_current=False)
         year.is_current = True
         year.save()
         return Response(AcademicYearSerializer(year).data)

@@ -62,8 +62,9 @@ class AcademicsAnalytics:
             att_qs = att_qs.filter(date__lte=date_to)
 
         # Aggregate attendance by class and date
+        # AttendanceRecord -> Student -> class_obj (FK path)
         class_date_attendance = att_qs.values(
-            'class_obj_id', 'date'
+            'student__class_obj_id', 'date'
         ).annotate(
             total=Count('id'),
             present=Count('id', filter=Q(status='PRESENT')),
@@ -82,7 +83,7 @@ class AcademicsAnalytics:
             if not day_code:
                 continue
 
-            class_id = record['class_obj_id']
+            class_id = record['student__class_obj_id']
             subjects_for_day = class_day_subject.get((class_id, day_code), set())
 
             from .models import TimetableEntry as TE
@@ -149,15 +150,15 @@ class AcademicsAnalytics:
         if date_to:
             att_qs = att_qs.filter(date__lte=date_to)
 
-        # Get class attendance rates
-        class_attendance = att_qs.values('class_obj_id').annotate(
+        # Get class attendance rates (AttendanceRecord -> Student -> class_obj)
+        class_attendance = att_qs.values('student__class_obj_id').annotate(
             total=Count('id'),
             present=Count('id', filter=Q(status='PRESENT')),
         )
         class_rate_map = {}
         for ca in class_attendance:
             if ca['total'] > 0:
-                class_rate_map[ca['class_obj_id']] = round(ca['present'] / ca['total'] * 100, 1)
+                class_rate_map[ca['student__class_obj_id']] = round(ca['present'] / ca['total'] * 100, 1)
 
         # Get teacher-class mapping
         teacher_classes = TimetableEntry.objects.filter(
@@ -247,7 +248,7 @@ class AcademicsAnalytics:
             date__gte=start_date,
             date__lte=end_date,
         ).values(
-            'class_obj_id', 'class_obj__name', 'date__year', 'date__month'
+            'student__class_obj_id', 'student__class_obj__name', 'date__year', 'date__month'
         ).annotate(
             total=Count('id'),
             present=Count('id', filter=Q(status='PRESENT')),
@@ -256,7 +257,7 @@ class AcademicsAnalytics:
         month_data = defaultdict(lambda: defaultdict(dict))
         for r in records:
             month_key = f"{r['date__year']}-{r['date__month']:02d}"
-            class_name = r['class_obj__name']
+            class_name = r['student__class_obj__name']
             rate = round(r['present'] / r['total'] * 100, 1) if r['total'] > 0 else 0
             month_data[month_key][class_name] = rate
 

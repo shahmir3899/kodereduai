@@ -2,8 +2,9 @@ import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
-import { admissionsApi, gradesApi } from '../../services/api'
+import { admissionsApi } from '../../services/api'
 import { useToast } from '../../components/Toast'
+import { GRADE_PRESETS, GRADE_LEVEL_LABELS } from '../../constants/gradePresets'
 
 const ALL_STAGES = [
   { key: 'NEW', label: 'New' },
@@ -75,19 +76,11 @@ export default function EnquiriesPage() {
   const [page, setPage] = useState(1)
   const pageSize = 20
 
-  // Grades for filter dropdown
-  const { data: gradesRes } = useQuery({
-    queryKey: ['grades'],
-    queryFn: () => gradesApi.getGrades(),
-    staleTime: 5 * 60 * 1000,
-  })
-  const grades = gradesRes?.data?.results || gradesRes?.data || []
-
   // Build query params
   const queryParams = useMemo(() => {
     const params = { page, page_size: pageSize }
     if (stageFilter) params.stage = stageFilter
-    if (gradeFilter) params.grade_applied = gradeFilter
+    if (gradeFilter) params.grade_level = gradeFilter
     if (sourceFilter) params.source = sourceFilter
     if (priorityFilter) params.priority = priorityFilter
     if (search) params.search = search
@@ -131,7 +124,7 @@ export default function EnquiriesPage() {
     queryKey: ['enquiries', 'kanban', stageFilter, gradeFilter, sourceFilter, priorityFilter, search],
     queryFn: () => admissionsApi.getEnquiries({
       page_size: 200,
-      ...(gradeFilter && { grade_applied: gradeFilter }),
+      ...(gradeFilter && { grade_level: gradeFilter }),
       ...(sourceFilter && { source: sourceFilter }),
       ...(priorityFilter && { priority: priorityFilter }),
       ...(search && { search }),
@@ -241,8 +234,8 @@ export default function EnquiriesPage() {
               className="input w-full text-sm"
             >
               <option value="">All Grades</option>
-              {grades.map((g) => (
-                <option key={g.id} value={g.id}>{g.name}</option>
+              {GRADE_PRESETS.map((p) => (
+                <option key={p.numeric_level} value={p.numeric_level}>{p.name}</option>
               ))}
             </select>
           </div>
@@ -342,7 +335,7 @@ export default function EnquiriesPage() {
                   </span>
                 </div>
                 <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
-                  <span>{enquiry.grade_applied_name || 'N/A'}</span>
+                  <span>{GRADE_LEVEL_LABELS[enquiry.applying_for_grade_level] || 'N/A'}</span>
                   <span className="text-gray-300">|</span>
                   <span className="capitalize">{(enquiry.source || '').replace(/_/g, ' ').toLowerCase()}</span>
                   {enquiry.priority && (
@@ -390,7 +383,7 @@ export default function EnquiriesPage() {
                     <td className="px-4 py-3 text-sm font-medium text-gray-900">{enquiry.child_name}</td>
                     <td className="px-4 py-3 text-sm text-gray-600">{enquiry.parent_name}</td>
                     <td className="px-4 py-3 text-sm text-gray-600">{enquiry.parent_phone}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{enquiry.grade_applied_name || 'N/A'}</td>
+                    <td className="px-4 py-3 text-sm text-gray-600">{GRADE_LEVEL_LABELS[enquiry.applying_for_grade_level] || 'N/A'}</td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${STAGE_BADGE_COLORS[enquiry.stage] || 'bg-gray-100 text-gray-700'}`}>
                         {(enquiry.stage || '').replace(/_/g, ' ')}
@@ -495,7 +488,7 @@ export default function EnquiriesPage() {
                         </div>
                         <p className="text-xs text-gray-500 truncate">{enquiry.parent_name}</p>
                         <div className="flex items-center gap-2 mt-2 text-xs text-gray-400">
-                          <span>{enquiry.grade_applied_name || 'N/A'}</span>
+                          <span>{GRADE_LEVEL_LABELS[enquiry.applying_for_grade_level] || 'N/A'}</span>
                           <span className="text-gray-300">|</span>
                           <span className="capitalize">{(enquiry.source || '').replace(/_/g, ' ').toLowerCase()}</span>
                         </div>

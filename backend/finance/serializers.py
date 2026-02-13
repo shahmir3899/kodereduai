@@ -308,9 +308,6 @@ class DiscountSerializer(serializers.ModelSerializer):
     applies_to_display = serializers.CharField(
         source='get_applies_to_display', read_only=True
     )
-    target_grade_name = serializers.CharField(
-        source='target_grade.name', read_only=True, default=None
-    )
     target_class_name = serializers.CharField(
         source='target_class.name', read_only=True, default=None
     )
@@ -325,7 +322,7 @@ class DiscountSerializer(serializers.ModelSerializer):
             'id', 'school', 'academic_year', 'academic_year_name',
             'name', 'discount_type', 'discount_type_display',
             'value', 'applies_to', 'applies_to_display',
-            'target_grade', 'target_grade_name',
+            'target_grade_level',
             'target_class', 'target_class_name',
             'start_date', 'end_date', 'is_active',
             'max_uses', 'stackable', 'usage_count',
@@ -338,9 +335,9 @@ class DiscountSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         applies_to = attrs.get('applies_to', getattr(self.instance, 'applies_to', 'ALL'))
-        if applies_to == 'GRADE' and not attrs.get('target_grade') and not getattr(self.instance, 'target_grade_id', None):
+        if applies_to == 'GRADE_LEVEL' and attrs.get('target_grade_level') is None and getattr(self.instance, 'target_grade_level', None) is None:
             raise serializers.ValidationError(
-                {'target_grade': 'Target grade is required when applies_to is GRADE.'}
+                {'target_grade_level': 'Target grade level is required when applies_to is GRADE_LEVEL.'}
             )
         if applies_to == 'CLASS' and not attrs.get('target_class') and not getattr(self.instance, 'target_class_id', None):
             raise serializers.ValidationError(

@@ -434,16 +434,6 @@ export const sessionsApi = {
   getAttendanceRisk: (params) => api.get('/api/sessions/attendance-risk/', { params }),
 }
 
-// Grades API
-export const gradesApi = {
-  getGrades: (params) => api.get('/api/grades/', { params }),
-  getGrade: (id) => api.get(`/api/grades/${id}/`),
-  createGrade: (data) => api.post('/api/grades/', data),
-  updateGrade: (id, data) => api.patch(`/api/grades/${id}/`, data),
-  deleteGrade: (id) => api.delete(`/api/grades/${id}/`),
-  getGradeClasses: (id) => api.get(`/api/grades/${id}/classes/`),
-}
-
 // Examinations API
 export const examinationsApi = {
   // Exam Types
