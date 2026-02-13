@@ -40,6 +40,9 @@ class ClassSubjectSerializer(serializers.ModelSerializer):
     subject_name = serializers.CharField(source='subject.name', read_only=True)
     subject_code = serializers.CharField(source='subject.code', read_only=True)
     teacher_name = serializers.SerializerMethodField()
+    academic_year_name = serializers.CharField(
+        source='academic_year.name', read_only=True, default=None,
+    )
 
     class Meta:
         model = ClassSubject
@@ -47,6 +50,7 @@ class ClassSubjectSerializer(serializers.ModelSerializer):
             'id', 'school', 'class_obj', 'class_name',
             'subject', 'subject_name', 'subject_code',
             'teacher', 'teacher_name',
+            'academic_year', 'academic_year_name',
             'periods_per_week', 'is_active',
             'created_at', 'updated_at',
         ]
@@ -138,6 +142,9 @@ class TimetableEntrySerializer(serializers.ModelSerializer):
     )
     teacher_name = serializers.SerializerMethodField()
     day_display = serializers.CharField(source='get_day_display', read_only=True)
+    academic_year_name = serializers.CharField(
+        source='academic_year.name', read_only=True, default=None,
+    )
 
     class Meta:
         model = TimetableEntry
@@ -148,6 +155,7 @@ class TimetableEntrySerializer(serializers.ModelSerializer):
             'slot_start_time', 'slot_end_time',
             'subject', 'subject_name', 'subject_code',
             'teacher', 'teacher_name',
+            'academic_year', 'academic_year_name',
             'room', 'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'school', 'created_at', 'updated_at']

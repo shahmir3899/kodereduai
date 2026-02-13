@@ -12,7 +12,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
-from core.permissions import HasSchoolAccess, IsSchoolAdminOrReadOnly
+from core.permissions import HasSchoolAccess, IsSchoolAdminOrReadOnly, ModuleAccessMixin
 from core.mixins import TenantQuerySetMixin, ensure_tenant_schools, ensure_tenant_school_id
 from .models import Subject, ClassSubject, TimetableSlot, TimetableEntry
 from .serializers import (
@@ -46,8 +46,9 @@ def _resolve_school_id(request):
 
 # ── Subject ViewSet ──────────────────────────────────────────────────────────
 
-class SubjectViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
+class SubjectViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     """CRUD for subjects."""
+    required_module = 'academics'
     queryset = Subject.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
     pagination_class = None
@@ -116,8 +117,9 @@ class SubjectViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
 
 # ── ClassSubject ViewSet ─────────────────────────────────────────────────────
 
-class ClassSubjectViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
+class ClassSubjectViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     """CRUD for class-subject-teacher assignments."""
+    required_module = 'academics'
     queryset = ClassSubject.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
     pagination_class = None
@@ -134,7 +136,7 @@ class ClassSubjectViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = ClassSubject.objects.select_related(
-            'school', 'class_obj', 'subject', 'teacher',
+            'school', 'class_obj', 'subject', 'teacher', 'academic_year',
         )
         school_id = _resolve_school_id(self.request)
         if school_id:
@@ -165,6 +167,10 @@ class ClassSubjectViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         if teacher:
             queryset = queryset.filter(teacher_id=teacher)
 
+        academic_year = self.request.query_params.get('academic_year')
+        if academic_year:
+            queryset = queryset.filter(academic_year_id=academic_year)
+
         return queryset
 
     def perform_create(self, serializer):
@@ -172,7 +178,17 @@ class ClassSubjectViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         if not school_id:
             from rest_framework.exceptions import ValidationError
             raise ValidationError({'detail': 'No school associated with your account.'})
-        serializer.save(school_id=school_id)
+
+        # Auto-resolve academic year if not provided
+        academic_year = serializer.validated_data.get('academic_year')
+        if not academic_year:
+            from academic_sessions.models import AcademicYear
+            sid = ensure_tenant_school_id(self.request) or self.request.user.school_id
+            academic_year = AcademicYear.objects.filter(
+                school_id=sid, is_current=True, is_active=True,
+            ).first()
+
+        serializer.save(school_id=school_id, academic_year=academic_year)
 
     def perform_destroy(self, instance):
         instance.is_active = False
@@ -201,8 +217,9 @@ class ClassSubjectViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
 
 # ── TimetableSlot ViewSet ────────────────────────────────────────────────────
 
-class TimetableSlotViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
+class TimetableSlotViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     """CRUD for timetable time slots (school-wide period structure)."""
+    required_module = 'academics'
     queryset = TimetableSlot.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
     pagination_class = None
@@ -251,8 +268,9 @@ class TimetableSlotViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
 
 # ── TimetableEntry ViewSet ───────────────────────────────────────────────────
 
-class TimetableEntryViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
+class TimetableEntryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     """CRUD for timetable entries with grid view, bulk save, and AI features."""
+    required_module = 'academics'
     queryset = TimetableEntry.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
     pagination_class = None
@@ -270,6 +288,7 @@ class TimetableEntryViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = TimetableEntry.objects.select_related(
             'school', 'class_obj', 'slot', 'subject', 'teacher',
+            'academic_year',
         )
         school_id = _resolve_school_id(self.request)
         if school_id:
@@ -289,6 +308,10 @@ class TimetableEntryViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         if day:
             queryset = queryset.filter(day=day.upper())
 
+        academic_year = self.request.query_params.get('academic_year')
+        if academic_year:
+            queryset = queryset.filter(academic_year_id=academic_year)
+
         return queryset
 
     def perform_create(self, serializer):
@@ -296,7 +319,17 @@ class TimetableEntryViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         if not school_id:
             from rest_framework.exceptions import ValidationError
             raise ValidationError({'detail': 'No school associated with your account.'})
-        serializer.save(school_id=school_id)
+
+        # Auto-resolve academic year if not provided
+        academic_year = serializer.validated_data.get('academic_year')
+        if not academic_year:
+            from academic_sessions.models import AcademicYear
+            sid = ensure_tenant_school_id(self.request) or self.request.user.school_id
+            academic_year = AcademicYear.objects.filter(
+                school_id=sid, is_current=True, is_active=True,
+            ).first()
+
+        serializer.save(school_id=school_id, academic_year=academic_year)
 
     @action(detail=False, methods=['get'])
     def by_class(self, request):
@@ -337,6 +370,16 @@ class TimetableEntryViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         if not class_id or not day:
             return Response({'detail': 'class_obj and day are required.'}, status=400)
 
+        # Auto-resolve academic year
+        academic_year_id = request.data.get('academic_year')
+        if not academic_year_id:
+            from academic_sessions.models import AcademicYear
+            sid = ensure_tenant_school_id(request) or request.user.school_id
+            ay = AcademicYear.objects.filter(
+                school_id=sid, is_current=True, is_active=True,
+            ).first()
+            academic_year_id = ay.id if ay else None
+
         # Validate teacher conflicts
         errors = []
         for idx, entry in enumerate(entries_data):
@@ -376,6 +419,7 @@ class TimetableEntryViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
                 TimetableEntry.objects.create(
                     school_id=school_id,
                     class_obj_id=class_id,
+                    academic_year_id=academic_year_id,
                     day=day.upper(),
                     slot_id=slot_id,
                     subject_id=subject_id,
@@ -522,8 +566,9 @@ class TimetableEntryViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
 
 # ── AI Chat View ─────────────────────────────────────────────────────────────
 
-class AcademicsAIChatView(APIView):
+class AcademicsAIChatView(ModuleAccessMixin, APIView):
     """AI chat assistant for academic scheduling queries."""
+    required_module = 'academics'
     permission_classes = [IsAuthenticated, HasSchoolAccess]
 
     def get(self, request):
@@ -598,8 +643,9 @@ class AcademicsAIChatView(APIView):
 
 # ── Analytics View ───────────────────────────────────────────────────────────
 
-class AcademicsAnalyticsView(APIView):
+class AcademicsAnalyticsView(ModuleAccessMixin, APIView):
     """Predictive analytics for academics."""
+    required_module = 'academics'
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
 
     def get(self, request):

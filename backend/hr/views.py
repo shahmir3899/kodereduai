@@ -13,7 +13,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 
-from core.permissions import HasSchoolAccess, get_effective_role
+from core.permissions import HasSchoolAccess, get_effective_role, ModuleAccessMixin
 from core.mixins import TenantQuerySetMixin, ensure_tenant_schools, ensure_tenant_school_id
 from .models import (
     StaffDepartment, StaffDesignation, StaffMember,
@@ -66,8 +66,9 @@ def _resolve_school_id(request):
 
 # ── Department ViewSet ────────────────────────────────────────────────────────
 
-class StaffDepartmentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
+class StaffDepartmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     """CRUD for staff departments."""
+    required_module = 'hr'
     queryset = StaffDepartment.objects.all()
     permission_classes = [IsAuthenticated, IsHRManagerOrAdminOrReadOnly, HasSchoolAccess]
     pagination_class = None
@@ -113,8 +114,9 @@ class StaffDepartmentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
 
 # ── Designation ViewSet ───────────────────────────────────────────────────────
 
-class StaffDesignationViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
+class StaffDesignationViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     """CRUD for staff designations."""
+    required_module = 'hr'
     queryset = StaffDesignation.objects.all()
     permission_classes = [IsAuthenticated, IsHRManagerOrAdminOrReadOnly, HasSchoolAccess]
     pagination_class = None
@@ -163,8 +165,9 @@ class StaffDesignationViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
 
 # ── Staff Member ViewSet ──────────────────────────────────────────────────────
 
-class StaffMemberViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
+class StaffMemberViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     """CRUD for staff members with search, filter, and dashboard stats."""
+    required_module = 'hr'
     queryset = StaffMember.objects.all()
     permission_classes = [IsAuthenticated, IsHRManagerOrAdminOrReadOnly, HasSchoolAccess]
     pagination_class = None
@@ -332,8 +335,9 @@ class StaffMemberViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
 
 # ── Salary Structure ViewSet ─────────────────────────────────────────────────
 
-class SalaryStructureViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
+class SalaryStructureViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     """CRUD for salary structures."""
+    required_module = 'hr'
     queryset = SalaryStructure.objects.all()
     permission_classes = [IsAuthenticated, IsHRManagerOrAdminOrReadOnly, HasSchoolAccess]
     pagination_class = None
@@ -419,8 +423,9 @@ class SalaryStructureViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
 
 # ── Payslip ViewSet ───────────────────────────────────────────────────────────
 
-class PayslipViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
+class PayslipViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     """CRUD for payslips with bulk generation, approval, and payment actions."""
+    required_module = 'hr'
     queryset = Payslip.objects.all()
     permission_classes = [IsAuthenticated, IsHRManagerOrAdminOrReadOnly, HasSchoolAccess]
     pagination_class = None
@@ -609,8 +614,9 @@ class PayslipViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
 
 # ── Leave Policy ViewSet ─────────────────────────────────────────────────────
 
-class LeavePolicyViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
+class LeavePolicyViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     """CRUD for leave policies."""
+    required_module = 'hr'
     queryset = LeavePolicy.objects.all()
     permission_classes = [IsAuthenticated, IsHRManagerOrAdminOrReadOnly, HasSchoolAccess]
     pagination_class = None
@@ -654,8 +660,9 @@ class LeavePolicyViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
 
 # ── Leave Application ViewSet ────────────────────────────────────────────────
 
-class LeaveApplicationViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
+class LeaveApplicationViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     """CRUD for leave applications with approve/reject/cancel actions."""
+    required_module = 'hr'
     queryset = LeaveApplication.objects.all()
     permission_classes = [IsAuthenticated, IsHRManagerOrAdminOrReadOnly, HasSchoolAccess]
     pagination_class = None
@@ -804,7 +811,8 @@ class LeaveApplicationViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
 
 # ── Staff Attendance ViewSet ─────────────────────────────────────────────────
 
-class StaffAttendanceViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
+class StaffAttendanceViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
+    required_module = 'hr'
     """CRUD for staff attendance with bulk marking and summary."""
     queryset = StaffAttendance.objects.all()
     permission_classes = [IsAuthenticated, IsHRManagerOrAdminOrReadOnly, HasSchoolAccess]
@@ -931,7 +939,8 @@ class StaffAttendanceViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
 
 # ── Performance Appraisal ViewSet ────────────────────────────────────────────
 
-class PerformanceAppraisalViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
+class PerformanceAppraisalViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
+    required_module = 'hr'
     """CRUD for performance appraisals."""
     queryset = PerformanceAppraisal.objects.all()
     permission_classes = [IsAuthenticated, IsHRManagerOrAdminOrReadOnly, HasSchoolAccess]
@@ -987,7 +996,8 @@ class PerformanceAppraisalViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
 
 # ── Staff Qualification ViewSet ──────────────────────────────────────────────
 
-class StaffQualificationViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
+class StaffQualificationViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
+    required_module = 'hr'
     """CRUD for staff qualifications."""
     queryset = StaffQualification.objects.all()
     permission_classes = [IsAuthenticated, IsHRManagerOrAdminOrReadOnly, HasSchoolAccess]
@@ -1045,7 +1055,8 @@ class StaffQualificationViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
 
 # ── Staff Document ViewSet ───────────────────────────────────────────────────
 
-class StaffDocumentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
+class StaffDocumentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
+    required_module = 'hr'
     """CRUD for staff documents."""
     queryset = StaffDocument.objects.all()
     permission_classes = [IsAuthenticated, IsHRManagerOrAdminOrReadOnly, HasSchoolAccess]

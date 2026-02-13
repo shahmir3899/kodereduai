@@ -32,6 +32,14 @@ class AttendanceUpload(models.Model):
         related_name='attendance_uploads',
         verbose_name='Class'
     )
+    academic_year = models.ForeignKey(
+        'academic_sessions.AcademicYear',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='attendance_uploads',
+        help_text="Academic year this attendance belongs to (auto-resolved if not provided)"
+    )
 
     # Date for this attendance
     date = models.DateField(help_text="Date of the attendance register")
@@ -227,6 +235,14 @@ class AttendanceRecord(models.Model):
         'schools.School',
         on_delete=models.CASCADE,
         related_name='attendance_records'
+    )
+    academic_year = models.ForeignKey(
+        'academic_sessions.AcademicYear',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='attendance_records',
+        help_text="Academic year this record belongs to"
     )
 
     # Student and date

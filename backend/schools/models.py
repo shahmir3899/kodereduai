@@ -1,5 +1,7 @@
 from django.db import models
 
+from core.module_registry import get_default_modules, ALL_MODULE_KEYS
+
 
 class Organization(models.Model):
     """
@@ -9,6 +11,13 @@ class Organization(models.Model):
     name = models.CharField(max_length=200)
     slug = models.SlugField(max_length=50, unique=True)
     logo = models.URLField(blank=True, null=True)
+
+    # Module ceiling: which modules are available to all schools in this org
+    allowed_modules = models.JSONField(
+        default=get_default_modules,
+        help_text="Module ceiling for this org. Schools can only enable modules allowed here."
+    )
+
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -20,6 +29,21 @@ class Organization(models.Model):
 
     def __str__(self):
         return self.name
+
+    def get_allowed_module(self, module_name: str) -> bool:
+        """Check if a specific module is allowed for this organization."""
+        return self.allowed_modules.get(module_name, False)
+
+    def cascade_disabled_modules(self):
+        """When org disables a module, auto-disable it on all org's schools."""
+        for school in self.schools.all():
+            changed = False
+            for key in ALL_MODULE_KEYS:
+                if not self.allowed_modules.get(key, False) and school.enabled_modules.get(key, False):
+                    school.enabled_modules[key] = False
+                    changed = True
+            if changed:
+                school.save(update_fields=['enabled_modules', 'updated_at'])
 
 
 class UserSchoolMembership(models.Model):
@@ -34,6 +58,8 @@ class UserSchoolMembership(models.Model):
         ACCOUNTANT = 'ACCOUNTANT', 'Accountant'
         TEACHER = 'TEACHER', 'Teacher'
         STAFF = 'STAFF', 'Staff'
+        PARENT = 'PARENT', 'Parent'
+        STUDENT = 'STUDENT', 'Student'
 
     user = models.ForeignKey(
         'users.User',
@@ -140,8 +166,8 @@ class School(models.Model):
 
     # Feature flags per school
     enabled_modules = models.JSONField(
-        default=dict,
-        help_text="Feature flags: {'attendance_ai': true, 'whatsapp': true}"
+        default=get_default_modules,
+        help_text="Per-school module toggles: {'attendance': true, 'finance': true, ...}"
     )
 
     # Status
@@ -160,8 +186,25 @@ class School(models.Model):
         return self.name
 
     def get_enabled_module(self, module_name: str) -> bool:
-        """Check if a specific module is enabled for this school."""
-        return self.enabled_modules.get(module_name, False)
+        """Check if a specific module is enabled for this school (respects org ceiling)."""
+        if not self.enabled_modules.get(module_name, False):
+            return False
+        # If school belongs to an org, check org ceiling
+        if self.organization_id:
+            return self.organization.allowed_modules.get(module_name, False)
+        return True
+
+    def get_effective_modules(self) -> dict:
+        """Return final module state: intersection of org ceiling and school toggles."""
+        result = {}
+        for key in ALL_MODULE_KEYS:
+            school_enabled = self.enabled_modules.get(key, False)
+            if self.organization_id:
+                org_allowed = self.organization.allowed_modules.get(key, False)
+                result[key] = school_enabled and org_allowed
+            else:
+                result[key] = school_enabled
+        return result
 
     def get_status_for_mark(self, mark: str) -> str:
         """

@@ -1,0 +1,215 @@
+"""
+LMS serializers for lesson plans, assignments, and submissions.
+Uses Read + Create serializer pattern for each model.
+"""
+
+from rest_framework import serializers
+from .models import (
+    LessonPlan, LessonAttachment,
+    Assignment, AssignmentAttachment, AssignmentSubmission,
+)
+
+
+# ---------------------------------------------------------------------------
+# Lesson Attachments
+# ---------------------------------------------------------------------------
+
+class LessonAttachmentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = LessonAttachment
+        fields = [
+            'id', 'lesson', 'file_url', 'file_name',
+            'attachment_type', 'uploaded_at',
+        ]
+        read_only_fields = ['id', 'uploaded_at']
+
+
+# ---------------------------------------------------------------------------
+# Lesson Plans
+# ---------------------------------------------------------------------------
+
+class LessonPlanReadSerializer(serializers.ModelSerializer):
+    """Read serializer with nested details for display."""
+    teacher_name = serializers.CharField(source='teacher.full_name', read_only=True)
+    class_name = serializers.CharField(source='class_obj.name', read_only=True)
+    subject_name = serializers.CharField(source='subject.name', read_only=True)
+    school_name = serializers.CharField(source='school.name', read_only=True)
+    academic_year_name = serializers.CharField(
+        source='academic_year.name', read_only=True, default=None,
+    )
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    attachments = LessonAttachmentSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = LessonPlan
+        fields = [
+            'id', 'school', 'school_name',
+            'academic_year', 'academic_year_name',
+            'class_obj', 'class_name',
+            'subject', 'subject_name',
+            'teacher', 'teacher_name',
+            'title', 'description', 'objectives',
+            'lesson_date', 'duration_minutes',
+            'materials_needed', 'teaching_methods',
+            'status', 'status_display',
+            'is_active', 'attachments',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class LessonPlanCreateSerializer(serializers.ModelSerializer):
+    """Write serializer with flat FK fields for creation/update."""
+
+    class Meta:
+        model = LessonPlan
+        fields = [
+            'id', 'school', 'academic_year',
+            'class_obj', 'subject', 'teacher',
+            'title', 'description', 'objectives',
+            'lesson_date', 'duration_minutes',
+            'materials_needed', 'teaching_methods',
+            'status', 'is_active',
+        ]
+        read_only_fields = ['id']
+
+
+# ---------------------------------------------------------------------------
+# Assignment Attachments
+# ---------------------------------------------------------------------------
+
+class AssignmentAttachmentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AssignmentAttachment
+        fields = [
+            'id', 'assignment', 'file_url', 'file_name',
+            'attachment_type', 'uploaded_at',
+        ]
+        read_only_fields = ['id', 'uploaded_at']
+
+
+# ---------------------------------------------------------------------------
+# Assignments
+# ---------------------------------------------------------------------------
+
+class AssignmentReadSerializer(serializers.ModelSerializer):
+    """Read serializer with nested details and computed submission_count."""
+    teacher_name = serializers.CharField(source='teacher.full_name', read_only=True)
+    class_name = serializers.CharField(source='class_obj.name', read_only=True)
+    subject_name = serializers.CharField(source='subject.name', read_only=True)
+    school_name = serializers.CharField(source='school.name', read_only=True)
+    academic_year_name = serializers.CharField(
+        source='academic_year.name', read_only=True, default=None,
+    )
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    assignment_type_display = serializers.CharField(
+        source='get_assignment_type_display', read_only=True,
+    )
+    attachments = AssignmentAttachmentSerializer(many=True, read_only=True)
+    submission_count = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = Assignment
+        fields = [
+            'id', 'school', 'school_name',
+            'academic_year', 'academic_year_name',
+            'class_obj', 'class_name',
+            'subject', 'subject_name',
+            'teacher', 'teacher_name',
+            'title', 'description', 'instructions',
+            'assignment_type', 'assignment_type_display',
+            'due_date', 'total_marks', 'attachments_allowed',
+            'status', 'status_display',
+            'is_active', 'attachments', 'submission_count',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class AssignmentCreateSerializer(serializers.ModelSerializer):
+    """Write serializer with flat FK fields for creation/update."""
+
+    class Meta:
+        model = Assignment
+        fields = [
+            'id', 'school', 'academic_year',
+            'class_obj', 'subject', 'teacher',
+            'title', 'description', 'instructions',
+            'assignment_type', 'due_date', 'total_marks',
+            'attachments_allowed', 'status', 'is_active',
+        ]
+        read_only_fields = ['id']
+
+
+# ---------------------------------------------------------------------------
+# Assignment Submissions
+# ---------------------------------------------------------------------------
+
+class AssignmentSubmissionReadSerializer(serializers.ModelSerializer):
+    """Read serializer with nested student details."""
+    student_name = serializers.CharField(source='student.name', read_only=True)
+    student_roll = serializers.CharField(source='student.roll_number', read_only=True)
+    assignment_title = serializers.CharField(source='assignment.title', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    graded_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = AssignmentSubmission
+        fields = [
+            'id', 'assignment', 'assignment_title',
+            'student', 'student_name', 'student_roll',
+            'school',
+            'submission_text', 'file_url', 'file_name',
+            'submitted_at',
+            'status', 'status_display',
+            'marks_obtained', 'feedback',
+            'graded_by', 'graded_by_name', 'graded_at',
+        ]
+        read_only_fields = [
+            'id', 'submitted_at', 'graded_by', 'graded_by_name', 'graded_at',
+        ]
+
+    def get_graded_by_name(self, obj):
+        return obj.graded_by.full_name if obj.graded_by else None
+
+
+class AssignmentSubmissionCreateSerializer(serializers.ModelSerializer):
+    """Write serializer for students creating submissions."""
+
+    class Meta:
+        model = AssignmentSubmission
+        fields = [
+            'id', 'assignment', 'student', 'school',
+            'submission_text', 'file_url', 'file_name',
+        ]
+        read_only_fields = ['id']
+
+    def validate(self, attrs):
+        assignment = attrs.get('assignment')
+        student = attrs.get('student')
+
+        # Ensure the assignment is published
+        if assignment and assignment.status != Assignment.Status.PUBLISHED:
+            raise serializers.ValidationError({
+                'assignment': 'Can only submit to published assignments.',
+            })
+
+        # Ensure the assignment is not closed
+        if assignment and assignment.status == Assignment.Status.CLOSED:
+            raise serializers.ValidationError({
+                'assignment': 'This assignment is closed and no longer accepts submissions.',
+            })
+
+        # Ensure the student belongs to the same class as the assignment
+        if assignment and student and student.class_obj_id != assignment.class_obj_id:
+            raise serializers.ValidationError({
+                'student': 'Student does not belong to the class this assignment is for.',
+            })
+
+        # Ensure the student belongs to the same school
+        if assignment and student and student.school_id != assignment.school_id:
+            raise serializers.ValidationError({
+                'student': 'Student does not belong to the same school as this assignment.',
+            })
+
+        return attrs

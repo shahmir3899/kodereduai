@@ -28,6 +28,22 @@ class SchoolSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
 
+    def validate_enabled_modules(self, value):
+        """Strip unknown module keys and validate against org ceiling."""
+        from core.module_registry import ALL_MODULE_KEYS
+        if value is not None:
+            # Strip any unknown keys (e.g. old 'attendance_ai', 'whatsapp')
+            value = {k: v for k, v in value.items() if k in ALL_MODULE_KEYS}
+            # Validate against org ceiling if school belongs to an org
+            if self.instance and self.instance.organization_id:
+                org = self.instance.organization
+                for key, enabled in value.items():
+                    if enabled and not org.allowed_modules.get(key, False):
+                        raise serializers.ValidationError(
+                            f"Module '{key}' is not allowed by the organization '{org.name}'."
+                        )
+        return value
+
     def get_user_count(self, obj):
         return obj.users.count()
 
@@ -114,6 +130,27 @@ class SchoolCreateSerializer(serializers.ModelSerializer):
             )
         return value
 
+    def validate_enabled_modules(self, value):
+        from core.module_registry import ALL_MODULE_KEYS
+        if value is not None:
+            # Strip unknown keys (e.g. old 'attendance_ai', 'whatsapp')
+            value = {k: v for k, v in value.items() if k in ALL_MODULE_KEYS}
+        return value
+
+    def validate(self, data):
+        data = super().validate(data)
+        enabled = data.get('enabled_modules')
+        if enabled:
+            # Get org from data (create) or from instance (update)
+            org = data.get('organization') or (self.instance and self.instance.organization)
+            if org:
+                for key, val in enabled.items():
+                    if val and not org.allowed_modules.get(key, False):
+                        raise serializers.ValidationError({
+                            'enabled_modules': f"Module '{key}' is not allowed by the organization '{org.name}'."
+                        })
+        return data
+
 
 class SchoolStatsSerializer(serializers.Serializer):
     """
@@ -136,23 +173,34 @@ class OrganizationSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Organization
-        fields = ['id', 'name', 'slug', 'logo', 'is_active', 'school_count', 'created_at', 'updated_at']
+        fields = [
+            'id', 'name', 'slug', 'logo', 'allowed_modules',
+            'is_active', 'school_count', 'created_at', 'updated_at',
+        ]
         read_only_fields = ['id', 'created_at', 'updated_at']
 
 
 class OrganizationCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Organization
-        fields = ['name', 'slug', 'logo', 'is_active']
+        fields = ['name', 'slug', 'logo', 'allowed_modules', 'is_active']
 
     def validate_slug(self, value):
         if value:
             value = value.lower().strip()
         return value
 
+    def validate_allowed_modules(self, value):
+        from core.module_registry import ALL_MODULE_KEYS
+        if value is not None:
+            invalid = set(value.keys()) - set(ALL_MODULE_KEYS)
+            if invalid:
+                raise serializers.ValidationError(f"Unknown module keys: {', '.join(invalid)}")
+        return value
+
     def validate(self, data):
-        # Auto-generate slug from name if not provided
-        if not data.get('slug'):
+        # Auto-generate slug from name if not provided (only on create, not partial update)
+        if not data.get('slug') and data.get('name'):
             data['slug'] = slugify(data['name'])[:50]
         return data
 

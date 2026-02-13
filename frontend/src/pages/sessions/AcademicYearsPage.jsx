@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { sessionsApi } from '../../services/api'
+import SessionSetupWizard from './SessionSetupWizard'
 
 const EMPTY_YEAR = { name: '', start_date: '', end_date: '' }
 const EMPTY_TERM = { academic_year: '', name: '', term_type: 'TERM', order: 1, start_date: '', end_date: '' }
@@ -24,6 +25,9 @@ export default function AcademicYearsPage() {
 
   // Expanded year for summary
   const [expandedYearId, setExpandedYearId] = useState(null)
+
+  // Setup wizard
+  const [showSetupWizard, setShowSetupWizard] = useState(false)
 
   // Queries
   const { data: yearsRes, isLoading: yearsLoading } = useQuery({
@@ -151,7 +155,15 @@ export default function AcademicYearsPage() {
       {/* ─── Academic Years Tab ─── */}
       {tab === 'years' && (
         <>
-          <div className="flex justify-end mb-4">
+          <div className="flex justify-end gap-2 mb-4">
+            {years.length > 0 && (
+              <button onClick={() => setShowSetupWizard(true)} className="btn-secondary text-sm px-4 py-2 flex items-center gap-1.5">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                AI Setup Wizard
+              </button>
+            )}
             <button onClick={openCreateYear} className="btn-primary text-sm px-4 py-2">+ Add Academic Year</button>
           </div>
 
@@ -446,6 +458,10 @@ export default function AcademicYearsPage() {
             </div>
           )}
         </>
+      )}
+      {/* AI Setup Wizard Modal */}
+      {showSetupWizard && (
+        <SessionSetupWizard onClose={() => setShowSetupWizard(false)} />
       )}
     </div>
   )

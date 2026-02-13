@@ -32,12 +32,14 @@ class AttendanceUploadSerializer(serializers.ModelSerializer):
     school_name = serializers.CharField(source='school.name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     created_by_name = serializers.CharField(source='created_by.username', read_only=True)
+    academic_year_name = serializers.CharField(source='academic_year.name', read_only=True, default=None)
 
     class Meta:
         model = AttendanceUpload
         fields = [
             'id', 'school', 'school_name',
             'class_obj', 'class_name', 'date',
+            'academic_year', 'academic_year_name',
             'image_url', 'status', 'status_display',
             'confidence_score', 'error_message',
             'created_by', 'created_by_name',
@@ -64,12 +66,14 @@ class AttendanceUploadDetailSerializer(serializers.ModelSerializer):
     images = AttendanceUploadImageSerializer(many=True, read_only=True)
     all_image_urls = serializers.SerializerMethodField()
     total_pages = serializers.IntegerField(read_only=True)
+    academic_year_name = serializers.CharField(source='academic_year.name', read_only=True, default=None)
 
     class Meta:
         model = AttendanceUpload
         fields = [
             'id', 'school', 'school_name',
             'class_obj', 'class_name', 'class_details', 'date',
+            'academic_year', 'academic_year_name',
             'image_url', 'images', 'all_image_urls', 'total_pages',
             'status', 'status_display',
             'ai_output_json', 'ocr_raw_text', 'structured_table_json',
@@ -252,6 +256,7 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
     class_name = serializers.CharField(source='student.class_obj.name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     source_display = serializers.CharField(source='get_source_display', read_only=True)
+    academic_year_name = serializers.CharField(source='academic_year.name', read_only=True, default=None)
 
     class Meta:
         model = AttendanceRecord
@@ -259,6 +264,7 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
             'id', 'school', 'student', 'student_name', 'student_roll',
             'class_name', 'date', 'status', 'status_display',
             'source', 'source_display', 'upload',
+            'academic_year', 'academic_year_name',
             'notification_sent', 'notification_sent_at',
             'created_at', 'updated_at'
         ]

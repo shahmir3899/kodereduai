@@ -6,7 +6,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core.mixins import TenantQuerySetMixin, ensure_tenant_school_id
-from core.permissions import IsSchoolAdmin, IsSchoolAdminOrReadOnly, HasSchoolAccess
+from core.permissions import IsSchoolAdmin, IsSchoolAdminOrReadOnly, HasSchoolAccess, ModuleAccessMixin
 
 from .models import ExamType, Exam, ExamSubject, StudentMark, GradeScale
 from .serializers import (
@@ -35,7 +35,8 @@ def _resolve_school_id(request):
     return None
 
 
-class ExamTypeViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
+class ExamTypeViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
+    required_module = 'examinations'
     queryset = ExamType.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
     pagination_class = None
@@ -64,7 +65,8 @@ class ExamTypeViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         instance.save()
 
 
-class ExamViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
+class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
+    required_module = 'examinations'
     queryset = Exam.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
     pagination_class = None
@@ -237,7 +239,8 @@ class ExamViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         return '-'
 
 
-class ExamSubjectViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
+class ExamSubjectViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
+    required_module = 'examinations'
     queryset = ExamSubject.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
     pagination_class = None
@@ -269,7 +272,8 @@ class ExamSubjectViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         instance.save()
 
 
-class StudentMarkViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
+class StudentMarkViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
+    required_module = 'examinations'
     queryset = StudentMark.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
     pagination_class = None
@@ -367,7 +371,8 @@ class StudentMarkViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
-class GradeScaleViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
+class GradeScaleViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
+    required_module = 'examinations'
     queryset = GradeScale.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
     pagination_class = None
@@ -396,7 +401,8 @@ class GradeScaleViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         instance.save()
 
 
-class ReportCardView(APIView):
+class ReportCardView(ModuleAccessMixin, APIView):
+    required_module = 'examinations'
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
 
     def get(self, request):

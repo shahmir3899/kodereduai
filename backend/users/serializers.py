@@ -38,33 +38,36 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         schools = []
         if user.is_super_admin:
             # Super admin sees all active schools
-            for school in School.objects.filter(is_active=True):
+            for school in School.objects.filter(is_active=True).select_related('organization'):
                 schools.append({
                     'id': school.id,
                     'name': school.name,
                     'role': 'SUPER_ADMIN',
                     'is_default': school.id == (user.school_id or 0),
+                    'enabled_modules': school.get_effective_modules(),
                 })
             # Ensure at least one default
             if schools and not any(s['is_default'] for s in schools):
                 schools[0]['is_default'] = True
         else:
-            for mem in user.school_memberships.filter(is_active=True).select_related('school'):
+            for mem in user.school_memberships.filter(is_active=True).select_related('school', 'school__organization'):
                 schools.append({
                     'id': mem.school_id,
                     'name': mem.school.name,
                     'role': mem.role,
                     'is_default': mem.is_default,
+                    'enabled_modules': mem.school.get_effective_modules(),
                 })
             # Legacy fallback: include user.school if not already in memberships
             if user.school_id and not any(s['id'] == user.school_id for s in schools):
                 try:
-                    legacy_school = School.objects.get(id=user.school_id, is_active=True)
+                    legacy_school = School.objects.select_related('organization').get(id=user.school_id, is_active=True)
                     schools.insert(0, {
                         'id': legacy_school.id,
                         'name': legacy_school.name,
                         'role': user.role or 'STAFF',
                         'is_default': not any(s['is_default'] for s in schools),
+                        'enabled_modules': legacy_school.get_effective_modules(),
                     })
                 except School.DoesNotExist:
                     pass
@@ -218,12 +221,13 @@ class CurrentUserSerializer(serializers.ModelSerializer):
     def get_schools(self, obj):
         if obj.is_super_admin:
             schools = []
-            for school in School.objects.filter(is_active=True):
+            for school in School.objects.filter(is_active=True).select_related('organization'):
                 schools.append({
                     'id': school.id,
                     'name': school.name,
                     'role': 'SUPER_ADMIN',
                     'is_default': school.id == (obj.school_id or 0),
+                    'enabled_modules': school.get_effective_modules(),
                 })
             if schools and not any(s['is_default'] for s in schools):
                 schools[0]['is_default'] = True
@@ -234,18 +238,24 @@ class CurrentUserSerializer(serializers.ModelSerializer):
                 'name': mem.school.name,
                 'role': mem.role,
                 'is_default': mem.is_default,
+                'enabled_modules': mem.school.get_effective_modules(),
             }
-            for mem in obj.school_memberships.filter(is_active=True).select_related('school')
+            for mem in obj.school_memberships.filter(
+                is_active=True
+            ).select_related('school', 'school__organization')
         ]
         # Legacy fallback: include user.school if not already in memberships
         if obj.school_id and not any(s['id'] == obj.school_id for s in schools):
             try:
-                legacy_school = School.objects.get(id=obj.school_id, is_active=True)
+                legacy_school = School.objects.select_related('organization').get(
+                    id=obj.school_id, is_active=True
+                )
                 schools.insert(0, {
                     'id': legacy_school.id,
                     'name': legacy_school.name,
                     'role': obj.role or 'STAFF',
                     'is_default': not any(s['is_default'] for s in schools),
+                    'enabled_modules': legacy_school.get_effective_modules(),
                 })
             except School.DoesNotExist:
                 pass

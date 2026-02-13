@@ -155,6 +155,16 @@ export function AuthProvider({ children }) {
   const effectiveRole = activeSchool?.role || user?.role
   const isSchoolAdmin = user?.is_super_admin || effectiveRole === 'SCHOOL_ADMIN' || effectiveRole === 'PRINCIPAL'
   const isStaffLevel = ['STAFF', 'TEACHER', 'HR_MANAGER', 'ACCOUNTANT'].includes(effectiveRole)
+  const isParent = effectiveRole === 'PARENT'
+  const isStudent = effectiveRole === 'STUDENT'
+
+  // Module access: derived from the active school's enabled_modules
+  const enabledModules = activeSchool?.enabled_modules || {}
+  const isModuleEnabled = (moduleKey) => {
+    // Super admin sees everything (they manage modules, not use them)
+    if (user?.is_super_admin) return true
+    return enabledModules[moduleKey] === true
+  }
 
   const value = {
     user,
@@ -172,8 +182,12 @@ export function AuthProvider({ children }) {
     isHRManager: effectiveRole === 'HR_MANAGER',
     isTeacher: effectiveRole === 'TEACHER',
     isAccountant: effectiveRole === 'ACCOUNTANT',
+    isParent,
+    isStudent,
     isStaffLevel,
     effectiveRole,
+    enabledModules,
+    isModuleEnabled,
   }
 
   return (

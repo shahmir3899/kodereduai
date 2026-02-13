@@ -1,10 +1,14 @@
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../contexts/AuthContext'
+import { useAcademicYear } from '../contexts/AcademicYearContext'
 import { attendanceApi, financeApi } from '../services/api'
 import { Link } from 'react-router-dom'
+import SessionHealthWidget from '../components/SessionHealthWidget'
+import AttendanceRiskWidget from '../components/AttendanceRiskWidget'
 
 export default function DashboardPage() {
   const { user, activeSchool } = useAuth()
+  const { activeAcademicYear, currentTerm, hasAcademicYear } = useAcademicYear()
   const today = new Date().toISOString().split('T')[0]
 
   // Fetch pending reviews
@@ -59,6 +63,46 @@ export default function DashboardPage() {
         <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Dashboard</h1>
         <p className="text-sm sm:text-base text-gray-600">Welcome back, {user?.username}</p>
       </div>
+
+      {/* Academic Session Banner */}
+      {hasAcademicYear ? (
+        <div className="mb-6 flex items-center gap-3 px-4 py-3 bg-sky-50 border border-sky-200 rounded-lg">
+          <svg className="w-5 h-5 text-sky-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-sky-800">
+              Session: {activeAcademicYear.name}
+              {currentTerm && <span className="text-sky-600 ml-2">| {currentTerm.name}</span>}
+            </p>
+            <p className="text-xs text-sky-600 mt-0.5">
+              {activeAcademicYear.start_date} to {activeAcademicYear.end_date}
+            </p>
+          </div>
+          <Link to="/academics/sessions" className="text-xs text-sky-700 hover:text-sky-800 font-medium shrink-0">
+            Manage
+          </Link>
+        </div>
+      ) : (
+        <div className="mb-6 flex items-center gap-3 px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg">
+          <svg className="w-5 h-5 text-amber-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+          </svg>
+          <div className="flex-1">
+            <p className="text-sm font-medium text-amber-800">No Academic Session Set</p>
+            <p className="text-xs text-amber-600">Create an academic year and set it as current to enable session-aware features.</p>
+          </div>
+          <Link to="/academics/sessions" className="btn-primary text-xs px-3 py-1.5">
+            Setup Now
+          </Link>
+        </div>
+      )}
+
+      {/* Session Health Widget */}
+      <SessionHealthWidget />
+
+      {/* Attendance Risk Monitor */}
+      <AttendanceRiskWidget />
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">

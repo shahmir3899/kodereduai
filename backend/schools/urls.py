@@ -9,6 +9,7 @@ from .views import (
     SuperAdminSchoolViewSet,
     SuperAdminOrganizationViewSet,
     SuperAdminMembershipViewSet,
+    ModuleRegistryView,
     SchoolViewSet,
 )
 
@@ -25,6 +26,7 @@ router.register(r'schools', SchoolViewSet, basename='school')
 urlpatterns = [
     # Super admin school management
     path('admin/', include(admin_router.urls)),
+    path('admin/modules/', ModuleRegistryView.as_view(), name='admin-module-registry'),
 
     # Regular school endpoints
     path('', include(router.urls)),

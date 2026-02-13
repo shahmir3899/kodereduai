@@ -75,6 +75,11 @@ export default function SuperAdminDashboard() {
     queryFn: () => membershipsApi.getAll(),
   })
 
+  const { data: moduleRegistryData } = useQuery({
+    queryKey: ['moduleRegistry'],
+    queryFn: () => schoolsApi.getModuleRegistry(),
+  })
+
   // ── Mutations ─────────────────────────────────────────────────────────────
 
   // School
@@ -206,6 +211,58 @@ export default function SuperAdminDashboard() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['adminMemberships'] }),
   })
 
+  // Module toggles — optimistic updates for instant UI feel
+  const [moduleMsg, setModuleMsg] = useState(null)
+
+  const setQueryItem = (queryKey, id, patch) => {
+    queryClient.setQueryData(queryKey, (old) => {
+      if (!old?.data) return old
+      const list = Array.isArray(old.data) ? old.data : old.data.results
+      if (!list) return old
+      const updated = list.map(item => item.id === id ? { ...item, ...patch } : item)
+      return { ...old, data: Array.isArray(old.data) ? updated : { ...old.data, results: updated } }
+    })
+  }
+
+  const toggleOrgModuleMutation = useMutation({
+    mutationFn: ({ id, allowed_modules }) =>
+      organizationsApi.update(id, { allowed_modules }),
+    onMutate: async ({ id, allowed_modules }) => {
+      await queryClient.cancelQueries({ queryKey: ['adminOrgs'] })
+      const prev = queryClient.getQueryData(['adminOrgs'])
+      setQueryItem(['adminOrgs'], id, { allowed_modules })
+      return { prev }
+    },
+    onError: (err, _vars, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(['adminOrgs'], ctx.prev)
+      const detail = err.response?.data?.allowed_modules || err.response?.data?.detail || err.message
+      setModuleMsg({ type: 'error', text: `Failed: ${detail}` })
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['adminOrgs'] })
+      queryClient.invalidateQueries({ queryKey: ['adminSchools'] })
+    },
+  })
+
+  const toggleSchoolModuleMutation = useMutation({
+    mutationFn: ({ id, enabled_modules }) =>
+      schoolsApi.updateSchool(id, { enabled_modules }),
+    onMutate: async ({ id, enabled_modules }) => {
+      await queryClient.cancelQueries({ queryKey: ['adminSchools'] })
+      const prev = queryClient.getQueryData(['adminSchools'])
+      setQueryItem(['adminSchools'], id, { enabled_modules })
+      return { prev }
+    },
+    onError: (err, _vars, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(['adminSchools'], ctx.prev)
+      const detail = err.response?.data?.enabled_modules || err.response?.data?.detail || err.message
+      setModuleMsg({ type: 'error', text: `Failed: ${detail}` })
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['adminSchools'] })
+    },
+  })
+
   // ── Handlers ──────────────────────────────────────────────────────────────
   const handleSaveSchool = () => {
     const payload = { ...newSchool }
@@ -213,7 +270,10 @@ export default function SuperAdminDashboard() {
     if (editingSchool) {
       updateSchoolMutation.mutate({ id: editingSchool.id, data: payload })
     } else {
-      payload.enabled_modules = { attendance_ai: true, whatsapp: false }
+      // Set all modules enabled by default for new schools
+      const defaultModules = {}
+      moduleRegistry.forEach(mod => { defaultModules[mod.key] = true })
+      payload.enabled_modules = defaultModules
       createSchoolMutation.mutate(payload)
     }
   }
@@ -314,6 +374,20 @@ export default function SuperAdminDashboard() {
   const users = usersData?.data?.results || usersData?.data || []
   const orgs = orgsData?.data?.results || orgsData?.data || []
   const memberships = membershipsData?.data?.results || membershipsData?.data || []
+  const moduleRegistry = moduleRegistryData?.data || []
+
+  // ── Module toggle handlers ──────────────────────────────────────────────
+  const handleOrgModuleToggle = (org, moduleKey) => {
+    const current = org.allowed_modules || {}
+    const updated = { ...current, [moduleKey]: !current[moduleKey] }
+    toggleOrgModuleMutation.mutate({ id: org.id, allowed_modules: updated })
+  }
+
+  const handleSchoolModuleToggle = (school, moduleKey) => {
+    const current = school.enabled_modules || {}
+    const updated = { ...current, [moduleKey]: !current[moduleKey] }
+    toggleSchoolModuleMutation.mutate({ id: school.id, enabled_modules: updated })
+  }
 
   const tabs = [
     { key: 'overview', label: 'Overview' },
@@ -321,6 +395,7 @@ export default function SuperAdminDashboard() {
     { key: 'users', label: 'Users' },
     { key: 'organizations', label: 'Organizations' },
     { key: 'memberships', label: 'Memberships' },
+    { key: 'modules', label: 'Modules' },
   ]
 
   return (
@@ -471,9 +546,10 @@ export default function SuperAdminDashboard() {
                       </button>
                       <button
                         onClick={() => toggleMutation.mutate({ id: school.id, isActive: school.is_active })}
-                        className={`text-xs font-medium ${school.is_active ? 'text-red-600' : 'text-green-600'}`}
+                        disabled={toggleMutation.isPending}
+                        className={`text-xs font-medium disabled:opacity-50 ${school.is_active ? 'text-red-600' : 'text-green-600'}`}
                       >
-                        {school.is_active ? 'Deactivate' : 'Activate'}
+                        {toggleMutation.isPending ? 'Saving...' : school.is_active ? 'Deactivate' : 'Activate'}
                       </button>
                     </div>
                   </div>
@@ -514,9 +590,10 @@ export default function SuperAdminDashboard() {
                           </button>
                           <button
                             onClick={() => toggleMutation.mutate({ id: school.id, isActive: school.is_active })}
-                            className={`text-sm font-medium ${school.is_active ? 'text-red-600 hover:text-red-700' : 'text-green-600 hover:text-green-700'}`}
+                            disabled={toggleMutation.isPending}
+                            className={`text-sm font-medium disabled:opacity-50 ${school.is_active ? 'text-red-600 hover:text-red-700' : 'text-green-600 hover:text-green-700'}`}
                           >
-                            {school.is_active ? 'Deactivate' : 'Activate'}
+                            {toggleMutation.isPending ? 'Saving...' : school.is_active ? 'Deactivate' : 'Activate'}
                           </button>
                         </td>
                       </tr>
@@ -574,9 +651,10 @@ export default function SuperAdminDashboard() {
                       {user.role !== 'SUPER_ADMIN' && (
                         <button
                           onClick={() => toggleUserMutation.mutate({ id: user.id, isActive: user.is_active })}
-                          className={`text-xs font-medium ${user.is_active ? 'text-red-600' : 'text-green-600'}`}
+                          disabled={toggleUserMutation.isPending}
+                          className={`text-xs font-medium disabled:opacity-50 ${user.is_active ? 'text-red-600' : 'text-green-600'}`}
                         >
-                          {user.is_active ? 'Deactivate' : 'Activate'}
+                          {toggleUserMutation.isPending ? 'Saving...' : user.is_active ? 'Deactivate' : 'Activate'}
                         </button>
                       )}
                     </div>
@@ -615,9 +693,10 @@ export default function SuperAdminDashboard() {
                           {user.role !== 'SUPER_ADMIN' && (
                             <button
                               onClick={() => toggleUserMutation.mutate({ id: user.id, isActive: user.is_active })}
-                              className={`text-sm font-medium ${user.is_active ? 'text-red-600 hover:text-red-700' : 'text-green-600 hover:text-green-700'}`}
+                              disabled={toggleUserMutation.isPending}
+                              className={`text-sm font-medium disabled:opacity-50 ${user.is_active ? 'text-red-600 hover:text-red-700' : 'text-green-600 hover:text-green-700'}`}
                             >
-                              {user.is_active ? 'Deactivate' : 'Activate'}
+                              {toggleUserMutation.isPending ? 'Saving...' : user.is_active ? 'Deactivate' : 'Activate'}
                             </button>
                           )}
                         </td>
@@ -677,7 +756,8 @@ export default function SuperAdminDashboard() {
                       </button>
                       <button
                         onClick={() => { if (confirm(`Delete "${org.name}"?`)) deleteOrgMutation.mutate(org.id) }}
-                        className="text-xs text-red-600 font-medium"
+                        disabled={deleteOrgMutation.isPending}
+                        className="text-xs text-red-600 font-medium disabled:opacity-50"
                       >
                         Delete
                       </button>
@@ -717,7 +797,8 @@ export default function SuperAdminDashboard() {
                           </button>
                           <button
                             onClick={() => { if (confirm(`Delete "${org.name}"?`)) deleteOrgMutation.mutate(org.id) }}
-                            className="text-sm text-red-600 hover:text-red-700 font-medium"
+                            disabled={deleteOrgMutation.isPending}
+                            className="text-sm text-red-600 hover:text-red-700 font-medium disabled:opacity-50"
                           >
                             Delete
                           </button>
@@ -773,7 +854,8 @@ export default function SuperAdminDashboard() {
                       </button>
                       <button
                         onClick={() => { if (confirm('Remove this membership?')) deleteMemMutation.mutate(mem.id) }}
-                        className="text-xs text-red-600 font-medium"
+                        disabled={deleteMemMutation.isPending}
+                        className="text-xs text-red-600 font-medium disabled:opacity-50"
                       >
                         Remove
                       </button>
@@ -818,7 +900,8 @@ export default function SuperAdminDashboard() {
                           </button>
                           <button
                             onClick={() => { if (confirm('Remove this membership?')) deleteMemMutation.mutate(mem.id) }}
-                            className="text-sm text-red-600 hover:text-red-700 font-medium"
+                            disabled={deleteMemMutation.isPending}
+                            className="text-sm text-red-600 hover:text-red-700 font-medium disabled:opacity-50"
                           >
                             Remove
                           </button>
@@ -830,6 +913,127 @@ export default function SuperAdminDashboard() {
               </div>
             </>
           )}
+        </div>
+      )}
+
+      {/* ════════════════════ Modules Tab ════════════════════ */}
+      {activeTab === 'modules' && (
+        <div className="space-y-6">
+          {/* Error banner (only shown on failure — optimistic UI handles success) */}
+          {moduleMsg?.type === 'error' && (
+            <div className="px-4 py-3 rounded-lg text-sm font-medium bg-red-50 text-red-700 border border-red-200">
+              {moduleMsg.text}
+              <button onClick={() => setModuleMsg(null)} className="float-right font-bold hover:opacity-70">&times;</button>
+            </div>
+          )}
+
+          {/* Organization Module Ceiling */}
+          <div className="card">
+            <h2 className="text-lg font-semibold text-gray-900 mb-1">Organization Module Control</h2>
+            <p className="text-sm text-gray-500 mb-4">Set which modules are available to all schools in each organization. Disabling a module here removes it from all schools in the org.</p>
+
+            {orgsLoading ? (
+              <Spinner />
+            ) : orgs.length === 0 ? (
+              <Empty text="No organizations yet. Create one in the Organizations tab." />
+            ) : (
+              <div className="space-y-4">
+                {orgs.map((org) => (
+                  <div key={org.id} className="border border-gray-200 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <p className="font-medium text-gray-900">{org.name}</p>
+                        <p className="text-xs text-gray-500">{org.school_count || 0} school(s)</p>
+                      </div>
+                      <StatusBadge active={org.is_active} />
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                      {moduleRegistry.map((mod) => {
+                        const isOn = org.allowed_modules?.[mod.key] ?? true
+                        return (
+                          <label key={mod.key} className="flex items-center gap-2 text-sm cursor-pointer p-1.5 rounded hover:bg-gray-50">
+                            <input
+                              type="checkbox"
+                              checked={isOn}
+                              onChange={() => handleOrgModuleToggle(org, mod.key)}
+                              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                            />
+                            <span className={isOn ? 'text-gray-700' : 'text-gray-400'}>{mod.label}</span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Per-School Module Toggles */}
+          <div className="card">
+            <h2 className="text-lg font-semibold text-gray-900 mb-1">Per-School Module Control</h2>
+            <p className="text-sm text-gray-500 mb-4">Enable or disable modules for individual schools. Greyed-out modules are blocked by the organization ceiling above.</p>
+
+            {schoolsLoading ? (
+              <Spinner />
+            ) : schools.length === 0 ? (
+              <Empty text="No schools yet." />
+            ) : (
+              <div className="space-y-4">
+                {schools.map((school) => {
+                  const org = orgs.find(o => o.id === school.organization)
+                  return (
+                    <div key={school.id} className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div>
+                          <p className="font-medium text-gray-900">{school.name}</p>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            {school.organization_name && (
+                              <span className="text-xs text-purple-600">{school.organization_name}</span>
+                            )}
+                            {!school.organization && (
+                              <span className="text-xs text-gray-400">Standalone (no org)</span>
+                            )}
+                          </div>
+                        </div>
+                        <StatusBadge active={school.is_active} />
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                        {moduleRegistry.map((mod) => {
+                          const orgBlocked = org && !(org.allowed_modules?.[mod.key] ?? true)
+                          const isOn = school.enabled_modules?.[mod.key] ?? false
+                          const effectiveOn = isOn && !orgBlocked
+                          return (
+                            <label
+                              key={mod.key}
+                              className={`flex items-center gap-2 text-sm p-1.5 rounded ${
+                                orgBlocked ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:bg-gray-50'
+                              }`}
+                              title={orgBlocked ? `Blocked by ${org?.name} organization` : mod.description}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={effectiveOn}
+                                onChange={() => !orgBlocked && handleSchoolModuleToggle(school, mod.key)}
+                                disabled={orgBlocked}
+                                className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                              />
+                              <span className={effectiveOn ? 'text-gray-700' : 'text-gray-400'}>
+                                {mod.label}
+                              </span>
+                              {orgBlocked && (
+                                <span className="text-xs text-red-400 ml-auto">org</span>
+                              )}
+                            </label>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -1186,8 +1390,9 @@ function MutationError({ mutation, fields = [] }) {
 function ModalFooter({ onCancel, onSubmit, disabled, loading, label }) {
   return (
     <div className="flex justify-end space-x-3 mt-6">
-      <button onClick={onCancel} className="btn btn-secondary">Cancel</button>
-      <button onClick={onSubmit} disabled={disabled} className="btn btn-primary">
+      <button onClick={onCancel} disabled={loading} className="btn btn-secondary">Cancel</button>
+      <button onClick={onSubmit} disabled={disabled || loading} className="btn btn-primary disabled:opacity-60">
+        {loading && <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2 align-middle" />}
         {loading ? 'Saving...' : label}
       </button>
     </div>

@@ -145,6 +145,9 @@ export const schoolsApi = {
   activateSchool: (id) => api.post(`/api/admin/schools/${id}/activate/`),
   deactivateSchool: (id) => api.post(`/api/admin/schools/${id}/deactivate/`),
 
+  // Module management
+  getModuleRegistry: () => api.get('/api/admin/modules/'),
+
   // Regular endpoints
   getMySchool: () => api.get('/api/schools/current/'),
 
@@ -166,6 +169,17 @@ export const studentsApi = {
   deleteStudent: (id) => api.delete(`/api/students/${id}/`),
   bulkCreateStudents: (data) => api.post('/api/students/bulk_create/', data),
   getStudentsByClass: (params) => api.get('/api/students/by_class/', { params }),
+
+  // Profile endpoints
+  getProfileSummary: (id) => api.get(`/api/students/${id}/profile_summary/`),
+  getAttendanceHistory: (id, params) => api.get(`/api/students/${id}/attendance_history/`, { params }),
+  getFeeLedger: (id) => api.get(`/api/students/${id}/fee_ledger/`),
+  getExamResults: (id) => api.get(`/api/students/${id}/exam_results/`),
+  getEnrollmentHistory: (id) => api.get(`/api/students/${id}/enrollment_history/`),
+  getDocuments: (id) => api.get(`/api/students/${id}/documents/`),
+  uploadDocument: (id, data) => api.post(`/api/students/${id}/documents/`, data),
+  deleteDocument: (id, docId) => api.delete(`/api/students/${id}/delete_document/`, { params: { document_id: docId } }),
+  getAIProfile: (id) => api.get(`/api/students/${id}/ai_profile/`),
 }
 
 // Classes API
@@ -237,6 +251,9 @@ export const financeApi = {
   sendChatMessage: (data) => api.post('/api/finance/ai-chat/', data),
   getChatHistory: () => api.get('/api/finance/ai-chat/'),
   clearChatHistory: () => api.delete('/api/finance/ai-chat/'),
+
+  // AI Fee Predictor
+  getFeePredictor: (params) => api.get('/api/finance/fee-predictor/', { params }),
 }
 
 // HR & Staff Management API
@@ -382,6 +399,7 @@ export const sessionsApi = {
   deleteAcademicYear: (id) => api.delete(`/api/sessions/academic-years/${id}/`),
   setCurrentYear: (id) => api.post(`/api/sessions/academic-years/${id}/set_current/`),
   getYearSummary: (id) => api.get(`/api/sessions/academic-years/${id}/summary/`),
+  getCurrentYear: () => api.get('/api/sessions/academic-years/current/'),
 
   // Terms
   getTerms: (params) => api.get('/api/sessions/terms/', { params }),
@@ -397,6 +415,23 @@ export const sessionsApi = {
   deleteEnrollment: (id) => api.delete(`/api/sessions/enrollments/${id}/`),
   getEnrollmentsByClass: (params) => api.get('/api/sessions/enrollments/by_class/', { params }),
   bulkPromote: (data) => api.post('/api/sessions/enrollments/bulk_promote/', data),
+
+  // Setup Wizard
+  setupPreview: (data) => api.post('/api/sessions/setup-wizard/', { action: 'preview', ...data }),
+  setupApply: (previewData) => api.post('/api/sessions/setup-wizard/', { action: 'apply', preview_data: previewData }),
+
+  // AI Promotion Advisor
+  getPromotionAdvice: (params) => api.get('/api/sessions/promotion-advisor/', { params }),
+
+  // Session Health
+  getSessionHealth: (params) => api.get('/api/sessions/health/', { params }),
+
+  // Section Allocator
+  sectionAllocatorPreview: (data) => api.post('/api/sessions/section-allocator/', { action: 'preview', ...data }),
+  sectionAllocatorApply: (data) => api.post('/api/sessions/section-allocator/', { action: 'apply', ...data }),
+
+  // Attendance Risk Predictor
+  getAttendanceRisk: (params) => api.get('/api/sessions/attendance-risk/', { params }),
 }
 
 // Grades API
@@ -480,4 +515,272 @@ export const usersApi = {
   createUser: (data) => api.post('/api/users/', data),
   updateUser: (id, data) => api.patch(`/api/users/${id}/`, data),
   deleteUser: (id) => api.delete(`/api/users/${id}/`),
+}
+
+// Notifications API
+export const notificationsApi = {
+  // Templates
+  getTemplates: (params) => api.get('/api/notifications/templates/', { params }),
+  getTemplate: (id) => api.get(`/api/notifications/templates/${id}/`),
+  createTemplate: (data) => api.post('/api/notifications/templates/', data),
+  updateTemplate: (id, data) => api.patch(`/api/notifications/templates/${id}/`, data),
+  deleteTemplate: (id) => api.delete(`/api/notifications/templates/${id}/`),
+
+  // Logs
+  getLogs: (params) => api.get('/api/notifications/logs/', { params }),
+
+  // Preferences
+  getPreferences: (params) => api.get('/api/notifications/preferences/', { params }),
+  updatePreference: (id, data) => api.patch(`/api/notifications/preferences/${id}/`, data),
+  createPreference: (data) => api.post('/api/notifications/preferences/', data),
+
+  // Config
+  getConfig: () => api.get('/api/notifications/config/'),
+  updateConfig: (data) => api.put('/api/notifications/config/', data),
+
+  // My notifications (in-app)
+  getMyNotifications: (params) => api.get('/api/notifications/my/', { params }),
+  getUnreadCount: () => api.get('/api/notifications/unread-count/'),
+  markRead: (id) => api.post(`/api/notifications/${id}/mark-read/`),
+  markAllRead: () => api.post('/api/notifications/mark-all-read/'),
+
+  // Send
+  send: (data) => api.post('/api/notifications/send/', data),
+
+  // Analytics
+  getAnalytics: () => api.get('/api/notifications/analytics/'),
+
+  // AI Communication Assistant
+  sendChatMessage: (data) => api.post('/api/notifications/ai-chat/', data),
+}
+
+// Reports API
+export const reportsApi = {
+  generate: (data) => api.post('/api/reports/generate/', data, { responseType: 'blob' }),
+  getList: (params) => api.get('/api/reports/list/', { params }),
+}
+
+// Parent Portal API
+export const parentsApi = {
+  // Registration
+  register: (data) => api.post('/api/parents/register/', data),
+
+  // My children
+  getMyChildren: () => api.get('/api/parents/my-children/'),
+  getChildOverview: (studentId) => api.get(`/api/parents/children/${studentId}/overview/`),
+  getChildAttendance: (studentId, params) => api.get(`/api/parents/children/${studentId}/attendance/`, { params }),
+  getChildFees: (studentId, params) => api.get(`/api/parents/children/${studentId}/fees/`, { params }),
+  getChildTimetable: (studentId) => api.get(`/api/parents/children/${studentId}/timetable/`),
+  getChildExamResults: (studentId, params) => api.get(`/api/parents/children/${studentId}/exam-results/`, { params }),
+
+  // Leave requests
+  getLeaveRequests: (params) => api.get('/api/parents/leave-requests/', { params }),
+  createLeaveRequest: (data) => api.post('/api/parents/leave-requests/', data),
+  cancelLeaveRequest: (id) => api.patch(`/api/parents/leave-requests/${id}/cancel/`),
+
+  // Messages
+  getMessageThreads: () => api.get('/api/parents/messages/threads/'),
+  getThreadMessages: (threadId) => api.get(`/api/parents/messages/threads/${threadId}/`),
+  sendMessage: (data) => api.post('/api/parents/messages/', data),
+  markMessageRead: (id) => api.patch(`/api/parents/messages/${id}/read/`),
+
+  // Admin endpoints
+  getParentsList: (params) => api.get('/api/parents/admin/parents/', { params }),
+  linkChild: (data) => api.post('/api/parents/admin/link-child/', data),
+  unlinkChild: (id) => api.delete(`/api/parents/admin/unlink-child/${id}/`),
+  generateInvite: (data) => api.post('/api/parents/admin/generate-invite/', data),
+  getAdminLeaveRequests: (params) => api.get('/api/parents/admin/leave-requests/', { params }),
+  reviewLeaveRequest: (id, data) => api.patch(`/api/parents/admin/leave-requests/${id}/review/`, data),
+}
+
+// Admissions CRM API
+export const admissionsApi = {
+  // Sessions
+  getSessions: (params) => api.get('/api/admissions/sessions/', { params }),
+  createSession: (data) => api.post('/api/admissions/sessions/', data),
+  updateSession: (id, data) => api.patch(`/api/admissions/sessions/${id}/`, data),
+  deleteSession: (id) => api.delete(`/api/admissions/sessions/${id}/`),
+
+  // Enquiries
+  getEnquiries: (params) => api.get('/api/admissions/enquiries/', { params }),
+  getEnquiry: (id) => api.get(`/api/admissions/enquiries/${id}/`),
+  createEnquiry: (data) => api.post('/api/admissions/enquiries/', data),
+  updateEnquiry: (id, data) => api.patch(`/api/admissions/enquiries/${id}/`, data),
+  deleteEnquiry: (id) => api.delete(`/api/admissions/enquiries/${id}/`),
+  updateStage: (id, data) => api.patch(`/api/admissions/enquiries/${id}/update_stage/`, data),
+  convertToStudent: (id, data) => api.post(`/api/admissions/enquiries/${id}/convert/`, data),
+
+  // Documents
+  getDocuments: (enquiryId) => api.get(`/api/admissions/enquiries/${enquiryId}/documents/`),
+  uploadDocument: (enquiryId, data) => api.post(`/api/admissions/enquiries/${enquiryId}/documents/`, data),
+  deleteDocument: (docId) => api.delete(`/api/admissions/documents/${docId}/`),
+
+  // Notes
+  getNotes: (enquiryId) => api.get(`/api/admissions/enquiries/${enquiryId}/notes/`),
+  addNote: (enquiryId, data) => api.post(`/api/admissions/enquiries/${enquiryId}/notes/`, data),
+
+  // Analytics
+  getPipelineAnalytics: () => api.get('/api/admissions/analytics/pipeline/'),
+
+  // Followups
+  getTodayFollowups: () => api.get('/api/admissions/followups/today/'),
+  getOverdueFollowups: () => api.get('/api/admissions/followups/overdue/'),
+}
+
+// Student Portal API
+export const studentPortalApi = {
+  // Dashboard
+  getDashboard: () => api.get('/api/student-portal/dashboard/'),
+
+  // Profile
+  getProfile: () => api.get('/api/student-portal/profile/'),
+
+  // Attendance
+  getAttendance: (params) => api.get('/api/student-portal/attendance/', { params }),
+
+  // Fees
+  getFees: (params) => api.get('/api/student-portal/fees/', { params }),
+
+  // Timetable
+  getTimetable: () => api.get('/api/student-portal/timetable/'),
+
+  // Exam Results
+  getExamResults: (params) => api.get('/api/student-portal/exam-results/', { params }),
+
+  // Assignments
+  getAssignments: (params) => api.get('/api/student-portal/assignments/', { params }),
+  getAssignment: (id) => api.get(`/api/student-portal/assignments/${id}/`),
+  submitAssignment: (id, data) => api.post(`/api/student-portal/assignments/${id}/submit/`, data),
+}
+
+// Discount & Scholarship API (extends financeApi)
+export const discountApi = {
+  getDiscounts: (params) => api.get('/api/finance/discounts/', { params }),
+  createDiscount: (data) => api.post('/api/finance/discounts/', data),
+  updateDiscount: (id, data) => api.patch(`/api/finance/discounts/${id}/`, data),
+  deleteDiscount: (id) => api.delete(`/api/finance/discounts/${id}/`),
+
+  getScholarships: (params) => api.get('/api/finance/scholarships/', { params }),
+  createScholarship: (data) => api.post('/api/finance/scholarships/', data),
+  updateScholarship: (id, data) => api.patch(`/api/finance/scholarships/${id}/`, data),
+  deleteScholarship: (id) => api.delete(`/api/finance/scholarships/${id}/`),
+
+  getStudentDiscounts: (params) => api.get('/api/finance/student-discounts/', { params }),
+  assignDiscount: (data) => api.post('/api/finance/student-discounts/', data),
+  bulkAssign: (data) => api.post('/api/finance/student-discounts/bulk_assign/', data),
+  removeStudentDiscount: (id) => api.delete(`/api/finance/student-discounts/${id}/`),
+
+  getFeeBreakdown: (studentId) => api.get(`/api/finance/fee-breakdown/${studentId}/`),
+  getSiblings: (studentId) => api.get(`/api/finance/siblings/${studentId}/`),
+}
+
+// Payment Gateway API (extends financeApi)
+export const paymentApi = {
+  getGatewayConfigs: (params) => api.get('/api/finance/gateway-config/', { params }),
+  createGatewayConfig: (data) => api.post('/api/finance/gateway-config/', data),
+  updateGatewayConfig: (id, data) => api.patch(`/api/finance/gateway-config/${id}/`, data),
+  deleteGatewayConfig: (id) => api.delete(`/api/finance/gateway-config/${id}/`),
+
+  getOnlinePayments: (params) => api.get('/api/finance/online-payments/', { params }),
+  initiatePayment: (data) => api.post('/api/finance/online-payments/initiate/', data),
+  verifyPayment: (data) => api.post('/api/finance/online-payments/verify/', data),
+  getReconciliation: (params) => api.get('/api/finance/online-payments/reconcile/', { params }),
+}
+
+// Transport API
+export const transportApi = {
+  // Dashboard
+  getDashboardStats: () => api.get('/api/transport/dashboard/'),
+
+  // Routes
+  getRoutes: (params) => api.get('/api/transport/routes/', { params }),
+  getRoute: (id) => api.get(`/api/transport/routes/${id}/`),
+  createRoute: (data) => api.post('/api/transport/routes/', data),
+  updateRoute: (id, data) => api.patch(`/api/transport/routes/${id}/`, data),
+  deleteRoute: (id) => api.delete(`/api/transport/routes/${id}/`),
+
+  // Route Stops
+  getStops: (params) => api.get('/api/transport/stops/', { params }),
+  createStop: (data) => api.post('/api/transport/stops/', data),
+  updateStop: (id, data) => api.patch(`/api/transport/stops/${id}/`, data),
+  deleteStop: (id) => api.delete(`/api/transport/stops/${id}/`),
+
+  // Vehicles
+  getVehicles: (params) => api.get('/api/transport/vehicles/', { params }),
+  getVehicle: (id) => api.get(`/api/transport/vehicles/${id}/`),
+  createVehicle: (data) => api.post('/api/transport/vehicles/', data),
+  updateVehicle: (id, data) => api.patch(`/api/transport/vehicles/${id}/`, data),
+  deleteVehicle: (id) => api.delete(`/api/transport/vehicles/${id}/`),
+
+  // Assignments
+  getAssignments: (params) => api.get('/api/transport/assignments/', { params }),
+  createAssignment: (data) => api.post('/api/transport/assignments/', data),
+  updateAssignment: (id, data) => api.patch(`/api/transport/assignments/${id}/`, data),
+  deleteAssignment: (id) => api.delete(`/api/transport/assignments/${id}/`),
+  bulkAssign: (data) => api.post('/api/transport/assignments/bulk_assign/', data),
+
+  // Transport Attendance
+  getAttendance: (params) => api.get('/api/transport/attendance/', { params }),
+  markAttendance: (data) => api.post('/api/transport/attendance/', data),
+  bulkMarkAttendance: (data) => api.post('/api/transport/attendance/bulk_mark/', data),
+}
+
+// LMS (Learning Management System) API
+export const lmsApi = {
+  // Lesson Plans
+  getLessonPlans: (params) => api.get('/api/lms/lesson-plans/', { params }),
+  getLessonPlan: (id) => api.get(`/api/lms/lesson-plans/${id}/`),
+  createLessonPlan: (data) => api.post('/api/lms/lesson-plans/', data),
+  updateLessonPlan: (id, data) => api.patch(`/api/lms/lesson-plans/${id}/`, data),
+  deleteLessonPlan: (id) => api.delete(`/api/lms/lesson-plans/${id}/`),
+  publishLessonPlan: (id) => api.post(`/api/lms/lesson-plans/${id}/publish/`),
+
+  // Assignments
+  getAssignments: (params) => api.get('/api/lms/assignments/', { params }),
+  getAssignment: (id) => api.get(`/api/lms/assignments/${id}/`),
+  createAssignment: (data) => api.post('/api/lms/assignments/', data),
+  updateAssignment: (id, data) => api.patch(`/api/lms/assignments/${id}/`, data),
+  deleteAssignment: (id) => api.delete(`/api/lms/assignments/${id}/`),
+  publishAssignment: (id) => api.post(`/api/lms/assignments/${id}/publish/`),
+  closeAssignment: (id) => api.post(`/api/lms/assignments/${id}/close/`),
+
+  // Submissions
+  getSubmissions: (params) => api.get('/api/lms/submissions/', { params }),
+  getSubmission: (id) => api.get(`/api/lms/submissions/${id}/`),
+  gradeSubmission: (id, data) => api.patch(`/api/lms/submissions/${id}/grade/`, data),
+  returnSubmission: (id) => api.post(`/api/lms/submissions/${id}/return/`),
+}
+
+// Library Management API
+export const libraryApi = {
+  // Dashboard / Stats
+  getStats: () => api.get('/api/library/stats/'),
+
+  // Categories
+  getCategories: (params) => api.get('/api/library/categories/', { params }),
+  createCategory: (data) => api.post('/api/library/categories/', data),
+  updateCategory: (id, data) => api.patch(`/api/library/categories/${id}/`, data),
+  deleteCategory: (id) => api.delete(`/api/library/categories/${id}/`),
+
+  // Books
+  getBooks: (params) => api.get('/api/library/books/', { params }),
+  getBook: (id) => api.get(`/api/library/books/${id}/`),
+  createBook: (data) => api.post('/api/library/books/', data),
+  updateBook: (id, data) => api.patch(`/api/library/books/${id}/`, data),
+  deleteBook: (id) => api.delete(`/api/library/books/${id}/`),
+
+  // Book Issues
+  getIssues: (params) => api.get('/api/library/issues/', { params }),
+  createIssue: (data) => api.post('/api/library/issues/', data),
+  returnBook: (id, data) => api.post(`/api/library/issues/${id}/return/`, data),
+
+  // Overdue
+  getOverdueBooks: (params) => api.get('/api/library/issues/overdue/', { params }),
+
+  // Fine configuration
+  getFineConfig: () => api.get('/api/library/config/'),
+
+  // Search helpers
+  searchStudents: (params) => api.get('/api/students/', { params }),
+  searchStaff: (params) => api.get('/api/hr/staff/', { params }),
 }

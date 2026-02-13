@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { studentsApi, classesApi, schoolsApi } from '../services/api'
 import { useToast } from '../components/Toast'
@@ -730,6 +731,12 @@ export default function StudentsPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
+                      <Link
+                        to={`/students/${student.id}`}
+                        className="text-sm text-primary-600 hover:text-primary-800 font-medium mr-3"
+                      >
+                        View
+                      </Link>
                       <button
                         onClick={() => openEditModal(student)}
                         className="text-sm text-blue-600 hover:text-blue-800 font-medium mr-3"

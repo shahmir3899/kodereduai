@@ -3,7 +3,7 @@ Student, Class, and Grade serializers.
 """
 
 from rest_framework import serializers
-from .models import Grade, Class, Student
+from .models import Grade, Class, Student, StudentDocument
 
 
 # ── Grade ─────────────────────────────────────────────────────
@@ -93,8 +93,14 @@ class StudentSerializer(serializers.ModelSerializer):
             'id', 'school', 'school_name',
             'class_obj', 'class_name',
             'roll_number', 'name',
+            'admission_number', 'admission_date', 'date_of_birth',
+            'gender', 'blood_group', 'address', 'previous_school',
             'parent_phone', 'parent_name',
-            'is_active', 'created_at', 'updated_at'
+            'guardian_name', 'guardian_relation', 'guardian_phone',
+            'guardian_email', 'guardian_occupation', 'guardian_address',
+            'emergency_contact',
+            'is_active', 'status', 'status_date', 'status_reason',
+            'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
 
@@ -104,7 +110,12 @@ class StudentCreateSerializer(serializers.ModelSerializer):
         model = Student
         fields = [
             'school', 'class_obj', 'roll_number',
-            'name', 'parent_phone', 'parent_name'
+            'name', 'parent_phone', 'parent_name',
+            'admission_number', 'admission_date', 'date_of_birth',
+            'gender', 'blood_group', 'address', 'previous_school',
+            'guardian_name', 'guardian_relation', 'guardian_phone',
+            'guardian_email', 'guardian_occupation', 'guardian_address',
+            'emergency_contact',
         ]
 
     def validate(self, attrs):
@@ -205,3 +216,35 @@ class StudentBulkCreateSerializer(serializers.Serializer):
                 })
 
         return {'created': created, 'updated': updated, 'errors': errors}
+
+
+# ── Student Document ──────────────────────────────────────────
+
+class StudentDocumentSerializer(serializers.ModelSerializer):
+    uploaded_by_name = serializers.CharField(
+        source='uploaded_by.username', read_only=True, default=None,
+    )
+
+    class Meta:
+        model = StudentDocument
+        fields = [
+            'id', 'school', 'student', 'document_type', 'title',
+            'file_url', 'uploaded_by', 'uploaded_by_name', 'created_at',
+        ]
+        read_only_fields = ['id', 'uploaded_by', 'created_at']
+
+
+# ── Student Profile Summary ──────────────────────────────────
+
+class StudentProfileSummarySerializer(serializers.Serializer):
+    """Aggregated student stats for the profile overview tab."""
+    student = StudentSerializer()
+    attendance_rate = serializers.FloatField()
+    total_present = serializers.IntegerField()
+    total_absent = serializers.IntegerField()
+    total_days = serializers.IntegerField()
+    fee_total_due = serializers.DecimalField(max_digits=12, decimal_places=2)
+    fee_total_paid = serializers.DecimalField(max_digits=12, decimal_places=2)
+    fee_outstanding = serializers.DecimalField(max_digits=12, decimal_places=2)
+    exam_average = serializers.FloatField(allow_null=True)
+    enrollment_status = serializers.CharField(allow_null=True)

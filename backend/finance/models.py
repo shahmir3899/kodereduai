@@ -140,6 +140,14 @@ class FeeStructure(models.Model):
         on_delete=models.CASCADE,
         related_name='fee_structures'
     )
+    academic_year = models.ForeignKey(
+        'academic_sessions.AcademicYear',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='fee_structures',
+        help_text="Academic year this fee structure applies to"
+    )
     class_obj = models.ForeignKey(
         'students.Class',
         on_delete=models.CASCADE,
@@ -247,6 +255,14 @@ class FeePayment(models.Model):
         'schools.School',
         on_delete=models.CASCADE,
         related_name='fee_payments'
+    )
+    academic_year = models.ForeignKey(
+        'academic_sessions.AcademicYear',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='fee_payments',
+        help_text="Academic year this payment belongs to"
     )
     student = models.ForeignKey(
         'students.Student',
@@ -591,3 +607,267 @@ class AccountSnapshot(models.Model):
 
     def __str__(self):
         return f"{self.account.name} @ {self.closing.year}/{self.closing.month:02d}: {self.closing_balance}"
+
+
+# =============================================================================
+# Phase 3: Discount & Scholarship Models
+# =============================================================================
+
+class Discount(models.Model):
+    """Defines a discount rule that can be applied to fee structures."""
+    DISCOUNT_TYPE_CHOICES = [
+        ('PERCENTAGE', 'Percentage'),
+        ('FIXED', 'Fixed Amount'),
+    ]
+    APPLIES_TO_CHOICES = [
+        ('ALL', 'All Students'),
+        ('GRADE', 'Specific Grade'),
+        ('CLASS', 'Specific Class'),
+        ('STUDENT', 'Individual Student'),
+        ('SIBLING', 'Siblings (auto-detect)'),
+    ]
+
+    school = models.ForeignKey(
+        'schools.School',
+        on_delete=models.CASCADE,
+        related_name='discounts',
+    )
+    academic_year = models.ForeignKey(
+        'academic_sessions.AcademicYear',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='discounts',
+    )
+    name = models.CharField(max_length=100)
+    discount_type = models.CharField(max_length=20, choices=DISCOUNT_TYPE_CHOICES)
+    value = models.DecimalField(max_digits=10, decimal_places=2)
+    applies_to = models.CharField(max_length=20, choices=APPLIES_TO_CHOICES, default='ALL')
+    target_grade = models.ForeignKey(
+        'students.Grade',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='discounts',
+    )
+    target_class = models.ForeignKey(
+        'students.Class',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='discounts',
+    )
+    start_date = models.DateField(null=True, blank=True)
+    end_date = models.DateField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    max_uses = models.IntegerField(null=True, blank=True)
+    stackable = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Discount'
+        verbose_name_plural = 'Discounts'
+        indexes = [models.Index(fields=['school', 'is_active'])]
+
+    def __str__(self):
+        return f"{self.name} ({self.get_discount_type_display()}: {self.value})"
+
+
+class Scholarship(models.Model):
+    """Named scholarship programs with eligibility criteria."""
+    TYPE_CHOICES = [
+        ('MERIT', 'Merit-Based'),
+        ('NEED', 'Need-Based'),
+        ('SPORTS', 'Sports'),
+        ('STAFF_CHILD', 'Staff Child'),
+        ('OTHER', 'Other'),
+    ]
+    COVERAGE_CHOICES = [
+        ('FULL', 'Full Fee Waiver'),
+        ('PERCENTAGE', 'Percentage Off'),
+        ('FIXED', 'Fixed Amount Off'),
+    ]
+
+    school = models.ForeignKey(
+        'schools.School',
+        on_delete=models.CASCADE,
+        related_name='scholarships',
+    )
+    academic_year = models.ForeignKey(
+        'academic_sessions.AcademicYear',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='scholarships',
+    )
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True, default='')
+    scholarship_type = models.CharField(max_length=20, choices=TYPE_CHOICES)
+    coverage = models.CharField(max_length=20, choices=COVERAGE_CHOICES)
+    value = models.DecimalField(max_digits=10, decimal_places=2)
+    max_recipients = models.IntegerField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Scholarship'
+        verbose_name_plural = 'Scholarships'
+        indexes = [models.Index(fields=['school', 'is_active'])]
+
+    def __str__(self):
+        return f"{self.name} ({self.get_scholarship_type_display()})"
+
+
+class StudentDiscount(models.Model):
+    """Tracks which discounts/scholarships are applied to which students."""
+    school = models.ForeignKey(
+        'schools.School',
+        on_delete=models.CASCADE,
+    )
+    student = models.ForeignKey(
+        'students.Student',
+        on_delete=models.CASCADE,
+        related_name='student_discounts',
+    )
+    discount = models.ForeignKey(
+        Discount,
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name='student_assignments',
+    )
+    scholarship = models.ForeignKey(
+        Scholarship,
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name='student_assignments',
+    )
+    academic_year = models.ForeignKey(
+        'academic_sessions.AcademicYear',
+        on_delete=models.CASCADE,
+    )
+    approved_by = models.ForeignKey(
+        'users.User',
+        null=True,
+        on_delete=models.SET_NULL,
+    )
+    approved_at = models.DateTimeField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    notes = models.TextField(blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Student Discount'
+        verbose_name_plural = 'Student Discounts'
+        indexes = [
+            models.Index(fields=['school', 'student', 'academic_year']),
+        ]
+
+    def __str__(self):
+        target = self.discount.name if self.discount else (self.scholarship.name if self.scholarship else 'N/A')
+        return f"{self.student.name} - {target}"
+
+
+# =============================================================================
+# Phase 3: Payment Gateway Models
+# =============================================================================
+
+class PaymentGatewayConfig(models.Model):
+    """Per-school payment gateway configuration."""
+    GATEWAY_CHOICES = [
+        ('STRIPE', 'Stripe'),
+        ('RAZORPAY', 'Razorpay'),
+        ('JAZZCASH', 'JazzCash'),
+        ('EASYPAISA', 'Easypaisa'),
+        ('MANUAL', 'Manual/Offline'),
+    ]
+
+    school = models.ForeignKey(
+        'schools.School',
+        on_delete=models.CASCADE,
+        related_name='payment_gateways',
+    )
+    gateway = models.CharField(max_length=20, choices=GATEWAY_CHOICES)
+    is_active = models.BooleanField(default=False)
+    is_default = models.BooleanField(default=False)
+    config = models.JSONField(
+        default=dict,
+        help_text='Gateway-specific config: api_key, secret, webhook_secret',
+    )
+    currency = models.CharField(max_length=3, default='PKR')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('school', 'gateway')
+        verbose_name = 'Payment Gateway Config'
+        verbose_name_plural = 'Payment Gateway Configs'
+
+    def __str__(self):
+        return f"{self.school.name} - {self.get_gateway_display()}"
+
+
+class OnlinePayment(models.Model):
+    """Tracks individual online payment transactions."""
+    STATUS_CHOICES = [
+        ('INITIATED', 'Initiated'),
+        ('PENDING', 'Pending'),
+        ('SUCCESS', 'Success'),
+        ('FAILED', 'Failed'),
+        ('REFUNDED', 'Refunded'),
+        ('EXPIRED', 'Expired'),
+    ]
+
+    school = models.ForeignKey(
+        'schools.School',
+        on_delete=models.CASCADE,
+        related_name='online_payments',
+    )
+    fee_payment = models.ForeignKey(
+        FeePayment,
+        on_delete=models.CASCADE,
+        related_name='online_payments',
+    )
+    student = models.ForeignKey(
+        'students.Student',
+        on_delete=models.CASCADE,
+        related_name='online_payments',
+    )
+    gateway = models.CharField(max_length=20)
+    gateway_order_id = models.CharField(max_length=100, unique=True)
+    gateway_payment_id = models.CharField(max_length=100, blank=True, default='')
+    gateway_signature = models.CharField(max_length=255, blank=True, default='')
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    currency = models.CharField(max_length=3, default='PKR')
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='INITIATED',
+    )
+    gateway_response = models.JSONField(default=dict)
+    initiated_by = models.ForeignKey(
+        'users.User',
+        null=True,
+        on_delete=models.SET_NULL,
+    )
+    initiated_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    failure_reason = models.TextField(blank=True, default='')
+
+    class Meta:
+        ordering = ['-initiated_at']
+        verbose_name = 'Online Payment'
+        verbose_name_plural = 'Online Payments'
+        indexes = [
+            models.Index(fields=['school', 'status']),
+            models.Index(fields=['gateway_order_id']),
+            models.Index(fields=['student', 'status']),
+        ]
+
+    def __str__(self):
+        return f"{self.student.name} - {self.amount} {self.currency} ({self.get_status_display()})"

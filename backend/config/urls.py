@@ -65,6 +65,34 @@ def api_root(request):
                 'report_card': '/api/examinations/report-card/',
             },
             'grades': '/api/grades/',
+            'grades': '/api/grades/',
+            'parents': {
+                'register': '/api/parents/register/',
+                'my_children': '/api/parents/my-children/',
+                'leave_requests': '/api/parents/leave-requests/',
+                'messages': '/api/parents/messages/',
+            },
+            'admissions': {
+                'sessions': '/api/admissions/sessions/',
+                'enquiries': '/api/admissions/enquiries/',
+                'analytics': '/api/admissions/analytics/pipeline/',
+            },
+            'lms': {
+                'lesson_plans': '/api/lms/lesson-plans/',
+                'assignments': '/api/lms/assignments/',
+                'submissions': '/api/lms/submissions/',
+            },
+            'transport': {
+                'routes': '/api/transport/routes/',
+                'vehicles': '/api/transport/vehicles/',
+                'assignments': '/api/transport/assignments/',
+                'attendance': '/api/transport/attendance/',
+            },
+            'library': {
+                'categories': '/api/library/categories/',
+                'books': '/api/library/books/',
+                'issues': '/api/library/issues/',
+            },
             'admin': {
                 'schools': '/api/admin/schools/',
             }
@@ -105,6 +133,27 @@ urlpatterns = [
 
     # Examinations & Results
     path('api/examinations/', include('examinations.urls')),
+
+    # Notifications
+    path('api/notifications/', include('notifications.urls')),
+
+    # Reports
+    path('api/reports/', include('reports.urls')),
+
+    # Parent Portal
+    path('api/parents/', include('parents.urls')),
+
+    # Admission CRM
+    path('api/admissions/', include('admissions.urls')),
+
+    # LMS (Lesson Plans & Assignments)
+    path('api/lms/', include('lms.urls')),
+
+    # Transportation
+    path('api/transport/', include('transport.urls')),
+
+    # Library
+    path('api/library/', include('library.urls')),
 ]
 
 # Serve media files in development

@@ -12,6 +12,8 @@ ADMIN_ROLES = ('SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL')
 # Roles that are staff-level (non-admin). These get read-only access to
 # existing modules (finance, attendance) and are subject to sensitive-data filtering.
 STAFF_LEVEL_ROLES = ('STAFF', 'TEACHER', 'HR_MANAGER', 'ACCOUNTANT')
+PARENT_ROLES = ('PARENT',)
+STUDENT_ROLES = ('STUDENT',)
 
 
 def get_effective_role(request):
@@ -186,3 +188,74 @@ class CanConfirmAttendance(permissions.BasePermission):
 
         role = get_effective_role(request)
         return role in ADMIN_ROLES
+
+
+class IsParent(permissions.BasePermission):
+    """Permission class that only allows Parent users."""
+    message = "Only parents can perform this action."
+
+    def has_permission(self, request, view):
+        if not request.user.is_authenticated:
+            return False
+        role = get_effective_role(request)
+        return role in PARENT_ROLES
+
+
+class IsParentOrAdmin(permissions.BasePermission):
+    """Allow parents (own data) or admins (all data)."""
+    message = "Only parents or admins can perform this action."
+
+    def has_permission(self, request, view):
+        if not request.user.is_authenticated:
+            return False
+        role = get_effective_role(request)
+        return role in ADMIN_ROLES or role in PARENT_ROLES
+
+
+class IsStudent(permissions.BasePermission):
+    """Permission class that only allows Student users."""
+    message = "Only students can perform this action."
+
+    def has_permission(self, request, view):
+        if not request.user.is_authenticated:
+            return False
+        role = get_effective_role(request)
+        return role in STUDENT_ROLES
+
+
+class IsStudentOrAdmin(permissions.BasePermission):
+    """Allow students (own data) or admins (all data)."""
+    message = "Only students or admins can perform this action."
+
+    def has_permission(self, request, view):
+        if not request.user.is_authenticated:
+            return False
+        role = get_effective_role(request)
+        return role in ADMIN_ROLES or role in STUDENT_ROLES
+
+
+class ModuleAccessMixin:
+    """
+    DRF ViewSet mixin that gates access based on the school's enabled modules.
+    Set `required_module` on the ViewSet class.
+
+    Example:
+        class StaffViewSet(ModuleAccessMixin, ModelViewSet):
+            required_module = 'hr'
+
+    Returns 403 if the module is disabled for the current school.
+    Super admins bypass this check (they access admin endpoints, not school endpoints).
+    """
+    required_module = None
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        if self.required_module and not request.user.is_super_admin:
+            school = getattr(request, 'tenant_school', None)
+            if school and not school.get_enabled_module(self.required_module):
+                from rest_framework.exceptions import PermissionDenied
+                from core.module_registry import MODULE_REGISTRY
+                label = MODULE_REGISTRY.get(self.required_module, {}).get('label', self.required_module)
+                raise PermissionDenied(
+                    f"The {label} module is not enabled for this school."
+                )

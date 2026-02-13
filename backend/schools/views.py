@@ -5,6 +5,7 @@ School views for tenant management.
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from django.utils import timezone
 from django.db.models import Count, Q
@@ -168,6 +169,11 @@ class SuperAdminOrganizationViewSet(viewsets.ModelViewSet):
             school_count=Count('schools')
         ).order_by('name')
 
+    def perform_update(self, serializer):
+        org = serializer.save()
+        # Cascade: disable modules on schools that the org no longer allows
+        org.cascade_disabled_modules()
+
 
 class SuperAdminMembershipViewSet(viewsets.ModelViewSet):
     """
@@ -189,6 +195,19 @@ class SuperAdminMembershipViewSet(viewsets.ModelViewSet):
         if school_id:
             qs = qs.filter(school_id=school_id)
         return qs
+
+
+class ModuleRegistryView(APIView):
+    """
+    Returns the list of all available modules with metadata.
+    Used by the admin panel to render module toggle controls.
+    """
+    permission_classes = [IsAuthenticated, IsSuperAdmin]
+
+    def get(self, request):
+        from core.module_registry import MODULE_REGISTRY
+        modules = list(MODULE_REGISTRY.values())
+        return Response(modules)
 
 
 class SchoolViewSet(TenantQuerySetMixin, viewsets.ReadOnlyModelViewSet):

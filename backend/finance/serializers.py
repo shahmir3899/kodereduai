@@ -6,6 +6,7 @@ from rest_framework import serializers
 from .models import (
     Account, Transfer, FeeStructure, FeePayment, Expense, OtherIncome,
     FinanceAIChatMessage, MonthlyClosing, AccountSnapshot,
+    Discount, Scholarship, StudentDiscount, PaymentGatewayConfig, OnlinePayment,
 )
 
 
@@ -76,6 +77,7 @@ class FeeStructureSerializer(serializers.ModelSerializer):
     class_name = serializers.CharField(source='class_obj.name', read_only=True, default=None)
     student_name = serializers.CharField(source='student.name', read_only=True, default=None)
     school_name = serializers.CharField(source='school.name', read_only=True)
+    academic_year_name = serializers.CharField(source='academic_year.name', read_only=True, default=None)
 
     class Meta:
         model = FeeStructure
@@ -83,6 +85,7 @@ class FeeStructureSerializer(serializers.ModelSerializer):
             'id', 'school', 'school_name',
             'class_obj', 'class_name',
             'student', 'student_name',
+            'academic_year', 'academic_year_name',
             'monthly_amount', 'effective_from', 'effective_to',
             'is_active', 'created_at', 'updated_at'
         ]
@@ -120,12 +123,14 @@ class FeePaymentSerializer(serializers.ModelSerializer):
     class_name = serializers.CharField(source='student.class_obj.name', read_only=True)
     collected_by_name = serializers.CharField(source='collected_by.username', read_only=True, default=None)
     account_name = serializers.CharField(source='account.name', read_only=True, default=None)
+    academic_year_name = serializers.CharField(source='academic_year.name', read_only=True, default=None)
 
     class Meta:
         model = FeePayment
         fields = [
             'id', 'school', 'student',
             'student_name', 'student_roll', 'class_name',
+            'academic_year', 'academic_year_name',
             'month', 'year', 'previous_balance', 'amount_due', 'amount_paid',
             'status', 'payment_date', 'payment_method',
             'receipt_number', 'notes',
@@ -212,7 +217,10 @@ class ExpenseSerializer(serializers.ModelSerializer):
 class ExpenseCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Expense
-        fields = ['school', 'category', 'amount', 'date', 'description', 'account']
+        fields = ['school', 'category', 'amount', 'date', 'description', 'account', 'is_sensitive']
+        extra_kwargs = {
+            'school': {'required': False},
+        }
 
     def validate(self, attrs):
         if not attrs.get('account'):
@@ -286,3 +294,265 @@ class MonthlyClosingSerializer(serializers.ModelSerializer):
             'notes',
         ]
         read_only_fields = ['id', 'closed_at']
+
+
+# =============================================================================
+# Phase 3: Discount & Scholarship Serializers
+# =============================================================================
+
+class DiscountSerializer(serializers.ModelSerializer):
+    """Full CRUD serializer for Discount model."""
+    discount_type_display = serializers.CharField(
+        source='get_discount_type_display', read_only=True
+    )
+    applies_to_display = serializers.CharField(
+        source='get_applies_to_display', read_only=True
+    )
+    target_grade_name = serializers.CharField(
+        source='target_grade.name', read_only=True, default=None
+    )
+    target_class_name = serializers.CharField(
+        source='target_class.name', read_only=True, default=None
+    )
+    academic_year_name = serializers.CharField(
+        source='academic_year.name', read_only=True, default=None
+    )
+    usage_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Discount
+        fields = [
+            'id', 'school', 'academic_year', 'academic_year_name',
+            'name', 'discount_type', 'discount_type_display',
+            'value', 'applies_to', 'applies_to_display',
+            'target_grade', 'target_grade_name',
+            'target_class', 'target_class_name',
+            'start_date', 'end_date', 'is_active',
+            'max_uses', 'stackable', 'usage_count',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'school', 'created_at', 'updated_at']
+
+    def get_usage_count(self, obj):
+        return obj.student_assignments.filter(is_active=True).count()
+
+    def validate(self, attrs):
+        applies_to = attrs.get('applies_to', getattr(self.instance, 'applies_to', 'ALL'))
+        if applies_to == 'GRADE' and not attrs.get('target_grade') and not getattr(self.instance, 'target_grade_id', None):
+            raise serializers.ValidationError(
+                {'target_grade': 'Target grade is required when applies_to is GRADE.'}
+            )
+        if applies_to == 'CLASS' and not attrs.get('target_class') and not getattr(self.instance, 'target_class_id', None):
+            raise serializers.ValidationError(
+                {'target_class': 'Target class is required when applies_to is CLASS.'}
+            )
+        discount_type = attrs.get('discount_type', getattr(self.instance, 'discount_type', None))
+        value = attrs.get('value', getattr(self.instance, 'value', None))
+        if discount_type == 'PERCENTAGE' and value is not None:
+            if value < 0 or value > 100:
+                raise serializers.ValidationError(
+                    {'value': 'Percentage value must be between 0 and 100.'}
+                )
+        return attrs
+
+
+class ScholarshipSerializer(serializers.ModelSerializer):
+    """Full CRUD serializer for Scholarship model."""
+    scholarship_type_display = serializers.CharField(
+        source='get_scholarship_type_display', read_only=True
+    )
+    coverage_display = serializers.CharField(
+        source='get_coverage_display', read_only=True
+    )
+    academic_year_name = serializers.CharField(
+        source='academic_year.name', read_only=True, default=None
+    )
+    recipient_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Scholarship
+        fields = [
+            'id', 'school', 'academic_year', 'academic_year_name',
+            'name', 'description',
+            'scholarship_type', 'scholarship_type_display',
+            'coverage', 'coverage_display',
+            'value', 'max_recipients', 'is_active',
+            'recipient_count',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'school', 'created_at', 'updated_at']
+
+    def get_recipient_count(self, obj):
+        return obj.student_assignments.filter(is_active=True).count()
+
+    def validate(self, attrs):
+        coverage = attrs.get('coverage', getattr(self.instance, 'coverage', None))
+        value = attrs.get('value', getattr(self.instance, 'value', None))
+        if coverage == 'PERCENTAGE' and value is not None:
+            if value < 0 or value > 100:
+                raise serializers.ValidationError(
+                    {'value': 'Percentage value must be between 0 and 100.'}
+                )
+        return attrs
+
+
+class StudentDiscountSerializer(serializers.ModelSerializer):
+    """Read serializer for StudentDiscount with nested names."""
+    student_name = serializers.CharField(source='student.name', read_only=True)
+    student_roll = serializers.CharField(source='student.roll_number', read_only=True, default=None)
+    class_name = serializers.CharField(source='student.class_obj.name', read_only=True, default=None)
+    discount_name = serializers.CharField(source='discount.name', read_only=True, default=None)
+    scholarship_name = serializers.CharField(source='scholarship.name', read_only=True, default=None)
+    academic_year_name = serializers.CharField(source='academic_year.name', read_only=True, default=None)
+    approved_by_name = serializers.CharField(source='approved_by.username', read_only=True, default=None)
+
+    class Meta:
+        model = StudentDiscount
+        fields = [
+            'id', 'school',
+            'student', 'student_name', 'student_roll', 'class_name',
+            'discount', 'discount_name',
+            'scholarship', 'scholarship_name',
+            'academic_year', 'academic_year_name',
+            'approved_by', 'approved_by_name', 'approved_at',
+            'is_active', 'notes', 'created_at',
+        ]
+        read_only_fields = ['id', 'school', 'approved_by', 'approved_at', 'created_at']
+
+
+class StudentDiscountCreateSerializer(serializers.Serializer):
+    """Create serializer for assigning a discount or scholarship to a student."""
+    student_id = serializers.IntegerField()
+    discount_id = serializers.IntegerField(required=False, allow_null=True, default=None)
+    scholarship_id = serializers.IntegerField(required=False, allow_null=True, default=None)
+    academic_year_id = serializers.IntegerField()
+    notes = serializers.CharField(required=False, allow_blank=True, default='')
+
+    def validate(self, attrs):
+        if not attrs.get('discount_id') and not attrs.get('scholarship_id'):
+            raise serializers.ValidationError(
+                'Either discount_id or scholarship_id must be provided.'
+            )
+        if attrs.get('discount_id') and attrs.get('scholarship_id'):
+            raise serializers.ValidationError(
+                'Provide either discount_id or scholarship_id, not both.'
+            )
+        return attrs
+
+
+# =============================================================================
+# Phase 3: Payment Gateway Serializers
+# =============================================================================
+
+class PaymentGatewayConfigSerializer(serializers.ModelSerializer):
+    """Admin serializer for PaymentGatewayConfig. Hides sensitive config on read."""
+    gateway_display = serializers.CharField(source='get_gateway_display', read_only=True)
+
+    class Meta:
+        model = PaymentGatewayConfig
+        fields = [
+            'id', 'school', 'gateway', 'gateway_display',
+            'is_active', 'is_default', 'config', 'currency',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'school', 'created_at', 'updated_at']
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        request = self.context.get('request')
+        # On read (list/retrieve), mask sensitive config keys
+        if request and request.method in ('GET', 'HEAD', 'OPTIONS'):
+            config = data.get('config', {})
+            if isinstance(config, dict):
+                masked = {}
+                for key, val in config.items():
+                    if isinstance(val, str) and len(val) > 4:
+                        masked[key] = val[:4] + '****'
+                    else:
+                        masked[key] = '****'
+                data['config'] = masked
+        return data
+
+
+class OnlinePaymentSerializer(serializers.ModelSerializer):
+    """Read-only serializer for OnlinePayment."""
+    student_name = serializers.CharField(source='student.name', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    fee_payment_month = serializers.IntegerField(source='fee_payment.month', read_only=True)
+    fee_payment_year = serializers.IntegerField(source='fee_payment.year', read_only=True)
+    initiated_by_name = serializers.CharField(source='initiated_by.username', read_only=True, default=None)
+
+    class Meta:
+        model = OnlinePayment
+        fields = [
+            'id', 'school',
+            'fee_payment', 'fee_payment_month', 'fee_payment_year',
+            'student', 'student_name',
+            'gateway', 'gateway_order_id', 'gateway_payment_id',
+            'amount', 'currency', 'status', 'status_display',
+            'initiated_by', 'initiated_by_name',
+            'initiated_at', 'completed_at', 'failure_reason',
+        ]
+        read_only_fields = fields
+
+
+class OnlinePaymentInitiateSerializer(serializers.Serializer):
+    """Serializer for initiating an online payment."""
+    fee_payment_id = serializers.IntegerField()
+    amount = serializers.DecimalField(max_digits=12, decimal_places=2)
+    gateway = serializers.ChoiceField(choices=[
+        ('STRIPE', 'Stripe'),
+        ('RAZORPAY', 'Razorpay'),
+        ('JAZZCASH', 'JazzCash'),
+        ('EASYPAISA', 'Easypaisa'),
+        ('MANUAL', 'Manual/Offline'),
+    ])
+
+    def validate_amount(self, value):
+        if value <= 0:
+            raise serializers.ValidationError('Amount must be positive.')
+        return value
+
+
+# =============================================================================
+# Phase 3: Fee Breakdown & Sibling Detection Serializers
+# =============================================================================
+
+class DiscountAppliedSerializer(serializers.Serializer):
+    """Represents a single discount applied in a fee breakdown."""
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    type = serializers.CharField()  # 'discount' or 'scholarship'
+    discount_type = serializers.CharField()  # PERCENTAGE / FIXED / FULL
+    value = serializers.DecimalField(max_digits=10, decimal_places=2)
+    amount_off = serializers.DecimalField(max_digits=10, decimal_places=2)
+
+
+class FeeBreakdownSerializer(serializers.Serializer):
+    """Computed fee breakdown for a student."""
+    student_id = serializers.IntegerField()
+    student_name = serializers.CharField()
+    class_name = serializers.CharField()
+    base_amount = serializers.DecimalField(max_digits=10, decimal_places=2, allow_null=True)
+    discounts_applied = DiscountAppliedSerializer(many=True)
+    scholarship_applied = DiscountAppliedSerializer(allow_null=True)
+    discount_total = serializers.DecimalField(max_digits=10, decimal_places=2)
+    final_amount = serializers.DecimalField(max_digits=10, decimal_places=2, allow_null=True)
+
+
+class SiblingStudentSerializer(serializers.Serializer):
+    """A sibling student detected by matching phone."""
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    class_name = serializers.CharField()
+    roll_number = serializers.CharField()
+    parent_phone = serializers.CharField()
+    guardian_phone = serializers.CharField()
+
+
+class SiblingDetectionSerializer(serializers.Serializer):
+    """Response serializer for sibling detection."""
+    student_id = serializers.IntegerField()
+    student_name = serializers.CharField()
+    matched_phone = serializers.CharField()
+    siblings = SiblingStudentSerializer(many=True)

@@ -3,7 +3,10 @@ import { Outlet, Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import FinanceChatWidget from './FinanceChatWidget'
 import AcademicsChatWidget from './AcademicsChatWidget'
+import CommunicationChatWidget from './CommunicationChatWidget'
+import NotificationBell from './NotificationBell'
 import SchoolSwitcher from './SchoolSwitcher'
+import AcademicYearSwitcher from './AcademicYearSwitcher'
 
 // Icons (simple SVG components)
 const HomeIcon = () => (
@@ -217,20 +220,82 @@ function SidebarGroup({ group, onNavigate }) {
   )
 }
 
+const UserPlusIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+  </svg>
+)
+
+const HeartIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+  </svg>
+)
+
+const MailIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+  </svg>
+)
+
+const TagIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+  </svg>
+)
+
+const TruckIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10l2 2h2m6-2h4l2 2h2a1 1 0 001-1v-5a1 1 0 00-.4-.8l-4-3a1 1 0 00-.6-.2H13m-6 4h.01M17 16h.01" />
+  </svg>
+)
+
+const LibraryIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z" />
+  </svg>
+)
+
+const PencilIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+  </svg>
+)
+
+const MapPinIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+  </svg>
+)
+
+const SearchIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+  </svg>
+)
+
+const ExclamationIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.832c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+  </svg>
+)
+
 export default function Layout() {
-  const { user, logout, isSuperAdmin, isStaffMember, isPrincipal, isHRManager, isStaffLevel } = useAuth()
+  const { user, logout, isSuperAdmin, isStaffMember, isPrincipal, isHRManager, isStaffLevel, isParent, isStudent, isModuleEnabled } = useAuth()
   const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const isActive = (href) => location.pathname === href || location.pathname.startsWith(href + '/')
 
   // Navigation structure: top-level items + collapsible groups
+  // Each group/item can have a `module` key — hidden if that module is disabled
   const navigationGroups = [
     // Dashboard - always visible at top
     { type: 'item', name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
 
     // Attendance group (consolidated)
-    {
+    ...(isModuleEnabled('attendance') ? [{
       type: 'group',
       name: 'Attendance',
       icon: ClipboardIcon,
@@ -238,10 +303,10 @@ export default function Layout() {
         { name: 'Capture & Review', href: '/attendance', icon: UploadIcon },
         { name: 'Register & Analytics', href: '/attendance/register', icon: TableIcon },
       ],
-    },
+    }] : []),
 
     // Finance group
-    {
+    ...(isModuleEnabled('finance') ? [{
       type: 'group',
       name: 'Finance',
       icon: CurrencyIcon,
@@ -253,10 +318,10 @@ export default function Layout() {
           ? [{ name: 'Reports', href: '/finance/reports', icon: ReportIcon }]
           : []),
       ],
-    },
+    }] : []),
 
-    // Academics group
-    {
+    // Academics group (includes examinations items when that module is enabled)
+    ...(isModuleEnabled('academics') ? [{
       type: 'group',
       name: 'Academics',
       icon: BookOpenIcon,
@@ -265,18 +330,24 @@ export default function Layout() {
         { name: 'Timetable', href: '/academics/timetable', icon: ClockIcon },
         { name: 'Sessions', href: '/academics/sessions', icon: CalendarIcon },
         { name: 'Promotion', href: '/academics/promotion', icon: UsersIcon },
-        { name: 'Exam Types', href: '/academics/exam-types', icon: FolderIcon },
-        { name: 'Exams', href: '/academics/exams', icon: ClipboardIcon },
-        { name: 'Marks Entry', href: '/academics/marks-entry', icon: DocumentIcon },
-        { name: 'Results', href: '/academics/results', icon: ChartIcon },
-        { name: 'Report Cards', href: '/academics/report-cards', icon: ReportIcon },
-        { name: 'Grade Scale', href: '/academics/grade-scale', icon: SettingsIcon },
+        ...(isModuleEnabled('examinations') ? [
+          { name: 'Exam Types', href: '/academics/exam-types', icon: FolderIcon },
+          { name: 'Exams', href: '/academics/exams', icon: ClipboardIcon },
+          { name: 'Marks Entry', href: '/academics/marks-entry', icon: DocumentIcon },
+          { name: 'Results', href: '/academics/results', icon: ChartIcon },
+          { name: 'Report Cards', href: '/academics/report-cards', icon: ReportIcon },
+          { name: 'Grade Scale', href: '/academics/grade-scale', icon: SettingsIcon },
+        ] : []),
         { name: 'AI Analytics', href: '/academics/analytics', icon: ChartIcon },
+        ...(isModuleEnabled('lms') ? [
+          { name: 'Lesson Plans', href: '/academics/lesson-plans', icon: BookOpenIcon },
+          { name: 'Assignments', href: '/academics/assignments', icon: PencilIcon },
+        ] : []),
       ],
-    },
+    }] : []),
 
-    // HR & Staff group (visible to SCHOOL_ADMIN, PRINCIPAL, HR_MANAGER)
-    ...(!isStaffLevel || isHRManager
+    // HR & Staff group (visible to SCHOOL_ADMIN, PRINCIPAL, HR_MANAGER + module check)
+    ...(isModuleEnabled('hr') && (!isStaffLevel || isHRManager)
       ? [{
           type: 'group',
           name: 'HR & Staff',
@@ -296,16 +367,69 @@ export default function Layout() {
       : []),
 
     // Management group
-    {
+    ...(isModuleEnabled('students') ? [{
       type: 'group',
       name: 'Management',
       icon: FolderIcon,
       children: [
-        { name: 'Grades & Sections', href: '/grades', icon: TableIcon },
+        { name: 'Classes & Grades', href: '/grades', icon: TableIcon },
         { name: 'Students', href: '/students', icon: UsersIcon },
-        { name: 'Classes', href: '/classes', icon: AcademicIcon },
       ],
-    },
+    }] : []),
+
+    // Notifications
+    ...(isModuleEnabled('notifications') ? [{
+      type: 'item', name: 'Notifications', href: '/notifications', icon: ChatBotIcon,
+    }] : []),
+
+    // Admissions CRM (admin only)
+    ...(isModuleEnabled('admissions') && !isStaffLevel ? [{
+      type: 'group',
+      name: 'Admissions',
+      icon: UserPlusIcon,
+      children: [
+        { name: 'Dashboard', href: '/admissions', icon: ChartIcon },
+        { name: 'Enquiries', href: '/admissions/enquiries', icon: UsersIcon },
+        { name: 'Sessions', href: '/admissions/sessions', icon: CalendarIcon },
+      ],
+    }] : []),
+
+    // Transport group
+    ...(isModuleEnabled('transport') ? [{
+      type: 'group',
+      name: 'Transport',
+      icon: TruckIcon,
+      children: [
+        { name: 'Dashboard', href: '/transport', icon: ChartIcon },
+        { name: 'Routes', href: '/transport/routes', icon: MapPinIcon },
+        { name: 'Vehicles', href: '/transport/vehicles', icon: TruckIcon },
+        { name: 'Assignments', href: '/transport/assignments', icon: UsersIcon },
+        { name: 'Attendance', href: '/transport/attendance', icon: ClipboardCheckIcon },
+      ],
+    }] : []),
+
+    // Library group
+    ...(isModuleEnabled('library') ? [{
+      type: 'group',
+      name: 'Library',
+      icon: LibraryIcon,
+      children: [
+        { name: 'Dashboard', href: '/library', icon: ChartIcon },
+        { name: 'Catalog', href: '/library/catalog', icon: SearchIcon },
+        { name: 'Issue / Return', href: '/library/issues', icon: BookOpenIcon },
+        { name: 'Overdue', href: '/library/overdue', icon: ExclamationIcon },
+      ],
+    }] : []),
+
+    // Finance: Discounts & Scholarships (added under Finance for admin)
+    ...(isModuleEnabled('finance') && !isStaffLevel ? [{
+      type: 'group',
+      name: 'Discounts',
+      icon: TagIcon,
+      children: [
+        { name: 'Discounts & Scholarships', href: '/finance/discounts', icon: TagIcon },
+      ],
+    }] : []),
 
     // Settings - admin only (SCHOOL_ADMIN, not staff-level roles)
     ...(!isStaffLevel
@@ -313,8 +437,26 @@ export default function Layout() {
       : []),
   ]
 
+  // Parent navigation - completely different sidebar
+  const parentNavGroups = [
+    { type: 'item', name: 'Dashboard', href: '/parent/dashboard', icon: HomeIcon },
+    { type: 'item', name: 'Leave Requests', href: '/parent/leave', icon: CalendarIcon },
+    { type: 'item', name: 'Messages', href: '/parent/messages', icon: MailIcon },
+  ]
+
+  // Student navigation - dedicated sidebar
+  const studentNavGroups = [
+    { type: 'item', name: 'Dashboard', href: '/student/dashboard', icon: HomeIcon },
+    { type: 'item', name: 'Attendance', href: '/student/attendance', icon: ClipboardIcon },
+    { type: 'item', name: 'Fees', href: '/student/fees', icon: CurrencyIcon },
+    { type: 'item', name: 'Timetable', href: '/student/timetable', icon: ClockIcon },
+    { type: 'item', name: 'Results', href: '/student/results', icon: ChartIcon },
+    { type: 'item', name: 'Assignments', href: '/student/assignments', icon: PencilIcon },
+    { type: 'item', name: 'My Profile', href: '/student/profile', icon: UsersIcon },
+  ]
+
   // SuperAdmin only sees the Admin Panel link — no school-internal nav
-  const visibleNavGroups = isSuperAdmin ? [] : navigationGroups
+  const visibleNavGroups = isSuperAdmin ? [] : (isParent ? parentNavGroups : (isStudent ? studentNavGroups : navigationGroups))
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -422,24 +564,33 @@ export default function Layout() {
               </svg>
             </button>
 
-            {/* School name / switcher */}
-            <div className="flex-1 lg:ml-0 ml-4">
+            {/* School name / switcher + Academic Year switcher */}
+            <div className="flex-1 lg:ml-0 ml-4 flex items-center gap-3">
               {isSuperAdmin ? (
                 <span className="text-sm font-medium text-gray-700">Platform Admin</span>
               ) : (
-                <SchoolSwitcher />
+                <>
+                  <SchoolSwitcher />
+                  <div className="hidden sm:block h-5 w-px bg-gray-200" />
+                  <div className="hidden sm:block">
+                    <AcademicYearSwitcher />
+                  </div>
+                </>
               )}
             </div>
 
-            {/* User avatar */}
-            <Link to="/profile" className="hidden lg:flex items-center hover:opacity-80 transition-opacity">
-              <span className="text-sm text-gray-600 mr-3">{user?.username}</span>
-              <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center">
-                <span className="text-primary-700 font-medium text-sm">
-                  {user?.username?.charAt(0).toUpperCase()}
-                </span>
-              </div>
-            </Link>
+            {/* Notification bell + User avatar */}
+            <div className="flex items-center gap-2">
+              {!isSuperAdmin && <NotificationBell />}
+              <Link to="/profile" className="hidden lg:flex items-center hover:opacity-80 transition-opacity">
+                <span className="text-sm text-gray-600 mr-3">{user?.username}</span>
+                <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center">
+                  <span className="text-primary-700 font-medium text-sm">
+                    {user?.username?.charAt(0).toUpperCase()}
+                  </span>
+                </div>
+              </Link>
+            </div>
           </div>
         </header>
 
@@ -452,6 +603,7 @@ export default function Layout() {
       {/* Floating AI Chat widgets - context-specific */}
       {location.pathname.startsWith('/finance') && !isStaffLevel && <FinanceChatWidget />}
       {location.pathname.startsWith('/academics') && <AcademicsChatWidget />}
+      {location.pathname.startsWith('/notifications') && !isStaffLevel && <CommunicationChatWidget />}
     </div>
   )
 }

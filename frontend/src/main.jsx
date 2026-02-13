@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import App from './App.jsx'
 import { AuthProvider } from './contexts/AuthContext.jsx'
+import { AcademicYearProvider } from './contexts/AcademicYearContext.jsx'
 import { ToastProvider } from './components/Toast.jsx'
 import './index.css'
 
@@ -21,9 +22,11 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <AuthProvider>
-          <ToastProvider>
-            <App />
-          </ToastProvider>
+          <AcademicYearProvider>
+            <ToastProvider>
+              <App />
+            </ToastProvider>
+          </AcademicYearProvider>
         </AuthProvider>
       </BrowserRouter>
     </QueryClientProvider>

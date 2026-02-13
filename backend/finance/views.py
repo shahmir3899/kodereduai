@@ -15,12 +15,14 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 
-from core.permissions import IsSchoolAdmin, IsSchoolAdminOrStaffReadOnly, HasSchoolAccess, get_effective_role
+from core.permissions import IsSchoolAdmin, IsSchoolAdminOrStaffReadOnly, HasSchoolAccess, get_effective_role, ModuleAccessMixin
 from core.mixins import TenantQuerySetMixin, ensure_tenant_schools, ensure_tenant_school_id
-from students.models import Student, Class
+from students.models import Student, Class, Grade
 from .models import (
     Account, Transfer, FeeStructure, FeePayment, Expense, OtherIncome,
     FinanceAIChatMessage, MonthlyClosing, AccountSnapshot,
+    Discount, Scholarship, StudentDiscount, PaymentGatewayConfig, OnlinePayment,
+    resolve_fee_amount,
 )
 from .serializers import (
     AccountSerializer, AccountCreateSerializer,
@@ -32,6 +34,11 @@ from .serializers import (
     OtherIncomeSerializer, OtherIncomeCreateSerializer,
     FinanceAIChatMessageSerializer, FinanceAIChatInputSerializer,
     CloseMonthSerializer, MonthlyClosingSerializer,
+    DiscountSerializer, ScholarshipSerializer,
+    StudentDiscountSerializer, StudentDiscountCreateSerializer,
+    PaymentGatewayConfigSerializer,
+    OnlinePaymentSerializer, OnlinePaymentInitiateSerializer,
+    FeeBreakdownSerializer, SiblingDetectionSerializer,
 )
 
 logger = logging.getLogger(__name__)
@@ -85,8 +92,9 @@ def _get_staff_visible_accounts(school_id):
     )
 
 
-class FeeStructureViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
+class FeeStructureViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     """CRUD for fee structures (class-level and student-level)."""
+    required_module = 'finance'
     queryset = FeeStructure.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrStaffReadOnly, HasSchoolAccess]
     pagination_class = None
@@ -97,7 +105,7 @@ class FeeStructureViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         return FeeStructureSerializer
 
     def get_queryset(self):
-        queryset = FeeStructure.objects.select_related('school', 'class_obj', 'student')
+        queryset = FeeStructure.objects.select_related('school', 'class_obj', 'student', 'academic_year')
 
         # Filter by active school (works for all users including super admin)
         school_id = _resolve_school_id(self.request)
@@ -110,6 +118,10 @@ class FeeStructureViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
             else:
                 return queryset.none()
 
+        academic_year = self.request.query_params.get('academic_year')
+        if academic_year:
+            queryset = queryset.filter(academic_year_id=academic_year)
+
         class_id = self.request.query_params.get('class_id')
         if class_id:
             queryset = queryset.filter(Q(class_obj_id=class_id) | Q(student__class_obj_id=class_id))
@@ -121,11 +133,23 @@ class FeeStructureViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         return queryset
 
     def perform_create(self, serializer):
+        from academic_sessions.models import AcademicYear
         school_id = _resolve_school_id(self.request)
         if not school_id:
             from rest_framework.exceptions import ValidationError
             raise ValidationError({'detail': 'No school associated with your account.'})
-        serializer.save(school_id=school_id)
+
+        extra_kwargs = {'school_id': school_id}
+
+        # Auto-resolve current academic year if not provided
+        if not serializer.validated_data.get('academic_year'):
+            academic_year = AcademicYear.objects.filter(
+                school_id=school_id, is_current=True, is_active=True,
+            ).first()
+            if academic_year:
+                extra_kwargs['academic_year'] = academic_year
+
+        serializer.save(**extra_kwargs)
 
     @action(detail=False, methods=['post'])
     def bulk_set(self, request):
@@ -169,8 +193,9 @@ class FeeStructureViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         return Response({'created': created_count})
 
 
-class FeePaymentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
+class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     """CRUD + bulk generation + summaries for fee payments."""
+    required_module = 'finance'
     queryset = FeePayment.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrStaffReadOnly, HasSchoolAccess]
     pagination_class = None
@@ -184,7 +209,8 @@ class FeePaymentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = FeePayment.objects.select_related(
-            'school', 'student', 'student__class_obj', 'collected_by', 'account'
+            'school', 'student', 'student__class_obj', 'collected_by', 'account',
+            'academic_year',
         )
 
         # Filter by active school (works for all users including super admin)
@@ -208,11 +234,15 @@ class FeePaymentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
                 )
 
         # Filters
+        academic_year = self.request.query_params.get('academic_year')
         month = self.request.query_params.get('month')
         year = self.request.query_params.get('year')
         class_id = self.request.query_params.get('class_id')
         fee_status = self.request.query_params.get('status')
         student_id = self.request.query_params.get('student_id')
+
+        if academic_year:
+            queryset = queryset.filter(academic_year_id=academic_year)
 
         if month:
             queryset = queryset.filter(month=month)
@@ -504,8 +534,9 @@ class FeePaymentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         })
 
 
-class ExpenseViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
+class ExpenseViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     """CRUD + category summaries for school expenses."""
+    required_module = 'finance'
     queryset = Expense.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrStaffReadOnly, HasSchoolAccess]
     pagination_class = None
@@ -608,8 +639,9 @@ class ExpenseViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         })
 
 
-class OtherIncomeViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
+class OtherIncomeViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     """CRUD for non-student-linked income (book sales, donations, etc.)."""
+    required_module = 'finance'
     queryset = OtherIncome.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrStaffReadOnly, HasSchoolAccess]
     pagination_class = None
@@ -659,8 +691,9 @@ class OtherIncomeViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         school_id = _resolve_school_id(self.request)
         serializer.save(school_id=school_id, recorded_by=self.request.user)
 
-class AccountViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
+class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     """CRUD for accounts + balance computation."""
+    required_module = 'finance'
     queryset = Account.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrStaffReadOnly, HasSchoolAccess]
     pagination_class = None
@@ -1093,8 +1126,9 @@ class AccountViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         return Response({'detail': f'Month {year}/{month:02d} reopened.', 'year': year, 'month': month})
 
 
-class TransferViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
+class TransferViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     """CRUD for inter-account transfers."""
+    required_module = 'finance'
     queryset = Transfer.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrStaffReadOnly, HasSchoolAccess]
     pagination_class = None
@@ -1173,8 +1207,9 @@ class TransferViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         serializer.save(school_id=school_id, recorded_by=self.request.user)
 
 
-class FinanceReportsView(APIView):
+class FinanceReportsView(ModuleAccessMixin, APIView):
     """Financial reports: summary and monthly trends."""
+    required_module = 'finance'
     permission_classes = [IsAuthenticated, IsSchoolAdminOrStaffReadOnly, HasSchoolAccess]
 
     def get(self, request):
@@ -1294,8 +1329,9 @@ class FinanceReportsView(APIView):
         return Response({'trend': trend})
 
 
-class FinanceAIChatView(APIView):
+class FinanceAIChatView(ModuleAccessMixin, APIView):
     """AI chat assistant for financial queries."""
+    required_module = 'finance'
     permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
 
     def get(self, request):
@@ -1363,3 +1399,641 @@ class FinanceAIChatView(APIView):
         ).delete()
 
         return Response({'deleted': deleted_count})
+
+
+class FeePredictorView(ModuleAccessMixin, APIView):
+    """AI fee default predictions."""
+    required_module = 'finance'
+    permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
+
+    def get(self, request):
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response({'error': 'school_id required'}, status=400)
+
+        month = request.query_params.get('month')
+        year = request.query_params.get('year')
+
+        from .fee_predictor_service import FeeCollectionPredictorService
+        service = FeeCollectionPredictorService(school_id)
+        predictions = service.predict_defaults(
+            target_month=int(month) if month else None,
+            target_year=int(year) if year else None,
+        )
+        return Response(predictions)
+
+
+# =============================================================================
+# Phase 3: Discount & Scholarship ViewSets
+# =============================================================================
+
+class DiscountViewSet(ModuleAccessMixin, viewsets.ModelViewSet):
+    """CRUD for discount rules."""
+    required_module = 'finance'
+    queryset = Discount.objects.all()
+    serializer_class = DiscountSerializer
+    permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
+    pagination_class = None
+
+    def get_queryset(self):
+        queryset = Discount.objects.select_related(
+            'school', 'academic_year', 'target_grade', 'target_class',
+        )
+        school_id = _resolve_school_id(self.request)
+        if school_id:
+            queryset = queryset.filter(school_id=school_id)
+        elif not self.request.user.is_super_admin:
+            tenant_schools = ensure_tenant_schools(self.request)
+            if tenant_schools:
+                queryset = queryset.filter(school_id__in=tenant_schools)
+            else:
+                return queryset.none()
+
+        # Optional filters
+        is_active = self.request.query_params.get('is_active')
+        if is_active is not None:
+            queryset = queryset.filter(is_active=is_active.lower() == 'true')
+
+        academic_year = self.request.query_params.get('academic_year')
+        if academic_year:
+            queryset = queryset.filter(academic_year_id=academic_year)
+
+        applies_to = self.request.query_params.get('applies_to')
+        if applies_to:
+            queryset = queryset.filter(applies_to=applies_to.upper())
+
+        return queryset
+
+    def perform_create(self, serializer):
+        school_id = _resolve_school_id(self.request)
+        if not school_id:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({'detail': 'No school associated with your account.'})
+        serializer.save(school_id=school_id)
+
+    def perform_update(self, serializer):
+        serializer.save()
+
+
+class ScholarshipViewSet(ModuleAccessMixin, viewsets.ModelViewSet):
+    """CRUD for scholarship programs."""
+    required_module = 'finance'
+    queryset = Scholarship.objects.all()
+    serializer_class = ScholarshipSerializer
+    permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
+    pagination_class = None
+
+    def get_queryset(self):
+        queryset = Scholarship.objects.select_related('school', 'academic_year')
+        school_id = _resolve_school_id(self.request)
+        if school_id:
+            queryset = queryset.filter(school_id=school_id)
+        elif not self.request.user.is_super_admin:
+            tenant_schools = ensure_tenant_schools(self.request)
+            if tenant_schools:
+                queryset = queryset.filter(school_id__in=tenant_schools)
+            else:
+                return queryset.none()
+
+        is_active = self.request.query_params.get('is_active')
+        if is_active is not None:
+            queryset = queryset.filter(is_active=is_active.lower() == 'true')
+
+        academic_year = self.request.query_params.get('academic_year')
+        if academic_year:
+            queryset = queryset.filter(academic_year_id=academic_year)
+
+        scholarship_type = self.request.query_params.get('scholarship_type')
+        if scholarship_type:
+            queryset = queryset.filter(scholarship_type=scholarship_type.upper())
+
+        return queryset
+
+    def perform_create(self, serializer):
+        school_id = _resolve_school_id(self.request)
+        if not school_id:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({'detail': 'No school associated with your account.'})
+        serializer.save(school_id=school_id)
+
+    def perform_update(self, serializer):
+        serializer.save()
+
+
+class StudentDiscountViewSet(ModuleAccessMixin, viewsets.ModelViewSet):
+    """CRUD for student discount/scholarship assignments + bulk assign."""
+    required_module = 'finance'
+    queryset = StudentDiscount.objects.all()
+    permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
+    pagination_class = None
+
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return StudentDiscountCreateSerializer
+        return StudentDiscountSerializer
+
+    def get_queryset(self):
+        queryset = StudentDiscount.objects.select_related(
+            'school', 'student', 'student__class_obj',
+            'discount', 'scholarship', 'academic_year', 'approved_by',
+        )
+        school_id = _resolve_school_id(self.request)
+        if school_id:
+            queryset = queryset.filter(school_id=school_id)
+        elif not self.request.user.is_super_admin:
+            tenant_schools = ensure_tenant_schools(self.request)
+            if tenant_schools:
+                queryset = queryset.filter(school_id__in=tenant_schools)
+            else:
+                return queryset.none()
+
+        # Optional filters
+        student_id = self.request.query_params.get('student_id')
+        if student_id:
+            queryset = queryset.filter(student_id=student_id)
+
+        discount_id = self.request.query_params.get('discount_id')
+        if discount_id:
+            queryset = queryset.filter(discount_id=discount_id)
+
+        scholarship_id = self.request.query_params.get('scholarship_id')
+        if scholarship_id:
+            queryset = queryset.filter(scholarship_id=scholarship_id)
+
+        academic_year = self.request.query_params.get('academic_year')
+        if academic_year:
+            queryset = queryset.filter(academic_year_id=academic_year)
+
+        is_active = self.request.query_params.get('is_active')
+        if is_active is not None:
+            queryset = queryset.filter(is_active=is_active.lower() == 'true')
+
+        return queryset
+
+    def perform_create(self, serializer):
+        from django.utils import timezone as tz
+        school_id = _resolve_school_id(self.request)
+        if not school_id:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({'detail': 'No school associated with your account.'})
+
+        data = serializer.validated_data
+        StudentDiscount.objects.create(
+            school_id=school_id,
+            student_id=data['student_id'],
+            discount_id=data.get('discount_id'),
+            scholarship_id=data.get('scholarship_id'),
+            academic_year_id=data['academic_year_id'],
+            approved_by=self.request.user,
+            approved_at=tz.now(),
+            is_active=True,
+            notes=data.get('notes', ''),
+        )
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        return Response({'detail': 'Student discount assigned successfully.'}, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=['post'])
+    def bulk_assign(self, request):
+        """Assign a discount to all students in a class or grade."""
+        from django.utils import timezone as tz
+
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response({'detail': 'No school associated with your account.'}, status=400)
+
+        discount_id = request.data.get('discount_id')
+        scholarship_id = request.data.get('scholarship_id')
+        class_id = request.data.get('class_id')
+        grade_id = request.data.get('grade_id')
+        academic_year_id = request.data.get('academic_year_id')
+
+        if not discount_id and not scholarship_id:
+            return Response(
+                {'detail': 'Either discount_id or scholarship_id is required.'},
+                status=400,
+            )
+        if not academic_year_id:
+            return Response({'detail': 'academic_year_id is required.'}, status=400)
+        if not class_id and not grade_id:
+            return Response(
+                {'detail': 'Either class_id or grade_id is required.'},
+                status=400,
+            )
+
+        # Build student queryset
+        students_qs = Student.objects.filter(school_id=school_id, is_active=True)
+        if class_id:
+            students_qs = students_qs.filter(class_obj_id=class_id)
+        elif grade_id:
+            students_qs = students_qs.filter(class_obj__grade_id=grade_id)
+
+        now = tz.now()
+        created_count = 0
+        skipped_count = 0
+
+        for student in students_qs:
+            # Check for existing active assignment
+            existing = StudentDiscount.objects.filter(
+                school_id=school_id,
+                student=student,
+                discount_id=discount_id if discount_id else None,
+                scholarship_id=scholarship_id if scholarship_id else None,
+                academic_year_id=academic_year_id,
+                is_active=True,
+            ).exists()
+
+            if existing:
+                skipped_count += 1
+                continue
+
+            StudentDiscount.objects.create(
+                school_id=school_id,
+                student=student,
+                discount_id=discount_id,
+                scholarship_id=scholarship_id,
+                academic_year_id=academic_year_id,
+                approved_by=request.user,
+                approved_at=now,
+                is_active=True,
+            )
+            created_count += 1
+
+        return Response({
+            'created': created_count,
+            'skipped': skipped_count,
+            'total_students': students_qs.count(),
+        })
+
+
+# =============================================================================
+# Phase 3: Payment Gateway ViewSets
+# =============================================================================
+
+class PaymentGatewayConfigViewSet(ModuleAccessMixin, viewsets.ModelViewSet):
+    """CRUD for payment gateway configurations (admin only)."""
+    required_module = 'finance'
+    queryset = PaymentGatewayConfig.objects.all()
+    serializer_class = PaymentGatewayConfigSerializer
+    permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
+    pagination_class = None
+
+    def get_queryset(self):
+        queryset = PaymentGatewayConfig.objects.select_related('school')
+        school_id = _resolve_school_id(self.request)
+        if school_id:
+            queryset = queryset.filter(school_id=school_id)
+        elif not self.request.user.is_super_admin:
+            tenant_schools = ensure_tenant_schools(self.request)
+            if tenant_schools:
+                queryset = queryset.filter(school_id__in=tenant_schools)
+            else:
+                return queryset.none()
+        return queryset
+
+    def perform_create(self, serializer):
+        school_id = _resolve_school_id(self.request)
+        if not school_id:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({'detail': 'No school associated with your account.'})
+        serializer.save(school_id=school_id)
+
+    def perform_update(self, serializer):
+        serializer.save()
+
+
+class OnlinePaymentViewSet(ModuleAccessMixin, viewsets.ReadOnlyModelViewSet):
+    """Read-only listing of online payments with initiate, verify, and reconcile actions."""
+    required_module = 'finance'
+    queryset = OnlinePayment.objects.all()
+    serializer_class = OnlinePaymentSerializer
+    permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
+    pagination_class = None
+
+    def get_queryset(self):
+        queryset = OnlinePayment.objects.select_related(
+            'school', 'fee_payment', 'student', 'initiated_by',
+        )
+        school_id = _resolve_school_id(self.request)
+        if school_id:
+            queryset = queryset.filter(school_id=school_id)
+        elif not self.request.user.is_super_admin:
+            tenant_schools = ensure_tenant_schools(self.request)
+            if tenant_schools:
+                queryset = queryset.filter(school_id__in=tenant_schools)
+            else:
+                return queryset.none()
+
+        # Optional filters
+        payment_status = self.request.query_params.get('status')
+        if payment_status:
+            queryset = queryset.filter(status=payment_status.upper())
+
+        gateway = self.request.query_params.get('gateway')
+        if gateway:
+            queryset = queryset.filter(gateway=gateway.upper())
+
+        student_id = self.request.query_params.get('student_id')
+        if student_id:
+            queryset = queryset.filter(student_id=student_id)
+
+        return queryset
+
+    @action(detail=False, methods=['post'])
+    def initiate(self, request):
+        """Initiate an online payment: create OnlinePayment with INITIATED status."""
+        import uuid
+
+        serializer = OnlinePaymentInitiateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response({'detail': 'No school associated with your account.'}, status=400)
+
+        fee_payment_id = serializer.validated_data['fee_payment_id']
+        amount = serializer.validated_data['amount']
+        gateway = serializer.validated_data['gateway']
+
+        # Validate fee_payment belongs to this school
+        try:
+            fee_payment = FeePayment.objects.get(id=fee_payment_id, school_id=school_id)
+        except FeePayment.DoesNotExist:
+            return Response({'detail': 'Fee payment not found.'}, status=404)
+
+        # Validate gateway is configured and active for this school
+        gateway_config = PaymentGatewayConfig.objects.filter(
+            school_id=school_id, gateway=gateway, is_active=True,
+        ).first()
+        if not gateway_config:
+            return Response(
+                {'detail': f'Gateway {gateway} is not active for this school.'},
+                status=400,
+            )
+
+        gateway_order_id = f"ORD-{uuid.uuid4().hex[:16].upper()}"
+
+        online_payment = OnlinePayment.objects.create(
+            school_id=school_id,
+            fee_payment=fee_payment,
+            student=fee_payment.student,
+            gateway=gateway,
+            gateway_order_id=gateway_order_id,
+            amount=amount,
+            currency=gateway_config.currency,
+            status='INITIATED',
+            initiated_by=request.user,
+        )
+
+        return Response(
+            OnlinePaymentSerializer(online_payment).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=True, methods=['post'])
+    def verify(self, request, pk=None):
+        """Verify a payment (stub implementation - marks as SUCCESS and updates FeePayment)."""
+        from django.utils import timezone as tz
+
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response({'detail': 'No school associated with your account.'}, status=400)
+
+        try:
+            online_payment = OnlinePayment.objects.get(id=pk, school_id=school_id)
+        except OnlinePayment.DoesNotExist:
+            return Response({'detail': 'Online payment not found.'}, status=404)
+
+        if online_payment.status == 'SUCCESS':
+            return Response({'detail': 'Payment already verified.'}, status=400)
+
+        if online_payment.status not in ('INITIATED', 'PENDING'):
+            return Response(
+                {'detail': f'Cannot verify payment with status {online_payment.status}.'},
+                status=400,
+            )
+
+        # Stub: mark as SUCCESS
+        gateway_payment_id = request.data.get('gateway_payment_id', '')
+        gateway_signature = request.data.get('gateway_signature', '')
+
+        with transaction.atomic():
+            online_payment.status = 'SUCCESS'
+            online_payment.gateway_payment_id = gateway_payment_id
+            online_payment.gateway_signature = gateway_signature
+            online_payment.completed_at = tz.now()
+            online_payment.gateway_response = request.data.get('gateway_response', {})
+            online_payment.save()
+
+            # Update the linked FeePayment
+            fee_payment = online_payment.fee_payment
+            fee_payment.amount_paid = fee_payment.amount_paid + online_payment.amount
+            fee_payment.payment_date = tz.now().date()
+            fee_payment.payment_method = 'ONLINE'
+            fee_payment.save()
+
+        return Response(OnlinePaymentSerializer(online_payment).data)
+
+    @action(detail=False, methods=['get'])
+    def reconcile(self, request):
+        """List all payments with status breakdown for reconciliation."""
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response({'detail': 'No school associated with your account.'}, status=400)
+
+        payments = OnlinePayment.objects.filter(school_id=school_id)
+
+        status_breakdown = payments.values('status').annotate(
+            count=Count('id'),
+            total_amount=Sum('amount'),
+        ).order_by('status')
+
+        total = payments.aggregate(
+            total_count=Count('id'),
+            total_amount=Sum('amount'),
+        )
+
+        return Response({
+            'status_breakdown': [
+                {
+                    'status': item['status'],
+                    'count': item['count'],
+                    'total_amount': item['total_amount'] or Decimal('0'),
+                }
+                for item in status_breakdown
+            ],
+            'total_count': total['total_count'] or 0,
+            'total_amount': total['total_amount'] or Decimal('0'),
+        })
+
+
+# =============================================================================
+# Phase 3: Fee Breakdown & Sibling Detection Views
+# =============================================================================
+
+class FeeBreakdownView(ModuleAccessMixin, APIView):
+    """
+    GET: Compute fee breakdown for a student with discount/scholarship deductions.
+    Takes student_id from URL path.
+    """
+    required_module = 'finance'
+    permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
+
+    def get(self, request, student_id):
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response({'detail': 'No school associated with your account.'}, status=400)
+
+        try:
+            student = Student.objects.select_related('class_obj').get(
+                id=student_id, school_id=school_id,
+            )
+        except Student.DoesNotExist:
+            return Response({'detail': 'Student not found.'}, status=404)
+
+        # 1. Get base fee amount
+        base_amount = resolve_fee_amount(student)
+
+        if base_amount is None:
+            return Response(FeeBreakdownSerializer({
+                'student_id': student.id,
+                'student_name': student.name,
+                'class_name': student.class_obj.name,
+                'base_amount': None,
+                'discounts_applied': [],
+                'scholarship_applied': None,
+                'discount_total': Decimal('0'),
+                'final_amount': None,
+            }).data)
+
+        # 2. Find active StudentDiscounts for this student
+        student_discounts = StudentDiscount.objects.filter(
+            school_id=school_id,
+            student=student,
+            is_active=True,
+        ).select_related('discount', 'scholarship')
+
+        discounts_applied = []
+        scholarship_applied = None
+        discount_total = Decimal('0')
+
+        for sd in student_discounts:
+            if sd.discount and sd.discount.is_active:
+                disc = sd.discount
+                if disc.discount_type == 'PERCENTAGE':
+                    amount_off = (base_amount * disc.value / Decimal('100')).quantize(Decimal('0.01'))
+                else:  # FIXED
+                    amount_off = min(disc.value, base_amount)
+
+                discounts_applied.append({
+                    'id': disc.id,
+                    'name': disc.name,
+                    'type': 'discount',
+                    'discount_type': disc.discount_type,
+                    'value': disc.value,
+                    'amount_off': amount_off,
+                })
+                discount_total += amount_off
+
+            elif sd.scholarship and sd.scholarship.is_active:
+                sch = sd.scholarship
+                if sch.coverage == 'FULL':
+                    amount_off = base_amount
+                elif sch.coverage == 'PERCENTAGE':
+                    amount_off = (base_amount * sch.value / Decimal('100')).quantize(Decimal('0.01'))
+                else:  # FIXED
+                    amount_off = min(sch.value, base_amount)
+
+                scholarship_applied = {
+                    'id': sch.id,
+                    'name': sch.name,
+                    'type': 'scholarship',
+                    'discount_type': sch.coverage,
+                    'value': sch.value,
+                    'amount_off': amount_off,
+                }
+                discount_total += amount_off
+
+        final_amount = max(Decimal('0'), base_amount - discount_total)
+
+        return Response(FeeBreakdownSerializer({
+            'student_id': student.id,
+            'student_name': student.name,
+            'class_name': student.class_obj.name,
+            'base_amount': base_amount,
+            'discounts_applied': discounts_applied,
+            'scholarship_applied': scholarship_applied,
+            'discount_total': discount_total,
+            'final_amount': final_amount,
+        }).data)
+
+
+class SiblingDetectionView(ModuleAccessMixin, APIView):
+    """
+    GET: Detect siblings by matching guardian_phone or parent_phone in the same school.
+    Takes student_id from URL path.
+    """
+    required_module = 'finance'
+    permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
+
+    def get(self, request, student_id):
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response({'detail': 'No school associated with your account.'}, status=400)
+
+        try:
+            student = Student.objects.select_related('class_obj').get(
+                id=student_id, school_id=school_id,
+            )
+        except Student.DoesNotExist:
+            return Response({'detail': 'Student not found.'}, status=404)
+
+        # Collect phone numbers to match on
+        phones = set()
+        if student.parent_phone and student.parent_phone.strip():
+            phones.add(student.parent_phone.strip())
+        if student.guardian_phone and student.guardian_phone.strip():
+            phones.add(student.guardian_phone.strip())
+
+        if not phones:
+            return Response(SiblingDetectionSerializer({
+                'student_id': student.id,
+                'student_name': student.name,
+                'matched_phone': '',
+                'siblings': [],
+            }).data)
+
+        # Find other students in the same school with matching phone
+        phone_q = Q()
+        for phone in phones:
+            phone_q |= Q(parent_phone=phone) | Q(guardian_phone=phone)
+
+        siblings = Student.objects.filter(
+            phone_q,
+            school_id=school_id,
+            is_active=True,
+        ).exclude(id=student.id).select_related('class_obj').distinct()
+
+        sibling_list = [
+            {
+                'id': s.id,
+                'name': s.name,
+                'class_name': s.class_obj.name if s.class_obj else '',
+                'roll_number': s.roll_number,
+                'parent_phone': s.parent_phone,
+                'guardian_phone': s.guardian_phone,
+            }
+            for s in siblings
+        ]
+
+        matched_phone = ', '.join(sorted(phones))
+
+        return Response(SiblingDetectionSerializer({
+            'student_id': student.id,
+            'student_name': student.name,
+            'matched_phone': matched_phone,
+            'siblings': sibling_list,
+        }).data)

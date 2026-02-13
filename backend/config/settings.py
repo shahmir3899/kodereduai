@@ -58,6 +58,12 @@ INSTALLED_APPS = [
     'academics',
     'academic_sessions',
     'examinations',
+    'reports',
+    'parents',
+    'admissions',
+    'lms',
+    'transport',
+    'library',
 ]
 
 MIDDLEWARE = [

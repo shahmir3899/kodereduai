@@ -31,6 +31,14 @@ class ClassSubject(models.Model):
         on_delete=models.CASCADE,
         related_name='class_subjects',
     )
+    academic_year = models.ForeignKey(
+        'academic_sessions.AcademicYear',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='class_subjects',
+        help_text="Academic year for this assignment"
+    )
     class_obj = models.ForeignKey(
         'students.Class',
         on_delete=models.CASCADE,
@@ -111,6 +119,14 @@ class TimetableEntry(models.Model):
         'schools.School',
         on_delete=models.CASCADE,
         related_name='timetable_entries',
+    )
+    academic_year = models.ForeignKey(
+        'academic_sessions.AcademicYear',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='timetable_entries',
+        help_text="Academic year for this timetable entry"
     )
     class_obj = models.ForeignKey(
         'students.Class',

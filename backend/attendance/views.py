@@ -12,7 +12,7 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from django.utils import timezone
 from django.db.models import Count, Q
 
-from core.permissions import IsSchoolAdmin, HasSchoolAccess, CanConfirmAttendance
+from core.permissions import IsSchoolAdmin, HasSchoolAccess, CanConfirmAttendance, ModuleAccessMixin
 from core.mixins import TenantQuerySetMixin, ensure_tenant_schools, ensure_tenant_school_id
 from .models import AttendanceUpload, AttendanceRecord
 from .serializers import (
@@ -27,10 +27,11 @@ from students.models import Student
 logger = logging.getLogger(__name__)
 
 
-class ImageUploadView(APIView):
+class ImageUploadView(ModuleAccessMixin, APIView):
     """
     Upload attendance images to Supabase storage.
     """
+    required_module = 'attendance'
     permission_classes = [IsAuthenticated, IsSchoolAdmin]
     parser_classes = [MultiPartParser, FormParser]
 
@@ -83,7 +84,8 @@ class ImageUploadView(APIView):
             )
 
 
-class AttendanceUploadViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
+class AttendanceUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
+    required_module = 'attendance'
     """
     ViewSet for managing attendance uploads.
 
@@ -152,6 +154,11 @@ class AttendanceUploadViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         if upload_status:
             queryset = queryset.filter(status=upload_status)
 
+        # Filter by academic year
+        academic_year_id = self.request.query_params.get('academic_year')
+        if academic_year_id:
+            queryset = queryset.filter(academic_year_id=academic_year_id)
+
         # Filter by date range
         date_from = self.request.query_params.get('date_from')
         date_to = self.request.query_params.get('date_to')
@@ -164,9 +171,19 @@ class AttendanceUploadViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         """Create upload and trigger processing task."""
+        # Auto-resolve academic year if not provided
+        academic_year = serializer.validated_data.get('academic_year')
+        if not academic_year:
+            from academic_sessions.models import AcademicYear
+            school_id = ensure_tenant_school_id(self.request) or self.request.user.school_id
+            academic_year = AcademicYear.objects.filter(
+                school_id=school_id, is_current=True, is_active=True,
+            ).first()
+
         upload = serializer.save(
             created_by=self.request.user,
-            status=AttendanceUpload.Status.PROCESSING
+            status=AttendanceUpload.Status.PROCESSING,
+            academic_year=academic_year,
         )
 
         # Try to use Celery if available, otherwise process synchronously
@@ -301,6 +318,7 @@ class AttendanceUploadViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
                 date=upload.date,
                 defaults={
                     'school': upload.school,
+                    'academic_year': upload.academic_year,
                     'status': (
                         AttendanceRecord.AttendanceStatus.ABSENT
                         if student.id in absent_student_ids
@@ -432,10 +450,11 @@ class AttendanceUploadViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
             }, status=status.HTTP_400_BAD_REQUEST)
 
 
-class AIStatusView(APIView):
+class AIStatusView(ModuleAccessMixin, APIView):
     """
     Returns the current AI processing configuration and status.
     """
+    required_module = 'attendance'
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -490,7 +509,8 @@ class AIStatusView(APIView):
         })
 
 
-class AttendanceRecordViewSet(TenantQuerySetMixin, viewsets.ReadOnlyModelViewSet):
+class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ReadOnlyModelViewSet):
+    required_module = 'attendance'
     """
     ViewSet for viewing attendance records.
     """
@@ -536,6 +556,11 @@ class AttendanceRecordViewSet(TenantQuerySetMixin, viewsets.ReadOnlyModelViewSet
         date_to = self.request.query_params.get('date_to')
         if date_to:
             queryset = queryset.filter(date__lte=date_to)
+
+        # Filter by academic year
+        academic_year_id = self.request.query_params.get('academic_year')
+        if academic_year_id:
+            queryset = queryset.filter(academic_year_id=academic_year_id)
 
         # Filter by status
         record_status = self.request.query_params.get('status')
