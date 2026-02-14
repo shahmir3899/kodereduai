@@ -75,6 +75,13 @@ import StudentTimetable from './pages/student/StudentTimetable'
 import StudentResults from './pages/student/StudentResults'
 import StudentAssignments from './pages/student/StudentAssignments'
 import StudentProfileView from './pages/student/StudentProfileView'
+import StudentStudyHelper from './pages/student/StudentStudyHelper'
+
+// Hostel pages
+import HostelDashboard from './pages/hostel/HostelDashboard'
+import HostelRoomsPage from './pages/hostel/HostelRoomsPage'
+import HostelAllocationsPage from './pages/hostel/HostelAllocationsPage'
+import GatePassesPage from './pages/hostel/GatePassesPage'
 
 // Transport pages
 import TransportDashboard from './pages/transport/TransportDashboard'
@@ -302,6 +309,13 @@ function App() {
           <Route path="student/results" element={<StudentRoute><StudentResults /></StudentRoute>} />
           <Route path="student/assignments" element={<StudentRoute><StudentAssignments /></StudentRoute>} />
           <Route path="student/profile" element={<StudentRoute><StudentProfileView /></StudentRoute>} />
+          <Route path="student/study-helper" element={<StudentRoute><StudentStudyHelper /></StudentRoute>} />
+
+          {/* Hostel routes */}
+          <Route path="hostel" element={<SchoolRoute><ModuleRoute module="hostel"><HostelDashboard /></ModuleRoute></SchoolRoute>} />
+          <Route path="hostel/rooms" element={<SchoolRoute><ModuleRoute module="hostel"><HostelRoomsPage /></ModuleRoute></SchoolRoute>} />
+          <Route path="hostel/allocations" element={<SchoolRoute><ModuleRoute module="hostel"><HostelAllocationsPage /></ModuleRoute></SchoolRoute>} />
+          <Route path="hostel/gate-passes" element={<SchoolRoute><ModuleRoute module="hostel"><GatePassesPage /></ModuleRoute></SchoolRoute>} />
 
           {/* Transport routes */}
           <Route path="transport" element={<SchoolRoute><ModuleRoute module="transport"><TransportDashboard /></ModuleRoute></SchoolRoute>} />

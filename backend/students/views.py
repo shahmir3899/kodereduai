@@ -798,3 +798,68 @@ class AdminStudentInviteView(APIView):
             'student_name': student.name,
             'expires_at': invite.expires_at.isoformat(),
         }, status=status.HTTP_201_CREATED)
+
+
+class StudyHelperView(APIView):
+    """AI Study Helper chat for students."""
+    permission_classes = [IsAuthenticated, IsStudent]
+
+    def get(self, request):
+        """Get chat history (last 50 messages)."""
+        student = _get_student_for_request(request)
+        if not student:
+            return Response({'error': 'No student profile linked.'}, status=404)
+        from .models import StudyHelperMessage
+        messages = StudyHelperMessage.objects.filter(student=student).order_by('-created_at')[:50]
+        data = [
+            {
+                'id': m.id,
+                'role': m.role,
+                'content': m.content,
+                'created_at': m.created_at,
+            }
+            for m in reversed(messages)
+        ]
+        return Response(data)
+
+    def post(self, request):
+        """Send a message and get AI response."""
+        student = _get_student_for_request(request)
+        if not student:
+            return Response({'error': 'No student profile linked.'}, status=404)
+        message = request.data.get('message', '').strip()
+        if not message:
+            return Response({'error': 'Message is required.'}, status=400)
+        if len(message) > 2000:
+            return Response({'error': 'Message too long (max 2000 characters).'}, status=400)
+
+        from .study_helper_service import StudyHelperService
+        service = StudyHelperService(student, student.school)
+
+        if not service.check_rate_limit():
+            return Response(
+                {'error': 'Daily limit reached (30 messages/day). Try again tomorrow.'},
+                status=429,
+            )
+
+        is_safe, reason = service.check_content_safety(message)
+        if not is_safe:
+            return Response({'error': reason}, status=400)
+
+        try:
+            response_text = service.chat(message)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"Study helper error: {e}")
+            response_text = "I'm sorry, I encountered an error. Please try again."
+
+        return Response({'response': response_text})
+
+    def delete(self, request):
+        """Clear chat history."""
+        student = _get_student_for_request(request)
+        if not student:
+            return Response({'error': 'No student profile linked.'}, status=404)
+        from .models import StudyHelperMessage
+        count, _ = StudyHelperMessage.objects.filter(student=student).delete()
+        return Response({'deleted': count})

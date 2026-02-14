@@ -178,7 +178,7 @@ class Assignment(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ['-due_date']
+        ordering = ['-due_date', '-id']
         verbose_name = 'Assignment'
         verbose_name_plural = 'Assignments'
 

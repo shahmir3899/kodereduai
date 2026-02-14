@@ -2,7 +2,7 @@
 
 > Created: 2026-02-14
 > Updated: 2026-02-14
-> Status: IN PROGRESS (Phases 5-7 COMPLETED)
+> Status: IN PROGRESS (Phases 5-7, 10-11 COMPLETED)
 > Replaces: Previous Phase 1-4 plan (all completed)
 > Based on: MINDMAP_VS_APP_ANALYSIS.md + Deep Codebase Audit
 
@@ -15,8 +15,8 @@
 3. [Phase 7: Proper Test Suite (P1) — COMPLETED](#phase-7-proper-test-suite-p1--completed)
 4. [Phase 8: Mobile App — React Native + Expo (P2)](#phase-8-mobile-app--react-native--expo-p2)
 5. [Phase 9: Student GPS Location Sharing (P2)](#phase-9-student-gps-location-sharing-p2)
-6. [Phase 10: AI Study Helper (P3)](#phase-10-ai-study-helper-p3)
-7. [Phase 11: Hostel Management (P3)](#phase-11-hostel-management-p3)
+6. [Phase 10: AI Study Helper (P3) — COMPLETED](#phase-10-ai-study-helper-p3--completed)
+7. [Phase 11: Hostel Management (P3) — COMPLETED](#phase-11-hostel-management-p3--completed)
 8. [Master Timeline & Dependencies](#master-timeline--dependencies)
 9. [Post-Implementation Coverage](#post-implementation-coverage)
 
@@ -1027,7 +1027,7 @@ def auto_end_stale_journeys(hours=2):
 
 ---
 
-## Phase 10: AI Study Helper (P3)
+## Phase 10: AI Study Helper (P3) — COMPLETED
 
 ### What We're Building
 
@@ -1233,11 +1233,24 @@ Student Navigation:
 | `mobile/app/(student)/ai-helper.tsx` | CREATE | Mobile chat screen |
 | New migration | CREATE | StudyHelperMessage table |
 
+### Implementation Status: COMPLETED
+
+**Implementation Notes:**
+- `StudyHelperMessage` model added to `students/models.py` with school, student, role, content, flagged fields
+- `students/study_helper_service.py` created with Groq LLM integration, 5 unsafe input patterns + 2 output patterns, 30 msg/day rolling rate limit, student context builder (class, subjects, recent lessons, active assignments)
+- `StudyHelperView` added to `students/views.py` — GET (history), POST (chat), DELETE (clear)
+- Route: `students/portal/study-helper/` added to `students/urls.py`
+- Frontend: `StudentStudyHelper.jsx` chat page with auto-scroll, typing indicator, suggestion chips, character counter, error handling
+- Sidebar: "AI Study Helper" added to student navigation in `Layout.jsx`
+- Route: `/student/study-helper` added to `App.jsx`
+- API: `getStudyHelperHistory`, `sendStudyHelperMessage`, `clearStudyHelperHistory` added to `studentPortalApi` in `api.js`
+- Migration: `students/migrations/0003_studyhelpermessage.py`
+
 ### Effort: ~2-3 days
 
 ---
 
-## Phase 11: Hostel Management (P3)
+## Phase 11: Hostel Management (P3) — COMPLETED
 
 ### Scope
 
@@ -1469,6 +1482,22 @@ Hostel (module-gated)
 | `frontend/src/services/api.js` | MODIFY | Add hostelApi service |
 | New migration(s) | CREATE | Hostel tables + FeeStructure fee_type |
 
+### Implementation Status: COMPLETED
+
+**Implementation Notes:**
+- New Django app `hostel/` created with `__init__.py`, `apps.py`, `models.py`, `serializers.py`, `views.py`, `urls.py`, `admin.py`
+- 4 models: `Hostel`, `Room`, `HostelAllocation`, `GatePass` — all with school-based multi-tenancy
+- Read/Write serializer pairs for all 4 models with validation (room capacity, duplicate allocation, gate pass ownership)
+- 4 ViewSets with `ModuleAccessMixin` + `TenantQuerySetMixin`: `HostelViewSet`, `RoomViewSet`, `HostelAllocationViewSet`, `GatePassViewSet`
+- Custom actions: `vacate` (allocation), `approve`, `reject`, `checkout`, `return_pass` (gate pass)
+- `HostelDashboardView` with aggregate stats (occupancy, capacity, pending passes, students on leave)
+- Registered in `INSTALLED_APPS`, `config/urls.py` at `/api/hostel/`, and `module_registry.py` as 'hostel'
+- Frontend: 4 pages — `HostelDashboard.jsx`, `HostelRoomsPage.jsx`, `HostelAllocationsPage.jsx`, `GatePassesPage.jsx`
+- Sidebar: Hostel group with Dashboard, Rooms, Allocations, Gate Passes in `Layout.jsx`
+- Routes: `/hostel`, `/hostel/rooms`, `/hostel/allocations`, `/hostel/gate-passes` in `App.jsx`
+- API: Full `hostelApi` service added to `api.js` with all CRUD + action endpoints
+- Migration: `hostel/migrations/0001_initial.py`
+
 ### Effort: ~3-5 days
 
 ---
@@ -1483,11 +1512,11 @@ WEEK 1: ✅ COMPLETED
 ├── Phase 6: Payment Gateway Full Flow ──────── ✅ DONE
 └── Phase 7: Pytest Test Suite ──────────────── ✅ DONE (659 tests passing)
 
-NEXT:
-├── Phase 10: AI Study Helper ───────────────── ~2-3 days
-└── Phase 11: Hostel Management ─────────────── ~3-5 days
+WEEK 2: ✅ COMPLETED
+├── Phase 10: AI Study Helper ───────────────── ✅ DONE
+└── Phase 11: Hostel Management ─────────────── ✅ DONE (659 tests still passing)
 
-THEN:
+REMAINING:
 ├── Phase 8: React Native Mobile App ────────── ~3-4 weeks
 └── Phase 9: GPS Location Sharing ───────────── ~1 week (built into mobile app)
 ```
@@ -1499,8 +1528,8 @@ Phase 5 (Celery) ─────────────────────
 Phase 6 (Payment) ─────────────────────────────── No dependencies ✅ DONE
 Phase 7 (Tests) ───────────────────────────────── No dependencies ✅ DONE
 
-Phase 10 (AI Helper) ──────────────────────────── No dependencies ✓
-Phase 11 (Hostel) ──────────────────────────────── No dependencies ✓
+Phase 10 (AI Helper) ──────────────────────────── No dependencies ✅ DONE
+Phase 11 (Hostel) ──────────────────────────────── No dependencies ✅ DONE
 
 Phase 8 (Mobile App) ──┬── Depends on Phase 6 (payment flow for parent payments)
                        ├── Depends on Phase 10 (AI helper for student screens)
@@ -1513,8 +1542,8 @@ Phase 9 (GPS) ─────────── Depends on Phase 8 (needs mobile
 
 ```
 Parallel Group 1: Phase 5 + Phase 6 + Phase 7     ✅ ALL DONE
-Parallel Group 2: Phase 10 + Phase 11              (all independent — NEXT)
-Sequential:       Phase 8 (after Group 1+2)
+Parallel Group 2: Phase 10 + Phase 11              ✅ ALL DONE
+Sequential:       Phase 8 (after Group 1+2)        ← NEXT
 Sequential:       Phase 9 (after Phase 8)
 ```
 

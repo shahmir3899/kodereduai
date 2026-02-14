@@ -58,6 +58,9 @@ whitenoise==6.8.2
 # Celery Beat (periodic task scheduler)
 django-celery-beat>=2.6.0
 
+# PDF Generation
+fpdf2>=2.8.0
+
 # Testing
 pytest>=8.0
 pytest-django>=4.8

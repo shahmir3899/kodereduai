@@ -266,3 +266,31 @@ class StudentInvite(models.Model):
         if not self.expires_at:
             self.expires_at = timezone.now() + timezone.timedelta(days=30)
         super().save(*args, **kwargs)
+
+
+class StudyHelperMessage(models.Model):
+    """Chat history for AI Study Helper per student."""
+    ROLE_CHOICES = [('user', 'User'), ('assistant', 'Assistant')]
+
+    school = models.ForeignKey(
+        'schools.School',
+        on_delete=models.CASCADE,
+        related_name='study_helper_messages',
+    )
+    student = models.ForeignKey(
+        Student,
+        on_delete=models.CASCADE,
+        related_name='study_messages',
+    )
+    role = models.CharField(max_length=10, choices=ROLE_CHOICES)
+    content = models.TextField()
+    flagged = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+        verbose_name = 'Study Helper Message'
+        verbose_name_plural = 'Study Helper Messages'
+
+    def __str__(self):
+        return f"{self.role}: {self.content[:50]}..."

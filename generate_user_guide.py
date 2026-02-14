@@ -58,7 +58,8 @@ class UserGuidePDF(FPDF):
             "Dashboard | Classes & Students | Attendance (AI-Powered)",
             "Academics & Examinations | Finance & Online Payments",
             "HR & Staff Management | Admissions CRM | Transport",
-            "Library | Notifications | LMS | Parent & Student Portals"
+            "Library | Hostel Management | LMS | Notifications",
+            "Parent & Student Portals | AI Study Helper"
         ]
         self.set_font("Helvetica", "I", 9)
         for m in modules:
@@ -313,6 +314,7 @@ def build_guide():
     pdf.bullet("Admissions - CRM pipeline for new admissions")
     pdf.bullet("Transport - Routes, Vehicles, Assignments")
     pdf.bullet("Library - Book Catalog, Issue/Return, Overdue")
+    pdf.bullet("Hostel - Dashboard, Rooms, Allocations, Gate Passes")
     pdf.bullet("Notifications - Inbox, Templates, Send")
     pdf.bullet("Settings - System configuration")
 
@@ -1154,8 +1156,117 @@ def build_guide():
     pdf.step("View and update your profile information.")
     pdf.step("See contact details and class information.")
 
+    pdf.section_title("AI Study Helper")
+    pdf.nav_path("Student Portal > AI Study Helper")
+    pdf.body_text(
+        "The AI Study Helper is an intelligent chatbot that assists students with their studies. "
+        "It is aware of the student's class, subjects, lesson plans, and assignments, allowing it "
+        "to provide personalized, curriculum-aligned academic support."
+    )
+    pdf.step("Navigate to 'AI Study Helper' in the student sidebar.")
+    pdf.step("Type your study question in the message box at the bottom of the screen.")
+    pdf.step("Click Send or press Enter to submit your question.")
+    pdf.step("The AI will respond with explanations, examples, and study tips tailored to your curriculum.")
+    pdf.step("Your conversation history is saved and can be reviewed later.")
+    pdf.step("Use the suggestion chips (e.g., 'Explain a concept', 'Help with homework') for quick prompts.")
+    pdf.step("Click 'Clear History' to start a fresh conversation.")
+    pdf.info_box("Daily Limit", "Students can send up to 30 messages per day to the AI Study Helper. "
+                 "The counter resets every 24 hours. This ensures fair usage for all students.")
+    pdf.warning_box("The AI Study Helper is designed for academic topics only. Questions about personal information, "
+                    "violence, or other inappropriate content will be blocked by the safety system.")
+
     # =========================================================================
-    # CHAPTER 15: SETTINGS & CONFIGURATION
+    # CHAPTER 15: HOSTEL MANAGEMENT
+    # =========================================================================
+    pdf.chapter_title("Hostel Management")
+
+    pdf.body_text(
+        "The Hostel Management module helps schools manage their boarding facilities. "
+        "It covers hostel buildings, rooms, student allocations, and gate passes for "
+        "students leaving and returning to the hostel."
+    )
+
+    pdf.section_title("Hostel Dashboard")
+    pdf.nav_path("Sidebar > Hostel > Dashboard")
+    pdf.body_text("The Hostel Dashboard provides a quick overview of all hostel operations:")
+    pdf.bullet("Total hostels, rooms, and current occupancy")
+    pdf.bullet("Occupancy rate (percentage of beds filled)")
+    pdf.bullet("Active allocations count")
+    pdf.bullet("Pending gate pass requests")
+    pdf.bullet("Students currently out on gate passes")
+    pdf.bullet("Available beds count")
+    pdf.bullet("Quick action links to manage rooms, allocations, and gate passes")
+
+    pdf.section_title("Managing Hostels & Rooms")
+    pdf.nav_path("Sidebar > Hostel > Rooms")
+    pdf.sub_section("Creating a Hostel")
+    pdf.step("Navigate to Hostel > Rooms in the sidebar.")
+    pdf.step("Switch to the 'Hostels' tab.")
+    pdf.step("Click 'Add Hostel'.")
+    pdf.step("Enter: Name, Hostel Type (Boys / Girls / Mixed), Capacity.")
+    pdf.step("Optionally assign a Warden (from staff members).")
+    pdf.step("Save. The hostel appears in the list.")
+
+    pdf.sub_section("Creating Rooms")
+    pdf.step("Switch to the 'Rooms' tab.")
+    pdf.step("Click 'Add Room'.")
+    pdf.step("Select the Hostel this room belongs to.")
+    pdf.step("Enter: Room Number, Floor, Room Type (Single / Double / Dormitory), Capacity.")
+    pdf.step("Save. The room shows current occupancy vs. capacity.")
+    pdf.info_box("Room Availability", "Rooms are automatically marked as unavailable when they reach full capacity. "
+                 "The system prevents over-allocation by checking capacity before each new allocation.")
+
+    pdf.section_title("Student Allocations")
+    pdf.nav_path("Sidebar > Hostel > Allocations")
+    pdf.body_text(
+        "Allocations assign students to specific hostel rooms for an academic year."
+    )
+    pdf.sub_section("Allocating a Student")
+    pdf.step("Navigate to Hostel > Allocations.")
+    pdf.step("Click 'Add Allocation'.")
+    pdf.step("Select: Student, Room (from available rooms), Academic Year.")
+    pdf.step("The system validates that the room has capacity and the student isn't already allocated.")
+    pdf.step("Save. The student is now assigned to the room.")
+    pdf.sub_section("Vacating a Student")
+    pdf.step("Find the active allocation in the list.")
+    pdf.step("Click the 'Vacate' button.")
+    pdf.step("The allocation is marked as inactive, and the room's occupancy count decreases.")
+    pdf.warning_box("Each student can only have one active hostel allocation per academic year. "
+                    "Vacate the current allocation before assigning to a new room.")
+
+    pdf.section_title("Gate Passes")
+    pdf.nav_path("Sidebar > Hostel > Gate Passes")
+    pdf.body_text(
+        "Gate passes track students leaving and returning to the hostel. "
+        "They follow a workflow: Request > Approve/Reject > Checkout > Return."
+    )
+    pdf.sub_section("Creating a Gate Pass")
+    pdf.step("Click 'New Gate Pass'.")
+    pdf.step("Select: Student, Pass Type (Day Out / Weekend / Holiday / Emergency).")
+    pdf.step("Enter: Departure Date, Expected Return Date/Time, Destination, Reason.")
+    pdf.step("Submit. The pass is created with 'Pending' status.")
+    pdf.sub_section("Approving / Rejecting Gate Passes")
+    pdf.step("Review pending gate passes in the list.")
+    pdf.step("Click 'Approve' to authorize the student's departure.")
+    pdf.step("Click 'Reject' with a reason to deny the request.")
+    pdf.sub_section("Checkout & Return")
+    pdf.step("When the student physically leaves, click 'Checkout' to record departure time.")
+    pdf.step("When the student returns, click 'Return' to record the actual return time.")
+    pdf.simple_table(
+        ["Status", "Meaning", "Next Action"],
+        [
+            ["Pending", "Pass requested, awaiting approval", "Approve or Reject"],
+            ["Approved", "Pass approved, student may leave", "Checkout when departing"],
+            ["Rejected", "Pass denied by admin", "No further action"],
+            ["Checked Out", "Student has left the hostel", "Return when student comes back"],
+            ["Returned", "Student has returned to hostel", "Complete - no action needed"],
+            ["Cancelled", "Pass was cancelled", "No further action"],
+        ],
+        [35, 75, 80]
+    )
+
+    # =========================================================================
+    # CHAPTER 16: SETTINGS & CONFIGURATION
     # =========================================================================
     pdf.chapter_title("Settings & Configuration")
 
@@ -1252,6 +1363,8 @@ def build_guide():
             ["Admissions", "Admission Sessions", "Create admission session"],
             ["Transport Assign.", "Routes, Vehicles, Students", "Set up routes and vehicles"],
             ["Library Issues", "Books in Catalog, Students", "Add books and students"],
+            ["Hostel Allocation", "Hostels, Rooms, Students", "Create hostels and rooms first"],
+            ["Gate Passes", "Hostel Allocations", "Allocate students to rooms first"],
             ["LMS Lessons", "Subjects assigned to classes", "Assign subjects first"],
             ["Assignments", "Classes, Subjects", "Create classes and subjects"],
             ["Notifications", "Users exist", "Create user accounts"],
@@ -1276,6 +1389,7 @@ def build_guide():
     pdf.step("Define Salary Structures")
     pdf.step("Set up Transport Routes and Vehicles")
     pdf.step("Set up Library Categories and Books")
+    pdf.step("Set up Hostels and Rooms (if using Hostel module)")
     pdf.step("Configure Attendance Settings (Mappings)")
     pdf.step("Create Notification Templates")
     pdf.step("Set up Admission Sessions (if using Admissions CRM)")
@@ -1303,6 +1417,7 @@ def build_guide():
             ["Mark staff attendance", "HR", "HR", "HR > Attendance"],
             ["Mark transport attendance", "Transport", "Transport", "Transport > Attendance"],
             ["Issue/Return library books", "Librarian", "Library", "Library > Issues"],
+            ["Review gate pass requests", "Hostel Warden", "Hostel", "Hostel > Gate Passes"],
             ["Check notifications", "All", "Notifications", "Bell icon / Inbox"],
             ["Follow up on admissions", "Admin", "Admissions", "Admissions > Enquiries"],
         ],
@@ -1312,6 +1427,7 @@ def build_guide():
     pdf.section_title("Weekly Tasks")
     pdf.bullet("Review attendance analytics and identify students with low attendance")
     pdf.bullet("Check overdue library books and send reminders")
+    pdf.bullet("Review hostel occupancy and pending gate passes")
     pdf.bullet("Review and update admission pipeline")
     pdf.bullet("Process leave applications")
 

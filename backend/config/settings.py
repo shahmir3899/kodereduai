@@ -65,6 +65,7 @@ INSTALLED_APPS = [
     'lms',
     'transport',
     'library',
+    'hostel',
 ]
 
 MIDDLEWARE = [

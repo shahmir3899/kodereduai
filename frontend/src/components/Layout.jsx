@@ -424,6 +424,19 @@ export default function Layout() {
       ],
     }] : []),
 
+    // Hostel group
+    ...(isModuleEnabled('hostel') ? [{
+      type: 'group',
+      name: 'Hostel',
+      icon: HomeIcon,
+      children: [
+        { name: 'Dashboard', href: '/hostel', icon: ChartIcon },
+        { name: 'Rooms', href: '/hostel/rooms', icon: TableIcon },
+        { name: 'Allocations', href: '/hostel/allocations', icon: UsersIcon },
+        { name: 'Gate Passes', href: '/hostel/gate-passes', icon: DocumentIcon },
+      ],
+    }] : []),
+
     // Finance: Discounts & Scholarships (added under Finance for admin)
     ...(isModuleEnabled('finance') && !isStaffLevel ? [{
       type: 'group',
@@ -455,6 +468,7 @@ export default function Layout() {
     { type: 'item', name: 'Timetable', href: '/student/timetable', icon: ClockIcon },
     { type: 'item', name: 'Results', href: '/student/results', icon: ChartIcon },
     { type: 'item', name: 'Assignments', href: '/student/assignments', icon: PencilIcon },
+    { type: 'item', name: 'AI Study Helper', href: '/student/study-helper', icon: ChatBotIcon },
     { type: 'item', name: 'My Profile', href: '/student/profile', icon: UsersIcon },
   ]
 

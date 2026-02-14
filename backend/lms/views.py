@@ -159,7 +159,7 @@ class AssignmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
             'school', 'academic_year', 'class_obj', 'subject', 'teacher',
         ).prefetch_related('attachments').annotate(
             submission_count=Count('submissions'),
-        )
+        ).order_by('-due_date', '-id')
 
         # Filter by class
         class_id = self.request.query_params.get('class_id')

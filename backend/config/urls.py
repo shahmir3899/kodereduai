@@ -91,6 +91,13 @@ def api_root(request):
                 'books': '/api/library/books/',
                 'issues': '/api/library/issues/',
             },
+            'hostel': {
+                'hostels': '/api/hostel/hostels/',
+                'rooms': '/api/hostel/rooms/',
+                'allocations': '/api/hostel/allocations/',
+                'gate_passes': '/api/hostel/gate-passes/',
+                'dashboard': '/api/hostel/dashboard/',
+            },
             'admin': {
                 'schools': '/api/admin/schools/',
             }
@@ -152,6 +159,9 @@ urlpatterns = [
 
     # Library
     path('api/library/', include('library.urls')),
+
+    # Hostel Management
+    path('api/hostel/', include('hostel.urls')),
 ]
 
 # Serve media files in development

@@ -88,6 +88,13 @@ MODULE_REGISTRY = {
         'icon': 'library',
         'dependencies': ['students'],
     },
+    'hostel': {
+        'key': 'hostel',
+        'label': 'Hostel Management',
+        'description': 'Hostels, rooms, student allocations, gate passes & leave tracking',
+        'icon': 'building',
+        'dependencies': ['students'],
+    },
 }
 
 ALL_MODULE_KEYS = list(MODULE_REGISTRY.keys())

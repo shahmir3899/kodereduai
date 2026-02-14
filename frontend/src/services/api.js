@@ -643,6 +643,11 @@ export const studentPortalApi = {
   getAssignments: (params) => api.get('/api/student-portal/assignments/', { params }),
   getAssignment: (id) => api.get(`/api/student-portal/assignments/${id}/`),
   submitAssignment: (id, data) => api.post(`/api/student-portal/assignments/${id}/submit/`, data),
+
+  // AI Study Helper
+  getStudyHelperHistory: () => api.get('/api/students/portal/study-helper/'),
+  sendStudyHelperMessage: (data) => api.post('/api/students/portal/study-helper/', data),
+  clearStudyHelperHistory: () => api.delete('/api/students/portal/study-helper/'),
 }
 
 // Discount & Scholarship API (extends financeApi)
@@ -783,4 +788,37 @@ export const libraryApi = {
   // Search helpers
   searchStudents: (params) => api.get('/api/students/', { params }),
   searchStaff: (params) => api.get('/api/hr/staff/', { params }),
+}
+
+// Hostel Management API
+export const hostelApi = {
+  // Dashboard
+  getDashboard: () => api.get('/api/hostel/dashboard/'),
+
+  // Hostels
+  getHostels: (params) => api.get('/api/hostel/hostels/', { params }),
+  getHostel: (id) => api.get(`/api/hostel/hostels/${id}/`),
+  createHostel: (data) => api.post('/api/hostel/hostels/', data),
+  updateHostel: (id, data) => api.patch(`/api/hostel/hostels/${id}/`, data),
+  deleteHostel: (id) => api.delete(`/api/hostel/hostels/${id}/`),
+
+  // Rooms
+  getRooms: (params) => api.get('/api/hostel/rooms/', { params }),
+  getRoom: (id) => api.get(`/api/hostel/rooms/${id}/`),
+  createRoom: (data) => api.post('/api/hostel/rooms/', data),
+  updateRoom: (id, data) => api.patch(`/api/hostel/rooms/${id}/`, data),
+  deleteRoom: (id) => api.delete(`/api/hostel/rooms/${id}/`),
+
+  // Allocations
+  getAllocations: (params) => api.get('/api/hostel/allocations/', { params }),
+  createAllocation: (data) => api.post('/api/hostel/allocations/', data),
+  vacateAllocation: (id) => api.patch(`/api/hostel/allocations/${id}/vacate/`),
+
+  // Gate Passes
+  getGatePasses: (params) => api.get('/api/hostel/gate-passes/', { params }),
+  createGatePass: (data) => api.post('/api/hostel/gate-passes/', data),
+  approveGatePass: (id, data) => api.patch(`/api/hostel/gate-passes/${id}/approve/`, data),
+  rejectGatePass: (id, data) => api.patch(`/api/hostel/gate-passes/${id}/reject/`, data),
+  checkoutGatePass: (id) => api.patch(`/api/hostel/gate-passes/${id}/checkout/`),
+  returnGatePass: (id) => api.patch(`/api/hostel/gate-passes/${id}/return/`),
 }

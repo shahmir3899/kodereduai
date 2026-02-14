@@ -10,6 +10,7 @@ from .views import (
     StudentRegistrationView, StudentDashboardView,
     StudentAttendanceView, StudentFeesView, StudentTimetableView,
     StudentResultsView, StudentAssignmentsView, AdminStudentInviteView,
+    StudyHelperView,
 )
 
 router = DefaultRouter()
@@ -26,6 +27,7 @@ urlpatterns = [
     path('students/portal/results/', StudentResultsView.as_view(), name='student-results'),
     path('students/portal/assignments/', StudentAssignmentsView.as_view(), name='student-assignments'),
     path('students/admin/generate-invite/', AdminStudentInviteView.as_view(), name='student-generate-invite'),
+    path('students/portal/study-helper/', StudyHelperView.as_view(), name='student-study-helper'),
 
     # Main router
     path('', include(router.urls)),
