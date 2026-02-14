@@ -242,7 +242,7 @@ function UploadTab({ onUploadSuccess }) {
             <label className="label">Class</label>
             <select className="input" value={selectedClass} onChange={e => setSelectedClass(e.target.value)}>
               <option value="">Select a class</option>
-              {classesData?.data?.results?.map(cls => <option key={cls.id} value={cls.id}>{cls.name}</option>)}
+              {(classesData?.data?.results || classesData?.data || []).map(cls => <option key={cls.id} value={cls.id}>{cls.name}</option>)}
             </select>
           </div>
           <div>
@@ -400,7 +400,9 @@ function ReviewDetail({ uploadId, onBack }) {
     queryFn: () => studentsApi.getStudents({ class_id: upload?.class_obj, is_active: true }),
     enabled: !!upload?.class_obj,
   })
-  const allStudents = studentsData?.data?.results || []
+  const allStudents = (studentsData?.data?.results || studentsData?.data || [])
+    .slice()
+    .sort((a, b) => (parseInt(a.roll_number) || 0) - (parseInt(b.roll_number) || 0))
 
   useEffect(() => {
     if (upload?.ai_output_json?.matched) {

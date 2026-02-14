@@ -71,7 +71,9 @@
       "Bash(serializers \")",
       "Bash(for app in parents admissions lms transport library)",
       "Bash(do echo \"=== $app ===\" echo \"Models:\" grep \"^class.*models.Model\" \"d:\\\\Personal\\\\smart-attendance\\\\backend$app\\\\models.py\")",
-      "Bash(done)"
+      "Bash(done)",
+      "Bash(grep:*)",
+      "Bash(tasklist:*)"
     ]
   }
 }

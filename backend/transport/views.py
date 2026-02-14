@@ -33,11 +33,15 @@ logger = logging.getLogger(__name__)
 
 def _resolve_school_id(request):
     """
-    Resolve school_id from: X-School-ID header -> user.school_id -> fallback.
+    Resolve school_id from: X-School-ID header -> params -> user.school_id -> fallback.
     """
     tenant_sid = ensure_tenant_school_id(request)
     if tenant_sid:
         return tenant_sid
+
+    # If X-School-ID header was sent but rejected, don't fall back
+    if request.headers.get('X-School-ID'):
+        return None
 
     school_id = (
         request.query_params.get('school_id')

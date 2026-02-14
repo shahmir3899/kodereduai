@@ -560,6 +560,8 @@ export const parentsApi = {
   getChildOverview: (studentId) => api.get(`/api/parents/children/${studentId}/overview/`),
   getChildAttendance: (studentId, params) => api.get(`/api/parents/children/${studentId}/attendance/`, { params }),
   getChildFees: (studentId, params) => api.get(`/api/parents/children/${studentId}/fees/`, { params }),
+  getPaymentGateways: (studentId) => api.get(`/api/parents/children/${studentId}/pay-fee/`),
+  initiatePayment: (studentId, data) => api.post(`/api/parents/children/${studentId}/pay-fee/`, data),
   getChildTimetable: (studentId) => api.get(`/api/parents/children/${studentId}/timetable/`),
   getChildExamResults: (studentId, params) => api.get(`/api/parents/children/${studentId}/exam-results/`, { params }),
 
@@ -675,6 +677,14 @@ export const paymentApi = {
   initiatePayment: (data) => api.post('/api/finance/online-payments/initiate/', data),
   verifyPayment: (data) => api.post('/api/finance/online-payments/verify/', data),
   getReconciliation: (params) => api.get('/api/finance/online-payments/reconcile/', { params }),
+
+  // Phase 6: test connection, toggle, set default
+  testConnection: (id) => api.post(`/api/finance/gateway-config/${id}/test-connection/`),
+  toggleGatewayStatus: (id) => api.post(`/api/finance/gateway-config/${id}/toggle-status/`),
+  setDefaultGateway: (id) => api.post(`/api/finance/gateway-config/${id}/set-default/`),
+
+  // Payment status
+  getPaymentStatus: (orderId) => api.get(`/api/finance/payment-status/${orderId}/`),
 }
 
 // Transport API

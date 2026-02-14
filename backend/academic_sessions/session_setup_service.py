@@ -240,15 +240,18 @@ class SessionSetupService:
 
             # 3. Create Class-Subject Mappings
             for cs_data in preview_data.get('class_subjects', []):
-                ClassSubject.objects.create(
+                _, created = ClassSubject.objects.get_or_create(
                     school_id=self.school_id,
                     academic_year=new_year,
                     class_obj_id=cs_data['class_id'],
                     subject_id=cs_data['subject_id'],
-                    teacher_id=cs_data.get('teacher_id'),
-                    periods_per_week=cs_data.get('periods_per_week', 1),
+                    defaults={
+                        'teacher_id': cs_data.get('teacher_id'),
+                        'periods_per_week': cs_data.get('periods_per_week', 1),
+                    },
                 )
-                result['class_subjects_created'] += 1
+                if created:
+                    result['class_subjects_created'] += 1
 
             # 4. Create Fee Structures
             for fee_data in preview_data.get('fee_structures', []):

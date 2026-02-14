@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework_simplejwt',
     'corsheaders',
+    'django_celery_beat',
 
     # Local apps
     'core',
@@ -210,6 +211,40 @@ CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'Asia/Karachi'
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minutes
+
+# Celery Beat — periodic task schedule
+from celery.schedules import crontab
+
+CELERY_BEAT_SCHEDULE = {
+    'monthly-fee-reminders': {
+        'task': 'notifications.tasks.send_fee_reminders',
+        'schedule': crontab(day_of_month='5', hour='9', minute='0'),
+    },
+    'weekly-overdue-alerts': {
+        'task': 'notifications.tasks.send_fee_overdue_alerts',
+        'schedule': crontab(day_of_week='monday', hour='10', minute='0'),
+    },
+    'daily-absence-summary': {
+        'task': 'notifications.tasks.send_daily_absence_summary',
+        'schedule': crontab(hour='17', minute='0'),
+    },
+    'process-notification-queue': {
+        'task': 'notifications.tasks.process_notification_queue',
+        'schedule': crontab(minute='*/5'),
+    },
+    'cleanup-old-uploads': {
+        'task': 'attendance.tasks.cleanup_old_uploads',
+        'schedule': crontab(day_of_week='sunday', hour='2', minute='0'),
+        'kwargs': {'days': 90},
+    },
+    'retry-failed-uploads': {
+        'task': 'attendance.tasks.retry_failed_uploads',
+        'schedule': crontab(hour='*/6'),
+        'kwargs': {'hours': 24},
+    },
+}
+
+CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 
 # =============================================================================
 # AI / LLM Configuration

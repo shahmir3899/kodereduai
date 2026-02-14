@@ -22,7 +22,7 @@ class DailyAttendanceReportGenerator(BaseReportGenerator):
 
         filters = {'school': self.school, 'date': report_date}
         if class_id:
-            filters['class_obj_id'] = class_id
+            filters['student__class_obj_id'] = class_id
 
         records = AttendanceRecord.objects.filter(**filters).select_related(
             'student', 'student__class_obj'
@@ -77,7 +77,7 @@ class MonthlyAttendanceReportGenerator(BaseReportGenerator):
             'date__year': year,
         }
         if class_id:
-            filters['class_obj_id'] = class_id
+            filters['student__class_obj_id'] = class_id
 
         # Aggregate per student
         student_stats = AttendanceRecord.objects.filter(**filters).values(

@@ -68,6 +68,9 @@ def _resolve_school_id(request):
     school_id = ensure_tenant_school_id(request)
     if school_id:
         return school_id
+    # If X-School-ID header was sent but rejected, don't fall back
+    if request.headers.get('X-School-ID'):
+        return None
     sid = (
         request.query_params.get('school_id')
         or request.data.get('school_id')
@@ -278,6 +281,107 @@ class ChildFeesView(APIView):
         ).order_by('-year', '-month')
 
         return Response(FeePaymentSerializer(payments, many=True).data)
+
+
+class ParentPayFeeView(APIView):
+    """
+    POST children/<int:student_id>/pay-fee/
+    Parent initiates an online payment for a child's fee.
+    """
+    permission_classes = [IsAuthenticated, IsParentOrAdmin]
+
+    def get(self, request, student_id):
+        """Return available gateways for this child's school."""
+        if not _verify_child_access(request, student_id):
+            return Response(
+                {'error': 'You do not have access to this child.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        try:
+            student = Student.objects.get(id=student_id)
+        except Student.DoesNotExist:
+            return Response({'error': 'Student not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        from finance.models import PaymentGatewayConfig
+        gateways = PaymentGatewayConfig.objects.filter(
+            school=student.school, is_active=True,
+        ).values('id', 'gateway', 'is_default', 'currency')
+        return Response({'gateways': list(gateways)})
+
+    def post(self, request, student_id):
+        """Initiate payment via the gateway service."""
+        if not _verify_child_access(request, student_id):
+            return Response(
+                {'error': 'You do not have access to this child.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        from finance.models import FeePayment, PaymentGatewayConfig, OnlinePayment
+        from finance.payment_gateway_service import get_gateway, PaymentGatewayError
+
+        fee_payment_id = request.data.get('fee_payment_id')
+        gateway_type = request.data.get('gateway')
+        return_url = request.data.get('return_url', '')
+
+        if not fee_payment_id or not gateway_type:
+            return Response(
+                {'error': 'fee_payment_id and gateway are required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            fee_payment = FeePayment.objects.get(id=fee_payment_id, student_id=student_id)
+        except FeePayment.DoesNotExist:
+            return Response({'error': 'Fee payment not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        outstanding = fee_payment.amount_due - fee_payment.amount_paid
+        if outstanding <= 0:
+            return Response({'error': 'This fee is already fully paid.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        gateway_config = PaymentGatewayConfig.objects.filter(
+            school=fee_payment.school, gateway=gateway_type.upper(), is_active=True,
+        ).first()
+        if not gateway_config:
+            return Response(
+                {'error': f'Gateway {gateway_type} is not active for this school.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        import uuid as _uuid
+        order_id = f"ORD-{_uuid.uuid4().hex[:16].upper()}"
+
+        try:
+            gw = get_gateway(gateway_config)
+            payment_data = gw.initiate_payment(
+                order_id=order_id,
+                amount=outstanding,
+                description=f"Fee payment for {fee_payment.student.name} - {fee_payment.get_month_display()}/{fee_payment.year}",
+                return_url=return_url,
+            )
+        except PaymentGatewayError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+        online_payment = OnlinePayment.objects.create(
+            school=fee_payment.school,
+            fee_payment=fee_payment,
+            student_id=student_id,
+            gateway=gateway_type.upper(),
+            gateway_order_id=order_id,
+            amount=outstanding,
+            currency=gateway_config.currency,
+            status='INITIATED',
+            initiated_by=request.user,
+        )
+
+        return Response({
+            'order_id': order_id,
+            'payment_id': online_payment.id,
+            'amount': str(outstanding),
+            'currency': gateway_config.currency,
+            'redirect_url': payment_data.get('redirect_url'),
+            'payload': payment_data.get('payload', {}),
+            'method': payment_data.get('method', 'POST'),
+        }, status=status.HTTP_201_CREATED)
 
 
 class ChildTimetableView(APIView):

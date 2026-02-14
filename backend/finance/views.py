@@ -1704,6 +1704,43 @@ class PaymentGatewayConfigViewSet(ModuleAccessMixin, viewsets.ModelViewSet):
     def perform_update(self, serializer):
         serializer.save()
 
+    @action(detail=True, methods=['post'], url_path='test-connection')
+    def test_connection(self, request, pk=None):
+        """Test if gateway credentials are valid."""
+        from .payment_gateway_service import get_gateway, PaymentGatewayError
+
+        gateway_config = self.get_object()
+        try:
+            gw = get_gateway(gateway_config)
+            result = gw.test_connection()
+        except PaymentGatewayError as e:
+            result = {'success': False, 'message': str(e)}
+        return Response(result)
+
+    @action(detail=True, methods=['post'], url_path='toggle-status')
+    def toggle_status(self, request, pk=None):
+        """Toggle gateway active/inactive."""
+        gateway_config = self.get_object()
+        gateway_config.is_active = not gateway_config.is_active
+        gateway_config.save(update_fields=['is_active'])
+        return Response(PaymentGatewayConfigSerializer(
+            gateway_config, context={'request': request},
+        ).data)
+
+    @action(detail=True, methods=['post'], url_path='set-default')
+    def set_default(self, request, pk=None):
+        """Set this gateway as the default for the school."""
+        gateway_config = self.get_object()
+        # Un-default all others for this school
+        PaymentGatewayConfig.objects.filter(
+            school=gateway_config.school,
+        ).update(is_default=False)
+        gateway_config.is_default = True
+        gateway_config.save(update_fields=['is_default'])
+        return Response(PaymentGatewayConfigSerializer(
+            gateway_config, context={'request': request},
+        ).data)
+
 
 class OnlinePaymentViewSet(ModuleAccessMixin, viewsets.ReadOnlyModelViewSet):
     """Read-only listing of online payments with initiate, verify, and reconcile actions."""
@@ -2037,3 +2074,163 @@ class SiblingDetectionView(ModuleAccessMixin, APIView):
             'matched_phone': matched_phone,
             'siblings': sibling_list,
         }).data)
+
+
+# =============================================================================
+# Phase 6: Payment Gateway Callbacks & Status
+# =============================================================================
+
+class JazzCashCallbackView(APIView):
+    """
+    POST callback from JazzCash after payment.
+    Public endpoint (no auth) — verified via HMAC signature.
+    """
+    permission_classes = []
+    authentication_classes = []
+
+    def post(self, request):
+        from .payment_gateway_service import get_gateway, PaymentGatewayError
+        from django.utils import timezone as tz
+
+        order_id = request.data.get('pp_TxnRefNo', '')
+        if not order_id:
+            return Response({'detail': 'Missing pp_TxnRefNo.'}, status=400)
+
+        try:
+            online_payment = OnlinePayment.objects.select_related(
+                'fee_payment', 'school',
+            ).get(gateway_order_id=order_id, gateway='JAZZCASH')
+        except OnlinePayment.DoesNotExist:
+            logger.warning(f'JazzCash callback: unknown order {order_id}')
+            return Response({'detail': 'Payment not found.'}, status=404)
+
+        gateway_config = PaymentGatewayConfig.objects.filter(
+            school=online_payment.school, gateway='JAZZCASH', is_active=True,
+        ).first()
+        if not gateway_config:
+            logger.error(f'JazzCash callback: no active config for school {online_payment.school_id}')
+            return Response({'detail': 'Gateway not configured.'}, status=400)
+
+        try:
+            gw = get_gateway(gateway_config)
+            result = gw.verify_callback(request.data)
+        except PaymentGatewayError as e:
+            logger.error(f'JazzCash callback error: {e}')
+            return Response({'detail': str(e)}, status=400)
+
+        with transaction.atomic():
+            online_payment.gateway_response = result.get('raw', {})
+            online_payment.gateway_payment_id = result.get('gateway_payment_id', '')
+
+            if result['status'] == 'SUCCESS' and result.get('verified'):
+                online_payment.status = 'SUCCESS'
+                online_payment.completed_at = tz.now()
+
+                fee_payment = online_payment.fee_payment
+                fee_payment.amount_paid = fee_payment.amount_paid + online_payment.amount
+                fee_payment.payment_date = tz.now().date()
+                fee_payment.payment_method = 'ONLINE'
+                fee_payment.save()
+            elif result['status'] == 'PENDING':
+                online_payment.status = 'PENDING'
+            else:
+                online_payment.status = 'FAILED'
+                online_payment.failure_reason = result.get('response_message', 'Verification failed')
+
+            online_payment.save()
+
+        return Response({'status': online_payment.status, 'order_id': order_id})
+
+
+class EasypaisaCallbackView(APIView):
+    """
+    POST callback from Easypaisa after payment.
+    Public endpoint (no auth) — verified via postback URL.
+    """
+    permission_classes = []
+    authentication_classes = []
+
+    def post(self, request):
+        from .payment_gateway_service import get_gateway, PaymentGatewayError
+        from django.utils import timezone as tz
+
+        order_id = request.data.get('orderRefNumber', '')
+        if not order_id:
+            return Response({'detail': 'Missing orderRefNumber.'}, status=400)
+
+        try:
+            online_payment = OnlinePayment.objects.select_related(
+                'fee_payment', 'school',
+            ).get(gateway_order_id=order_id, gateway='EASYPAISA')
+        except OnlinePayment.DoesNotExist:
+            logger.warning(f'Easypaisa callback: unknown order {order_id}')
+            return Response({'detail': 'Payment not found.'}, status=404)
+
+        gateway_config = PaymentGatewayConfig.objects.filter(
+            school=online_payment.school, gateway='EASYPAISA', is_active=True,
+        ).first()
+        if not gateway_config:
+            logger.error(f'Easypaisa callback: no active config for school {online_payment.school_id}')
+            return Response({'detail': 'Gateway not configured.'}, status=400)
+
+        try:
+            gw = get_gateway(gateway_config)
+            result = gw.verify_callback(request.data)
+        except PaymentGatewayError as e:
+            logger.error(f'Easypaisa callback error: {e}')
+            return Response({'detail': str(e)}, status=400)
+
+        with transaction.atomic():
+            online_payment.gateway_response = result.get('raw', {})
+            online_payment.gateway_payment_id = result.get('gateway_payment_id', '')
+
+            if result['status'] == 'SUCCESS':
+                online_payment.status = 'SUCCESS'
+                online_payment.completed_at = tz.now()
+
+                fee_payment = online_payment.fee_payment
+                fee_payment.amount_paid = fee_payment.amount_paid + online_payment.amount
+                fee_payment.payment_date = tz.now().date()
+                fee_payment.payment_method = 'ONLINE'
+                fee_payment.save()
+            elif result['status'] == 'PENDING':
+                online_payment.status = 'PENDING'
+            else:
+                online_payment.status = 'FAILED'
+                online_payment.failure_reason = result.get('response_message', 'Payment failed')
+
+            online_payment.save()
+
+        return Response({'status': online_payment.status, 'order_id': order_id})
+
+
+class PaymentStatusView(APIView):
+    """
+    GET /api/finance/payment-status/<order_id>/
+    Check the status of an online payment by order ID.
+    Accessible by authenticated users (parents checking their payment).
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, order_id):
+        try:
+            online_payment = OnlinePayment.objects.select_related(
+                'student', 'fee_payment',
+            ).get(gateway_order_id=order_id)
+        except OnlinePayment.DoesNotExist:
+            return Response({'detail': 'Payment not found.'}, status=404)
+
+        return Response({
+            'order_id': online_payment.gateway_order_id,
+            'status': online_payment.status,
+            'status_display': online_payment.get_status_display(),
+            'amount': str(online_payment.amount),
+            'currency': online_payment.currency,
+            'gateway': online_payment.gateway,
+            'student_name': online_payment.student.name,
+            'fee_month': online_payment.fee_payment.month,
+            'fee_year': online_payment.fee_payment.year,
+            'initiated_at': online_payment.initiated_at,
+            'completed_at': online_payment.completed_at,
+            'failure_reason': online_payment.failure_reason,
+        })

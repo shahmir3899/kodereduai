@@ -46,11 +46,12 @@ class TransportRouteCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = TransportRoute
         fields = [
-            'name', 'description',
+            'id', 'name', 'description',
             'start_location', 'end_location',
             'distance_km', 'estimated_duration_minutes',
             'is_active',
         ]
+        read_only_fields = ['id']
 
 
 # =============================================================================
@@ -110,11 +111,12 @@ class TransportVehicleCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = TransportVehicle
         fields = [
-            'vehicle_number', 'vehicle_type',
+            'id', 'vehicle_number', 'vehicle_type',
             'capacity', 'make_model',
             'driver_name', 'driver_phone', 'driver_license',
             'assigned_route', 'is_active',
         ]
+        read_only_fields = ['id']
 
 
 # =============================================================================
@@ -164,10 +166,11 @@ class TransportAssignmentCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = TransportAssignment
         fields = [
-            'academic_year', 'student',
+            'id', 'academic_year', 'student',
             'route', 'stop', 'vehicle',
             'transport_type', 'is_active',
         ]
+        read_only_fields = ['id']
 
     def validate(self, attrs):
         # Ensure the stop belongs to the selected route
@@ -228,8 +231,9 @@ class TransportAttendanceCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = TransportAttendance
         fields = [
-            'student', 'route', 'date', 'boarding_status',
+            'id', 'student', 'route', 'date', 'boarding_status',
         ]
+        read_only_fields = ['id']
 
 
 # =============================================================================

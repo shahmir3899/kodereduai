@@ -140,6 +140,8 @@ export default function PaymentGatewayPage() {
   const [editingGateway, setEditingGateway] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
+  const [testResult, setTestResult] = useState(null)
+  const [testingId, setTestingId] = useState(null)
 
   // ── Queries ─────────────────────────────────────────────────────────────
 
@@ -201,7 +203,7 @@ export default function PaymentGatewayPage() {
   })
 
   const toggleActiveMutation = useMutation({
-    mutationFn: ({ id, is_active }) => paymentApi.updateGatewayConfig(id, { is_active }),
+    mutationFn: (id) => paymentApi.toggleGatewayStatus(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['gatewayConfigs'] })
       showSuccess('Gateway status updated!')
@@ -212,13 +214,32 @@ export default function PaymentGatewayPage() {
   })
 
   const setDefaultMutation = useMutation({
-    mutationFn: (id) => paymentApi.updateGatewayConfig(id, { is_default: true }),
+    mutationFn: (id) => paymentApi.setDefaultGateway(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['gatewayConfigs'] })
       showSuccess('Default gateway updated!')
     },
     onError: (err) => {
       showError(err?.response?.data?.detail || 'Failed to set default gateway')
+    },
+  })
+
+  const testConnectionMutation = useMutation({
+    mutationFn: (id) => paymentApi.testConnection(id),
+    onSuccess: (res) => {
+      const data = res.data
+      setTestResult(data)
+      if (data.success) {
+        showSuccess(data.message || 'Connection successful!')
+      } else {
+        showError(data.message || 'Connection test failed')
+      }
+      setTestingId(null)
+    },
+    onError: (err) => {
+      showError(err?.response?.data?.detail || 'Connection test failed')
+      setTestingId(null)
+      setTestResult(null)
     },
   })
 
@@ -415,7 +436,7 @@ export default function PaymentGatewayPage() {
                 <div className="px-4 py-3 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
                   <div className="flex items-center gap-1">
                     <button
-                      onClick={() => toggleActiveMutation.mutate({ id: gw.id, is_active: !gw.is_active })}
+                      onClick={() => toggleActiveMutation.mutate(gw.id)}
                       disabled={toggleActiveMutation.isPending}
                       className={`text-xs font-medium px-2 py-1 rounded transition-colors ${
                         gw.is_active
@@ -424,6 +445,13 @@ export default function PaymentGatewayPage() {
                       }`}
                     >
                       {gw.is_active ? 'Deactivate' : 'Activate'}
+                    </button>
+                    <button
+                      onClick={() => { setTestingId(gw.id); setTestResult(null); testConnectionMutation.mutate(gw.id) }}
+                      disabled={testingId === gw.id}
+                      className="text-xs font-medium text-blue-600 hover:bg-blue-50 px-2 py-1 rounded transition-colors"
+                    >
+                      {testingId === gw.id ? 'Testing...' : 'Test'}
                     </button>
                     {!gw.is_default && gw.is_active && (
                       <button
@@ -567,14 +595,21 @@ export default function PaymentGatewayPage() {
                   </select>
                 </div>
                 <div className="flex items-end pb-0.5">
-                  <button
-                    type="button"
-                    className="btn btn-secondary text-xs opacity-50 cursor-not-allowed"
-                    disabled
-                    title="Coming soon"
-                  >
-                    Test Connection
-                  </button>
+                  {editingGateway && (
+                    <button
+                      type="button"
+                      className="btn btn-secondary text-xs"
+                      disabled={testConnectionMutation.isPending}
+                      onClick={() => { setTestResult(null); testConnectionMutation.mutate(editingGateway.id) }}
+                    >
+                      {testConnectionMutation.isPending ? 'Testing...' : 'Test Connection'}
+                    </button>
+                  )}
+                  {testResult && (
+                    <span className={`ml-2 text-xs ${testResult.success ? 'text-green-600' : 'text-red-600'}`}>
+                      {testResult.success ? 'Connected!' : 'Failed'}
+                    </span>
+                  )}
                 </div>
               </div>
 

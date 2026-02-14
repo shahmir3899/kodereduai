@@ -142,7 +142,7 @@ class AdmissionEnquiryCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = AdmissionEnquiry
         fields = [
-            'session',
+            'id', 'session',
             # Child info
             'child_name', 'child_dob', 'child_gender',
             'applying_for_grade_level', 'previous_school',
@@ -157,6 +157,7 @@ class AdmissionEnquiryCreateSerializer(serializers.ModelSerializer):
             'assigned_to', 'priority', 'next_followup_date',
             'notes', 'metadata',
         ]
+        read_only_fields = ['id']
 
     def validate(self, attrs):
         if not attrs.get('child_name'):

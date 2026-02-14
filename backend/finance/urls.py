@@ -13,6 +13,7 @@ from .views import (
     DiscountViewSet, ScholarshipViewSet, StudentDiscountViewSet,
     PaymentGatewayConfigViewSet, OnlinePaymentViewSet,
     FeeBreakdownView, SiblingDetectionView,
+    JazzCashCallbackView, EasypaisaCallbackView, PaymentStatusView,
 )
 
 router = DefaultRouter()
@@ -34,5 +35,13 @@ urlpatterns = [
     path('fee-predictor/', FeePredictorView.as_view(), name='fee-predictor'),
     path('fee-breakdown/<int:student_id>/', FeeBreakdownView.as_view(), name='fee-breakdown'),
     path('siblings/<int:student_id>/', SiblingDetectionView.as_view(), name='sibling-detection'),
+
+    # Payment gateway callbacks (public — no auth, verified by signature)
+    path('callbacks/jazzcash/', JazzCashCallbackView.as_view(), name='jazzcash-callback'),
+    path('callbacks/easypaisa/', EasypaisaCallbackView.as_view(), name='easypaisa-callback'),
+
+    # Payment status check
+    path('payment-status/<str:order_id>/', PaymentStatusView.as_view(), name='payment-status'),
+
     path('', include(router.urls)),
 ]

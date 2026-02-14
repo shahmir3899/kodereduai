@@ -20,10 +20,10 @@ router.register(r'enquiries', AdmissionEnquiryViewSet, basename='admission-enqui
 
 # Nested routers for documents and notes under a specific enquiry
 documents_router = DefaultRouter()
-documents_router.register(r'documents', AdmissionDocumentViewSet, basename='admission-document')
+documents_router.register(r'', AdmissionDocumentViewSet, basename='admission-document')
 
 notes_router = DefaultRouter()
-notes_router.register(r'notes', AdmissionNoteViewSet, basename='admission-note')
+notes_router.register(r'', AdmissionNoteViewSet, basename='admission-note')
 
 urlpatterns = [
     # Analytics

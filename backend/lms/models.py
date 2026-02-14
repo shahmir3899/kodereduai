@@ -185,8 +185,7 @@ class Assignment(models.Model):
     def __str__(self):
         return f"{self.title} - {self.class_obj.name} (due {self.due_date:%Y-%m-%d})"
 
-    @property
-    def submission_count(self):
+    def get_submission_count(self):
         return self.submissions.count()
 
 

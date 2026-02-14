@@ -49,6 +49,7 @@ import ChildTimetable from './pages/parent/ChildTimetable'
 import ChildExamResults from './pages/parent/ChildExamResults'
 import LeaveApplication from './pages/parent/LeaveApplication'
 import ParentMessages from './pages/parent/ParentMessages'
+import PaymentResultPage from './pages/parent/PaymentResultPage'
 
 // Admissions pages
 import AdmissionDashboard from './pages/admissions/AdmissionDashboard'
@@ -286,6 +287,7 @@ function App() {
           <Route path="parent/children/:studentId/results" element={<ParentRoute><ChildExamResults /></ParentRoute>} />
           <Route path="parent/leave" element={<ParentRoute><LeaveApplication /></ParentRoute>} />
           <Route path="parent/messages" element={<ParentRoute><ParentMessages /></ParentRoute>} />
+          <Route path="parent/payment-result" element={<ParentRoute><PaymentResultPage /></ParentRoute>} />
 
           {/* LMS routes */}
           <Route path="academics/lesson-plans" element={<SchoolRoute><ModuleRoute module="lms"><LessonPlansPage /></ModuleRoute></SchoolRoute>} />
