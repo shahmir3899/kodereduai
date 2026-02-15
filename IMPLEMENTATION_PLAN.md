@@ -2,7 +2,7 @@
 
 > Created: 2026-02-14
 > Updated: 2026-02-14
-> Status: IN PROGRESS (Phases 5-7, 10-11 COMPLETED)
+> Status: Phases 5-11 COMPLETED | Phases 12-13 PLANNED
 > Replaces: Previous Phase 1-4 plan (all completed)
 > Based on: MINDMAP_VS_APP_ANALYSIS.md + Deep Codebase Audit
 
@@ -13,12 +13,14 @@
 1. [Phase 5: Celery Beat Configuration (P0) — COMPLETED](#phase-5-celery-beat-configuration-p0--completed)
 2. [Phase 6: Payment Gateway Full Flow (P1) — COMPLETED](#phase-6-payment-gateway-full-flow-p1--completed)
 3. [Phase 7: Proper Test Suite (P1) — COMPLETED](#phase-7-proper-test-suite-p1--completed)
-4. [Phase 8: Mobile App — React Native + Expo (P2)](#phase-8-mobile-app--react-native--expo-p2)
-5. [Phase 9: Student GPS Location Sharing (P2)](#phase-9-student-gps-location-sharing-p2)
+4. [Phase 8: Mobile App — React Native + Expo (P2) — COMPLETED](#phase-8-mobile-app--react-native--expo-p2--completed)
+5. [Phase 9: Student GPS Location Sharing (P2) — COMPLETED](#phase-9-student-gps-location-sharing-p2--completed)
 6. [Phase 10: AI Study Helper (P3) — COMPLETED](#phase-10-ai-study-helper-p3--completed)
 7. [Phase 11: Hostel Management (P3) — COMPLETED](#phase-11-hostel-management-p3--completed)
-8. [Master Timeline & Dependencies](#master-timeline--dependencies)
-9. [Post-Implementation Coverage](#post-implementation-coverage)
+8. [Phase 12: Inventory & Store Management (P3)](#phase-12-inventory--store-management-p3)
+9. [Phase 13: Drag-and-Drop Timetable (P3)](#phase-13-drag-and-drop-timetable-p3)
+10. [Master Timeline & Dependencies](#master-timeline--dependencies)
+11. [Post-Implementation Coverage](#post-implementation-coverage)
 
 ---
 
@@ -651,7 +653,7 @@ pytest -v
 
 ---
 
-## Phase 8: Mobile App — React Native + Expo (P2)
+## Phase 8: Mobile App — React Native + Expo (P2) — COMPLETED
 
 ### Framework Decision: React Native with Expo
 
@@ -874,9 +876,50 @@ Week 4: Payment WebView + polish + testing + EAS Build config
 
 ### Effort: ~3-4 weeks (MVP)
 
+### Implementation Status: COMPLETED
+
+**Project Setup & Infrastructure (67 files):**
+- Created Expo SDK 54 project with TypeScript, Expo Router (file-based routing)
+- `mobile/services/api.ts` — Full Axios client with Bearer token + X-School-ID interceptors, 401 auto-refresh with request queue, 15+ API namespaces (authApi, studentsApi, parentsApi, financeApi, attendanceApi, academicsApi, examinationsApi, notificationsApi, hrApi, libraryApi, transportApi, admissionsApi, hostelApi, studentPortalApi, paymentApi)
+- `mobile/services/auth.ts` — expo-secure-store token CRUD (getToken, setTokens, clearTokens, getSchoolId, setSchoolId)
+- `mobile/contexts/AuthContext.tsx` — Full port from web: user state, activeSchool, loading, login/logout/switchSchool/refreshUser, role computed (isParent, isStudent, isSchoolAdmin, isStaffLevel, isModuleEnabled)
+- `mobile/contexts/NotificationContext.tsx` — Push notification state, auto-register on login, unread badge count
+- `mobile/app/_layout.tsx` — Root layout with auth guard + role-based routing (parent → parent tabs, student → student tabs, admin → admin tabs)
+
+**UI Component Library (12 components):**
+- `Button.tsx`, `Card.tsx`, `Badge.tsx`, `Input.tsx`, `Select.tsx`, `Modal.tsx`, `Toast.tsx`, `Spinner.tsx`, `EmptyState.tsx`, `Avatar.tsx`, `TabBar.tsx`, `StatCard.tsx`
+
+**Auth Screens (2 screens):**
+- `mobile/app/(auth)/login.tsx` — Login with JWT + secure token storage
+- `mobile/app/(auth)/register.tsx` — Parent/Student registration
+
+**Parent Portal (10 screens):**
+- Dashboard, Child Overview, Child Attendance (calendar heatmap), Child Fees (Pay Now), Child Timetable (weekly grid), Child Results (by term), Leave Application, Messages (threads), Payment WebView, GPS Track Child (Phase 9)
+- Shared components: `AttendanceCalendar.tsx`, `FeeCard.tsx`, `TimetableGrid.tsx`, `PaymentWebView.tsx`
+
+**Student Portal (10 screens):**
+- Dashboard, Attendance Calendar, Fee Status, Timetable, Exam Results, Assignments (submit), AI Study Helper (chat), Profile, Location Sharing (GPS), Notification Inbox
+- Shared components: `ChatInterface.tsx`, `NotificationItem.tsx`
+
+**Admin/Staff Portal (23 screens):**
+- Dashboard, Attendance Capture (camera), Attendance Review, Student Directory (card grid), Student Profile (tabs), Edit Student, Finance Dashboard, Fee Collection, Expense Entry, Income Entry, Transaction History, Quick Send Notification, Template Send, Notification History, HR Staff Directory, Leave Approvals, Gate Pass Approvals, Transport Dashboard, Timetable View, Exam Results, Library Quick Issue, Notification Inbox, AI Assistant (3 tabs: Finance AI, Academics AI, Communication AI)
+- Shared components: `StudentCard.tsx`, `StaffCard.tsx`
+
+**Push Notifications (Backend + Mobile):**
+- `backend/users/models.py` — Added `DevicePushToken` model (user FK, token, device_type, is_active)
+- `backend/users/views.py` — `RegisterPushTokenView` (POST, upsert) + `UnregisterPushTokenView` (DELETE)
+- `backend/users/urls.py` — `/api/auth/register-push-token/`, `/api/auth/unregister-push-token/`
+- `backend/notifications/channels/expo.py` — NEW `ExpoChannel` extending BaseChannel, sends via Expo Push API, handles DeviceNotRegistered token cleanup
+- `backend/notifications/engine.py` — Registered PUSH channel in handlers + config check
+- `backend/notifications/models.py` — Added `('PUSH', 'Push Notification')` to CHANNEL_CHOICES + `push_enabled` to SchoolNotificationConfig
+- `mobile/services/notifications.ts` — Push token registration, Android notification channel, foreground/tap handlers
+- Migrations: `users/0005_devicepushtoken.py`, `notifications/0003_add_push_channel.py`
+
+**Total: 52 screens (2 auth + 10 parent + 10 student + 23 admin + 7 shared), 67 mobile files, 0 TypeScript errors**
+
 ---
 
-## Phase 9: Student GPS Location Sharing (P2)
+## Phase 9: Student GPS Location Sharing (P2) — COMPLETED
 
 ### Concept
 
@@ -1024,6 +1067,31 @@ def auto_end_stale_journeys(hours=2):
 | New migration | CREATE | StudentJourney + LocationUpdate tables |
 
 ### Effort: ~1 week
+
+### Implementation Status: COMPLETED
+
+**Backend:**
+- `backend/transport/models.py` — Added `StudentJourney` model (school, student, transport_assignment, journey_type TO_SCHOOL/FROM_SCHOOL, status ACTIVE/COMPLETED/CANCELLED, start/end lat/lng, timestamps) + `LocationUpdate` model (journey FK, lat, lng, accuracy, speed, battery_level, timestamp with composite index)
+- `backend/transport/serializers.py` — `LocationUpdateSerializer`, `StudentJourneyReadSerializer` (with `latest_location` SerializerMethodField), `JourneyStartSerializer`, `JourneyUpdateSerializer`
+- `backend/transport/views.py` — 6 new APIViews:
+  - `JourneyStartView` (POST) — Student starts journey, checks no active journey exists
+  - `JourneyEndView` (POST) — Student ends journey, records end location
+  - `JourneyUpdateView` (POST) — GPS ping every 30s, creates LocationUpdate
+  - `JourneyTrackView` (GET) — Parent tracks child, returns active journey + last 50 locations
+  - `JourneyHistoryView` (GET) — Parent views last 20 journeys
+  - `ActiveJourneysView` (GET) — Admin views all active journeys for school
+- `backend/transport/urls.py` — 6 journey routes under `/api/transport/journey/`
+- `backend/transport/tasks.py` — NEW: `cleanup_old_location_data(days=7)` + `auto_end_stale_journeys(hours=2)` Celery tasks
+- `backend/config/settings.py` — Added `cleanup-location-data` (weekly Sunday 3 AM) + `auto-end-stale-journeys` (every hour) to CELERY_BEAT_SCHEDULE
+- Migration: `transport/0002_add_gps_journey_models.py`
+
+**Mobile:**
+- `mobile/services/location.ts` — Background GPS tracking using `expo-task-manager` + `expo-location`. Posts GPS updates to `transportApi.updateJourney` every 30s or 50m. Android foreground service notification.
+- `mobile/services/api.ts` — Added 6 GPS endpoints to `transportApi`: `startJourney`, `endJourney`, `updateJourney`, `trackStudent`, `getJourneyHistory`, `getActiveJourneys`
+- `mobile/app/(student)/location-sharing.tsx` — Start/End journey UI, direction selector (TO_SCHOOL/FROM_SCHOOL), elapsed time timer, background GPS activation, permission handling
+- `mobile/app/(parent)/track-child.tsx` — Child selector chips, polls every 10s, latest position display (coordinates, speed, battery), location history list, "No Active Journey" empty state
+
+**Verification: 0 TypeScript errors, Django system check 0 issues, all migrations applied**
 
 ---
 
@@ -1502,6 +1570,397 @@ Hostel (module-gated)
 
 ---
 
+## Phase 12: Inventory & Store Management (P3)
+
+### What We're Building
+
+A complete school inventory system for tracking supplies, equipment, and consumables. Schools buy stationery, lab equipment, sports goods, cleaning supplies, uniforms — all currently tracked only as a single "SUPPLIES" expense line. This module adds proper item-level tracking: what's in stock, what needs reordering, who requested it, and where the money went.
+
+### What Exists Already
+
+| Component | Status | Location |
+|-----------|--------|----------|
+| `Expense` model with `SUPPLIES` category | Exists | `finance/models.py:436-527` |
+| `OtherIncome` with `SALE` category (Books/Copies/Uniform) | Exists | `finance/models.py:569-658` |
+| `Account` model (payment sources) | Exists | `finance/models.py:6-76` |
+| Module registry + `ModuleAccessMixin` | Ready | `core/module_registry.py` |
+| Multi-tenancy middleware + `TenantQuerySetMixin` | Ready | Used by all apps |
+
+### New Django App: `inventory/`
+
+### Backend Models
+
+```python
+# inventory/models.py
+
+class InventoryCategory(models.Model):
+    """Categories for inventory items (e.g., Stationery, Lab Equipment, Sports)."""
+    school = ForeignKey(School, CASCADE, related_name='inventory_categories')
+    name = CharField(max_length=100)          # e.g., "Stationery", "Lab Equipment"
+    description = TextField(blank=True)
+    is_active = BooleanField(default=True)
+    created_at = DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('school', 'name')
+        ordering = ['name']
+
+
+class Vendor(models.Model):
+    """Supplier/vendor for inventory purchases."""
+    school = ForeignKey(School, CASCADE, related_name='vendors')
+    name = CharField(max_length=200)
+    contact_person = CharField(max_length=100, blank=True)
+    phone = CharField(max_length=20, blank=True)
+    email = EmailField(blank=True)
+    address = TextField(blank=True)
+    is_active = BooleanField(default=True)
+    created_at = DateTimeField(auto_now_add=True)
+    updated_at = DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('school', 'name')
+        ordering = ['name']
+
+
+class InventoryItem(models.Model):
+    """An item tracked in inventory (e.g., Whiteboard Marker, Microscope)."""
+    UNIT_CHOICES = [
+        ('PCS', 'Pieces'), ('PKT', 'Packets'), ('BOX', 'Boxes'),
+        ('KG', 'Kilograms'), ('LTR', 'Litres'), ('SET', 'Sets'),
+        ('REAM', 'Reams'), ('DZN', 'Dozens'), ('MTR', 'Meters'),
+    ]
+
+    school = ForeignKey(School, CASCADE, related_name='inventory_items')
+    category = ForeignKey(InventoryCategory, CASCADE, related_name='items')
+    name = CharField(max_length=200)
+    sku = CharField(max_length=50, blank=True)      # Optional stock code
+    unit = CharField(max_length=10, choices=UNIT_CHOICES, default='PCS')
+    current_stock = PositiveIntegerField(default=0)
+    minimum_stock = PositiveIntegerField(default=5,
+        help_text='Alert when stock falls below this level')
+    unit_price = DecimalField(max_digits=10, decimal_places=2, default=0,
+        help_text='Last known unit price')
+    location = CharField(max_length=100, blank=True,
+        help_text='Storage location e.g. "Store Room A", "Lab Cabinet 3"')
+    is_active = BooleanField(default=True)
+    created_at = DateTimeField(auto_now_add=True)
+    updated_at = DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('school', 'name', 'category')
+        ordering = ['name']
+        indexes = [
+            models.Index(fields=['school', 'category']),
+        ]
+
+    @property
+    def is_low_stock(self):
+        return self.current_stock <= self.minimum_stock
+
+    @property
+    def stock_value(self):
+        return self.current_stock * self.unit_price
+
+
+class StockTransaction(models.Model):
+    """Every stock movement: purchase, issue, return, adjustment, disposal."""
+    TRANSACTION_TYPES = [
+        ('PURCHASE', 'Purchase'),        # Stock In — bought from vendor
+        ('ISSUE', 'Issue'),              # Stock Out — given to department/staff
+        ('RETURN', 'Return'),            # Stock In — returned by department
+        ('ADJUSTMENT', 'Adjustment'),    # Correction (+ or -)
+        ('DISPOSAL', 'Disposal'),        # Written off (damaged/expired)
+    ]
+
+    school = ForeignKey(School, CASCADE, related_name='stock_transactions')
+    item = ForeignKey(InventoryItem, CASCADE, related_name='transactions')
+    transaction_type = CharField(max_length=20, choices=TRANSACTION_TYPES)
+    quantity = IntegerField(help_text='Positive for in, negative for out')
+    unit_price = DecimalField(max_digits=10, decimal_places=2, default=0)
+    total_amount = DecimalField(max_digits=12, decimal_places=2, default=0)
+    vendor = ForeignKey(Vendor, SET_NULL, null=True, blank=True,
+        help_text='Only for PURCHASE transactions')
+    issued_to = CharField(max_length=200, blank=True,
+        help_text='Department or person name for ISSUE/RETURN')
+    reference_number = CharField(max_length=100, blank=True,
+        help_text='Invoice/PO/receipt number')
+    remarks = TextField(blank=True)
+    date = DateField()
+    recorded_by = ForeignKey(User, SET_NULL, null=True)
+    expense = ForeignKey('finance.Expense', SET_NULL, null=True, blank=True,
+        help_text='Link to finance expense record')
+    created_at = DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-date', '-created_at']
+        indexes = [
+            models.Index(fields=['school', 'item', '-date']),
+            models.Index(fields=['school', 'transaction_type']),
+        ]
+
+
+class PurchaseRequest(models.Model):
+    """Staff requests to purchase items. Requires admin approval."""
+    STATUS_CHOICES = [
+        ('PENDING', 'Pending'),
+        ('APPROVED', 'Approved'),
+        ('REJECTED', 'Rejected'),
+        ('ORDERED', 'Ordered'),
+        ('RECEIVED', 'Received'),
+    ]
+
+    school = ForeignKey(School, CASCADE, related_name='purchase_requests')
+    requested_by = ForeignKey(User, CASCADE, related_name='purchase_requests')
+    item = ForeignKey(InventoryItem, CASCADE, related_name='purchase_requests')
+    quantity = PositiveIntegerField()
+    estimated_cost = DecimalField(max_digits=10, decimal_places=2, default=0)
+    reason = TextField()
+    status = CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+    approved_by = ForeignKey(User, SET_NULL, null=True, blank=True,
+        related_name='approved_purchase_requests')
+    approved_at = DateTimeField(null=True, blank=True)
+    remarks = TextField(blank=True)
+    created_at = DateTimeField(auto_now_add=True)
+    updated_at = DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+```
+
+### API Endpoints
+
+```python
+# inventory/urls.py
+
+# Categories
+GET/POST    /api/inventory/categories/                    # List/create
+GET/PATCH   /api/inventory/categories/{id}/               # Detail/update
+
+# Vendors
+GET/POST    /api/inventory/vendors/                       # List/create
+GET/PATCH   /api/inventory/vendors/{id}/                  # Detail/update
+
+# Items
+GET/POST    /api/inventory/items/                         # List/create (filterable by category)
+GET/PATCH   /api/inventory/items/{id}/                    # Detail/update
+GET         /api/inventory/items/low-stock/               # Items below minimum_stock
+
+# Transactions
+GET/POST    /api/inventory/transactions/                  # List/create
+GET         /api/inventory/transactions/{id}/             # Detail (read-only once created)
+
+# Purchase Requests
+GET/POST    /api/inventory/purchase-requests/             # List/create
+PATCH       /api/inventory/purchase-requests/{id}/approve/
+PATCH       /api/inventory/purchase-requests/{id}/reject/
+PATCH       /api/inventory/purchase-requests/{id}/mark-received/
+
+# Dashboard
+GET         /api/inventory/dashboard/                     # Summary stats
+```
+
+### Transaction Logic
+
+```
+PURCHASE:  quantity is POSITIVE  → current_stock += quantity
+                                 → auto-create Expense with SUPPLIES category (optional)
+ISSUE:     quantity is NEGATIVE  → current_stock -= abs(quantity)
+RETURN:    quantity is POSITIVE  → current_stock += quantity
+ADJUSTMENT: quantity is +/-     → current_stock += quantity (can be negative)
+DISPOSAL:  quantity is NEGATIVE  → current_stock -= abs(quantity)
+```
+
+Each `StockTransaction.save()` updates `InventoryItem.current_stock` atomically using `F()` expressions.
+
+### Finance Integration
+
+- **Purchase → Expense**: When recording a PURCHASE transaction, optionally auto-create a linked `Expense` record with `category=SUPPLIES` and the same amount.
+- **Sale → Income**: If the school sells items (Books/Copies/Uniform), create an ISSUE transaction + linked `OtherIncome` with `category=SALE`.
+- **Dashboard**: Show total inventory value (sum of `current_stock * unit_price` across all items).
+
+### Frontend Pages (4 pages)
+
+| Page | Route | Description |
+|------|-------|-------------|
+| `InventoryDashboard.jsx` | `/inventory` | Total items, total value, low stock alerts, recent transactions chart |
+| `InventoryItemsPage.jsx` | `/inventory/items` | Item grid with category filter, search, stock levels (green/yellow/red), add/edit modal |
+| `StockTransactionsPage.jsx` | `/inventory/transactions` | Transaction log with type filters + date range, "Record Transaction" form modal (type, item, qty, vendor, reference) |
+| `PurchaseRequestsPage.jsx` | `/inventory/requests` | Request list with status tabs (Pending/Approved/Ordered/Received), approve/reject actions, "New Request" form |
+
+Additional modals/sections:
+- Vendor management (modal in transactions page or settings)
+- Category management (modal in items page)
+- Low stock alert banner on dashboard
+
+### Sidebar Navigation
+
+```
+Inventory (module-gated)
+├── Dashboard       → /inventory
+├── Items           → /inventory/items
+├── Transactions    → /inventory/transactions
+└── Purchase Requests → /inventory/requests
+```
+
+### Module Registration
+
+```python
+# core/module_registry.py
+'inventory': {
+    'name': 'Inventory & Store',
+    'description': 'Track school supplies, equipment, and purchase requests',
+    'dependencies': ['finance'],
+}
+```
+
+### Files Created/Modified
+
+| File | Action | Description |
+|------|--------|-------------|
+| `backend/inventory/__init__.py` | CREATE | App init |
+| `backend/inventory/apps.py` | CREATE | App config |
+| `backend/inventory/models.py` | CREATE | 5 models: InventoryCategory, Vendor, InventoryItem, StockTransaction, PurchaseRequest |
+| `backend/inventory/serializers.py` | CREATE | Read/Write serializer pairs for all models |
+| `backend/inventory/views.py` | CREATE | 5 ViewSets + dashboard + purchase request actions |
+| `backend/inventory/urls.py` | CREATE | URL patterns |
+| `backend/inventory/admin.py` | CREATE | Django admin registration |
+| `backend/config/settings.py` | MODIFY | Add 'inventory' to INSTALLED_APPS |
+| `backend/config/urls.py` | MODIFY | Add inventory URL include |
+| `backend/core/module_registry.py` | MODIFY | Register inventory module |
+| `frontend/src/pages/inventory/InventoryDashboard.jsx` | CREATE | Dashboard page |
+| `frontend/src/pages/inventory/InventoryItemsPage.jsx` | CREATE | Items management |
+| `frontend/src/pages/inventory/StockTransactionsPage.jsx` | CREATE | Transaction log + entry |
+| `frontend/src/pages/inventory/PurchaseRequestsPage.jsx` | CREATE | Purchase request workflow |
+| `frontend/src/App.jsx` | MODIFY | Add 4 inventory routes |
+| `frontend/src/components/Layout.jsx` | MODIFY | Add inventory nav group |
+| `frontend/src/services/api.js` | MODIFY | Add inventoryApi service |
+| New migration(s) | CREATE | Inventory tables |
+
+### Effort: ~3-5 days
+
+---
+
+## Phase 13: Drag-and-Drop Timetable (P3)
+
+### What We're Building
+
+Replace the current cell-by-cell modal editing of the timetable grid with **drag-and-drop** interaction. Teachers drag subject blocks onto time slots, swap entries by dragging between cells, and get instant visual conflict feedback.
+
+### What Exists Already
+
+| Component | Status | Location |
+|-----------|--------|----------|
+| `TimetableSlot` model (periods/breaks) | Complete | `academics/models.py` |
+| `TimetableEntry` model (class+day+slot→subject+teacher) | Complete | `academics/models.py` |
+| `TimetableEntryViewSet` with `bulk_save`, `auto_generate`, `teacher_conflicts`, `quality_score` | Complete | `academics/views.py` |
+| `TimetablePage.jsx` — grid table + cell edit modal | Complete | `frontend/src/pages/academics/TimetablePage.jsx` |
+| AI-powered auto-generation with CSP algorithm | Complete | `academics/views.py` |
+| Conflict detection + quality scoring | Complete | `academics/views.py` |
+
+**Current UX flow:**
+1. Admin selects a class
+2. Grid shows days (columns) × time slots (rows)
+3. Click a cell → modal opens → select subject + teacher → save
+4. One cell at a time, modal-heavy
+
+**Target UX flow:**
+1. Admin selects a class
+2. Grid shows days × time slots (same layout)
+3. Sidebar shows available subject blocks (from `ClassSubject` assignments)
+4. Drag subject block from sidebar → drop onto empty cell
+5. Drag existing cell → drop onto another cell to swap
+6. Real-time conflict highlighting (red border if teacher already booked)
+7. Auto-save on drop (calls `bulk_save`)
+8. Click cell to edit details (teacher override, room) via popover (not full modal)
+
+### Frontend Library
+
+**`@dnd-kit/core`** — lightweight, accessible drag-and-drop for React. Already dominant in the React ecosystem, works with tables/grids, supports: sortable, droppable, draggable, collision detection, keyboard accessible.
+
+```bash
+npm install @dnd-kit/core @dnd-kit/sortable @dnd-kit/utilities
+```
+
+### Implementation Changes
+
+#### Frontend: `TimetablePage.jsx` → Enhanced with DnD
+
+**New/Modified Components:**
+
+| Component | Description |
+|-----------|-------------|
+| `SubjectPalette.jsx` | Sidebar showing draggable subject blocks (from ClassSubject). Each block shows subject name + teacher + periods remaining/total |
+| `TimetableGrid.jsx` | Enhanced grid — each cell is a `Droppable` zone. Existing entries are `Draggable`. Empty cells accept drops |
+| `TimetableCell.jsx` | Individual cell — shows subject + teacher. Draggable handle. Click opens inline editor popover (not modal) |
+| `ConflictOverlay.jsx` | Red border/shake on cells where teacher has a conflict. Real-time check via `teacher_conflicts` endpoint on drag hover |
+
+**DnD Flow:**
+
+```
+1. DragStart: Pick up SubjectBlock from palette OR existing TimetableCell
+2. DragOver:  Highlight valid drop targets (empty cells or swap targets)
+              Call teacher_conflicts API → show red overlay on conflicting cells
+3. DragEnd:
+   a. Palette → Empty cell: Create new TimetableEntry
+   b. Cell → Cell: Swap two entries
+   c. Cell → Palette: Remove entry (unassign)
+4. After drop: Call bulk_save for the affected day(s)
+5. UI updates optimistically (revert on error)
+```
+
+**Period Counter in Palette:**
+
+```
+Math (Mr. Khan)  ████░░  4/6 periods assigned
+English (Ms. Ali) ██████  6/6 periods assigned ← dimmed, can't add more
+Science (Dr. Raza) ██░░░░ 2/6 periods assigned
+```
+
+Each subject block shows `assigned / periods_per_week` from `ClassSubject`.
+
+#### Backend: No Model Changes
+
+The backend already supports everything needed:
+- `bulk_save` action handles batch creates/updates/deletes
+- `teacher_conflicts` action checks for teacher double-booking
+- `quality_score` gives real-time quality feedback
+- `auto_generate` fills the entire grid
+
+**One small addition to `TimetableEntryViewSet`:**
+
+```python
+@action(detail=False, methods=['post'])
+def swap(self, request):
+    """
+    Swap two timetable entries atomically.
+    Body: { entry_a_id: int, entry_b_id: int }
+    Swaps subject+teacher between the two entries.
+    """
+```
+
+This avoids the client needing to delete + recreate during swaps.
+
+### Mobile App Impact
+
+The mobile timetable is view-only (students and parents see their schedule). No drag-and-drop needed on mobile. No mobile changes required.
+
+### Files Created/Modified
+
+| File | Action | Description |
+|------|--------|-------------|
+| `frontend/src/pages/academics/TimetablePage.jsx` | MODIFY | Add DnD context, palette sidebar, swap logic |
+| `frontend/src/components/timetable/SubjectPalette.jsx` | CREATE | Draggable subject blocks with period counters |
+| `frontend/src/components/timetable/TimetableCell.jsx` | CREATE | Draggable + droppable cell with conflict overlay |
+| `frontend/src/components/timetable/ConflictOverlay.jsx` | CREATE | Visual conflict indicator |
+| `frontend/src/services/api.js` | MODIFY | Add `swapEntries` method to academicsApi |
+| `backend/academics/views.py` | MODIFY | Add `swap` action to TimetableEntryViewSet |
+| `package.json` | MODIFY | Add `@dnd-kit/core`, `@dnd-kit/sortable`, `@dnd-kit/utilities` |
+
+### Effort: ~2-3 days
+
+---
+
 ## Master Timeline & Dependencies
 
 ### Execution Order
@@ -1516,9 +1975,13 @@ WEEK 2: ✅ COMPLETED
 ├── Phase 10: AI Study Helper ───────────────── ✅ DONE
 └── Phase 11: Hostel Management ─────────────── ✅ DONE (659 tests still passing)
 
-REMAINING:
-├── Phase 8: React Native Mobile App ────────── ~3-4 weeks
-└── Phase 9: GPS Location Sharing ───────────── ~1 week (built into mobile app)
+WEEKS 3-4: ✅ COMPLETED
+├── Phase 8: React Native Mobile App ─────────── ✅ DONE (52 screens, 67 files, 0 TS errors)
+└── Phase 9: GPS Location Sharing ────────────── ✅ DONE (backend + mobile, integrated into Phase 8)
+
+WEEK 5: PLANNED
+├── Phase 12: Inventory & Store Management ────── ⬜ ~3-5 days
+└── Phase 13: Drag-and-Drop Timetable ─────────── ⬜ ~2-3 days
 ```
 
 ### Dependency Graph
@@ -1531,11 +1994,14 @@ Phase 7 (Tests) ─────────────────────�
 Phase 10 (AI Helper) ──────────────────────────── No dependencies ✅ DONE
 Phase 11 (Hostel) ──────────────────────────────── No dependencies ✅ DONE
 
-Phase 8 (Mobile App) ──┬── Depends on Phase 6 (payment flow for parent payments)
-                       ├── Depends on Phase 10 (AI helper for student screens)
-                       └── Depends on Phase 5 (push notifications need Celery)
+Phase 8 (Mobile App) ──┬── Depends on Phase 6 ✅ DONE
+                       ├── Depends on Phase 10 ✅ DONE
+                       └── Depends on Phase 5  ✅ DONE
 
-Phase 9 (GPS) ─────────── Depends on Phase 8 (needs mobile app for location access)
+Phase 9 (GPS) ─────────── Depends on Phase 8   ✅ DONE
+
+Phase 12 (Inventory) ─────────────────────────── Depends on Finance (Phase 6) ✅ ready
+Phase 13 (DnD Timetable) ─────────────────────── No dependencies (enhances existing)
 ```
 
 ### What Can Run in Parallel
@@ -1543,18 +2009,20 @@ Phase 9 (GPS) ─────────── Depends on Phase 8 (needs mobile
 ```
 Parallel Group 1: Phase 5 + Phase 6 + Phase 7     ✅ ALL DONE
 Parallel Group 2: Phase 10 + Phase 11              ✅ ALL DONE
-Sequential:       Phase 8 (after Group 1+2)        ← NEXT
-Sequential:       Phase 9 (after Phase 8)
+Sequential:       Phase 8 (after Group 1+2)        ✅ DONE
+Sequential:       Phase 9 (after Phase 8)          ✅ DONE
+
+Parallel Group 3: Phase 12 + Phase 13             ⬜ CAN RUN IN PARALLEL
 ```
 
 ---
 
 ## Post-Implementation Coverage
 
-### Mind Map Coverage After All Phases
+### Mind Map Coverage — All Phases Complete
 
-| Pillar | Current | After All Phases | Change |
-|--------|---------|-----------------|--------|
+| Pillar | Before P5-P11 | After All Phases | Change |
+|--------|---------------|-----------------|--------|
 | Core Administration | 68% | **80%** | +12% (hostel) |
 | Communication Hub | 60% | **75%** | +15% (push notifications, journey alerts) |
 | Parent Interface | 78% | **90%** | +12% (mobile app, live tracking, payments) |
@@ -1566,33 +2034,34 @@ Sequential:       Phase 9 (after Phase 8)
 | Student Interface | 50% | **80%** | +30% (AI helper, GPS, mobile app) |
 | **OVERALL** | **~68%** | **~80%** | **+12%** |
 
-### Remaining Gaps After All Phases (The Last 20%)
+### Remaining Gaps (After All Planned Phases)
 
 | Gap | Pillar | Priority |
 |-----|--------|----------|
+| ~~Inventory & Store management~~ | ~~Core Admin~~ | **Phase 12 — PLANNED** |
+| ~~Drag-and-drop timetable~~ | ~~Core Admin~~ | **Phase 13 — PLANNED** |
 | Digital Marketing Hub (social media posting) | Growth & Marketing | Low |
 | Content Marketing Bot (AI social content) | AI Layer | Low |
 | Admission Chatbot (24/7 WhatsApp lead bot) | AI Layer | Medium |
 | Online Classes (Zoom/Teams/Meet integration) | Academics | Medium |
 | Biometric hardware integration (staff) | Core Admin | Low |
-| Inventory & Store management | Core Admin | Low |
 | Security notifications system | Communication | Low |
 | Self-healing timetable bot (auto-substitute) | AI Layer | Low |
 | Social sharing / WhatsApp stories | Parent Interface | Low |
-| Drag-and-drop timetable | Core Admin | Low |
-| Hall ticket PDF generation | Core Admin | Low |
 
 ---
 
 ## Total New Files Summary
 
-| Phase | New Files | Modified Files | New Models |
-|-------|-----------|----------------|------------|
-| Phase 5 (Celery) | 0 | 2 | 0 |
-| Phase 6 (Payment) | 2 | 8 | 0 |
-| Phase 7 (Tests) | 16 | 1 | 0 |
-| Phase 8 (Mobile) | ~50+ | 4 | 0 (1 field) |
-| Phase 9 (GPS) | 2 | 6 | 2 |
-| Phase 10 (AI Helper) | 2 | 6 | 1 |
-| Phase 11 (Hostel) | 8 | 7 | 4 |
-| **TOTAL** | **~80+** | **~34** | **7 new models** |
+| Phase | New Files | Modified Files | New Models | Status |
+|-------|-----------|----------------|------------|--------|
+| Phase 5 (Celery) | 0 | 2 | 0 | ✅ DONE |
+| Phase 6 (Payment) | 2 | 8 | 0 | ✅ DONE |
+| Phase 7 (Tests) | 16 | 1 | 0 | ✅ DONE |
+| Phase 8 (Mobile) | 67 | 6 | 1 (DevicePushToken) | ✅ DONE |
+| Phase 9 (GPS) | 2 | 6 | 2 (StudentJourney, LocationUpdate) | ✅ DONE |
+| Phase 10 (AI Helper) | 2 | 6 | 1 | ✅ DONE |
+| Phase 11 (Hostel) | 8 | 7 | 4 | ✅ DONE |
+| Phase 12 (Inventory) | 11 | 4 | 5 (Category, Vendor, Item, Transaction, Request) | ⬜ PLANNED |
+| Phase 13 (DnD Timetable) | 3 | 4 | 0 | ⬜ PLANNED |
+| **TOTAL** | **~111** | **~44** | **13 new models** | **7 DONE / 2 PLANNED** |

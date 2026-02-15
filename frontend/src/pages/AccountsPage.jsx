@@ -50,6 +50,7 @@ export default function AccountsPage() {
 
   // Transfer modal
   const [showTransferModal, setShowTransferModal] = useState(false)
+  const [transferConfirmStep, setTransferConfirmStep] = useState(false)
   const [transferForm, setTransferForm] = useState({
     from_account: '', to_account: '', amount: '', date: new Date().toISOString().split('T')[0], description: ''
   })
@@ -60,6 +61,7 @@ export default function AccountsPage() {
 
   // Close month modal
   const [showCloseMonthModal, setShowCloseMonthModal] = useState(false)
+  const [closeMonthConfirmed, setCloseMonthConfirmed] = useState(false)
   const now = new Date()
   const [closeMonthForm, setCloseMonthForm] = useState({
     year: now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear(),
@@ -169,6 +171,7 @@ export default function AccountsPage() {
 
   const closeTransferModal = () => {
     setShowTransferModal(false)
+    setTransferConfirmStep(false)
     setTransferForm({ from_account: '', to_account: '', amount: '', date: new Date().toISOString().split('T')[0], description: '' })
   }
 
@@ -625,7 +628,7 @@ export default function AccountsPage() {
                     <label className="block text-sm font-medium text-gray-700 mb-1">Month</label>
                     <select
                       value={closeMonthForm.month}
-                      onChange={(e) => setCloseMonthForm(f => ({ ...f, month: parseInt(e.target.value) }))}
+                      onChange={(e) => { setCloseMonthForm(f => ({ ...f, month: parseInt(e.target.value) })); setCloseMonthConfirmed(false) }}
                       className="input-field"
                     >
                       {['January','February','March','April','May','June','July','August','September','October','November','December'].map((name, i) => (
@@ -638,7 +641,7 @@ export default function AccountsPage() {
                     <input
                       type="number"
                       value={closeMonthForm.year}
-                      onChange={(e) => setCloseMonthForm(f => ({ ...f, year: parseInt(e.target.value) }))}
+                      onChange={(e) => { setCloseMonthForm(f => ({ ...f, year: parseInt(e.target.value) })); setCloseMonthConfirmed(false) }}
                       className="input-field"
                       min={2020} max={2100}
                     />
@@ -649,17 +652,26 @@ export default function AccountsPage() {
                     Last closed: {['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][lastClosed.month]} {lastClosed.year}
                   </p>
                 )}
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-sm text-red-800 font-medium">
+                    This will lock {['January','February','March','April','May','June','July','August','September','October','November','December'][closeMonthForm.month - 1]} {closeMonthForm.year}. No transactions can be added or edited in this period after closing.
+                  </p>
+                  <label className="flex items-center gap-2 mt-2 cursor-pointer">
+                    <input type="checkbox" checked={closeMonthConfirmed} onChange={(e) => setCloseMonthConfirmed(e.target.checked)} className="rounded border-red-300 text-red-600 focus:ring-red-500" />
+                    <span className="text-sm text-red-700">I understand, close this period</span>
+                  </label>
+                </div>
                 <div className="flex gap-3 pt-2">
                   <button
                     type="button"
-                    onClick={() => setShowCloseMonthModal(false)}
+                    onClick={() => { setShowCloseMonthModal(false); setCloseMonthConfirmed(false) }}
                     className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={() => closeMonthMutation.mutate(closeMonthForm)}
-                    disabled={closeMonthMutation.isPending}
+                    disabled={closeMonthMutation.isPending || !closeMonthConfirmed}
                     className="flex-1 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 text-sm disabled:opacity-50"
                   >
                     {closeMonthMutation.isPending ? 'Closing...' : 'Close Month'}
@@ -679,78 +691,105 @@ export default function AccountsPage() {
           <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
             <div className="p-6">
               <h3 className="text-lg font-semibold mb-4">Record Transfer</h3>
-              <form onSubmit={handleTransferSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">From Account</label>
-                  <select
-                    value={transferForm.from_account}
-                    onChange={(e) => setTransferForm(f => ({ ...f, from_account: e.target.value }))}
-                    className="input-field"
-                    required
-                  >
-                    <option value="">-- Select Account --</option>
-                    {fromAccountList.filter(a => a.is_active).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                  </select>
+              {transferConfirmStep ? (
+                <div className="space-y-4">
+                  <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-2">
+                    <p className="text-sm font-medium text-blue-900">Please confirm this transfer:</p>
+                    <div className="text-sm text-blue-800 space-y-1">
+                      <p><span className="font-medium">From:</span> {accountListAll.find(a => String(a.id) === String(transferForm.from_account))?.name || '-'}</p>
+                      <p><span className="font-medium">To:</span> {accountListAll.find(a => String(a.id) === String(transferForm.to_account))?.name || '-'}</p>
+                      <p><span className="font-medium">Amount:</span> {Number(transferForm.amount).toLocaleString()}</p>
+                      <p><span className="font-medium">Date:</span> {transferForm.date}</p>
+                      {transferForm.description && <p><span className="font-medium">Description:</span> {transferForm.description}</p>}
+                    </div>
+                  </div>
+                  <div className="flex gap-3">
+                    <button onClick={() => setTransferConfirmStep(false)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">Back</button>
+                    <button
+                      onClick={() => { handleTransferSubmit({ preventDefault: () => {} }); setTransferConfirmStep(false) }}
+                      disabled={createTransferMutation.isPending}
+                      className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50"
+                    >
+                      {createTransferMutation.isPending ? 'Saving...' : 'Confirm Transfer'}
+                    </button>
+                  </div>
+                  {createTransferMutation.isError && (
+                    <p className="text-sm text-red-600">{getErrorMessage(createTransferMutation.error, 'Failed to record transfer')}</p>
+                  )}
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">To Account</label>
-                  <select
-                    value={transferForm.to_account}
-                    onChange={(e) => setTransferForm(f => ({ ...f, to_account: e.target.value }))}
-                    className="input-field"
-                    required
-                  >
-                    <option value="">-- Select Account --</option>
-                    {accountListAll.filter(a => a.is_active).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={transferForm.amount}
-                    onChange={(e) => setTransferForm(f => ({ ...f, amount: e.target.value }))}
-                    className="input-field"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
-                  <input
-                    type="date"
-                    value={transferForm.date}
-                    onChange={(e) => setTransferForm(f => ({ ...f, date: e.target.value }))}
-                    className="input-field"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Description (optional)</label>
-                  <textarea
-                    value={transferForm.description}
-                    onChange={(e) => setTransferForm(f => ({ ...f, description: e.target.value }))}
-                    className="input-field"
-                    rows={2}
-                    placeholder="Reason for transfer..."
-                  />
-                </div>
-                <div className="flex gap-3 pt-2">
-                  <button type="button" onClick={closeTransferModal} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={createTransferMutation.isPending}
-                    className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50"
-                  >
-                    {createTransferMutation.isPending ? 'Saving...' : 'Record Transfer'}
-                  </button>
-                </div>
-                {createTransferMutation.isError && (
-                  <p className="text-sm text-red-600">{getErrorMessage(createTransferMutation.error, 'Failed to record transfer')}</p>
-                )}
-              </form>
+              ) : (
+                <form onSubmit={(e) => { e.preventDefault(); setTransferConfirmStep(true) }} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">From Account</label>
+                    <select
+                      value={transferForm.from_account}
+                      onChange={(e) => setTransferForm(f => ({ ...f, from_account: e.target.value }))}
+                      className="input-field"
+                      required
+                    >
+                      <option value="">-- Select Account --</option>
+                      {fromAccountList.filter(a => a.is_active).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">To Account</label>
+                    <select
+                      value={transferForm.to_account}
+                      onChange={(e) => setTransferForm(f => ({ ...f, to_account: e.target.value }))}
+                      className="input-field"
+                      required
+                    >
+                      <option value="">-- Select Account --</option>
+                      {accountListAll.filter(a => a.is_active).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={transferForm.amount}
+                      onChange={(e) => setTransferForm(f => ({ ...f, amount: e.target.value }))}
+                      className="input-field"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                    <input
+                      type="date"
+                      value={transferForm.date}
+                      onChange={(e) => setTransferForm(f => ({ ...f, date: e.target.value }))}
+                      className="input-field"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Description (optional)</label>
+                    <textarea
+                      value={transferForm.description}
+                      onChange={(e) => setTransferForm(f => ({ ...f, description: e.target.value }))}
+                      className="input-field"
+                      rows={2}
+                      placeholder="Reason for transfer..."
+                    />
+                  </div>
+                  <div className="flex gap-3 pt-2">
+                    <button type="button" onClick={closeTransferModal} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm"
+                    >
+                      Review Transfer
+                    </button>
+                  </div>
+                  {createTransferMutation.isError && (
+                    <p className="text-sm text-red-600">{getErrorMessage(createTransferMutation.error, 'Failed to record transfer')}</p>
+                  )}
+                </form>
+              )}
             </div>
           </div>
         </div>

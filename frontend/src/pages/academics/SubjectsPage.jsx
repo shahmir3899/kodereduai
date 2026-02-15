@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { academicsApi, classesApi, hrApi } from '../../services/api'
 
@@ -7,6 +7,41 @@ const SEVERITY_STYLES = {
   orange: { bg: 'bg-orange-50', border: 'border-orange-200', badge: 'bg-orange-100 text-orange-700', icon: 'text-orange-500' },
   yellow: { bg: 'bg-yellow-50', border: 'border-yellow-200', badge: 'bg-yellow-100 text-yellow-700', icon: 'text-yellow-500' },
   blue: { bg: 'bg-blue-50', border: 'border-blue-200', badge: 'bg-blue-100 text-blue-700', icon: 'text-blue-500' },
+}
+
+const PRESET_SUBJECTS = [
+  { name: 'Mathematics', code: 'MATH' },
+  { name: 'English', code: 'ENG' },
+  { name: 'Urdu', code: 'URDU' },
+  { name: 'Islamiat', code: 'ISL' },
+  { name: 'Pakistan Studies', code: 'PST' },
+  { name: 'Science', code: 'SCI' },
+  { name: 'Physics', code: 'PHY' },
+  { name: 'Chemistry', code: 'CHEM' },
+  { name: 'Biology', code: 'BIO' },
+  { name: 'Computer Science', code: 'CS' },
+  { name: 'Social Studies', code: 'SST' },
+  { name: 'General Knowledge', code: 'GK' },
+  { name: 'Art', code: 'ART' },
+  { name: 'Physical Education', code: 'PE' },
+]
+
+// Auto-generate a subject code from name
+function generateCode(name) {
+  if (!name) return ''
+  const KNOWN = {
+    mathematics: 'MATH', english: 'ENG', urdu: 'URDU', islamiat: 'ISL',
+    'pakistan studies': 'PST', science: 'SCI', physics: 'PHY', chemistry: 'CHEM',
+    biology: 'BIO', 'computer science': 'CS', 'social studies': 'SST',
+    'general knowledge': 'GK', art: 'ART', 'physical education': 'PE',
+  }
+  const known = KNOWN[name.toLowerCase().trim()]
+  if (known) return known
+  // Multi-word: take first letter of each word
+  const words = name.trim().split(/\s+/)
+  if (words.length >= 2) return words.map(w => w[0]).join('').toUpperCase().slice(0, 4)
+  // Single word: take first 3-4 chars
+  return name.trim().toUpperCase().slice(0, 4)
 }
 
 const EMPTY_SUBJECT = { name: '', code: '', description: '', is_elective: false }
@@ -22,6 +57,8 @@ export default function SubjectsPage() {
   const [editSubjectId, setEditSubjectId] = useState(null)
   const [subjectForm, setSubjectForm] = useState(EMPTY_SUBJECT)
   const [subjectErrors, setSubjectErrors] = useState({})
+  const [showQuickAdd, setShowQuickAdd] = useState(true)
+  const [quickAddMsg, setQuickAddMsg] = useState('')
 
   // Assignment state
   const [classFilter, setClassFilter] = useState('')
@@ -72,6 +109,9 @@ export default function SubjectsPage() {
   const workloadData = workloadRes?.data || {}
   const gapData = gapRes?.data || {}
 
+  // Set of existing subject codes for quick-add checks
+  const existingCodes = useMemo(() => new Set(subjects.map(s => s.code.toUpperCase())), [subjects])
+
   // Collapsible sections for gap analysis
   const [expandedGap, setExpandedGap] = useState({ red: true, orange: true, yellow: true, blue: true })
 
@@ -91,6 +131,21 @@ export default function SubjectsPage() {
   const deleteSubjectMut = useMutation({
     mutationFn: (id) => academicsApi.deleteSubject(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['subjects'] }),
+  })
+
+  // Bulk create mutation (for "Add All Remaining")
+  const bulkCreateMut = useMutation({
+    mutationFn: (data) => academicsApi.bulkCreateSubjects(data),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['subjects'] })
+      const { created, skipped } = res.data
+      setQuickAddMsg(`${created} subjects added${skipped ? `, ${skipped} already existed` : ''}`)
+      setTimeout(() => setQuickAddMsg(''), 3000)
+    },
+    onError: () => {
+      setQuickAddMsg('Failed to create subjects')
+      setTimeout(() => setQuickAddMsg(''), 3000)
+    },
   })
 
   // Assignment mutations
@@ -119,12 +174,39 @@ export default function SubjectsPage() {
   }
   const closeSubjectModal = () => { setShowSubjectModal(false); setEditSubjectId(null); setSubjectForm(EMPTY_SUBJECT); setSubjectErrors({}) }
 
+  // Auto-generate code when name changes (only for new subjects)
+  const handleNameChange = (name) => {
+    if (editSubjectId) {
+      setSubjectForm(p => ({ ...p, name }))
+    } else {
+      const code = generateCode(name)
+      setSubjectForm(p => ({ ...p, name, code }))
+    }
+  }
+
   const handleSubjectSubmit = (e) => {
     e.preventDefault()
     const payload = { ...subjectForm, code: subjectForm.code.toUpperCase() }
     if (editSubjectId) updateSubjectMut.mutate({ id: editSubjectId, data: payload })
     else createSubjectMut.mutate(payload)
   }
+
+  // Quick add single preset
+  const handleQuickAdd = (preset) => {
+    if (existingCodes.has(preset.code)) return
+    createSubjectMut.mutate({ name: preset.name, code: preset.code, description: '', is_elective: false })
+  }
+
+  // Quick add all remaining presets
+  const handleAddAllRemaining = () => {
+    const remaining = PRESET_SUBJECTS.filter(p => !existingCodes.has(p.code))
+    if (remaining.length === 0) return
+    bulkCreateMut.mutate({
+      subjects: remaining.map(p => ({ name: p.name, code: p.code, is_elective: false })),
+    })
+  }
+
+  const remainingPresets = PRESET_SUBJECTS.filter(p => !existingCodes.has(p.code))
 
   // Assignment modal helpers
   const openCreateAssign = () => { setAssignForm(EMPTY_ASSIGNMENT); setEditAssignId(null); setAssignErrors({}); setShowAssignModal(true) }
@@ -182,6 +264,73 @@ export default function SubjectsPage() {
       {/* ─── Subjects Tab ─── */}
       {tab === 'subjects' && (
         <>
+          {/* Quick Add Section */}
+          <div className="card mb-4">
+            <button
+              onClick={() => setShowQuickAdd(p => !p)}
+              className="w-full flex items-center justify-between"
+            >
+              <div className="flex items-center gap-2">
+                <svg className="w-5 h-5 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                <span className="text-sm font-semibold text-gray-900">Quick Add Subjects</span>
+                <span className="text-xs text-gray-500">Pakistan Curriculum</span>
+              </div>
+              <svg className={`w-4 h-4 text-gray-400 transition-transform ${showQuickAdd ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+
+            {showQuickAdd && (
+              <div className="mt-3 pt-3 border-t border-gray-100">
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {PRESET_SUBJECTS.map(p => {
+                    const exists = existingCodes.has(p.code)
+                    return (
+                      <button
+                        key={p.code}
+                        onClick={() => handleQuickAdd(p)}
+                        disabled={exists || createSubjectMut.isPending}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                          exists
+                            ? 'bg-green-50 text-green-600 border border-green-200 cursor-default'
+                            : 'bg-primary-50 text-primary-700 border border-primary-200 hover:bg-primary-100 cursor-pointer'
+                        }`}
+                      >
+                        {exists && (
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                        <span className="font-mono text-[10px] opacity-70">{p.code}</span>
+                        {p.name}
+                      </button>
+                    )
+                  })}
+                </div>
+
+                <div className="flex items-center gap-3">
+                  {remainingPresets.length > 0 && (
+                    <button
+                      onClick={handleAddAllRemaining}
+                      disabled={bulkCreateMut.isPending}
+                      className="text-xs font-medium text-primary-600 hover:text-primary-700 hover:underline disabled:opacity-50"
+                    >
+                      {bulkCreateMut.isPending ? 'Adding...' : `+ Add All Remaining (${remainingPresets.length})`}
+                    </button>
+                  )}
+                  {remainingPresets.length === 0 && (
+                    <span className="text-xs text-green-600 font-medium">All preset subjects have been added</span>
+                  )}
+                  {quickAddMsg && (
+                    <span className={`text-xs ${quickAddMsg.includes('Failed') ? 'text-red-600' : 'text-green-600'}`}>{quickAddMsg}</span>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
           <div className="flex flex-col sm:flex-row gap-3 mb-4">
             <input
               type="text"
@@ -254,7 +403,7 @@ export default function SubjectsPage() {
                     <input
                       type="text"
                       value={subjectForm.name}
-                      onChange={e => setSubjectForm(p => ({ ...p, name: e.target.value }))}
+                      onChange={e => handleNameChange(e.target.value)}
                       className="input w-full"
                       required
                       placeholder="e.g. Mathematics"
@@ -262,7 +411,7 @@ export default function SubjectsPage() {
                     {subjectErrors.name && <p className="text-xs text-red-600 mt-1">{subjectErrors.name}</p>}
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Code *</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Code * <span className="text-xs text-gray-400 font-normal">(auto-generated, editable)</span></label>
                     <input
                       type="text"
                       value={subjectForm.code}

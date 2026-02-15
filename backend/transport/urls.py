@@ -11,6 +11,12 @@ from .views import (
     TransportVehicleViewSet,
     TransportAssignmentViewSet,
     TransportAttendanceViewSet,
+    JourneyStartView,
+    JourneyEndView,
+    JourneyUpdateView,
+    JourneyTrackView,
+    JourneyHistoryView,
+    ActiveJourneysView,
 )
 
 router = DefaultRouter()
@@ -21,5 +27,12 @@ router.register(r'assignments', TransportAssignmentViewSet, basename='transport-
 router.register(r'attendance', TransportAttendanceViewSet, basename='transport-attendance')
 
 urlpatterns = [
+    # GPS Journey endpoints
+    path('journey/start/', JourneyStartView.as_view(), name='journey-start'),
+    path('journey/end/', JourneyEndView.as_view(), name='journey-end'),
+    path('journey/update/', JourneyUpdateView.as_view(), name='journey-update'),
+    path('journey/track/<int:student_id>/', JourneyTrackView.as_view(), name='journey-track'),
+    path('journey/history/<int:student_id>/', JourneyHistoryView.as_view(), name='journey-history'),
+    path('journey/active/', ActiveJourneysView.as_view(), name='journey-active'),
     path('', include(router.urls)),
 ]

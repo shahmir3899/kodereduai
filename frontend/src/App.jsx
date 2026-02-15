@@ -96,6 +96,12 @@ import BookCatalogPage from './pages/library/BookCatalogPage'
 import BookIssuePage from './pages/library/BookIssuePage'
 import OverdueBooksPage from './pages/library/OverdueBooksPage'
 
+// Inventory pages
+import InventoryDashboard from './pages/inventory/InventoryDashboard'
+import InventoryItemsPage from './pages/inventory/InventoryItemsPage'
+import StockTransactionsPage from './pages/inventory/StockTransactionsPage'
+import ItemAssignmentsPage from './pages/inventory/ItemAssignmentsPage'
+
 // Components
 import Layout from './components/Layout'
 import LoadingSpinner from './components/LoadingSpinner'
@@ -329,6 +335,12 @@ function App() {
           <Route path="library/catalog" element={<SchoolRoute><ModuleRoute module="library"><BookCatalogPage /></ModuleRoute></SchoolRoute>} />
           <Route path="library/issues" element={<SchoolRoute><ModuleRoute module="library"><BookIssuePage /></ModuleRoute></SchoolRoute>} />
           <Route path="library/overdue" element={<SchoolRoute><ModuleRoute module="library"><OverdueBooksPage /></ModuleRoute></SchoolRoute>} />
+
+          {/* Inventory routes */}
+          <Route path="inventory" element={<SchoolRoute><ModuleRoute module="inventory"><InventoryDashboard /></ModuleRoute></SchoolRoute>} />
+          <Route path="inventory/items" element={<SchoolRoute><ModuleRoute module="inventory"><InventoryItemsPage /></ModuleRoute></SchoolRoute>} />
+          <Route path="inventory/transactions" element={<SchoolRoute><ModuleRoute module="inventory"><StockTransactionsPage /></ModuleRoute></SchoolRoute>} />
+          <Route path="inventory/assignments" element={<SchoolRoute><ModuleRoute module="inventory"><ItemAssignmentsPage /></ModuleRoute></SchoolRoute>} />
 
           {/* Admissions CRM routes */}
           <Route path="admissions" element={<SchoolRoute><ModuleRoute module="admissions"><AdmissionDashboard /></ModuleRoute></SchoolRoute>} />

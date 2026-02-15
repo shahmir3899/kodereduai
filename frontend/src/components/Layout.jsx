@@ -437,6 +437,19 @@ export default function Layout() {
       ],
     }] : []),
 
+    // Inventory group
+    ...(isModuleEnabled('inventory') ? [{
+      type: 'group',
+      name: 'Inventory',
+      icon: ClipboardCheckIcon,
+      children: [
+        { name: 'Dashboard', href: '/inventory', icon: ChartIcon },
+        { name: 'Items', href: '/inventory/items', icon: FolderIcon },
+        { name: 'Transactions', href: '/inventory/transactions', icon: DocumentIcon },
+        { name: 'Assignments', href: '/inventory/assignments', icon: UsersIcon },
+      ],
+    }] : []),
+
     // Finance: Discounts & Scholarships (added under Finance for admin)
     ...(isModuleEnabled('finance') && !isStaffLevel ? [{
       type: 'group',

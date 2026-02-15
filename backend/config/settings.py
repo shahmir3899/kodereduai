@@ -66,6 +66,7 @@ INSTALLED_APPS = [
     'transport',
     'library',
     'hostel',
+    'inventory',
 ]
 
 MIDDLEWARE = [
@@ -159,6 +160,7 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     ),
+    'EXCEPTION_HANDLER': 'core.views.custom_exception_handler',
     'DEFAULT_PAGINATION_CLASS': 'core.pagination.FlexiblePageNumberPagination',
     'PAGE_SIZE': 20,
     'DEFAULT_THROTTLE_CLASSES': [
@@ -242,6 +244,16 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'attendance.tasks.retry_failed_uploads',
         'schedule': crontab(hour='*/6'),
         'kwargs': {'hours': 24},
+    },
+    'cleanup-location-data': {
+        'task': 'transport.tasks.cleanup_old_location_data',
+        'schedule': crontab(hour=3, minute=0, day_of_week='sunday'),
+        'kwargs': {'days': 7},
+    },
+    'auto-end-stale-journeys': {
+        'task': 'transport.tasks.auto_end_stale_journeys',
+        'schedule': crontab(minute=0),  # Every hour
+        'kwargs': {'hours': 2},
     },
 }
 

@@ -6,6 +6,7 @@ from rest_framework import serializers
 from .models import (
     TransportRoute, TransportStop, TransportVehicle,
     TransportAssignment, TransportAttendance,
+    StudentJourney, LocationUpdate,
 )
 
 
@@ -261,3 +262,51 @@ class BulkTransportAttendanceSerializer(serializers.Serializer):
         if not value:
             raise serializers.ValidationError("At least one attendance record is required.")
         return value
+
+
+# =============================================================================
+# GPS Journey Serializers
+# =============================================================================
+
+class LocationUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = LocationUpdate
+        fields = ['id', 'latitude', 'longitude', 'accuracy', 'speed', 'battery_level', 'timestamp']
+        read_only_fields = ['id', 'timestamp']
+
+
+class StudentJourneyReadSerializer(serializers.ModelSerializer):
+    student_name = serializers.CharField(source='student.name', read_only=True)
+    latest_location = serializers.SerializerMethodField()
+
+    class Meta:
+        model = StudentJourney
+        fields = [
+            'id', 'school', 'student', 'student_name',
+            'transport_assignment', 'journey_type', 'status',
+            'started_at', 'ended_at',
+            'start_latitude', 'start_longitude',
+            'end_latitude', 'end_longitude',
+            'latest_location',
+        ]
+
+    def get_latest_location(self, obj):
+        loc = obj.locations.first()
+        if loc:
+            return LocationUpdateSerializer(loc).data
+        return None
+
+
+class JourneyStartSerializer(serializers.Serializer):
+    journey_type = serializers.ChoiceField(choices=[('TO_SCHOOL', 'To School'), ('FROM_SCHOOL', 'From School')])
+    latitude = serializers.DecimalField(max_digits=9, decimal_places=6)
+    longitude = serializers.DecimalField(max_digits=9, decimal_places=6)
+
+
+class JourneyUpdateSerializer(serializers.Serializer):
+    journey_id = serializers.IntegerField()
+    latitude = serializers.DecimalField(max_digits=9, decimal_places=6)
+    longitude = serializers.DecimalField(max_digits=9, decimal_places=6)
+    accuracy = serializers.FloatField()
+    speed = serializers.FloatField(required=False, allow_null=True)
+    battery_level = serializers.IntegerField(required=False, allow_null=True)

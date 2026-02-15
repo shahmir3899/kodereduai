@@ -1,4 +1,6 @@
+import io
 from decimal import Decimal
+from django.http import HttpResponse
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -360,6 +362,146 @@ class StudentMarkViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
             'errors': errors,
             'message': f'{created + updated} marks saved.',
         })
+
+    @action(detail=False, methods=['get'])
+    def download_template(self, request):
+        """Generate Excel template pre-filled with student names for marks entry."""
+        school_id = _resolve_school_id(request)
+        exam_subject_id = request.query_params.get('exam_subject_id')
+        if not exam_subject_id:
+            return Response(
+                {'detail': 'exam_subject_id param required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            exam_subject = ExamSubject.objects.select_related(
+                'exam', 'exam__class_obj', 'subject',
+            ).get(pk=exam_subject_id, school_id=school_id)
+        except ExamSubject.DoesNotExist:
+            return Response(
+                {'detail': 'Exam subject not found.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Get students from the exam's class
+        from students.models import Student
+        students = Student.objects.filter(
+            school_id=school_id,
+            student_class=exam_subject.exam.class_obj,
+            is_active=True,
+        ).order_by('roll_number', 'name')
+
+        # Also check for existing marks
+        existing_marks = {
+            m.student_id: m
+            for m in StudentMark.objects.filter(
+                school_id=school_id,
+                exam_subject=exam_subject,
+            )
+        }
+
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = 'Marks Entry'
+
+        # Header info rows
+        header_font = Font(bold=True, size=12)
+        info_font = Font(size=10, color='555555')
+        ws.merge_cells('A1:E1')
+        ws['A1'] = f'Marks Entry - {exam_subject.exam.name}'
+        ws['A1'].font = header_font
+        ws.merge_cells('A2:E2')
+        ws['A2'] = (
+            f'Subject: {exam_subject.subject.name} | '
+            f'Class: {exam_subject.exam.class_obj.name} | '
+            f'Total Marks: {exam_subject.total_marks} | '
+            f'Passing: {exam_subject.passing_marks}'
+        )
+        ws['A2'].font = info_font
+
+        # Hidden metadata row for upload parsing
+        ws['A3'] = 'exam_subject_id'
+        ws['B3'] = str(exam_subject.id)
+        ws.row_dimensions[3].hidden = True
+
+        # Column headers
+        headers = ['Student ID', 'Roll Number', 'Student Name', f'Marks (out of {exam_subject.total_marks})', 'Absent (Y/N)', 'Remarks']
+        header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+        header_font_white = Font(bold=True, color='FFFFFF', size=10)
+        thin_border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin'),
+        )
+
+        for col_idx, header in enumerate(headers, 1):
+            cell = ws.cell(row=4, column=col_idx, value=header)
+            cell.font = header_font_white
+            cell.fill = header_fill
+            cell.alignment = Alignment(horizontal='center')
+            cell.border = thin_border
+
+        # Student rows
+        for row_idx, student in enumerate(students, 5):
+            existing = existing_marks.get(student.id)
+            ws.cell(row=row_idx, column=1, value=student.id).border = thin_border
+            ws.cell(row=row_idx, column=2, value=student.roll_number or '').border = thin_border
+            name_cell = ws.cell(row=row_idx, column=3, value=student.name)
+            name_cell.border = thin_border
+            name_cell.font = Font(size=10)
+
+            marks_cell = ws.cell(row=row_idx, column=4)
+            if existing and existing.marks_obtained is not None:
+                marks_cell.value = float(existing.marks_obtained)
+            marks_cell.border = thin_border
+            marks_cell.alignment = Alignment(horizontal='center')
+
+            absent_cell = ws.cell(row=row_idx, column=5)
+            if existing and existing.is_absent:
+                absent_cell.value = 'Y'
+            absent_cell.border = thin_border
+            absent_cell.alignment = Alignment(horizontal='center')
+
+            remarks_cell = ws.cell(row=row_idx, column=6)
+            if existing and existing.remarks:
+                remarks_cell.value = existing.remarks
+            remarks_cell.border = thin_border
+
+        # Column widths
+        ws.column_dimensions['A'].width = 12
+        ws.column_dimensions['B'].width = 14
+        ws.column_dimensions['C'].width = 30
+        ws.column_dimensions['D'].width = 20
+        ws.column_dimensions['E'].width = 14
+        ws.column_dimensions['F'].width = 25
+
+        # Lock student ID and name columns (read-only visual cue)
+        lock_fill = PatternFill(start_color='F2F2F2', end_color='F2F2F2', fill_type='solid')
+        for row_idx in range(5, 5 + students.count()):
+            ws.cell(row=row_idx, column=1).fill = lock_fill
+            ws.cell(row=row_idx, column=2).fill = lock_fill
+            ws.cell(row=row_idx, column=3).fill = lock_fill
+
+        buffer = io.BytesIO()
+        wb.save(buffer)
+        buffer.seek(0)
+
+        filename = (
+            f'Marks_Template_{exam_subject.exam.name}_'
+            f'{exam_subject.subject.code}.xlsx'
+        ).replace(' ', '_')
+
+        response = HttpResponse(
+            buffer.getvalue(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
 
     @action(detail=False, methods=['get'])
     def by_student(self, request):

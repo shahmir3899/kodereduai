@@ -33,6 +33,13 @@ class SubjectCreateSerializer(serializers.ModelSerializer):
         return value
 
 
+class SubjectBulkCreateSerializer(serializers.Serializer):
+    subjects = serializers.ListField(
+        child=serializers.DictField(),
+        help_text="List of {name, code, description?, is_elective?}",
+    )
+
+
 # ── ClassSubject ─────────────────────────────────────────────────────────────
 
 class ClassSubjectSerializer(serializers.ModelSerializer):

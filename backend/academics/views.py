@@ -16,7 +16,7 @@ from core.permissions import HasSchoolAccess, IsSchoolAdminOrReadOnly, ModuleAcc
 from core.mixins import TenantQuerySetMixin, ensure_tenant_schools, ensure_tenant_school_id
 from .models import Subject, ClassSubject, TimetableSlot, TimetableEntry
 from .serializers import (
-    SubjectSerializer, SubjectCreateSerializer,
+    SubjectSerializer, SubjectCreateSerializer, SubjectBulkCreateSerializer,
     ClassSubjectSerializer, ClassSubjectCreateSerializer,
     TimetableSlotSerializer, TimetableSlotCreateSerializer,
     TimetableEntrySerializer, TimetableEntryCreateSerializer,
@@ -124,6 +124,42 @@ class SubjectViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
     def perform_destroy(self, instance):
         instance.is_active = False
         instance.save()
+
+    @action(detail=False, methods=['post'])
+    def bulk_create(self, request):
+        """Create multiple subjects at once, skipping duplicates."""
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response({'detail': 'No school selected.'}, status=400)
+
+        serializer = SubjectBulkCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        created = 0
+        skipped = 0
+        for item in serializer.validated_data['subjects']:
+            code = (item.get('code') or '').upper()
+            name = item.get('name', '')
+            if not code or not name:
+                skipped += 1
+                continue
+            if Subject.objects.filter(school_id=school_id, code=code).exists():
+                skipped += 1
+                continue
+            Subject.objects.create(
+                school_id=school_id,
+                name=name,
+                code=code,
+                description=item.get('description', ''),
+                is_elective=item.get('is_elective', False),
+            )
+            created += 1
+
+        return Response({
+            'created': created,
+            'skipped': skipped,
+            'message': f'{created} subjects created, {skipped} skipped (duplicate or invalid).',
+        })
 
     @action(detail=False, methods=['get'])
     def gap_analysis(self, request):
@@ -289,6 +325,117 @@ class TimetableSlotViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mode
     def perform_destroy(self, instance):
         instance.is_active = False
         instance.save()
+
+    @action(detail=False, methods=['post'])
+    def suggest_slots(self, request):
+        """AI: Suggest optimal time slots based on school schedule parameters."""
+        start_time_str = request.data.get('start_time')
+        end_time_str = request.data.get('end_time')
+        num_periods = int(request.data.get('num_periods', 6))
+        period_duration = int(request.data.get('period_duration_minutes', 40))
+
+        if not start_time_str or not end_time_str:
+            return Response(
+                {'detail': 'start_time and end_time are required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        from datetime import datetime as dt, timedelta
+        start = dt.strptime(start_time_str, '%H:%M')
+        end = dt.strptime(end_time_str, '%H:%M')
+        total_minutes = (end - start).seconds // 60
+
+        # Validate there's enough time
+        min_needed = num_periods * period_duration + 15  # at least one break
+        if total_minutes < min_needed:
+            return Response(
+                {'detail': f'Not enough time. Need at least {min_needed} minutes for {num_periods} periods.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        slots = []
+        order = 1
+        current = start
+        periods_placed = 0
+        # Insert a break every 2-3 periods, lunch around midpoint
+        lunch_after = num_periods // 2
+        break_interval = 3 if num_periods >= 6 else 2
+
+        while periods_placed < num_periods:
+            # Check if we should insert lunch
+            if periods_placed == lunch_after and periods_placed > 0:
+                lunch_end = current + timedelta(minutes=30)
+                slots.append({
+                    'name': 'Lunch Break',
+                    'slot_type': 'LUNCH',
+                    'start_time': current.strftime('%H:%M'),
+                    'end_time': lunch_end.strftime('%H:%M'),
+                    'order': order,
+                })
+                order += 1
+                current = lunch_end
+            # Check if we should insert a short break
+            elif (periods_placed > 0
+                  and periods_placed % break_interval == 0
+                  and periods_placed != lunch_after):
+                break_end = current + timedelta(minutes=15)
+                slots.append({
+                    'name': 'Break',
+                    'slot_type': 'BREAK',
+                    'start_time': current.strftime('%H:%M'),
+                    'end_time': break_end.strftime('%H:%M'),
+                    'order': order,
+                })
+                order += 1
+                current = break_end
+
+            # Place the period
+            period_end = current + timedelta(minutes=period_duration)
+            periods_placed += 1
+            slots.append({
+                'name': f'Period {periods_placed}',
+                'slot_type': 'PERIOD',
+                'start_time': current.strftime('%H:%M'),
+                'end_time': period_end.strftime('%H:%M'),
+                'order': order,
+            })
+            order += 1
+            current = period_end
+
+        return Response({'slots': slots})
+
+    @action(detail=False, methods=['post'])
+    def bulk_create_slots(self, request):
+        """Create multiple time slots at once, replacing all existing slots."""
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response({'detail': 'No school selected.'}, status=400)
+
+        slots_data = request.data.get('slots', [])
+        if not slots_data:
+            return Response({'detail': 'No slots provided.'}, status=400)
+
+        # Deactivate existing slots
+        TimetableSlot.objects.filter(school_id=school_id, is_active=True).update(
+            is_active=False,
+        )
+
+        created = 0
+        for item in slots_data:
+            TimetableSlot.objects.create(
+                school_id=school_id,
+                name=item['name'],
+                slot_type=item['slot_type'],
+                start_time=item['start_time'],
+                end_time=item['end_time'],
+                order=item['order'],
+            )
+            created += 1
+
+        return Response({
+            'created': created,
+            'message': f'{created} time slots created.',
+        })
 
 
 # ── TimetableEntry ViewSet ───────────────────────────────────────────────────

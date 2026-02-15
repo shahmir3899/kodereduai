@@ -95,6 +95,13 @@ MODULE_REGISTRY = {
         'icon': 'building',
         'dependencies': ['students'],
     },
+    'inventory': {
+        'key': 'inventory',
+        'label': 'Inventory & Store',
+        'description': 'Item tracking, stock levels, assignments to users & procurement',
+        'icon': 'package',
+        'dependencies': [],
+    },
 }
 
 ALL_MODULE_KEYS = list(MODULE_REGISTRY.keys())

@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 
@@ -125,6 +126,34 @@ class Transfer(models.Model):
         indexes = [
             models.Index(fields=['school', 'date']),
         ]
+
+    def save(self, *args, **kwargs):
+        """Safeguard 2: reject writes to closed periods."""
+        if self.date:
+            is_locked = MonthlyClosing.objects.filter(
+                school_id=self.school_id,
+                year=self.date.year,
+                month=self.date.month,
+            ).exists()
+            if is_locked:
+                raise ValidationError(
+                    f"Period {self.date.year}/{self.date.month:02d} is closed. "
+                    f"Reopen it before modifying transfers."
+                )
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        """Block deletion of transfers in closed periods."""
+        if self.date:
+            is_locked = MonthlyClosing.objects.filter(
+                school_id=self.school_id, year=self.date.year, month=self.date.month,
+            ).exists()
+            if is_locked:
+                raise ValidationError(
+                    f"Period {self.date.year}/{self.date.month:02d} is closed. "
+                    f"Reopen it before deleting transfers."
+                )
+        super().delete(*args, **kwargs)
 
     def __str__(self):
         return f"{self.from_account.name} -> {self.to_account.name}: {self.amount} ({self.date})"
@@ -344,7 +373,33 @@ class FeePayment(models.Model):
         return f"{self.student.name} - {self.month}/{self.year}: {self.get_status_display()}"
 
     def save(self, *args, **kwargs):
-        """Auto-compute status from amounts."""
+        """Validate payment fields, check period locks, then auto-compute status."""
+        # --- Safeguard 1: enforce payment_date + account when money received ---
+        if self.amount_paid and self.amount_paid > 0:
+            missing = []
+            if not self.payment_date:
+                missing.append('payment_date')
+            if not self.account_id:
+                missing.append('account')
+            if missing:
+                raise ValidationError(
+                    f"Cannot record payment without: {', '.join(missing)}. "
+                    f"amount_paid={self.amount_paid} requires both payment_date and account."
+                )
+
+        # --- Safeguard 2: reject writes to closed periods ---
+        # FeePayment belongs to a specific month/year — use that as the period
+        is_locked = MonthlyClosing.objects.filter(
+            school_id=self.school_id,
+            year=self.year,
+            month=self.month,
+        ).exists()
+        if is_locked:
+            raise ValidationError(
+                f"Period {self.year}/{self.month:02d} is closed. "
+                f"Reopen it before modifying fee records."
+            )
+
         if self.amount_due == 0 and self.amount_paid == 0:
             self.status = self.PaymentStatus.PAID
         elif self.amount_due <= 0:
@@ -364,6 +419,18 @@ class FeePayment(models.Model):
             self.receipt_number = ''
 
         super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        """Block deletion of fee records in closed periods."""
+        is_locked = MonthlyClosing.objects.filter(
+            school_id=self.school_id, year=self.year, month=self.month,
+        ).exists()
+        if is_locked:
+            raise ValidationError(
+                f"Period {self.year}/{self.month:02d} is closed. "
+                f"Reopen it before deleting fee records."
+            )
+        super().delete(*args, **kwargs)
 
 
 class Expense(models.Model):
@@ -427,6 +494,34 @@ class Expense(models.Model):
             models.Index(fields=['school', 'date']),
             models.Index(fields=['school', 'category']),
         ]
+
+    def save(self, *args, **kwargs):
+        """Safeguard 2: reject writes to closed periods."""
+        if self.date:
+            is_locked = MonthlyClosing.objects.filter(
+                school_id=self.school_id,
+                year=self.date.year,
+                month=self.date.month,
+            ).exists()
+            if is_locked:
+                raise ValidationError(
+                    f"Period {self.date.year}/{self.date.month:02d} is closed. "
+                    f"Reopen it before modifying expenses."
+                )
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        """Block deletion of expenses in closed periods."""
+        if self.date:
+            is_locked = MonthlyClosing.objects.filter(
+                school_id=self.school_id, year=self.date.year, month=self.date.month,
+            ).exists()
+            if is_locked:
+                raise ValidationError(
+                    f"Period {self.date.year}/{self.date.month:02d} is closed. "
+                    f"Reopen it before deleting expenses."
+                )
+        super().delete(*args, **kwargs)
 
     def __str__(self):
         return f"{self.get_category_display()} - {self.amount} ({self.date})"
@@ -530,6 +625,34 @@ class OtherIncome(models.Model):
             models.Index(fields=['school', 'date']),
             models.Index(fields=['school', 'category']),
         ]
+
+    def save(self, *args, **kwargs):
+        """Safeguard 2: reject writes to closed periods."""
+        if self.date:
+            is_locked = MonthlyClosing.objects.filter(
+                school_id=self.school_id,
+                year=self.date.year,
+                month=self.date.month,
+            ).exists()
+            if is_locked:
+                raise ValidationError(
+                    f"Period {self.date.year}/{self.date.month:02d} is closed. "
+                    f"Reopen it before modifying income records."
+                )
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        """Block deletion of income records in closed periods."""
+        if self.date:
+            is_locked = MonthlyClosing.objects.filter(
+                school_id=self.school_id, year=self.date.year, month=self.date.month,
+            ).exists()
+            if is_locked:
+                raise ValidationError(
+                    f"Period {self.date.year}/{self.date.month:02d} is closed. "
+                    f"Reopen it before deleting income records."
+                )
+        super().delete(*args, **kwargs)
 
     def __str__(self):
         return f"{self.get_category_display()} - {self.amount} ({self.date})"

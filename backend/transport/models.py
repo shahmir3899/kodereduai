@@ -302,3 +302,78 @@ class TransportAttendance(models.Model):
 
     def __str__(self):
         return f"{self.student.name} - {self.route.name} - {self.date}: {self.get_boarding_status_display()}"
+
+
+class StudentJourney(models.Model):
+    """Tracks a student's journey to/from school with GPS."""
+
+    JOURNEY_TYPE_CHOICES = [
+        ('TO_SCHOOL', 'To School'),
+        ('FROM_SCHOOL', 'From School'),
+    ]
+    STATUS_CHOICES = [
+        ('ACTIVE', 'Active'),
+        ('COMPLETED', 'Completed'),
+        ('CANCELLED', 'Cancelled'),
+    ]
+
+    school = models.ForeignKey(
+        'schools.School',
+        on_delete=models.CASCADE,
+        related_name='student_journeys',
+    )
+    student = models.ForeignKey(
+        'students.Student',
+        on_delete=models.CASCADE,
+        related_name='journeys',
+    )
+    transport_assignment = models.ForeignKey(
+        TransportAssignment,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='journeys',
+    )
+    journey_type = models.CharField(max_length=15, choices=JOURNEY_TYPE_CHOICES)
+    status = models.CharField(max_length=15, choices=STATUS_CHOICES, default='ACTIVE')
+    started_at = models.DateTimeField(auto_now_add=True)
+    ended_at = models.DateTimeField(null=True, blank=True)
+    start_latitude = models.DecimalField(max_digits=9, decimal_places=6)
+    start_longitude = models.DecimalField(max_digits=9, decimal_places=6)
+    end_latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    end_longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+
+    class Meta:
+        ordering = ['-started_at']
+        verbose_name = 'Student Journey'
+        verbose_name_plural = 'Student Journeys'
+
+    def __str__(self):
+        return f"{self.student.name} - {self.get_journey_type_display()} ({self.get_status_display()})"
+
+
+class LocationUpdate(models.Model):
+    """Individual GPS ping during a student journey."""
+
+    journey = models.ForeignKey(
+        StudentJourney,
+        on_delete=models.CASCADE,
+        related_name='locations',
+    )
+    latitude = models.DecimalField(max_digits=9, decimal_places=6)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6)
+    accuracy = models.FloatField(help_text='GPS accuracy in meters')
+    speed = models.FloatField(null=True, blank=True, help_text='Speed in m/s')
+    battery_level = models.IntegerField(null=True, blank=True, help_text='Battery % (0-100)')
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-timestamp']
+        indexes = [
+            models.Index(fields=['journey', '-timestamp']),
+        ]
+        verbose_name = 'Location Update'
+        verbose_name_plural = 'Location Updates'
+
+    def __str__(self):
+        return f"({self.latitude}, {self.longitude}) at {self.timestamp}"

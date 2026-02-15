@@ -81,6 +81,13 @@ export default function FinanceDashboardPage() {
     enabled: isAdmin,
   })
 
+  // Recent entries (admin only)
+  const { data: recentEntriesData } = useQuery({
+    queryKey: ['recentEntries'],
+    queryFn: () => financeApi.getRecentEntries({ limit: 15 }),
+    enabled: isAdmin,
+  })
+
   // --- Derived data ---
   const balances = balancesData?.data?.accounts || []
   const grandTotal = balancesData?.data?.grand_total || 0
@@ -102,6 +109,7 @@ export default function FinanceDashboardPage() {
 
   const feeSummaryAllData = feeSummaryAll?.data
   const trendMonths = trendData?.data?.months || []
+  const recentEntries = recentEntriesData?.data || []
 
   const monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
@@ -359,6 +367,53 @@ export default function FinanceDashboardPage() {
           )}
         </div>
       </div>
+
+      {/* --- Recent Entries (Admin+ only) --- */}
+      {isAdmin && recentEntries.length > 0 && (
+        <div className="mt-6 card">
+          <h2 className="text-sm font-semibold text-gray-700 mb-3">Recent Entries</h2>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
+                  <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Amount</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Account</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">By</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-100">
+                {recentEntries.map((entry) => {
+                  const typeBadge = {
+                    fee_payment: { label: 'Fee', cls: 'bg-green-100 text-green-800' },
+                    other_income: { label: 'Income', cls: 'bg-blue-100 text-blue-800' },
+                    expense: { label: 'Expense', cls: 'bg-red-100 text-red-800' },
+                    transfer: { label: 'Transfer', cls: 'bg-purple-100 text-purple-800' },
+                  }[entry.type] || { label: entry.type, cls: 'bg-gray-100 text-gray-800' }
+                  return (
+                    <tr key={`${entry.type}-${entry.id}`}>
+                      <td className="px-3 py-2">
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${typeBadge.cls}`}>
+                          {typeBadge.label}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-sm text-gray-900 max-w-[200px] truncate">{entry.description}</td>
+                      <td className={`px-3 py-2 text-sm font-medium text-right ${entry.type === 'expense' ? 'text-red-700' : 'text-green-700'}`}>
+                        {Number(entry.amount).toLocaleString()}
+                      </td>
+                      <td className="px-3 py-2 text-xs text-gray-500">{entry.account_name || '—'}</td>
+                      <td className="px-3 py-2 text-xs text-gray-500">{entry.date || '—'}</td>
+                      <td className="px-3 py-2 text-xs text-gray-500">{entry.recorded_by || '—'}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* --- Quick Actions --- */}
       {canWrite && (

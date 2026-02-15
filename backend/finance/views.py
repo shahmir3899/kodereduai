@@ -265,7 +265,12 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
             serializer.save(collected_by=self.request.user)
 
     def perform_update(self, serializer):
-        serializer.save(collected_by=self.request.user)
+        instance = serializer.instance
+        amount_paid = serializer.validated_data.get('amount_paid', instance.amount_paid)
+        if amount_paid and amount_paid > 0 and not serializer.validated_data.get('payment_date') and not instance.payment_date:
+            serializer.save(collected_by=self.request.user, payment_date=date.today())
+        else:
+            serializer.save(collected_by=self.request.user)
 
     @action(detail=False, methods=['post'])
     def generate_monthly(self, request):
@@ -280,6 +285,12 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         school_id = _resolve_school_id(request)
         if not school_id:
             return Response({'detail': 'No school associated with your account. Please contact an administrator.'}, status=400)
+
+        # Block generation into closed periods
+        if MonthlyClosing.objects.filter(school_id=school_id, year=year, month=month).exists():
+            return Response({
+                'detail': f'Period {year}/{month:02d} is closed. Reopen it before generating fees.'
+            }, status=400)
 
         # 1. Fetch all active students (1 query)
         students = list(Student.objects.filter(school_id=school_id, is_active=True))
@@ -392,6 +403,8 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
                     payment.amount_paid = Decimal(str(item['amount_paid']))
                 if 'payment_date' in item:
                     payment.payment_date = item['payment_date']
+                elif Decimal(str(item.get('amount_paid', 0))) > 0 and not payment.payment_date:
+                    payment.payment_date = date.today()
                 if 'payment_method' in item:
                     payment.payment_method = item['payment_method']
                 if 'account' in item:
@@ -417,11 +430,20 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         if not school_id:
             return Response({'detail': 'No school associated with your account.'}, status=400)
 
-        deleted_count, _ = FeePayment.objects.filter(
-            id__in=ids, school_id=school_id
-        ).delete()
+        payments = FeePayment.objects.filter(id__in=ids, school_id=school_id)
+        deleted_count = 0
+        errors = []
+        for payment in payments:
+            try:
+                payment.delete()
+                deleted_count += 1
+            except Exception as e:
+                errors.append(f"Record {payment.id}: {str(e)}")
 
-        return Response({'deleted': deleted_count})
+        result = {'deleted': deleted_count}
+        if errors:
+            result['errors'] = errors
+        return Response(result)
 
     @action(detail=False, methods=['get'])
     def monthly_summary(self, request):
@@ -802,11 +824,14 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             tfr_out_qs = tfr_out_qs.filter(is_sensitive=False)
 
         # Apply date floor: txn_start (from snapshot) or date_from (user filter)
-        # When snapshot exists, txn_start is the floor (NULLs excluded — they're in snapshot).
-        # When no snapshot, date_from is the floor (original behavior).
+        # When snapshot exists, txn_start is the floor — NULLs are EXCLUDED (already in snapshot).
+        # When no snapshot, date_from is the floor — NULLs are INCLUDED (real payments without date).
         effective_floor = txn_start or (date_from if date_from else None)
         if effective_floor:
-            fee_qs = fee_qs.filter(payment_date__gte=effective_floor)
+            if txn_start:
+                fee_qs = fee_qs.filter(payment_date__gte=effective_floor)
+            else:
+                fee_qs = fee_qs.filter(Q(payment_date__gte=effective_floor) | Q(payment_date__isnull=True))
             income_qs = income_qs.filter(date__gte=effective_floor)
             expense_qs = expense_qs.filter(date__gte=effective_floor)
             tfr_in_qs = tfr_in_qs.filter(date__gte=effective_floor)
@@ -1030,8 +1055,52 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         if not school_id:
             return Response({'detail': 'No school associated.'}, status=400)
 
+        # --- Safeguard 3: pre-close validation ---
+        # Reject close if any fee payments in the target month have dirty data
+        dirty_fees = FeePayment.objects.filter(
+            school_id=school_id, month=month, year=year,
+            amount_paid__gt=0,
+        ).filter(
+            Q(payment_date__isnull=True) | Q(account__isnull=True)
+        )
+        dirty_count = dirty_fees.count()
+        if dirty_count > 0:
+            samples = list(
+                dirty_fees.select_related('student')
+                .values_list('student__name', flat=True)[:5]
+            )
+            return Response({
+                'detail': (
+                    f"Cannot close {year}/{month:02d}: {dirty_count} fee payment(s) "
+                    f"have amount_paid > 0 but are missing payment_date or account. "
+                    f"Fix them first."
+                ),
+                'dirty_count': dirty_count,
+                'sample_students': samples,
+            }, status=400)
+
+        # Reject close if there are no transactions at all for this month
         last_day = calendar.monthrange(year, month)[1]
-        month_end = date(year, month, last_day).isoformat()
+        month_start = date(year, month, 1)
+        month_end_date = date(year, month, last_day)
+        has_fees = FeePayment.objects.filter(
+            school_id=school_id, month=month, year=year,
+        ).exists()
+        has_expenses = Expense.objects.filter(
+            school_id=school_id, date__gte=month_start, date__lte=month_end_date,
+        ).exists()
+        has_income = OtherIncome.objects.filter(
+            school_id=school_id, date__gte=month_start, date__lte=month_end_date,
+        ).exists()
+        if not has_fees and not has_expenses and not has_income:
+            return Response({
+                'detail': (
+                    f"Cannot close {year}/{month:02d}: no transactions found for this month. "
+                    f"There must be at least some data before closing."
+                ),
+            }, status=400)
+
+        month_end = month_end_date.isoformat()
 
         from schools.models import School
         try:
@@ -1124,6 +1193,97 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         closing.delete()
 
         return Response({'detail': f'Month {year}/{month:02d} reopened.', 'year': year, 'month': month})
+
+    @action(detail=False, methods=['get'], url_path='recent_entries',
+            permission_classes=[IsAuthenticated, IsSchoolAdmin, HasSchoolAccess])
+    def recent_entries(self, request):
+        """Return recent finance entries across all transaction types. Admin+ only."""
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response({'detail': 'No school associated.'}, status=400)
+
+        limit = min(int(request.query_params.get('limit', 20)), 50)
+        entries = []
+
+        # Recent fee payments (where money was actually received)
+        fee_payments = (
+            FeePayment.objects
+            .filter(school_id=school_id, amount_paid__gt=0)
+            .select_related('student', 'student__class_obj', 'account', 'collected_by')
+            .order_by('-updated_at')[:limit]
+        )
+        for fp in fee_payments:
+            entries.append({
+                'type': 'fee_payment',
+                'id': fp.id,
+                'description': f"{fp.student.name} ({fp.student.class_obj.name if fp.student.class_obj else 'N/A'})",
+                'amount': float(fp.amount_paid),
+                'date': str(fp.payment_date) if fp.payment_date else None,
+                'account_name': fp.account.name if fp.account else None,
+                'recorded_by': fp.collected_by.get_full_name() if fp.collected_by else None,
+                'timestamp': fp.updated_at.isoformat(),
+            })
+
+        # Recent other income
+        other_income = (
+            OtherIncome.objects
+            .filter(school_id=school_id)
+            .select_related('account', 'recorded_by')
+            .order_by('-created_at')[:limit]
+        )
+        for oi in other_income:
+            entries.append({
+                'type': 'other_income',
+                'id': oi.id,
+                'description': f"{oi.get_category_display()}{(' — ' + oi.description) if oi.description else ''}",
+                'amount': float(oi.amount),
+                'date': str(oi.date),
+                'account_name': oi.account.name if oi.account else None,
+                'recorded_by': oi.recorded_by.get_full_name() if oi.recorded_by else None,
+                'timestamp': oi.created_at.isoformat(),
+            })
+
+        # Recent expenses
+        expenses = (
+            Expense.objects
+            .filter(school_id=school_id)
+            .select_related('account', 'recorded_by')
+            .order_by('-created_at')[:limit]
+        )
+        for exp in expenses:
+            entries.append({
+                'type': 'expense',
+                'id': exp.id,
+                'description': f"{exp.get_category_display()}{(' — ' + exp.description) if exp.description else ''}",
+                'amount': float(exp.amount),
+                'date': str(exp.date),
+                'account_name': exp.account.name if exp.account else None,
+                'recorded_by': exp.recorded_by.get_full_name() if exp.recorded_by else None,
+                'timestamp': exp.created_at.isoformat(),
+            })
+
+        # Recent transfers
+        transfers = (
+            Transfer.objects
+            .filter(school_id=school_id)
+            .select_related('from_account', 'to_account', 'recorded_by')
+            .order_by('-created_at')[:limit]
+        )
+        for tfr in transfers:
+            entries.append({
+                'type': 'transfer',
+                'id': tfr.id,
+                'description': f"{tfr.from_account.name} → {tfr.to_account.name}{(' — ' + tfr.description) if tfr.description else ''}",
+                'amount': float(tfr.amount),
+                'date': str(tfr.date),
+                'account_name': None,
+                'recorded_by': tfr.recorded_by.get_full_name() if tfr.recorded_by else None,
+                'timestamp': tfr.created_at.isoformat(),
+            })
+
+        # Sort all by timestamp descending, take top N
+        entries.sort(key=lambda e: e['timestamp'], reverse=True)
+        return Response(entries[:limit])
 
 
 class TransferViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
@@ -1251,11 +1411,11 @@ class FinanceReportsView(ModuleAccessMixin, APIView):
             )
 
         if date_from:
-            fee_qs = fee_qs.filter(payment_date__gte=date_from)
+            fee_qs = fee_qs.filter(Q(payment_date__gte=date_from) | Q(payment_date__isnull=True))
             expense_qs = expense_qs.filter(date__gte=date_from)
             other_income_qs = other_income_qs.filter(date__gte=date_from)
         if date_to:
-            fee_qs = fee_qs.filter(payment_date__lte=date_to)
+            fee_qs = fee_qs.filter(Q(payment_date__lte=date_to) | Q(payment_date__isnull=True))
             expense_qs = expense_qs.filter(date__lte=date_to)
             other_income_qs = other_income_qs.filter(date__lte=date_to)
 

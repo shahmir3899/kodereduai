@@ -168,3 +168,31 @@ class User(AbstractUser):
             school_id=school_id, is_active=True,
         ).first()
         return mem.role if mem else None
+
+
+class DevicePushToken(models.Model):
+    """Stores Expo push tokens for mobile push notifications."""
+
+    DEVICE_TYPE_CHOICES = [
+        ('IOS', 'iOS'),
+        ('ANDROID', 'Android'),
+    ]
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='push_tokens',
+    )
+    token = models.CharField(max_length=200, help_text='ExponentPushToken[xxx]')
+    device_type = models.CharField(max_length=10, choices=DEVICE_TYPE_CHOICES)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('user', 'token')
+        verbose_name = 'Device Push Token'
+        verbose_name_plural = 'Device Push Tokens'
+
+    def __str__(self):
+        return f"{self.user.username} - {self.device_type} ({self.token[:30]}...)"

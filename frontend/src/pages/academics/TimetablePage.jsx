@@ -45,6 +45,19 @@ export default function TimetablePage() {
   const [substituteData, setSubstituteData] = useState(null)
   const [loadingSubstitute, setLoadingSubstitute] = useState(false)
 
+  // AI Suggest Slots state
+  const [showAISuggest, setShowAISuggest] = useState(false)
+  const [aiSlotForm, setAiSlotForm] = useState({
+    start_time: '08:00',
+    end_time: '14:00',
+    num_periods: 6,
+    period_duration_minutes: 40,
+  })
+  const [suggestedSlots, setSuggestedSlots] = useState(null)
+  const [loadingSuggest, setLoadingSuggest] = useState(false)
+  const [applyingSlots, setApplyingSlots] = useState(false)
+  const [suggestError, setSuggestError] = useState('')
+
   // Queries
   const { data: classesData } = useQuery({
     queryKey: ['classes'],
@@ -340,6 +353,32 @@ export default function TimetablePage() {
   })
 
   const resetSlotForm = () => { setSlotForm(EMPTY_SLOT); setEditSlotId(null); setSlotErrors({}) }
+
+  // AI Suggest Slots handlers
+  const handleSuggestSlots = async () => {
+    setLoadingSuggest(true)
+    setSuggestError('')
+    setSuggestedSlots(null)
+    try {
+      const res = await academicsApi.suggestTimeSlots(aiSlotForm)
+      setSuggestedSlots(res.data.slots)
+    } catch (err) {
+      setSuggestError(err.response?.data?.detail || 'Failed to generate suggestions')
+    }
+    setLoadingSuggest(false)
+  }
+
+  const handleApplySuggestedSlots = async () => {
+    if (!suggestedSlots?.length) return
+    setApplyingSlots(true)
+    try {
+      await academicsApi.bulkCreateSlots({ slots: suggestedSlots })
+      queryClient.invalidateQueries({ queryKey: ['timetableSlots'] })
+      setSuggestedSlots(null)
+      setShowAISuggest(false)
+    } catch { /* ignore */ }
+    setApplyingSlots(false)
+  }
 
   const handleSlotSubmit = (e) => {
     e.preventDefault()
@@ -861,6 +900,120 @@ export default function TimetablePage() {
                 ))}
               </div>
             )}
+
+            {/* AI Suggest Slots Section */}
+            <div className="border-t border-gray-200 pt-4 mb-4">
+              <button
+                onClick={() => { setShowAISuggest(p => !p); setSuggestedSlots(null); setSuggestError('') }}
+                className="flex items-center gap-2 text-sm font-medium text-indigo-600 hover:text-indigo-700 mb-3"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                {showAISuggest ? 'Hide AI Suggest' : 'AI Suggest Slots'}
+              </button>
+
+              {showAISuggest && (
+                <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-lg mb-3">
+                  <p className="text-xs text-indigo-700 mb-3">
+                    Enter your school schedule parameters and AI will suggest optimal time slots with breaks.
+                  </p>
+                  <div className="grid grid-cols-2 gap-2 mb-3">
+                    <div>
+                      <label className="block text-xs text-indigo-600 mb-1">School Start</label>
+                      <input
+                        type="time"
+                        value={aiSlotForm.start_time}
+                        onChange={e => setAiSlotForm(p => ({ ...p, start_time: e.target.value }))}
+                        className="input w-full text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-indigo-600 mb-1">School End</label>
+                      <input
+                        type="time"
+                        value={aiSlotForm.end_time}
+                        onChange={e => setAiSlotForm(p => ({ ...p, end_time: e.target.value }))}
+                        className="input w-full text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-indigo-600 mb-1">Number of Periods</label>
+                      <input
+                        type="number"
+                        min="2"
+                        max="12"
+                        value={aiSlotForm.num_periods}
+                        onChange={e => setAiSlotForm(p => ({ ...p, num_periods: parseInt(e.target.value) || 6 }))}
+                        className="input w-full text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-indigo-600 mb-1">Period Duration (min)</label>
+                      <input
+                        type="number"
+                        min="20"
+                        max="90"
+                        value={aiSlotForm.period_duration_minutes}
+                        onChange={e => setAiSlotForm(p => ({ ...p, period_duration_minutes: parseInt(e.target.value) || 40 }))}
+                        className="input w-full text-sm"
+                      />
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleSuggestSlots}
+                    disabled={loadingSuggest}
+                    className="px-3 py-1.5 text-xs bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                  >
+                    {loadingSuggest ? 'Generating...' : 'Generate Slots'}
+                  </button>
+
+                  {suggestError && (
+                    <p className="text-xs text-red-600 mt-2">{suggestError}</p>
+                  )}
+
+                  {suggestedSlots && (
+                    <div className="mt-3">
+                      <p className="text-xs font-medium text-indigo-700 mb-2">Suggested Schedule:</p>
+                      <div className="space-y-1 mb-3">
+                        {suggestedSlots.map((s, i) => (
+                          <div key={i} className="flex items-center gap-2 text-xs px-2 py-1 bg-white rounded border border-indigo-100">
+                            <span className="font-mono text-gray-400 w-4">{s.order}</span>
+                            <span className={`px-1.5 py-0.5 rounded font-medium ${
+                              s.slot_type === 'PERIOD' ? 'bg-blue-100 text-blue-700' :
+                              s.slot_type === 'LUNCH' ? 'bg-orange-100 text-orange-700' :
+                              'bg-yellow-100 text-yellow-700'
+                            }`}>
+                              {s.slot_type}
+                            </span>
+                            <span className="text-gray-700 flex-1">{s.name}</span>
+                            <span className="text-gray-400">{s.start_time}-{s.end_time}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={handleApplySuggestedSlots}
+                          disabled={applyingSlots}
+                          className="px-3 py-1.5 text-xs bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+                        >
+                          {applyingSlots ? 'Applying...' : 'Apply All Slots'}
+                        </button>
+                        <button
+                          onClick={() => setSuggestedSlots(null)}
+                          className="px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-100 rounded-lg"
+                        >
+                          Discard
+                        </button>
+                      </div>
+                      <p className="text-[10px] text-indigo-500 mt-2">
+                        This will replace all existing time slots with the suggested ones.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
 
             <div className="border-t border-gray-200 pt-4">
               <h3 className="text-sm font-medium text-gray-700 mb-3">{editSlotId ? 'Edit Slot' : 'Add New Slot'}</h3>

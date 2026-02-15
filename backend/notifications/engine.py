@@ -90,6 +90,7 @@ class NotificationEngine:
             'SMS': config.sms_enabled,
             'IN_APP': config.in_app_enabled,
             'EMAIL': config.email_enabled,
+            'PUSH': config.push_enabled,
         }
         return channel_map.get(channel, False)
 
@@ -97,10 +98,12 @@ class NotificationEngine:
         """Get the channel handler for dispatching."""
         from .channels.whatsapp import WhatsAppChannel
         from .channels.in_app import InAppChannel
+        from .channels.expo import ExpoChannel
 
         handlers = {
             'WHATSAPP': WhatsAppChannel,
             'IN_APP': InAppChannel,
+            'PUSH': ExpoChannel,
         }
         handler_class = handlers.get(channel)
         if handler_class:

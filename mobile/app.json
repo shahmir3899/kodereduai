@@ -1,0 +1,80 @@
+{
+  "expo": {
+    "name": "KoderEduAI",
+    "slug": "kodereduai",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "kodereduai",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1e40af"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.kodereduai.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "This app uses the camera to capture attendance photos.",
+        "NSLocationWhenInUseUsageDescription": "This app uses your location to share your journey status with parents.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "This app uses background location to track your journey to school."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1e40af"
+      },
+      "package": "com.kodereduai.app",
+      "permissions": [
+        "CAMERA",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "RECEIVE_BOOT_COMPLETED"
+      ],
+      "edgeToEdgeEnabled": true
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-router",
+        {
+          "origin": "https://kodereduai.com"
+        }
+      ],
+      "expo-secure-store",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow KoderEduAI to access your camera for attendance capture."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow KoderEduAI to use your location for journey tracking.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#1e40af"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow KoderEduAI to access your photos."
+        }
+      ]
+    ]
+  }
+}

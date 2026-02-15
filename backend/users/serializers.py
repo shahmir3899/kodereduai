@@ -263,3 +263,9 @@ class CurrentUserSerializer(serializers.ModelSerializer):
 
     def get_organization_name(self, obj):
         return obj.organization.name if obj.organization else None
+
+
+class DevicePushTokenSerializer(serializers.Serializer):
+    """Serializer for registering/unregistering Expo push tokens."""
+    token = serializers.CharField(max_length=200)
+    device_type = serializers.ChoiceField(choices=[('IOS', 'iOS'), ('ANDROID', 'Android')])

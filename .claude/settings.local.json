@@ -73,7 +73,17 @@
       "Bash(do echo \"=== $app ===\" echo \"Models:\" grep \"^class.*models.Model\" \"d:\\\\Personal\\\\smart-attendance\\\\backend$app\\\\models.py\")",
       "Bash(done)",
       "Bash(grep:*)",
-      "Bash(tasklist:*)"
+      "Bash(tasklist:*)",
+      "Bash(node --version:*)",
+      "Bash(npm:*)",
+      "Bash(npx create-expo-app@latest mobile --template blank-typescript --no-install)",
+      "Bash(npx expo install:*)",
+      "Bash(while read f)",
+      "Bash(do echo \"$f\")",
+      "Bash(cat:*)",
+      "Bash(npx tsc:*)",
+      "WebFetch(domain:)",
+      "Bash(pdftotext:*)"
     ]
   }
 }

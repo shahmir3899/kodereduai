@@ -225,6 +225,7 @@ export const financeApi = {
   deleteAccount: (id) => api.delete(`/api/finance/accounts/${id}/`),
   getAccountBalances: (params) => api.get('/api/finance/accounts/balances/', { params }),
   getAccountBalancesAll: (params) => api.get('/api/finance/accounts/balances_all/', { params }),
+  getRecentEntries: (params) => api.get('/api/finance/accounts/recent_entries/', { params }),
 
   // Monthly Closings
   closeMonth: (data) => api.post('/api/finance/accounts/close_month/', data),
@@ -344,6 +345,7 @@ export const academicsApi = {
   createSubject: (data) => api.post('/api/academics/subjects/', data),
   updateSubject: (id, data) => api.patch(`/api/academics/subjects/${id}/`, data),
   deleteSubject: (id) => api.delete(`/api/academics/subjects/${id}/`),
+  bulkCreateSubjects: (data) => api.post('/api/academics/subjects/bulk_create/', data),
 
   // Class-Subject Assignments
   getClassSubjects: (params) => api.get('/api/academics/class-subjects/', { params }),
@@ -358,6 +360,8 @@ export const academicsApi = {
   createTimetableSlot: (data) => api.post('/api/academics/timetable-slots/', data),
   updateTimetableSlot: (id, data) => api.patch(`/api/academics/timetable-slots/${id}/`, data),
   deleteTimetableSlot: (id) => api.delete(`/api/academics/timetable-slots/${id}/`),
+  suggestTimeSlots: (data) => api.post('/api/academics/timetable-slots/suggest_slots/', data),
+  bulkCreateSlots: (data) => api.post('/api/academics/timetable-slots/bulk_create_slots/', data),
 
   // Timetable Entries
   getTimetableEntries: (params) => api.get('/api/academics/timetable-entries/', { params }),
@@ -464,6 +468,11 @@ export const examinationsApi = {
   updateMark: (id, data) => api.patch(`/api/examinations/marks/${id}/`, data),
   bulkEntryMarks: (data) => api.post('/api/examinations/marks/bulk_entry/', data),
   getMarksByStudent: (params) => api.get('/api/examinations/marks/by_student/', { params }),
+  downloadMarksTemplate: (examSubjectId) =>
+    api.get('/api/examinations/marks/download_template/', {
+      params: { exam_subject_id: examSubjectId },
+      responseType: 'blob',
+    }),
 
   // Grade Scales
   getGradeScales: (params) => api.get('/api/examinations/grade-scales/', { params }),
@@ -821,4 +830,45 @@ export const hostelApi = {
   rejectGatePass: (id, data) => api.patch(`/api/hostel/gate-passes/${id}/reject/`, data),
   checkoutGatePass: (id) => api.patch(`/api/hostel/gate-passes/${id}/checkout/`),
   returnGatePass: (id) => api.patch(`/api/hostel/gate-passes/${id}/return/`),
+}
+
+// Inventory & Store Management API
+export const inventoryApi = {
+  // Dashboard
+  getDashboard: () => api.get('/api/inventory/dashboard/'),
+
+  // Categories
+  getCategories: (params) => api.get('/api/inventory/categories/', { params }),
+  createCategory: (data) => api.post('/api/inventory/categories/', data),
+  updateCategory: (id, data) => api.patch(`/api/inventory/categories/${id}/`, data),
+  deleteCategory: (id) => api.delete(`/api/inventory/categories/${id}/`),
+
+  // Vendors
+  getVendors: (params) => api.get('/api/inventory/vendors/', { params }),
+  getVendor: (id) => api.get(`/api/inventory/vendors/${id}/`),
+  createVendor: (data) => api.post('/api/inventory/vendors/', data),
+  updateVendor: (id, data) => api.patch(`/api/inventory/vendors/${id}/`, data),
+  deleteVendor: (id) => api.delete(`/api/inventory/vendors/${id}/`),
+
+  // Items
+  getItems: (params) => api.get('/api/inventory/items/', { params }),
+  getItem: (id) => api.get(`/api/inventory/items/${id}/`),
+  createItem: (data) => api.post('/api/inventory/items/', data),
+  updateItem: (id, data) => api.patch(`/api/inventory/items/${id}/`, data),
+  deleteItem: (id) => api.delete(`/api/inventory/items/${id}/`),
+  getLowStockItems: () => api.get('/api/inventory/items/low_stock/'),
+
+  // Assignments
+  getAssignments: (params) => api.get('/api/inventory/assignments/', { params }),
+  getAssignment: (id) => api.get(`/api/inventory/assignments/${id}/`),
+  createAssignment: (data) => api.post('/api/inventory/assignments/', data),
+  returnItem: (id, data) => api.post(`/api/inventory/assignments/${id}/return_item/`, data),
+  getAssignmentsByUser: (userId) => api.get(`/api/inventory/assignments/by_user/`, { params: { user_id: userId } }),
+
+  // Transactions
+  getTransactions: (params) => api.get('/api/inventory/transactions/', { params }),
+  createTransaction: (data) => api.post('/api/inventory/transactions/', data),
+
+  // Search helpers
+  searchUsers: (params) => api.get('/api/users/', { params }),
 }

@@ -11,7 +11,7 @@ from datetime import date
 from decimal import Decimal
 
 from django.conf import settings
-from django.db.models import Sum, Count
+from django.db.models import Sum, Count, Q
 
 logger = logging.getLogger(__name__)
 
@@ -309,11 +309,11 @@ class FinanceAIAgent:
         other_qs = OtherIncome.objects.filter(school_id=self.school_id)
 
         if date_from:
-            fee_qs = fee_qs.filter(payment_date__gte=date_from)
+            fee_qs = fee_qs.filter(Q(payment_date__gte=date_from) | Q(payment_date__isnull=True))
             exp_qs = exp_qs.filter(date__gte=date_from)
             other_qs = other_qs.filter(date__gte=date_from)
         if date_to:
-            fee_qs = fee_qs.filter(payment_date__lte=date_to)
+            fee_qs = fee_qs.filter(Q(payment_date__lte=date_to) | Q(payment_date__isnull=True))
             exp_qs = exp_qs.filter(date__lte=date_to)
             other_qs = other_qs.filter(date__lte=date_to)
 
@@ -430,13 +430,13 @@ class FinanceAIAgent:
             tfr_out_qs = Transfer.objects.filter(school_id__in=scope_ids, from_account=account)
 
             if date_from:
-                fee_qs = fee_qs.filter(payment_date__gte=date_from)
+                fee_qs = fee_qs.filter(Q(payment_date__gte=date_from) | Q(payment_date__isnull=True))
                 other_qs = other_qs.filter(date__gte=date_from)
                 exp_qs = exp_qs.filter(date__gte=date_from)
                 tfr_in_qs = tfr_in_qs.filter(date__gte=date_from)
                 tfr_out_qs = tfr_out_qs.filter(date__gte=date_from)
             if date_to:
-                fee_qs = fee_qs.filter(payment_date__lte=date_to)
+                fee_qs = fee_qs.filter(Q(payment_date__lte=date_to) | Q(payment_date__isnull=True))
                 other_qs = other_qs.filter(date__lte=date_to)
                 exp_qs = exp_qs.filter(date__lte=date_to)
                 tfr_in_qs = tfr_in_qs.filter(date__lte=date_to)

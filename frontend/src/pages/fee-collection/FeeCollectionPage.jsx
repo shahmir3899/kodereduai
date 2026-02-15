@@ -137,7 +137,8 @@ export default function FeeCollectionPage() {
       }
       return
     }
-    data.paymentMutation.mutate({ id, data: { [field]: parsedValue, ...(payment?.account && { account: payment.account }) } })
+    const today = new Date().toISOString().split('T')[0]
+    data.paymentMutation.mutate({ id, data: { [field]: parsedValue, payment_date: payment?.payment_date || today, ...(payment?.account && { account: payment.account }) } })
     setEditingCell(null)
   }
 
@@ -173,8 +174,10 @@ export default function FeeCollectionPage() {
 
   // Bulk update handler
   const handleBulkUpdate = (amount, accountId) => {
+    const today = new Date().toISOString().split('T')[0]
     const records = [...selectedIds].map(id => ({
       id, amount_paid: amount,
+      payment_date: today,
       ...(accountId && { account: accountId }),
     }))
     data.bulkUpdateMutation.mutate({ records }, {
@@ -340,6 +343,7 @@ export default function FeeCollectionPage() {
         classFilter={classFilter} setClassFilter={setClassFilter}
         classList={data.classList}
         mutation={data.generateMutation}
+        existingCount={data.paymentList.length}
       />
 
       <FeeStructureModal

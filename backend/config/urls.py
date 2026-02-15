@@ -98,6 +98,14 @@ def api_root(request):
                 'gate_passes': '/api/hostel/gate-passes/',
                 'dashboard': '/api/hostel/dashboard/',
             },
+            'inventory': {
+                'categories': '/api/inventory/categories/',
+                'vendors': '/api/inventory/vendors/',
+                'items': '/api/inventory/items/',
+                'assignments': '/api/inventory/assignments/',
+                'transactions': '/api/inventory/transactions/',
+                'dashboard': '/api/inventory/dashboard/',
+            },
             'admin': {
                 'schools': '/api/admin/schools/',
             }
@@ -162,6 +170,9 @@ urlpatterns = [
 
     # Hostel Management
     path('api/hostel/', include('hostel.urls')),
+
+    # Inventory & Store
+    path('api/inventory/', include('inventory.urls')),
 ]
 
 # Serve media files in development

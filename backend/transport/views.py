@@ -9,6 +9,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.views import APIView
 
 from core.permissions import (
     IsSchoolAdmin, IsSchoolAdminOrReadOnly, HasSchoolAccess, ModuleAccessMixin,
@@ -529,3 +530,162 @@ class TransportAttendanceViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewset
             'errors': errors,
             'total_processed': created_count + updated_count,
         }, status=status.HTTP_200_OK)
+
+
+# =============================================================================
+# GPS Journey Views
+# =============================================================================
+
+class JourneyStartView(APIView):
+    """POST /api/transport/journey/start/ — Student starts a journey."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        from .serializers import JourneyStartSerializer, StudentJourneyReadSerializer
+        from .models import StudentJourney
+        from students.models import Student
+
+        serializer = JourneyStartSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        # Find the student linked to this user
+        try:
+            student = Student.objects.get(user=request.user)
+        except Student.DoesNotExist:
+            return Response({'error': 'No student profile found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Check for existing active journey
+        active = StudentJourney.objects.filter(student=student, status='ACTIVE').first()
+        if active:
+            return Response({'error': 'You already have an active journey.', 'journey_id': active.id},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        # Find transport assignment
+        assignment = student.transport_assignments.filter(is_active=True).first()
+
+        journey = StudentJourney.objects.create(
+            school=student.school,
+            student=student,
+            transport_assignment=assignment,
+            journey_type=serializer.validated_data['journey_type'],
+            start_latitude=serializer.validated_data['latitude'],
+            start_longitude=serializer.validated_data['longitude'],
+        )
+        return Response(StudentJourneyReadSerializer(journey).data, status=status.HTTP_201_CREATED)
+
+
+class JourneyEndView(APIView):
+    """POST /api/transport/journey/end/ — Student ends a journey."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        from .serializers import StudentJourneyReadSerializer
+        from .models import StudentJourney
+        from students.models import Student
+        from django.utils import timezone
+
+        journey_id = request.data.get('journey_id')
+        if not journey_id:
+            return Response({'error': 'journey_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            student = Student.objects.get(user=request.user)
+        except Student.DoesNotExist:
+            return Response({'error': 'No student profile found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            journey = StudentJourney.objects.get(id=journey_id, student=student, status='ACTIVE')
+        except StudentJourney.DoesNotExist:
+            return Response({'error': 'Active journey not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        latitude = request.data.get('latitude')
+        longitude = request.data.get('longitude')
+
+        journey.status = 'COMPLETED'
+        journey.ended_at = timezone.now()
+        if latitude and longitude:
+            journey.end_latitude = latitude
+            journey.end_longitude = longitude
+        journey.save()
+
+        return Response(StudentJourneyReadSerializer(journey).data)
+
+
+class JourneyUpdateView(APIView):
+    """POST /api/transport/journey/update/ — GPS ping every 30s."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        from .serializers import JourneyUpdateSerializer
+        from .models import StudentJourney, LocationUpdate
+
+        serializer = JourneyUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        d = serializer.validated_data
+
+        try:
+            journey = StudentJourney.objects.get(id=d['journey_id'], status='ACTIVE')
+        except StudentJourney.DoesNotExist:
+            return Response({'error': 'Active journey not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        LocationUpdate.objects.create(
+            journey=journey,
+            latitude=d['latitude'],
+            longitude=d['longitude'],
+            accuracy=d['accuracy'],
+            speed=d.get('speed'),
+            battery_level=d.get('battery_level'),
+        )
+        return Response({'status': 'ok'})
+
+
+class JourneyTrackView(APIView):
+    """GET /api/transport/journey/track/<student_id>/ — Parent tracks child."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, student_id):
+        from .serializers import StudentJourneyReadSerializer, LocationUpdateSerializer
+        from .models import StudentJourney
+
+        journey = StudentJourney.objects.filter(
+            student_id=student_id, status='ACTIVE',
+        ).first()
+
+        if not journey:
+            return Response({'active': False, 'message': 'No active journey.'})
+
+        locations = journey.locations.all()[:50]
+        return Response({
+            'active': True,
+            'journey': StudentJourneyReadSerializer(journey).data,
+            'locations': LocationUpdateSerializer(locations, many=True).data,
+        })
+
+
+class JourneyHistoryView(APIView):
+    """GET /api/transport/journey/history/<student_id>/ — Past journeys."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, student_id):
+        from .serializers import StudentJourneyReadSerializer
+        from .models import StudentJourney
+
+        journeys = StudentJourney.objects.filter(
+            student_id=student_id,
+        ).order_by('-started_at')[:20]
+        return Response(StudentJourneyReadSerializer(journeys, many=True).data)
+
+
+class ActiveJourneysView(APIView):
+    """GET /api/transport/journey/active/ — Admin: all active journeys."""
+    permission_classes = [IsAuthenticated, IsSchoolAdmin]
+
+    def get(self, request):
+        from .serializers import StudentJourneyReadSerializer
+        from .models import StudentJourney
+
+        school_id = ensure_tenant_school_id(request)
+        journeys = StudentJourney.objects.filter(
+            school_id=school_id, status='ACTIVE',
+        )
+        return Response(StudentJourneyReadSerializer(journeys, many=True).data)

@@ -29,6 +29,7 @@ class NotificationTemplate(models.Model):
         ('SMS', 'SMS'),
         ('IN_APP', 'In-App'),
         ('EMAIL', 'Email'),
+        ('PUSH', 'Push Notification'),
     ]
 
     school = models.ForeignKey(
@@ -222,6 +223,7 @@ class SchoolNotificationConfig(models.Model):
     sms_enabled = models.BooleanField(default=False)
     in_app_enabled = models.BooleanField(default=True)
     email_enabled = models.BooleanField(default=False)
+    push_enabled = models.BooleanField(default=True)
     quiet_hours_start = models.TimeField(
         null=True,
         blank=True,

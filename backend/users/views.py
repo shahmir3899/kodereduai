@@ -19,6 +19,7 @@ from .serializers import (
     ChangePasswordSerializer,
     ProfileUpdateSerializer,
     CurrentUserSerializer,
+    DevicePushTokenSerializer,
 )
 
 User = get_user_model()
@@ -172,3 +173,50 @@ class SuperAdminUserCreateView(generics.CreateAPIView):
 
     def perform_create(self, serializer):
         serializer.save()
+
+
+class RegisterPushTokenView(APIView):
+    """
+    POST /api/auth/register-push-token/
+    Register an Expo push token for the current user.
+    Body: { token: "ExponentPushToken[...]", device_type: "IOS"|"ANDROID" }
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = DevicePushTokenSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        from .models import DevicePushToken
+        DevicePushToken.objects.update_or_create(
+            user=request.user,
+            token=serializer.validated_data['token'],
+            defaults={
+                'device_type': serializer.validated_data['device_type'],
+                'is_active': True,
+            },
+        )
+        return Response({'message': 'Push token registered.'}, status=status.HTTP_200_OK)
+
+
+class UnregisterPushTokenView(APIView):
+    """
+    DELETE /api/auth/unregister-push-token/
+    Deactivate a push token for the current user.
+    Body: { token: "ExponentPushToken[...]" }
+    """
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request):
+        token = request.data.get('token')
+        if not token:
+            return Response({'error': 'token is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        from .models import DevicePushToken
+        updated = DevicePushToken.objects.filter(
+            user=request.user, token=token,
+        ).update(is_active=False)
+
+        if updated:
+            return Response({'message': 'Push token unregistered.'})
+        return Response({'error': 'Token not found.'}, status=status.HTTP_404_NOT_FOUND)
