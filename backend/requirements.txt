@@ -13,8 +13,9 @@ click-repl==0.3.0
 colorama==0.4.6
 distro==1.9.0
 dj-database-url==2.3.0
-Django==6.0.1
+Django==5.2.11
 django-cors-headers==4.9.0
+django-filter==25.2
 djangorestframework==3.16.1
 djangorestframework_simplejwt==5.5.1
 fuzzywuzzy==0.18.0
@@ -60,6 +61,9 @@ django-celery-beat>=2.6.0
 
 # PDF Generation
 fpdf2>=2.8.0
+
+# Excel Generation
+openpyxl>=3.1.0
 
 # Testing
 pytest>=8.0
