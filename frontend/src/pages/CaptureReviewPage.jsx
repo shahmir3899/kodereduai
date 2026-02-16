@@ -88,7 +88,7 @@ function UploadTab({ onUploadSuccess }) {
 
   const { data: classesData } = useQuery({
     queryKey: ['classes', activeSchool?.id],
-    queryFn: () => classesApi.getClasses({ school_id: activeSchool?.id }),
+    queryFn: () => classesApi.getClasses({ school_id: activeSchool?.id, page_size: 9999 }),
     enabled: !!activeSchool?.id,
   })
 
@@ -101,7 +101,7 @@ function UploadTab({ onUploadSuccess }) {
   const createMutation = useMutation({
     mutationFn: data => attendanceApi.createUpload(data),
     onSuccess: (response) => {
-      queryClient.invalidateQueries(['pendingReviews'])
+      queryClient.invalidateQueries({ queryKey: ['pendingReviews'] })
       setUploadStep(null)
       setUploadedFiles([])
       const uploadId = response.data?.id
@@ -392,12 +392,16 @@ function ReviewDetail({ uploadId, onBack }) {
     queryKey: ['uploadDetail', uploadId],
     queryFn: () => attendanceApi.getUploadDetails(uploadId),
     enabled: !!uploadId,
+    refetchInterval: (query) => {
+      const status = query.state.data?.data?.status
+      return status === 'PROCESSING' ? 3000 : false
+    },
   })
   const upload = uploadData?.data
 
   const { data: studentsData } = useQuery({
     queryKey: ['classStudents', upload?.class_obj],
-    queryFn: () => studentsApi.getStudents({ class_id: upload?.class_obj, is_active: true }),
+    queryFn: () => studentsApi.getStudents({ class_id: upload?.class_obj, is_active: true, page_size: 9999 }),
     enabled: !!upload?.class_obj,
   })
   const allStudents = (studentsData?.data?.results || studentsData?.data || [])
@@ -417,15 +421,15 @@ function ReviewDetail({ uploadId, onBack }) {
       rollCorrections: Object.entries(rollCorrections).map(([sid, confirmed]) => ({ student_id: parseInt(sid), confirmed })),
     }),
     onSuccess: () => {
-      queryClient.invalidateQueries(['pendingReviews'])
-      queryClient.invalidateQueries(['uploadDetail', uploadId])
+      queryClient.invalidateQueries({ queryKey: ['pendingReviews'] })
+      queryClient.invalidateQueries({ queryKey: ['uploadDetail', uploadId] })
       navigate('/dashboard')
     },
   })
 
   const deleteMutation = useMutation({
     mutationFn: (id) => attendanceApi.deleteUpload(id),
-    onSuccess: () => { queryClient.invalidateQueries(['pendingReviews']); setShowDeleteConfirm(null); onBack() },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['pendingReviews'] }); setShowDeleteConfirm(null); onBack() },
   })
 
   const handleReprocess = async () => {
@@ -433,7 +437,7 @@ function ReviewDetail({ uploadId, onBack }) {
     try {
       const response = await attendanceApi.reprocessUpload(uploadId)
       setReprocessSuccess(`AI reprocessing complete! Found ${response.data.matched_count || 0} absent students.`)
-      queryClient.invalidateQueries(['uploadDetail', uploadId])
+      queryClient.invalidateQueries({ queryKey: ['uploadDetail', uploadId] })
     } catch (err) {
       setReprocessError(err.response?.data?.error || 'Failed to reprocess with AI')
     } finally { setReprocessing(false) }
@@ -777,7 +781,7 @@ function PendingReviewTab({ initialReviewId }) {
 
   const deleteMutation = useMutation({
     mutationFn: (uploadId) => attendanceApi.deleteUpload(uploadId),
-    onSuccess: () => { queryClient.invalidateQueries(['pendingReviews']); setShowDeleteConfirm(null) },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['pendingReviews'] }); setShowDeleteConfirm(null) },
   })
 
   // If reviewing a specific upload, show detail

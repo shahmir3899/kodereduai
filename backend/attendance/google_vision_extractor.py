@@ -803,9 +803,42 @@ class GoogleVisionExtractor:
         return students, date_columns
 
     def _interpret_mark(self, mark: str) -> str:
-        """Convert raw mark to status using school mappings."""
+        """Convert raw mark to status using school mappings.
+
+        Handles compound marks like "PP" (morning+afternoon), "PA", "AA" etc.
+        by checking each character individually and using majority logic.
+        """
         mark = mark.upper().strip()
-        return self.mark_mappings.get(mark, 'UNMARKED')
+        if not mark:
+            return 'UNMARKED'
+
+        # Direct lookup first (handles "P", "A", "AB", etc.)
+        result = self.mark_mappings.get(mark)
+        if result:
+            return result
+
+        # Compound mark: split into individual characters, interpret each
+        # e.g. "PP" -> [PRESENT, PRESENT] -> PRESENT
+        # e.g. "PA" -> [PRESENT, ABSENT] -> PRESENT (was present at least once)
+        # e.g. "AA" -> [ABSENT, ABSENT] -> ABSENT
+        statuses = []
+        for ch in mark:
+            s = self.mark_mappings.get(ch)
+            if s and s != 'UNMARKED':
+                statuses.append(s)
+
+        if not statuses:
+            return 'UNMARKED'
+
+        # If any mark is PRESENT, student was present
+        if 'PRESENT' in statuses:
+            return 'PRESENT'
+        if 'LATE' in statuses:
+            return 'LATE'
+        if 'ABSENT' in statuses:
+            return 'ABSENT'
+
+        return 'UNMARKED'
 
     # ==========================================================
     # PUBLIC API

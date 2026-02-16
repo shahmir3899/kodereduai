@@ -1,3 +1,4 @@
+from django.db.models import Count, Q
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -38,7 +39,7 @@ def _resolve_school_id(request):
 class AcademicYearViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
     queryset = AcademicYear.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
-    pagination_class = None
+
 
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):
@@ -51,7 +52,10 @@ class AcademicYearViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         return ctx
 
     def get_queryset(self):
-        qs = super().get_queryset().select_related('school')
+        qs = super().get_queryset().select_related('school').annotate(
+            terms_count=Count('terms', filter=Q(terms__is_active=True)),
+            enrollment_count=Count('enrollments', filter=Q(enrollments__is_active=True)),
+        )
         is_active = self.request.query_params.get('is_active')
         if is_active is not None:
             qs = qs.filter(is_active=is_active.lower() == 'true')
@@ -124,7 +128,7 @@ class AcademicYearViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
 class TermViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
     queryset = Term.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
-    pagination_class = None
+
 
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):
@@ -156,7 +160,7 @@ class TermViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
 class StudentEnrollmentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
     queryset = StudentEnrollment.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
-    pagination_class = None
+
 
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):
@@ -205,6 +209,7 @@ class StudentEnrollmentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'])
     def bulk_promote(self, request):
+        """Promote students in bulk (background task)."""
         serializer = BulkPromoteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -213,66 +218,42 @@ class StudentEnrollmentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         target_year = serializer.validated_data['target_academic_year']
         promotions = serializer.validated_data['promotions']
 
-        created = 0
-        errors = []
+        from core.task_utils import dispatch_background_task
+        from core.models import BackgroundTask
+        from .tasks import bulk_promote_task
 
-        for promo in promotions:
-            student_id = promo.get('student_id')
-            target_class_id = promo.get('target_class_id')
-            new_roll_number = promo.get('new_roll_number', '')
-
-            # Mark old enrollment as promoted
-            old_enrollment = StudentEnrollment.objects.filter(
-                school_id=school_id,
-                student_id=student_id,
-                academic_year=source_year,
-                is_active=True,
-            ).first()
-
-            if old_enrollment:
-                old_enrollment.status = StudentEnrollment.Status.PROMOTED
-                old_enrollment.save(update_fields=['status'])
-                if not new_roll_number:
-                    new_roll_number = old_enrollment.roll_number
-
-            # Create new enrollment
-            try:
-                StudentEnrollment.objects.create(
-                    school_id=school_id,
-                    student_id=student_id,
-                    academic_year=target_year,
-                    class_obj_id=target_class_id,
-                    roll_number=new_roll_number,
-                    status=StudentEnrollment.Status.ACTIVE,
-                )
-                # Update student's current class
-                from students.models import Student
-                Student.objects.filter(pk=student_id).update(
-                    class_obj_id=target_class_id,
-                    roll_number=new_roll_number,
-                )
-                created += 1
-            except Exception as e:
-                errors.append({'student_id': student_id, 'error': str(e)})
+        bg_task = dispatch_background_task(
+            celery_task_func=bulk_promote_task,
+            task_type=BackgroundTask.TaskType.BULK_PROMOTION,
+            title=f"Promoting {len(promotions)} students",
+            school_id=school_id,
+            user=request.user,
+            task_kwargs={
+                'school_id': school_id,
+                'source_year_id': source_year.id,
+                'target_year_id': target_year.id,
+                'promotions': promotions,
+            },
+            progress_total=len(promotions),
+        )
 
         return Response({
-            'promoted': created,
-            'errors': errors,
-            'message': f'{created} students promoted successfully.',
-        })
+            'task_id': bg_task.celery_task_id,
+            'message': 'Bulk promotion started.',
+        }, status=202)
 
 
 class PromotionAdvisorView(APIView):
-    """AI Smart Promotion Advisor - analyzes student data and recommends promotion decisions."""
+    """AI Smart Promotion Advisor (background task)."""
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
 
-    def get(self, request):
-        academic_year = request.query_params.get('academic_year')
-        class_id = request.query_params.get('class_id')
+    def post(self, request):
+        academic_year = request.data.get('academic_year')
+        class_id = request.data.get('class_id')
 
         if not academic_year or not class_id:
             return Response(
-                {'detail': 'academic_year and class_id query params are required.'},
+                {'detail': 'academic_year and class_id are required.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -283,20 +264,28 @@ class PromotionAdvisorView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        from .promotion_advisor_service import PromotionAdvisorService
+        from core.task_utils import dispatch_background_task
+        from core.models import BackgroundTask
+        from .tasks import promotion_advisor_task
 
-        service = PromotionAdvisorService(school_id, int(academic_year))
-        recommendations = service.get_recommendations(int(class_id))
+        bg_task = dispatch_background_task(
+            celery_task_func=promotion_advisor_task,
+            task_type=BackgroundTask.TaskType.PROMOTION_ADVISOR,
+            title="Running promotion analysis",
+            school_id=school_id,
+            user=request.user,
+            task_kwargs={
+                'school_id': school_id,
+                'academic_year_id': int(academic_year),
+                'class_id': int(class_id),
+            },
+            progress_total=100,
+        )
 
         return Response({
-            'recommendations': recommendations,
-            'total': len(recommendations),
-            'summary': {
-                'promote': sum(1 for r in recommendations if r['recommendation'] == 'PROMOTE'),
-                'needs_review': sum(1 for r in recommendations if r['recommendation'] == 'NEEDS_REVIEW'),
-                'retain': sum(1 for r in recommendations if r['recommendation'] == 'RETAIN'),
-            },
-        })
+            'task_id': bg_task.celery_task_id,
+            'message': 'Promotion analysis started.',
+        }, status=202)
 
 
 class SessionHealthView(APIView):

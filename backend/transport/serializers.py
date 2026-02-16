@@ -17,9 +17,9 @@ from .models import (
 class TransportRouteReadSerializer(serializers.ModelSerializer):
     """Read serializer with computed counts for stops, vehicles, and students."""
     school_name = serializers.CharField(source='school.name', read_only=True)
-    stops_count = serializers.IntegerField(source='stops.count', read_only=True)
-    vehicles_count = serializers.SerializerMethodField()
-    students_count = serializers.SerializerMethodField()
+    stops_count = serializers.IntegerField(read_only=True, default=0)
+    vehicles_count = serializers.IntegerField(read_only=True, default=0)
+    students_count = serializers.IntegerField(read_only=True, default=0)
 
     class Meta:
         model = TransportRoute
@@ -33,12 +33,6 @@ class TransportRouteReadSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
-
-    def get_vehicles_count(self, obj):
-        return obj.vehicles.filter(is_active=True).count()
-
-    def get_students_count(self, obj):
-        return obj.transport_assignments.filter(is_active=True).count()
 
 
 class TransportRouteCreateSerializer(serializers.ModelSerializer):

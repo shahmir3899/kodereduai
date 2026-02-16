@@ -34,12 +34,12 @@ export default function AcademicYearsPage() {
   // Queries
   const { data: yearsRes, isLoading: yearsLoading } = useQuery({
     queryKey: ['academicYears'],
-    queryFn: () => sessionsApi.getAcademicYears(),
+    queryFn: () => sessionsApi.getAcademicYears({ page_size: 9999 }),
   })
 
   const { data: termsRes, isLoading: termsLoading } = useQuery({
     queryKey: ['terms', yearFilter],
-    queryFn: () => sessionsApi.getTerms({ academic_year: yearFilter || undefined }),
+    queryFn: () => sessionsApi.getTerms({ academic_year: yearFilter || undefined, page_size: 9999 }),
     enabled: tab === 'terms',
   })
 

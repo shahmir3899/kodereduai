@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { academicsApi, classesApi, hrApi } from '../../services/api'
+import { useDebounce } from '../../hooks/useDebounce'
 
 const SEVERITY_STYLES = {
   red: { bg: 'bg-red-50', border: 'border-red-200', badge: 'bg-red-100 text-red-700', icon: 'text-red-500' },
@@ -45,7 +46,7 @@ function generateCode(name) {
 }
 
 const EMPTY_SUBJECT = { name: '', code: '', description: '', is_elective: false }
-const EMPTY_ASSIGNMENT = { class_obj: '', subject: '', teacher: '', periods_per_week: 1 }
+const EMPTY_ASSIGNMENT = { class_obj: '', subjects: [], teacher: '', periods_per_week: 1 }
 
 export default function SubjectsPage() {
   const queryClient = useQueryClient()
@@ -53,6 +54,7 @@ export default function SubjectsPage() {
 
   // Subject state
   const [search, setSearch] = useState('')
+  const debouncedSearch = useDebounce(search, 300)
   const [showSubjectModal, setShowSubjectModal] = useState(false)
   const [editSubjectId, setEditSubjectId] = useState(null)
   const [subjectForm, setSubjectForm] = useState(EMPTY_SUBJECT)
@@ -69,24 +71,26 @@ export default function SubjectsPage() {
 
   // Queries
   const { data: subjectRes, isLoading: subjectLoading } = useQuery({
-    queryKey: ['subjects', search],
-    queryFn: () => academicsApi.getSubjects({ search: search || undefined }),
+    queryKey: ['subjects', debouncedSearch],
+    queryFn: () => academicsApi.getSubjects({ search: debouncedSearch || undefined, page_size: 9999 }),
   })
 
   const { data: assignRes, isLoading: assignLoading } = useQuery({
     queryKey: ['classSubjects', classFilter],
-    queryFn: () => academicsApi.getClassSubjects({ class_obj: classFilter || undefined }),
+    queryFn: () => academicsApi.getClassSubjects({ class_obj: classFilter || undefined, page_size: 9999 }),
     enabled: tab === 'assignments',
   })
 
   const { data: classesData } = useQuery({
     queryKey: ['classes'],
-    queryFn: () => classesApi.getClasses(),
+    queryFn: () => classesApi.getClasses({ page_size: 9999 }),
+    staleTime: 5 * 60 * 1000,
   })
 
   const { data: staffData } = useQuery({
     queryKey: ['hrStaffActive'],
     queryFn: () => hrApi.getStaff({ employment_status: 'ACTIVE', page_size: 500 }),
+    staleTime: 5 * 60 * 1000,
   })
 
   // AI Insights queries
@@ -150,8 +154,17 @@ export default function SubjectsPage() {
 
   // Assignment mutations
   const createAssignMut = useMutation({
-    mutationFn: (data) => academicsApi.createClassSubject(data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['classSubjects'] }); closeAssignModal() },
+    mutationFn: (data) => academicsApi.bulkAssignSubjects(data),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['classSubjects'] })
+      const d = res.data
+      if (d.skipped_count > 0) {
+        setAssignErrors({ detail: `${d.created_count} assigned, ${d.skipped_count} skipped (already assigned): ${d.skipped_subjects.join(', ')}` })
+        if (d.created_count > 0) setTimeout(closeAssignModal, 2000)
+      } else {
+        closeAssignModal()
+      }
+    },
     onError: (err) => setAssignErrors(err.response?.data || { detail: 'Failed to create assignment' }),
   })
 
@@ -212,7 +225,7 @@ export default function SubjectsPage() {
   const openCreateAssign = () => { setAssignForm(EMPTY_ASSIGNMENT); setEditAssignId(null); setAssignErrors({}); setShowAssignModal(true) }
   const openEditAssign = (a) => {
     setAssignForm({
-      class_obj: a.class_obj, subject: a.subject,
+      class_obj: a.class_obj, subjects: [a.subject],
       teacher: a.teacher || '', periods_per_week: a.periods_per_week,
     })
     setEditAssignId(a.id); setAssignErrors({}); setShowAssignModal(true)
@@ -221,13 +234,27 @@ export default function SubjectsPage() {
 
   const handleAssignSubmit = (e) => {
     e.preventDefault()
-    const payload = {
-      ...assignForm,
-      teacher: assignForm.teacher || null,
-      periods_per_week: parseInt(assignForm.periods_per_week) || 1,
+    if (editAssignId) {
+      const payload = {
+        class_obj: assignForm.class_obj,
+        subject: assignForm.subjects[0],
+        teacher: assignForm.teacher || null,
+        periods_per_week: parseInt(assignForm.periods_per_week) || 1,
+      }
+      updateAssignMut.mutate({ id: editAssignId, data: payload })
+    } else {
+      if (assignForm.subjects.length === 0) {
+        setAssignErrors({ detail: 'Please select at least one subject.' })
+        return
+      }
+      const payload = {
+        class_obj: assignForm.class_obj,
+        subjects: assignForm.subjects,
+        teacher: assignForm.teacher || null,
+        periods_per_week: parseInt(assignForm.periods_per_week) || 1,
+      }
+      createAssignMut.mutate(payload)
     }
-    if (editAssignId) updateAssignMut.mutate({ id: editAssignId, data: payload })
-    else createAssignMut.mutate(payload)
   }
 
   return (
@@ -569,16 +596,51 @@ export default function SubjectsPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Subject *</label>
-                    <select
-                      value={assignForm.subject}
-                      onChange={e => setAssignForm(p => ({ ...p, subject: e.target.value }))}
-                      className="input w-full"
-                      required
-                    >
-                      <option value="">Select subject...</option>
-                      {subjects.map(s => <option key={s.id} value={s.id}>{s.code} - {s.name}</option>)}
-                    </select>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      {editAssignId ? 'Subject *' : 'Subjects *'}
+                    </label>
+                    {editAssignId ? (
+                      <select
+                        value={assignForm.subjects[0] || ''}
+                        onChange={e => setAssignForm(p => ({ ...p, subjects: [e.target.value] }))}
+                        className="input w-full"
+                        required
+                      >
+                        <option value="">Select subject...</option>
+                        {subjects.map(s => <option key={s.id} value={s.id}>{s.code} - {s.name}</option>)}
+                      </select>
+                    ) : (
+                      <div className="border border-gray-300 rounded-lg max-h-48 overflow-y-auto p-2 space-y-1">
+                        {subjects.length === 0 && <p className="text-sm text-gray-400 p-1">No subjects available</p>}
+                        {subjects.map(s => (
+                          <label key={s.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={assignForm.subjects.includes(s.id)}
+                              onChange={e => {
+                                setAssignForm(p => ({
+                                  ...p,
+                                  subjects: e.target.checked
+                                    ? [...p.subjects, s.id]
+                                    : p.subjects.filter(id => id !== s.id),
+                                }))
+                              }}
+                              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            <span className="text-sm text-gray-700">{s.code} - {s.name}</span>
+                          </label>
+                        ))}
+                        {subjects.length > 0 && (
+                          <div className="flex gap-2 pt-1 border-t mt-1">
+                            <button type="button" onClick={() => setAssignForm(p => ({ ...p, subjects: subjects.map(s => s.id) }))} className="text-xs text-blue-600 hover:underline">Select All</button>
+                            <button type="button" onClick={() => setAssignForm(p => ({ ...p, subjects: [] }))} className="text-xs text-gray-500 hover:underline">Clear</button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {!editAssignId && assignForm.subjects.length > 0 && (
+                      <p className="text-xs text-gray-500 mt-1">{assignForm.subjects.length} subject{assignForm.subjects.length > 1 ? 's' : ''} selected</p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Teacher</label>
@@ -605,7 +667,7 @@ export default function SubjectsPage() {
                   <div className="flex justify-end gap-3 pt-2">
                     <button type="button" onClick={closeAssignModal} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>
                     <button type="submit" disabled={createAssignMut.isPending || updateAssignMut.isPending} className="btn-primary px-4 py-2 text-sm disabled:opacity-50">
-                      {createAssignMut.isPending || updateAssignMut.isPending ? 'Saving...' : editAssignId ? 'Update' : 'Assign'}
+                      {createAssignMut.isPending || updateAssignMut.isPending ? 'Saving...' : editAssignId ? 'Update' : `Assign${assignForm.subjects.length > 1 ? ` (${assignForm.subjects.length})` : ''}`}
                     </button>
                   </div>
                 </form>

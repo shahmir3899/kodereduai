@@ -1,6 +1,10 @@
 """
 KoderEduAI - Comprehensive User Guide PDF Generator
 Generates a professional PDF user guide covering all modules and workflows.
+
+Source: generate_user_guide.py (project root)
+Output: KoderEduAI_User_Guide.pdf (project root)
+Run:    python generate_user_guide.py
 """
 
 from fpdf import FPDF
@@ -64,6 +68,11 @@ class UserGuidePDF(FPDF):
         self.set_font("Helvetica", "I", 9)
         for m in modules:
             self.cell(0, 6, m, align="C", new_x="LMARGIN", new_y="NEXT")
+        self.ln(15)
+        self.set_font("Helvetica", "", 8)
+        self.set_text_color(150, 150, 150)
+        self.cell(0, 5, "To update this guide, edit: generate_user_guide.py (project root)", align="C", new_x="LMARGIN", new_y="NEXT")
+        self.cell(0, 5, "Then run: python generate_user_guide.py", align="C", new_x="LMARGIN", new_y="NEXT")
 
     def add_toc(self):
         self.add_page()
@@ -274,15 +283,22 @@ def build_guide():
     pdf.simple_table(
         ["Role", "Access Level", "Description"],
         [
-            ["School Admin", "Full School", "Full access to school settings, data, and configuration"],
-            ["Principal", "School-wide", "View and manage school operations"],
+            ["Super Admin", "Platform-wide", "Creates schools & School Admin accounts"],
+            ["School Admin", "Full School", "Full access; can create users within their school"],
+            ["Principal", "School-wide", "School operations; can create staff-level users"],
             ["Teacher", "Assigned Classes", "Attendance, marks entry, lesson plans"],
             ["HR Manager", "HR Module", "Staff management, payroll, leave"],
+            ["Accountant", "Finance Module", "Fee management, expenses, reports"],
             ["Staff", "Limited", "Basic access, notifications"],
             ["Parent", "Parent Portal", "View child's attendance, fees, results"],
             ["Student", "Student Portal", "View own attendance, timetable, assignments"],
         ],
         [30, 35, 125]
+    )
+    pdf.body_text(
+        "User Management: School Admins can create Principal, HR Manager, Accountant, Teacher, and Staff users. "
+        "Principals can create HR Manager, Accountant, Teacher, and Staff users. "
+        "See the User Management chapter for full details."
     )
 
     pdf.section_title("Logging In")
@@ -290,8 +306,9 @@ def build_guide():
     pdf.step("Enter your username/email and password on the Login page.")
     pdf.step("Click 'Sign In' to access your dashboard.")
     pdf.step("If you manage multiple schools, use the School Switcher (top bar) to select the active school.")
-    pdf.info_box("First-Time Setup", "Your school and admin account will be pre-configured by the platform team. "
-                 "Once you receive your School Admin credentials, log in and follow the Initial Setup steps in Chapter 2.")
+    pdf.info_box("First-Time Setup", "Your School Admin account is created by the Super Admin. "
+                 "Once you receive your credentials, log in and follow the Initial Setup steps in Chapter 2. "
+                 "You can then create other users from Settings > Users tab.")
 
     pdf.section_title("Navigating the Application")
     pdf.body_text(
@@ -309,7 +326,7 @@ def build_guide():
     pdf.bullet("Management - Classes and Students")
     pdf.bullet("Attendance - Capture, Review, Register")
     pdf.bullet("Academics - Subjects, Timetable, Sessions, Examinations, LMS")
-    pdf.bullet("Finance - Dashboard, Fee Collection, Expenses, Reports")
+    pdf.bullet("Finance - Dashboard, Fee Collection, Expenses, Payment Gateways")
     pdf.bullet("HR & Staff - Staff Directory, Departments, Payroll, Leave")
     pdf.bullet("Admissions - CRM pipeline for new admissions")
     pdf.bullet("Transport - Routes, Vehicles, Assignments")
@@ -599,13 +616,42 @@ def build_guide():
     pdf.section_title("Finance Dashboard")
     pdf.nav_path("Sidebar > Finance > Dashboard")
     pdf.body_text(
-        "The Finance Dashboard provides a real-time overview of your school's financial health:"
+        "The Finance Dashboard is the central hub for all financial data and reports. "
+        "It combines real-time account overview with period-based financial analysis in a single page."
     )
+
+    pdf.sub_section("Period Selector")
+    pdf.body_text(
+        "At the top of the page, use the period selector buttons (This Month, Last Month, This Quarter, "
+        "This Year, or Custom date range) to filter the financial summary and expense breakdown data."
+    )
+
+    pdf.sub_section("KPI Row")
+    pdf.body_text("Five key metrics are displayed at a glance:")
+    pdf.bullet("Account Balance - Total balance across all accounts")
+    pdf.bullet("Total Income - Revenue for the selected period")
+    pdf.bullet("Total Expenses - Expenses for the selected period")
+    pdf.bullet("Net Balance - Income minus Expenses")
+    pdf.bullet("Fee Collection Rate - Percentage of fees collected for the current month")
+
+    pdf.sub_section("Dashboard Cards")
+    pdf.bullet("Fee Collection Summary - Total collected this month, pending amounts, collection rate")
     pdf.bullet("Account Balances - Current balance of each cash, bank, and person account")
-    pdf.bullet("Fee Collection Summary - Total collected this month, pending amounts")
-    pdf.bullet("Expense Breakdown - Expenses categorized by type")
-    pdf.bullet("Recent Transfers - Latest inter-account transfers")
-    pdf.bullet("Monthly Trends - Charts showing income vs. expense trends")
+    pdf.bullet("Expense Breakdown - Donut chart and detailed table showing expense categories, amounts, and percentages for the selected period")
+    pdf.bullet("Recent Transfers - Latest inter-account transfers with a quick-add button")
+    pdf.bullet("Monthly Trend Chart - 6-month bar chart showing income vs. expenses over time")
+    pdf.bullet("Recent Entries Table (Admin only) - Last 15 transactions across all types")
+    pdf.bullet("Quick Actions - Shortcut buttons to record fees, expenses, and transfers")
+
+    pdf.sub_section("Downloading PDF Reports")
+    pdf.step("Select the desired period using the period selector buttons at the top of the dashboard.")
+    pdf.step("Click the 'PDF' button in the top-right area of the page header.")
+    pdf.step("A comprehensive PDF report is generated and downloaded automatically.")
+    pdf.body_text(
+        "The PDF report includes: Financial Summary (income, expenses, net balance, fee collection rate), "
+        "Account Balances table, Monthly Trend table (last 6 months), and Expense Breakdown by category. "
+        "Each page includes the school name, period, generation date, and page numbers."
+    )
 
     pdf.section_title("Generating Fee Structures")
     pdf.nav_path("Sidebar > Finance > Fee Collection")
@@ -643,12 +689,17 @@ def build_guide():
     pdf.step("Edit or delete expenses as needed.")
 
     pdf.section_title("Financial Reports")
-    pdf.nav_path("Sidebar > Finance > Reports")
-    pdf.body_text("Generate comprehensive financial reports:")
-    pdf.bullet("Profit & Loss Statement - Revenue vs. expenses breakdown")
-    pdf.bullet("Cash Flow Analysis - Money in vs. money out over time")
-    pdf.bullet("Fee Collection Report - Class-wise and student-wise collection status")
-    pdf.bullet("Expense Report - Category-wise expense breakdown")
+    pdf.nav_path("Sidebar > Finance > Dashboard")
+    pdf.body_text(
+        "Financial reports are integrated directly into the Finance Dashboard. Use the period selector "
+        "at the top to view data for different time ranges, and click the PDF button to download a report."
+    )
+    pdf.bullet("Income vs. Expenses summary - View totals and net balance for any period")
+    pdf.bullet("Monthly Trend - 6-month bar chart comparing income and expenses")
+    pdf.bullet("Expense Breakdown - Donut chart and table with category-wise amounts and percentages")
+    pdf.bullet("Fee Collection Report - Available via the Fee Collection page's Export PDF button")
+    pdf.info_box("Downloadable PDF", "Click the PDF button on the dashboard header to generate a comprehensive "
+                 "finance report including summary, account balances, monthly trends, and expense breakdown.")
 
     pdf.section_title("Online Payment Collection")
     pdf.nav_path("Sidebar > Finance > Payment Gateways")
@@ -1332,7 +1383,154 @@ def build_guide():
                  "and masked in the UI (only the first 4 characters are visible). They are never exposed in API responses.")
 
     # =========================================================================
-    # CHAPTER 16: MODULE DEPENDENCIES (QUICK REFERENCE)
+    # CHAPTER 17: USER MANAGEMENT
+    # =========================================================================
+    pdf.chapter_title("User Management")
+
+    pdf.body_text(
+        "KoderEduAI uses a hierarchical role system for user management. "
+        "Super Admins create School Admin accounts, while School Admins and Principals "
+        "can create and manage users within their own schools."
+    )
+
+    pdf.section_title("User Roles & Hierarchy")
+    pdf.body_text("The system has the following roles, listed from highest to lowest privilege:")
+    pdf.simple_table(
+        ["Role", "Can Create", "Access Level"],
+        [
+            ["Super Admin", "All roles", "Platform-wide"],
+            ["School Admin", "Principal, HR Manager, Accountant, Teacher, Staff", "Full school access"],
+            ["Principal", "HR Manager, Accountant, Teacher, Staff", "Full school access"],
+            ["HR Manager", "- (no user creation)", "HR module full access"],
+            ["Accountant", "- (no user creation)", "Finance module access"],
+            ["Teacher", "- (no user creation)", "Academics & LMS access"],
+            ["Staff", "- (no user creation)", "Basic read-only access"],
+            ["Parent", "- (self-registered via invite)", "Child data only"],
+            ["Student", "- (self-registered via invite)", "Own data only"],
+        ],
+        [40, 80, 60],
+    )
+
+    pdf.section_title("Managing Users (School Admin & Principal)")
+    pdf.nav_path("Sidebar > Settings > Users Tab")
+    pdf.body_text(
+        "School Admins and Principals can create, edit, and deactivate user accounts "
+        "for their school from the Users tab in Settings."
+    )
+    pdf.step("Navigate to Settings and click the 'Users' tab.")
+    pdf.step("Click 'Add User' to open the user creation form.")
+    pdf.step("Fill in Username (required), Email, Password, and select a Role from the dropdown.")
+    pdf.step("The role dropdown only shows roles you are allowed to create based on your role.")
+    pdf.step("Click 'Create User' to save. A school membership is automatically created.")
+    pdf.step("To edit a user, click 'Edit' in the actions column. You can change name, email, role, and phone.")
+    pdf.step("To deactivate a user, click 'Deactivate'. The user will no longer be able to log in.")
+    pdf.step("To reactivate, click 'Activate' on an inactive user.")
+
+    pdf.info_box("Role Restrictions",
+                 "You can only edit or deactivate users whose role you are allowed to create. "
+                 "For example, a Principal cannot deactivate a School Admin.")
+
+    pdf.section_title("Creating Student User Accounts")
+    pdf.nav_path("Sidebar > Students > Add Student")
+    pdf.body_text(
+        "When adding a new student, you can optionally create a user account so the student "
+        "can access the Student Portal."
+    )
+    pdf.step("Open the Add Student modal and fill in the student details (Class, Name, Roll Number).")
+    pdf.step("Check the 'Create User Account (Student Portal)' checkbox at the bottom of the form.")
+    pdf.step("Additional fields will appear: Username (auto-suggested from student name), Email, Password, and Confirm Password.")
+    pdf.step("Fill in the login credentials. Password must be at least 8 characters.")
+    pdf.step("Click 'Add Student'. Both the student record and user account will be created together.")
+    pdf.step("The student can now log in to the Student Portal using these credentials.")
+
+    pdf.section_title("Converting Existing Students to Users")
+    pdf.nav_path("Sidebar > Students")
+    pdf.body_text(
+        "For students already in the system without user accounts, you can convert them "
+        "individually or in bulk directly from the Students page."
+    )
+
+    pdf.sub_section("Individual Conversion")
+    pdf.step("Open the Students page. Each student row shows an 'Account' column - "
+             "green badge for existing accounts, 'No Account' for students without one.")
+    pdf.step("Click the 'Create Account' button in the Actions column next to any student without an account.")
+    pdf.step("A modal will appear with Username (auto-suggested from the student's name), "
+             "Email (pre-filled from guardian email if available), Password, and Confirm Password.")
+    pdf.step("Fill in or adjust the credentials and click 'Create Account'.")
+    pdf.step("The student will now have a user account linked to their student record.")
+
+    pdf.sub_section("Bulk Conversion")
+    pdf.step("Use the checkboxes in the first column to select students without accounts. "
+             "The 'Select All' checkbox in the header only selects students without accounts.")
+    pdf.step("A purple floating bar will appear at the bottom showing the count of selected students.")
+    pdf.step("Click 'Create Accounts' on the floating bar.")
+    pdf.step("Enter a Default Password (minimum 8 characters) that will be used for all selected students.")
+    pdf.step("Click 'Create N Account(s)'. Usernames are auto-generated from student names.")
+    pdf.step("A results summary will show: accounts created, skipped (already have accounts), and any errors.")
+    pdf.step("Students can change their password after first login.")
+
+    pdf.info_box("Username Generation",
+                 "Usernames are generated automatically: student name in lowercase with spaces replaced by underscores. "
+                 "If a duplicate exists, the roll number is appended. Example: 'Ahmed Khan' becomes 'ahmed_khan'.")
+
+    pdf.section_title("Creating Staff User Accounts")
+    pdf.nav_path("Sidebar > HR & Staff > Add Staff Member")
+    pdf.body_text(
+        "When adding a new staff member, you can optionally create a user account so "
+        "they can log in to the system."
+    )
+
+    pdf.sub_section("Full Staff Form")
+    pdf.step("Navigate to HR & Staff > Staff Directory > Add Staff Member (full form).")
+    pdf.step("Fill in the staff details (name, department, designation, etc.).")
+    pdf.step("At the bottom, check the 'Create User Account' checkbox.")
+    pdf.step("Enter Username, select User Role (Teacher, Staff, HR Manager, or Accountant), and set Password.")
+    pdf.step("Click 'Add Staff Member'. Both the staff record and user account are created and linked.")
+
+    pdf.sub_section("Quick Add")
+    pdf.step("From the Staff Directory, click 'Quick Add'.")
+    pdf.step("Fill in first name, last name, and optionally phone/department/designation.")
+    pdf.step("Check 'Create User Account' to expand the user credential fields.")
+    pdf.step("Fill in Username, Role, Password, and Confirm Password.")
+    pdf.step("Click 'Add Staff'. The staff member and user account are created together.")
+
+    pdf.info_box("User Role vs Staff Record",
+                 "The User Role determines what the staff member can access in the system. "
+                 "For example, a Teacher role gives access to lesson plans and mark entry, "
+                 "while an HR Manager role gives access to the full HR module.")
+
+    pdf.section_title("Converting Existing Staff to Users")
+    pdf.nav_path("Sidebar > HR & Staff > Staff Directory")
+    pdf.body_text(
+        "For staff members already in the system without user accounts, you can convert them "
+        "individually or in bulk directly from the Staff Directory page."
+    )
+
+    pdf.sub_section("Individual Conversion")
+    pdf.step("Open the Staff Directory. Each row shows an 'Account' column - "
+             "green badge with username for existing accounts, 'No Account' otherwise.")
+    pdf.step("Click the 'Create Account' button next to any staff member without an account.")
+    pdf.step("A modal will appear with Username (auto-suggested), Role dropdown (based on your hierarchy), "
+             "Password, and Confirm Password.")
+    pdf.step("Select the appropriate role and set credentials, then click 'Create Account'.")
+
+    pdf.sub_section("Bulk Conversion")
+    pdf.step("Use the checkboxes to select staff members without accounts. "
+             "'Select All' only selects staff without accounts.")
+    pdf.step("A purple floating bar will appear. Click 'Create Accounts'.")
+    pdf.step("Choose a Default Role (e.g., Teacher) and Default Password for all selected staff.")
+    pdf.step("Click 'Create N Account(s)'. Usernames are auto-generated from staff names.")
+    pdf.step("Review the results summary showing created accounts, skipped, and errors.")
+
+    pdf.info_box("Staff Username Generation",
+                 "Usernames are generated as first_name_last_name in lowercase. If a duplicate exists, "
+                 "the employee ID is used instead. Example: 'Jane Doe' becomes 'jane_doe'.")
+
+    pdf.warning_box("Passwords cannot be recovered. If a user forgets their password, "
+                    "a School Admin or Super Admin must reset it from the Users tab.")
+
+    # =========================================================================
+    # CHAPTER 18: MODULE DEPENDENCIES (QUICK REFERENCE)
     # =========================================================================
     pdf.chapter_title("Module Dependencies - Quick Reference")
 
@@ -1434,7 +1632,7 @@ def build_guide():
     pdf.section_title("Monthly Tasks")
     pdf.bullet("Generate and process staff payroll")
     pdf.bullet("Close financial month in Settings")
-    pdf.bullet("Review financial reports (P&L, cash flow)")
+    pdf.bullet("Review Finance Dashboard with different period filters (monthly, quarterly, yearly)")
     pdf.bullet("Generate fee reminders for unpaid balances")
     pdf.bullet("Review staff performance (if applicable)")
 
@@ -1466,7 +1664,8 @@ def build_guide():
     pdf.bullet("Set up accounts before the start of the academic year")
     pdf.bullet("Close months regularly to maintain accurate records")
     pdf.bullet("Use discounts/scholarships feature instead of manual fee adjustments")
-    pdf.bullet("Generate financial reports monthly for oversight")
+    pdf.bullet("Download PDF reports monthly from the Finance Dashboard for record-keeping")
+    pdf.bullet("Use the period selector to compare This Month vs Last Month or view yearly trends")
 
     pdf.section_title("Security Tips")
     pdf.bullet("Use strong, unique passwords for each user account")

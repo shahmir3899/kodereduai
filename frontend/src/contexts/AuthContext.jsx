@@ -1,9 +1,11 @@
-import { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import api, { authApi } from '../services/api'
 
 const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
+  const queryClient = useQueryClient()
   const [user, setUser] = useState(null)
   const [activeSchool, setActiveSchool] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -126,13 +128,27 @@ export function AuthProvider({ children }) {
     return userData
   }
 
-  const logout = () => {
+  const logout = useCallback(() => {
     localStorage.removeItem('access_token')
     localStorage.removeItem('refresh_token')
     localStorage.removeItem('active_school_id')
+
+    // Clear academic year preferences for all schools
+    const keysToRemove = []
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (key && key.startsWith('active_academic_year_')) {
+        keysToRemove.push(key)
+      }
+    }
+    keysToRemove.forEach(key => localStorage.removeItem(key))
+
+    // Clear React Query cache to prevent data leakage between users
+    queryClient.clear()
+
     setUser(null)
     setActiveSchool(null)
-  }
+  }, [queryClient])
 
   const switchSchool = async (schoolId) => {
     try {
@@ -160,13 +176,21 @@ export function AuthProvider({ children }) {
 
   // Module access: derived from the active school's enabled_modules
   const enabledModules = activeSchool?.enabled_modules || {}
-  const isModuleEnabled = (moduleKey) => {
+  const isModuleEnabled = useCallback((moduleKey) => {
     // Super admin sees everything (they manage modules, not use them)
     if (user?.is_super_admin) return true
     return enabledModules[moduleKey] === true
-  }
+  }, [user?.is_super_admin, enabledModules])
 
-  const value = {
+  // Role hierarchy: which roles can the current user create?
+  const getAllowableRoles = useCallback(() => {
+    if (user?.is_super_admin) return ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL', 'HR_MANAGER', 'ACCOUNTANT', 'TEACHER', 'STAFF']
+    if (effectiveRole === 'SCHOOL_ADMIN') return ['PRINCIPAL', 'HR_MANAGER', 'ACCOUNTANT', 'TEACHER', 'STAFF']
+    if (effectiveRole === 'PRINCIPAL') return ['HR_MANAGER', 'ACCOUNTANT', 'TEACHER', 'STAFF']
+    return []
+  }, [user?.is_super_admin, effectiveRole])
+
+  const value = useMemo(() => ({
     user,
     activeSchool,
     loading,
@@ -188,7 +212,8 @@ export function AuthProvider({ children }) {
     effectiveRole,
     enabledModules,
     isModuleEnabled,
-  }
+    getAllowableRoles,
+  }), [user, activeSchool, loading, effectiveRole, enabledModules, isModuleEnabled, getAllowableRoles, login, logout, switchSchool, refreshUser, isSchoolAdmin, isParent, isStudent, isStaffLevel])
 
   return (
     <AuthContext.Provider value={value}>

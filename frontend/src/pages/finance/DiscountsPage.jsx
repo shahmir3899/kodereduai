@@ -30,7 +30,7 @@ const coverageBadge = {
 
 const EMPTY_DISCOUNT = {
   name: '',
-  type: 'PERCENTAGE',
+  discount_type: 'PERCENTAGE',
   value: '',
   applies_to: 'ALL',
   target_grade_level: '',
@@ -160,37 +160,37 @@ export default function DiscountsPage() {
 
   const { data: discountsData, isLoading: discountsLoading } = useQuery({
     queryKey: ['discounts'],
-    queryFn: () => discountApi.getDiscounts(),
+    queryFn: () => discountApi.getDiscounts({ page_size: 9999 }),
     staleTime: 5 * 60 * 1000,
   })
 
   const { data: scholarshipsData, isLoading: scholarshipsLoading } = useQuery({
     queryKey: ['scholarships'],
-    queryFn: () => discountApi.getScholarships(),
+    queryFn: () => discountApi.getScholarships({ page_size: 9999 }),
     staleTime: 5 * 60 * 1000,
   })
 
   const { data: studentDiscountsData, isLoading: assignmentsLoading } = useQuery({
     queryKey: ['studentDiscounts'],
-    queryFn: () => discountApi.getStudentDiscounts(),
+    queryFn: () => discountApi.getStudentDiscounts({ page_size: 9999 }),
     staleTime: 2 * 60 * 1000,
   })
 
   const { data: classesData } = useQuery({
     queryKey: ['classes'],
-    queryFn: () => classesApi.getClasses(),
+    queryFn: () => classesApi.getClasses({ page_size: 9999 }),
     staleTime: 5 * 60 * 1000,
   })
 
   const { data: studentsData } = useQuery({
     queryKey: ['students'],
-    queryFn: () => studentsApi.getStudents(),
+    queryFn: () => studentsApi.getStudents({ page_size: 9999 }),
     staleTime: 5 * 60 * 1000,
   })
 
   const { data: sessionsData } = useQuery({
     queryKey: ['academicYears'],
-    queryFn: () => sessionsApi.getAcademicYears(),
+    queryFn: () => sessionsApi.getAcademicYears({ page_size: 9999 }),
     staleTime: 5 * 60 * 1000,
   })
 
@@ -207,7 +207,7 @@ export default function DiscountsPage() {
     if (!search) return allDiscounts
     const s = search.toLowerCase()
     return allDiscounts.filter(
-      (d) => d.name?.toLowerCase().includes(s) || d.type?.toLowerCase().includes(s)
+      (d) => d.name?.toLowerCase().includes(s) || d.discount_type?.toLowerCase().includes(s)
     )
   }, [allDiscounts, search])
 
@@ -381,7 +381,7 @@ export default function DiscountsPage() {
     setEditingDiscount(discount)
     setDiscountForm({
       name: discount.name || '',
-      type: discount.type || 'PERCENTAGE',
+      discount_type: discount.discount_type || 'PERCENTAGE',
       value: discount.value || '',
       applies_to: discount.applies_to || 'ALL',
       target_grade_level: discount.target_grade_level != null ? String(discount.target_grade_level) : '',
@@ -410,14 +410,14 @@ export default function DiscountsPage() {
       showError('Please enter a valid discount value')
       return
     }
-    if (discountForm.type === 'PERCENTAGE' && parseFloat(discountForm.value) > 100) {
+    if (discountForm.discount_type === 'PERCENTAGE' && parseFloat(discountForm.value) > 100) {
       showError('Percentage discount cannot exceed 100%')
       return
     }
 
     const payload = {
       name: discountForm.name.trim(),
-      type: discountForm.type,
+      discount_type: discountForm.discount_type,
       value: parseFloat(discountForm.value),
       applies_to: discountForm.applies_to,
       stackable: discountForm.stackable,
@@ -740,11 +740,11 @@ export default function DiscountsPage() {
                         <div className="min-w-0 flex-1">
                           <p className="font-medium text-sm text-gray-900 truncate">{discount.name}</p>
                           <div className="flex items-center gap-2 mt-1 flex-wrap">
-                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${discountTypeBadge[discount.type] || 'bg-gray-100 text-gray-800'}`}>
-                              {discount.type}
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${discountTypeBadge[discount.discount_type] || 'bg-gray-100 text-gray-800'}`}>
+                              {discount.discount_type}
                             </span>
                             <span className="text-xs text-gray-600 font-medium">
-                              {formatValue(discount.type, discount.value)}
+                              {formatValue(discount.discount_type, discount.value)}
                             </span>
                           </div>
                         </div>
@@ -796,12 +796,12 @@ export default function DiscountsPage() {
                             </div>
                           </td>
                           <td className="px-4 py-3">
-                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${discountTypeBadge[discount.type] || 'bg-gray-100 text-gray-800'}`}>
-                              {discount.type}
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${discountTypeBadge[discount.discount_type] || 'bg-gray-100 text-gray-800'}`}>
+                              {discount.discount_type}
                             </span>
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-700 font-medium">
-                            {formatValue(discount.type, discount.value)}
+                            {formatValue(discount.discount_type, discount.value)}
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-500">
                             {formatAppliesToLabel(discount)}
@@ -1166,8 +1166,8 @@ export default function DiscountsPage() {
                   <label className="label">Type *</label>
                   <select
                     className="input"
-                    value={discountForm.type}
-                    onChange={(e) => setDiscountForm({ ...discountForm, type: e.target.value })}
+                    value={discountForm.discount_type}
+                    onChange={(e) => setDiscountForm({ ...discountForm, discount_type: e.target.value })}
                   >
                     <option value="PERCENTAGE">Percentage (%)</option>
                     <option value="FIXED">Fixed Amount (Rs.)</option>
@@ -1180,9 +1180,9 @@ export default function DiscountsPage() {
                     className="input"
                     value={discountForm.value}
                     onChange={(e) => setDiscountForm({ ...discountForm, value: e.target.value })}
-                    placeholder={discountForm.type === 'PERCENTAGE' ? 'e.g., 10' : 'e.g., 500'}
+                    placeholder={discountForm.discount_type === 'PERCENTAGE' ? 'e.g., 10' : 'e.g., 500'}
                     min="0"
-                    max={discountForm.type === 'PERCENTAGE' ? '100' : undefined}
+                    max={discountForm.discount_type === 'PERCENTAGE' ? '100' : undefined}
                     step="any"
                     required
                   />
@@ -1493,7 +1493,7 @@ export default function DiscountsPage() {
                   <option value="">-- Select Discount --</option>
                   {allDiscounts.filter((d) => d.is_active).map((d) => (
                     <option key={d.id} value={d.id}>
-                      {d.name} ({formatValue(d.type, d.value)})
+                      {d.name} ({formatValue(d.discount_type, d.value)})
                     </option>
                   ))}
                 </select>
@@ -1595,7 +1595,7 @@ export default function DiscountsPage() {
                   <option value="">-- Select Discount --</option>
                   {allDiscounts.filter((d) => d.is_active).map((d) => (
                     <option key={d.id} value={d.id}>
-                      {d.name} ({formatValue(d.type, d.value)})
+                      {d.name} ({formatValue(d.discount_type, d.value)})
                     </option>
                   ))}
                 </select>

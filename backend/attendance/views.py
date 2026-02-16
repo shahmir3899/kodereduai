@@ -310,25 +310,49 @@ class AttendanceUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
             is_active=True
         )
 
-        # Create attendance records
-        created_records = []
-        for student in all_students:
-            record, created = AttendanceRecord.objects.update_or_create(
-                student=student,
-                date=upload.date,
-                defaults={
-                    'school': upload.school,
-                    'academic_year': upload.academic_year,
-                    'status': (
-                        AttendanceRecord.AttendanceStatus.ABSENT
-                        if student.id in absent_student_ids
-                        else AttendanceRecord.AttendanceStatus.PRESENT
-                    ),
-                    'source': AttendanceRecord.Source.IMAGE_AI,
-                    'upload': upload,
-                }
+        # Create attendance records using bulk operations
+        student_ids = [s.id for s in all_students]
+        existing_records = {
+            r.student_id: r
+            for r in AttendanceRecord.objects.filter(
+                student_id__in=student_ids, date=upload.date
             )
-            created_records.append(record)
+        }
+
+        to_create = []
+        to_update = []
+        for student in all_students:
+            att_status = (
+                AttendanceRecord.AttendanceStatus.ABSENT
+                if student.id in absent_student_ids
+                else AttendanceRecord.AttendanceStatus.PRESENT
+            )
+            if student.id in existing_records:
+                record = existing_records[student.id]
+                record.school = upload.school
+                record.academic_year = upload.academic_year
+                record.status = att_status
+                record.source = AttendanceRecord.Source.IMAGE_AI
+                record.upload = upload
+                to_update.append(record)
+            else:
+                to_create.append(AttendanceRecord(
+                    student=student,
+                    date=upload.date,
+                    school=upload.school,
+                    academic_year=upload.academic_year,
+                    status=att_status,
+                    source=AttendanceRecord.Source.IMAGE_AI,
+                    upload=upload,
+                ))
+
+        if to_create:
+            AttendanceRecord.objects.bulk_create(to_create)
+        if to_update:
+            AttendanceRecord.objects.bulk_update(
+                to_update, ['school', 'academic_year', 'status', 'source', 'upload']
+            )
+        created_records = to_update + to_create
 
         # Update upload status
         upload.status = AttendanceUpload.Status.CONFIRMED
@@ -353,8 +377,11 @@ class AttendanceUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
 
         # Trigger WhatsApp notifications for absent students
         if upload.school.get_enabled_module('whatsapp'):
-            from .tasks import send_whatsapp_notifications
-            send_whatsapp_notifications.delay(upload.id)
+            try:
+                from .tasks import send_whatsapp_notifications
+                send_whatsapp_notifications.delay(upload.id)
+            except Exception as e:
+                logger.warning(f"Could not queue WhatsApp notifications: {e}")
 
         return Response({
             'success': True,
@@ -367,9 +394,23 @@ class AttendanceUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
 
     @action(detail=False, methods=['get'])
     def pending_review(self, request):
-        """Get all uploads pending review."""
-        queryset = self.get_queryset().filter(
-            status=AttendanceUpload.Status.REVIEW_REQUIRED
+        """Get all uploads pending review, including stuck PROCESSING ones."""
+        # Auto-recover: mark uploads stuck in PROCESSING for > 5 minutes as FAILED
+        stuck_cutoff = timezone.now() - timezone.timedelta(minutes=5)
+        stuck = self.get_queryset().filter(
+            status=AttendanceUpload.Status.PROCESSING,
+            created_at__lt=stuck_cutoff,
+        )
+        stuck_count = stuck.update(
+            status=AttendanceUpload.Status.FAILED,
+            error_message='Processing timed out. Click "Reprocess AI" to retry.',
+        )
+        if stuck_count:
+            logger.warning(f"Auto-recovered {stuck_count} stuck uploads")
+
+        # Return REVIEW_REQUIRED + PROCESSING + FAILED (not CONFIRMED)
+        queryset = self.get_queryset().exclude(
+            status=AttendanceUpload.Status.CONFIRMED
         )
         serializer = AttendanceUploadSerializer(queryset, many=True)
         return Response(serializer.data)

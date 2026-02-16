@@ -2,7 +2,6 @@
 Report generation views.
 """
 
-import base64
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -36,7 +35,7 @@ def _get_generator_class(report_type):
 
 
 class GenerateReportView(APIView):
-    """Generate a report and return it as a downloadable file."""
+    """Generate a report as a background task."""
     permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
 
     def post(self, request):
@@ -48,39 +47,67 @@ class GenerateReportView(APIView):
         if not school_id:
             return Response({'error': 'school_id required'}, status=400)
 
-        from schools.models import School
-        school = School.objects.get(id=school_id)
-
         generator_class = _get_generator_class(data['report_type'])
         if not generator_class:
             return Response({'error': f"Unknown report type: {data['report_type']}"}, status=400)
 
-        generator = generator_class(school, data.get('parameters', {}))
-        fmt = data.get('format', 'PDF')
-        content = generator.generate(format=fmt)
+        from core.task_utils import dispatch_background_task
+        from core.models import BackgroundTask
+        from .tasks import generate_report_task
 
-        # Save record
-        report = GeneratedReport.objects.create(
-            school=school,
-            report_type=data['report_type'],
-            title=f"{data['report_type']} Report",
-            parameters=data.get('parameters', {}),
-            format=fmt,
-            generated_by=request.user,
+        fmt = data.get('format', 'PDF')
+        report_label = data['report_type'].replace('_', ' ').title()
+
+        bg_task = dispatch_background_task(
+            celery_task_func=generate_report_task,
+            task_type=BackgroundTask.TaskType.REPORT_GENERATION,
+            title=f"Generating {report_label} ({fmt})",
+            school_id=school_id,
+            user=request.user,
+            task_kwargs={
+                'school_id': school_id,
+                'user_id': request.user.id,
+                'report_type': data['report_type'],
+                'format': fmt,
+                'parameters': data.get('parameters', {}),
+            },
+            progress_total=3,
         )
 
-        # Return as downloadable file
-        if fmt == 'XLSX':
-            response = HttpResponse(
-                content,
-                content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            )
-            response['Content-Disposition'] = f'attachment; filename="report_{report.id}.xlsx"'
-        else:
-            content_type = 'application/pdf' if content[:4] == b'%PDF' else 'text/plain'
-            response = HttpResponse(content, content_type=content_type)
-            response['Content-Disposition'] = f'attachment; filename="report_{report.id}.pdf"'
+        return Response({
+            'task_id': bg_task.celery_task_id,
+            'message': f'{report_label} report generation started.',
+        }, status=202)
 
+
+class ReportDownloadView(APIView):
+    """Download a previously generated report by ID."""
+    permission_classes = [IsAuthenticated, HasSchoolAccess]
+
+    def get(self, request, report_id):
+        school_id = ensure_tenant_school_id(request)
+        if not school_id:
+            return Response({'error': 'school_id required'}, status=400)
+
+        try:
+            report = GeneratedReport.objects.get(id=report_id, school_id=school_id)
+        except GeneratedReport.DoesNotExist:
+            return Response({'error': 'Report not found'}, status=404)
+
+        if not report.file_content:
+            return Response({'error': 'Report content not available'}, status=404)
+
+        content = bytes(report.file_content)
+
+        if report.format == 'XLSX':
+            content_type = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            ext = 'xlsx'
+        else:
+            content_type = 'application/pdf'
+            ext = 'pdf'
+
+        response = HttpResponse(content, content_type=content_type)
+        response['Content-Disposition'] = f'attachment; filename="report_{report.id}.{ext}"'
         return response
 
 

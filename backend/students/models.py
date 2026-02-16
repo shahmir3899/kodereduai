@@ -47,6 +47,10 @@ class Class(models.Model):
                 name='unique_level_section_per_school',
             ),
         ]
+        indexes = [
+            models.Index(fields=['school', 'is_active']),
+            models.Index(fields=['school', 'grade_level', 'section']),
+        ]
 
     def __str__(self):
         return f"{self.name} - {self.school.name}"
@@ -142,6 +146,11 @@ class Student(models.Model):
         ordering = ['class_obj', 'roll_number']
         verbose_name = 'Student'
         verbose_name_plural = 'Students'
+        indexes = [
+            models.Index(fields=['school', 'is_active']),
+            models.Index(fields=['class_obj', 'is_active']),
+            models.Index(fields=['school', 'class_obj']),
+        ]
 
     def __str__(self):
         return f"{self.roll_number}. {self.name} ({self.class_obj.name})"

@@ -35,23 +35,23 @@ export default function ExamsPage() {
 
   const { data: yearsRes } = useQuery({
     queryKey: ['academicYears'],
-    queryFn: () => sessionsApi.getAcademicYears(),
+    queryFn: () => sessionsApi.getAcademicYears({ page_size: 9999 }),
   })
 
   const { data: termsRes } = useQuery({
     queryKey: ['terms', form.academic_year],
-    queryFn: () => sessionsApi.getTerms({ academic_year: form.academic_year }),
+    queryFn: () => sessionsApi.getTerms({ academic_year: form.academic_year, page_size: 9999 }),
     enabled: !!form.academic_year,
   })
 
   const { data: examTypesRes } = useQuery({
     queryKey: ['examTypes'],
-    queryFn: () => examinationsApi.getExamTypes(),
+    queryFn: () => examinationsApi.getExamTypes({ page_size: 9999 }),
   })
 
   const { data: classesRes } = useQuery({
     queryKey: ['classes'],
-    queryFn: () => classesApi.getClasses(),
+    queryFn: () => classesApi.getClasses({ page_size: 9999 }),
   })
 
   const exams = examsRes?.data?.results || examsRes?.data || []

@@ -30,7 +30,7 @@ export default function OverdueBooksPage() {
 
   const { data: overdueData, isLoading, error } = useQuery({
     queryKey: ['libraryOverdue'],
-    queryFn: () => libraryApi.getOverdueBooks(),
+    queryFn: () => libraryApi.getOverdueBooks({ page_size: 9999 }),
   })
 
   const { data: configData } = useQuery({

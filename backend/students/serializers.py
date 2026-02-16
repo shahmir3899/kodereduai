@@ -49,6 +49,8 @@ class ClassCreateSerializer(serializers.ModelSerializer):
 class StudentSerializer(serializers.ModelSerializer):
     class_name = serializers.CharField(source='class_obj.name', read_only=True)
     school_name = serializers.CharField(source='school.name', read_only=True)
+    has_user_account = serializers.SerializerMethodField()
+    user_username = serializers.SerializerMethodField()
 
     class Meta:
         model = Student
@@ -63,9 +65,18 @@ class StudentSerializer(serializers.ModelSerializer):
             'guardian_email', 'guardian_occupation', 'guardian_address',
             'emergency_contact',
             'is_active', 'status', 'status_date', 'status_reason',
+            'has_user_account', 'user_username',
             'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def get_has_user_account(self, obj):
+        return hasattr(obj, 'user_profile') and obj.user_profile is not None
+
+    def get_user_username(self, obj):
+        if hasattr(obj, 'user_profile') and obj.user_profile:
+            return obj.user_profile.user.username
+        return None
 
 
 class StudentCreateSerializer(serializers.ModelSerializer):

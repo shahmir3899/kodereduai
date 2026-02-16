@@ -42,26 +42,27 @@ export default function TransportAssignmentsPage() {
     queryFn: () => transportApi.getAssignments({
       ...(filterRoute && { route: filterRoute }),
       ...(filterClass && { class_id: filterClass }),
+      page_size: 9999,
     }),
   })
 
   // Fetch routes
   const { data: routesData } = useQuery({
     queryKey: ['transport-routes'],
-    queryFn: () => transportApi.getRoutes(),
+    queryFn: () => transportApi.getRoutes({ page_size: 9999 }),
   })
 
   // Fetch classes
   const { data: classesData } = useQuery({
     queryKey: ['classes', activeSchool?.id],
-    queryFn: () => classesApi.getClasses({ school_id: activeSchool?.id }),
+    queryFn: () => classesApi.getClasses({ school_id: activeSchool?.id, page_size: 9999 }),
     enabled: !!activeSchool?.id,
   })
 
   // Fetch students for assignment
   const { data: studentsData } = useQuery({
     queryKey: ['students', activeSchool?.id],
-    queryFn: () => studentsApi.getStudents({ school_id: activeSchool?.id }),
+    queryFn: () => studentsApi.getStudents({ school_id: activeSchool?.id, page_size: 9999 }),
     enabled: !!activeSchool?.id,
   })
 
@@ -69,14 +70,14 @@ export default function TransportAssignmentsPage() {
   const selectedRouteForForm = showModal ? assignForm.route : bulkForm.route
   const { data: stopsData } = useQuery({
     queryKey: ['transport-stops', selectedRouteForForm],
-    queryFn: () => transportApi.getStops({ route: selectedRouteForForm }),
+    queryFn: () => transportApi.getStops({ route: selectedRouteForForm, page_size: 9999 }),
     enabled: !!selectedRouteForForm,
   })
 
   // Fetch vehicles filtered by selected route
   const { data: vehiclesData } = useQuery({
     queryKey: ['transport-vehicles-route', selectedRouteForForm],
-    queryFn: () => transportApi.getVehicles({ assigned_route: selectedRouteForForm }),
+    queryFn: () => transportApi.getVehicles({ assigned_route: selectedRouteForForm, page_size: 9999 }),
     enabled: !!selectedRouteForForm,
   })
 

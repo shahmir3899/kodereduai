@@ -6,6 +6,7 @@ import App from './App.jsx'
 import { AuthProvider } from './contexts/AuthContext.jsx'
 import { AcademicYearProvider } from './contexts/AcademicYearContext.jsx'
 import { ToastProvider } from './components/Toast.jsx'
+import { BackgroundTaskProvider } from './contexts/BackgroundTaskContext.jsx'
 import './index.css'
 
 const queryClient = new QueryClient({
@@ -24,7 +25,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <AuthProvider>
           <AcademicYearProvider>
             <ToastProvider>
-              <App />
+              <BackgroundTaskProvider>
+                <App />
+              </BackgroundTaskProvider>
             </ToastProvider>
           </AcademicYearProvider>
         </AuthProvider>

@@ -80,6 +80,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'core.middleware.TenantMiddleware',  # Custom multi-tenancy middleware
+    'core.cache_middleware.APICacheControlMiddleware',
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -215,6 +216,18 @@ CELERY_TIMEZONE = 'Asia/Karachi'
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minutes
 
+# Local dev: run tasks synchronously inside Django (no worker/Redis needed)
+# Production: tasks run in separate Celery worker via start.sh
+if ENVIRONMENT == 'local':
+    CELERY_TASK_ALWAYS_EAGER = True
+    CELERY_TASK_EAGER_PROPAGATES = True
+
+# SSL settings for rediss:// URLs (Upstash, Render Redis, etc.)
+if CELERY_BROKER_URL.startswith('rediss://'):
+    import ssl
+    CELERY_BROKER_USE_SSL = {'ssl_cert_reqs': ssl.CERT_NONE}
+    CELERY_REDIS_BACKEND_USE_SSL = {'ssl_cert_reqs': ssl.CERT_NONE}
+
 # Celery Beat — periodic task schedule
 from celery.schedules import crontab
 
@@ -258,6 +271,44 @@ CELERY_BEAT_SCHEDULE = {
 }
 
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
+
+# =============================================================================
+# Cache Configuration
+# =============================================================================
+REDIS_URL = os.getenv('REDIS_URL', '')
+
+if REDIS_URL:
+    _cache_location = REDIS_URL.rsplit('/', 1)[0] + '/1' if '/' in REDIS_URL else REDIS_URL
+elif CELERY_BROKER_URL.startswith(('redis://', 'rediss://')):
+    _cache_location = CELERY_BROKER_URL.rsplit('/', 1)[0] + '/1'
+else:
+    _cache_location = ''
+
+if _cache_location:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django_redis.cache.RedisCache',
+            'LOCATION': _cache_location,
+            'OPTIONS': {
+                'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+            },
+            'KEY_PREFIX': 'eduai',
+            'TIMEOUT': 300,
+        }
+    }
+    if _cache_location.startswith('rediss://'):
+        import ssl as _ssl
+        CACHES['default']['OPTIONS']['CONNECTION_POOL_KWARGS'] = {
+            'ssl_cert_reqs': _ssl.CERT_NONE,
+        }
+    DJANGO_REDIS_IGNORE_EXCEPTIONS = True
+else:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'eduai-cache',
+        }
+    }
 
 # =============================================================================
 # AI / LLM Configuration

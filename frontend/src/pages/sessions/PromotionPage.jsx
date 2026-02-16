@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { sessionsApi, classesApi } from '../../services/api'
+import { useBackgroundTask } from '../../hooks/useBackgroundTask'
 
 // Recommendation badge component
 function RecBadge({ rec }) {
@@ -60,43 +61,44 @@ export default function PromotionPage() {
   // Queries
   const { data: yearsRes } = useQuery({
     queryKey: ['academicYears'],
-    queryFn: () => sessionsApi.getAcademicYears(),
+    queryFn: () => sessionsApi.getAcademicYears({ page_size: 9999 }),
   })
 
   const { data: classesRes } = useQuery({
     queryKey: ['classes'],
-    queryFn: () => classesApi.getClasses(),
+    queryFn: () => classesApi.getClasses({ page_size: 9999 }),
   })
 
   const { data: enrollmentsRes, isLoading: enrollmentsLoading } = useQuery({
     queryKey: ['enrollmentsByClass', sourceClassId, sourceYearId],
-    queryFn: () => sessionsApi.getEnrollmentsByClass({ class_id: sourceClassId, academic_year_id: sourceYearId }),
+    queryFn: () => sessionsApi.getEnrollmentsByClass({ class_id: sourceClassId, academic_year_id: sourceYearId, page_size: 9999 }),
     enabled: !!sourceClassId && !!sourceYearId && step >= 2,
   })
 
-  // AI Promotion Advisor query
-  const { data: advisorRes, isLoading: advisorLoading, refetch: refetchAdvisor } = useQuery({
-    queryKey: ['promotionAdvisor', sourceYearId, sourceClassId],
-    queryFn: () => sessionsApi.getPromotionAdvice({ academic_year: sourceYearId, class_id: sourceClassId }),
-    enabled: false, // Only fetch on demand
+  // AI Promotion Advisor (background task)
+  const [advisorData, setAdvisorData] = useState(null)
+  const advisorTask = useBackgroundTask({
+    mutationFn: (data) => sessionsApi.getPromotionAdvice(data),
+    taskType: 'PROMOTION_ADVISOR',
+    title: 'Running AI Promotion Analysis',
+    onSuccess: (resultData) => {
+      if (resultData) setAdvisorData(resultData)
+    },
   })
+  const advisorLoading = advisorTask.isSubmitting || (advisorTask.submittedTaskId && !advisorTask.isComplete && !advisorTask.isFailed)
 
   const years = yearsRes?.data?.results || yearsRes?.data || []
   const classes = classesRes?.data?.results || classesRes?.data || []
   const enrollments = enrollmentsRes?.data?.results || enrollmentsRes?.data || []
-  const advisorData = advisorRes?.data || null
   const recommendations = advisorData?.recommendations || []
 
-  // Bulk promote mutation
-  const promoteMut = useMutation({
+  // Bulk promote (background task)
+  const promoteMut = useBackgroundTask({
     mutationFn: (data) => sessionsApi.bulkPromote(data),
-    onSuccess: (res) => {
-      setResult(res.data)
-      queryClient.invalidateQueries({ queryKey: ['enrollments'] })
-      queryClient.invalidateQueries({ queryKey: ['enrollmentsByClass'] })
-    },
-    onError: (err) => {
-      setResult({ error: err.response?.data?.detail || 'Promotion failed' })
+    taskType: 'BULK_PROMOTION',
+    title: `Promoting students`,
+    onSuccess: (resultData) => {
+      if (resultData) setResult(resultData)
     },
   })
 
@@ -123,7 +125,7 @@ export default function PromotionPage() {
       return
     }
 
-    promoteMut.mutate({
+    promoteMut.trigger({
       source_academic_year_id: parseInt(sourceYearId),
       target_academic_year_id: parseInt(targetYearId),
       promotions: included.map(p => ({
@@ -147,7 +149,7 @@ export default function PromotionPage() {
     if (sourceYearId && sourceClassId) {
       setShowAdvisor(true)
       setAdvisorOverrides({})
-      refetchAdvisor()
+      advisorTask.trigger({ academic_year: sourceYearId, class_id: sourceClassId })
     }
   }
 
@@ -604,9 +606,9 @@ export default function PromotionPage() {
                 <button onClick={() => setStep(2)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Back</button>
                 <button
                   onClick={handlePromote}
-                  disabled={promoteMut.isPending}
+                  disabled={promoteMut.isSubmitting}
                   className="btn-primary px-6 py-2 text-sm disabled:opacity-50"
-                >{promoteMut.isPending ? 'Promoting...' : 'Promote Students'}</button>
+                >{promoteMut.isSubmitting ? 'Starting...' : 'Promote Students'}</button>
               </div>
             </>
           )}

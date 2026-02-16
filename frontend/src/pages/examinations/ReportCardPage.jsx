@@ -11,12 +11,12 @@ export default function ReportCardPage() {
   // Queries
   const { data: yearsRes } = useQuery({
     queryKey: ['academicYears'],
-    queryFn: () => sessionsApi.getAcademicYears(),
+    queryFn: () => sessionsApi.getAcademicYears({ page_size: 9999 }),
   })
 
   const { data: termsRes } = useQuery({
     queryKey: ['terms', yearId],
-    queryFn: () => sessionsApi.getTerms({ academic_year: yearId }),
+    queryFn: () => sessionsApi.getTerms({ academic_year: yearId, page_size: 9999 }),
     enabled: !!yearId,
   })
 

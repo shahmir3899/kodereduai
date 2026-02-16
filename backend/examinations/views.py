@@ -1,6 +1,10 @@
 import io
 from decimal import Decimal
+from django.db.models import Count, Q
 from django.http import HttpResponse
+from django.utils.decorators import method_decorator
+from django.views.decorators.cache import cache_page
+from django.views.decorators.vary import vary_on_headers
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -44,7 +48,11 @@ class ExamTypeViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelView
     required_module = 'examinations'
     queryset = ExamType.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
-    pagination_class = None
+
+    @method_decorator(cache_page(60 * 120))  # 2 hours
+    @method_decorator(vary_on_headers('X-School-ID'))
+    def list(self, request, *args, **kwargs):
+        return super().list(request, *args, **kwargs)
 
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):
@@ -74,7 +82,7 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
     required_module = 'examinations'
     queryset = Exam.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
-    pagination_class = None
+
 
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):
@@ -89,6 +97,8 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
     def get_queryset(self):
         qs = super().get_queryset().select_related(
             'school', 'academic_year', 'term', 'exam_type', 'class_obj',
+        ).annotate(
+            subjects_count=Count('exam_subjects', filter=Q(exam_subjects__is_active=True)),
         )
         academic_year = self.request.query_params.get('academic_year')
         if academic_year:
@@ -123,6 +133,8 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
         exam.save(update_fields=['status'])
         return Response(ExamSerializer(exam).data)
 
+    @method_decorator(cache_page(60 * 15))  # 15 minutes
+    @method_decorator(vary_on_headers('X-School-ID'))
     @action(detail=True, methods=['get'])
     def results(self, request, pk=None):
         exam = self.get_object()
@@ -140,6 +152,14 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
             school_id=school_id, is_active=True,
         ).order_by('-min_percentage'))
 
+        # Prefetch all marks in one query and build lookup dict
+        all_marks = StudentMark.objects.filter(
+            exam_subject__in=exam_subjects, school_id=school_id,
+        ).select_related('exam_subject')
+        marks_lookup = {
+            (m.student_id, m.exam_subject_id): m for m in all_marks
+        }
+
         results = []
         for student in students:
             marks_list = []
@@ -148,9 +168,7 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
             all_pass = True
 
             for es in exam_subjects:
-                mark = StudentMark.objects.filter(
-                    exam_subject=es, student=student, school_id=school_id,
-                ).first()
+                mark = marks_lookup.get((student.id, es.id))
                 obtained = mark.marks_obtained if mark and not mark.is_absent else None
                 is_absent = mark.is_absent if mark else False
 
@@ -199,6 +217,8 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
             'results': results,
         })
 
+    @method_decorator(cache_page(60 * 15))  # 15 minutes
+    @method_decorator(vary_on_headers('X-School-ID'))
     @action(detail=True, methods=['get'])
     def class_summary(self, request, pk=None):
         exam = self.get_object()
@@ -212,14 +232,21 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
             is_active=True,
         )
 
+        # Prefetch all marks for this exam in one query
+        all_marks = StudentMark.objects.filter(
+            exam_subject__in=exam_subjects, school_id=school_id,
+            is_absent=False, marks_obtained__isnull=False,
+        )
+        # Group marks by exam_subject_id
+        marks_by_subject = {}
+        for m in all_marks:
+            marks_by_subject.setdefault(m.exam_subject_id, []).append(m)
+
         subject_stats = []
         for es in exam_subjects:
-            marks = StudentMark.objects.filter(
-                exam_subject=es, school_id=school_id,
-                is_absent=False, marks_obtained__isnull=False,
-            )
-            marks_values = [float(m.marks_obtained) for m in marks]
-            passed = sum(1 for m in marks if m.marks_obtained >= es.passing_marks)
+            subject_marks = marks_by_subject.get(es.id, [])
+            marks_values = [float(m.marks_obtained) for m in subject_marks]
+            passed = sum(1 for m in subject_marks if m.marks_obtained >= es.passing_marks)
             subject_stats.append({
                 'subject_name': es.subject.name,
                 'total_marks': float(es.total_marks),
@@ -248,7 +275,7 @@ class ExamSubjectViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
     required_module = 'examinations'
     queryset = ExamSubject.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
-    pagination_class = None
+
 
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):
@@ -281,7 +308,7 @@ class StudentMarkViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
     required_module = 'examinations'
     queryset = StudentMark.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
-    pagination_class = None
+
 
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):
@@ -520,7 +547,11 @@ class GradeScaleViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
     required_module = 'examinations'
     queryset = GradeScale.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
-    pagination_class = None
+
+    @method_decorator(cache_page(60 * 120))  # 2 hours
+    @method_decorator(vary_on_headers('X-School-ID'))
+    def list(self, request, *args, **kwargs):
+        return super().list(request, *args, **kwargs)
 
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):
@@ -550,6 +581,8 @@ class ReportCardView(ModuleAccessMixin, APIView):
     required_module = 'examinations'
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
 
+    @method_decorator(cache_page(60 * 15))  # 15 minutes
+    @method_decorator(vary_on_headers('X-School-ID'))
     def get(self, request):
         student_id = request.query_params.get('student_id')
         academic_year_id = request.query_params.get('academic_year_id')
@@ -588,22 +621,34 @@ class ReportCardView(ModuleAccessMixin, APIView):
             school_id=school_id, is_active=True,
         ).order_by('-min_percentage'))
 
-        # Collect all subjects across all exams
+        # Prefetch all exam subjects and marks for this student in one query
+        all_exam_subjects = ExamSubject.objects.filter(
+            exam__in=exams, is_active=True,
+        ).select_related('subject')
+        student_marks = StudentMark.objects.filter(
+            exam_subject__in=all_exam_subjects,
+            student=student,
+            school_id=school_id,
+        )
+        marks_lookup = {m.exam_subject_id: m for m in student_marks}
+
+        # Group exam subjects by exam
+        es_by_exam = {}
+        for es in all_exam_subjects:
+            es_by_exam.setdefault(es.exam_id, []).append(es)
+
         all_subjects = {}
         exam_data = []
 
         for exam in exams:
-            exam_subjects = exam.exam_subjects.filter(is_active=True).select_related('subject')
+            exam_subjects = es_by_exam.get(exam.id, [])
             exam_marks = {}
 
             for es in exam_subjects:
                 if es.subject_id not in all_subjects:
                     all_subjects[es.subject_id] = es.subject.name
 
-                mark = StudentMark.objects.filter(
-                    exam_subject=es, student=student, school_id=school_id,
-                ).first()
-
+                mark = marks_lookup.get(es.id)
                 exam_marks[es.subject_id] = {
                     'total_marks': float(es.total_marks),
                     'marks_obtained': float(mark.marks_obtained) if mark and mark.marks_obtained else None,
@@ -618,17 +663,14 @@ class ReportCardView(ModuleAccessMixin, APIView):
                 'marks': exam_marks,
             })
 
-        # Calculate overall totals
+        # Calculate overall totals using prefetched data
         grand_total_obtained = Decimal('0')
         grand_total_possible = Decimal('0')
-        for exam in exams:
-            for es in exam.exam_subjects.filter(is_active=True):
-                mark = StudentMark.objects.filter(
-                    exam_subject=es, student=student, school_id=school_id,
-                ).first()
-                if mark and mark.marks_obtained is not None and not mark.is_absent:
-                    grand_total_obtained += mark.marks_obtained
-                grand_total_possible += es.total_marks
+        for es in all_exam_subjects:
+            mark = marks_lookup.get(es.id)
+            if mark and mark.marks_obtained is not None and not mark.is_absent:
+                grand_total_obtained += mark.marks_obtained
+            grand_total_possible += es.total_marks
 
         overall_pct = float(grand_total_obtained / grand_total_possible * 100) if grand_total_possible > 0 else 0
         overall_grade = '-'

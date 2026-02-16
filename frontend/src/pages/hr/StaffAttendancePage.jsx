@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { hrApi } from '../../services/api'
 
@@ -54,7 +54,7 @@ export default function StaffAttendancePage() {
   // Fetch summary
   const { data: summaryRes, isLoading: summaryLoading } = useQuery({
     queryKey: ['hrAttendanceSummary', summaryRange.start, summaryRange.end],
-    queryFn: () => hrApi.getAttendanceSummary({ start_date: summaryRange.start, end_date: summaryRange.end }),
+    queryFn: () => hrApi.getAttendanceSummary({ date_from: summaryRange.start, date_to: summaryRange.end }),
     enabled: viewMode === 'summary',
   })
 
@@ -72,7 +72,7 @@ export default function StaffAttendancePage() {
   }, [existingAttendance])
 
   // Initialize local attendance state when data changes
-  useMemo(() => {
+  useEffect(() => {
     const data = {}
     staffList.forEach(staff => {
       const existing = existingMap[staff.id]

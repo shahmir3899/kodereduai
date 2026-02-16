@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { financeApi, classesApi } from '../../services/api'
+import { useBackgroundTask } from '../../hooks/useBackgroundTask'
 
 export function useFeeData({ month, year, classFilter, statusFilter }) {
   const queryClient = useQueryClient()
@@ -12,17 +13,20 @@ export function useFeeData({ month, year, classFilter, statusFilter }) {
   // Queries
   const { data: accountsData } = useQuery({
     queryKey: ['accounts'],
-    queryFn: () => financeApi.getAccounts(),
+    queryFn: () => financeApi.getAccounts({ page_size: 9999 }),
+    staleTime: 5 * 60 * 1000,
   })
 
   const { data: classes } = useQuery({
     queryKey: ['classes'],
-    queryFn: () => classesApi.getClasses(),
+    queryFn: () => classesApi.getClasses({ page_size: 9999 }),
+    staleTime: 5 * 60 * 1000,
   })
 
   const { data: feeStructures } = useQuery({
     queryKey: ['feeStructures'],
-    queryFn: () => financeApi.getFeeStructures(),
+    queryFn: () => financeApi.getFeeStructures({ page_size: 9999 }),
+    staleTime: 5 * 60 * 1000,
   })
 
   const { data: payments, isLoading } = useQuery({
@@ -31,6 +35,7 @@ export function useFeeData({ month, year, classFilter, statusFilter }) {
       month, year,
       ...(classFilter && { class_id: classFilter }),
       ...(statusFilter && { status: statusFilter }),
+      page_size: 9999,
     }),
   })
 
@@ -44,7 +49,7 @@ export function useFeeData({ month, year, classFilter, statusFilter }) {
     queryFn: () => {
       const startDate = `${year}-${String(month).padStart(2, '0')}-01`
       const endDate = new Date(year, month, 0).toISOString().split('T')[0]
-      return financeApi.getOtherIncome({ date_from: startDate, date_to: endDate })
+      return financeApi.getOtherIncome({ date_from: startDate, date_to: endDate, page_size: 9999 })
     },
   })
 
@@ -62,13 +67,11 @@ export function useFeeData({ month, year, classFilter, statusFilter }) {
     }
   }, [feeStructures, classes])
 
-  // Existing mutations
-  const generateMutation = useMutation({
+  // Generate monthly fees (background task)
+  const generateMutation = useBackgroundTask({
     mutationFn: (data) => financeApi.generateMonthly(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['feePayments'] })
-      queryClient.invalidateQueries({ queryKey: ['monthlySummary'] })
-    },
+    taskType: 'FEE_GENERATION',
+    title: `Generating fees for ${month}/${year}`,
   })
 
   const paymentMutation = useMutation({

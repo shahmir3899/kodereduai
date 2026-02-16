@@ -52,6 +52,7 @@ export default function GatePassesPage() {
     queryFn: () => hostelApi.getGatePasses({
       status: statusFilter || undefined,
       pass_type: passTypeFilter || undefined,
+      page_size: 9999,
     }),
   })
 

@@ -121,6 +121,9 @@ class ExamSubject(models.Model):
     class Meta:
         unique_together = ('school', 'exam', 'subject')
         ordering = ['subject__name']
+        indexes = [
+            models.Index(fields=['exam', 'is_active']),
+        ]
 
     def __str__(self):
         return f"{self.exam.name} - {self.subject.name}"

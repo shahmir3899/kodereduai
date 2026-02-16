@@ -58,17 +58,18 @@ export default function InventoryItemsPage() {
       search: search || undefined,
       category: categoryFilter || undefined,
       stock_status: stockFilter || undefined,
+      page_size: 9999,
     }),
   })
 
   const { data: categoriesData } = useQuery({
     queryKey: ['inventoryCategories'],
-    queryFn: () => inventoryApi.getCategories(),
+    queryFn: () => inventoryApi.getCategories({ page_size: 9999 }),
   })
 
   const { data: vendorsData } = useQuery({
     queryKey: ['inventoryVendors'],
-    queryFn: () => inventoryApi.getVendors(),
+    queryFn: () => inventoryApi.getVendors({ page_size: 9999 }),
   })
 
   const items = itemsData?.data?.results || itemsData?.data || []

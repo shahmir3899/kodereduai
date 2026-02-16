@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { academicsApi, classesApi, hrApi } from '../../services/api'
+import { useBackgroundTask } from '../../hooks/useBackgroundTask'
 
 const DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
 const DAY_LABELS = { MON: 'Mon', TUE: 'Tue', WED: 'Wed', THU: 'Thu', FRI: 'Fri', SAT: 'Sat' }
@@ -61,12 +62,12 @@ export default function TimetablePage() {
   // Queries
   const { data: classesData } = useQuery({
     queryKey: ['classes'],
-    queryFn: () => classesApi.getClasses(),
+    queryFn: () => classesApi.getClasses({ page_size: 9999 }),
   })
 
   const { data: slotsData, isLoading: slotsLoading } = useQuery({
     queryKey: ['timetableSlots'],
-    queryFn: () => academicsApi.getTimetableSlots(),
+    queryFn: () => academicsApi.getTimetableSlots({ page_size: 9999 }),
   })
 
   const { data: timetableData, isLoading: ttLoading } = useQuery({
@@ -236,44 +237,42 @@ export default function TimetablePage() {
     setLoadingResolution(false)
   }
 
-  // Auto-generate timetable
-  const handleAutoGenerate = async () => {
-    setAutoGenerating(true)
-    setShowAutoGenConfirm(false)
-    setSaveMsg('')
-    try {
-      const res = await academicsApi.autoGenerateTimetable({ class_id: parseInt(selectedClassId) })
-      const { grid: aiGrid, score, warnings } = res.data
-
-      // Transform AI grid into localGrid format
-      const newGrid = {}
-      for (const day of DAYS) {
-        const dayEntries = aiGrid[day] || []
-        dayEntries.forEach(entry => {
-          const key = `${day}-${entry.slot_id}`
-          newGrid[key] = {
-            subject: entry.subject_id,
-            teacher: entry.teacher_id,
-            room: entry.room || '',
-            subject_name: entry.subject_name,
-            subject_code: classSubjects.find(cs => cs.subject === entry.subject_id)?.subject_code || null,
-            teacher_name: entry.teacher_name,
-          }
-        })
+  // Auto-generate timetable (background task)
+  const autoGenTask = useBackgroundTask({
+    mutationFn: (data) => academicsApi.autoGenerateTimetable(data),
+    taskType: 'TIMETABLE_GENERATION',
+    title: 'Auto-generating timetable',
+    onSubmitted: () => setShowAutoGenConfirm(false),
+    onSuccess: (resultData) => {
+      if (resultData?.grid) {
+        const newGrid = {}
+        for (const day of DAYS) {
+          const dayEntries = resultData.grid[day] || []
+          dayEntries.forEach(entry => {
+            const key = `${day}-${entry.slot_id}`
+            newGrid[key] = {
+              subject: entry.subject_id,
+              teacher: entry.teacher_id,
+              room: entry.room || '',
+              subject_name: entry.subject_name,
+              subject_code: classSubjects.find(cs => cs.subject === entry.subject_id)?.subject_code || null,
+              teacher_name: entry.teacher_name,
+            }
+          })
+        }
+        setLocalGrid(newGrid)
+        setHasChanges(true)
+        let msg = `AI generated timetable (score: ${resultData.score?.toFixed(0) || '?'}/100).`
+        if (resultData.warnings?.length) msg += ' Warnings: ' + resultData.warnings.join('; ')
+        msg += ' Review and click "Save Timetable" to apply.'
+        setSaveMsg(msg)
       }
+    },
+  })
 
-      setLocalGrid(newGrid)
-      setHasChanges(true)
-
-      let msg = `AI generated timetable (score: ${score?.toFixed(0) || '?'}/100).`
-      if (warnings?.length) msg += ' Warnings: ' + warnings.join('; ')
-      msg += ' Review and click "Save Timetable" to apply.'
-      setSaveMsg(msg)
-    } catch (err) {
-      const detail = err.response?.data?.detail || 'Auto-generation failed'
-      setSaveMsg(detail)
-    }
-    setAutoGenerating(false)
+  const handleAutoGenerate = () => {
+    setSaveMsg('')
+    autoGenTask.trigger({ class_id: parseInt(selectedClassId) })
   }
 
   // Substitute teacher search
@@ -437,13 +436,13 @@ export default function TimetablePage() {
           {selectedClassId && classSubjects.length > 0 && (
             <button
               onClick={() => setShowAutoGenConfirm(true)}
-              disabled={autoGenerating}
+              disabled={autoGenTask.isSubmitting}
               className="px-3 py-2 text-sm bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 disabled:opacity-50"
             >
-              {autoGenerating ? (
+              {autoGenTask.isSubmitting ? (
                 <span className="flex items-center gap-1">
                   <span className="animate-spin h-3 w-3 border-2 border-indigo-500 border-t-transparent rounded-full"></span>
-                  Generating...
+                  Starting...
                 </span>
               ) : 'AI Generate'}
             </button>

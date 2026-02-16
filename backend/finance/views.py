@@ -97,7 +97,7 @@ class FeeStructureViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Model
     required_module = 'finance'
     queryset = FeeStructure.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrStaffReadOnly, HasSchoolAccess]
-    pagination_class = None
+
 
     def get_serializer_class(self):
         if self.action == 'create':
@@ -198,7 +198,7 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
     required_module = 'finance'
     queryset = FeePayment.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrStaffReadOnly, HasSchoolAccess]
-    pagination_class = None
+
 
     def get_serializer_class(self):
         if self.action == 'create':
@@ -274,7 +274,7 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
 
     @action(detail=False, methods=['post'])
     def generate_monthly(self, request):
-        """Bulk generate fee payment records for a month/year."""
+        """Bulk generate fee payment records (background task)."""
         serializer = GenerateMonthlySerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -284,99 +284,36 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
 
         school_id = _resolve_school_id(request)
         if not school_id:
-            return Response({'detail': 'No school associated with your account. Please contact an administrator.'}, status=400)
+            return Response({'detail': 'No school associated with your account.'}, status=400)
 
-        # Block generation into closed periods
+        # Quick validation — block closed periods before dispatching task
         if MonthlyClosing.objects.filter(school_id=school_id, year=year, month=month).exists():
             return Response({
                 'detail': f'Period {year}/{month:02d} is closed. Reopen it before generating fees.'
             }, status=400)
 
-        # 1. Fetch all active students (1 query)
-        students = list(Student.objects.filter(school_id=school_id, is_active=True))
-        if class_id:
-            students = [s for s in students if s.class_obj_id == int(class_id)]
+        from core.task_utils import dispatch_background_task
+        from core.models import BackgroundTask
+        from .tasks import generate_monthly_fees_task
 
-        prev_month = month - 1
-        prev_year = year
-        if prev_month == 0:
-            prev_month = 12
-            prev_year = year - 1
-
-        # 2. Existing records for this month — skip these (1 query)
-        existing_ids = set(
-            FeePayment.objects.filter(
-                school_id=school_id, month=month, year=year
-            ).values_list('student_id', flat=True)
+        bg_task = dispatch_background_task(
+            celery_task_func=generate_monthly_fees_task,
+            task_type=BackgroundTask.TaskType.FEE_GENERATION,
+            title=f"Generating fees for {month}/{year}",
+            school_id=school_id,
+            user=request.user,
+            task_kwargs={
+                'school_id': school_id,
+                'month': month,
+                'year': year,
+                'class_id': class_id,
+            },
         )
 
-        # 3. Fee structures — build lookup in memory (1 query)
-        today = date.today()
-        fee_structures = FeeStructure.objects.filter(
-            school_id=school_id, is_active=True, effective_from__lte=today,
-        ).filter(
-            Q(effective_to__isnull=True) | Q(effective_to__gte=today)
-        ).order_by('-effective_from')
-
-        student_fees = {}
-        class_fees = {}
-        for fs in fee_structures:
-            if fs.student_id:
-                if fs.student_id not in student_fees:
-                    student_fees[fs.student_id] = fs.monthly_amount
-            elif fs.class_obj_id:
-                if fs.class_obj_id not in class_fees:
-                    class_fees[fs.class_obj_id] = fs.monthly_amount
-
-        # 4. Previous month balances for carry-forward (1 query)
-        prev_balances = {}
-        for fp in FeePayment.objects.filter(
-            school_id=school_id, month=prev_month, year=prev_year
-        ):
-            prev_balances[fp.student_id] = fp.amount_due - fp.amount_paid
-
-        # 5. Build all payment objects in memory (0 queries)
-        created_count = 0
-        skipped_count = 0
-        no_fee_count = 0
-        to_create = []
-
-        for student in students:
-            if student.id in existing_ids:
-                skipped_count += 1
-                continue
-
-            monthly_fee = student_fees.get(student.id)
-            if monthly_fee is None:
-                monthly_fee = class_fees.get(student.class_obj_id)
-            if monthly_fee is None:
-                no_fee_count += 1
-                continue
-
-            prev_balance = prev_balances.get(student.id, Decimal('0'))
-
-            to_create.append(FeePayment(
-                school_id=school_id,
-                student=student,
-                month=month,
-                year=year,
-                previous_balance=prev_balance,
-                amount_due=prev_balance + monthly_fee,
-                amount_paid=0,
-            ))
-            created_count += 1
-
-        # 6. Single bulk insert (1 query), atomic
-        with transaction.atomic():
-            FeePayment.objects.bulk_create(to_create)
-
         return Response({
-            'created': created_count,
-            'skipped': skipped_count,
-            'no_fee_structure': no_fee_count,
-            'month': month,
-            'year': year,
-        })
+            'task_id': bg_task.celery_task_id,
+            'message': 'Fee generation started.',
+        }, status=202)
 
     @action(detail=False, methods=['post'])
     def bulk_update(self, request):
@@ -561,7 +498,7 @@ class ExpenseViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
     required_module = 'finance'
     queryset = Expense.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrStaffReadOnly, HasSchoolAccess]
-    pagination_class = None
+
 
     def get_serializer_class(self):
         if self.action == 'create':
@@ -666,7 +603,7 @@ class OtherIncomeViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
     required_module = 'finance'
     queryset = OtherIncome.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrStaffReadOnly, HasSchoolAccess]
-    pagination_class = None
+
 
     def get_serializer_class(self):
         if self.action == 'create':
@@ -718,7 +655,7 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
     required_module = 'finance'
     queryset = Account.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrStaffReadOnly, HasSchoolAccess]
-    pagination_class = None
+
 
     def get_serializer_class(self):
         if self.action == 'create':
@@ -1291,7 +1228,7 @@ class TransferViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelView
     required_module = 'finance'
     queryset = Transfer.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrStaffReadOnly, HasSchoolAccess]
-    pagination_class = None
+
 
     def get_serializer_class(self):
         if self.action == 'create':
@@ -1593,11 +1530,13 @@ class DiscountViewSet(ModuleAccessMixin, viewsets.ModelViewSet):
     queryset = Discount.objects.all()
     serializer_class = DiscountSerializer
     permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
-    pagination_class = None
+
 
     def get_queryset(self):
         queryset = Discount.objects.select_related(
             'school', 'academic_year', 'target_class',
+        ).annotate(
+            usage_count=Count('student_assignments', filter=Q(student_assignments__is_active=True)),
         )
         school_id = _resolve_school_id(self.request)
         if school_id:
@@ -1641,10 +1580,12 @@ class ScholarshipViewSet(ModuleAccessMixin, viewsets.ModelViewSet):
     queryset = Scholarship.objects.all()
     serializer_class = ScholarshipSerializer
     permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
-    pagination_class = None
+
 
     def get_queryset(self):
-        queryset = Scholarship.objects.select_related('school', 'academic_year')
+        queryset = Scholarship.objects.select_related('school', 'academic_year').annotate(
+            recipient_count=Count('student_assignments', filter=Q(student_assignments__is_active=True)),
+        )
         school_id = _resolve_school_id(self.request)
         if school_id:
             queryset = queryset.filter(school_id=school_id)
@@ -1685,7 +1626,7 @@ class StudentDiscountViewSet(ModuleAccessMixin, viewsets.ModelViewSet):
     required_module = 'finance'
     queryset = StudentDiscount.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
-    pagination_class = None
+
 
     def get_serializer_class(self):
         if self.action == 'create':
@@ -1839,7 +1780,7 @@ class PaymentGatewayConfigViewSet(ModuleAccessMixin, viewsets.ModelViewSet):
     queryset = PaymentGatewayConfig.objects.all()
     serializer_class = PaymentGatewayConfigSerializer
     permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
-    pagination_class = None
+
 
     def get_queryset(self):
         queryset = PaymentGatewayConfig.objects.select_related('school')
@@ -1908,7 +1849,7 @@ class OnlinePaymentViewSet(ModuleAccessMixin, viewsets.ReadOnlyModelViewSet):
     queryset = OnlinePayment.objects.all()
     serializer_class = OnlinePaymentSerializer
     permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
-    pagination_class = None
+
 
     def get_queryset(self):
         queryset = OnlinePayment.objects.select_related(

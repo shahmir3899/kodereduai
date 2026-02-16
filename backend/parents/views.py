@@ -483,7 +483,7 @@ class ParentLeaveRequestViewSet(ModuleAccessMixin, viewsets.ModelViewSet):
     required_module = 'parents'
     permission_classes = [IsAuthenticated, IsParentOrAdmin]
     serializer_class = ParentLeaveRequestSerializer
-    pagination_class = None
+
 
     def get_queryset(self):
         profile = get_parent_profile(self.request)

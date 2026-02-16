@@ -180,6 +180,8 @@ export const studentsApi = {
   uploadDocument: (id, data) => api.post(`/api/students/${id}/documents/`, data),
   deleteDocument: (id, docId) => api.delete(`/api/students/${id}/delete_document/`, { params: { document_id: docId } }),
   getAIProfile: (id) => api.get(`/api/students/${id}/ai_profile/`),
+  createStudentUserAccount: (id, data) => api.post(`/api/students/${id}/create-user-account/`, data),
+  bulkCreateAccounts: (data) => api.post('/api/students/bulk-create-accounts/', data),
 }
 
 // Classes API
@@ -265,9 +267,12 @@ export const hrApi = {
   // Staff Members
   getStaff: (params) => api.get('/api/hr/staff/', { params }),
   getStaffMember: (id) => api.get(`/api/hr/staff/${id}/`),
+  getNextEmployeeId: () => api.get('/api/hr/staff/next-employee-id/'),
   createStaff: (data) => api.post('/api/hr/staff/', data),
   updateStaff: (id, data) => api.patch(`/api/hr/staff/${id}/`, data),
   deleteStaff: (id) => api.delete(`/api/hr/staff/${id}/`),
+  createStaffUserAccount: (id, data) => api.post(`/api/hr/staff/${id}/create-user-account/`, data),
+  bulkCreateStaffAccounts: (data) => api.post('/api/hr/staff/bulk-create-accounts/', data),
 
   // Departments
   getDepartments: (params) => api.get('/api/hr/departments/', { params }),
@@ -350,6 +355,7 @@ export const academicsApi = {
   // Class-Subject Assignments
   getClassSubjects: (params) => api.get('/api/academics/class-subjects/', { params }),
   createClassSubject: (data) => api.post('/api/academics/class-subjects/', data),
+  bulkAssignSubjects: (data) => api.post('/api/academics/class-subjects/bulk-assign/', data),
   updateClassSubject: (id, data) => api.patch(`/api/academics/class-subjects/${id}/`, data),
   deleteClassSubject: (id) => api.delete(`/api/academics/class-subjects/${id}/`),
   getClassSubjectsByClass: (classId) =>
@@ -425,7 +431,7 @@ export const sessionsApi = {
   setupApply: (previewData) => api.post('/api/sessions/setup-wizard/', { action: 'apply', preview_data: previewData }),
 
   // AI Promotion Advisor
-  getPromotionAdvice: (params) => api.get('/api/sessions/promotion-advisor/', { params }),
+  getPromotionAdvice: (data) => api.post('/api/sessions/promotion-advisor/', data),
 
   // Session Health
   getSessionHealth: (params) => api.get('/api/sessions/health/', { params }),
@@ -555,8 +561,9 @@ export const notificationsApi = {
 
 // Reports API
 export const reportsApi = {
-  generate: (data) => api.post('/api/reports/generate/', data, { responseType: 'blob' }),
+  generate: (data) => api.post('/api/reports/generate/', data),
   getList: (params) => api.get('/api/reports/list/', { params }),
+  download: (reportId) => api.get(`/api/reports/${reportId}/download/`, { responseType: 'blob' }),
 }
 
 // Parent Portal API
@@ -871,4 +878,10 @@ export const inventoryApi = {
 
   // Search helpers
   searchUsers: (params) => api.get('/api/users/', { params }),
+}
+
+// Background Tasks API
+export const tasksApi = {
+  getMyTasks: () => api.get('/api/tasks/tasks/'),
+  getTask: (taskId) => api.get(`/api/tasks/tasks/${taskId}/`),
 }

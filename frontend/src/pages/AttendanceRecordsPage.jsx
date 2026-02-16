@@ -27,7 +27,7 @@ export default function AttendanceRecordsPage() {
   // Fetch classes
   const { data: classesData } = useQuery({
     queryKey: ['classes'],
-    queryFn: () => classesApi.getClasses(),
+    queryFn: () => classesApi.getClasses({ page_size: 9999 }),
   })
   const classes = classesData?.data?.results || classesData?.data || []
 

@@ -37,7 +37,7 @@ export default function SubmissionReviewPage() {
 
   const { data: submissionsData, isLoading: submissionsLoading } = useQuery({
     queryKey: ['submissions', assignmentId],
-    queryFn: () => lmsApi.getSubmissions({ assignment: assignmentId }),
+    queryFn: () => lmsApi.getSubmissions({ assignment: assignmentId, page_size: 9999 }),
     enabled: !!assignmentId,
   })
 

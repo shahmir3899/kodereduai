@@ -13,7 +13,7 @@ export default function ExamTypesPage() {
 
   const { data: res, isLoading } = useQuery({
     queryKey: ['examTypes'],
-    queryFn: () => examinationsApi.getExamTypes(),
+    queryFn: () => examinationsApi.getExamTypes({ page_size: 9999 }),
   })
 
   const items = res?.data?.results || res?.data || []

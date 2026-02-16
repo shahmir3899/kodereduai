@@ -35,7 +35,7 @@ class InventoryCategoryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.
     required_module = 'inventory'
     queryset = InventoryCategory.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
-    pagination_class = None
+
 
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):
@@ -43,7 +43,9 @@ class InventoryCategoryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.
         return InventoryCategoryReadSerializer
 
     def get_queryset(self):
-        queryset = super().get_queryset().select_related('school')
+        queryset = super().get_queryset().select_related('school').annotate(
+            items_count=Count('items'),
+        )
 
         is_active = self.request.query_params.get('is_active')
         if is_active is not None:
@@ -61,7 +63,7 @@ class VendorViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSe
     required_module = 'inventory'
     queryset = Vendor.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
-    pagination_class = None
+
 
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):
@@ -97,7 +99,7 @@ class InventoryItemViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mode
     required_module = 'inventory'
     queryset = InventoryItem.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
-    pagination_class = None
+
 
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):
@@ -105,7 +107,9 @@ class InventoryItemViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mode
         return InventoryItemReadSerializer
 
     def get_queryset(self):
-        queryset = super().get_queryset().select_related('school', 'category')
+        queryset = super().get_queryset().select_related('school', 'category').annotate(
+            active_assignments_count=Count('assignments', filter=Q(assignments__is_active=True)),
+        )
 
         category_id = self.request.query_params.get('category_id')
         if category_id:
@@ -146,7 +150,7 @@ class ItemAssignmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
     required_module = 'inventory'
     queryset = ItemAssignment.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
-    pagination_class = None
+
 
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):
@@ -267,7 +271,7 @@ class StockTransactionViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
     required_module = 'inventory'
     queryset = StockTransaction.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
-    pagination_class = None
+
     http_method_names = ['get', 'post', 'head', 'options']
 
     def get_serializer_class(self):

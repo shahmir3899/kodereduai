@@ -3,6 +3,41 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { hrApi } from '../../services/api'
 import { useToast } from '../../components/Toast'
 
+const PRESET_DEPARTMENTS = [
+  { name: 'Teaching', description: 'Academic teaching staff' },
+  { name: 'Administration', description: 'School administration and office staff' },
+  { name: 'Finance & Accounts', description: 'Fee collection, accounts and payroll' },
+  { name: 'IT / Lab', description: 'IT support and laboratory staff' },
+  { name: 'Library', description: 'Library management staff' },
+  { name: 'Transport', description: 'School transport and logistics' },
+  { name: 'Security', description: 'Campus security and gatekeeping' },
+  { name: 'Maintenance', description: 'Cleaning, maintenance and support staff' },
+  { name: 'Sports', description: 'Physical education and sports coaching' },
+  { name: 'Medical / Health', description: 'School nurse and health services' },
+]
+
+const PRESET_DESIGNATIONS = [
+  { name: 'Principal', dept: 'Administration' },
+  { name: 'Vice Principal', dept: 'Administration' },
+  { name: 'Head Teacher', dept: 'Teaching' },
+  { name: 'Senior Teacher', dept: 'Teaching' },
+  { name: 'Teacher', dept: 'Teaching' },
+  { name: 'Subject Coordinator', dept: 'Teaching' },
+  { name: 'Office Manager', dept: 'Administration' },
+  { name: 'Receptionist', dept: 'Administration' },
+  { name: 'Clerk', dept: 'Administration' },
+  { name: 'Accountant', dept: 'Finance & Accounts' },
+  { name: 'Cashier', dept: 'Finance & Accounts' },
+  { name: 'Librarian', dept: 'Library' },
+  { name: 'Lab Assistant', dept: 'IT / Lab' },
+  { name: 'IT Administrator', dept: 'IT / Lab' },
+  { name: 'Sports Coach', dept: 'Sports' },
+  { name: 'School Nurse', dept: 'Medical / Health' },
+  { name: 'Security Guard', dept: 'Security' },
+  { name: 'Driver', dept: 'Transport' },
+  { name: 'Peon', dept: 'Maintenance' },
+]
+
 export default function DepartmentsPage() {
   const queryClient = useQueryClient()
   const { showError, showSuccess } = useToast()
@@ -22,14 +57,14 @@ export default function DepartmentsPage() {
   // Fetch departments
   const { data: deptData, isLoading: deptLoading } = useQuery({
     queryKey: ['hrDepartments'],
-    queryFn: () => hrApi.getDepartments(),
+    queryFn: () => hrApi.getDepartments({ page_size: 9999 }),
     staleTime: 5 * 60 * 1000,
   })
 
   // Fetch designations
   const { data: desigData, isLoading: desigLoading } = useQuery({
     queryKey: ['hrDesignations'],
-    queryFn: () => hrApi.getDesignations(),
+    queryFn: () => hrApi.getDesignations({ page_size: 9999 }),
     staleTime: 5 * 60 * 1000,
   })
 
@@ -41,8 +76,8 @@ export default function DepartmentsPage() {
   const addDeptMutation = useMutation({
     mutationFn: (data) => hrApi.createDepartment(data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['hrDepartments'])
-      queryClient.invalidateQueries(['hrDashboardStats'])
+      queryClient.invalidateQueries({ queryKey: ['hrDepartments'] })
+      queryClient.invalidateQueries({ queryKey: ['hrDashboardStats'] })
       closeDeptModal()
       showSuccess('Department created successfully!')
     },
@@ -54,7 +89,7 @@ export default function DepartmentsPage() {
   const updateDeptMutation = useMutation({
     mutationFn: ({ id, data }) => hrApi.updateDepartment(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['hrDepartments'])
+      queryClient.invalidateQueries({ queryKey: ['hrDepartments'] })
       closeDeptModal()
       showSuccess('Department updated successfully!')
     },
@@ -66,8 +101,8 @@ export default function DepartmentsPage() {
   const deleteDeptMutation = useMutation({
     mutationFn: (id) => hrApi.deleteDepartment(id),
     onSuccess: () => {
-      queryClient.invalidateQueries(['hrDepartments'])
-      queryClient.invalidateQueries(['hrDashboardStats'])
+      queryClient.invalidateQueries({ queryKey: ['hrDepartments'] })
+      queryClient.invalidateQueries({ queryKey: ['hrDashboardStats'] })
       setDeleteDeptConfirm(null)
       showSuccess('Department deactivated successfully!')
     },
@@ -81,7 +116,7 @@ export default function DepartmentsPage() {
   const addDesigMutation = useMutation({
     mutationFn: (data) => hrApi.createDesignation(data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['hrDesignations'])
+      queryClient.invalidateQueries({ queryKey: ['hrDesignations'] })
       closeDesigModal()
       showSuccess('Designation created successfully!')
     },
@@ -93,7 +128,7 @@ export default function DepartmentsPage() {
   const updateDesigMutation = useMutation({
     mutationFn: ({ id, data }) => hrApi.updateDesignation(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['hrDesignations'])
+      queryClient.invalidateQueries({ queryKey: ['hrDesignations'] })
       closeDesigModal()
       showSuccess('Designation updated successfully!')
     },
@@ -105,7 +140,7 @@ export default function DepartmentsPage() {
   const deleteDesigMutation = useMutation({
     mutationFn: (id) => hrApi.deleteDesignation(id),
     onSuccess: () => {
-      queryClient.invalidateQueries(['hrDesignations'])
+      queryClient.invalidateQueries({ queryKey: ['hrDesignations'] })
       setDeleteDesigConfirm(null)
       showSuccess('Designation deactivated successfully!')
     },
@@ -189,6 +224,71 @@ export default function DepartmentsPage() {
     }
   }
 
+  // Quick-add presets
+  const [quickAdding, setQuickAdding] = useState({})
+  const existingDeptNames = new Set(departments.map(d => d.name.toLowerCase()))
+  const existingDesigNames = new Set(designations.map(d => d.name.toLowerCase()))
+  const remainingDepts = PRESET_DEPARTMENTS.filter(p => !existingDeptNames.has(p.name.toLowerCase()))
+  const remainingDesigs = PRESET_DESIGNATIONS.filter(p => !existingDesigNames.has(p.name.toLowerCase()))
+
+  const quickAddDept = async (preset) => {
+    setQuickAdding(p => ({ ...p, [`dept-${preset.name}`]: true }))
+    try {
+      await hrApi.createDepartment({ name: preset.name, description: preset.description })
+      queryClient.invalidateQueries({ queryKey: ['hrDepartments'] })
+      showSuccess(`"${preset.name}" department added!`)
+    } catch (err) {
+      showError(err.response?.data?.name?.[0] || 'Failed to add department')
+    }
+    setQuickAdding(p => ({ ...p, [`dept-${preset.name}`]: false }))
+  }
+
+  const quickAddAllDepts = async () => {
+    setQuickAdding(p => ({ ...p, allDepts: true }))
+    let added = 0
+    for (const preset of remainingDepts) {
+      try {
+        await hrApi.createDepartment({ name: preset.name, description: preset.description })
+        added++
+      } catch { /* skip duplicates */ }
+    }
+    queryClient.invalidateQueries({ queryKey: ['hrDepartments'] })
+    if (added > 0) showSuccess(`${added} department${added > 1 ? 's' : ''} added!`)
+    setQuickAdding(p => ({ ...p, allDepts: false }))
+  }
+
+  // Build dept name → id map for linking designations
+  const deptNameToId = {}
+  departments.forEach(d => { deptNameToId[d.name.toLowerCase()] = d.id })
+
+  const quickAddDesig = async (preset) => {
+    setQuickAdding(p => ({ ...p, [`desig-${preset.name}`]: true }))
+    try {
+      const deptId = preset.dept ? (deptNameToId[preset.dept.toLowerCase()] || null) : null
+      await hrApi.createDesignation({ name: preset.name, department: deptId })
+      queryClient.invalidateQueries({ queryKey: ['hrDesignations'] })
+      showSuccess(`"${preset.name}" designation added!`)
+    } catch (err) {
+      showError(err.response?.data?.name?.[0] || 'Failed to add designation')
+    }
+    setQuickAdding(p => ({ ...p, [`desig-${preset.name}`]: false }))
+  }
+
+  const quickAddAllDesigs = async () => {
+    setQuickAdding(p => ({ ...p, allDesigs: true }))
+    let added = 0
+    for (const preset of remainingDesigs) {
+      try {
+        const deptId = preset.dept ? (deptNameToId[preset.dept.toLowerCase()] || null) : null
+        await hrApi.createDesignation({ name: preset.name, department: deptId })
+        added++
+      } catch { /* skip duplicates */ }
+    }
+    queryClient.invalidateQueries({ queryKey: ['hrDesignations'] })
+    if (added > 0) showSuccess(`${added} designation${added > 1 ? 's' : ''} added!`)
+    setQuickAdding(p => ({ ...p, allDesigs: false }))
+  }
+
   const isDeptSubmitting = addDeptMutation.isPending || updateDeptMutation.isPending
   const isDesigSubmitting = addDesigMutation.isPending || updateDesigMutation.isPending
 
@@ -208,13 +308,43 @@ export default function DepartmentsPage() {
           </button>
         </div>
 
+        {/* Quick Add Departments */}
+        {!deptLoading && remainingDepts.length > 0 && (
+          <div className="card mb-4 bg-blue-50 border border-blue-200">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-medium text-blue-800">Quick Add Common Departments</p>
+              {remainingDepts.length > 1 && (
+                <button
+                  onClick={quickAddAllDepts}
+                  disabled={quickAdding.allDepts}
+                  className="text-xs px-3 py-1 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {quickAdding.allDepts ? 'Adding...' : `Add All (${remainingDepts.length})`}
+                </button>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {remainingDepts.map(p => (
+                <button
+                  key={p.name}
+                  onClick={() => quickAddDept(p)}
+                  disabled={quickAdding[`dept-${p.name}`]}
+                  className="px-3 py-1.5 text-sm bg-white border border-blue-300 text-blue-700 rounded-full hover:bg-blue-100 disabled:opacity-50 transition-colors"
+                >
+                  {quickAdding[`dept-${p.name}`] ? '...' : `+ ${p.name}`}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {deptLoading ? (
           <div className="text-center py-8">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
           </div>
         ) : departments.length === 0 ? (
           <div className="card text-center py-8 text-gray-500">
-            No departments created yet. Add your first department.
+            No departments created yet. Use the quick add buttons above or add manually.
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -258,13 +388,44 @@ export default function DepartmentsPage() {
           </button>
         </div>
 
+        {/* Quick Add Designations */}
+        {!desigLoading && remainingDesigs.length > 0 && (
+          <div className="card mb-4 bg-green-50 border border-green-200">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-medium text-green-800">Quick Add Common Designations</p>
+              {remainingDesigs.length > 1 && (
+                <button
+                  onClick={quickAddAllDesigs}
+                  disabled={quickAdding.allDesigs}
+                  className="text-xs px-3 py-1 bg-green-600 text-white rounded-full hover:bg-green-700 disabled:opacity-50"
+                >
+                  {quickAdding.allDesigs ? 'Adding...' : `Add All (${remainingDesigs.length})`}
+                </button>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {remainingDesigs.map(preset => (
+                <button
+                  key={preset.name}
+                  onClick={() => quickAddDesig(preset)}
+                  disabled={quickAdding[`desig-${preset.name}`]}
+                  className="px-3 py-1.5 text-sm bg-white border border-green-300 text-green-700 rounded-full hover:bg-green-100 disabled:opacity-50 transition-colors"
+                  title={preset.dept ? `Department: ${preset.dept}` : ''}
+                >
+                  {quickAdding[`desig-${preset.name}`] ? '...' : `+ ${preset.name}`}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {desigLoading ? (
           <div className="text-center py-8">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
           </div>
         ) : designations.length === 0 ? (
           <div className="card text-center py-8 text-gray-500">
-            No designations created yet. Add your first designation.
+            No designations created yet. Use the quick add buttons above or add manually.
           </div>
         ) : (
           <div className="card overflow-x-auto">

@@ -175,18 +175,18 @@ export function GenerateModal({ show, onClose, month, year, classFilter, setClas
           <div className="flex gap-3">
             <button onClick={() => { setConfirmed(false); onClose() }} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">Cancel</button>
             <button
-              onClick={() => mutation.mutate({ month, year, ...(classFilter && { class_id: parseInt(classFilter) }) })}
-              disabled={mutation.isPending || !canGenerate}
+              onClick={() => {
+                const data = { month, year, ...(classFilter && { class_id: parseInt(classFilter) }) }
+                // Support both useMutation and useBackgroundTask interfaces
+                if (mutation.trigger) mutation.trigger(data)
+                else mutation.mutate(data)
+              }}
+              disabled={(mutation.isSubmitting ?? mutation.isPending) || !canGenerate}
               className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50"
             >
-              {mutation.isPending ? 'Generating...' : 'Generate'}
+              {(mutation.isSubmitting ?? mutation.isPending) ? 'Starting...' : 'Generate'}
             </button>
           </div>
-          {mutation.isError && (
-            <div className="mt-3 text-sm text-red-700 bg-red-50 p-3 rounded">
-              {getErrorMessage(mutation.error, 'Failed to generate fee records')}
-            </div>
-          )}
           {mutation.isSuccess && (
             <div className="mt-3 text-sm text-green-700 bg-green-50 p-3 rounded">
               Created {mutation.data?.data?.created} records.

@@ -21,12 +21,12 @@ export default function MarksEntryPage() {
   // Queries
   const { data: yearsRes } = useQuery({
     queryKey: ['academicYears'],
-    queryFn: () => sessionsApi.getAcademicYears(),
+    queryFn: () => sessionsApi.getAcademicYears({ page_size: 9999 }),
   })
 
   const { data: classesRes } = useQuery({
     queryKey: ['classes'],
-    queryFn: () => classesApi.getClasses(),
+    queryFn: () => classesApi.getClasses({ page_size: 9999 }),
   })
 
   const { data: examsRes } = useQuery({
@@ -39,13 +39,13 @@ export default function MarksEntryPage() {
 
   const { data: examSubjectsRes } = useQuery({
     queryKey: ['examSubjects', selectedExamId],
-    queryFn: () => examinationsApi.getExamSubjects({ exam: selectedExamId }),
+    queryFn: () => examinationsApi.getExamSubjects({ exam: selectedExamId, page_size: 9999 }),
     enabled: !!selectedExamId,
   })
 
   const { data: marksRes, isLoading: marksLoading } = useQuery({
     queryKey: ['marks', selectedSubjectId],
-    queryFn: () => examinationsApi.getMarks({ exam_subject: selectedSubjectId }),
+    queryFn: () => examinationsApi.getMarks({ exam_subject: selectedSubjectId, page_size: 9999 }),
     enabled: !!selectedSubjectId,
   })
 

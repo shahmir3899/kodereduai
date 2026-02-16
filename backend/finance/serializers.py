@@ -314,7 +314,7 @@ class DiscountSerializer(serializers.ModelSerializer):
     academic_year_name = serializers.CharField(
         source='academic_year.name', read_only=True, default=None
     )
-    usage_count = serializers.SerializerMethodField()
+    usage_count = serializers.IntegerField(read_only=True, default=0)
 
     class Meta:
         model = Discount
@@ -329,9 +329,6 @@ class DiscountSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'school', 'created_at', 'updated_at']
-
-    def get_usage_count(self, obj):
-        return obj.student_assignments.filter(is_active=True).count()
 
     def validate(self, attrs):
         applies_to = attrs.get('applies_to', getattr(self.instance, 'applies_to', 'ALL'))
@@ -364,7 +361,7 @@ class ScholarshipSerializer(serializers.ModelSerializer):
     academic_year_name = serializers.CharField(
         source='academic_year.name', read_only=True, default=None
     )
-    recipient_count = serializers.SerializerMethodField()
+    recipient_count = serializers.IntegerField(read_only=True, default=0)
 
     class Meta:
         model = Scholarship
@@ -378,9 +375,6 @@ class ScholarshipSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'school', 'created_at', 'updated_at']
-
-    def get_recipient_count(self, obj):
-        return obj.student_assignments.filter(is_active=True).count()
 
     def validate(self, attrs):
         coverage = attrs.get('coverage', getattr(self.instance, 'coverage', None))

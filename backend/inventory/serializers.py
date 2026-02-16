@@ -11,7 +11,7 @@ from .models import InventoryCategory, Vendor, InventoryItem, ItemAssignment, St
 # =============================================================================
 
 class InventoryCategoryReadSerializer(serializers.ModelSerializer):
-    items_count = serializers.IntegerField(source='items.count', read_only=True)
+    items_count = serializers.IntegerField(read_only=True, default=0)
 
     class Meta:
         model = InventoryCategory
@@ -63,7 +63,7 @@ class InventoryItemReadSerializer(serializers.ModelSerializer):
     unit_display = serializers.CharField(source='get_unit_display', read_only=True)
     is_low_stock = serializers.BooleanField(read_only=True)
     stock_value = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
-    active_assignments_count = serializers.SerializerMethodField()
+    active_assignments_count = serializers.IntegerField(read_only=True, default=0)
 
     class Meta:
         model = InventoryItem
@@ -78,9 +78,6 @@ class InventoryItemReadSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
-
-    def get_active_assignments_count(self, obj):
-        return obj.assignments.filter(is_active=True).count()
 
 
 class InventoryItemCreateSerializer(serializers.ModelSerializer):

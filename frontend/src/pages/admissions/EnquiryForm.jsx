@@ -70,7 +70,7 @@ export default function EnquiryForm() {
   // Admission sessions for optional linking
   const { data: sessionsRes } = useQuery({
     queryKey: ['admissionSessions'],
-    queryFn: () => admissionsApi.getSessions(),
+    queryFn: () => admissionsApi.getSessions({ page_size: 9999 }),
     staleTime: 5 * 60 * 1000,
   })
 

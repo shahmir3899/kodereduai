@@ -6,6 +6,9 @@ import logging
 from datetime import datetime
 
 from django.db.models import Q
+from django.utils.decorators import method_decorator
+from django.views.decorators.cache import cache_page
+from django.views.decorators.vary import vary_on_headers
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -70,7 +73,11 @@ class SubjectViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
     required_module = 'academics'
     queryset = Subject.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
-    pagination_class = None
+
+    @method_decorator(cache_page(60 * 60))  # 1 hour
+    @method_decorator(vary_on_headers('X-School-ID'))
+    def list(self, request, *args, **kwargs):
+        return super().list(request, *args, **kwargs)
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
@@ -179,7 +186,7 @@ class ClassSubjectViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Model
     required_module = 'academics'
     queryset = ClassSubject.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
-    pagination_class = None
+
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
@@ -253,6 +260,51 @@ class ClassSubjectViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Model
         instance.is_active = False
         instance.save()
 
+    @action(detail=False, methods=['post'], url_path='bulk-assign')
+    def bulk_assign(self, request):
+        """Assign multiple subjects to a class at once."""
+        from .serializers import ClassSubjectBulkAssignSerializer
+        serializer = ClassSubjectBulkAssignSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({'detail': 'No school associated with your account.'})
+
+        from academic_sessions.models import AcademicYear
+        sid = ensure_tenant_school_id(request) or request.user.school_id
+        academic_year = AcademicYear.objects.filter(
+            school_id=sid, is_current=True, is_active=True,
+        ).first()
+
+        class_obj = serializer.validated_data['class_obj']
+        subjects = serializer.validated_data['subjects']
+        teacher = serializer.validated_data.get('teacher')
+        periods_per_week = serializer.validated_data.get('periods_per_week', 1)
+
+        created = []
+        skipped = []
+        for subject in subjects:
+            exists = ClassSubject.objects.filter(
+                school_id=school_id, class_obj=class_obj, subject=subject,
+            ).exists()
+            if exists:
+                skipped.append(subject.name if hasattr(subject, 'name') else str(subject))
+                continue
+            obj = ClassSubject.objects.create(
+                school_id=school_id, academic_year=academic_year,
+                class_obj=class_obj, subject=subject,
+                teacher=teacher, periods_per_week=periods_per_week,
+            )
+            created.append(obj.id)
+
+        return Response({
+            'created_count': len(created),
+            'skipped_count': len(skipped),
+            'skipped_subjects': skipped,
+        }, status=201 if created else 200)
+
     @action(detail=False, methods=['get'])
     def by_class(self, request):
         """Get all subjects assigned to a specific class."""
@@ -281,7 +333,11 @@ class TimetableSlotViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mode
     required_module = 'academics'
     queryset = TimetableSlot.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
-    pagination_class = None
+
+    @method_decorator(cache_page(60 * 120))  # 2 hours
+    @method_decorator(vary_on_headers('X-School-ID'))
+    def list(self, request, *args, **kwargs):
+        return super().list(request, *args, **kwargs)
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
@@ -445,7 +501,7 @@ class TimetableEntryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
     required_module = 'academics'
     queryset = TimetableEntry.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
-    pagination_class = None
+
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
@@ -638,7 +694,7 @@ class TimetableEntryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
 
     @action(detail=False, methods=['post'])
     def auto_generate(self, request):
-        """AI: Auto-generate a timetable for a class using CSP algorithm."""
+        """AI: Auto-generate a timetable for a class (background task)."""
         serializer = AutoGenerateRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -648,18 +704,24 @@ class TimetableEntryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
 
         class_id = serializer.validated_data['class_id']
 
-        from .ai_engine import TimetableGenerator
-        generator = TimetableGenerator(school_id, class_id)
-        result = generator.generate()
+        from core.task_utils import dispatch_background_task
+        from core.models import BackgroundTask
+        from .tasks import auto_generate_timetable_task
 
-        if not result.success:
-            return Response({'detail': result.error}, status=400)
+        bg_task = dispatch_background_task(
+            celery_task_func=auto_generate_timetable_task,
+            task_type=BackgroundTask.TaskType.TIMETABLE_GENERATION,
+            title="Auto-generating timetable",
+            school_id=school_id,
+            user=request.user,
+            task_kwargs={'school_id': school_id, 'class_id': class_id},
+            progress_total=100,
+        )
 
         return Response({
-            'grid': result.grid,
-            'score': result.score,
-            'warnings': result.warnings,
-        })
+            'task_id': bg_task.celery_task_id,
+            'message': 'Timetable generation started.',
+        }, status=202)
 
     @action(detail=False, methods=['get'])
     def suggest_resolution(self, request):

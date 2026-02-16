@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { hrApi } from '../../services/api'
 import { useToast } from '../../components/Toast'
+import { useBackgroundTask } from '../../hooks/useBackgroundTask'
 
 const statusBadge = {
   DRAFT: 'bg-yellow-100 text-yellow-800',
@@ -28,7 +29,7 @@ export default function PayrollPage() {
   // Fetch payslips for selected month/year
   const { data: payslipData, isLoading } = useQuery({
     queryKey: ['hrPayslips', month, year],
-    queryFn: () => hrApi.getPayslips({ month, year }),
+    queryFn: () => hrApi.getPayslips({ month, year, page_size: 9999 }),
     staleTime: 2 * 60 * 1000,
   })
 
@@ -39,27 +40,21 @@ export default function PayrollPage() {
     staleTime: 2 * 60 * 1000,
   })
 
-  // Generate payslips mutation
-  const generateMutation = useMutation({
+  // Generate payslips (background task)
+  const generateTask = useBackgroundTask({
     mutationFn: () => hrApi.generatePayslips({ month, year }),
-    onSuccess: (res) => {
-      queryClient.invalidateQueries(['hrPayslips', month, year])
-      queryClient.invalidateQueries(['hrPayrollSummary', month, year])
-      queryClient.invalidateQueries(['hrDashboardStats'])
-      const d = res.data
-      showSuccess(d.message || `${d.created} payslip(s) generated!`)
-      setGenerateConfirm(false)
-    },
-    onError: (err) => showError(err.response?.data?.detail || 'Failed to generate payslips'),
+    taskType: 'PAYSLIP_GENERATION',
+    title: `Generating payslips for ${MONTHS[month - 1]} ${year}`,
+    onSubmitted: () => setGenerateConfirm(false),
   })
 
   // Approve mutation
   const approveMutation = useMutation({
     mutationFn: (id) => hrApi.approvePayslip(id),
     onSuccess: () => {
-      queryClient.invalidateQueries(['hrPayslips', month, year])
-      queryClient.invalidateQueries(['hrPayrollSummary', month, year])
-      queryClient.invalidateQueries(['hrDashboardStats'])
+      queryClient.invalidateQueries({ queryKey: ['hrPayslips', month, year] })
+      queryClient.invalidateQueries({ queryKey: ['hrPayrollSummary', month, year] })
+      queryClient.invalidateQueries({ queryKey: ['hrDashboardStats'] })
       showSuccess('Payslip approved!')
     },
     onError: (err) => showError(err.response?.data?.detail || 'Failed to approve'),
@@ -69,9 +64,9 @@ export default function PayrollPage() {
   const markPaidMutation = useMutation({
     mutationFn: (id) => hrApi.markPayslipPaid(id, {}),
     onSuccess: () => {
-      queryClient.invalidateQueries(['hrPayslips', month, year])
-      queryClient.invalidateQueries(['hrPayrollSummary', month, year])
-      queryClient.invalidateQueries(['hrDashboardStats'])
+      queryClient.invalidateQueries({ queryKey: ['hrPayslips', month, year] })
+      queryClient.invalidateQueries({ queryKey: ['hrPayrollSummary', month, year] })
+      queryClient.invalidateQueries({ queryKey: ['hrDashboardStats'] })
       showSuccess('Payslip marked as paid!')
     },
     onError: (err) => showError(err.response?.data?.detail || 'Failed to mark paid'),
@@ -284,11 +279,11 @@ export default function PayrollPage() {
             <div className="flex justify-end gap-3">
               <button onClick={() => setGenerateConfirm(false)} className="btn btn-secondary">Cancel</button>
               <button
-                onClick={() => generateMutation.mutate()}
-                disabled={generateMutation.isPending}
+                onClick={() => generateTask.trigger()}
+                disabled={generateTask.isSubmitting}
                 className="btn btn-primary"
               >
-                {generateMutation.isPending ? 'Generating...' : 'Generate'}
+                {generateTask.isSubmitting ? 'Starting...' : 'Generate'}
               </button>
             </div>
           </div>

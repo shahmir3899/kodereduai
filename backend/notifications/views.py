@@ -32,7 +32,7 @@ class NotificationTemplateViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewse
     queryset = NotificationTemplate.objects.all()
     serializer_class = NotificationTemplateSerializer
     permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
-    pagination_class = None
+
 
     def get_queryset(self):
         qs = super().get_queryset().select_related('school')
@@ -80,7 +80,7 @@ class NotificationPreferenceViewSet(ModuleAccessMixin, TenantQuerySetMixin, view
     queryset = NotificationPreference.objects.all()
     serializer_class = NotificationPreferenceSerializer
     permission_classes = [IsAuthenticated, HasSchoolAccess]
-    pagination_class = None
+
 
 
 class SchoolNotificationConfigView(ModuleAccessMixin, APIView):

@@ -38,17 +38,18 @@ export default function HostelAllocationsPage() {
     queryFn: () => hostelApi.getAllocations({
       hostel_id: hostelFilter || undefined,
       status: statusFilter || undefined,
+      page_size: 9999,
     }),
   })
 
   const { data: hostelsData } = useQuery({
     queryKey: ['hostels'],
-    queryFn: () => hostelApi.getHostels(),
+    queryFn: () => hostelApi.getHostels({ page_size: 9999 }),
   })
 
   const { data: roomsData } = useQuery({
     queryKey: ['hostelRooms', allocationForm.hostel_for_room || ''],
-    queryFn: () => hostelApi.getRooms({ hostel_id: allocationForm.hostel_for_room || undefined }),
+    queryFn: () => hostelApi.getRooms({ hostel_id: allocationForm.hostel_for_room || undefined, page_size: 9999 }),
     enabled: showModal,
   })
 

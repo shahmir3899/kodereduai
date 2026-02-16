@@ -84,7 +84,11 @@
       "Bash(npx tsc:*)",
       "WebFetch(domain:)",
       "Bash(pdftotext:*)",
-      "Bash(pip freeze:*)"
+      "Bash(pip freeze:*)",
+      "Bash(git -C /d/Personal/smart-attendance log:*)",
+      "Bash(node:*)",
+      "Bash(node -e:*)",
+      "Bash(npx vitest:*)"
     ]
   }
 }

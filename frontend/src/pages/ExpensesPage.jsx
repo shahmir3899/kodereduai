@@ -59,7 +59,7 @@ export default function ExpensesPage() {
   // --- Expense Queries ---
   const { data: accountsData } = useQuery({
     queryKey: ['accounts'],
-    queryFn: () => financeApi.getAccounts(),
+    queryFn: () => financeApi.getAccounts({ page_size: 9999 }),
   })
 
   const { data: expenses, isLoading } = useQuery({
@@ -68,6 +68,7 @@ export default function ExpensesPage() {
       ...(dateFrom && { date_from: dateFrom }),
       ...(dateTo && { date_to: dateTo }),
       ...(categoryFilter && { category: categoryFilter }),
+      page_size: 9999,
     }),
   })
 
@@ -86,6 +87,7 @@ export default function ExpensesPage() {
     queryFn: () => financeApi.getTransfers({
       ...(tfrDateFrom && { date_from: tfrDateFrom }),
       ...(tfrDateTo && { date_to: tfrDateTo }),
+      page_size: 9999,
     }),
     enabled: activeTab === 'transfers',
   })

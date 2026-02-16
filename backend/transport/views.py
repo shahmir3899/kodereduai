@@ -76,7 +76,7 @@ class TransportRouteViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
     required_module = 'transport'
     queryset = TransportRoute.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
-    pagination_class = None
+
 
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):
@@ -84,8 +84,11 @@ class TransportRouteViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
         return TransportRouteReadSerializer
 
     def get_queryset(self):
-        queryset = TransportRoute.objects.select_related('school').prefetch_related(
-            'stops', 'vehicles', 'transport_assignments',
+        from django.db.models import Count, Q
+        queryset = TransportRoute.objects.select_related('school').annotate(
+            stops_count=Count('stops'),
+            vehicles_count=Count('vehicles', filter=Q(vehicles__is_active=True)),
+            students_count=Count('transport_assignments', filter=Q(transport_assignments__is_active=True)),
         )
 
         school_id = _resolve_school_id(self.request)
@@ -145,7 +148,7 @@ class TransportStopViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mode
     queryset = TransportStop.objects.all()
     serializer_class = TransportStopSerializer
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
-    pagination_class = None
+
     tenant_field = 'route__school_id'
 
     def get_queryset(self):
@@ -188,7 +191,7 @@ class TransportVehicleViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
     required_module = 'transport'
     queryset = TransportVehicle.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
-    pagination_class = None
+
 
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):
@@ -240,7 +243,7 @@ class TransportAssignmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewset
     required_module = 'transport'
     queryset = TransportAssignment.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
-    pagination_class = None
+
 
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):
@@ -404,7 +407,7 @@ class TransportAttendanceViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewset
     required_module = 'transport'
     queryset = TransportAttendance.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
-    pagination_class = None
+
 
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):

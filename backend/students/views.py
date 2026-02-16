@@ -15,7 +15,7 @@ from django.db.models import Sum, Avg
 
 from core.permissions import (
     IsSchoolAdmin, IsSchoolAdminOrReadOnly, HasSchoolAccess, ModuleAccessMixin,
-    IsStudent, IsStudentOrAdmin, get_effective_role, ADMIN_ROLES,
+    IsStudent, IsStudentOrAdmin, get_effective_role, ADMIN_ROLES, ROLE_HIERARCHY,
 )
 from core.mixins import TenantQuerySetMixin, ensure_tenant_schools, ensure_tenant_school_id
 from .models import Class, Student, StudentDocument, StudentProfile, StudentInvite
@@ -51,7 +51,7 @@ class ClassViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet
     required_module = 'students'
     queryset = Class.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
-    pagination_class = None
+
 
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):
@@ -106,7 +106,7 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
     required_module = 'students'
     queryset = Student.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
-    pagination_class = None
+
 
     def get_serializer_class(self):
         if self.action == 'create':
@@ -116,7 +116,9 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         return StudentSerializer
 
     def get_queryset(self):
-        queryset = Student.objects.select_related('school', 'class_obj')
+        queryset = Student.objects.select_related(
+            'school', 'class_obj',
+        ).prefetch_related('user_profile__user')
 
         active_school_id = ensure_tenant_school_id(self.request)
         if active_school_id:
@@ -157,6 +159,168 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             serializer.save(school_id=school_id)
         else:
             serializer.save()
+
+    @action(detail=True, methods=['post'], url_path='create-user-account')
+    def create_user_account(self, request, pk=None):
+        """Create a User account + StudentProfile + Membership for an existing student."""
+        student = self.get_object()
+
+        # Check if student already has a user account
+        if hasattr(student, 'user_profile') and student.user_profile is not None:
+            return Response(
+                {'error': 'This student already has a linked user account.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        username = request.data.get('username')
+        email = request.data.get('email', '')
+        password = request.data.get('password')
+        confirm_password = request.data.get('confirm_password')
+
+        if not username or not password:
+            return Response(
+                {'error': 'username and password are required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if password != confirm_password:
+            return Response(
+                {'error': "Passwords don't match."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if len(password) < 8:
+            return Response(
+                {'error': 'Password must be at least 8 characters.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if User.objects.filter(username=username).exists():
+            return Response(
+                {'error': 'This username is already taken.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Create user
+        user = User(
+            username=username,
+            email=email,
+            first_name=student.name.split()[0] if student.name else '',
+            last_name=' '.join(student.name.split()[1:]) if student.name and len(student.name.split()) > 1 else '',
+            role='STAFF',  # base role; school-level role is STUDENT via membership
+            school_id=student.school_id,
+        )
+        user.set_password(password)
+        user.save()
+
+        # Create StudentProfile link
+        StudentProfile.objects.create(
+            user=user,
+            student=student,
+            school_id=student.school_id,
+        )
+
+        # Create school membership with STUDENT role
+        from schools.models import UserSchoolMembership
+        UserSchoolMembership.objects.get_or_create(
+            user=user,
+            school_id=student.school_id,
+            defaults={'role': 'STUDENT', 'is_default': True, 'is_active': True},
+        )
+
+        return Response({
+            'message': 'User account created successfully.',
+            'user_id': user.id,
+            'username': user.username,
+        }, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=['post'], url_path='bulk-create-accounts')
+    def bulk_create_accounts(self, request):
+        """Bulk create user accounts for multiple existing students."""
+        import re
+
+        student_ids = request.data.get('student_ids', [])
+        default_password = request.data.get('default_password', '')
+
+        if not student_ids:
+            return Response({'error': 'student_ids is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not default_password or len(default_password) < 8:
+            return Response({'error': 'default_password must be at least 8 characters.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response({'error': 'No school associated.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        students = Student.objects.filter(
+            id__in=student_ids, school_id=school_id,
+        ).prefetch_related('user_profile')
+
+        created = []
+        skipped = []
+        errors = []
+
+        for student in students:
+            if hasattr(student, 'user_profile') and student.user_profile is not None:
+                skipped.append({'student_id': student.id, 'name': student.name, 'reason': 'Already has account'})
+                continue
+
+            # Auto-generate username from name
+            base = re.sub(r'[^a-z0-9_]', '', student.name.lower().replace(' ', '_'))
+            if not base:
+                base = 'student'
+            username = base
+            if User.objects.filter(username=username).exists():
+                username = f'{base}_{student.roll_number}' if student.roll_number else f'{base}_{student.id}'
+                username = re.sub(r'[^a-z0-9_]', '', username.lower())
+            if User.objects.filter(username=username).exists():
+                username = f'{base}_{student.roll_number}_{school_id}'
+                username = re.sub(r'[^a-z0-9_]', '', username.lower())
+            if User.objects.filter(username=username).exists():
+                errors.append({'student_id': student.id, 'name': student.name, 'error': 'Could not generate unique username'})
+                continue
+
+            try:
+                name_parts = student.name.split() if student.name else ['']
+                first_name = name_parts[0]
+                last_name = ' '.join(name_parts[1:]) if len(name_parts) > 1 else ''
+
+                user = User(
+                    username=username,
+                    email=student.guardian_email or '',
+                    first_name=first_name,
+                    last_name=last_name,
+                    role='STAFF',  # base role; school-level role is STUDENT via membership
+                    school_id=school_id,
+                )
+                user.set_password(default_password)
+                user.save()
+
+                StudentProfile.objects.create(
+                    user=user,
+                    student=student,
+                    school_id=school_id,
+                )
+
+                from schools.models import UserSchoolMembership
+                UserSchoolMembership.objects.get_or_create(
+                    user=user,
+                    school_id=school_id,
+                    defaults={'role': 'STUDENT', 'is_default': True, 'is_active': True},
+                )
+
+                created.append({
+                    'student_id': student.id,
+                    'username': username,
+                    'student_name': student.name,
+                })
+            except Exception as e:
+                errors.append({'student_id': student.id, 'name': student.name, 'error': str(e)})
+
+        return Response({
+            'created_count': len(created),
+            'skipped_count': len(skipped),
+            'error_count': len(errors),
+            'created': created,
+            'skipped': skipped,
+            'errors': errors,
+        })
 
     @action(detail=False, methods=['post'])
     def bulk_create(self, request):

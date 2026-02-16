@@ -8,12 +8,15 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 from django.db.models import Count, Q, Sum
+from django.utils.decorators import method_decorator
+from django.views.decorators.cache import cache_page
+from django.views.decorators.vary import vary_on_headers
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 
-from core.permissions import HasSchoolAccess, get_effective_role, ModuleAccessMixin
+from core.permissions import HasSchoolAccess, get_effective_role, ModuleAccessMixin, ROLE_HIERARCHY, ADMIN_ROLES
 from core.mixins import TenantQuerySetMixin, ensure_tenant_schools, ensure_tenant_school_id
 from .models import (
     StaffDepartment, StaffDesignation, StaffMember,
@@ -88,7 +91,11 @@ class StaffDepartmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mo
     required_module = 'hr'
     queryset = StaffDepartment.objects.all()
     permission_classes = [IsAuthenticated, IsHRManagerOrAdminOrReadOnly, HasSchoolAccess]
-    pagination_class = None
+
+    @method_decorator(cache_page(60 * 120))  # 2 hours
+    @method_decorator(vary_on_headers('X-School-ID'))
+    def list(self, request, *args, **kwargs):
+        return super().list(request, *args, **kwargs)
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
@@ -103,7 +110,9 @@ class StaffDepartmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mo
         return StaffDepartmentSerializer
 
     def get_queryset(self):
-        queryset = StaffDepartment.objects.select_related('school').prefetch_related('staff_members')
+        queryset = StaffDepartment.objects.select_related('school').annotate(
+            staff_count=Count('staff_members', filter=Q(staff_members__is_active=True)),
+        )
         if _is_school_header_rejected(self.request):
             return queryset.none()
 
@@ -138,7 +147,7 @@ class StaffDesignationViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
     required_module = 'hr'
     queryset = StaffDesignation.objects.all()
     permission_classes = [IsAuthenticated, IsHRManagerOrAdminOrReadOnly, HasSchoolAccess]
-    pagination_class = None
+
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
@@ -191,7 +200,7 @@ class StaffMemberViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
     required_module = 'hr'
     queryset = StaffMember.objects.all()
     permission_classes = [IsAuthenticated, IsHRManagerOrAdminOrReadOnly, HasSchoolAccess]
-    pagination_class = None
+
 
     def get_serializer_class(self):
         if self.action == 'create':
@@ -251,17 +260,264 @@ class StaffMemberViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
 
         return queryset
 
+    def _generate_next_employee_id(self, school_id):
+        """Generate next employee ID like EMP-001, EMP-002, etc."""
+        last = (
+            StaffMember.objects.filter(school_id=school_id, employee_id__startswith='EMP-')
+            .order_by('-employee_id')
+            .values_list('employee_id', flat=True)
+            .first()
+        )
+        if last:
+            try:
+                num = int(last.split('-', 1)[1]) + 1
+            except (ValueError, IndexError):
+                num = 1
+        else:
+            num = 1
+        return f'EMP-{num:03d}'
+
     def perform_create(self, serializer):
         school_id = _resolve_school_id(self.request)
         if not school_id:
             from rest_framework.exceptions import ValidationError
             raise ValidationError({'detail': 'No school associated with your account.'})
-        serializer.save(school_id=school_id)
+        if not serializer.validated_data.get('employee_id'):
+            serializer.validated_data['employee_id'] = self._generate_next_employee_id(school_id)
+
+        # Optionally create a linked user account
+        create_user = self.request.data.get('create_user_account', False)
+        linked_user = None
+        if create_user:
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+
+            username = self.request.data.get('username', '')
+            password = self.request.data.get('password', '')
+            confirm_password = self.request.data.get('confirm_password', '')
+            user_role = self.request.data.get('user_role', 'STAFF')
+
+            if not username or not password:
+                from rest_framework.exceptions import ValidationError
+                raise ValidationError({'detail': 'username and password are required for user account creation.'})
+            if password != confirm_password:
+                from rest_framework.exceptions import ValidationError
+                raise ValidationError({'detail': "Passwords don't match."})
+            if len(password) < 8:
+                from rest_framework.exceptions import ValidationError
+                raise ValidationError({'detail': 'Password must be at least 8 characters.'})
+            if User.objects.filter(username=username).exists():
+                from rest_framework.exceptions import ValidationError
+                raise ValidationError({'detail': 'This username is already taken.'})
+
+            first_name = serializer.validated_data.get('first_name', '')
+            last_name = serializer.validated_data.get('last_name', '')
+            email = serializer.validated_data.get('email', '')
+
+            linked_user = User(
+                username=username,
+                email=email,
+                first_name=first_name,
+                last_name=last_name,
+                role=user_role,
+                school_id=school_id,
+            )
+            linked_user.set_password(password)
+            linked_user.save()
+
+            from schools.models import UserSchoolMembership
+            UserSchoolMembership.objects.get_or_create(
+                user=linked_user,
+                school_id=school_id,
+                defaults={'role': user_role, 'is_default': True, 'is_active': True},
+            )
+
+        staff = serializer.save(school_id=school_id, user=linked_user) if linked_user else serializer.save(school_id=school_id)
 
     def perform_destroy(self, instance):
         instance.is_active = False
         instance.save()
 
+    @action(detail=True, methods=['post'], url_path='create-user-account')
+    def create_user_account(self, request, pk=None):
+        """Create a User account for an existing staff member."""
+        from django.contrib.auth import get_user_model
+        from rest_framework.exceptions import ValidationError as DRFValidationError
+        User = get_user_model()
+
+        staff = self.get_object()
+        if staff.user is not None:
+            return Response(
+                {'error': 'This staff member already has a user account.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        username = request.data.get('username', '')
+        password = request.data.get('password', '')
+        confirm_password = request.data.get('confirm_password', '')
+        user_role = request.data.get('user_role', 'STAFF')
+
+        if not username or not password:
+            return Response(
+                {'error': 'username and password are required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if password != confirm_password:
+            return Response(
+                {'error': "Passwords don't match."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if len(password) < 8:
+            return Response(
+                {'error': 'Password must be at least 8 characters.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if User.objects.filter(username=username).exists():
+            return Response(
+                {'error': 'This username is already taken.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Enforce role hierarchy
+        creator_role = get_effective_role(request)
+        allowed_roles = ROLE_HIERARCHY.get(creator_role, [])
+        if user_role not in allowed_roles:
+            return Response(
+                {'error': f'You cannot create users with the {user_role} role.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        user = User(
+            username=username,
+            email=staff.email or '',
+            first_name=staff.first_name,
+            last_name=staff.last_name,
+            role=user_role,
+            school_id=staff.school_id,
+        )
+        user.set_password(password)
+        user.save()
+
+        from schools.models import UserSchoolMembership
+        UserSchoolMembership.objects.get_or_create(
+            user=user,
+            school_id=staff.school_id,
+            defaults={'role': user_role, 'is_default': True, 'is_active': True},
+        )
+
+        staff.user = user
+        staff.save(update_fields=['user'])
+
+        return Response({
+            'message': 'User account created successfully.',
+            'user_id': user.id,
+            'username': user.username,
+        }, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=['post'], url_path='bulk-create-accounts')
+    def bulk_create_accounts(self, request):
+        """Bulk create user accounts for multiple staff members."""
+        import re
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+
+        staff_ids = request.data.get('staff_ids', [])
+        default_password = request.data.get('default_password', '')
+        default_role = request.data.get('default_role', 'TEACHER')
+
+        if not staff_ids:
+            return Response({'error': 'staff_ids is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not default_password or len(default_password) < 8:
+            return Response({'error': 'default_password must be at least 8 characters.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Enforce role hierarchy
+        creator_role = get_effective_role(request)
+        allowed_roles = ROLE_HIERARCHY.get(creator_role, [])
+        if default_role not in allowed_roles:
+            return Response(
+                {'error': f'You cannot create users with the {default_role} role.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response({'error': 'No school associated.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        staff_members = StaffMember.objects.filter(
+            id__in=staff_ids, school_id=school_id,
+        ).select_related('user')
+
+        created = []
+        skipped = []
+        errors = []
+
+        for staff in staff_members:
+            if staff.user is not None:
+                skipped.append({'staff_id': staff.id, 'name': f'{staff.first_name} {staff.last_name}', 'reason': 'Already has account'})
+                continue
+
+            # Auto-generate username
+            base = re.sub(r'[^a-z0-9_]', '', f'{staff.first_name}_{staff.last_name}'.lower().replace(' ', '_'))
+            if not base:
+                base = 'staff'
+            username = base
+            if User.objects.filter(username=username).exists():
+                username = re.sub(r'[^a-z0-9_]', '', staff.employee_id.lower().replace('-', '_')) if staff.employee_id else f'{base}_{staff.id}'
+            if User.objects.filter(username=username).exists():
+                username = f'{base}_{staff.id}'
+            if User.objects.filter(username=username).exists():
+                errors.append({'staff_id': staff.id, 'name': f'{staff.first_name} {staff.last_name}', 'error': 'Could not generate unique username'})
+                continue
+
+            try:
+                user = User(
+                    username=username,
+                    email=staff.email or '',
+                    first_name=staff.first_name,
+                    last_name=staff.last_name,
+                    role=default_role,
+                    school_id=school_id,
+                )
+                user.set_password(default_password)
+                user.save()
+
+                from schools.models import UserSchoolMembership
+                UserSchoolMembership.objects.get_or_create(
+                    user=user,
+                    school_id=school_id,
+                    defaults={'role': default_role, 'is_default': True, 'is_active': True},
+                )
+
+                staff.user = user
+                staff.save(update_fields=['user'])
+
+                created.append({
+                    'staff_id': staff.id,
+                    'username': username,
+                    'name': f'{staff.first_name} {staff.last_name}',
+                })
+            except Exception as e:
+                errors.append({'staff_id': staff.id, 'name': f'{staff.first_name} {staff.last_name}', 'error': str(e)})
+
+        return Response({
+            'created_count': len(created),
+            'skipped_count': len(skipped),
+            'error_count': len(errors),
+            'created': created,
+            'skipped': skipped,
+            'errors': errors,
+        })
+
+    @action(detail=False, methods=['get'], url_path='next-employee-id')
+    def next_employee_id(self, request):
+        """Return the next auto-generated employee ID."""
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response({'detail': 'No school associated.'}, status=400)
+        return Response({'next_employee_id': self._generate_next_employee_id(school_id)})
+
+    @method_decorator(cache_page(60 * 15))  # 15 minutes
+    @method_decorator(vary_on_headers('X-School-ID'))
     @action(detail=False, methods=['get'])
     def dashboard_stats(self, request):
         """HR dashboard summary stats."""
@@ -363,7 +619,7 @@ class SalaryStructureViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mo
     required_module = 'hr'
     queryset = SalaryStructure.objects.all()
     permission_classes = [IsAuthenticated, IsHRManagerOrAdminOrReadOnly, HasSchoolAccess]
-    pagination_class = None
+
 
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):
@@ -453,7 +709,7 @@ class PayslipViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
     required_module = 'hr'
     queryset = Payslip.objects.all()
     permission_classes = [IsAuthenticated, IsHRManagerOrAdminOrReadOnly, HasSchoolAccess]
-    pagination_class = None
+
 
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):
@@ -509,7 +765,7 @@ class PayslipViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
 
     @action(detail=False, methods=['post'])
     def generate_payslips(self, request):
-        """Bulk generate payslips for all active staff with salary structures."""
+        """Bulk generate payslips for all active staff (background task)."""
         school_id = _resolve_school_id(request)
         if not school_id:
             return Response({'detail': 'No school selected.'}, status=400)
@@ -519,59 +775,28 @@ class PayslipViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         if not month or not year:
             return Response({'detail': 'month and year are required.'}, status=400)
 
-        month, year = int(month), int(year)
-        today = date.today()
+        from core.task_utils import dispatch_background_task
+        from core.models import BackgroundTask
+        from .tasks import generate_payslips_task
 
-        # Get active staff with salary structures
-        active_staff = StaffMember.objects.filter(
-            school_id=school_id, is_active=True, employment_status='ACTIVE',
+        bg_task = dispatch_background_task(
+            celery_task_func=generate_payslips_task,
+            task_type=BackgroundTask.TaskType.PAYSLIP_GENERATION,
+            title=f"Generating payslips for {int(month)}/{int(year)}",
+            school_id=school_id,
+            user=request.user,
+            task_kwargs={
+                'school_id': school_id,
+                'user_id': request.user.id,
+                'month': int(month),
+                'year': int(year),
+            },
         )
 
-        created = 0
-        skipped = 0
-        for staff in active_staff:
-            # Check if payslip already exists
-            if Payslip.objects.filter(
-                school_id=school_id, staff_member=staff, month=month, year=year,
-            ).exists():
-                skipped += 1
-                continue
-
-            # Find active salary structure
-            salary = SalaryStructure.objects.filter(
-                school_id=school_id,
-                staff_member=staff,
-                is_active=True,
-                effective_from__lte=today,
-            ).filter(
-                Q(effective_to__isnull=True) | Q(effective_to__gte=today)
-            ).first()
-
-            if not salary:
-                skipped += 1
-                continue
-
-            Payslip.objects.create(
-                school_id=school_id,
-                staff_member=staff,
-                month=month,
-                year=year,
-                basic_salary=salary.basic_salary,
-                total_allowances=sum(Decimal(str(v)) for v in salary.allowances.values()),
-                total_deductions=sum(Decimal(str(v)) for v in salary.deductions.values()),
-                net_salary=salary.net_salary,
-                allowances_breakdown=salary.allowances,
-                deductions_breakdown=salary.deductions,
-                status='DRAFT',
-                generated_by=request.user,
-            )
-            created += 1
-
         return Response({
-            'created': created,
-            'skipped': skipped,
-            'message': f'{created} payslip(s) generated, {skipped} skipped.',
-        })
+            'task_id': bg_task.celery_task_id,
+            'message': 'Payslip generation started.',
+        }, status=202)
 
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
@@ -646,7 +871,7 @@ class LeavePolicyViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
     required_module = 'hr'
     queryset = LeavePolicy.objects.all()
     permission_classes = [IsAuthenticated, IsHRManagerOrAdminOrReadOnly, HasSchoolAccess]
-    pagination_class = None
+
 
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):
@@ -659,7 +884,9 @@ class LeavePolicyViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
         return context
 
     def get_queryset(self):
-        queryset = LeavePolicy.objects.filter()
+        queryset = LeavePolicy.objects.annotate(
+            applications_count=Count('applications'),
+        )
         if _is_school_header_rejected(self.request):
             return queryset.none()
 
@@ -694,7 +921,7 @@ class LeaveApplicationViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
     required_module = 'hr'
     queryset = LeaveApplication.objects.all()
     permission_classes = [IsAuthenticated, IsHRManagerOrAdminOrReadOnly, HasSchoolAccess]
-    pagination_class = None
+
 
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):
@@ -847,7 +1074,7 @@ class StaffAttendanceViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mo
     """CRUD for staff attendance with bulk marking and summary."""
     queryset = StaffAttendance.objects.all()
     permission_classes = [IsAuthenticated, IsHRManagerOrAdminOrReadOnly, HasSchoolAccess]
-    pagination_class = None
+
 
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):
@@ -977,7 +1204,7 @@ class PerformanceAppraisalViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewse
     """CRUD for performance appraisals."""
     queryset = PerformanceAppraisal.objects.all()
     permission_classes = [IsAuthenticated, IsHRManagerOrAdminOrReadOnly, HasSchoolAccess]
-    pagination_class = None
+
 
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):
@@ -1036,7 +1263,7 @@ class StaffQualificationViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets
     """CRUD for staff qualifications."""
     queryset = StaffQualification.objects.all()
     permission_classes = [IsAuthenticated, IsHRManagerOrAdminOrReadOnly, HasSchoolAccess]
-    pagination_class = None
+
 
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):
@@ -1097,7 +1324,7 @@ class StaffDocumentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mode
     """CRUD for staff documents."""
     queryset = StaffDocument.objects.all()
     permission_classes = [IsAuthenticated, IsHRManagerOrAdminOrReadOnly, HasSchoolAccess]
-    pagination_class = None
+
 
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):

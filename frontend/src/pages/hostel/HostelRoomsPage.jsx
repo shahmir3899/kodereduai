@@ -47,12 +47,12 @@ export default function HostelRoomsPage() {
 
   const { data: hostelsData, isLoading: hostelsLoading } = useQuery({
     queryKey: ['hostels'],
-    queryFn: () => hostelApi.getHostels(),
+    queryFn: () => hostelApi.getHostels({ page_size: 9999 }),
   })
 
   const { data: roomsData, isLoading: roomsLoading } = useQuery({
     queryKey: ['hostelRooms', selectedHostel],
-    queryFn: () => hostelApi.getRooms({ hostel_id: selectedHostel }),
+    queryFn: () => hostelApi.getRooms({ hostel_id: selectedHostel, page_size: 9999 }),
     enabled: !!selectedHostel,
   })
 

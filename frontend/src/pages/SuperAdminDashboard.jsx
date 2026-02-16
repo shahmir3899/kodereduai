@@ -57,7 +57,7 @@ export default function SuperAdminDashboard() {
 
   const { data: schoolsData, isLoading: schoolsLoading } = useQuery({
     queryKey: ['adminSchools'],
-    queryFn: () => schoolsApi.getAllSchools(),
+    queryFn: () => schoolsApi.getAllSchools({ page_size: 9999 }),
   })
 
   const { data: usersData, isLoading: usersLoading } = useQuery({
@@ -67,12 +67,12 @@ export default function SuperAdminDashboard() {
 
   const { data: orgsData, isLoading: orgsLoading } = useQuery({
     queryKey: ['adminOrgs'],
-    queryFn: () => organizationsApi.getAll(),
+    queryFn: () => organizationsApi.getAll({ page_size: 9999 }),
   })
 
   const { data: membershipsData, isLoading: membershipsLoading } = useQuery({
     queryKey: ['adminMemberships'],
-    queryFn: () => membershipsApi.getAll(),
+    queryFn: () => membershipsApi.getAll({ page_size: 9999 }),
   })
 
   const { data: moduleRegistryData } = useQuery({

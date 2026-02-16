@@ -89,6 +89,13 @@ class ClassSubjectCreateSerializer(serializers.ModelSerializer):
         return data
 
 
+class ClassSubjectBulkAssignSerializer(serializers.Serializer):
+    class_obj = serializers.PrimaryKeyRelatedField(queryset=ClassSubject.class_obj.field.related_model.objects.all())
+    subjects = serializers.PrimaryKeyRelatedField(queryset=Subject.objects.all(), many=True)
+    teacher = serializers.PrimaryKeyRelatedField(queryset=ClassSubject.teacher.field.related_model.objects.all(), required=False, allow_null=True)
+    periods_per_week = serializers.IntegerField(default=1, min_value=1, max_value=20)
+
+
 # ── TimetableSlot ────────────────────────────────────────────────────────────
 
 class TimetableSlotSerializer(serializers.ModelSerializer):

@@ -83,7 +83,7 @@ export default function EnquiryDetail() {
   // Classes for convert modal
   const { data: classesRes } = useQuery({
     queryKey: ['classes'],
-    queryFn: () => classesApi.getClasses(),
+    queryFn: () => classesApi.getClasses({ page_size: 9999 }),
     enabled: showConvertModal,
     staleTime: 5 * 60 * 1000,
   })

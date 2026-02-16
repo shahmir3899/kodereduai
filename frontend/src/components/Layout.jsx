@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Outlet, Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import FinanceChatWidget from './FinanceChatWidget'
 import AcademicsChatWidget from './AcademicsChatWidget'
 import CommunicationChatWidget from './CommunicationChatWidget'
 import NotificationBell from './NotificationBell'
+import { TaskDrawerButton } from './TaskDrawer'
 import SchoolSwitcher from './SchoolSwitcher'
 import AcademicYearSwitcher from './AcademicYearSwitcher'
 
@@ -281,6 +282,24 @@ const ExclamationIcon = () => (
   </svg>
 )
 
+// Static navigation arrays (no dependencies on component state)
+const parentNavGroups = [
+  { type: 'item', name: 'Dashboard', href: '/parent/dashboard', icon: HomeIcon },
+  { type: 'item', name: 'Leave Requests', href: '/parent/leave', icon: CalendarIcon },
+  { type: 'item', name: 'Messages', href: '/parent/messages', icon: MailIcon },
+]
+
+const studentNavGroups = [
+  { type: 'item', name: 'Dashboard', href: '/student/dashboard', icon: HomeIcon },
+  { type: 'item', name: 'Attendance', href: '/student/attendance', icon: ClipboardIcon },
+  { type: 'item', name: 'Fees', href: '/student/fees', icon: CurrencyIcon },
+  { type: 'item', name: 'Timetable', href: '/student/timetable', icon: ClockIcon },
+  { type: 'item', name: 'Results', href: '/student/results', icon: ChartIcon },
+  { type: 'item', name: 'Assignments', href: '/student/assignments', icon: PencilIcon },
+  { type: 'item', name: 'AI Study Helper', href: '/student/study-helper', icon: ChatBotIcon },
+  { type: 'item', name: 'My Profile', href: '/student/profile', icon: UsersIcon },
+]
+
 export default function Layout() {
   const { user, logout, isSuperAdmin, isStaffMember, isPrincipal, isHRManager, isStaffLevel, isParent, isStudent, isModuleEnabled } = useAuth()
   const location = useLocation()
@@ -288,9 +307,8 @@ export default function Layout() {
 
   const isActive = (href) => location.pathname === href || location.pathname.startsWith(href + '/')
 
-  // Navigation structure: top-level items + collapsible groups
-  // Each group/item can have a `module` key — hidden if that module is disabled
-  const navigationGroups = [
+  // Navigation structure: memoized to avoid re-creating on every render
+  const navigationGroups = useMemo(() => [
     // Dashboard - always visible at top
     { type: 'item', name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
 
@@ -316,7 +334,6 @@ export default function Layout() {
         { name: 'Expenses', href: '/finance/expenses', icon: WalletIcon },
         ...(!isStaffLevel
           ? [
-              { name: 'Reports', href: '/finance/reports', icon: ReportIcon },
               { name: 'Payment Gateways', href: '/finance/payment-gateways', icon: CogIcon },
             ]
           : []),
@@ -464,26 +481,7 @@ export default function Layout() {
     ...(!isStaffLevel
       ? [{ type: 'item', name: 'Settings', href: '/settings', icon: CogIcon }]
       : []),
-  ]
-
-  // Parent navigation - completely different sidebar
-  const parentNavGroups = [
-    { type: 'item', name: 'Dashboard', href: '/parent/dashboard', icon: HomeIcon },
-    { type: 'item', name: 'Leave Requests', href: '/parent/leave', icon: CalendarIcon },
-    { type: 'item', name: 'Messages', href: '/parent/messages', icon: MailIcon },
-  ]
-
-  // Student navigation - dedicated sidebar
-  const studentNavGroups = [
-    { type: 'item', name: 'Dashboard', href: '/student/dashboard', icon: HomeIcon },
-    { type: 'item', name: 'Attendance', href: '/student/attendance', icon: ClipboardIcon },
-    { type: 'item', name: 'Fees', href: '/student/fees', icon: CurrencyIcon },
-    { type: 'item', name: 'Timetable', href: '/student/timetable', icon: ClockIcon },
-    { type: 'item', name: 'Results', href: '/student/results', icon: ChartIcon },
-    { type: 'item', name: 'Assignments', href: '/student/assignments', icon: PencilIcon },
-    { type: 'item', name: 'AI Study Helper', href: '/student/study-helper', icon: ChatBotIcon },
-    { type: 'item', name: 'My Profile', href: '/student/profile', icon: UsersIcon },
-  ]
+  ], [isModuleEnabled, isStaffLevel, isHRManager])
 
   // SuperAdmin only sees the Admin Panel link — no school-internal nav
   const visibleNavGroups = isSuperAdmin ? [] : (isParent ? parentNavGroups : (isStudent ? studentNavGroups : navigationGroups))
@@ -505,7 +503,8 @@ export default function Layout() {
         }`}
       >
         {/* Logo */}
-        <div className="flex items-center justify-center h-16 border-b border-gray-200">
+        <div className="flex items-center justify-center h-16 border-b border-gray-200 gap-2">
+          <img src="/Logo.jpeg" alt="KoderEduAI" className="h-10 w-10 rounded-full object-cover" />
           <h1 className="text-xl font-bold text-primary-600">KoderEduAI</h1>
         </div>
 
@@ -609,8 +608,9 @@ export default function Layout() {
               )}
             </div>
 
-            {/* Notification bell + User avatar */}
+            {/* Task drawer + Notification bell + User avatar */}
             <div className="flex items-center gap-2">
+              <TaskDrawerButton />
               {!isSuperAdmin && <NotificationBell />}
               <Link to="/profile" className="hidden lg:flex items-center hover:opacity-80 transition-opacity">
                 <span className="text-sm text-gray-600 mr-3">{user?.username}</span>

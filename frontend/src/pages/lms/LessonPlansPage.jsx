@@ -40,19 +40,19 @@ export default function LessonPlansPage() {
 
   const { data: classesData } = useQuery({
     queryKey: ['classes'],
-    queryFn: () => classesApi.getClasses(),
+    queryFn: () => classesApi.getClasses({ page_size: 9999 }),
     staleTime: 5 * 60 * 1000,
   })
 
   const { data: subjectsData } = useQuery({
     queryKey: ['subjects'],
-    queryFn: () => academicsApi.getSubjects(),
+    queryFn: () => academicsApi.getSubjects({ page_size: 9999 }),
     staleTime: 5 * 60 * 1000,
   })
 
   const { data: staffData } = useQuery({
     queryKey: ['hrStaff'],
-    queryFn: () => hrApi.getStaff({ role: 'TEACHER' }),
+    queryFn: () => hrApi.getStaff({ role: 'TEACHER', page_size: 9999 }),
     staleTime: 5 * 60 * 1000,
   })
 
@@ -62,6 +62,7 @@ export default function LessonPlansPage() {
       lmsApi.getLessonPlans({
         ...(filterClass && { class_obj: filterClass }),
         ...(filterSubject && { subject: filterSubject }),
+        page_size: 9999,
       }),
   })
 

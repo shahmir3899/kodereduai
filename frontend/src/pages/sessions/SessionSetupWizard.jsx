@@ -43,7 +43,7 @@ export default function SessionSetupWizard({ onClose }) {
     onSuccess: (res) => {
       if (res.data.success) {
         addToast('New academic year created successfully!', 'success')
-        queryClient.invalidateQueries(['academicYears'])
+        queryClient.invalidateQueries({ queryKey: ['academicYears'] })
         refreshYears()
         setStep(3)
       } else {

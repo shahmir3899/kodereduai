@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { schoolsApi, attendanceApi, financeApi } from '../services/api'
+import { schoolsApi, attendanceApi, financeApi, usersApi } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 
 const ACCOUNT_TYPES = [
@@ -32,17 +32,24 @@ const getErrorMessage = (error, fallback = 'Something went wrong') => {
 
 export default function SettingsPage() {
   const queryClient = useQueryClient()
-  const { isPrincipal, isStaffMember } = useAuth()
-  const isAdmin = !isPrincipal && !isStaffMember
+  const { isPrincipal, isStaffMember, isSchoolAdmin, isSuperAdmin, getAllowableRoles } = useAuth()
+  const isFinanceAdmin = !isPrincipal && !isStaffMember
+  const canManageUsers = isSchoolAdmin && !isSuperAdmin
   const [searchParams, setSearchParams] = useSearchParams()
 
-  const initialTab = searchParams.get('tab') === 'accounts' && isAdmin ? 'accounts' : 'mappings'
+  const getInitialTab = () => {
+    const tab = searchParams.get('tab')
+    if (tab === 'accounts' && isFinanceAdmin) return 'accounts'
+    if (tab === 'users' && canManageUsers) return 'users'
+    return 'mappings'
+  }
+  const initialTab = getInitialTab()
   const [activeTab, setActiveTab] = useState(initialTab)
 
   const handleTabChange = (tab) => {
     setActiveTab(tab)
-    if (tab === 'accounts') {
-      setSearchParams({ tab: 'accounts' })
+    if (tab === 'accounts' || tab === 'users') {
+      setSearchParams({ tab })
     } else {
       setSearchParams({})
     }
@@ -81,6 +88,15 @@ export default function SettingsPage() {
     month: now.getMonth() === 0 ? 12 : now.getMonth(),
   })
 
+  // --- Users State ---
+  const [showUserModal, setShowUserModal] = useState(false)
+  const [editingUser, setEditingUser] = useState(null)
+  const [userSearch, setUserSearch] = useState('')
+  const [userRoleFilter, setUserRoleFilter] = useState('')
+  const EMPTY_USER_FORM = { username: '', email: '', password: '', confirm_password: '', first_name: '', last_name: '', role: 'STAFF', phone: '' }
+  const [userForm, setUserForm] = useState(EMPTY_USER_FORM)
+  const [userError, setUserError] = useState('')
+
   // --- Attendance Queries ---
   const { data: mappingsData, isLoading: mappingsLoading } = useQuery({
     queryKey: ['markMappings'],
@@ -112,29 +128,29 @@ export default function SettingsPage() {
   const saveMappingsMutation = useMutation({
     mutationFn: (data) => schoolsApi.updateMarkMappings(data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['markMappings'])
-      queryClient.invalidateQueries(['mappingSuggestions'])
+      queryClient.invalidateQueries({ queryKey: ['markMappings'] })
+      queryClient.invalidateQueries({ queryKey: ['mappingSuggestions'] })
     }
   })
 
   const saveRegConfigMutation = useMutation({
     mutationFn: (data) => schoolsApi.updateRegisterConfig(data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['registerConfig'])
+      queryClient.invalidateQueries({ queryKey: ['registerConfig'] })
     }
   })
 
   // --- Finance Account Queries ---
   const { data: accountsData, isLoading: accountsLoading } = useQuery({
     queryKey: ['accounts'],
-    queryFn: () => financeApi.getAccounts(),
-    enabled: isAdmin && activeTab === 'accounts',
+    queryFn: () => financeApi.getAccounts({ page_size: 9999 }),
+    enabled: isFinanceAdmin && activeTab === 'accounts',
   })
 
   const { data: closingsData } = useQuery({
     queryKey: ['monthlyClosings'],
-    queryFn: () => financeApi.getClosings(),
-    enabled: isAdmin && activeTab === 'accounts',
+    queryFn: () => financeApi.getClosings({ page_size: 9999 }),
+    enabled: isFinanceAdmin && activeTab === 'accounts',
   })
 
   const closingsList = closingsData?.data || []
@@ -232,11 +248,124 @@ export default function SettingsPage() {
 
   const suggestions = suggestionsData?.data?.suggestions || []
 
+  // --- Users Queries & Mutations ---
+  const { data: usersData, isLoading: usersLoading } = useQuery({
+    queryKey: ['schoolUsers'],
+    queryFn: () => usersApi.getUsers({ page_size: 9999 }),
+    enabled: canManageUsers && activeTab === 'users',
+  })
+
+  const rawUsers = usersData?.data?.results || usersData?.data || []
+  const allowableRoles = canManageUsers ? getAllowableRoles() : []
+
+  const filteredUsers = rawUsers.filter(u => {
+    const matchesSearch = !userSearch ||
+      u.username?.toLowerCase().includes(userSearch.toLowerCase()) ||
+      u.first_name?.toLowerCase().includes(userSearch.toLowerCase()) ||
+      u.last_name?.toLowerCase().includes(userSearch.toLowerCase()) ||
+      u.email?.toLowerCase().includes(userSearch.toLowerCase())
+    const matchesRole = !userRoleFilter || u.role === userRoleFilter
+    return matchesSearch && matchesRole
+  })
+
+  const createUserMutation = useMutation({
+    mutationFn: (data) => usersApi.createUser(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['schoolUsers'] })
+      closeUserModal()
+    },
+    onError: (error) => setUserError(getErrorMessage(error, 'Failed to create user')),
+  })
+
+  const updateUserMutation = useMutation({
+    mutationFn: ({ id, data }) => usersApi.updateUser(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['schoolUsers'] })
+      closeUserModal()
+    },
+    onError: (error) => setUserError(getErrorMessage(error, 'Failed to update user')),
+  })
+
+  const toggleUserActiveMutation = useMutation({
+    mutationFn: ({ id, is_active }) => usersApi.updateUser(id, { is_active }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['schoolUsers'] }),
+  })
+
+  const closeUserModal = () => {
+    setShowUserModal(false)
+    setEditingUser(null)
+    setUserForm(EMPTY_USER_FORM)
+    setUserError('')
+  }
+
+  const openEditUser = (user) => {
+    setEditingUser(user)
+    setUserForm({
+      username: user.username,
+      email: user.email || '',
+      password: '',
+      confirm_password: '',
+      first_name: user.first_name || '',
+      last_name: user.last_name || '',
+      role: user.role,
+      phone: user.phone || '',
+    })
+    setUserError('')
+    setShowUserModal(true)
+  }
+
+  const handleUserSubmit = (e) => {
+    e.preventDefault()
+    setUserError('')
+    if (!editingUser) {
+      if (!userForm.username || !userForm.password) {
+        setUserError('Username and password are required.')
+        return
+      }
+      if (userForm.password !== userForm.confirm_password) {
+        setUserError("Passwords don't match.")
+        return
+      }
+      if (userForm.password.length < 8) {
+        setUserError('Password must be at least 8 characters.')
+        return
+      }
+      createUserMutation.mutate(userForm)
+    } else {
+      const { password, confirm_password, username, ...updateData } = userForm
+      updateUserMutation.mutate({ id: editingUser.id, data: updateData })
+    }
+  }
+
+  const ROLE_LABELS = {
+    SUPER_ADMIN: 'Super Admin',
+    SCHOOL_ADMIN: 'School Admin',
+    PRINCIPAL: 'Principal',
+    HR_MANAGER: 'HR Manager',
+    ACCOUNTANT: 'Accountant',
+    TEACHER: 'Teacher',
+    STAFF: 'Staff',
+    STUDENT: 'Student',
+    PARENT: 'Parent',
+  }
+
+  const ROLE_COLORS = {
+    SUPER_ADMIN: 'bg-red-100 text-red-800',
+    SCHOOL_ADMIN: 'bg-purple-100 text-purple-800',
+    PRINCIPAL: 'bg-indigo-100 text-indigo-800',
+    HR_MANAGER: 'bg-orange-100 text-orange-800',
+    ACCOUNTANT: 'bg-cyan-100 text-cyan-800',
+    TEACHER: 'bg-green-100 text-green-800',
+    STAFF: 'bg-gray-100 text-gray-800',
+    STUDENT: 'bg-blue-100 text-blue-800',
+    PARENT: 'bg-yellow-100 text-yellow-800',
+  }
+
   return (
     <div>
       <div className="mb-6">
         <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Settings</h1>
-        <p className="text-sm sm:text-base text-gray-600">Configure attendance and finance settings</p>
+        <p className="text-sm sm:text-base text-gray-600">Configure attendance, finance, and user settings</p>
       </div>
 
       {/* Tabs */}
@@ -262,7 +391,7 @@ export default function SettingsPage() {
           >
             Register Layout
           </button>
-          {isAdmin && (
+          {isFinanceAdmin && (
             <button
               onClick={() => handleTabChange('accounts')}
               className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
@@ -272,6 +401,18 @@ export default function SettingsPage() {
               }`}
             >
               Finance Accounts
+            </button>
+          )}
+          {canManageUsers && (
+            <button
+              onClick={() => handleTabChange('users')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
+                activeTab === 'users'
+                  ? 'border-primary-600 text-primary-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              Users
             </button>
           )}
         </nav>
@@ -474,7 +615,7 @@ export default function SettingsPage() {
       )}
 
       {/* Finance Accounts Tab (Admin Only) */}
-      {activeTab === 'accounts' && isAdmin && (
+      {activeTab === 'accounts' && isFinanceAdmin && (
         <div className="space-y-6">
           {/* Actions */}
           <div className="flex flex-wrap gap-2">
@@ -616,6 +757,204 @@ export default function SettingsPage() {
                 {(createAccountMutation.isError || updateAccountMutation.isError) && (
                   <p className="text-sm text-red-600">{getErrorMessage(createAccountMutation.error || updateAccountMutation.error, 'Failed to save account')}</p>
                 )}
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Users Tab */}
+      {activeTab === 'users' && canManageUsers && (
+        <div className="space-y-6">
+          {/* Actions */}
+          <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
+            <div className="flex flex-col sm:flex-row gap-2 flex-1">
+              <input
+                type="text"
+                placeholder="Search by name, username, or email..."
+                value={userSearch}
+                onChange={(e) => setUserSearch(e.target.value)}
+                className="input flex-1"
+              />
+              <select
+                value={userRoleFilter}
+                onChange={(e) => setUserRoleFilter(e.target.value)}
+                className="input w-full sm:w-40"
+              >
+                <option value="">All Roles</option>
+                {Object.entries(ROLE_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+            </div>
+            <button
+              onClick={() => { setUserForm({ ...EMPTY_USER_FORM }); setEditingUser(null); setUserError(''); setShowUserModal(true) }}
+              className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm whitespace-nowrap"
+            >
+              Add User
+            </button>
+          </div>
+
+          {/* User List */}
+          <div className="card">
+            <h3 className="font-medium text-gray-900 mb-4">School Users ({filteredUsers.length})</h3>
+            {usersLoading ? (
+              <div className="text-center py-8 text-gray-500">Loading...</div>
+            ) : filteredUsers.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-gray-500 mb-2">No users found</p>
+                <p className="text-sm text-gray-400">Click "Add User" to create a new user</p>
+              </div>
+            ) : (
+              <>
+                {/* Mobile */}
+                <div className="sm:hidden space-y-3">
+                  {filteredUsers.map((u) => (
+                    <div key={u.id} className="border rounded-lg p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <div>
+                          <span className="font-medium text-gray-900">{u.first_name || u.last_name ? `${u.first_name} ${u.last_name}`.trim() : u.username}</span>
+                          <p className="text-xs text-gray-500">{u.username}</p>
+                        </div>
+                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${ROLE_COLORS[u.role] || 'bg-gray-100 text-gray-800'}`}>
+                          {ROLE_LABELS[u.role] || u.role}
+                        </span>
+                      </div>
+                      {u.email && <p className="text-sm text-gray-600">{u.email}</p>}
+                      <div className="flex items-center justify-between mt-2">
+                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${u.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
+                          {u.is_active ? 'Active' : 'Inactive'}
+                        </span>
+                        <div className="flex gap-2">
+                          {allowableRoles.includes(u.role) && (
+                            <button onClick={() => openEditUser(u)} className="text-xs text-primary-600 hover:underline">Edit</button>
+                          )}
+                          {allowableRoles.includes(u.role) && (
+                            <button
+                              onClick={() => toggleUserActiveMutation.mutate({ id: u.id, is_active: !u.is_active })}
+                              className={`text-xs ${u.is_active ? 'text-red-600' : 'text-green-600'} hover:underline`}
+                            >
+                              {u.is_active ? 'Deactivate' : 'Activate'}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Desktop */}
+                <div className="hidden sm:block overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">User</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
+                        <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Role</th>
+                        <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Status</th>
+                        <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {filteredUsers.map((u) => (
+                        <tr key={u.id}>
+                          <td className="px-4 py-3">
+                            <div className="text-sm font-medium text-gray-900">{u.first_name || u.last_name ? `${u.first_name} ${u.last_name}`.trim() : u.username}</div>
+                            <div className="text-xs text-gray-500">@{u.username}</div>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-600">{u.email || '-'}</td>
+                          <td className="px-4 py-3 text-center">
+                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${ROLE_COLORS[u.role] || 'bg-gray-100 text-gray-800'}`}>
+                              {ROLE_LABELS[u.role] || u.role}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${u.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
+                              {u.is_active ? 'Active' : 'Inactive'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            {allowableRoles.includes(u.role) ? (
+                              <>
+                                <button onClick={() => openEditUser(u)} className="text-sm text-primary-600 hover:underline mr-3">Edit</button>
+                                <button
+                                  onClick={() => toggleUserActiveMutation.mutate({ id: u.id, is_active: !u.is_active })}
+                                  className={`text-sm ${u.is_active ? 'text-red-600' : 'text-green-600'} hover:underline`}
+                                >
+                                  {u.is_active ? 'Deactivate' : 'Activate'}
+                                </button>
+                              </>
+                            ) : (
+                              <span className="text-xs text-gray-400">-</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Add/Edit User Modal */}
+      {showUserModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <h3 className="text-lg font-semibold mb-4">{editingUser ? 'Edit User' : 'Add User'}</h3>
+              <form onSubmit={handleUserSubmit} className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
+                    <input type="text" value={userForm.first_name} onChange={(e) => setUserForm(f => ({ ...f, first_name: e.target.value }))} className="input-field" placeholder="First name" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
+                    <input type="text" value={userForm.last_name} onChange={(e) => setUserForm(f => ({ ...f, last_name: e.target.value }))} className="input-field" placeholder="Last name" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Username *</label>
+                  <input type="text" value={userForm.username} onChange={(e) => setUserForm(f => ({ ...f, username: e.target.value }))} className="input-field" required disabled={!!editingUser} placeholder="Username for login" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                  <input type="email" value={userForm.email} onChange={(e) => setUserForm(f => ({ ...f, email: e.target.value }))} className="input-field" placeholder="Email address" />
+                </div>
+                {!editingUser && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Password *</label>
+                      <input type="password" value={userForm.password} onChange={(e) => setUserForm(f => ({ ...f, password: e.target.value }))} className="input-field" required placeholder="Min 8 characters" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Confirm Password *</label>
+                      <input type="password" value={userForm.confirm_password} onChange={(e) => setUserForm(f => ({ ...f, confirm_password: e.target.value }))} className="input-field" required placeholder="Confirm" />
+                    </div>
+                  </div>
+                )}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Role *</label>
+                  <select value={userForm.role} onChange={(e) => setUserForm(f => ({ ...f, role: e.target.value }))} className="input-field" required>
+                    {allowableRoles.map(role => (
+                      <option key={role} value={role}>{ROLE_LABELS[role] || role}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                  <input type="text" value={userForm.phone} onChange={(e) => setUserForm(f => ({ ...f, phone: e.target.value }))} className="input-field" placeholder="Phone number" />
+                </div>
+                {userError && <p className="text-sm text-red-600">{userError}</p>}
+                <div className="flex gap-3 pt-2">
+                  <button type="button" onClick={closeUserModal} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">Cancel</button>
+                  <button type="submit" disabled={createUserMutation.isPending || updateUserMutation.isPending} className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50">
+                    {(createUserMutation.isPending || updateUserMutation.isPending) ? 'Saving...' : editingUser ? 'Update' : 'Create User'}
+                  </button>
+                </div>
               </form>
             </div>
           </div>

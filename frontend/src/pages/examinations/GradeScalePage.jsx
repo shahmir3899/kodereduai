@@ -13,7 +13,7 @@ export default function GradeScalePage() {
 
   const { data: res, isLoading } = useQuery({
     queryKey: ['gradeScales'],
-    queryFn: () => examinationsApi.getGradeScales(),
+    queryFn: () => examinationsApi.getGradeScales({ page_size: 9999 }),
   })
 
   const items = res?.data?.results || res?.data || []

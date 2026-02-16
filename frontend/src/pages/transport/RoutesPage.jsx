@@ -15,7 +15,7 @@ const emptyRouteForm = {
 const emptyStopForm = {
   name: '',
   address: '',
-  order: '',
+  stop_order: '',
   pickup_time: '',
   drop_time: '',
 }
@@ -37,13 +37,13 @@ export default function RoutesPage() {
   // Fetch routes
   const { data: routesData, isLoading, error } = useQuery({
     queryKey: ['transport-routes'],
-    queryFn: () => transportApi.getRoutes(),
+    queryFn: () => transportApi.getRoutes({ page_size: 9999 }),
   })
 
   // Fetch stops for expanded route
   const { data: stopsData, isLoading: stopsLoading } = useQuery({
     queryKey: ['transport-stops', expandedRoute],
-    queryFn: () => transportApi.getStops({ route: expandedRoute }),
+    queryFn: () => transportApi.getStops({ route: expandedRoute, page_size: 9999 }),
     enabled: !!expandedRoute,
   })
 
@@ -150,7 +150,7 @@ export default function RoutesPage() {
     setStopRouteId(routeId)
     setStopForm({
       ...emptyStopForm,
-      order: (stops.length + 1).toString(),
+      stop_order: (stops.length + 1).toString(),
     })
     setShowStopModal(true)
   }
@@ -161,7 +161,7 @@ export default function RoutesPage() {
     setStopForm({
       name: stop.name || '',
       address: stop.address || '',
-      order: stop.order?.toString() || '',
+      stop_order: stop.stop_order?.toString() || '',
       pickup_time: stop.pickup_time || '',
       drop_time: stop.drop_time || '',
     })
@@ -181,7 +181,7 @@ export default function RoutesPage() {
     const payload = {
       ...stopForm,
       route: stopRouteId,
-      order: stopForm.order ? parseInt(stopForm.order) : 1,
+      stop_order: stopForm.stop_order ? parseInt(stopForm.stop_order) : 1,
     }
 
     if (editingStop) {
@@ -279,10 +279,10 @@ export default function RoutesPage() {
                         <p className="text-xs text-gray-400 py-2">No stops added yet.</p>
                       ) : (
                         <div className="space-y-2">
-                          {stops.sort((a, b) => (a.order || 0) - (b.order || 0)).map((stop) => (
+                          {stops.sort((a, b) => (a.stop_order || 0) - (b.stop_order || 0)).map((stop) => (
                             <div key={stop.id} className="flex items-center justify-between bg-white p-2 rounded border border-gray-100">
                               <div>
-                                <p className="text-xs font-medium text-gray-900">#{stop.order} {stop.name}</p>
+                                <p className="text-xs font-medium text-gray-900">#{stop.stop_order} {stop.name}</p>
                                 <p className="text-xs text-gray-500">{stop.address || '--'}</p>
                                 <p className="text-xs text-gray-400">
                                   Pickup: {stop.pickup_time || '--'} | Drop: {stop.drop_time || '--'}
@@ -385,9 +385,9 @@ export default function RoutesPage() {
                                     </tr>
                                   </thead>
                                   <tbody className="divide-y divide-gray-100">
-                                    {stops.sort((a, b) => (a.order || 0) - (b.order || 0)).map((stop) => (
+                                    {stops.sort((a, b) => (a.stop_order || 0) - (b.stop_order || 0)).map((stop) => (
                                       <tr key={stop.id} className="hover:bg-white">
-                                        <td className="px-3 py-2 text-sm text-gray-500">{stop.order || '--'}</td>
+                                        <td className="px-3 py-2 text-sm text-gray-500">{stop.stop_order || '--'}</td>
                                         <td className="px-3 py-2 text-sm font-medium text-gray-900">{stop.name}</td>
                                         <td className="px-3 py-2 text-sm text-gray-500">{stop.address || '--'}</td>
                                         <td className="px-3 py-2 text-sm text-gray-500">{stop.pickup_time || '--'}</td>
@@ -566,8 +566,8 @@ export default function RoutesPage() {
                   type="number"
                   className="input"
                   placeholder="Stop order (1, 2, 3...)"
-                  value={stopForm.order}
-                  onChange={(e) => setStopForm({ ...stopForm, order: e.target.value })}
+                  value={stopForm.stop_order}
+                  onChange={(e) => setStopForm({ ...stopForm, stop_order: e.target.value })}
                 />
               </div>
 

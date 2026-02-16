@@ -173,6 +173,9 @@ urlpatterns = [
 
     # Inventory & Store
     path('api/inventory/', include('inventory.urls')),
+
+    # Background Tasks
+    path('api/tasks/', include('core.urls')),
 ]
 
 # Serve media files in development

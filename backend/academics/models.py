@@ -19,6 +19,9 @@ class Subject(models.Model):
     class Meta:
         unique_together = ('school', 'code')
         ordering = ['name']
+        indexes = [
+            models.Index(fields=['school', 'is_active']),
+        ]
 
     def __str__(self):
         return f"{self.code} - {self.name}"
@@ -65,6 +68,10 @@ class ClassSubject(models.Model):
     class Meta:
         unique_together = ('school', 'class_obj', 'subject')
         ordering = ['class_obj', 'subject__name']
+        indexes = [
+            models.Index(fields=['teacher']),
+            models.Index(fields=['academic_year']),
+        ]
 
     def __str__(self):
         teacher_name = self.teacher.full_name if self.teacher else 'Unassigned'
@@ -162,6 +169,10 @@ class TimetableEntry(models.Model):
     class Meta:
         unique_together = ('school', 'class_obj', 'day', 'slot')
         ordering = ['day', 'slot__order']
+        indexes = [
+            models.Index(fields=['teacher', 'day', 'slot']),
+            models.Index(fields=['school', 'class_obj', 'day']),
+        ]
 
     def __str__(self):
         subject_name = self.subject.name if self.subject else self.slot.name

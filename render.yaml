@@ -28,7 +28,7 @@
 #       1. New > Web Service > Connect repo
 #       2. Root Directory: backend
 #       3. Build Command: ./build.sh
-#       4. Start Command: gunicorn config.wsgi:application
+#       4. Start Command: bash start.sh
 #       5. Add all env vars from backend/.env.example
 #       6. Set ENVIRONMENT=production
 #
@@ -39,7 +39,16 @@
 #       4. Publish Directory: dist
 #       5. Add env var: VITE_API_URL=https://YOUR-BACKEND.onrender.com
 #
-# STEP 3: Post-Deploy Checklist
+# STEP 3: Set up Redis (required for Celery background tasks)
+# ----------------------------------------------------------
+#   Upstash Redis (free tier):
+#     1. Go to https://upstash.com > Create Redis Database
+#     2. Select region closest to Oregon (US-West)
+#     3. Copy the Redis URL (rediss://default:xxxxx@xxxxx.upstash.io:6379)
+#     4. Set it as CELERY_BROKER_URL and CELERY_RESULT_BACKEND
+#        in the API service env vars on Render
+#
+# STEP 4: Post-Deploy Checklist
 # -----------------------------
 #   1. Copy your backend URL (e.g. https://kodereduai-api.onrender.com)
 #   2. Set it as VITE_API_URL in the frontend service env vars
@@ -47,6 +56,8 @@
 #   4. Add it to CORS_ALLOWED_ORIGINS in backend env vars
 #   5. Add both URLs (without https://) to ALLOWED_HOSTS in backend env vars
 #   6. Redeploy frontend to pick up the new VITE_API_URL
+#   7. Set CELERY_BROKER_URL and CELERY_RESULT_BACKEND (Upstash URL)
+#   8. Verify worker is running: check service logs for "celery worker ready"
 #
 # =============================================================================
 
@@ -61,7 +72,7 @@ services:
     plan: free
     rootDir: backend
     buildCommand: ./build.sh
-    startCommand: gunicorn config.wsgi:application
+    startCommand: bash start.sh
     envVars:
       - key: ENVIRONMENT
         value: production
@@ -72,6 +83,10 @@ services:
       - key: CORS_ALLOWED_ORIGINS
         sync: false
       - key: DATABASE_URL
+        sync: false
+      - key: CELERY_BROKER_URL
+        sync: false
+      - key: CELERY_RESULT_BACKEND
         sync: false
       - key: GROQ_API_KEY
         sync: false

@@ -42,6 +42,7 @@ export default function LoginPage() {
       <div className="max-w-md w-full">
         {/* Logo/Title */}
         <div className="text-center mb-6 sm:mb-8">
+          <img src="/Logo.jpeg" alt="KoderEduAI" className="h-16 w-16 rounded-full object-cover mx-auto mb-3" />
           <h1 className="text-2xl sm:text-3xl font-bold text-primary-700">KoderEduAI</h1>
           <p className="mt-2 text-gray-600">AI-Powered Education Platform</p>
         </div>

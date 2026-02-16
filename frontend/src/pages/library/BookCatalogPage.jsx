@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { libraryApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
+import { useDebounce } from '../../hooks/useDebounce'
 
 const emptyBookForm = {
   title: '',
@@ -24,6 +25,7 @@ export default function BookCatalogPage() {
 
   // Filters
   const [search, setSearch] = useState('')
+  const debouncedSearch = useDebounce(search, 300)
   const [categoryFilter, setCategoryFilter] = useState('')
 
   // Book modal
@@ -52,16 +54,17 @@ export default function BookCatalogPage() {
   // ---- Queries ----
 
   const { data: booksData, isLoading: booksLoading } = useQuery({
-    queryKey: ['libraryBooks', search, categoryFilter],
+    queryKey: ['libraryBooks', debouncedSearch, categoryFilter],
     queryFn: () => libraryApi.getBooks({
-      search: search || undefined,
+      search: debouncedSearch || undefined,
       category: categoryFilter || undefined,
+      page_size: 9999,
     }),
   })
 
   const { data: categoriesData } = useQuery({
     queryKey: ['libraryCategories'],
-    queryFn: () => libraryApi.getCategories(),
+    queryFn: () => libraryApi.getCategories({ page_size: 9999 }),
   })
 
   const books = booksData?.data?.results || booksData?.data || []

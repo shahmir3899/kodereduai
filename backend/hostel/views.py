@@ -38,7 +38,7 @@ class HostelViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSe
     required_module = 'hostel'
     queryset = Hostel.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
-    pagination_class = None
+
 
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):
@@ -73,7 +73,7 @@ class RoomViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
     required_module = 'hostel'
     queryset = Room.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
-    pagination_class = None
+
     tenant_field = 'hostel__school_id'
 
     def get_serializer_class(self):
@@ -127,7 +127,7 @@ class HostelAllocationViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
     required_module = 'hostel'
     queryset = HostelAllocation.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
-    pagination_class = None
+
 
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):
@@ -205,7 +205,7 @@ class GatePassViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelView
     required_module = 'hostel'
     queryset = GatePass.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
-    pagination_class = None
+
 
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):

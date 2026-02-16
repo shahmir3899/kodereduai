@@ -89,7 +89,7 @@ export default function AccountsPage() {
 
   const { data: accountsData, isLoading: accountsLoading } = useQuery({
     queryKey: ['accounts'],
-    queryFn: () => financeApi.getAccounts(),
+    queryFn: () => financeApi.getAccounts({ page_size: 9999 }),
   })
 
   const { data: transfersData, isLoading: transfersLoading } = useQuery({
@@ -147,7 +147,7 @@ export default function AccountsPage() {
   // Monthly closings
   const { data: closingsData } = useQuery({
     queryKey: ['monthlyClosings'],
-    queryFn: () => financeApi.getClosings(),
+    queryFn: () => financeApi.getClosings({ page_size: 9999 }),
     enabled: canManageAccounts,
   })
   const closingsList = closingsData?.data || []

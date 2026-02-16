@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { studentsApi, reportsApi } from '../services/api'
 import { useToast } from '../components/Toast'
+import { useBackgroundTask } from '../hooks/useBackgroundTask'
 
 const TABS = ['Overview', 'Attendance', 'Fees', 'Academics', 'History', 'Documents']
 
@@ -17,6 +18,19 @@ export default function StudentProfilePage() {
   const [tab, setTab] = useState('Overview')
   const queryClient = useQueryClient()
   const { showError, showSuccess } = useToast()
+
+  // Report download (background task)
+  const reportTask = useBackgroundTask({
+    mutationFn: (data) => reportsApi.generate(data),
+    taskType: 'REPORT_GENERATION',
+    title: 'Generating Student Report',
+    onSuccess: (resultData) => {
+      if (resultData?.download_url) {
+        const baseUrl = import.meta.env.VITE_API_URL || ''
+        window.open(`${baseUrl}${resultData.download_url}`, '_blank')
+      }
+    },
+  })
 
   // Core data
   const { data: studentData, isLoading } = useQuery({
@@ -128,26 +142,15 @@ export default function StudentProfilePage() {
           </div>
           {/* Quick download */}
           <button
-            onClick={async () => {
-              try {
-                const res = await reportsApi.generate({
-                  report_type: 'STUDENT_COMPREHENSIVE',
-                  format: 'PDF',
-                  parameters: { student_id: parseInt(id) },
-                })
-                const url = window.URL.createObjectURL(new Blob([res.data]))
-                const a = document.createElement('a')
-                a.href = url
-                a.download = `${student.name}_Report.pdf`
-                a.click()
-                window.URL.revokeObjectURL(url)
-              } catch {
-                showError('Failed to generate report')
-              }
-            }}
-            className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm flex-shrink-0"
+            onClick={() => reportTask.trigger({
+              report_type: 'STUDENT_COMPREHENSIVE',
+              format: 'PDF',
+              parameters: { student_id: parseInt(id) },
+            })}
+            disabled={reportTask.isSubmitting}
+            className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm flex-shrink-0 disabled:opacity-50"
           >
-            Download Report
+            {reportTask.isSubmitting ? 'Starting...' : 'Download Report'}
           </button>
         </div>
       </div>

@@ -19,7 +19,7 @@ class BookCategorySerializer(serializers.ModelSerializer):
         fields = [
             'id', 'school', 'name', 'description',
         ]
-        read_only_fields = ['id']
+        read_only_fields = ['id', 'school']
 
 
 # =============================================================================
@@ -31,7 +31,7 @@ class BookReadSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(
         source='category.name', read_only=True, default=None,
     )
-    issued_count = serializers.SerializerMethodField()
+    issued_count = serializers.IntegerField(read_only=True, default=0)
     available_count = serializers.IntegerField(
         source='available_copies', read_only=True,
     )
@@ -46,10 +46,6 @@ class BookReadSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
-
-    def get_issued_count(self, obj):
-        """Count of currently issued (not returned) copies."""
-        return obj.issues.filter(status='ISSUED').count()
 
 
 class BookCreateSerializer(serializers.ModelSerializer):

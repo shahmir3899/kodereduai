@@ -58,7 +58,7 @@ class AdmissionSessionViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
     queryset = AdmissionSession.objects.all()
     serializer_class = AdmissionSessionSerializer
     permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
-    pagination_class = None
+
 
     def get_queryset(self):
         queryset = super().get_queryset().select_related(
@@ -97,7 +97,7 @@ class AdmissionEnquiryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
     required_module = 'admissions'
     queryset = AdmissionEnquiry.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
-    pagination_class = None
+
 
     def get_serializer_class(self):
         if self.action == 'list':
@@ -281,7 +281,7 @@ class AdmissionDocumentViewSet(ModuleAccessMixin, viewsets.ModelViewSet):
     queryset = AdmissionDocument.objects.all()
     serializer_class = AdmissionDocumentSerializer
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
-    pagination_class = None
+
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -312,7 +312,7 @@ class AdmissionNoteViewSet(ModuleAccessMixin, viewsets.ModelViewSet):
     queryset = AdmissionNote.objects.all()
     serializer_class = AdmissionNoteSerializer
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
-    pagination_class = None
+
 
     def get_queryset(self):
         queryset = super().get_queryset().select_related('user')

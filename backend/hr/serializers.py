@@ -12,7 +12,7 @@ from django.utils import timezone
 # ── Department ────────────────────────────────────────────────────────────────
 
 class StaffDepartmentSerializer(serializers.ModelSerializer):
-    staff_count = serializers.SerializerMethodField()
+    staff_count = serializers.IntegerField(read_only=True, default=0)
 
     class Meta:
         model = StaffDepartment
@@ -21,9 +21,6 @@ class StaffDepartmentSerializer(serializers.ModelSerializer):
             'staff_count', 'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'school', 'staff_count', 'created_at', 'updated_at']
-
-    def get_staff_count(self, obj):
-        return obj.staff_members.filter(is_active=True).count()
 
 
 class StaffDepartmentCreateSerializer(serializers.ModelSerializer):
@@ -262,7 +259,7 @@ class PayslipCreateSerializer(serializers.ModelSerializer):
 
 class LeavePolicySerializer(serializers.ModelSerializer):
     leave_type_display = serializers.CharField(source='get_leave_type_display', read_only=True)
-    applications_count = serializers.SerializerMethodField()
+    applications_count = serializers.IntegerField(read_only=True, default=0)
 
     class Meta:
         model = LeavePolicy
@@ -276,9 +273,6 @@ class LeavePolicySerializer(serializers.ModelSerializer):
             'id', 'school', 'leave_type_display', 'applications_count',
             'created_at', 'updated_at',
         ]
-
-    def get_applications_count(self, obj):
-        return obj.applications.count()
 
 
 class LeavePolicyCreateSerializer(serializers.ModelSerializer):

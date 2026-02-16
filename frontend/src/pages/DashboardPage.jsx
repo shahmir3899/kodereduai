@@ -8,7 +8,7 @@ import AttendanceRiskWidget from '../components/AttendanceRiskWidget'
 
 export default function DashboardPage() {
   const { user, activeSchool } = useAuth()
-  const { activeAcademicYear, currentTerm, hasAcademicYear } = useAcademicYear()
+  const { activeAcademicYear, currentTerm, hasAcademicYear, loading: academicYearLoading } = useAcademicYear()
   const today = new Date().toISOString().split('T')[0]
 
   // Fetch pending reviews
@@ -61,11 +61,11 @@ export default function DashboardPage() {
     <div>
       <div className="mb-6">
         <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-sm sm:text-base text-gray-600">Welcome back, {user?.username}</p>
+        <p className="text-sm sm:text-base text-gray-600">Welcome back, {[user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.username}</p>
       </div>
 
       {/* Academic Session Banner */}
-      {hasAcademicYear ? (
+      {academicYearLoading ? null : hasAcademicYear ? (
         <div className="mb-6 flex items-center gap-3 px-4 py-3 bg-sky-50 border border-sky-200 rounded-lg">
           <svg className="w-5 h-5 text-sky-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />

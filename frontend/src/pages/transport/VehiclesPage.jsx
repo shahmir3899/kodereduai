@@ -38,13 +38,13 @@ export default function VehiclesPage() {
   // Fetch vehicles
   const { data: vehiclesData, isLoading, error } = useQuery({
     queryKey: ['transport-vehicles'],
-    queryFn: () => transportApi.getVehicles(),
+    queryFn: () => transportApi.getVehicles({ page_size: 9999 }),
   })
 
   // Fetch routes for dropdown
   const { data: routesData } = useQuery({
     queryKey: ['transport-routes'],
-    queryFn: () => transportApi.getRoutes(),
+    queryFn: () => transportApi.getRoutes({ page_size: 9999 }),
   })
 
   // Mutations

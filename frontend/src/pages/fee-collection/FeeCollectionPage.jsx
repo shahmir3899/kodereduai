@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useFeeData } from './useFeeData'
 import FeeFilters, { MONTHS } from './FeeFilters'
-import FeeSummaryCards from './FeeSummaryCards'
+import FeeSummaryCards, { ClassBreakdown, PendingStudents } from './FeeSummaryCards'
 import FeeCharts from './FeeCharts'
 import FeeTable from './FeeTable'
 import BulkActionsBar from './BulkActionsBar'
@@ -23,6 +23,9 @@ export default function FeeCollectionPage() {
   const [classFilter, setClassFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [activeTab, setActiveTab] = useState('fees')
+
+  // Analytics toggle
+  const [showAnalytics, setShowAnalytics] = useState(false)
 
   // Modal state
   const [showPaymentModal, setShowPaymentModal] = useState(null)
@@ -222,14 +225,6 @@ export default function FeeCollectionPage() {
           <p className="text-sm text-gray-600">Manage student fee payments & other income</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {activeTab === 'fees' && data.paymentList.length > 0 && (
-            <button
-              onClick={handleExportPDF}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm"
-            >
-              Export PDF
-            </button>
-          )}
           {canWrite && (
             <>
               <button
@@ -272,17 +267,53 @@ export default function FeeCollectionPage() {
       {/* Student Fees Tab */}
       {activeTab === 'fees' && (
         <>
-          <FeeFilters
-            month={month} setMonth={setMonth}
-            year={year} setYear={setYear}
-            classFilter={classFilter} setClassFilter={setClassFilter}
-            statusFilter={statusFilter} setStatusFilter={setStatusFilter}
-            classList={data.classList}
-          />
+          {/* KPI Summary Cards — always visible */}
+          <FeeSummaryCards summaryData={data.summaryData} />
 
-          <FeeSummaryCards summaryData={data.summaryData} paymentList={data.paymentList} />
+          {/* Analytics Toggle */}
+          <button
+            onClick={() => setShowAnalytics(!showAnalytics)}
+            className="flex items-center gap-2 mb-4 px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors"
+          >
+            <svg
+              className={`w-4 h-4 transition-transform ${showAnalytics ? 'rotate-90' : ''}`}
+              fill="none" stroke="currentColor" viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+            {showAnalytics ? 'Hide' : 'Show'} Analytics
+          </button>
 
-          <FeeCharts summaryData={data.summaryData} />
+          {/* Collapsible Analytics Section */}
+          {showAnalytics && (
+            <div className="space-y-4 mb-4">
+              <ClassBreakdown summaryData={data.summaryData} />
+              <PendingStudents paymentList={data.paymentList} />
+              <FeeCharts summaryData={data.summaryData} />
+            </div>
+          )}
+
+          {/* Sticky Toolbar: Filters + Export */}
+          <div className="sticky top-0 z-30 bg-white border-b border-gray-200 shadow-sm -mx-4 px-4 py-3 sm:-mx-6 sm:px-6 mb-4">
+            <div className="flex flex-wrap items-end gap-3">
+              <FeeFilters
+                month={month} setMonth={setMonth}
+                year={year} setYear={setYear}
+                classFilter={classFilter} setClassFilter={setClassFilter}
+                statusFilter={statusFilter} setStatusFilter={setStatusFilter}
+                classList={data.classList}
+              />
+              <div className="flex-1" />
+              {data.paymentList.length > 0 && (
+                <button
+                  onClick={handleExportPDF}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm whitespace-nowrap"
+                >
+                  Export PDF
+                </button>
+              )}
+            </div>
+          </div>
 
           <FeeTable
             paymentList={data.paymentList}

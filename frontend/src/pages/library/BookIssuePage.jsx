@@ -70,13 +70,13 @@ export default function BookIssuePage() {
   // Active issues list (ISSUED status)
   const { data: activeIssuesData, isLoading: issuesLoading } = useQuery({
     queryKey: ['libraryIssues', 'active'],
-    queryFn: () => libraryApi.getIssues({ status: 'ISSUED' }),
+    queryFn: () => libraryApi.getIssues({ status: 'ISSUED', page_size: 9999 }),
   })
 
   // Filtered issues for return tab
   const { data: returnIssuesData, isLoading: returnLoading } = useQuery({
     queryKey: ['libraryIssues', 'return', returnSearch],
-    queryFn: () => libraryApi.getIssues({ status: 'ISSUED', search: returnSearch || undefined }),
+    queryFn: () => libraryApi.getIssues({ status: 'ISSUED', search: returnSearch || undefined, page_size: 9999 }),
     enabled: activeTab === 'return',
   })
 

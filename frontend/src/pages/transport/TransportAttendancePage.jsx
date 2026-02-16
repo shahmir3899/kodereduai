@@ -23,27 +23,27 @@ export default function TransportAttendancePage() {
   // Fetch routes
   const { data: routesData } = useQuery({
     queryKey: ['transport-routes'],
-    queryFn: () => transportApi.getRoutes(),
+    queryFn: () => transportApi.getRoutes({ page_size: 9999 }),
   })
 
   // Fetch assignments for selected route
   const { data: assignmentsData, isLoading: assignmentsLoading } = useQuery({
     queryKey: ['transport-assignments', selectedRoute],
-    queryFn: () => transportApi.getAssignments({ route: selectedRoute }),
+    queryFn: () => transportApi.getAssignments({ route: selectedRoute, page_size: 9999 }),
     enabled: !!selectedRoute,
   })
 
   // Fetch existing attendance for selected date + route
   const { data: attendanceData, isLoading: attendanceLoading } = useQuery({
     queryKey: ['transport-attendance', selectedRoute, selectedDate],
-    queryFn: () => transportApi.getAttendance({ route: selectedRoute, date: selectedDate }),
+    queryFn: () => transportApi.getAttendance({ route: selectedRoute, date: selectedDate, page_size: 9999 }),
     enabled: !!selectedRoute && !!selectedDate,
     onSuccess: (data) => {
       // Pre-populate attendanceMap from existing records
       const records = data?.data?.results || data?.data || []
       const map = {}
       records.forEach((record) => {
-        map[record.student] = record.status || record.boarding_status || 'BOARDED'
+        map[record.student] = record.boarding_status || 'BOARDED'
       })
       setAttendanceMap(map)
     },
@@ -69,7 +69,7 @@ export default function TransportAttendancePage() {
     if (existingAttendance.length > 0) {
       const map = {}
       existingAttendance.forEach((record) => {
-        map[record.student] = record.status || record.boarding_status || 'BOARDED'
+        map[record.student] = record.boarding_status || 'BOARDED'
       })
       setAttendanceMap(map)
     } else if (selectedRoute) {
@@ -95,16 +95,14 @@ export default function TransportAttendancePage() {
     setSaveSuccess(false)
 
     const records = assignments.map((assignment) => ({
-      student: assignment.student,
-      route: parseInt(selectedRoute),
-      date: selectedDate,
-      status: attendanceMap[assignment.student] || 'BOARDED',
+      student_id: assignment.student,
+      boarding_status: attendanceMap[assignment.student] || 'BOARDED',
     }))
 
     try {
       await bulkMarkMutation.mutateAsync({
         date: selectedDate,
-        route: parseInt(selectedRoute),
+        route_id: parseInt(selectedRoute),
         records,
       })
     } finally {

@@ -5,8 +5,8 @@ from .models import AcademicYear, Term, StudentEnrollment
 # ── AcademicYear ──────────────────────────────────────────────
 
 class AcademicYearSerializer(serializers.ModelSerializer):
-    terms_count = serializers.SerializerMethodField()
-    enrollment_count = serializers.SerializerMethodField()
+    terms_count = serializers.IntegerField(read_only=True, default=0)
+    enrollment_count = serializers.IntegerField(read_only=True, default=0)
 
     class Meta:
         model = AcademicYear
@@ -16,12 +16,6 @@ class AcademicYearSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'school', 'created_at', 'updated_at']
-
-    def get_terms_count(self, obj):
-        return obj.terms.filter(is_active=True).count()
-
-    def get_enrollment_count(self, obj):
-        return obj.enrollments.filter(is_active=True).count()
 
 
 class AcademicYearCreateSerializer(serializers.ModelSerializer):

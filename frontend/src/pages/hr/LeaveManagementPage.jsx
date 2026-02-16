@@ -56,19 +56,19 @@ export default function LeaveManagementPage() {
   // ── Queries ──
   const { data: appData, isLoading: appsLoading } = useQuery({
     queryKey: ['hrLeaveApplications'],
-    queryFn: () => hrApi.getLeaveApplications(),
+    queryFn: () => hrApi.getLeaveApplications({ page_size: 9999 }),
     staleTime: 2 * 60 * 1000,
   })
 
   const { data: policyData, isLoading: policiesLoading } = useQuery({
     queryKey: ['hrLeavePolicies'],
-    queryFn: () => hrApi.getLeavePolicies(),
+    queryFn: () => hrApi.getLeavePolicies({ page_size: 9999 }),
     staleTime: 5 * 60 * 1000,
   })
 
   const { data: staffData } = useQuery({
     queryKey: ['hrStaff'],
-    queryFn: () => hrApi.getStaff(),
+    queryFn: () => hrApi.getStaff({ page_size: 9999 }),
     staleTime: 5 * 60 * 1000,
   })
 
@@ -97,8 +97,8 @@ export default function LeaveManagementPage() {
   const createAppMutation = useMutation({
     mutationFn: (data) => hrApi.createLeaveApplication(data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['hrLeaveApplications'])
-      queryClient.invalidateQueries(['hrDashboardStats'])
+      queryClient.invalidateQueries({ queryKey: ['hrLeaveApplications'] })
+      queryClient.invalidateQueries({ queryKey: ['hrDashboardStats'] })
       showSuccess('Leave application submitted!')
       setApplyModal(false)
       setAppForm(EMPTY_APPLICATION)
@@ -112,8 +112,8 @@ export default function LeaveManagementPage() {
   const approveMutation = useMutation({
     mutationFn: ({ id, data }) => hrApi.approveLeave(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['hrLeaveApplications'])
-      queryClient.invalidateQueries(['hrDashboardStats'])
+      queryClient.invalidateQueries({ queryKey: ['hrLeaveApplications'] })
+      queryClient.invalidateQueries({ queryKey: ['hrDashboardStats'] })
       showSuccess('Leave approved!')
       setActionModal(null)
       setAdminRemarks('')
@@ -124,8 +124,8 @@ export default function LeaveManagementPage() {
   const rejectMutation = useMutation({
     mutationFn: ({ id, data }) => hrApi.rejectLeave(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['hrLeaveApplications'])
-      queryClient.invalidateQueries(['hrDashboardStats'])
+      queryClient.invalidateQueries({ queryKey: ['hrLeaveApplications'] })
+      queryClient.invalidateQueries({ queryKey: ['hrDashboardStats'] })
       showSuccess('Leave rejected!')
       setActionModal(null)
       setAdminRemarks('')
@@ -136,8 +136,8 @@ export default function LeaveManagementPage() {
   const cancelMutation = useMutation({
     mutationFn: (id) => hrApi.cancelLeave(id),
     onSuccess: () => {
-      queryClient.invalidateQueries(['hrLeaveApplications'])
-      queryClient.invalidateQueries(['hrDashboardStats'])
+      queryClient.invalidateQueries({ queryKey: ['hrLeaveApplications'] })
+      queryClient.invalidateQueries({ queryKey: ['hrDashboardStats'] })
       showSuccess('Leave cancelled!')
     },
     onError: (err) => showError(err.response?.data?.detail || 'Failed to cancel'),
@@ -146,7 +146,7 @@ export default function LeaveManagementPage() {
   const createPolicyMutation = useMutation({
     mutationFn: (data) => hrApi.createLeavePolicy(data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['hrLeavePolicies'])
+      queryClient.invalidateQueries({ queryKey: ['hrLeavePolicies'] })
       showSuccess('Leave policy created!')
       closePolicyModal()
     },
@@ -156,7 +156,7 @@ export default function LeaveManagementPage() {
   const updatePolicyMutation = useMutation({
     mutationFn: ({ id, data }) => hrApi.updateLeavePolicy(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['hrLeavePolicies'])
+      queryClient.invalidateQueries({ queryKey: ['hrLeavePolicies'] })
       showSuccess('Leave policy updated!')
       closePolicyModal()
     },
@@ -166,7 +166,7 @@ export default function LeaveManagementPage() {
   const deletePolicyMutation = useMutation({
     mutationFn: (id) => hrApi.deleteLeavePolicy(id),
     onSuccess: () => {
-      queryClient.invalidateQueries(['hrLeavePolicies'])
+      queryClient.invalidateQueries({ queryKey: ['hrLeavePolicies'] })
       showSuccess('Leave policy deactivated!')
     },
     onError: (err) => showError(err.response?.data?.detail || 'Failed to delete'),

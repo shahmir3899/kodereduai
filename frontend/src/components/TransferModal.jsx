@@ -27,7 +27,7 @@ export default function TransferModal({ isOpen, onClose, onSuccess }) {
 
   const { data: accountsData } = useQuery({
     queryKey: ['accounts'],
-    queryFn: () => financeApi.getAccounts(),
+    queryFn: () => financeApi.getAccounts({ page_size: 9999 }),
     enabled: isOpen,
   })
 

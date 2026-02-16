@@ -62,7 +62,7 @@ function RegisterTab() {
 
   const { data: classesData } = useQuery({
     queryKey: ['classes'],
-    queryFn: () => classesApi.getClasses(),
+    queryFn: () => classesApi.getClasses({ page_size: 9999 }),
   })
   const classes = classesData?.data?.results || classesData?.data || []
 
@@ -539,11 +539,11 @@ function ConfigurationTab() {
 
   const saveMappingsMutation = useMutation({
     mutationFn: data => schoolsApi.updateMarkMappings(data),
-    onSuccess: () => { queryClient.invalidateQueries(['markMappings']); queryClient.invalidateQueries(['mappingSuggestions']) },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['markMappings'] }); queryClient.invalidateQueries({ queryKey: ['mappingSuggestions'] }) },
   })
   const saveRegConfigMutation = useMutation({
     mutationFn: data => schoolsApi.updateRegisterConfig(data),
-    onSuccess: () => queryClient.invalidateQueries(['registerConfig']),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['registerConfig'] }),
   })
 
   const addSymbol = () => {

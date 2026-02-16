@@ -91,21 +91,21 @@ export default function SalaryManagementPage() {
   // Fetch salary structures
   const { data: salaryData, isLoading } = useQuery({
     queryKey: ['hrSalaryStructures'],
-    queryFn: () => hrApi.getSalaryStructures(),
+    queryFn: () => hrApi.getSalaryStructures({ page_size: 9999 }),
     staleTime: 5 * 60 * 1000,
   })
 
   // Fetch staff for dropdown
   const { data: staffData } = useQuery({
     queryKey: ['hrStaff'],
-    queryFn: () => hrApi.getStaff(),
+    queryFn: () => hrApi.getStaff({ page_size: 9999 }),
     staleTime: 5 * 60 * 1000,
   })
 
   // Fetch departments for filter
   const { data: deptData } = useQuery({
     queryKey: ['hrDepartments'],
-    queryFn: () => hrApi.getDepartments(),
+    queryFn: () => hrApi.getDepartments({ page_size: 9999 }),
     staleTime: 5 * 60 * 1000,
   })
 
@@ -114,7 +114,7 @@ export default function SalaryManagementPage() {
   const createMutation = useMutation({
     mutationFn: (data) => hrApi.createSalaryStructure(data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['hrSalaryStructures'])
+      queryClient.invalidateQueries({ queryKey: ['hrSalaryStructures'] })
       showSuccess('Salary structure created!')
       closeModal()
     },
@@ -124,7 +124,7 @@ export default function SalaryManagementPage() {
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => hrApi.updateSalaryStructure(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['hrSalaryStructures'])
+      queryClient.invalidateQueries({ queryKey: ['hrSalaryStructures'] })
       showSuccess('Salary structure updated!')
       closeModal()
     },
@@ -134,7 +134,7 @@ export default function SalaryManagementPage() {
   const deleteMutation = useMutation({
     mutationFn: (id) => hrApi.deleteSalaryStructure(id),
     onSuccess: () => {
-      queryClient.invalidateQueries(['hrSalaryStructures'])
+      queryClient.invalidateQueries({ queryKey: ['hrSalaryStructures'] })
       showSuccess('Salary structure deactivated!')
     },
     onError: (err) => showError(err.response?.data?.detail || 'Failed to delete'),

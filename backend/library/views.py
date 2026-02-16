@@ -33,7 +33,7 @@ class BookCategoryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Model
     queryset = BookCategory.objects.all()
     serializer_class = BookCategorySerializer
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
-    pagination_class = None
+
 
 
 class BookViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
@@ -41,7 +41,7 @@ class BookViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
     required_module = 'library'
     queryset = Book.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
-    pagination_class = None
+
 
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):
@@ -49,7 +49,9 @@ class BookViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
         return BookReadSerializer
 
     def get_queryset(self):
-        queryset = super().get_queryset().select_related('category')
+        queryset = super().get_queryset().select_related('category').annotate(
+            issued_count=Count('issues', filter=Q(issues__status='ISSUED')),
+        )
         # Optional filters
         category_id = self.request.query_params.get('category')
         if category_id:
@@ -119,7 +121,7 @@ class BookIssueViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
     required_module = 'library'
     queryset = BookIssue.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
-    pagination_class = None
+
 
     def get_serializer_class(self):
         if self.action in ('create',):
@@ -237,7 +239,7 @@ class LibraryConfigViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mode
     queryset = LibraryConfiguration.objects.all()
     serializer_class = LibraryConfigSerializer
     permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
-    pagination_class = None
+
 
     # Only allow retrieve and partial_update (no list, create, delete via this endpoint)
     http_method_names = ['get', 'patch', 'head', 'options']

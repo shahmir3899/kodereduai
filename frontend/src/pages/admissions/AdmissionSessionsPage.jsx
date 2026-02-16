@@ -27,13 +27,13 @@ export default function AdmissionSessionsPage() {
   // Admission sessions
   const { data: sessionsRes, isLoading } = useQuery({
     queryKey: ['admissionSessions'],
-    queryFn: () => admissionsApi.getSessions(),
+    queryFn: () => admissionsApi.getSessions({ page_size: 9999 }),
   })
 
   // Academic years for dropdown
   const { data: yearsRes } = useQuery({
     queryKey: ['academicYears'],
-    queryFn: () => sessionsApi.getAcademicYears(),
+    queryFn: () => sessionsApi.getAcademicYears({ page_size: 9999 }),
     staleTime: 5 * 60 * 1000,
   })
 

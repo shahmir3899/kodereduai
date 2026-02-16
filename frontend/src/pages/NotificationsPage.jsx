@@ -54,7 +54,7 @@ function InboxTab() {
 
   const { data, isLoading } = useQuery({
     queryKey: ['myNotifications', filter],
-    queryFn: () => notificationsApi.getMyNotifications({ event_type: filter || undefined }),
+    queryFn: () => notificationsApi.getMyNotifications({ event_type: filter || undefined, page_size: 9999 }),
   })
 
   const markAllMutation = useMutation({
@@ -142,7 +142,7 @@ function TemplatesTab() {
 
   const { data, isLoading } = useQuery({
     queryKey: ['notificationTemplates'],
-    queryFn: () => notificationsApi.getTemplates(),
+    queryFn: () => notificationsApi.getTemplates({ page_size: 9999 }),
   })
 
   const saveMutation = useMutation({

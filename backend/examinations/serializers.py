@@ -37,7 +37,7 @@ class ExamSerializer(serializers.ModelSerializer):
     class_name = serializers.CharField(source='class_obj.name', read_only=True)
     academic_year_name = serializers.CharField(source='academic_year.name', read_only=True)
     term_name = serializers.CharField(source='term.name', read_only=True, default=None)
-    subjects_count = serializers.SerializerMethodField()
+    subjects_count = serializers.IntegerField(read_only=True, default=0)
 
     class Meta:
         model = Exam
@@ -49,9 +49,6 @@ class ExamSerializer(serializers.ModelSerializer):
             'is_active', 'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'school', 'created_at', 'updated_at']
-
-    def get_subjects_count(self, obj):
-        return obj.exam_subjects.filter(is_active=True).count()
 
 
 class ExamCreateSerializer(serializers.ModelSerializer):

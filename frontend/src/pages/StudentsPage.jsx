@@ -1,11 +1,11 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { studentsApi, classesApi, schoolsApi } from '../services/api'
 import { useToast } from '../components/Toast'
 import { exportStudentsPDF, exportStudentsPNG } from './studentExport'
-import * as XLSX from 'xlsx'
+import { useDebounce } from '../hooks/useDebounce'
 
 // Phone format note: Use dashes (0300-1234567) to prevent Excel scientific notation
 
@@ -19,6 +19,7 @@ export default function StudentsPage() {
   const [selectedSchoolId, setSelectedSchoolId] = useState(activeSchool?.id || null)
   const [selectedClass, setSelectedClass] = useState('')
   const [search, setSearch] = useState('')
+  const debouncedSearch = useDebounce(search, 300)
   const [showModal, setShowModal] = useState(false)
   const [editingStudent, setEditingStudent] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
@@ -34,6 +35,23 @@ export default function StudentsPage() {
     parent_name: '',
     class_id: '',
   })
+  const [createUserAccount, setCreateUserAccount] = useState(false)
+  const [studentUserForm, setStudentUserForm] = useState({
+    username: '', email: '', password: '', confirm_password: '',
+  })
+  const [studentUserError, setStudentUserError] = useState('')
+
+  // Convert existing students to users
+  const [selectedStudents, setSelectedStudents] = useState(new Set())
+  const [showConvertModal, setShowConvertModal] = useState(false)
+  const [convertStudent, setConvertStudent] = useState(null) // for individual convert
+  const [convertForm, setConvertForm] = useState({ username: '', email: '', password: '', confirm_password: '' })
+  const [convertError, setConvertError] = useState('')
+  const [showBulkConvertModal, setShowBulkConvertModal] = useState(false)
+  const [bulkConvertPassword, setBulkConvertPassword] = useState('')
+  const [bulkConvertError, setBulkConvertError] = useState('')
+  const [convertResults, setConvertResults] = useState(null)
+  const [isConverting, setIsConverting] = useState(false)
 
   // Fetch schools for Super Admin
   const { data: schoolsData } = useQuery({
@@ -52,7 +70,7 @@ export default function StudentsPage() {
   // Fetch classes (cached)
   const { data: classesData } = useQuery({
     queryKey: ['classes', selectedSchoolId],
-    queryFn: () => classesApi.getClasses({ school_id: selectedSchoolId }),
+    queryFn: () => classesApi.getClasses({ school_id: selectedSchoolId, page_size: 9999 }),
     enabled: !!selectedSchoolId,
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
   })
@@ -62,6 +80,7 @@ export default function StudentsPage() {
     queryKey: ['students', selectedSchoolId],
     queryFn: () => studentsApi.getStudents({
       school_id: selectedSchoolId,
+      page_size: 9999,
     }),
     enabled: !!selectedSchoolId,
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
@@ -71,8 +90,8 @@ export default function StudentsPage() {
   const addMutation = useMutation({
     mutationFn: (data) => studentsApi.createStudent(data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['students'])
-      queryClient.invalidateQueries(['classes'])
+      queryClient.invalidateQueries({ queryKey: ['students'] })
+      queryClient.invalidateQueries({ queryKey: ['classes'] })
       closeModal()
       showSuccess('Student added successfully!')
     },
@@ -89,7 +108,7 @@ export default function StudentsPage() {
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => studentsApi.updateStudent(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['students'])
+      queryClient.invalidateQueries({ queryKey: ['students'] })
       closeModal()
       showSuccess('Student updated successfully!')
     },
@@ -106,8 +125,8 @@ export default function StudentsPage() {
   const deleteMutation = useMutation({
     mutationFn: (id) => studentsApi.deleteStudent(id),
     onSuccess: () => {
-      queryClient.invalidateQueries(['students'])
-      queryClient.invalidateQueries(['classes'])
+      queryClient.invalidateQueries({ queryKey: ['students'] })
+      queryClient.invalidateQueries({ queryKey: ['classes'] })
       setDeleteConfirm(null)
       showSuccess('Student deleted successfully!')
     },
@@ -118,6 +137,77 @@ export default function StudentsPage() {
       showError(message)
     },
   })
+
+  // Individual convert handler
+  const handleIndividualConvert = async () => {
+    setConvertError('')
+    if (!convertForm.username || !convertForm.password) {
+      setConvertError('Username and password are required.')
+      return
+    }
+    if (convertForm.password.length < 8) {
+      setConvertError('Password must be at least 8 characters.')
+      return
+    }
+    if (convertForm.password !== convertForm.confirm_password) {
+      setConvertError("Passwords don't match.")
+      return
+    }
+    setIsConverting(true)
+    try {
+      await studentsApi.createStudentUserAccount(convertStudent.id, convertForm)
+      queryClient.invalidateQueries({ queryKey: ['students'] })
+      setShowConvertModal(false)
+      setConvertStudent(null)
+      setConvertForm({ username: '', email: '', password: '', confirm_password: '' })
+      showSuccess('User account created successfully!')
+    } catch (err) {
+      setConvertError(err?.response?.data?.error || err?.response?.data?.detail || 'Failed to create user account')
+    } finally {
+      setIsConverting(false)
+    }
+  }
+
+  // Bulk convert handler
+  const handleBulkConvert = async () => {
+    setBulkConvertError('')
+    if (!bulkConvertPassword || bulkConvertPassword.length < 8) {
+      setBulkConvertError('Default password must be at least 8 characters.')
+      return
+    }
+    setIsConverting(true)
+    try {
+      const response = await studentsApi.bulkCreateAccounts({
+        student_ids: Array.from(selectedStudents),
+        default_password: bulkConvertPassword,
+      })
+      setConvertResults(response.data)
+      queryClient.invalidateQueries({ queryKey: ['students'] })
+      setSelectedStudents(new Set())
+      showSuccess(`Created ${response.data.created_count} user account(s)!`)
+    } catch (err) {
+      setBulkConvertError(err?.response?.data?.error || err?.response?.data?.detail || 'Bulk conversion failed')
+    } finally {
+      setIsConverting(false)
+    }
+  }
+
+  const openConvertModal = (student) => {
+    setConvertStudent(student)
+    const suggestedUsername = student.name?.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || ''
+    setConvertForm({ username: suggestedUsername, email: student.guardian_email || '', password: '', confirm_password: '' })
+    setConvertError('')
+    setShowConvertModal(true)
+  }
+
+  const toggleStudentSelection = useCallback((id) => {
+    setSelectedStudents(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
 
   // Modal handlers
   const openAddModal = () => {
@@ -154,9 +244,12 @@ export default function StudentsPage() {
       parent_name: '',
       class_id: '',
     })
+    setCreateUserAccount(false)
+    setStudentUserForm({ username: '', email: '', password: '', confirm_password: '' })
+    setStudentUserError('')
   }
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!studentForm.class_id) {
       showError('Please select a class')
       return
@@ -164,6 +257,23 @@ export default function StudentsPage() {
     if (!studentForm.name || !studentForm.roll_number) {
       showError('Name and Roll Number are required')
       return
+    }
+
+    // Validate user account fields if checkbox is checked
+    if (createUserAccount && !editingStudent) {
+      setStudentUserError('')
+      if (!studentUserForm.username || !studentUserForm.password) {
+        setStudentUserError('Username and password are required for user account.')
+        return
+      }
+      if (studentUserForm.password.length < 8) {
+        setStudentUserError('Password must be at least 8 characters.')
+        return
+      }
+      if (studentUserForm.password !== studentUserForm.confirm_password) {
+        setStudentUserError("Passwords don't match.")
+        return
+      }
     }
 
     // Normalize phone number if provided
@@ -179,16 +289,57 @@ export default function StudentsPage() {
     if (editingStudent) {
       updateMutation.mutate({ id: editingStudent.id, data })
     } else {
-      addMutation.mutate({
-        school: selectedSchoolId,
-        class_obj: parseInt(studentForm.class_id),
-        ...data,
-      })
+      // Create student first, then optionally create user account
+      try {
+        const response = await studentsApi.createStudent({
+          school: selectedSchoolId,
+          class_obj: parseInt(studentForm.class_id),
+          ...data,
+        })
+        const newStudent = response.data
+
+        if (createUserAccount && newStudent?.id) {
+          try {
+            await studentsApi.createStudentUserAccount(newStudent.id, {
+              username: studentUserForm.username,
+              email: studentUserForm.email,
+              password: studentUserForm.password,
+              confirm_password: studentUserForm.confirm_password,
+            })
+            showSuccess('Student and user account created successfully!')
+          } catch (userErr) {
+            const errMsg = userErr?.response?.data?.error || userErr?.response?.data?.detail || 'Failed to create user account'
+            showWarning(`Student created but user account failed: ${errMsg}`)
+          }
+        } else {
+          showSuccess('Student added successfully!')
+        }
+
+        queryClient.invalidateQueries({ queryKey: ['students'] })
+        closeModal()
+      } catch (err) {
+        const errData = err?.response?.data
+        let msg = 'Failed to add student'
+        if (errData) {
+          if (typeof errData === 'string') msg = errData
+          else if (errData.detail) msg = errData.detail
+          else if (errData.non_field_errors) msg = errData.non_field_errors.join(', ')
+          else {
+            const msgs = []
+            for (const [key, val] of Object.entries(errData)) {
+              if (Array.isArray(val)) msgs.push(`${key}: ${val.join(', ')}`)
+              else if (typeof val === 'string') msgs.push(`${key}: ${val}`)
+            }
+            if (msgs.length > 0) msg = msgs.join('; ')
+          }
+        }
+        showError(msg)
+      }
     }
   }
 
   // Download Students Excel (or blank template if no students exist)
-  const downloadExcelTemplate = () => {
+  const downloadExcelTemplate = async () => {
     const dlClasses = classesData?.data?.results || classesData?.data || []
     const selectedSchool = schools.find(s => s.id === selectedSchoolId)
 
@@ -197,6 +348,7 @@ export default function StudentsPage() {
       return
     }
 
+    const XLSX = (await import('xlsx')).default || await import('xlsx')
     const wb = XLSX.utils.book_new()
 
     // Instruction rows + header (same format the upload parser expects)
@@ -299,8 +451,9 @@ export default function StudentsPage() {
     if (!file) return
 
     const reader = new FileReader()
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       try {
+        const XLSX = (await import('xlsx')).default || await import('xlsx')
         const data = new Uint8Array(e.target.result)
         const workbook = XLSX.read(data, { type: 'array' })
 
@@ -448,8 +601,8 @@ export default function StudentsPage() {
         }
       }
 
-      queryClient.invalidateQueries(['students'])
-      queryClient.invalidateQueries(['classes'])
+      queryClient.invalidateQueries({ queryKey: ['students'] })
+      queryClient.invalidateQueries({ queryKey: ['classes'] })
       setShowBulkModal(false)
       setBulkData({ class_id: '', students: [] })
 
@@ -496,8 +649,8 @@ export default function StudentsPage() {
         return false
       }
       // Filter by search (name or roll number)
-      if (search) {
-        const searchLower = search.toLowerCase()
+      if (debouncedSearch) {
+        const searchLower = debouncedSearch.toLowerCase()
         const matchesName = student.name?.toLowerCase().includes(searchLower)
         const matchesRoll = student.roll_number?.toLowerCase().includes(searchLower)
         if (!matchesName && !matchesRoll) {
@@ -519,7 +672,20 @@ export default function StudentsPage() {
       const rollB = parseInt(b.roll_number) || 0
       return rollA - rollB
     })
-  }, [allStudents, selectedClass, search, classGradeMap])
+  }, [allStudents, selectedClass, debouncedSearch, classGradeMap])
+
+  // Students without accounts (for bulk select) — must be after `students` useMemo
+  const studentsWithoutAccounts = useMemo(() => {
+    return students.filter(s => !s.has_user_account)
+  }, [students])
+
+  const toggleSelectAll = useCallback(() => {
+    if (selectedStudents.size === studentsWithoutAccounts.length && studentsWithoutAccounts.length > 0) {
+      setSelectedStudents(new Set())
+    } else {
+      setSelectedStudents(new Set(studentsWithoutAccounts.map(s => s.id)))
+    }
+  }, [studentsWithoutAccounts, selectedStudents.size])
 
   // Stats computation
   const stats = useMemo(() => {
@@ -759,15 +925,34 @@ export default function StudentsPage() {
             {students.map((student) => (
               <div key={student.id} className="p-3 border border-gray-200 rounded-lg">
                 <div className="flex items-center justify-between">
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium text-sm text-gray-900 truncate">{student.name}</p>
-                    <p className="text-xs text-gray-500">Roll #{student.roll_number} | {student.class_name}</p>
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    {!student.has_user_account && (
+                      <input
+                        type="checkbox"
+                        checked={selectedStudents.has(student.id)}
+                        onChange={() => toggleStudentSelection(student.id)}
+                        className="rounded flex-shrink-0"
+                      />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-sm text-gray-900 truncate">{student.name}</p>
+                      <p className="text-xs text-gray-500">Roll #{student.roll_number} | {student.class_name}</p>
+                    </div>
                   </div>
-                  <span className={`px-2 py-0.5 rounded-full text-xs flex-shrink-0 ml-2 ${
-                    student.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                  }`}>
-                    {student.is_active ? 'Active' : 'Inactive'}
-                  </span>
+                  <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+                    {student.has_user_account ? (
+                      <span className="px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700" title={student.user_username}>
+                        User
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-500">No Account</span>
+                    )}
+                    <span className={`px-2 py-0.5 rounded-full text-xs ${
+                      student.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                    }`}>
+                      {student.is_active ? 'Active' : 'Inactive'}
+                    </span>
+                  </div>
                 </div>
                 {student.parent_phone && (
                   <p className="text-xs text-gray-500 mt-1">{student.parent_phone}</p>
@@ -775,6 +960,9 @@ export default function StudentsPage() {
                 <div className="flex gap-3 mt-2 pt-2 border-t border-gray-100">
                   <button onClick={() => openEditModal(student)} className="text-xs text-blue-600 font-medium">Edit</button>
                   <button onClick={() => setDeleteConfirm(student)} className="text-xs text-red-600 font-medium">Delete</button>
+                  {!student.has_user_account && (
+                    <button onClick={() => openConvertModal(student)} className="text-xs text-purple-600 font-medium">Create Account</button>
+                  )}
                 </div>
               </div>
             ))}
@@ -784,22 +972,51 @@ export default function StudentsPage() {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase w-10">
+                    <input
+                      type="checkbox"
+                      checked={studentsWithoutAccounts.length > 0 && selectedStudents.size === studentsWithoutAccounts.length}
+                      onChange={toggleSelectAll}
+                      className="rounded"
+                      title="Select all students without accounts"
+                    />
+                  </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Roll No</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Class</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Parent Phone</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Account</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                   <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {students.map((student) => (
-                  <tr key={student.id} className="hover:bg-gray-50">
+                  <tr key={student.id} className={`hover:bg-gray-50 ${selectedStudents.has(student.id) ? 'bg-purple-50' : ''}`}>
+                    <td className="px-3 py-3">
+                      {!student.has_user_account ? (
+                        <input
+                          type="checkbox"
+                          checked={selectedStudents.has(student.id)}
+                          onChange={() => toggleStudentSelection(student.id)}
+                          className="rounded"
+                        />
+                      ) : <span className="w-4 h-4 block" />}
+                    </td>
                     <td className="px-4 py-3 text-sm text-gray-900">{student.roll_number}</td>
                     <td className="px-4 py-3 text-sm font-medium text-gray-900">{student.name}</td>
                     <td className="px-4 py-3 text-sm text-gray-500">{student.class_name}</td>
                     <td className="px-4 py-3 text-sm text-gray-500">
                       {student.parent_phone || <span className="text-gray-400 italic">Not set</span>}
+                    </td>
+                    <td className="px-4 py-3">
+                      {student.has_user_account ? (
+                        <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700" title={student.user_username}>
+                          {student.user_username || 'User'}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-gray-400">No Account</span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${
@@ -810,7 +1027,7 @@ export default function StudentsPage() {
                         {student.is_active ? 'Active' : 'Inactive'}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-4 py-3 text-right whitespace-nowrap">
                       <Link
                         to={`/students/${student.id}`}
                         className="text-sm text-primary-600 hover:text-primary-800 font-medium mr-3"
@@ -823,6 +1040,14 @@ export default function StudentsPage() {
                       >
                         Edit
                       </button>
+                      {!student.has_user_account && (
+                        <button
+                          onClick={() => openConvertModal(student)}
+                          className="text-sm text-purple-600 hover:text-purple-800 font-medium mr-3"
+                        >
+                          Create Account
+                        </button>
+                      )}
                       <button
                         onClick={() => setDeleteConfirm(student)}
                         className="text-sm text-red-600 hover:text-red-800 font-medium"
@@ -887,7 +1112,13 @@ export default function StudentsPage() {
                   type="text"
                   className="input"
                   value={studentForm.name}
-                  onChange={(e) => setStudentForm({ ...studentForm, name: e.target.value })}
+                  onChange={(e) => {
+                    const name = e.target.value
+                    setStudentForm({ ...studentForm, name })
+                    if (createUserAccount) {
+                      setStudentUserForm(f => ({ ...f, username: name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') }))
+                    }
+                  }}
                   required
                 />
               </div>
@@ -913,6 +1144,81 @@ export default function StudentsPage() {
                   onChange={(e) => setStudentForm({ ...studentForm, parent_name: e.target.value })}
                 />
               </div>
+
+              {/* Create User Account */}
+              {!editingStudent && (
+                <div className="border-t border-gray-200 pt-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={createUserAccount}
+                      onChange={(e) => {
+                        setCreateUserAccount(e.target.checked)
+                        if (e.target.checked && studentForm.name) {
+                          setStudentUserForm(f => ({
+                            ...f,
+                            username: studentForm.name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, ''),
+                          }))
+                        }
+                      }}
+                      className="rounded"
+                    />
+                    <span className="text-sm font-medium text-gray-700">Create User Account (Student Portal)</span>
+                  </label>
+                  <p className="text-xs text-gray-500 mt-1 ml-6">Create login credentials so the student can access the Student Portal</p>
+
+                  {createUserAccount && (
+                    <div className="mt-3 ml-6 space-y-3 p-3 bg-gray-50 rounded-lg">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Username *</label>
+                        <input
+                          type="text"
+                          className="input text-sm"
+                          value={studentUserForm.username}
+                          onChange={(e) => setStudentUserForm(f => ({ ...f, username: e.target.value }))}
+                          placeholder="Login username"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Email</label>
+                        <input
+                          type="email"
+                          className="input text-sm"
+                          value={studentUserForm.email}
+                          onChange={(e) => setStudentUserForm(f => ({ ...f, email: e.target.value }))}
+                          placeholder="Email address (optional)"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Password *</label>
+                          <input
+                            type="password"
+                            className="input text-sm"
+                            value={studentUserForm.password}
+                            onChange={(e) => setStudentUserForm(f => ({ ...f, password: e.target.value }))}
+                            placeholder="Min 8 chars"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Confirm *</label>
+                          <input
+                            type="password"
+                            className="input text-sm"
+                            value={studentUserForm.confirm_password}
+                            onChange={(e) => setStudentUserForm(f => ({ ...f, confirm_password: e.target.value }))}
+                            placeholder="Confirm"
+                            required
+                          />
+                        </div>
+                      </div>
+                      {studentUserError && <p className="text-xs text-red-600">{studentUserError}</p>}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="flex justify-end space-x-3 mt-6">
@@ -1009,6 +1315,199 @@ export default function StudentsPage() {
                 {isUploading ? 'Uploading...' : 'Upload Students'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Bulk Convert Action Bar */}
+      {selectedStudents.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-40 bg-purple-600 text-white px-6 py-3 rounded-full shadow-lg flex items-center gap-4">
+          <span className="text-sm font-medium">{selectedStudents.size} student(s) selected</span>
+          <button
+            onClick={() => {
+              setBulkConvertPassword('')
+              setBulkConvertError('')
+              setConvertResults(null)
+              setShowBulkConvertModal(true)
+            }}
+            className="bg-white text-purple-700 px-4 py-1.5 rounded-full text-sm font-semibold hover:bg-purple-50"
+          >
+            Create Accounts
+          </button>
+          <button
+            onClick={() => setSelectedStudents(new Set())}
+            className="text-purple-200 hover:text-white text-sm"
+          >
+            Clear
+          </button>
+        </div>
+      )}
+
+      {/* Individual Convert Modal */}
+      {showConvertModal && convertStudent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-md mx-4">
+            <h2 className="text-lg font-bold text-gray-900 mb-1">Create User Account</h2>
+            <p className="text-sm text-gray-500 mb-4">
+              For student: <strong>{convertStudent.name}</strong> (Roll #{convertStudent.roll_number})
+            </p>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Username *</label>
+                <input
+                  type="text"
+                  className="input"
+                  value={convertForm.username}
+                  onChange={(e) => setConvertForm(f => ({ ...f, username: e.target.value }))}
+                  placeholder="Login username"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                <input
+                  type="email"
+                  className="input"
+                  value={convertForm.email}
+                  onChange={(e) => setConvertForm(f => ({ ...f, email: e.target.value }))}
+                  placeholder="Email (optional)"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Password *</label>
+                  <input
+                    type="password"
+                    className="input"
+                    value={convertForm.password}
+                    onChange={(e) => setConvertForm(f => ({ ...f, password: e.target.value }))}
+                    placeholder="Min 8 chars"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Confirm *</label>
+                  <input
+                    type="password"
+                    className="input"
+                    value={convertForm.confirm_password}
+                    onChange={(e) => setConvertForm(f => ({ ...f, confirm_password: e.target.value }))}
+                    placeholder="Confirm"
+                  />
+                </div>
+              </div>
+              {convertError && <p className="text-sm text-red-600">{convertError}</p>}
+            </div>
+
+            <div className="flex justify-end space-x-3 mt-6">
+              <button
+                onClick={() => { setShowConvertModal(false); setConvertStudent(null) }}
+                className="btn btn-secondary"
+                disabled={isConverting}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleIndividualConvert}
+                className="btn btn-primary"
+                disabled={isConverting}
+              >
+                {isConverting ? 'Creating...' : 'Create Account'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Convert Modal */}
+      {showBulkConvertModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-md mx-4">
+            <h2 className="text-lg font-bold text-gray-900 mb-4">Bulk Create User Accounts</h2>
+
+            {!convertResults ? (
+              <>
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-4">
+                  <p className="text-purple-800 text-sm">
+                    Create user accounts for <strong>{selectedStudents.size}</strong> selected student(s).
+                    Usernames will be auto-generated from student names.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Default Password *</label>
+                  <input
+                    type="password"
+                    className="input"
+                    value={bulkConvertPassword}
+                    onChange={(e) => setBulkConvertPassword(e.target.value)}
+                    placeholder="Min 8 characters — same for all accounts"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Students can change their password after first login.</p>
+                </div>
+                {bulkConvertError && <p className="text-sm text-red-600 mt-2">{bulkConvertError}</p>}
+
+                <div className="flex justify-end space-x-3 mt-6">
+                  <button
+                    onClick={() => setShowBulkConvertModal(false)}
+                    className="btn btn-secondary"
+                    disabled={isConverting}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleBulkConvert}
+                    className="btn btn-primary"
+                    disabled={isConverting}
+                  >
+                    {isConverting ? 'Creating...' : `Create ${selectedStudents.size} Account(s)`}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="space-y-3 mb-6">
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                    <p className="text-green-800 text-sm font-medium">Created: {convertResults.created_count} account(s)</p>
+                  </div>
+                  {convertResults.skipped_count > 0 && (
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                      <p className="text-yellow-800 text-sm font-medium">Skipped: {convertResults.skipped_count} (already have accounts)</p>
+                    </div>
+                  )}
+                  {convertResults.error_count > 0 && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                      <p className="text-red-800 text-sm font-medium">Errors: {convertResults.error_count}</p>
+                      <ul className="mt-1 text-xs text-red-700 list-disc list-inside">
+                        {convertResults.errors?.map((e, i) => (
+                          <li key={i}>{e.name}: {e.error}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {convertResults.created?.length > 0 && (
+                    <div className="max-h-40 overflow-y-auto">
+                      <p className="text-xs font-medium text-gray-600 mb-1">Created usernames:</p>
+                      <div className="space-y-1">
+                        {convertResults.created.map((c, i) => (
+                          <div key={i} className="flex justify-between text-xs bg-gray-50 px-2 py-1 rounded">
+                            <span className="text-gray-700">{c.student_name}</span>
+                            <span className="font-mono text-gray-900">{c.username}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div className="flex justify-end">
+                  <button
+                    onClick={() => { setShowBulkConvertModal(false); setConvertResults(null) }}
+                    className="btn btn-primary"
+                  >
+                    Done
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

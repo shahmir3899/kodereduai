@@ -1,110 +1,117 @@
-import { Component } from 'react'
+import { Component, lazy, Suspense } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './contexts/AuthContext'
 
-// Pages
-import LoginPage from './pages/LoginPage'
-import DashboardPage from './pages/DashboardPage'
-import CaptureReviewPage from './pages/CaptureReviewPage'
-import RegisterPage from './pages/RegisterPage'
-import StudentsPage from './pages/StudentsPage'
-import ClassesGradesPage from './pages/ClassesGradesPage'
-import SuperAdminDashboard from './pages/SuperAdminDashboard'
-import ProfilePage from './pages/ProfilePage'
-import FeeCollectionPage from './pages/fee-collection/FeeCollectionPage'
-import ExpensesPage from './pages/ExpensesPage'
-import FinancialReportsPage from './pages/FinancialReportsPage'
-import FinanceDashboardPage from './pages/FinanceDashboardPage'
-import SettingsPage from './pages/SettingsPage'
-import HRDashboardPage from './pages/hr/HRDashboardPage'
-import StaffDirectoryPage from './pages/hr/StaffDirectoryPage'
-import StaffFormPage from './pages/hr/StaffFormPage'
-import DepartmentsPage from './pages/hr/DepartmentsPage'
-import SalaryManagementPage from './pages/hr/SalaryManagementPage'
-import PayrollPage from './pages/hr/PayrollPage'
-import LeaveManagementPage from './pages/hr/LeaveManagementPage'
-import StaffAttendancePage from './pages/hr/StaffAttendancePage'
-import PerformanceAppraisalPage from './pages/hr/PerformanceAppraisalPage'
-import StaffDocumentsPage from './pages/hr/StaffDocumentsPage'
-import SubjectsPage from './pages/academics/SubjectsPage'
-import TimetablePage from './pages/academics/TimetablePage'
-import AcademicsAnalyticsPage from './pages/academics/AcademicsAnalyticsPage'
-import AcademicYearsPage from './pages/sessions/AcademicYearsPage'
-import PromotionPage from './pages/sessions/PromotionPage'
-import ExamTypesPage from './pages/examinations/ExamTypesPage'
-import ExamsPage from './pages/examinations/ExamsPage'
-import MarksEntryPage from './pages/examinations/MarksEntryPage'
-import ResultsPage from './pages/examinations/ResultsPage'
-import ReportCardPage from './pages/examinations/ReportCardPage'
-import GradeScalePage from './pages/examinations/GradeScalePage'
-import StudentProfilePage from './pages/StudentProfilePage'
-import NotificationsPage from './pages/NotificationsPage'
-
-// Parent Portal pages
-import ParentDashboard from './pages/parent/ParentDashboard'
-import ChildOverview from './pages/parent/ChildOverview'
-import ChildAttendance from './pages/parent/ChildAttendance'
-import ChildFees from './pages/parent/ChildFees'
-import ChildTimetable from './pages/parent/ChildTimetable'
-import ChildExamResults from './pages/parent/ChildExamResults'
-import LeaveApplication from './pages/parent/LeaveApplication'
-import ParentMessages from './pages/parent/ParentMessages'
-import PaymentResultPage from './pages/parent/PaymentResultPage'
-
-// Admissions pages
-import AdmissionDashboard from './pages/admissions/AdmissionDashboard'
-import EnquiriesPage from './pages/admissions/EnquiriesPage'
-import EnquiryDetail from './pages/admissions/EnquiryDetail'
-import EnquiryForm from './pages/admissions/EnquiryForm'
-import AdmissionSessionsPage from './pages/admissions/AdmissionSessionsPage'
-
-// Finance additions
-import DiscountsPage from './pages/finance/DiscountsPage'
-import PaymentGatewayPage from './pages/finance/PaymentGatewayPage'
-
-// LMS pages
-import LessonPlansPage from './pages/lms/LessonPlansPage'
-import AssignmentsPage from './pages/lms/AssignmentsPage'
-import SubmissionReviewPage from './pages/lms/SubmissionReviewPage'
-
-// Student Portal pages
-import StudentDashboard from './pages/student/StudentDashboard'
-import StudentAttendance from './pages/student/StudentAttendance'
-import StudentFees from './pages/student/StudentFees'
-import StudentTimetable from './pages/student/StudentTimetable'
-import StudentResults from './pages/student/StudentResults'
-import StudentAssignments from './pages/student/StudentAssignments'
-import StudentProfileView from './pages/student/StudentProfileView'
-import StudentStudyHelper from './pages/student/StudentStudyHelper'
-
-// Hostel pages
-import HostelDashboard from './pages/hostel/HostelDashboard'
-import HostelRoomsPage from './pages/hostel/HostelRoomsPage'
-import HostelAllocationsPage from './pages/hostel/HostelAllocationsPage'
-import GatePassesPage from './pages/hostel/GatePassesPage'
-
-// Transport pages
-import TransportDashboard from './pages/transport/TransportDashboard'
-import RoutesPage from './pages/transport/RoutesPage'
-import VehiclesPage from './pages/transport/VehiclesPage'
-import TransportAssignmentsPage from './pages/transport/TransportAssignmentsPage'
-import TransportAttendancePage from './pages/transport/TransportAttendancePage'
-
-// Library pages
-import LibraryDashboard from './pages/library/LibraryDashboard'
-import BookCatalogPage from './pages/library/BookCatalogPage'
-import BookIssuePage from './pages/library/BookIssuePage'
-import OverdueBooksPage from './pages/library/OverdueBooksPage'
-
-// Inventory pages
-import InventoryDashboard from './pages/inventory/InventoryDashboard'
-import InventoryItemsPage from './pages/inventory/InventoryItemsPage'
-import StockTransactionsPage from './pages/inventory/StockTransactionsPage'
-import ItemAssignmentsPage from './pages/inventory/ItemAssignmentsPage'
-
-// Components
+// Components (kept eager - needed for app shell)
 import Layout from './components/Layout'
 import LoadingSpinner from './components/LoadingSpinner'
+
+// Login kept eager (first page users see)
+import LoginPage from './pages/LoginPage'
+
+// Lazy-loaded pages
+const DashboardPage = lazy(() => import('./pages/DashboardPage'))
+const CaptureReviewPage = lazy(() => import('./pages/CaptureReviewPage'))
+const RegisterPage = lazy(() => import('./pages/RegisterPage'))
+const StudentsPage = lazy(() => import('./pages/StudentsPage'))
+const ClassesGradesPage = lazy(() => import('./pages/ClassesGradesPage'))
+const SuperAdminDashboard = lazy(() => import('./pages/SuperAdminDashboard'))
+const ProfilePage = lazy(() => import('./pages/ProfilePage'))
+const FeeCollectionPage = lazy(() => import('./pages/fee-collection/FeeCollectionPage'))
+const ExpensesPage = lazy(() => import('./pages/ExpensesPage'))
+const FinanceDashboardPage = lazy(() => import('./pages/FinanceDashboardPage'))
+const SettingsPage = lazy(() => import('./pages/SettingsPage'))
+const StudentProfilePage = lazy(() => import('./pages/StudentProfilePage'))
+const NotificationsPage = lazy(() => import('./pages/NotificationsPage'))
+
+// HR pages
+const HRDashboardPage = lazy(() => import('./pages/hr/HRDashboardPage'))
+const StaffDirectoryPage = lazy(() => import('./pages/hr/StaffDirectoryPage'))
+const StaffFormPage = lazy(() => import('./pages/hr/StaffFormPage'))
+const DepartmentsPage = lazy(() => import('./pages/hr/DepartmentsPage'))
+const SalaryManagementPage = lazy(() => import('./pages/hr/SalaryManagementPage'))
+const PayrollPage = lazy(() => import('./pages/hr/PayrollPage'))
+const LeaveManagementPage = lazy(() => import('./pages/hr/LeaveManagementPage'))
+const StaffAttendancePage = lazy(() => import('./pages/hr/StaffAttendancePage'))
+const PerformanceAppraisalPage = lazy(() => import('./pages/hr/PerformanceAppraisalPage'))
+const StaffDocumentsPage = lazy(() => import('./pages/hr/StaffDocumentsPage'))
+
+// Academics pages
+const SubjectsPage = lazy(() => import('./pages/academics/SubjectsPage'))
+const TimetablePage = lazy(() => import('./pages/academics/TimetablePage'))
+const AcademicsAnalyticsPage = lazy(() => import('./pages/academics/AcademicsAnalyticsPage'))
+const AcademicYearsPage = lazy(() => import('./pages/sessions/AcademicYearsPage'))
+const PromotionPage = lazy(() => import('./pages/sessions/PromotionPage'))
+
+// Examination pages
+const ExamTypesPage = lazy(() => import('./pages/examinations/ExamTypesPage'))
+const ExamsPage = lazy(() => import('./pages/examinations/ExamsPage'))
+const MarksEntryPage = lazy(() => import('./pages/examinations/MarksEntryPage'))
+const ResultsPage = lazy(() => import('./pages/examinations/ResultsPage'))
+const ReportCardPage = lazy(() => import('./pages/examinations/ReportCardPage'))
+const GradeScalePage = lazy(() => import('./pages/examinations/GradeScalePage'))
+
+// Parent Portal pages
+const ParentDashboard = lazy(() => import('./pages/parent/ParentDashboard'))
+const ChildOverview = lazy(() => import('./pages/parent/ChildOverview'))
+const ChildAttendance = lazy(() => import('./pages/parent/ChildAttendance'))
+const ChildFees = lazy(() => import('./pages/parent/ChildFees'))
+const ChildTimetable = lazy(() => import('./pages/parent/ChildTimetable'))
+const ChildExamResults = lazy(() => import('./pages/parent/ChildExamResults'))
+const LeaveApplication = lazy(() => import('./pages/parent/LeaveApplication'))
+const ParentMessages = lazy(() => import('./pages/parent/ParentMessages'))
+const PaymentResultPage = lazy(() => import('./pages/parent/PaymentResultPage'))
+
+// Admissions pages
+const AdmissionDashboard = lazy(() => import('./pages/admissions/AdmissionDashboard'))
+const EnquiriesPage = lazy(() => import('./pages/admissions/EnquiriesPage'))
+const EnquiryDetail = lazy(() => import('./pages/admissions/EnquiryDetail'))
+const EnquiryForm = lazy(() => import('./pages/admissions/EnquiryForm'))
+const AdmissionSessionsPage = lazy(() => import('./pages/admissions/AdmissionSessionsPage'))
+
+// Finance additions
+const DiscountsPage = lazy(() => import('./pages/finance/DiscountsPage'))
+const PaymentGatewayPage = lazy(() => import('./pages/finance/PaymentGatewayPage'))
+
+// LMS pages
+const LessonPlansPage = lazy(() => import('./pages/lms/LessonPlansPage'))
+const AssignmentsPage = lazy(() => import('./pages/lms/AssignmentsPage'))
+const SubmissionReviewPage = lazy(() => import('./pages/lms/SubmissionReviewPage'))
+
+// Student Portal pages
+const StudentDashboard = lazy(() => import('./pages/student/StudentDashboard'))
+const StudentAttendance = lazy(() => import('./pages/student/StudentAttendance'))
+const StudentFees = lazy(() => import('./pages/student/StudentFees'))
+const StudentTimetable = lazy(() => import('./pages/student/StudentTimetable'))
+const StudentResults = lazy(() => import('./pages/student/StudentResults'))
+const StudentAssignments = lazy(() => import('./pages/student/StudentAssignments'))
+const StudentProfileView = lazy(() => import('./pages/student/StudentProfileView'))
+const StudentStudyHelper = lazy(() => import('./pages/student/StudentStudyHelper'))
+
+// Hostel pages
+const HostelDashboard = lazy(() => import('./pages/hostel/HostelDashboard'))
+const HostelRoomsPage = lazy(() => import('./pages/hostel/HostelRoomsPage'))
+const HostelAllocationsPage = lazy(() => import('./pages/hostel/HostelAllocationsPage'))
+const GatePassesPage = lazy(() => import('./pages/hostel/GatePassesPage'))
+
+// Transport pages
+const TransportDashboard = lazy(() => import('./pages/transport/TransportDashboard'))
+const RoutesPage = lazy(() => import('./pages/transport/RoutesPage'))
+const VehiclesPage = lazy(() => import('./pages/transport/VehiclesPage'))
+const TransportAssignmentsPage = lazy(() => import('./pages/transport/TransportAssignmentsPage'))
+const TransportAttendancePage = lazy(() => import('./pages/transport/TransportAttendancePage'))
+
+// Library pages
+const LibraryDashboard = lazy(() => import('./pages/library/LibraryDashboard'))
+const BookCatalogPage = lazy(() => import('./pages/library/BookCatalogPage'))
+const BookIssuePage = lazy(() => import('./pages/library/BookIssuePage'))
+const OverdueBooksPage = lazy(() => import('./pages/library/OverdueBooksPage'))
+
+// Inventory pages
+const InventoryDashboard = lazy(() => import('./pages/inventory/InventoryDashboard'))
+const InventoryItemsPage = lazy(() => import('./pages/inventory/InventoryItemsPage'))
+const StockTransactionsPage = lazy(() => import('./pages/inventory/StockTransactionsPage'))
+const ItemAssignmentsPage = lazy(() => import('./pages/inventory/ItemAssignmentsPage'))
 
 // Error Boundary to catch runtime crashes
 class ErrorBoundary extends Component {
@@ -217,153 +224,155 @@ function App() {
 
   return (
     <ErrorBoundary>
-      <Routes>
-        {/* Public routes */}
-        <Route path="/login" element={<LoginPage />} />
+      <Suspense fallback={<LoadingSpinner />}>
+        <Routes>
+          {/* Public routes */}
+          <Route path="/login" element={<LoginPage />} />
 
-        {/* Protected routes */}
-        <Route
-          path="/"
-          element={
-            <ProtectedRoute>
-              <Layout />
-            </ProtectedRoute>
-          }
-        >
-          <Route index element={<RootRedirect />} />
-          <Route path="profile" element={<ProfilePage />} />
-          <Route path="dashboard" element={<SchoolRoute><DashboardPage /></SchoolRoute>} />
-
-          {/* Attendance — consolidated into 2 pages */}
-          <Route path="attendance" element={<SchoolRoute><ModuleRoute module="attendance"><CaptureReviewPage /></ModuleRoute></SchoolRoute>} />
-          <Route path="attendance/review/:id" element={<SchoolRoute><ModuleRoute module="attendance"><CaptureReviewPage /></ModuleRoute></SchoolRoute>} />
-          <Route path="attendance/register" element={<SchoolRoute><ModuleRoute module="attendance"><RegisterPage /></ModuleRoute></SchoolRoute>} />
-
-          {/* Redirects from old routes */}
-          <Route path="attendance/upload" element={<Navigate to="/attendance" replace />} />
-          <Route path="attendance/review" element={<Navigate to="/attendance?tab=review" replace />} />
-          <Route path="attendance/records" element={<Navigate to="/attendance/register" replace />} />
-          <Route path="settings" element={<SchoolRoute><SettingsPage /></SchoolRoute>} />
-          <Route path="accuracy" element={<Navigate to="/attendance/register?tab=analytics" replace />} />
-
-          <Route path="students" element={<SchoolRoute><ModuleRoute module="students"><StudentsPage /></ModuleRoute></SchoolRoute>} />
-          <Route path="students/:id" element={<SchoolRoute><ModuleRoute module="students"><StudentProfilePage /></ModuleRoute></SchoolRoute>} />
-          <Route path="classes" element={<SchoolRoute><ModuleRoute module="students"><ClassesGradesPage /></ModuleRoute></SchoolRoute>} />
-
-          {/* HR routes */}
-          <Route path="hr" element={<SchoolRoute><ModuleRoute module="hr"><HRDashboardPage /></ModuleRoute></SchoolRoute>} />
-          <Route path="hr/staff" element={<SchoolRoute><ModuleRoute module="hr"><StaffDirectoryPage /></ModuleRoute></SchoolRoute>} />
-          <Route path="hr/staff/new" element={<SchoolRoute><ModuleRoute module="hr"><StaffFormPage /></ModuleRoute></SchoolRoute>} />
-          <Route path="hr/staff/:id/edit" element={<SchoolRoute><ModuleRoute module="hr"><StaffFormPage /></ModuleRoute></SchoolRoute>} />
-          <Route path="hr/departments" element={<SchoolRoute><ModuleRoute module="hr"><DepartmentsPage /></ModuleRoute></SchoolRoute>} />
-          <Route path="hr/salary" element={<SchoolRoute><ModuleRoute module="hr"><SalaryManagementPage /></ModuleRoute></SchoolRoute>} />
-          <Route path="hr/payroll" element={<SchoolRoute><ModuleRoute module="hr"><PayrollPage /></ModuleRoute></SchoolRoute>} />
-          <Route path="hr/leave" element={<SchoolRoute><ModuleRoute module="hr"><LeaveManagementPage /></ModuleRoute></SchoolRoute>} />
-          <Route path="hr/attendance" element={<SchoolRoute><ModuleRoute module="hr"><StaffAttendancePage /></ModuleRoute></SchoolRoute>} />
-          <Route path="hr/appraisals" element={<SchoolRoute><ModuleRoute module="hr"><PerformanceAppraisalPage /></ModuleRoute></SchoolRoute>} />
-          <Route path="hr/documents" element={<SchoolRoute><ModuleRoute module="hr"><StaffDocumentsPage /></ModuleRoute></SchoolRoute>} />
-
-          {/* Academics routes */}
-          <Route path="academics/subjects" element={<SchoolRoute><ModuleRoute module="academics"><SubjectsPage /></ModuleRoute></SchoolRoute>} />
-          <Route path="academics/timetable" element={<SchoolRoute><ModuleRoute module="academics"><TimetablePage /></ModuleRoute></SchoolRoute>} />
-          <Route path="academics/analytics" element={<SchoolRoute><ModuleRoute module="academics"><AcademicsAnalyticsPage /></ModuleRoute></SchoolRoute>} />
-          <Route path="academics/sessions" element={<SchoolRoute><ModuleRoute module="academics"><AcademicYearsPage /></ModuleRoute></SchoolRoute>} />
-          <Route path="academics/promotion" element={<SchoolRoute><ModuleRoute module="academics"><PromotionPage /></ModuleRoute></SchoolRoute>} />
-          <Route path="academics/exam-types" element={<SchoolRoute><ModuleRoute module="examinations"><ExamTypesPage /></ModuleRoute></SchoolRoute>} />
-          <Route path="academics/exams" element={<SchoolRoute><ModuleRoute module="examinations"><ExamsPage /></ModuleRoute></SchoolRoute>} />
-          <Route path="academics/marks-entry" element={<SchoolRoute><ModuleRoute module="examinations"><MarksEntryPage /></ModuleRoute></SchoolRoute>} />
-          <Route path="academics/results" element={<SchoolRoute><ModuleRoute module="examinations"><ResultsPage /></ModuleRoute></SchoolRoute>} />
-          <Route path="academics/report-cards" element={<SchoolRoute><ModuleRoute module="examinations"><ReportCardPage /></ModuleRoute></SchoolRoute>} />
-          <Route path="academics/grade-scale" element={<SchoolRoute><ModuleRoute module="examinations"><GradeScalePage /></ModuleRoute></SchoolRoute>} />
-
-          {/* Classes (legacy /grades redirects) */}
-          <Route path="grades" element={<Navigate to="/classes" replace />} />
-
-          {/* Notifications */}
-          <Route path="notifications" element={<SchoolRoute><ModuleRoute module="notifications"><NotificationsPage /></ModuleRoute></SchoolRoute>} />
-
-          {/* Finance routes */}
-          <Route path="finance" element={<SchoolRoute><ModuleRoute module="finance"><FinanceDashboardPage /></ModuleRoute></SchoolRoute>} />
-          <Route path="finance/fees" element={<SchoolRoute><ModuleRoute module="finance"><FeeCollectionPage /></ModuleRoute></SchoolRoute>} />
-          <Route path="finance/accounts" element={<Navigate to="/settings?tab=accounts" replace />} />
-          <Route path="finance/expenses" element={<SchoolRoute><ModuleRoute module="finance"><ExpensesPage /></ModuleRoute></SchoolRoute>} />
-          <Route path="finance/reports" element={<SchoolRoute><ModuleRoute module="finance"><FinancialReportsPage /></ModuleRoute></SchoolRoute>} />
-          <Route path="finance/discounts" element={<SchoolRoute><ModuleRoute module="finance"><DiscountsPage /></ModuleRoute></SchoolRoute>} />
-          <Route path="finance/payment-gateways" element={<SchoolRoute><ModuleRoute module="finance"><PaymentGatewayPage /></ModuleRoute></SchoolRoute>} />
-
-          {/* Parent Portal routes */}
-          <Route path="parent/dashboard" element={<ParentRoute><ParentDashboard /></ParentRoute>} />
-          <Route path="parent/children/:studentId" element={<ParentRoute><ChildOverview /></ParentRoute>} />
-          <Route path="parent/children/:studentId/attendance" element={<ParentRoute><ChildAttendance /></ParentRoute>} />
-          <Route path="parent/children/:studentId/fees" element={<ParentRoute><ChildFees /></ParentRoute>} />
-          <Route path="parent/children/:studentId/timetable" element={<ParentRoute><ChildTimetable /></ParentRoute>} />
-          <Route path="parent/children/:studentId/results" element={<ParentRoute><ChildExamResults /></ParentRoute>} />
-          <Route path="parent/leave" element={<ParentRoute><LeaveApplication /></ParentRoute>} />
-          <Route path="parent/messages" element={<ParentRoute><ParentMessages /></ParentRoute>} />
-          <Route path="parent/payment-result" element={<ParentRoute><PaymentResultPage /></ParentRoute>} />
-
-          {/* LMS routes */}
-          <Route path="academics/lesson-plans" element={<SchoolRoute><ModuleRoute module="lms"><LessonPlansPage /></ModuleRoute></SchoolRoute>} />
-          <Route path="academics/assignments" element={<SchoolRoute><ModuleRoute module="lms"><AssignmentsPage /></ModuleRoute></SchoolRoute>} />
-          <Route path="academics/assignments/:id/submissions" element={<SchoolRoute><ModuleRoute module="lms"><SubmissionReviewPage /></ModuleRoute></SchoolRoute>} />
-
-          {/* Student Portal routes */}
-          <Route path="student/dashboard" element={<StudentRoute><StudentDashboard /></StudentRoute>} />
-          <Route path="student/attendance" element={<StudentRoute><StudentAttendance /></StudentRoute>} />
-          <Route path="student/fees" element={<StudentRoute><StudentFees /></StudentRoute>} />
-          <Route path="student/timetable" element={<StudentRoute><StudentTimetable /></StudentRoute>} />
-          <Route path="student/results" element={<StudentRoute><StudentResults /></StudentRoute>} />
-          <Route path="student/assignments" element={<StudentRoute><StudentAssignments /></StudentRoute>} />
-          <Route path="student/profile" element={<StudentRoute><StudentProfileView /></StudentRoute>} />
-          <Route path="student/study-helper" element={<StudentRoute><StudentStudyHelper /></StudentRoute>} />
-
-          {/* Hostel routes */}
-          <Route path="hostel" element={<SchoolRoute><ModuleRoute module="hostel"><HostelDashboard /></ModuleRoute></SchoolRoute>} />
-          <Route path="hostel/rooms" element={<SchoolRoute><ModuleRoute module="hostel"><HostelRoomsPage /></ModuleRoute></SchoolRoute>} />
-          <Route path="hostel/allocations" element={<SchoolRoute><ModuleRoute module="hostel"><HostelAllocationsPage /></ModuleRoute></SchoolRoute>} />
-          <Route path="hostel/gate-passes" element={<SchoolRoute><ModuleRoute module="hostel"><GatePassesPage /></ModuleRoute></SchoolRoute>} />
-
-          {/* Transport routes */}
-          <Route path="transport" element={<SchoolRoute><ModuleRoute module="transport"><TransportDashboard /></ModuleRoute></SchoolRoute>} />
-          <Route path="transport/routes" element={<SchoolRoute><ModuleRoute module="transport"><RoutesPage /></ModuleRoute></SchoolRoute>} />
-          <Route path="transport/vehicles" element={<SchoolRoute><ModuleRoute module="transport"><VehiclesPage /></ModuleRoute></SchoolRoute>} />
-          <Route path="transport/assignments" element={<SchoolRoute><ModuleRoute module="transport"><TransportAssignmentsPage /></ModuleRoute></SchoolRoute>} />
-          <Route path="transport/attendance" element={<SchoolRoute><ModuleRoute module="transport"><TransportAttendancePage /></ModuleRoute></SchoolRoute>} />
-
-          {/* Library routes */}
-          <Route path="library" element={<SchoolRoute><ModuleRoute module="library"><LibraryDashboard /></ModuleRoute></SchoolRoute>} />
-          <Route path="library/catalog" element={<SchoolRoute><ModuleRoute module="library"><BookCatalogPage /></ModuleRoute></SchoolRoute>} />
-          <Route path="library/issues" element={<SchoolRoute><ModuleRoute module="library"><BookIssuePage /></ModuleRoute></SchoolRoute>} />
-          <Route path="library/overdue" element={<SchoolRoute><ModuleRoute module="library"><OverdueBooksPage /></ModuleRoute></SchoolRoute>} />
-
-          {/* Inventory routes */}
-          <Route path="inventory" element={<SchoolRoute><ModuleRoute module="inventory"><InventoryDashboard /></ModuleRoute></SchoolRoute>} />
-          <Route path="inventory/items" element={<SchoolRoute><ModuleRoute module="inventory"><InventoryItemsPage /></ModuleRoute></SchoolRoute>} />
-          <Route path="inventory/transactions" element={<SchoolRoute><ModuleRoute module="inventory"><StockTransactionsPage /></ModuleRoute></SchoolRoute>} />
-          <Route path="inventory/assignments" element={<SchoolRoute><ModuleRoute module="inventory"><ItemAssignmentsPage /></ModuleRoute></SchoolRoute>} />
-
-          {/* Admissions CRM routes */}
-          <Route path="admissions" element={<SchoolRoute><ModuleRoute module="admissions"><AdmissionDashboard /></ModuleRoute></SchoolRoute>} />
-          <Route path="admissions/enquiries" element={<SchoolRoute><ModuleRoute module="admissions"><EnquiriesPage /></ModuleRoute></SchoolRoute>} />
-          <Route path="admissions/enquiries/new" element={<SchoolRoute><ModuleRoute module="admissions"><EnquiryForm /></ModuleRoute></SchoolRoute>} />
-          <Route path="admissions/enquiries/:id" element={<SchoolRoute><ModuleRoute module="admissions"><EnquiryDetail /></ModuleRoute></SchoolRoute>} />
-          <Route path="admissions/enquiries/:id/edit" element={<SchoolRoute><ModuleRoute module="admissions"><EnquiryForm /></ModuleRoute></SchoolRoute>} />
-          <Route path="admissions/sessions" element={<SchoolRoute><ModuleRoute module="admissions"><AdmissionSessionsPage /></ModuleRoute></SchoolRoute>} />
-
-          {/* Super Admin routes */}
+          {/* Protected routes */}
           <Route
-            path="admin"
+            path="/"
             element={
-              <ProtectedRoute requireSuperAdmin>
-                <SuperAdminDashboard />
+              <ProtectedRoute>
+                <Layout />
               </ProtectedRoute>
             }
-          />
-        </Route>
+          >
+            <Route index element={<RootRedirect />} />
+            <Route path="profile" element={<ProfilePage />} />
+            <Route path="dashboard" element={<SchoolRoute><DashboardPage /></SchoolRoute>} />
 
-        {/* Catch-all redirect */}
-        <Route path="*" element={<RootRedirect />} />
-      </Routes>
+            {/* Attendance — consolidated into 2 pages */}
+            <Route path="attendance" element={<SchoolRoute><ModuleRoute module="attendance"><CaptureReviewPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="attendance/review/:id" element={<SchoolRoute><ModuleRoute module="attendance"><CaptureReviewPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="attendance/register" element={<SchoolRoute><ModuleRoute module="attendance"><RegisterPage /></ModuleRoute></SchoolRoute>} />
+
+            {/* Redirects from old routes */}
+            <Route path="attendance/upload" element={<Navigate to="/attendance" replace />} />
+            <Route path="attendance/review" element={<Navigate to="/attendance?tab=review" replace />} />
+            <Route path="attendance/records" element={<Navigate to="/attendance/register" replace />} />
+            <Route path="settings" element={<SchoolRoute><SettingsPage /></SchoolRoute>} />
+            <Route path="accuracy" element={<Navigate to="/attendance/register?tab=analytics" replace />} />
+
+            <Route path="students" element={<SchoolRoute><ModuleRoute module="students"><StudentsPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="students/:id" element={<SchoolRoute><ModuleRoute module="students"><StudentProfilePage /></ModuleRoute></SchoolRoute>} />
+            <Route path="classes" element={<SchoolRoute><ModuleRoute module="students"><ClassesGradesPage /></ModuleRoute></SchoolRoute>} />
+
+            {/* HR routes */}
+            <Route path="hr" element={<SchoolRoute><ModuleRoute module="hr"><HRDashboardPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="hr/staff" element={<SchoolRoute><ModuleRoute module="hr"><StaffDirectoryPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="hr/staff/new" element={<SchoolRoute><ModuleRoute module="hr"><StaffFormPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="hr/staff/:id/edit" element={<SchoolRoute><ModuleRoute module="hr"><StaffFormPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="hr/departments" element={<SchoolRoute><ModuleRoute module="hr"><DepartmentsPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="hr/salary" element={<SchoolRoute><ModuleRoute module="hr"><SalaryManagementPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="hr/payroll" element={<SchoolRoute><ModuleRoute module="hr"><PayrollPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="hr/leave" element={<SchoolRoute><ModuleRoute module="hr"><LeaveManagementPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="hr/attendance" element={<SchoolRoute><ModuleRoute module="hr"><StaffAttendancePage /></ModuleRoute></SchoolRoute>} />
+            <Route path="hr/appraisals" element={<SchoolRoute><ModuleRoute module="hr"><PerformanceAppraisalPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="hr/documents" element={<SchoolRoute><ModuleRoute module="hr"><StaffDocumentsPage /></ModuleRoute></SchoolRoute>} />
+
+            {/* Academics routes */}
+            <Route path="academics/subjects" element={<SchoolRoute><ModuleRoute module="academics"><SubjectsPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="academics/timetable" element={<SchoolRoute><ModuleRoute module="academics"><TimetablePage /></ModuleRoute></SchoolRoute>} />
+            <Route path="academics/analytics" element={<SchoolRoute><ModuleRoute module="academics"><AcademicsAnalyticsPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="academics/sessions" element={<SchoolRoute><ModuleRoute module="academics"><AcademicYearsPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="academics/promotion" element={<SchoolRoute><ModuleRoute module="academics"><PromotionPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="academics/exam-types" element={<SchoolRoute><ModuleRoute module="examinations"><ExamTypesPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="academics/exams" element={<SchoolRoute><ModuleRoute module="examinations"><ExamsPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="academics/marks-entry" element={<SchoolRoute><ModuleRoute module="examinations"><MarksEntryPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="academics/results" element={<SchoolRoute><ModuleRoute module="examinations"><ResultsPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="academics/report-cards" element={<SchoolRoute><ModuleRoute module="examinations"><ReportCardPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="academics/grade-scale" element={<SchoolRoute><ModuleRoute module="examinations"><GradeScalePage /></ModuleRoute></SchoolRoute>} />
+
+            {/* Classes (legacy /grades redirects) */}
+            <Route path="grades" element={<Navigate to="/classes" replace />} />
+
+            {/* Notifications */}
+            <Route path="notifications" element={<SchoolRoute><ModuleRoute module="notifications"><NotificationsPage /></ModuleRoute></SchoolRoute>} />
+
+            {/* Finance routes */}
+            <Route path="finance" element={<SchoolRoute><ModuleRoute module="finance"><FinanceDashboardPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="finance/fees" element={<SchoolRoute><ModuleRoute module="finance"><FeeCollectionPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="finance/accounts" element={<Navigate to="/settings?tab=accounts" replace />} />
+            <Route path="finance/expenses" element={<SchoolRoute><ModuleRoute module="finance"><ExpensesPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="finance/reports" element={<Navigate to="/finance" replace />} />
+            <Route path="finance/discounts" element={<SchoolRoute><ModuleRoute module="finance"><DiscountsPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="finance/payment-gateways" element={<SchoolRoute><ModuleRoute module="finance"><PaymentGatewayPage /></ModuleRoute></SchoolRoute>} />
+
+            {/* Parent Portal routes */}
+            <Route path="parent/dashboard" element={<ParentRoute><ParentDashboard /></ParentRoute>} />
+            <Route path="parent/children/:studentId" element={<ParentRoute><ChildOverview /></ParentRoute>} />
+            <Route path="parent/children/:studentId/attendance" element={<ParentRoute><ChildAttendance /></ParentRoute>} />
+            <Route path="parent/children/:studentId/fees" element={<ParentRoute><ChildFees /></ParentRoute>} />
+            <Route path="parent/children/:studentId/timetable" element={<ParentRoute><ChildTimetable /></ParentRoute>} />
+            <Route path="parent/children/:studentId/results" element={<ParentRoute><ChildExamResults /></ParentRoute>} />
+            <Route path="parent/leave" element={<ParentRoute><LeaveApplication /></ParentRoute>} />
+            <Route path="parent/messages" element={<ParentRoute><ParentMessages /></ParentRoute>} />
+            <Route path="parent/payment-result" element={<ParentRoute><PaymentResultPage /></ParentRoute>} />
+
+            {/* LMS routes */}
+            <Route path="academics/lesson-plans" element={<SchoolRoute><ModuleRoute module="lms"><LessonPlansPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="academics/assignments" element={<SchoolRoute><ModuleRoute module="lms"><AssignmentsPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="academics/assignments/:id/submissions" element={<SchoolRoute><ModuleRoute module="lms"><SubmissionReviewPage /></ModuleRoute></SchoolRoute>} />
+
+            {/* Student Portal routes */}
+            <Route path="student/dashboard" element={<StudentRoute><StudentDashboard /></StudentRoute>} />
+            <Route path="student/attendance" element={<StudentRoute><StudentAttendance /></StudentRoute>} />
+            <Route path="student/fees" element={<StudentRoute><StudentFees /></StudentRoute>} />
+            <Route path="student/timetable" element={<StudentRoute><StudentTimetable /></StudentRoute>} />
+            <Route path="student/results" element={<StudentRoute><StudentResults /></StudentRoute>} />
+            <Route path="student/assignments" element={<StudentRoute><StudentAssignments /></StudentRoute>} />
+            <Route path="student/profile" element={<StudentRoute><StudentProfileView /></StudentRoute>} />
+            <Route path="student/study-helper" element={<StudentRoute><StudentStudyHelper /></StudentRoute>} />
+
+            {/* Hostel routes */}
+            <Route path="hostel" element={<SchoolRoute><ModuleRoute module="hostel"><HostelDashboard /></ModuleRoute></SchoolRoute>} />
+            <Route path="hostel/rooms" element={<SchoolRoute><ModuleRoute module="hostel"><HostelRoomsPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="hostel/allocations" element={<SchoolRoute><ModuleRoute module="hostel"><HostelAllocationsPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="hostel/gate-passes" element={<SchoolRoute><ModuleRoute module="hostel"><GatePassesPage /></ModuleRoute></SchoolRoute>} />
+
+            {/* Transport routes */}
+            <Route path="transport" element={<SchoolRoute><ModuleRoute module="transport"><TransportDashboard /></ModuleRoute></SchoolRoute>} />
+            <Route path="transport/routes" element={<SchoolRoute><ModuleRoute module="transport"><RoutesPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="transport/vehicles" element={<SchoolRoute><ModuleRoute module="transport"><VehiclesPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="transport/assignments" element={<SchoolRoute><ModuleRoute module="transport"><TransportAssignmentsPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="transport/attendance" element={<SchoolRoute><ModuleRoute module="transport"><TransportAttendancePage /></ModuleRoute></SchoolRoute>} />
+
+            {/* Library routes */}
+            <Route path="library" element={<SchoolRoute><ModuleRoute module="library"><LibraryDashboard /></ModuleRoute></SchoolRoute>} />
+            <Route path="library/catalog" element={<SchoolRoute><ModuleRoute module="library"><BookCatalogPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="library/issues" element={<SchoolRoute><ModuleRoute module="library"><BookIssuePage /></ModuleRoute></SchoolRoute>} />
+            <Route path="library/overdue" element={<SchoolRoute><ModuleRoute module="library"><OverdueBooksPage /></ModuleRoute></SchoolRoute>} />
+
+            {/* Inventory routes */}
+            <Route path="inventory" element={<SchoolRoute><ModuleRoute module="inventory"><InventoryDashboard /></ModuleRoute></SchoolRoute>} />
+            <Route path="inventory/items" element={<SchoolRoute><ModuleRoute module="inventory"><InventoryItemsPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="inventory/transactions" element={<SchoolRoute><ModuleRoute module="inventory"><StockTransactionsPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="inventory/assignments" element={<SchoolRoute><ModuleRoute module="inventory"><ItemAssignmentsPage /></ModuleRoute></SchoolRoute>} />
+
+            {/* Admissions CRM routes */}
+            <Route path="admissions" element={<SchoolRoute><ModuleRoute module="admissions"><AdmissionDashboard /></ModuleRoute></SchoolRoute>} />
+            <Route path="admissions/enquiries" element={<SchoolRoute><ModuleRoute module="admissions"><EnquiriesPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="admissions/enquiries/new" element={<SchoolRoute><ModuleRoute module="admissions"><EnquiryForm /></ModuleRoute></SchoolRoute>} />
+            <Route path="admissions/enquiries/:id" element={<SchoolRoute><ModuleRoute module="admissions"><EnquiryDetail /></ModuleRoute></SchoolRoute>} />
+            <Route path="admissions/enquiries/:id/edit" element={<SchoolRoute><ModuleRoute module="admissions"><EnquiryForm /></ModuleRoute></SchoolRoute>} />
+            <Route path="admissions/sessions" element={<SchoolRoute><ModuleRoute module="admissions"><AdmissionSessionsPage /></ModuleRoute></SchoolRoute>} />
+
+            {/* Super Admin routes */}
+            <Route
+              path="admin"
+              element={
+                <ProtectedRoute requireSuperAdmin>
+                  <SuperAdminDashboard />
+                </ProtectedRoute>
+              }
+            />
+          </Route>
+
+          {/* Catch-all redirect */}
+          <Route path="*" element={<RootRedirect />} />
+        </Routes>
+      </Suspense>
     </ErrorBoundary>
   )
 }

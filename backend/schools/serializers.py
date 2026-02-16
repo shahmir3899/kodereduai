@@ -11,8 +11,8 @@ class SchoolSerializer(serializers.ModelSerializer):
     """
     Serializer for School model.
     """
-    user_count = serializers.SerializerMethodField()
-    student_count = serializers.SerializerMethodField()
+    user_count = serializers.IntegerField(read_only=True, default=0)
+    student_count = serializers.IntegerField(read_only=True, default=0)
     organization_name = serializers.CharField(source='organization.name', read_only=True, default=None)
 
     class Meta:
@@ -43,12 +43,6 @@ class SchoolSerializer(serializers.ModelSerializer):
                             f"Module '{key}' is not allowed by the organization '{org.name}'."
                         )
         return value
-
-    def get_user_count(self, obj):
-        return obj.users.count()
-
-    def get_student_count(self, obj):
-        return obj.students.filter(is_active=True).count()
 
 
 class MarkMappingsSerializer(serializers.Serializer):

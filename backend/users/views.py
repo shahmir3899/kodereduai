@@ -9,7 +9,7 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.views import TokenObtainPairView
 from django.contrib.auth import get_user_model
 
-from core.permissions import IsSuperAdmin, IsSchoolAdmin, HasSchoolAccess
+from core.permissions import IsSuperAdmin, IsSchoolAdmin, HasSchoolAccess, ROLE_HIERARCHY, get_effective_role
 from core.mixins import TenantQuerySetMixin, ensure_tenant_school_id
 from .serializers import (
     CustomTokenObtainPairSerializer,
@@ -111,7 +111,9 @@ class UserViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         return queryset.none()
 
     def perform_create(self, serializer):
-        """Set school_id when creating users."""
+        """Create user and auto-create UserSchoolMembership."""
+        from rest_framework.exceptions import ValidationError
+
         user = self.request.user
 
         school_id = (
@@ -122,10 +124,27 @@ class UserViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         if not school_id and not user.is_super_admin:
             school_id = ensure_tenant_school_id(self.request) or user.school_id
 
+        role = self.request.data.get('role', 'STAFF')
+
+        # Enforce role hierarchy
+        creator_role = get_effective_role(self.request)
+        allowed_roles = ROLE_HIERARCHY.get(creator_role, [])
+        if role not in allowed_roles:
+            raise ValidationError({'role': f'You cannot create users with the {role} role.'})
+
         if school_id:
-            serializer.save(school_id=school_id)
+            new_user = serializer.save(school_id=school_id)
         else:
-            serializer.save()
+            new_user = serializer.save()
+
+        # Auto-create membership for the school
+        if school_id:
+            from schools.models import UserSchoolMembership
+            UserSchoolMembership.objects.get_or_create(
+                user=new_user,
+                school_id=school_id,
+                defaults={'role': role, 'is_default': True, 'is_active': True},
+            )
 
 
 class SwitchSchoolView(APIView):

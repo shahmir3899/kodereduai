@@ -4,6 +4,11 @@ import { Link } from 'react-router-dom'
 import { financeApi } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 import TransferModal from '../components/TransferModal'
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell,
+} from 'recharts'
+import { exportFinanceReport } from './finance/financeReportExport'
 
 const typeColors = {
   CASH: 'bg-green-100 text-green-800',
@@ -11,26 +16,36 @@ const typeColors = {
   PERSON: 'bg-purple-100 text-purple-800',
 }
 
-const categoryColors = {
-  SALARY: 'bg-blue-500',
-  RENT: 'bg-purple-500',
-  UTILITIES: 'bg-yellow-500',
-  SUPPLIES: 'bg-green-500',
-  MAINTENANCE: 'bg-orange-500',
-  MISC: 'bg-gray-500',
-}
+const EXPENSE_COLORS = ['#dc2626', '#ea580c', '#f59e0b', '#8b5cf6', '#06b6d4', '#6b7280']
+
+const PERIODS = [
+  { label: 'This Month', getValue: () => { const d = new Date(); return { date_from: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`, date_to: d.toISOString().split('T')[0] } } },
+  { label: 'Last Month', getValue: () => { const d = new Date(); d.setMonth(d.getMonth() - 1); const start = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`; const end = new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split('T')[0]; return { date_from: start, date_to: end } } },
+  { label: 'This Quarter', getValue: () => { const d = new Date(); const q = Math.floor(d.getMonth() / 3); return { date_from: `${d.getFullYear()}-${String(q * 3 + 1).padStart(2, '0')}-01`, date_to: d.toISOString().split('T')[0] } } },
+  { label: 'This Year', getValue: () => { const d = new Date(); return { date_from: `${d.getFullYear()}-01-01`, date_to: d.toISOString().split('T')[0] } } },
+]
+
+const MONTH_NAMES = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 export default function FinanceDashboardPage() {
   const { user, isStaffMember, isPrincipal } = useAuth()
   const canWrite = !isStaffMember
   const hasMultipleSchools = !isStaffMember && (user?.schools?.length > 1 || user?.is_super_admin)
-  const isAdmin = !isPrincipal && !isStaffMember // SCHOOL_ADMIN
+  const isAdmin = !isPrincipal && !isStaffMember
 
   const [showTransferModal, setShowTransferModal] = useState(false)
+  const [periodIdx, setPeriodIdx] = useState(0)
+  const [customFrom, setCustomFrom] = useState('')
+  const [customTo, setCustomTo] = useState('')
+  const [useCustom, setUseCustom] = useState(false)
 
   const now = new Date()
   const currentMonth = now.getMonth() + 1
   const currentYear = now.getFullYear()
+
+  const period = useCustom
+    ? { date_from: customFrom, date_to: customTo }
+    : PERIODS[periodIdx].getValue()
 
   // --- Queries ---
 
@@ -61,24 +76,10 @@ export default function FinanceDashboardPage() {
     enabled: hasMultipleSchools,
   })
 
-  // Expense category summary (current month)
-  const firstOfMonth = `${currentYear}-${String(currentMonth).padStart(2, '0')}-01`
-  const { data: expenseSummary } = useQuery({
-    queryKey: ['expenseSummaryDashboard', currentMonth, currentYear],
-    queryFn: () => financeApi.getExpenseCategorySummary({ date_from: firstOfMonth }),
-  })
-
   // Recent transfers (last 5)
   const { data: transfersData } = useQuery({
     queryKey: ['recentTransfers'],
-    queryFn: () => financeApi.getTransfers(),
-  })
-
-  // Monthly trend (admin only, last 3 months)
-  const { data: trendData } = useQuery({
-    queryKey: ['monthlyTrendDashboard'],
-    queryFn: () => financeApi.getMonthlyTrend({ months: 3 }),
-    enabled: isAdmin,
+    queryFn: () => financeApi.getTransfers({ page_size: 9999 }),
   })
 
   // Recent entries (admin only)
@@ -86,6 +87,29 @@ export default function FinanceDashboardPage() {
     queryKey: ['recentEntries'],
     queryFn: () => financeApi.getRecentEntries({ limit: 15 }),
     enabled: isAdmin,
+  })
+
+  // Finance summary (period-filtered: income/expenses/balance)
+  const { data: summaryReport, isLoading: summaryLoading } = useQuery({
+    queryKey: ['financeSummary', period.date_from, period.date_to],
+    queryFn: () => financeApi.getFinanceSummary(period),
+    enabled: !!(period.date_from && period.date_to),
+  })
+
+  // Monthly trend (6 months, Recharts)
+  const { data: trendReport } = useQuery({
+    queryKey: ['monthlyTrend6'],
+    queryFn: () => financeApi.getMonthlyTrend({ months: 6 }),
+  })
+
+  // Expense category summary (period-filtered)
+  const { data: categorySummary } = useQuery({
+    queryKey: ['expenseCategoryReport', period.date_from, period.date_to],
+    queryFn: () => financeApi.getExpenseCategorySummary({
+      date_from: period.date_from,
+      date_to: period.date_to,
+    }),
+    enabled: !!(period.date_from && period.date_to),
   })
 
   // --- Derived data ---
@@ -101,30 +125,214 @@ export default function FinanceDashboardPage() {
   const feeTotalPending = feeData?.total_pending || 0
   const feeCollectionRate = feeTotalDue > 0 ? Math.round((feeTotalCollected / feeTotalDue) * 100) : 0
 
-  const expenseCategories = expenseSummary?.data?.categories || []
-  const expenseTotal = expenseSummary?.data?.total || 0
-
   const allTransfers = transfersData?.data?.results || transfersData?.data || []
   const recentTransfers = allTransfers.slice(0, 5)
 
   const feeSummaryAllData = feeSummaryAll?.data
-  const trendMonths = trendData?.data?.months || []
   const recentEntries = recentEntriesData?.data || []
 
-  const monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  const summaryData = summaryReport?.data
+  const trendMonths = trendReport?.data?.trend || []
+  const categories = categorySummary?.data?.categories || []
+  const catTotal = categorySummary?.data?.total || 0
+
+  const trendChartData = trendMonths.map(t => ({
+    name: `${MONTH_NAMES[t.month]} ${t.year}`,
+    Income: Number(t.income || 0),
+    Expenses: Number(t.expenses || 0),
+  }))
+
+  const handleExportPDF = () => {
+    exportFinanceReport({
+      schoolName: user?.school_name || '',
+      periodLabel: useCustom ? 'Custom' : PERIODS[periodIdx].label,
+      dateFrom: period.date_from,
+      dateTo: period.date_to,
+      summary: summaryData || {},
+      trendData: trendMonths,
+      categories,
+      catTotal,
+      accounts: hasMultipleSchools ? [] : balances,
+      grandTotal: hasMultipleSchools ? grandTotalAll : grandTotal,
+      feeCollectionRate,
+      feeTotalCollected,
+      feeTotalPending,
+    })
+  }
 
   return (
     <div>
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
+      {/* --- Header with Period Selector + PDF Button --- */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-3">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Finance Dashboard</h1>
           <p className="text-sm text-gray-600">
-            {monthNames[currentMonth]} {currentYear} overview
+            {useCustom ? 'Custom period' : PERIODS[periodIdx].label} overview
           </p>
+        </div>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {PERIODS.map((p, i) => (
+            <button
+              key={p.label}
+              onClick={() => { setPeriodIdx(i); setUseCustom(false) }}
+              className={`px-2.5 py-1 rounded-lg text-xs transition-colors ${
+                !useCustom && periodIdx === i
+                  ? 'bg-primary-600 text-white'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
+          <button
+            onClick={() => setUseCustom(true)}
+            className={`px-2.5 py-1 rounded-lg text-xs transition-colors ${
+              useCustom ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            Custom
+          </button>
+          <button
+            onClick={handleExportPDF}
+            className="px-3 py-1 bg-primary-600 text-white rounded-lg text-xs hover:bg-primary-700 transition-colors flex items-center gap-1"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            PDF
+          </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Custom date range inputs */}
+      {useCustom && (
+        <div className="flex gap-3 mb-4">
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">From</label>
+            <input
+              type="date"
+              value={customFrom}
+              onChange={(e) => setCustomFrom(e.target.value)}
+              className="input text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">To</label>
+            <input
+              type="date"
+              value={customTo}
+              onChange={(e) => setCustomTo(e.target.value)}
+              className="input text-sm"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* --- KPI Row --- */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+        <div className="card py-3 px-4">
+          <p className="text-xs text-gray-500">Account Balance</p>
+          <p className="text-lg font-bold text-gray-900">
+            {Number(hasMultipleSchools ? grandTotalAll : grandTotal).toLocaleString()}
+          </p>
+        </div>
+        <div className="card py-3 px-4">
+          <p className="text-xs text-gray-500">Total Income</p>
+          <p className="text-lg font-bold text-green-700">
+            {summaryLoading ? '...' : Number(summaryData?.total_income || 0).toLocaleString()}
+          </p>
+        </div>
+        <div className="card py-3 px-4">
+          <p className="text-xs text-gray-500">Total Expenses</p>
+          <p className="text-lg font-bold text-red-700">
+            {summaryLoading ? '...' : Number(summaryData?.total_expenses || 0).toLocaleString()}
+          </p>
+        </div>
+        <div className="card py-3 px-4">
+          <p className="text-xs text-gray-500">Net Balance</p>
+          <p className={`text-lg font-bold ${Number(summaryData?.balance) >= 0 ? 'text-blue-700' : 'text-red-700'}`}>
+            {summaryLoading ? '...' : Number(summaryData?.balance || 0).toLocaleString()}
+          </p>
+        </div>
+        <div className="card py-3 px-4">
+          <p className="text-xs text-gray-500">Fee Rate</p>
+          <p className="text-lg font-bold text-blue-700">{feeCollectionRate}%</p>
+          <p className="text-[10px] text-gray-400">{MONTH_NAMES[currentMonth]} {currentYear}</p>
+        </div>
+      </div>
+
+      {/* --- Two-Column Grid --- */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+
+        {/* --- Fee Collection Card (Current Month) --- */}
+        <div className="card">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-gray-700">Fee Collection — {MONTH_NAMES[currentMonth]}</h2>
+            <Link to="/finance/fees" className="text-xs text-primary-600 hover:underline">
+              Details
+            </Link>
+          </div>
+
+          {!hasMultipleSchools ? (
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-green-50 rounded-lg p-3 text-center">
+                <p className="text-xs text-green-600 mb-1">Collected</p>
+                <p className="text-lg font-bold text-green-700">{Number(feeTotalCollected).toLocaleString()}</p>
+              </div>
+              <div className="bg-orange-50 rounded-lg p-3 text-center">
+                <p className="text-xs text-orange-600 mb-1">Pending</p>
+                <p className="text-lg font-bold text-orange-700">{Number(feeTotalPending).toLocaleString()}</p>
+              </div>
+              <div className="bg-blue-50 rounded-lg p-3 text-center">
+                <p className="text-xs text-blue-600 mb-1">Rate</p>
+                <p className="text-lg font-bold text-blue-700">{feeCollectionRate}%</p>
+              </div>
+            </div>
+          ) : (
+            feeSummaryAllData ? (
+              <div>
+                <div className="space-y-2 mb-3">
+                  {feeSummaryAllData.schools?.map((school) => {
+                    const rate = school.total_due > 0 ? Math.round((school.total_collected / school.total_due) * 100) : 0
+                    return (
+                      <div key={school.school_id} className="border rounded-lg p-2">
+                        <p className="text-xs font-medium text-gray-600 mb-1">{school.school_name}</p>
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-green-700">{Number(school.total_collected).toLocaleString()}</span>
+                          <span className="text-gray-400">/</span>
+                          <span className="text-gray-600">{Number(school.total_due).toLocaleString()}</span>
+                          <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${rate >= 80 ? 'bg-green-100 text-green-700' : rate >= 50 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>
+                            {rate}%
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+                <div className="grid grid-cols-3 gap-3 pt-2 border-t">
+                  <div className="text-center">
+                    <p className="text-xs text-green-600">Total Collected</p>
+                    <p className="text-sm font-bold text-green-700">{Number(feeSummaryAllData.grand_total_collected).toLocaleString()}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-xs text-orange-600">Total Pending</p>
+                    <p className="text-sm font-bold text-orange-700">{Number(feeSummaryAllData.grand_total_pending).toLocaleString()}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-xs text-blue-600">Rate</p>
+                    <p className="text-sm font-bold text-blue-700">
+                      {feeSummaryAllData.grand_total_due > 0
+                        ? Math.round((feeSummaryAllData.grand_total_collected / feeSummaryAllData.grand_total_due) * 100)
+                        : 0}%
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-4 text-gray-400 text-sm">Loading...</div>
+            )
+          )}
+        </div>
 
         {/* --- Account Balances Card --- */}
         <div className="card">
@@ -138,7 +346,6 @@ export default function FinanceDashboardPage() {
           </div>
 
           {!hasMultipleSchools ? (
-            // Single school view
             balancesLoading ? (
               <div className="text-center py-4 text-gray-400 text-sm">Loading...</div>
             ) : balances.length === 0 ? (
@@ -167,7 +374,6 @@ export default function FinanceDashboardPage() {
               </div>
             )
           ) : (
-            // Multi-school view
             balancesAllLoading ? (
               <div className="text-center py-4 text-gray-400 text-sm">Loading...</div>
             ) : (balanceGroups.length === 0 && balanceShared.accounts.length === 0) ? (
@@ -218,113 +424,71 @@ export default function FinanceDashboardPage() {
           )}
         </div>
 
-        {/* --- Fee Collection Card --- */}
+        {/* --- Expense Breakdown Card (period-filtered) --- */}
         <div className="card">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-gray-700">Fee Collection — {monthNames[currentMonth]}</h2>
-            <Link to="/finance/fees" className="text-xs text-primary-600 hover:underline">
-              Details
-            </Link>
-          </div>
-
-          {!hasMultipleSchools ? (
-            // Single school
-            <div className="grid grid-cols-3 gap-3">
-              <div className="bg-green-50 rounded-lg p-3 text-center">
-                <p className="text-xs text-green-600 mb-1">Collected</p>
-                <p className="text-lg font-bold text-green-700">{Number(feeTotalCollected).toLocaleString()}</p>
-              </div>
-              <div className="bg-orange-50 rounded-lg p-3 text-center">
-                <p className="text-xs text-orange-600 mb-1">Pending</p>
-                <p className="text-lg font-bold text-orange-700">{Number(feeTotalPending).toLocaleString()}</p>
-              </div>
-              <div className="bg-blue-50 rounded-lg p-3 text-center">
-                <p className="text-xs text-blue-600 mb-1">Rate</p>
-                <p className="text-lg font-bold text-blue-700">{feeCollectionRate}%</p>
-              </div>
-            </div>
-          ) : (
-            // Multi-school admin
-            feeSummaryAllData ? (
-              <div>
-                <div className="space-y-2 mb-3">
-                  {feeSummaryAllData.schools?.map((school) => {
-                    const rate = school.total_due > 0 ? Math.round((school.total_collected / school.total_due) * 100) : 0
-                    return (
-                      <div key={school.school_id} className="border rounded-lg p-2">
-                        <p className="text-xs font-medium text-gray-600 mb-1">{school.school_name}</p>
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-green-700">{Number(school.total_collected).toLocaleString()}</span>
-                          <span className="text-gray-400">/</span>
-                          <span className="text-gray-600">{Number(school.total_due).toLocaleString()}</span>
-                          <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${rate >= 80 ? 'bg-green-100 text-green-700' : rate >= 50 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>
-                            {rate}%
-                          </span>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-                <div className="grid grid-cols-3 gap-3 pt-2 border-t">
-                  <div className="text-center">
-                    <p className="text-xs text-green-600">Total Collected</p>
-                    <p className="text-sm font-bold text-green-700">{Number(feeSummaryAllData.grand_total_collected).toLocaleString()}</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-xs text-orange-600">Total Pending</p>
-                    <p className="text-sm font-bold text-orange-700">{Number(feeSummaryAllData.grand_total_pending).toLocaleString()}</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-xs text-blue-600">Rate</p>
-                    <p className="text-sm font-bold text-blue-700">
-                      {feeSummaryAllData.grand_total_due > 0
-                        ? Math.round((feeSummaryAllData.grand_total_collected / feeSummaryAllData.grand_total_due) * 100)
-                        : 0}%
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="text-center py-4 text-gray-400 text-sm">Loading...</div>
-            )
-          )}
-        </div>
-
-        {/* --- Expense Summary Card --- */}
-        <div className="card">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-gray-700">Expenses — {monthNames[currentMonth]}</h2>
+            <h2 className="text-sm font-semibold text-gray-700">Expense Breakdown</h2>
             <Link to="/finance/expenses" className="text-xs text-primary-600 hover:underline">
               Details
             </Link>
           </div>
 
-          {expenseCategories.length === 0 ? (
-            <p className="text-sm text-gray-400 py-4 text-center">No expenses this month</p>
+          {categories.length === 0 ? (
+            <p className="text-sm text-gray-400 py-4 text-center">No expenses in this period</p>
           ) : (
             <div>
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-2xl font-bold text-gray-900">{Number(expenseTotal).toLocaleString()}</span>
+              {/* Donut Chart */}
+              <div className="h-48">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={categories.map(c => ({ name: c.category_display, value: Number(c.total_amount) }))}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={40}
+                      outerRadius={70}
+                      paddingAngle={3}
+                      dataKey="value"
+                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    >
+                      {categories.map((_, i) => (
+                        <Cell key={i} fill={EXPENSE_COLORS[i % EXPENSE_COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(value) => value.toLocaleString()} />
+                  </PieChart>
+                </ResponsiveContainer>
               </div>
-              <div className="space-y-2">
-                {expenseCategories.map((cat) => {
-                  const pct = expenseTotal > 0 ? (cat.total_amount / expenseTotal * 100) : 0
-                  return (
-                    <div key={cat.category} className="flex items-center gap-2">
-                      <div className={`w-2 h-2 rounded-full ${categoryColors[cat.category] || 'bg-gray-400'}`} />
-                      <span className="text-xs text-gray-600 w-20 truncate">{cat.category_display}</span>
-                      <div className="flex-1 bg-gray-200 rounded-full h-2 overflow-hidden">
-                        <div
-                          className={`h-full rounded-full ${categoryColors[cat.category] || 'bg-gray-400'}`}
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                      <span className="text-xs font-medium text-gray-700 w-16 text-right">
-                        {Number(cat.total_amount).toLocaleString()}
-                      </span>
-                    </div>
-                  )
-                })}
+
+              {/* Category Table */}
+              <div className="overflow-x-auto mt-2">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
+                      <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Amount</th>
+                      <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">%</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-100">
+                    {categories.map((cat) => (
+                      <tr key={cat.category}>
+                        <td className="px-3 py-1.5 text-sm text-gray-900">{cat.category_display}</td>
+                        <td className="px-3 py-1.5 text-sm text-gray-900 text-right">{Number(cat.total_amount).toLocaleString()}</td>
+                        <td className="px-3 py-1.5 text-sm text-gray-500 text-right">
+                          {catTotal > 0 ? Math.round(cat.total_amount / catTotal * 100) : 0}%
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-gray-50">
+                      <td className="px-3 py-1.5 text-sm font-bold text-gray-900">Total</td>
+                      <td className="px-3 py-1.5 text-sm font-bold text-gray-900 text-right">{Number(catTotal).toLocaleString()}</td>
+                      <td className="px-3 py-1.5 text-sm font-bold text-gray-500 text-right">100%</td>
+                    </tr>
+                  </tfoot>
+                </table>
               </div>
             </div>
           )}
@@ -368,9 +532,31 @@ export default function FinanceDashboardPage() {
         </div>
       </div>
 
+      {/* --- Monthly Trend (Recharts, 6 months) --- */}
+      {trendChartData.length > 0 && (
+        <div className="card mb-4">
+          <h2 className="text-sm font-semibold text-gray-700 mb-3">Monthly Trend (Last 6 Months)</h2>
+          <div className="h-56">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={trendChartData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v} />
+                <Tooltip formatter={(value, name) => [value.toLocaleString(), name]} labelStyle={{ fontWeight: 'bold' }} />
+                <Bar dataKey="Income" fill="#16a34a" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="Expenses" fill="#ef4444" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="flex items-center justify-center gap-4 mt-2 text-xs text-gray-500">
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-600" /> Income</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500" /> Expenses</span>
+          </div>
+        </div>
+      )}
+
       {/* --- Recent Entries (Admin+ only) --- */}
       {isAdmin && recentEntries.length > 0 && (
-        <div className="mt-6 card">
+        <div className="card mb-4">
           <h2 className="text-sm font-semibold text-gray-700 mb-3">Recent Entries</h2>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
@@ -417,7 +603,7 @@ export default function FinanceDashboardPage() {
 
       {/* --- Quick Actions --- */}
       {canWrite && (
-        <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
           <Link
             to="/finance/fees"
             className="card flex items-center justify-center py-3 hover:bg-gray-50 transition-colors"
@@ -439,52 +625,9 @@ export default function FinanceDashboardPage() {
         </div>
       )}
 
-      {/* --- Admin-Only: Monthly Trend --- */}
-      {isAdmin && trendMonths.length > 0 && (
-        <div className="mt-6 card">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-gray-700">Monthly Trend</h2>
-            <Link to="/finance/reports" className="text-xs text-primary-600 hover:underline">
-              Full Reports
-            </Link>
-          </div>
-          <div className="flex items-end gap-2 h-32">
-            {trendMonths.map((m, idx) => {
-              const maxVal = Math.max(...trendMonths.map(t => Math.max(t.income || 0, t.expenses || 0)), 1)
-              const incomeH = ((m.income || 0) / maxVal) * 100
-              const expenseH = ((m.expenses || 0) / maxVal) * 100
-              return (
-                <div key={idx} className="flex-1 flex flex-col items-center gap-1">
-                  <div className="flex items-end gap-0.5 h-24 w-full justify-center">
-                    <div
-                      className="bg-green-400 rounded-t w-4"
-                      style={{ height: `${Math.max(incomeH, 2)}%` }}
-                      title={`Income: ${Number(m.income || 0).toLocaleString()}`}
-                    />
-                    <div
-                      className="bg-red-400 rounded-t w-4"
-                      style={{ height: `${Math.max(expenseH, 2)}%` }}
-                      title={`Expenses: ${Number(m.expenses || 0).toLocaleString()}`}
-                    />
-                  </div>
-                  <span className="text-[10px] text-gray-500">{m.month_name?.slice(0, 3)}</span>
-                </div>
-              )
-            })}
-          </div>
-          <div className="flex items-center justify-center gap-4 mt-2 text-xs text-gray-500">
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-400" /> Income</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-400" /> Expenses</span>
-          </div>
-        </div>
-      )}
-
-      {/* --- Admin-Only: Quick Links --- */}
+      {/* --- Admin Quick Links --- */}
       {isAdmin && (
-        <div className="mt-4 flex flex-wrap gap-3">
-          <Link to="/finance/reports" className="text-sm text-primary-600 hover:underline">
-            View Full Reports &rarr;
-          </Link>
+        <div className="flex flex-wrap gap-3">
           <Link to="/settings?tab=accounts" className="text-sm text-primary-600 hover:underline">
             Finance Settings &rarr;
           </Link>

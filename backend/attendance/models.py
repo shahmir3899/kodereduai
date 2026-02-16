@@ -111,6 +111,11 @@ class AttendanceUpload(models.Model):
         ordering = ['-created_at']
         verbose_name = 'Attendance Upload'
         verbose_name_plural = 'Attendance Uploads'
+        indexes = [
+            models.Index(fields=['status']),
+            models.Index(fields=['-created_at']),
+            models.Index(fields=['academic_year']),
+        ]
 
     def __str__(self):
         return f"{self.class_obj.name} - {self.date} ({self.get_status_display()})"
@@ -290,6 +295,10 @@ class AttendanceRecord(models.Model):
         ordering = ['-date', 'student__class_obj', 'student__roll_number']
         verbose_name = 'Attendance Record'
         verbose_name_plural = 'Attendance Records'
+        indexes = [
+            models.Index(fields=['school', 'date', 'status']),
+            models.Index(fields=['student', 'date']),
+        ]
 
     def __str__(self):
         return f"{self.student.name} - {self.date}: {self.get_status_display()}"

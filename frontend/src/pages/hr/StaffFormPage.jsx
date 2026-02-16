@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { hrApi } from '../../services/api'
+import { useAuth } from '../../contexts/AuthContext'
 import { useToast } from '../../components/Toast'
 
 const EMPTY_FORM = {
@@ -28,9 +29,20 @@ export default function StaffFormPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { showError, showSuccess } = useToast()
+  const { getAllowableRoles } = useAuth()
   const isEdit = !!id
 
   const [form, setForm] = useState(EMPTY_FORM)
+  const [createUserAccount, setCreateUserAccount] = useState(false)
+  const [staffUserForm, setStaffUserForm] = useState({
+    username: '', password: '', confirm_password: '', user_role: 'STAFF',
+  })
+  const [staffUserError, setStaffUserError] = useState('')
+  const staffRoleOptions = getAllowableRoles().filter(r => !['SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL'].includes(r))
+
+  const ROLE_LABELS = {
+    HR_MANAGER: 'HR Manager', ACCOUNTANT: 'Accountant', TEACHER: 'Teacher', STAFF: 'Staff',
+  }
 
   // Fetch existing staff member for edit
   const { data: staffData, isLoading: staffLoading } = useQuery({
@@ -42,16 +54,29 @@ export default function StaffFormPage() {
   // Fetch departments
   const { data: deptData } = useQuery({
     queryKey: ['hrDepartments'],
-    queryFn: () => hrApi.getDepartments(),
+    queryFn: () => hrApi.getDepartments({ page_size: 9999 }),
     staleTime: 5 * 60 * 1000,
   })
 
   // Fetch designations (filtered by selected department)
   const { data: desigData } = useQuery({
     queryKey: ['hrDesignations', form.department],
-    queryFn: () => hrApi.getDesignations(form.department ? { department: form.department } : {}),
+    queryFn: () => hrApi.getDesignations(form.department ? { department: form.department, page_size: 9999 } : { page_size: 9999 }),
     staleTime: 5 * 60 * 1000,
   })
+
+  // Auto-generate employee ID for new staff
+  const { data: nextIdData } = useQuery({
+    queryKey: ['hrNextEmployeeId'],
+    queryFn: () => hrApi.getNextEmployeeId(),
+    enabled: !isEdit,
+  })
+
+  useEffect(() => {
+    if (!isEdit && nextIdData?.data?.next_employee_id) {
+      setForm(p => ({ ...p, employee_id: nextIdData.data.next_employee_id }))
+    }
+  }, [nextIdData, isEdit])
 
   // Populate form on edit
   useEffect(() => {
@@ -82,8 +107,8 @@ export default function StaffFormPage() {
   const createMutation = useMutation({
     mutationFn: (data) => hrApi.createStaff(data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['hrStaff'])
-      queryClient.invalidateQueries(['hrDashboardStats'])
+      queryClient.invalidateQueries({ queryKey: ['hrStaff'] })
+      queryClient.invalidateQueries({ queryKey: ['hrDashboardStats'] })
       showSuccess('Staff member created successfully!')
       navigate('/hr/staff')
     },
@@ -98,9 +123,9 @@ export default function StaffFormPage() {
   const updateMutation = useMutation({
     mutationFn: (data) => hrApi.updateStaff(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['hrStaff'])
-      queryClient.invalidateQueries(['hrStaffMember', id])
-      queryClient.invalidateQueries(['hrDashboardStats'])
+      queryClient.invalidateQueries({ queryKey: ['hrStaff'] })
+      queryClient.invalidateQueries({ queryKey: ['hrStaffMember', id] })
+      queryClient.invalidateQueries({ queryKey: ['hrDashboardStats'] })
       showSuccess('Staff member updated successfully!')
       navigate('/hr/staff')
     },
@@ -118,16 +143,41 @@ export default function StaffFormPage() {
       if (field === 'department') {
         next.designation = ''
       }
+      // Auto-fill department when designation is selected (if department is empty)
+      if (field === 'designation' && value && !prev.department) {
+        const allDesigs = desigData?.data?.results || desigData?.data || []
+        const desig = allDesigs.find(d => String(d.id) === value)
+        if (desig?.department) {
+          next.department = String(desig.department)
+        }
+      }
       return next
     })
   }
 
   const handleSubmit = (e) => {
     e.preventDefault()
+    setStaffUserError('')
 
     if (!form.first_name || !form.last_name) {
       showError('First name and last name are required.')
       return
+    }
+
+    // Validate user account fields if checkbox is checked
+    if (createUserAccount && !isEdit) {
+      if (!staffUserForm.username || !staffUserForm.password) {
+        setStaffUserError('Username and password are required.')
+        return
+      }
+      if (staffUserForm.password.length < 8) {
+        setStaffUserError('Password must be at least 8 characters.')
+        return
+      }
+      if (staffUserForm.password !== staffUserForm.confirm_password) {
+        setStaffUserError("Passwords don't match.")
+        return
+      }
     }
 
     const payload = { ...form }
@@ -137,6 +187,15 @@ export default function StaffFormPage() {
     if (!payload.date_of_birth) payload.date_of_birth = null
     if (!payload.date_of_joining) payload.date_of_joining = null
     if (!payload.gender) payload.gender = null
+
+    // Add user account fields if checkbox is checked
+    if (createUserAccount && !isEdit) {
+      payload.create_user_account = true
+      payload.username = staffUserForm.username
+      payload.password = staffUserForm.password
+      payload.confirm_password = staffUserForm.confirm_password
+      payload.user_role = staffUserForm.user_role
+    }
 
     if (isEdit) {
       updateMutation.mutate(payload)
@@ -260,19 +319,20 @@ export default function StaffFormPage() {
               <h2 className="text-sm font-semibold text-gray-700 mb-4">Employment Details</h2>
               <div className="space-y-4">
                 <div>
-                  <label className="label">Employee ID</label>
+                  <label className="label">Employee ID {!isEdit && <span className="text-xs text-gray-400 font-normal">(Auto-generated)</span>}</label>
                   <input
                     type="text"
-                    className="input"
+                    className={`input ${!isEdit ? 'bg-gray-50 text-gray-500' : ''}`}
                     placeholder="e.g., EMP-001"
                     value={form.employee_id}
                     onChange={(e) => handleChange('employee_id', e.target.value)}
+                    readOnly={!isEdit}
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="label">Department</label>
+                    <label className="label">Department <span className="text-xs text-gray-400 font-normal">(Optional)</span></label>
                     <select
                       className="input"
                       value={form.department}
@@ -285,7 +345,7 @@ export default function StaffFormPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="label">Designation</label>
+                    <label className="label">Designation <span className="text-xs text-gray-400 font-normal">(Optional)</span></label>
                     <select
                       className="input"
                       value={form.designation}
@@ -380,6 +440,84 @@ export default function StaffFormPage() {
             </div>
           </div>
         </div>
+
+        {/* Create User Account */}
+        {!isEdit && (
+          <div className="card mt-6">
+            <h2 className="text-sm font-semibold text-gray-700 mb-4">User Account</h2>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={createUserAccount}
+                onChange={(e) => {
+                  setCreateUserAccount(e.target.checked)
+                  if (e.target.checked && form.first_name) {
+                    const suggested = `${form.first_name}_${form.last_name}`.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '')
+                    setStaffUserForm(f => ({ ...f, username: suggested }))
+                  }
+                }}
+                className="rounded"
+              />
+              <span className="text-sm font-medium text-gray-700">Create User Account</span>
+            </label>
+            <p className="text-xs text-gray-500 mt-1 ml-6">Create login credentials so this staff member can access the system</p>
+
+            {createUserAccount && (
+              <div className="mt-4 ml-6 space-y-3 p-4 bg-gray-50 rounded-lg">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="label">Username *</label>
+                    <input
+                      type="text"
+                      className="input"
+                      value={staffUserForm.username}
+                      onChange={(e) => setStaffUserForm(f => ({ ...f, username: e.target.value }))}
+                      placeholder="Login username"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="label">User Role *</label>
+                    <select
+                      className="input"
+                      value={staffUserForm.user_role}
+                      onChange={(e) => setStaffUserForm(f => ({ ...f, user_role: e.target.value }))}
+                    >
+                      {staffRoleOptions.map(role => (
+                        <option key={role} value={role}>{ROLE_LABELS[role] || role}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="label">Password *</label>
+                    <input
+                      type="password"
+                      className="input"
+                      value={staffUserForm.password}
+                      onChange={(e) => setStaffUserForm(f => ({ ...f, password: e.target.value }))}
+                      placeholder="Min 8 characters"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="label">Confirm Password *</label>
+                    <input
+                      type="password"
+                      className="input"
+                      value={staffUserForm.confirm_password}
+                      onChange={(e) => setStaffUserForm(f => ({ ...f, confirm_password: e.target.value }))}
+                      placeholder="Confirm password"
+                      required
+                    />
+                  </div>
+                </div>
+                {staffUserError && <p className="text-sm text-red-600">{staffUserError}</p>}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Action Buttons */}
         <div className="flex justify-end gap-3 mt-6">

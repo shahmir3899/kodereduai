@@ -15,6 +15,13 @@ STAFF_LEVEL_ROLES = ('STAFF', 'TEACHER', 'HR_MANAGER', 'ACCOUNTANT')
 PARENT_ROLES = ('PARENT',)
 STUDENT_ROLES = ('STUDENT',)
 
+# Which roles each role is allowed to create
+ROLE_HIERARCHY = {
+    'SUPER_ADMIN': ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL', 'HR_MANAGER', 'ACCOUNTANT', 'TEACHER', 'STAFF'],
+    'SCHOOL_ADMIN': ['PRINCIPAL', 'HR_MANAGER', 'ACCOUNTANT', 'TEACHER', 'STAFF'],
+    'PRINCIPAL': ['HR_MANAGER', 'ACCOUNTANT', 'TEACHER', 'STAFF'],
+}
+
 
 def get_effective_role(request):
     """
