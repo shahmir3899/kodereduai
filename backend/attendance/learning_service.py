@@ -51,6 +51,7 @@ class LearningService:
         confirmed_absent_ids: List[int],
         name_corrections: Optional[List[Dict]] = None,
         roll_corrections: Optional[List[Dict]] = None,
+        user_changed_marks: Optional[List[Dict]] = None,
     ) -> Dict[str, Any]:
         """
         Record the difference between AI predictions and human confirmation.
@@ -60,6 +61,8 @@ class LearningService:
             confirmed_absent_ids: Student IDs confirmed absent by human
             name_corrections: List of {student_id, confirmed} for name match feedback
             roll_corrections: List of {student_id, confirmed} for roll match feedback
+            user_changed_marks: List of {student_id, ai_suggested, user_confirmed, confidence}
+                               for implicit feedback from simplified UI
 
         Returns:
             Dict with correction statistics
@@ -82,7 +85,36 @@ class LearningService:
 
         corrections = []
 
-        # Record false positives
+        # Record user changed marks (implicit feedback from simplified UI)
+        if user_changed_marks:
+            for change in user_changed_marks:
+                student_id = change.get('student_id')
+                ai_suggested = change.get('ai_suggested')
+                user_confirmed = change.get('user_confirmed')
+                confidence = change.get('confidence', 0)
+                
+                # Determine correction type based on AI suggestion vs user action
+                if ai_suggested == 'ABSENT' and user_confirmed == 'PRESENT':
+                    correction_type = CorrectionType.FALSE_POSITIVE
+                elif ai_suggested == 'PRESENT' and user_confirmed == 'ABSENT':
+                    correction_type = CorrectionType.FALSE_NEGATIVE
+                else:
+                    # Other cases (LATE vs PRESENT, etc.)
+                    correction_type = CorrectionType.MARK_MISREAD
+                
+                ai_entry = next((e for e in all_ai_entries if e.get('student_id') == student_id), {})
+                corrections.append({
+                    'student_id': student_id,
+                    'correction_type': correction_type,
+                    'ai_prediction': ai_suggested,
+                    'human_correction': user_confirmed,
+                    'raw_mark': ai_entry.get('raw_mark', ''),
+                    'ocr_confidence': confidence,
+                    'match_type': ai_entry.get('match_type', ''),
+                    'feedback_source': 'implicit_ui_change'
+                })
+
+        # Record false positives (not already captured by user_changed_marks)
         for student_id in false_positives:
             ai_entry = next((m for m in ai_matched if m.get('student_id') == student_id), {})
             corrections.append({

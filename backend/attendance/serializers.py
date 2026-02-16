@@ -203,6 +203,14 @@ class CorrectionItemSerializer(serializers.Serializer):
     )
 
 
+class UserChangedMarkSerializer(serializers.Serializer):
+    """Implicit feedback: when user changed AI's mark suggestion."""
+    student_id = serializers.IntegerField()
+    ai_suggested = serializers.CharField()  # 'PRESENT', 'ABSENT', 'LATE', etc.
+    user_confirmed = serializers.CharField()  # What user actually marked
+    confidence = serializers.FloatField(min_value=0, max_value=1)
+
+
 class AttendanceConfirmSerializer(serializers.Serializer):
     """
     Serializer for confirming attendance (with optional edits).
@@ -218,6 +226,10 @@ class AttendanceConfirmSerializer(serializers.Serializer):
     roll_corrections = CorrectionItemSerializer(
         many=True, required=False, default=list,
         help_text="Roll number match confirmations/rejections"
+    )
+    user_changed_marks = UserChangedMarkSerializer(
+        many=True, required=False, default=list,
+        help_text="Implicit feedback: marks user changed from AI suggestion"
     )
 
     def validate_absent_student_ids(self, value):

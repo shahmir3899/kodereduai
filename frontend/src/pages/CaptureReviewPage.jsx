@@ -26,6 +26,35 @@ const compressImage = (file) => {
   })
 }
 
+// ─── Image Alignment Guide ───
+function ImageAlignmentGuide({ width, height }) {
+  const colWidth = width / 3
+  return (
+    <svg
+      width={width}
+      height={height}
+      className="absolute inset-0 pointer-events-none"
+      style={{ zIndex: 10 }}
+    >
+      {/* Vertical column guides - 3 columns: Roll#, Name, Attendance */}
+      <line x1={colWidth} y1="0" x2={colWidth} y2={height} stroke="rgba(59, 130, 246, 0.4)" strokeWidth="2" strokeDasharray="5,5" />
+      <line x1={colWidth * 2} y1="0" x2={colWidth * 2} y2={height} stroke="rgba(59, 130, 246, 0.4)" strokeWidth="2" strokeDasharray="5,5" />
+      
+      {/* Horizontal baseline guides */}
+      <line x1="0" y1={height * 0.1} x2={width} y2={height * 0.1} stroke="rgba(34, 197, 94, 0.3)" strokeWidth="1" strokeDasharray="3,3" />
+      <line x1="0" y1={height * 0.9} x2={width} y2={height * 0.9} stroke="rgba(34, 197, 94, 0.3)" strokeWidth="1" strokeDasharray="3,3" />
+      
+      {/* Column labels */}
+      <text x={colWidth * 0.5} y="20" textAnchor="middle" fill="rgba(59, 130, 246, 0.6)" fontSize="12" fontWeight="bold">Roll #</text>
+      <text x={colWidth * 1.5} y="20" textAnchor="middle" fill="rgba(59, 130, 246, 0.6)" fontSize="12" fontWeight="bold">Name</text>
+      <text x={colWidth * 2.5} y="20" textAnchor="middle" fill="rgba(59, 130, 246, 0.6)" fontSize="12" fontWeight="bold">Attendance (Days 1-15)</text>
+      
+      {/* Top alignment indicator */}
+      <rect x="0" y="0" width={width} height="3" fill="rgba(34, 197, 94, 0.5)" />
+    </svg>
+  )
+}
+
 // ─── Tab button ───
 function TabButton({ active, onClick, children, badge }) {
   return (
@@ -298,8 +327,55 @@ function UploadTab({ onUploadSuccess }) {
                     <div className="flex-1">
                       <div className="relative overflow-hidden rounded-lg border border-gray-200 bg-white max-h-48">
                         <img src={fileObj.previewUrl} alt={`Page ${index + 1}`} className="w-full h-auto object-contain max-h-48 transition-transform duration-200" style={{ transform: `rotate(${fileObj.rotation}deg)` }} />
+                        {/* Alignment Grid Overlay */}
+                        <div className="absolute inset-0 pointer-events-none">
+                          <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+                            {/* Vertical column guides - Roll#, Name, Attendance */}
+                            <line x1="33.33" y1="0" x2="33.33" y2="100" stroke="rgba(59, 130, 246, 0.3)" strokeWidth="0.5" strokeDasharray="2,2" />
+                            <line x1="66.66" y1="0" x2="66.66" y2="100" stroke="rgba(59, 130, 246, 0.3)" strokeWidth="0.5" strokeDasharray="2,2" />
+                            
+                            {/* Multiple horizontal baseline guides for row alignment */}
+                            <line x1="0" y1="15" x2="100" y2="15" stroke="rgba(34, 197, 94, 0.5)" strokeWidth="0.6" />
+                            <line x1="0" y1="30" x2="100" y2="30" stroke="rgba(34, 197, 94, 0.35)" strokeWidth="0.6" strokeDasharray="1,1" />
+                            <line x1="0" y1="45" x2="100" y2="45" stroke="rgba(34, 197, 94, 0.35)" strokeWidth="0.6" strokeDasharray="1,1" />
+                            <line x1="0" y1="60" x2="100" y2="60" stroke="rgba(34, 197, 94, 0.35)" strokeWidth="0.6" strokeDasharray="1,1" />
+                            <line x1="0" y1="75" x2="100" y2="75" stroke="rgba(34, 197, 94, 0.35)" strokeWidth="0.6" strokeDasharray="1,1" />
+                            <line x1="0" y1="90" x2="100" y2="90" stroke="rgba(34, 197, 94, 0.5)" strokeWidth="0.6" />
+                            
+                            {/* Column headers indicator area */}
+                            <rect x="0" y="12" width="33.33" height="5" fill="rgba(59, 130, 246, 0.05)" />
+                            <rect x="33.33" y="12" width="33.34" height="5" fill="rgba(59, 130, 246, 0.05)" />
+                            <rect x="66.66" y="12" width="33.34" height="5" fill="rgba(59, 130, 246, 0.05)" />
+                          </svg>
+                          
+                          {/* Status indicator */}
+                          <div className="absolute bottom-1 right-1 bg-blue-500 bg-opacity-70 text-white px-2 py-0.5 rounded text-xs font-medium">
+                            {Math.abs(fileObj.rotation) > 2 ? 'Rotated' : 'Aligned'}
+                          </div>
+                        </div>
                       </div>
                       <p className="text-xs text-gray-500 mt-1 truncate">{fileObj.file.name}</p>
+                      <p className="text-xs text-blue-600 mt-0.5">Blue: Columns | Green: Row alignment (thick = header/footer)</p>
+                      
+                      {/* Fine-grain rotation slider */}
+                      <div className="mt-2 flex items-center gap-2">
+                        <span className="text-xs text-gray-600 font-medium">Rotate:</span>
+                        <input 
+                          type="range" 
+                          min="-45" 
+                          max="45" 
+                          value={fileObj.rotation} 
+                          onChange={(e) => {
+                            const newRotation = parseInt(e.target.value)
+                            setUploadedFiles(prev => prev.map((f, i) => i === index ? { ...f, rotation: newRotation } : f))
+                          }}
+                          className="flex-1 h-1.5 bg-gray-300 rounded-lg appearance-none cursor-pointer"
+                          style={{
+                            background: `linear-gradient(to right, #d1d5db 0%, #d1d5db ${50 + (fileObj.rotation / 90) * 50}%, #3b82f6 ${50 + (fileObj.rotation / 90) * 50}%, #3b82f6 100%)`
+                          }}
+                        />
+                        <span className="text-xs font-mono text-primary-600 w-10 text-right">{fileObj.rotation}°</span>
+                      </div>
                     </div>
                     <div className="flex flex-col gap-2">
                       <div className="flex gap-1">
@@ -334,11 +410,35 @@ function UploadTab({ onUploadSuccess }) {
           Tips for best results
           <svg className="w-4 h-4 sm:hidden transition-transform group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
         </summary>
-        <ul className="text-sm text-blue-700 space-y-1 mt-2">
+        <ul className="text-sm text-blue-700 space-y-2 mt-2">
+          <li>- <strong>Fine-grain rotation:</strong> Use the slider below each image preview for precise alignment
+            <ul className="text-xs text-blue-600 mt-1 ml-4 space-y-1">
+              <li>• Slide left/right to rotate ±45° in small increments</li>
+              <li>• Quick toggle buttons still work for 90° rotations</li>
+              <li>• Watch the green lines align with student rows as you adjust</li>
+            </ul>
+          </li>
+          <li>- <strong>Alignment guides:</strong> Look for the gridlines overlaid on each image
+            <ul className="text-xs text-blue-600 mt-1 ml-4 space-y-1">
+              <li>• <strong className="text-blue-700">Blue vertical lines:</strong> Divide Roll#, Name, and Attendance columns</li>
+              <li>• <strong className="text-blue-700">Green horizontal lines:</strong> 5 alignment guides for student rows
+                <ul className="text-xs text-blue-500 mt-0.5 ml-2">
+                  <li>◦ Thick lines (top & bottom): Mark header and footer rows</li>
+                  <li>◦ Thin dashed lines: Guide for middle student rows</li>
+                </ul>
+              </li>
+              <li>• Best alignment: Student names and marks should sit on or between green lines</li>
+            </ul>
+          </li>
+          <li>- <strong>Review attendance data:</strong> Check Name/Roll columns for AI match confidence
+            <ul className="text-xs text-blue-600 mt-1 ml-4 space-y-1">
+              <li>• ✓ (check) = confirm this AI match is correct</li>
+              <li>• ✗ (X) = AI matched wrong student, needs correction</li>
+              <li>• Use P/A buttons to mark specific students</li>
+            </ul>
+          </li>
           <li>- <strong>Multi-page registers:</strong> Upload all pages - they'll be processed and merged automatically</li>
-          <li>- Use rotation buttons to orient each page correctly</li>
-          <li>- Ensure each image is clear and well-lit</li>
-          <li>- Capture the entire page with all student names visible</li>
+          <li>- Ensure each image is clear, well-lit, and shows all student names and attendance marks</li>
         </ul>
       </details>
 
@@ -575,7 +675,7 @@ function ReviewDetail({ uploadId, onBack }) {
                 })}
               </div>
 
-              {/* Desktop Table */}
+              {/* Desktop Table - Simplified */}
               <div className="hidden sm:block overflow-x-auto max-h-[32rem] overflow-y-auto mb-4 border border-gray-200 rounded-lg">
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 sticky top-0 z-10">

@@ -84,6 +84,7 @@ class GoogleVisionExtractor:
 
         # Get school's mark mappings
         self.mark_mappings = self._get_mark_mappings()
+        logger.info(f"[GoogleVision] School {school.id}: mark_mappings = {self.mark_mappings}")
 
         # Google Vision API credentials
         self.api_key = getattr(settings, 'GOOGLE_VISION_API_KEY', None)
@@ -444,9 +445,10 @@ class GoogleVisionExtractor:
 
         1. Cluster words into rows by y-coordinate
         2. Find header row with date numbers
-        3. Determine column boundaries
-        4. Extract student data from each row
-        5. Reconstruct missing serial numbers
+        3. Merge student rows (name row + attendance mark rows)
+        4. Determine column boundaries
+        5. Extract student data from each row group
+        6. Reconstruct missing serial numbers
         """
         # 1. Cluster words into rows
         rows = self._cluster_into_rows(words)
@@ -470,12 +472,59 @@ class GoogleVisionExtractor:
 
             logger.info(f"Date columns: {date_columns}, name column ends at x={name_col_end}")
 
-        # 3. Parse student rows (rows after header)
-        students = []
+        # 2b. Merge rows: If a row starts with a number (serial), it's a student row.
+        # Any following rows with mostly marks should be merged into it.
+        merged_rows = []
         start_idx = (header_idx + 1) if header_idx is not None else 0
+        i = start_idx
 
-        for i in range(start_idx, len(rows)):
-            student = self._parse_student_row(rows[i], name_col_end, date_positions)
+        while i < len(rows):
+            current_row = rows[i]
+            
+            # Check if this row starts with a serial number
+            has_serial = False
+            if current_row['words']:
+                first_text = current_row['words'][0]['text'].strip()
+                if re.match(r'^\d{1,3}\.?$', first_text):
+                    has_serial = True
+            
+            if has_serial:
+                # This is a student row. Merge with following rows that are mostly marks
+                merged_words = list(current_row['words'])
+                merged_y_min = current_row['y_min']
+                merged_y_max = current_row['y_max']
+                
+                # Look ahead: merge next rows if they're mostly P/A/L etc
+                j = i + 1
+                while j < len(rows):
+                    next_row = rows[j]
+                    # Check if this row is mostly attendance marks
+                    mark_count = sum(1 for w in next_row['words'] 
+                                   if re.match(r'^[PALVXpavlx✓✗√✘→➤]+$', w['text'].strip()))
+                    
+                    # If >50% of words are marks, merge it
+                    if len(next_row['words']) > 0 and mark_count / len(next_row['words']) > 0.5:
+                        merged_words.extend(next_row['words'])
+                        merged_y_max = next_row['y_max']
+                        j += 1
+                    else:
+                        break
+                
+                merged_rows.append({
+                    'words': merged_words,
+                    'y_min': merged_y_min,
+                    'y_max': merged_y_max,
+                })
+                i = j
+            else:
+                i += 1
+        
+        logger.info(f"After merging: {len(merged_rows)} student rows")
+
+        # 3. Parse student rows (merged rows)
+        students = []
+        for merged_row in merged_rows:
+            student = self._parse_student_row(merged_row, name_col_end, date_positions)
             if student:
                 students.append(student)
 
@@ -499,6 +548,11 @@ class GoogleVisionExtractor:
         serial = None
         name_parts = []
         attendance = {}
+
+        # Debug: log all words in the row
+        if row['words']:
+            all_words = [w['text'] for w in row['words']]
+            logger.debug(f"Row words: {all_words}")
 
         # First pass: identify the serial number (first pure number in the row)
         serial_max_x = 0
@@ -525,22 +579,46 @@ class GoogleVisionExtractor:
             matched_day = None
             if date_positions and name_col_end and word_center_x > name_col_end:
                 best_dist = float('inf')
+                best_match_day = None
                 for day, pos in date_positions.items():
                     dist = abs(word_center_x - pos['x'])
                     col_width = max(pos['max_x'] - pos['min_x'], 15)
-                    if dist < best_dist and dist < col_width * 2.5:
+                    # Increase tolerance to 3.5x column width (was 2.5x) to handle highlighted cells
+                    tolerance = col_width * 3.5
+                    if dist < tolerance and dist < best_dist:
                         best_dist = dist
-                        matched_day = day
+                        best_match_day = day
+                
+                if best_match_day is not None:
+                    matched_day = best_match_day
+                    logger.debug(f"Matched mark '{text}' at x={word_center_x} to day {matched_day} (col x={date_positions[matched_day]['x']}, dist={best_dist})")
+            elif name_col_end is None:
+                logger.debug(f"name_col_end is None, cannot classify word '{text}' at x={word_center_x}")
+            elif word_center_x < name_col_end:
+                logger.debug(f"Word '{text}' at x={word_center_x} is in name column (name_col_end={name_col_end})")
+            else:
+                logger.debug(f"Word '{text}' at x={word_center_x} is past column but didn't match any date column (name_col_end={name_col_end})")
 
             if matched_day is not None:
                 # This is an attendance mark
                 mark = text.upper()
+                
+                # Skip visual decorators (arrows, bullets, etc.)
+                if mark in ['➤', '→', '•', '◦', '○', '◉', '■', '□', '▪', '▫']:
+                    logger.debug(f"Skipping visual decorator at day {matched_day}: '{text}'")
+                    continue
+                
                 status = self._interpret_mark(mark)
-                if status != 'UNMARKED' or len(text) == 1:
+                logger.debug(f"Detected mark at day {matched_day}: raw='{text}' (len={len(mark)}) -> status='{status}'")
+                
+                # Always include marks that map to a known status, or single characters
+                if status != 'UNMARKED' or len(mark) <= 2:
                     attendance[str(matched_day)] = {
                         'raw': text,
                         'status': status,
                     }
+                else:
+                    logger.debug(f"Filtered out mark '{mark}' at day {matched_day} (status={status}, len={len(mark)})")
             elif name_col_end is None or word_center_x < name_col_end:
                 # This is part of the name column
                 # Filter out pure numbers (these are likely stray serial/date numbers)
@@ -559,12 +637,18 @@ class GoogleVisionExtractor:
         if not name or len(name) < 2:
             return None
 
-        return ExtractedStudent(
+        student = ExtractedStudent(
             roll_number=serial or '',
             name=name,
             attendance=attendance,
             confidence=0.7 if serial else 0.5,
         )
+        
+        # Debug log for the student's attendance data
+        att_summary = {k: v['status'] for k, v in attendance.items()}
+        logger.debug(f"Parsed student: serial={serial}, name='{name}', attendance_by_day={att_summary}")
+        
+        return student
 
     def _reconstruct_missing_serials(self, students: List[ExtractedStudent]) -> List[ExtractedStudent]:
         """
@@ -815,11 +899,12 @@ class GoogleVisionExtractor:
         # Direct lookup first (handles "P", "A", "AB", etc.)
         result = self.mark_mappings.get(mark)
         if result:
+            logger.debug(f"Mark '{mark}' -> status '{result}' (direct lookup)")
             return result
 
         # Compound mark: split into individual characters, interpret each
         # e.g. "PP" -> [PRESENT, PRESENT] -> PRESENT
-        # e.g. "PA" -> [PRESENT, ABSENT] -> PRESENT (was present at least once)
+        # e.g. "PA" -> [PRESENT, ABSENT] -> ABSENT (defensive: any absence counts)
         # e.g. "AA" -> [ABSENT, ABSENT] -> ABSENT
         statuses = []
         for ch in mark:
@@ -828,16 +913,21 @@ class GoogleVisionExtractor:
                 statuses.append(s)
 
         if not statuses:
+            logger.warning(f"Mark '{mark}' could not be interpreted. Mappings: {self.mark_mappings}")
             return 'UNMARKED'
 
-        # If any mark is PRESENT, student was present
-        if 'PRESENT' in statuses:
-            return 'PRESENT'
-        if 'LATE' in statuses:
-            return 'LATE'
+        # Defensive logic: ABSENT takes priority (catch absences first)
         if 'ABSENT' in statuses:
+            logger.debug(f"Mark '{mark}' -> status 'ABSENT' (compound, defensive)")
             return 'ABSENT'
+        if 'LATE' in statuses:
+            logger.debug(f"Mark '{mark}' -> status 'LATE' (compound)")
+            return 'LATE'
+        if 'PRESENT' in statuses:
+            logger.debug(f"Mark '{mark}' -> status 'PRESENT' (compound)")
+            return 'PRESENT'
 
+        logger.warning(f"Mark '{mark}' has no recognized status in compound: {statuses}")
         return 'UNMARKED'
 
     # ==========================================================

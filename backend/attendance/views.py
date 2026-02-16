@@ -302,6 +302,16 @@ class AttendanceUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
         absent_student_ids = set(serializer.validated_data['absent_student_ids'])
         name_corrections = serializer.validated_data.get('name_corrections', [])
         roll_corrections = serializer.validated_data.get('roll_corrections', [])
+        user_changed_marks = serializer.validated_data.get('user_changed_marks', [])
+
+        logger.info(f"Confirm attendance for upload {upload.id}:")
+        logger.info(f"  Absent IDs: {absent_student_ids}")
+        logger.info(f"  Name corrections: {len(name_corrections)} items")
+        logger.info(f"  Roll corrections: {len(roll_corrections)} items")
+        logger.info(f"  User changed marks (implicit feedback): {len(user_changed_marks)} items")
+        if user_changed_marks:
+            for change in user_changed_marks:
+                logger.info(f"    Student {change['student_id']}: AI suggested {change['ai_suggested']} → User confirmed {change['user_confirmed']} (AI confidence: {change['confidence']})")
 
         # Get all active students in the class
         all_students = Student.objects.filter(
@@ -369,6 +379,7 @@ class AttendanceUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
                 list(absent_student_ids),
                 name_corrections=name_corrections,
                 roll_corrections=roll_corrections,
+                user_changed_marks=user_changed_marks,  # NEW: implicit feedback from simplified UI
             )
             logger.info(f"Learning feedback recorded: {learning_stats}")
         except Exception as e:
