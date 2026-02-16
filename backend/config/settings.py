@@ -222,6 +222,13 @@ if ENVIRONMENT == 'local':
     CELERY_TASK_ALWAYS_EAGER = True
     CELERY_TASK_EAGER_PROPAGATES = True
 
+# Log key environment variables for debugging (especially on Render)
+import logging
+logging.getLogger(__name__).info("ENVIRONMENT=%s", ENVIRONMENT)
+logging.getLogger(__name__).info("CELERY_BROKER_URL=%r", CELERY_BROKER_URL)
+logging.getLogger(__name__).info("CELERY_RESULT_BACKEND=%r", CELERY_RESULT_BACKEND)
+logging.getLogger(__name__).info("REDIS_URL=%r", REDIS_URL)
+
 # SSL settings for rediss:// URLs (Upstash, Render Redis, etc.)
 if CELERY_BROKER_URL.startswith('rediss://'):
     import ssl
