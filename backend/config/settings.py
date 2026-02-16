@@ -164,10 +164,8 @@ REST_FRAMEWORK = {
     'EXCEPTION_HANDLER': 'core.views.custom_exception_handler',
     'DEFAULT_PAGINATION_CLASS': 'core.pagination.FlexiblePageNumberPagination',
     'PAGE_SIZE': 20,
-    'DEFAULT_THROTTLE_CLASSES': [
-        'rest_framework.throttling.AnonRateThrottle',
-        'rest_framework.throttling.UserRateThrottle',
-    ],
+    # Throttling disabled: enable only after properly configuring Redis on Render
+    'DEFAULT_THROTTLE_CLASSES': [],
     'DEFAULT_THROTTLE_RATES': {
         'anon': '30/minute',
         'user': '120/minute',
