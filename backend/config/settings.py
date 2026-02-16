@@ -164,11 +164,10 @@ REST_FRAMEWORK = {
     'EXCEPTION_HANDLER': 'core.views.custom_exception_handler',
     'DEFAULT_PAGINATION_CLASS': 'core.pagination.FlexiblePageNumberPagination',
     'PAGE_SIZE': 20,
-    # Disable throttling if Redis is using localhost (not properly configured on Render)
     'DEFAULT_THROTTLE_CLASSES': [
         'rest_framework.throttling.AnonRateThrottle',
         'rest_framework.throttling.UserRateThrottle',
-    ] if not CELERY_BROKER_URL.startswith('redis://localhost') else [],
+    ],
     'DEFAULT_THROTTLE_RATES': {
         'anon': '30/minute',
         'user': '120/minute',
@@ -223,12 +222,9 @@ if ENVIRONMENT == 'local':
     CELERY_TASK_ALWAYS_EAGER = True
     CELERY_TASK_EAGER_PROPAGATES = True
 
-# Log key environment variables for debugging (especially on Render)
-import logging
-logging.getLogger(__name__).info("ENVIRONMENT=%s", ENVIRONMENT)
-logging.getLogger(__name__).info("CELERY_BROKER_URL=%r", CELERY_BROKER_URL)
-logging.getLogger(__name__).info("CELERY_RESULT_BACKEND=%r", CELERY_RESULT_BACKEND)
-logging.getLogger(__name__).info("REDIS_URL=%r", REDIS_URL)
+# Disable throttling if Redis is using localhost (not properly configured on Render)
+if CELERY_BROKER_URL.startswith('redis://localhost'):
+    REST_FRAMEWORK['DEFAULT_THROTTLE_CLASSES'] = []
 
 # SSL settings for rediss:// URLs (Upstash, Render Redis, etc.)
 if CELERY_BROKER_URL.startswith('rediss://'):
@@ -317,6 +313,13 @@ else:
             'LOCATION': 'eduai-cache',
         }
     }
+
+# Log key environment variables for debugging (especially on Render)
+import logging
+logging.getLogger(__name__).info("ENVIRONMENT=%s", ENVIRONMENT)
+logging.getLogger(__name__).info("CELERY_BROKER_URL=%r", CELERY_BROKER_URL)
+logging.getLogger(__name__).info("CELERY_RESULT_BACKEND=%r", CELERY_RESULT_BACKEND)
+logging.getLogger(__name__).info("REDIS_URL=%r", REDIS_URL)
 
 # =============================================================================
 # AI / LLM Configuration
