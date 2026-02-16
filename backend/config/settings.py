@@ -164,10 +164,11 @@ REST_FRAMEWORK = {
     'EXCEPTION_HANDLER': 'core.views.custom_exception_handler',
     'DEFAULT_PAGINATION_CLASS': 'core.pagination.FlexiblePageNumberPagination',
     'PAGE_SIZE': 20,
+    # Disable throttling if Redis is using localhost (not properly configured on Render)
     'DEFAULT_THROTTLE_CLASSES': [
         'rest_framework.throttling.AnonRateThrottle',
         'rest_framework.throttling.UserRateThrottle',
-    ],
+    ] if not CELERY_BROKER_URL.startswith('redis://localhost') else [],
     'DEFAULT_THROTTLE_RATES': {
         'anon': '30/minute',
         'user': '120/minute',
