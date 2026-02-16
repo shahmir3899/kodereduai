@@ -350,7 +350,7 @@ TESSERACT_CMD = os.getenv('TESSERACT_CMD', r'C:\Program Files\Tesseract-OCR\tess
 # =============================================================================
 SUPABASE_URL = os.getenv('SUPABASE_URL', '').strip()
 SUPABASE_KEY = os.getenv('SUPABASE_KEY', '').strip()
-SUPABASE_BUCKET = os.getenv('SUPABASE_BUCKET', 'attendance-uploads').strip()
+SUPABASE_BUCKET = os.getenv('SUPABASE_BUCKET', 'atten-reg').strip()
 
 # =============================================================================
 # WhatsApp Configuration
