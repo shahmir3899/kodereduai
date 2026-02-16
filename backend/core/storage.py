@@ -4,7 +4,6 @@ Supabase storage service for file uploads.
 
 import logging
 import uuid
-import time
 from datetime import datetime
 from django.conf import settings
 
@@ -24,19 +23,26 @@ class SupabaseStorageService:
 
     @property
     def client(self):
-        """Lazy initialization of Supabase client with extended timeouts."""
+        """Lazy initialization of Supabase client with extended httpx timeout."""
         if self._client is None:
             if not self.url or not self.key:
                 raise Exception("Supabase credentials not configured")
 
             from supabase import create_client
-            # Create client with custom config for longer timeouts
+            import httpx
+            
+            # Create httpx client with 120s timeout for large file uploads
+            # (default is 30s which is too short for Render→Supabase network latency)
+            http_client = httpx.Client(timeout=120.0)
+            
+            # Create Supabase client and inject custom httpx client
             self._client = create_client(self.url, self.key)
-            
-            # Increase timeout for HTTP requests (default is often 5-10s)
-            if hasattr(self._client, '_client_options'):
-                self._client._client_options['timeout'] = 60  # 60 second timeout
-            
+            # Replace the internal httpx client with our longer-timeout version
+            if hasattr(self._client, '_client'):
+                self._client._client = http_client
+            elif hasattr(self._client.storage, '_client'):
+                self._client.storage._client = http_client
+                
         return self._client
 
     def is_configured(self) -> bool:
@@ -45,7 +51,7 @@ class SupabaseStorageService:
 
     def upload_attendance_image(self, file, school_id: int, class_id: int) -> str:
         """
-        Upload attendance image to Supabase Storage with retry logic.
+        Upload attendance image to Supabase Storage.
 
         Args:
             file: File object from request
@@ -64,46 +70,33 @@ class SupabaseStorageService:
         extension = file.name.split('.')[-1] if '.' in file.name else 'jpg'
         filename = f"attendance/{school_id}/{class_id}/{timestamp}_{unique_id}.{extension}"
 
-        # Retry logic: attempt upload up to 3 times with exponential backoff
-        max_retries = 3
-        for attempt in range(max_retries):
-            try:
-                # Read file content
-                file_content = file.read()
-                # Reset file pointer for potential retries
-                file.seek(0)
+        try:
+            # Read file content
+            file_content = file.read()
 
-                # Get content type
-                content_type = getattr(file, 'content_type', 'image/jpeg')
+            # Get content type
+            content_type = getattr(file, 'content_type', 'image/jpeg')
 
-                # Upload to Supabase
-                result = self.client.storage.from_(self.bucket).upload(
-                    path=filename,
-                    file=file_content,
-                    file_options={"content-type": content_type}
-                )
+            logger.info(f"Starting upload to Supabase: {filename} ({len(file_content)} bytes)")
 
-                # Get public URL
-                public_url = self.client.storage.from_(self.bucket).get_public_url(filename)
+            # Upload to Supabase
+            # The httpx client now has 120s timeout to handle Render→Supabase latency
+            result = self.client.storage.from_(self.bucket).upload(
+                path=filename,
+                file=file_content,
+                file_options={"content-type": content_type}
+            )
 
-                logger.info(f"Uploaded attendance image: {filename}")
-                return public_url
+            # Get public URL
+            public_url = self.client.storage.from_(self.bucket).get_public_url(filename)
 
-            except Exception as e:
-                error_msg = str(e)
-                logger.warning(f"Upload attempt {attempt + 1}/{max_retries} failed: {error_msg}")
-                
-                # If this was the last attempt, raise the exception
-                if attempt == max_retries - 1:
-                    logger.error(f"Failed to upload to Supabase after {max_retries} attempts: {error_msg}")
-                    raise Exception(f"Failed to upload image after retries: {error_msg}")
-                
-                # Exponential backoff: wait 2s, 4s, 8s between retries
-                wait_time = 2 ** (attempt + 1)
-                logger.info(f"Retrying upload in {wait_time}s...")
-                time.sleep(wait_time)
-        
-        raise Exception("Upload failed - max retries exceeded")
+            logger.info(f"Successfully uploaded attendance image: {filename} → {public_url}")
+            return public_url
+
+        except Exception as e:
+            error_msg = str(e)
+            logger.error(f"Failed to upload to Supabase: {error_msg}")
+            raise Exception(f"Failed to upload image: {error_msg}")
 
     def delete_file(self, file_path: str) -> bool:
         """
