@@ -372,11 +372,13 @@ class TimetableSlotViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mode
 
     @action(detail=False, methods=['post'])
     def suggest_slots(self, request):
-        """AI: Suggest optimal time slots based on school schedule parameters."""
+        """Suggest optimal time slots based on school schedule parameters. v2"""
         start_time_str = request.data.get('start_time')
         end_time_str = request.data.get('end_time')
         num_periods = int(request.data.get('num_periods', 6))
         period_duration = int(request.data.get('period_duration_minutes', 40))
+        num_breaks = int(request.data.get('num_breaks', 1))
+        break_duration = int(request.data.get('break_duration_minutes', 15))
 
         if not start_time_str or not end_time_str:
             return Response(
@@ -390,49 +392,26 @@ class TimetableSlotViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mode
         total_minutes = (end - start).seconds // 60
 
         # Validate there's enough time
-        min_needed = num_periods * period_duration + 15  # at least one break
+        min_needed = num_periods * period_duration + num_breaks * break_duration
         if total_minutes < min_needed:
             return Response(
-                {'detail': f'Not enough time. Need at least {min_needed} minutes for {num_periods} periods.'},
+                {'detail': f'Not enough time. Need at least {min_needed} minutes for {num_periods} periods and {num_breaks} break(s).'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        # Calculate which periods to insert breaks after (evenly spaced)
+        break_after_periods = set()
+        if num_breaks > 0 and num_periods > 1:
+            for i in range(1, num_breaks + 1):
+                pos = round(i * num_periods / (num_breaks + 1))
+                break_after_periods.add(pos)
 
         slots = []
         order = 1
         current = start
         periods_placed = 0
-        # Insert a break every 2-3 periods, lunch around midpoint
-        lunch_after = num_periods // 2
-        break_interval = 3 if num_periods >= 6 else 2
 
         while periods_placed < num_periods:
-            # Check if we should insert lunch
-            if periods_placed == lunch_after and periods_placed > 0:
-                lunch_end = current + timedelta(minutes=30)
-                slots.append({
-                    'name': 'Lunch Break',
-                    'slot_type': 'LUNCH',
-                    'start_time': current.strftime('%H:%M'),
-                    'end_time': lunch_end.strftime('%H:%M'),
-                    'order': order,
-                })
-                order += 1
-                current = lunch_end
-            # Check if we should insert a short break
-            elif (periods_placed > 0
-                  and periods_placed % break_interval == 0
-                  and periods_placed != lunch_after):
-                break_end = current + timedelta(minutes=15)
-                slots.append({
-                    'name': 'Break',
-                    'slot_type': 'BREAK',
-                    'start_time': current.strftime('%H:%M'),
-                    'end_time': break_end.strftime('%H:%M'),
-                    'order': order,
-                })
-                order += 1
-                current = break_end
-
             # Place the period
             period_end = current + timedelta(minutes=period_duration)
             periods_placed += 1
@@ -445,6 +424,19 @@ class TimetableSlotViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mode
             })
             order += 1
             current = period_end
+
+            # Insert break after this period if scheduled
+            if periods_placed in break_after_periods:
+                break_end = current + timedelta(minutes=break_duration)
+                slots.append({
+                    'name': 'Break',
+                    'slot_type': 'BREAK',
+                    'start_time': current.strftime('%H:%M'),
+                    'end_time': break_end.strftime('%H:%M'),
+                    'order': order,
+                })
+                order += 1
+                current = break_end
 
         return Response({'slots': slots})
 
@@ -459,10 +451,8 @@ class TimetableSlotViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mode
         if not slots_data:
             return Response({'detail': 'No slots provided.'}, status=400)
 
-        # Deactivate existing slots
-        TimetableSlot.objects.filter(school_id=school_id, is_active=True).update(
-            is_active=False,
-        )
+        # Delete existing slots (hard-delete to avoid unique constraint on school_id+order)
+        TimetableSlot.objects.filter(school_id=school_id).delete()
 
         created = 0
         for item in slots_data:
@@ -894,9 +884,10 @@ class AcademicsAnalyticsView(ModuleAccessMixin, APIView):
             months = int(request.query_params.get('months', 6))
             return Response(analytics.attendance_trends(months))
         else:
+            months = int(request.query_params.get('months', 6))
             return Response({
                 'subject_attendance': analytics.subject_attendance_by_slot(date_from, date_to),
                 'teacher_effectiveness': analytics.teacher_effectiveness(date_from, date_to),
                 'slot_recommendations': analytics.optimal_slot_recommendations(),
-                'trends': analytics.attendance_trends(),
+                'attendance_trends': analytics.attendance_trends(months),
             })

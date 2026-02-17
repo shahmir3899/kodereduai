@@ -280,6 +280,9 @@ class ExamSubjectViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
         exam = self.request.query_params.get('exam')
         if exam:
             qs = qs.filter(exam_id=exam)
+        class_obj = self.request.query_params.get('class_obj')
+        if class_obj:
+            qs = qs.filter(exam__class_obj_id=class_obj)
         is_active = self.request.query_params.get('is_active')
         if is_active is not None:
             qs = qs.filter(is_active=is_active.lower() == 'true')

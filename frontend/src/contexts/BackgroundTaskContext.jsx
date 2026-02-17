@@ -36,7 +36,8 @@ export function BackgroundTaskProvider({ children }) {
     queryKey: ['backgroundTasks'],
     queryFn: () => tasksApi.getMyTasks(),
     refetchInterval: (query) => {
-      const tasks = query.state.data?.data || []
+      const raw = query.state.data?.data
+      const tasks = Array.isArray(raw) ? raw : Array.isArray(raw?.results) ? raw.results : []
       const hasActive = tasks.some(
         t => t.status === 'PENDING' || t.status === 'IN_PROGRESS'
       )
@@ -45,7 +46,8 @@ export function BackgroundTaskProvider({ children }) {
     enabled: hasTrackedTasks,
   })
 
-  const allTasks = tasksResponse?.data || []
+  const allTasksRaw = tasksResponse?.data
+  const allTasks = Array.isArray(allTasksRaw) ? allTasksRaw : Array.isArray(allTasksRaw?.results) ? allTasksRaw.results : []
 
   const visibleTasks = allTasks.filter(
     t => trackedTaskIds.includes(t.celery_task_id) &&

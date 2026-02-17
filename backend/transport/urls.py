@@ -6,6 +6,7 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 
 from .views import (
+    TransportDashboardView,
     TransportRouteViewSet,
     TransportStopViewSet,
     TransportVehicleViewSet,
@@ -27,6 +28,8 @@ router.register(r'assignments', TransportAssignmentViewSet, basename='transport-
 router.register(r'attendance', TransportAttendanceViewSet, basename='transport-attendance')
 
 urlpatterns = [
+    # Dashboard
+    path('dashboard/', TransportDashboardView.as_view(), name='transport-dashboard'),
     # GPS Journey endpoints
     path('journey/start/', JourneyStartView.as_view(), name='journey-start'),
     path('journey/end/', JourneyEndView.as_view(), name='journey-end'),

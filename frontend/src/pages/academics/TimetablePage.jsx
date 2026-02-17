@@ -46,6 +46,8 @@ export default function TimetablePage() {
   const [substituteData, setSubstituteData] = useState(null)
   const [loadingSubstitute, setLoadingSubstitute] = useState(false)
 
+  const [confirmDeleteSlotId, setConfirmDeleteSlotId] = useState(null)
+
   // AI Suggest Slots state
   const [showAISuggest, setShowAISuggest] = useState(false)
   const [aiSlotForm, setAiSlotForm] = useState({
@@ -53,8 +55,12 @@ export default function TimetablePage() {
     end_time: '14:00',
     num_periods: 6,
     period_duration_minutes: 40,
+    num_breaks: 1,
+    break_duration_minutes: 15,
   })
   const [suggestedSlots, setSuggestedSlots] = useState(null)
+  const [dragIdx, setDragIdx] = useState(null)
+  const [dragOverIdx, setDragOverIdx] = useState(null)
   const [loadingSuggest, setLoadingSuggest] = useState(false)
   const [applyingSlots, setApplyingSlots] = useState(false)
   const [suggestError, setSuggestError] = useState('')
@@ -336,19 +342,19 @@ export default function TimetablePage() {
   // Slot CRUD mutations
   const createSlotMut = useMutation({
     mutationFn: (data) => academicsApi.createTimetableSlot(data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['timetableSlots'] }); resetSlotForm() },
+    onSuccess: () => { queryClient.refetchQueries({ queryKey: ['timetableSlots'] }); resetSlotForm() },
     onError: (err) => setSlotErrors(err.response?.data || { detail: 'Failed' }),
   })
 
   const updateSlotMut = useMutation({
     mutationFn: ({ id, data }) => academicsApi.updateTimetableSlot(id, data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['timetableSlots'] }); resetSlotForm() },
+    onSuccess: () => { queryClient.refetchQueries({ queryKey: ['timetableSlots'] }); resetSlotForm() },
     onError: (err) => setSlotErrors(err.response?.data || { detail: 'Failed' }),
   })
 
   const deleteSlotMut = useMutation({
     mutationFn: (id) => academicsApi.deleteTimetableSlot(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['timetableSlots'] }),
+    onSuccess: () => queryClient.refetchQueries({ queryKey: ['timetableSlots'] }),
   })
 
   const resetSlotForm = () => { setSlotForm(EMPTY_SLOT); setEditSlotId(null); setSlotErrors({}) }
@@ -367,15 +373,45 @@ export default function TimetablePage() {
     setLoadingSuggest(false)
   }
 
+  // Drag-and-drop reorder for suggested slots
+  const handleSlotDragEnd = (fromIdx, toIdx) => {
+    if (fromIdx === toIdx || !suggestedSlots) return
+    const reordered = [...suggestedSlots]
+    const [moved] = reordered.splice(fromIdx, 1)
+    reordered.splice(toIdx, 0, moved)
+    // Recalculate order numbers and re-sequence times
+    const startTime = reordered[0]?.start_time
+    if (startTime) {
+      const dt = (h, m) => new Date(2000, 0, 1, h, m)
+      let current = dt(...startTime.split(':').map(Number))
+      reordered.forEach((slot, i) => {
+        const duration = (() => {
+          const [sh, sm] = slot.start_time.split(':').map(Number)
+          const [eh, em] = slot.end_time.split(':').map(Number)
+          return (eh * 60 + em) - (sh * 60 + sm)
+        })()
+        slot.order = i + 1
+        slot.start_time = `${String(current.getHours()).padStart(2, '0')}:${String(current.getMinutes()).padStart(2, '0')}`
+        current = new Date(current.getTime() + duration * 60000)
+        slot.end_time = `${String(current.getHours()).padStart(2, '0')}:${String(current.getMinutes()).padStart(2, '0')}`
+      })
+    }
+    setSuggestedSlots(reordered)
+    setDragIdx(null)
+    setDragOverIdx(null)
+  }
+
   const handleApplySuggestedSlots = async () => {
     if (!suggestedSlots?.length) return
     setApplyingSlots(true)
     try {
       await academicsApi.bulkCreateSlots({ slots: suggestedSlots })
-      queryClient.invalidateQueries({ queryKey: ['timetableSlots'] })
+      await queryClient.refetchQueries({ queryKey: ['timetableSlots'] })
       setSuggestedSlots(null)
       setShowAISuggest(false)
-    } catch { /* ignore */ }
+    } catch (err) {
+      setSuggestError(err.response?.data?.detail || 'Failed to apply slots')
+    }
     setApplyingSlots(false)
   }
 
@@ -864,43 +900,71 @@ export default function TimetablePage() {
             {slots.length > 0 && (
               <div className="mb-4 space-y-2">
                 {slots.map(s => (
-                  <div key={s.id} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded font-mono">{s.order}</span>
-                      <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
-                        s.slot_type === 'PERIOD' ? 'bg-blue-100 text-blue-700' :
-                        s.slot_type === 'BREAK' ? 'bg-yellow-100 text-yellow-700' :
-                        s.slot_type === 'LUNCH' ? 'bg-orange-100 text-orange-700' :
-                        'bg-purple-100 text-purple-700'
-                      }`}>
-                        {s.slot_type}
-                      </span>
-                      <span className="text-sm text-gray-700">{s.name}</span>
-                      <span className="text-xs text-gray-400">{s.start_time?.slice(0, 5)}-{s.end_time?.slice(0, 5)}</span>
-                    </div>
-                    <div className="flex gap-1">
-                      <button
-                        onClick={() => {
-                          setSlotForm({
-                            name: s.name, slot_type: s.slot_type,
-                            start_time: s.start_time?.slice(0, 5), end_time: s.end_time?.slice(0, 5),
-                            order: s.order,
-                          })
-                          setEditSlotId(s.id)
-                        }}
-                        className="text-xs text-primary-600 hover:underline"
-                      >Edit</button>
-                      <button
-                        onClick={() => { if (confirm(`Delete slot "${s.name}"?`)) deleteSlotMut.mutate(s.id) }}
-                        className="text-xs text-red-600 hover:underline"
-                      >Del</button>
-                    </div>
+                  <div key={s.id} className={`p-2 rounded-lg transition-all ${confirmDeleteSlotId === s.id ? 'bg-red-50 border border-red-200' : 'bg-gray-50'}`}>
+                    {confirmDeleteSlotId === s.id ? (
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <svg className="w-4 h-4 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                          </svg>
+                          <span className="text-sm text-red-700">Delete <strong>{s.name}</strong> ({s.start_time?.slice(0, 5)}-{s.end_time?.slice(0, 5)})?</span>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => { deleteSlotMut.mutate(s.id); setConfirmDeleteSlotId(null) }}
+                            disabled={deleteSlotMut.isPending}
+                            className="px-3 py-1 text-xs bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50"
+                          >
+                            {deleteSlotMut.isPending ? 'Deleting...' : 'Delete'}
+                          </button>
+                          <button
+                            onClick={() => setConfirmDeleteSlotId(null)}
+                            className="px-3 py-1 text-xs text-gray-600 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded font-mono">{s.order}</span>
+                          <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
+                            s.slot_type === 'PERIOD' ? 'bg-blue-100 text-blue-700' :
+                            s.slot_type === 'BREAK' ? 'bg-yellow-100 text-yellow-700' :
+                            s.slot_type === 'LUNCH' ? 'bg-orange-100 text-orange-700' :
+                            'bg-purple-100 text-purple-700'
+                          }`}>
+                            {s.slot_type}
+                          </span>
+                          <span className="text-sm text-gray-700">{s.name}</span>
+                          <span className="text-xs text-gray-400">{s.start_time?.slice(0, 5)}-{s.end_time?.slice(0, 5)}</span>
+                        </div>
+                        <div className="flex gap-1">
+                          <button
+                            onClick={() => {
+                              setSlotForm({
+                                name: s.name, slot_type: s.slot_type,
+                                start_time: s.start_time?.slice(0, 5), end_time: s.end_time?.slice(0, 5),
+                                order: s.order,
+                              })
+                              setEditSlotId(s.id)
+                            }}
+                            className="text-xs text-primary-600 hover:underline"
+                          >Edit</button>
+                          <button
+                            onClick={() => setConfirmDeleteSlotId(s.id)}
+                            className="text-xs text-red-600 hover:underline"
+                          >Delete</button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
             )}
 
-            {/* AI Suggest Slots Section */}
+            {/* Intelligent Suggest Slots Section */}
             <div className="border-t border-gray-200 pt-4 mb-4">
               <button
                 onClick={() => { setShowAISuggest(p => !p); setSuggestedSlots(null); setSuggestError('') }}
@@ -909,13 +973,13 @@ export default function TimetablePage() {
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
-                {showAISuggest ? 'Hide AI Suggest' : 'AI Suggest Slots'}
+                {showAISuggest ? 'Hide Suggestions' : 'Intelligent Suggest Slots'}
               </button>
 
               {showAISuggest && (
                 <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-lg mb-3">
                   <p className="text-xs text-indigo-700 mb-3">
-                    Enter your school schedule parameters and AI will suggest optimal time slots with breaks.
+                    Enter your school schedule parameters to generate optimal time slots with breaks.
                   </p>
                   <div className="grid grid-cols-2 gap-2 mb-3">
                     <div>
@@ -958,6 +1022,29 @@ export default function TimetablePage() {
                         className="input w-full text-sm"
                       />
                     </div>
+                    <div>
+                      <label className="block text-xs text-indigo-600 mb-1">Number of Breaks</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="5"
+                        value={aiSlotForm.num_breaks}
+                        onChange={e => setAiSlotForm(p => ({ ...p, num_breaks: parseInt(e.target.value) || 0 }))}
+                        className="input w-full text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-indigo-600 mb-1">Break Duration (min)</label>
+                      <input
+                        type="number"
+                        min="5"
+                        max="30"
+                        value={aiSlotForm.break_duration_minutes}
+                        onChange={e => setAiSlotForm(p => ({ ...p, break_duration_minutes: parseInt(e.target.value) || 15 }))}
+                        className="input w-full text-sm"
+                        disabled={aiSlotForm.num_breaks === 0}
+                      />
+                    </div>
                   </div>
                   <button
                     onClick={handleSuggestSlots}
@@ -973,10 +1060,24 @@ export default function TimetablePage() {
 
                   {suggestedSlots && (
                     <div className="mt-3">
-                      <p className="text-xs font-medium text-indigo-700 mb-2">Suggested Schedule:</p>
+                      <p className="text-xs font-medium text-indigo-700 mb-2">Suggested Schedule: <span className="font-normal text-indigo-500">(drag to reorder)</span></p>
                       <div className="space-y-1 mb-3">
                         {suggestedSlots.map((s, i) => (
-                          <div key={i} className="flex items-center gap-2 text-xs px-2 py-1 bg-white rounded border border-indigo-100">
+                          <div
+                            key={`${s.order}-${s.name}`}
+                            draggable
+                            onDragStart={() => setDragIdx(i)}
+                            onDragOver={e => { e.preventDefault(); setDragOverIdx(i) }}
+                            onDragEnd={() => { if (dragIdx !== null && dragOverIdx !== null) handleSlotDragEnd(dragIdx, dragOverIdx); setDragIdx(null); setDragOverIdx(null) }}
+                            className={`flex items-center gap-2 text-xs px-2 py-1.5 bg-white rounded border cursor-grab active:cursor-grabbing select-none transition-all ${
+                              dragIdx === i ? 'opacity-40 border-indigo-400 scale-95' :
+                              dragOverIdx === i && dragIdx !== null ? 'border-indigo-400 shadow-sm ring-1 ring-indigo-200' :
+                              'border-indigo-100'
+                            }`}
+                          >
+                            <svg className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                              <path d="M7 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM13 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM7 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM13 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM7 14a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM13 14a2 2 0 1 0 0 4 2 2 0 0 0 0-4z"/>
+                            </svg>
                             <span className="font-mono text-gray-400 w-4">{s.order}</span>
                             <span className={`px-1.5 py-0.5 rounded font-medium ${
                               s.slot_type === 'PERIOD' ? 'bg-blue-100 text-blue-700' :

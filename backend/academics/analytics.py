@@ -189,11 +189,16 @@ class AcademicsAnalytics:
             class_rates = [class_rate_map[cid] for cid in class_ids if cid in class_rate_map]
             avg_attendance = round(sum(class_rates) / len(class_rates), 1) if class_rates else None
 
+            avg_rating = rating_map.get(tid)
+            # Scale rating (1-5) to percentage (0-100) for chart display
+            avg_rating_scaled = round(avg_rating * 20, 1) if avg_rating is not None else None
+
             results.append({
                 'teacher_id': tid,
                 'teacher_name': teacher_name,
                 'avg_class_attendance_rate': avg_attendance,
-                'avg_rating': rating_map.get(tid),
+                'avg_rating': avg_rating,
+                'avg_rating_scaled': avg_rating_scaled,
                 'classes_count': te['classes_count'],
                 'total_periods': te['total_periods'],
             })

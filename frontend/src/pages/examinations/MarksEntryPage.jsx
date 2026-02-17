@@ -43,6 +43,7 @@ export default function MarksEntryPage() {
     queryFn: () => examinationsApi.getExams({
       academic_year: yearFilter || undefined,
       class_obj: classFilter || undefined,
+      page_size: 9999,
     }),
   })
 
@@ -82,9 +83,9 @@ export default function MarksEntryPage() {
   }
 
   // When selectedSubjectId or existingMarks change, reinit
-  useState(() => {
+  useEffect(() => {
     if (existingMarks.length > 0) initGrid()
-  }, [existingMarks])
+  }, [selectedSubjectId, existingMarks.length])
 
   // Bulk save mutation
   const bulkSaveMut = useMutation({
@@ -231,11 +232,6 @@ export default function MarksEntryPage() {
       }
     }
     reader.readAsBinaryString(file)
-  }
-
-  // Load existing marks when they arrive
-  if (existingMarks.length > 0 && marksData.length === 0) {
-    initGrid()
   }
 
   return (

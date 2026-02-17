@@ -12,6 +12,20 @@ export function AcademicYearProvider({ children }) {
   const [terms, setTerms] = useState([])
   const [loading, setLoading] = useState(true)
 
+  const fetchTermsForYear = useCallback(async (yearId) => {
+    try {
+      const termsRes = await sessionsApi.getTerms({ academic_year: yearId })
+      const termsList = Array.isArray(termsRes.data) ? termsRes.data : termsRes.data.results || []
+      setTerms(termsList)
+      const today = new Date().toISOString().split('T')[0]
+      const active = termsList.find(t => t.start_date <= today && t.end_date >= today)
+      setCurrentTerm(active || null)
+    } catch {
+      setTerms([])
+      setCurrentTerm(null)
+    }
+  }, [])
+
   const fetchAcademicYears = useCallback(async () => {
     if (!activeSchool?.id || isSuperAdmin) {
       setLoading(false)
@@ -21,18 +35,12 @@ export function AcademicYearProvider({ children }) {
     try {
       setLoading(true)
 
-      // Fetch all academic years and current year in parallel
-      const [yearsRes, currentRes] = await Promise.allSettled([
-        sessionsApi.getAcademicYears(),
-        sessionsApi.getCurrentYear(),
-      ])
-
-      const years = yearsRes.status === 'fulfilled' ? yearsRes.value.data : []
-      // Handle both array and paginated responses
+      const yearsRes = await sessionsApi.getAcademicYears()
+      const years = yearsRes.data
       const yearsList = Array.isArray(years) ? years : years.results || []
       setAcademicYears(yearsList)
 
-      // Resolve active year: saved preference → current → first
+      // Resolve active year: saved preference → is_current → first
       const savedId = localStorage.getItem(`active_academic_year_${activeSchool.id}`)
       let resolved = null
 
@@ -40,41 +48,21 @@ export function AcademicYearProvider({ children }) {
         resolved = yearsList.find(y => String(y.id) === String(savedId))
       }
 
-      if (!resolved && currentRes.status === 'fulfilled') {
-        const currentData = currentRes.value.data
-        resolved = yearsList.find(y => y.id === currentData.id) || currentData
-        setTerms(currentData.terms || [])
-        setCurrentTerm(currentData.current_term || null)
-      }
-
-      if (!resolved && yearsList.length > 0) {
-        // Fall back to the one marked as current, or the first
-        resolved = yearsList.find(y => y.is_current) || yearsList[0]
+      if (!resolved) {
+        resolved = yearsList.find(y => y.is_current) || yearsList[0] || null
       }
 
       if (resolved) {
         setActiveAcademicYear(resolved)
         localStorage.setItem(`active_academic_year_${activeSchool.id}`, resolved.id)
-
-        // If we resolved to a non-current year, fetch its terms
-        if (currentRes.status !== 'fulfilled' || resolved.id !== currentRes.value?.data?.id) {
-          try {
-            const termsRes = await sessionsApi.getTerms({ academic_year: resolved.id })
-            const termsList = Array.isArray(termsRes.data) ? termsRes.data : termsRes.data.results || []
-            setTerms(termsList)
-            // Find current term by date
-            const today = new Date().toISOString().split('T')[0]
-            const active = termsList.find(t => t.start_date <= today && t.end_date >= today)
-            setCurrentTerm(active || null)
-          } catch { /* terms are optional */ }
-        }
+        await fetchTermsForYear(resolved.id)
       }
     } catch (error) {
       console.error('Failed to fetch academic years:', error)
     } finally {
       setLoading(false)
     }
-  }, [activeSchool?.id, isSuperAdmin])
+  }, [activeSchool?.id, isSuperAdmin, fetchTermsForYear])
 
   useEffect(() => {
     if (isAuthenticated && !isSuperAdmin) {
@@ -90,20 +78,8 @@ export function AcademicYearProvider({ children }) {
 
     setActiveAcademicYear(year)
     localStorage.setItem(`active_academic_year_${activeSchool.id}`, year.id)
-
-    // Fetch terms for the new year
-    try {
-      const termsRes = await sessionsApi.getTerms({ academic_year: yearId })
-      const termsList = Array.isArray(termsRes.data) ? termsRes.data : termsRes.data.results || []
-      setTerms(termsList)
-      const today = new Date().toISOString().split('T')[0]
-      const active = termsList.find(t => t.start_date <= today && t.end_date >= today)
-      setCurrentTerm(active || null)
-    } catch {
-      setTerms([])
-      setCurrentTerm(null)
-    }
-  }, [academicYears, activeAcademicYear?.id, activeSchool?.id])
+    await fetchTermsForYear(yearId)
+  }, [academicYears, activeAcademicYear?.id, activeSchool?.id, fetchTermsForYear])
 
   const refresh = useCallback(() => {
     return fetchAcademicYears()

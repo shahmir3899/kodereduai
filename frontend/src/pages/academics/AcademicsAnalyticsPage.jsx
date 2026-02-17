@@ -16,7 +16,7 @@ export default function AcademicsAnalyticsPage() {
   const [dateTo, setDateTo] = useState(() => new Date().toISOString().split('T')[0])
   const [months, setMonths] = useState(6)
 
-  const { data: overviewRes, isLoading } = useQuery({
+  const { data: overviewRes, isLoading, isError, error } = useQuery({
     queryKey: ['academicsAnalytics', 'overview', dateFrom, dateTo, months],
     queryFn: () => academicsApi.getAnalytics({ type: 'overview', date_from: dateFrom, date_to: dateTo, months }),
   })
@@ -24,7 +24,7 @@ export default function AcademicsAnalyticsPage() {
   const data = overviewRes?.data || {}
   const subjectAttendance = data.subject_attendance?.subjects || []
   const teacherEffectiveness = data.teacher_effectiveness?.teachers || []
-  const slotRecommendations = data.slot_recommendations || []
+  const slotRecommendations = data.slot_recommendations?.recommendations || []
   const trends = data.attendance_trends?.months || []
 
   // Transform trends for recharts
@@ -69,6 +69,14 @@ export default function AcademicsAnalyticsPage() {
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto mb-3"></div>
           <p className="text-sm text-gray-500">Analyzing data...</p>
         </div>
+      ) : isError ? (
+        <div className="card text-center py-12">
+          <svg className="w-12 h-12 text-red-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Failed to load analytics</h3>
+          <p className="text-sm text-gray-500">{error?.response?.data?.detail || error?.message || 'Something went wrong.'}</p>
+        </div>
       ) : (
         <div className="space-y-6">
           {/* Row 1: Subject Attendance by Time + Teacher Effectiveness */}
@@ -84,7 +92,7 @@ export default function AcademicsAnalyticsPage() {
                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                     <XAxis dataKey="subject_name" tick={{ fontSize: 11 }} interval={0} angle={-30} textAnchor="end" height={60} />
                     <YAxis tick={{ fontSize: 11 }} domain={[0, 100]} unit="%" />
-                    <Tooltip formatter={(val) => `${val.toFixed(1)}%`} />
+                    <Tooltip formatter={(val) => val != null ? `${val.toFixed(1)}%` : 'N/A'} />
                     <Legend wrapperStyle={{ fontSize: 12 }} />
                     <Bar dataKey="morning_rate" name="Morning" fill="#4f46e5" radius={[2, 2, 0, 0]} />
                     <Bar dataKey="afternoon_rate" name="Afternoon" fill="#06b6d4" radius={[2, 2, 0, 0]} />
@@ -108,7 +116,7 @@ export default function AcademicsAnalyticsPage() {
                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                     <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11 }} unit="%" />
                     <YAxis type="category" dataKey="teacher_name" width={100} tick={{ fontSize: 11 }} />
-                    <Tooltip formatter={(val) => `${val.toFixed(1)}%`} />
+                    <Tooltip formatter={(val) => val != null ? `${val.toFixed(1)}%` : 'N/A'} />
                     <Legend wrapperStyle={{ fontSize: 12 }} />
                     <Bar dataKey="avg_class_attendance_rate" name="Class Attendance" fill="#4f46e5" radius={[0, 2, 2, 0]} />
                     <Bar dataKey="avg_rating_scaled" name="Rating (scaled)" fill="#f59e0b" radius={[0, 2, 2, 0]} />
