@@ -88,7 +88,20 @@
       "Bash(git -C /d/Personal/smart-attendance log:*)",
       "Bash(node:*)",
       "Bash(node -e:*)",
-      "Bash(npx vitest:*)"
+      "Bash(npx vitest:*)",
+      "Bash(git -C /d/Personal/smart-attendance remote -v)",
+      "Bash(source:*)",
+      "Bash(# Save tokens for reuse export TOKEN=\"\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzcxNDI1MTc1LCJpYXQiOjE3NzEzMzg3NzUsImp0aSI6ImE3Y2U1MWY4MGEwMDQ0NTVhYjlhYTk1ZmNmMDY5YzRmIiwidXNlcl9pZCI6IjE1NSIsInVzZXJuYW1lIjoiUDE5U0NIX3N1cGVyYWRtaW4iLCJyb2xlIjoiU1VQRVJfQURNSU4iLCJzY2hvb2xfaWQiOm51bGx9.knSdmWg_Jyx9dCxwQR7-CyBeDc3yMohkWIWQ1oH9L1Q\"\" export SCHOOL_ID=37 # Also login as school admin \\(focus3899\\) for school 1 curl -s http://localhost:8000/api/auth/login/ -X POST -H \"\"Content-Type: application/json\"\" -d ''{\"\"username\"\":\"\"focus3899\"\",\"\"password\"\":\"\"Abcd1234\"\"}'' | python -m json.tool)",
+      "Bash(\"d:/Personal/smart-attendance/docs/BACKEND_APPS.md\":*)",
+      "Bash(\"d:/Personal/smart-attendance/docs/FRONTEND_PAGES.md\":*)",
+      "Bash(\"d:/Personal/smart-attendance/docs/API_ENDPOINTS.md\":*)",
+      "Bash(wc:*)",
+      "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzcxNDI5ODIwLCJpYXQiOjE3NzEzNDM0MjAsImp0aSI6ImY5ODY0ZjE5MGQwYTQ2MDdiZWRiOWIyYTQ1NzhjMjM3IiwidXNlcl9pZCI6IjEzNCIsInVzZXJuYW1lIjoiU0VFRF9URVNUX2FkbWluIiwicm9sZSI6IlNDSE9PTF9BRE1JTiIsInNjaG9vbF9pZCI6MzcsIm9yZ2FuaXphdGlvbl9pZCI6MjF9.x_DdUZTfYu4JloFkTYmkqwOc9Rh7Hj7bOAlQZRqeKWU\")",
+      "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzcxNDMxMjY3LCJpYXQiOjE3NzEzNDQ4NjcsImp0aSI6IjA5MzQyYzU5ZWI2YjQ3MjZhY2MyNzE5NGQyMjkyYTJjIiwidXNlcl9pZCI6IjQiLCJ1c2VybmFtZSI6ImZvY3VzMzg5OSIsInJvbGUiOiJTQ0hPT0xfQURNSU4iLCJzY2hvb2xfaWQiOjF9.RC7pRZ_o8lKxkJLOYiM-vgOj2nIp2Rod3dS57JhQLWc\")",
+      "Bash(wmic process:*)",
+      "Bash(powershell -Command \"Get-CimInstance Win32_Process -Filter \"\"Name=''python.exe''\"\" | Select-Object ProcessId, CommandLine | Format-List\")",
+      "Bash(taskkill:*)",
+      "Bash(powershell -Command \"Get-CimInstance Win32_Process -Filter \"\"Name=''python.exe''\"\" | Where-Object { $_.CommandLine -like ''*manage.py runserver*'' } | Select-Object ProcessId, CommandLine | Format-List\")"
     ]
   }
 }

@@ -1,0 +1,123 @@
+==============================================================================
+SESSION PROMPTS — Copy-paste these at the start of each Claude Code session
+==============================================================================
+
+
+--- PROMPT 1: BUG FIX ---
+
+Read the following documentation files to understand the project:
+- CLAUDE.md (root)
+- docs/BACKEND_APPS.md
+- docs/API_ENDPOINTS.md
+- docs/API_RESPONSES.md
+- docs/FRONTEND_PAGES.md
+- docs/FRONTEND_COMPONENTS.md
+- docs/ATTENDANCE_PIPELINE.md
+- docs/ENV_AND_DEPLOYMENT.md
+
+Now, here is the issue:
+[1- academic- ai analytics fattal error
+2- academic- marks entry subject dropdown not showing data
+3- transport- add stop Nd rout not showing"]
+
+Based on the documentation:
+1. Identify which apps, models, serializers, API endpoints, and frontend
+   pages/components are involved
+2. Trace the data flow from frontend to backend for this feature
+3. Propose a step-by-step plan to fix the issue
+4. After implementing the fix, update the relevant docs/ files if any API
+   responses, endpoints, models, or component behavior changed
+
+
+--- PROMPT 2: NEW FEATURE ---
+
+Read all docs/ files for project context.
+
+I want to add [feature description — e.g., "SMS notifications when a
+student is marked absent"].
+
+1. Identify all related modules, endpoints, and components from the docs
+2. Plan the implementation (backend models/views, frontend pages, API changes)
+3. Implement it
+4. Update docs/ files to reflect any new endpoints, response fields,
+   components, or model changes
+
+
+--- PROMPT 3: DEBUGGING ---
+
+Read all docs/ files for project context.
+
+Bug: [description — e.g., "POST /api/attendance/uploads/{id}/confirm/
+returns 500 when academic_year is null"]
+
+1. Use API_ENDPOINTS.md and API_RESPONSES.md to understand the expected
+   behavior
+2. Trace the issue through backend code
+3. Fix it
+4. Update API_RESPONSES.md or API_ENDPOINTS.md if the fix changes any
+   API behavior
+
+
+--- PROMPT 4: REFACTORING / IMPROVEMENT ---
+
+Read all docs/ files for project context.
+
+I want to refactor/improve [description — e.g., "the attendance pipeline
+to support batch uploads of multiple images at once"].
+
+1. Read ATTENDANCE_PIPELINE.md (or relevant doc) to understand current flow
+2. Identify all affected files: models, views, serializers, frontend components
+3. Propose a plan with minimal disruption to existing functionality
+4. Implement the changes
+5. Update all affected docs/ files (especially API_ENDPOINTS.md,
+   API_RESPONSES.md, and the relevant pipeline/component docs)
+
+
+--- PROMPT 5: FRONTEND-ONLY CHANGE ---
+
+Read these docs for context:
+- CLAUDE.md
+- docs/FRONTEND_PAGES.md
+- docs/FRONTEND_COMPONENTS.md
+- docs/API_RESPONSES.md
+
+Task: [description — e.g., "Add a filter by date range on the attendance
+register page"]
+
+1. Identify the page component and its sub-components from FRONTEND_PAGES.md
+2. Check API_RESPONSES.md for available query params on the related endpoint
+3. Implement the frontend change
+4. Update FRONTEND_PAGES.md or FRONTEND_COMPONENTS.md if new components
+   or props were added
+
+
+--- PROMPT 6: BACKEND-ONLY CHANGE ---
+
+Read these docs for context:
+- CLAUDE.md
+- docs/BACKEND_APPS.md
+- docs/API_ENDPOINTS.md
+- docs/API_RESPONSES.md
+
+Task: [description — e.g., "Add a bulk delete endpoint for expired
+fee payments"]
+
+1. Identify the relevant app, models, and existing endpoints from the docs
+2. Implement the new endpoint (view, serializer, URL registration)
+3. Update API_ENDPOINTS.md with the new endpoint
+4. Update API_RESPONSES.md with the sample response
+5. Update BACKEND_APPS.md if any model changes were made
+
+
+--- PROMPT 7: QUICK INVESTIGATION ---
+
+Read all docs/ files for project context.
+
+I need to understand: [question — e.g., "How does the session-scoped
+roll number system work? Why is roll_number on both Student and
+StudentEnrollment?"]
+
+1. Search the docs for all references to the topic
+2. Trace through the relevant code (models, views, frontend)
+3. Explain the current implementation clearly
+4. Suggest improvements if any issues are found
