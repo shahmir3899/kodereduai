@@ -4,7 +4,7 @@ SESSION PROMPTS — Copy-paste these at the start of each Claude Code session
 
 
 --- PROMPT 1: BUG FIX ---
-
+Bugs
 Read the following documentation files to understand the project:
 - CLAUDE.md (root)
 - docs/BACKEND_APPS.md
@@ -15,10 +15,10 @@ Read the following documentation files to understand the project:
 - docs/ATTENDANCE_PIPELINE.md
 - docs/ENV_AND_DEPLOYMENT.md
 
-Now, here is the issue:
-[1- academic- ai analytics fattal error
-2- academic- marks entry subject dropdown not showing data
-3- transport- add stop Nd rout not showing"]
+Now, here are the issue:
+1- https://kodereduai.onrender.com/academics/promotion at the end of wizard where students shows are not in roll number order
+2- on same page AI advisor starts and shows Tasks in background but stuck at zero on Render production env
+3- https://kodereduai.onrender.com/academics/marks-entry on this page subject filter not showing data
 
 Based on the documentation:
 1. Identify which apps, models, serializers, API endpoints, and frontend

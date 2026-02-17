@@ -92,6 +92,13 @@ export default function PromotionPage() {
   const enrollments = enrollmentsRes?.data?.results || enrollmentsRes?.data || []
   const recommendations = advisorData?.recommendations || []
 
+  // Natural sort comparator for roll numbers (handles "1", "2", "10" correctly)
+  const rollSort = (a, b) => {
+    const ra = a.roll_number ?? a.current_roll ?? ''
+    const rb = b.roll_number ?? b.current_roll ?? ''
+    return String(ra).localeCompare(String(rb), undefined, { numeric: true, sensitivity: 'base' })
+  }
+
   // Bulk promote (background task)
   const promoteMut = useBackgroundTask({
     mutationFn: (data) => sessionsApi.bulkPromote(data),
@@ -105,7 +112,7 @@ export default function PromotionPage() {
   // Initialize promotions when enrollments load
   const initializePromotions = () => {
     if (enrollments.length > 0) {
-      setPromotions(enrollments.map(e => ({
+      setPromotions(enrollments.slice().sort(rollSort).map(e => ({
         student_id: e.student,
         student_name: e.student_name,
         current_class: e.class_name,
@@ -164,7 +171,7 @@ export default function PromotionPage() {
       alert('Please select a target class first using "Set all target class" before accepting recommendations.')
       return
     }
-    // Build promotions from advisor data
+    // Build promotions from advisor data, sorted by roll number
     const newPromotions = recommendations.map(r => {
       const effectiveRec = getEffectiveRec(r)
       return {
@@ -176,7 +183,7 @@ export default function PromotionPage() {
         new_roll_number: r.roll_number,
         include: effectiveRec === 'PROMOTE',
       }
-    })
+    }).sort(rollSort)
     setPromotions(newPromotions)
     setShowAdvisor(false)
     setStep(3)

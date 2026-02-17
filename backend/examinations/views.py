@@ -114,6 +114,27 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
             qs = qs.filter(is_active=True)
         return qs
 
+    def perform_create(self, serializer):
+        super().perform_create(serializer)
+        exam = serializer.instance
+        # Auto-create ExamSubject entries from the class's assigned subjects
+        from academics.models import ClassSubject
+        class_subjects = ClassSubject.objects.filter(
+            school_id=exam.school_id,
+            class_obj=exam.class_obj,
+            is_active=True,
+        ).select_related('subject')
+        exam_subjects = [
+            ExamSubject(
+                school_id=exam.school_id,
+                exam=exam,
+                subject=cs.subject,
+            )
+            for cs in class_subjects
+        ]
+        if exam_subjects:
+            ExamSubject.objects.bulk_create(exam_subjects, ignore_conflicts=True)
+
     def perform_destroy(self, instance):
         instance.is_active = False
         instance.save()

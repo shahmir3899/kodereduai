@@ -50,7 +50,11 @@ def dispatch_background_task(
             triggered_by=user,
         )
         try:
-            celery_task_func(*task_args, **task_kwargs)
+            # Use .apply() to properly set up Celery task context (self.request.id)
+            # so that task functions using self.request.id for progress tracking work
+            celery_task_func.apply(
+                args=task_args, kwargs=task_kwargs, task_id=celery_task_id,
+            )
         except Exception as task_exc:
             logger.exception(f"Sync fallback failed for '{title}'")
             mark_task_failed(celery_task_id, str(task_exc)[:500])

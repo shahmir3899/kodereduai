@@ -216,7 +216,7 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | Method | URL | Params |
 |--------|-----|--------|
 | GET/POST | /api/examinations/exam-types/ | |
-| GET/POST | /api/examinations/exams/ | academic_year, exam_type |
+| GET/POST | /api/examinations/exams/ | academic_year, exam_type | POST auto-creates ExamSubjects from class's assigned subjects |
 | POST | /api/examinations/exams/{id}/publish/ | |
 | GET | /api/examinations/exams/{id}/results/ | |
 | GET | /api/examinations/exams/{id}/class_summary/ | |
