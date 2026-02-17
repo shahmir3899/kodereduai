@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { academicsApi, classesApi, hrApi } from '../../services/api'
+import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useDebounce } from '../../hooks/useDebounce'
 
 const SEVERITY_STYLES = {
@@ -50,6 +51,7 @@ const EMPTY_ASSIGNMENT = { class_obj: '', subjects: [], teacher: '', periods_per
 
 export default function SubjectsPage() {
   const queryClient = useQueryClient()
+  const { activeAcademicYear } = useAcademicYear()
   const [tab, setTab] = useState('subjects')
 
   // Subject state
@@ -61,6 +63,7 @@ export default function SubjectsPage() {
   const [subjectErrors, setSubjectErrors] = useState({})
   const [showQuickAdd, setShowQuickAdd] = useState(true)
   const [quickAddMsg, setQuickAddMsg] = useState('')
+  const [quickAddingCode, setQuickAddingCode] = useState(null)
 
   // Assignment state
   const [classFilter, setClassFilter] = useState('')
@@ -76,21 +79,23 @@ export default function SubjectsPage() {
   })
 
   const { data: assignRes, isLoading: assignLoading } = useQuery({
-    queryKey: ['classSubjects', classFilter],
-    queryFn: () => academicsApi.getClassSubjects({ class_obj: classFilter || undefined, page_size: 9999 }),
+    queryKey: ['classSubjects', classFilter, activeAcademicYear?.id],
+    queryFn: () => academicsApi.getClassSubjects({
+      class_obj: classFilter || undefined,
+      ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
+      page_size: 9999,
+    }),
     enabled: tab === 'assignments',
   })
 
   const { data: classesData } = useQuery({
     queryKey: ['classes'],
     queryFn: () => classesApi.getClasses({ page_size: 9999 }),
-    staleTime: 5 * 60 * 1000,
   })
 
   const { data: staffData } = useQuery({
     queryKey: ['hrStaffActive'],
     queryFn: () => hrApi.getStaff({ employment_status: 'ACTIVE', page_size: 500 }),
-    staleTime: 5 * 60 * 1000,
   })
 
   // AI Insights queries
@@ -207,7 +212,11 @@ export default function SubjectsPage() {
   // Quick add single preset
   const handleQuickAdd = (preset) => {
     if (existingCodes.has(preset.code)) return
-    createSubjectMut.mutate({ name: preset.name, code: preset.code, description: '', is_elective: false })
+    setQuickAddingCode(preset.code)
+    createSubjectMut.mutate(
+      { name: preset.name, code: preset.code, description: '', is_elective: false },
+      { onSettled: () => setQuickAddingCode(null) },
+    )
   }
 
   // Quick add all remaining presets
@@ -314,6 +323,7 @@ export default function SubjectsPage() {
                 <div className="flex flex-wrap gap-2 mb-3">
                   {PRESET_SUBJECTS.map(p => {
                     const exists = existingCodes.has(p.code)
+                    const isAdding = quickAddingCode === p.code
                     return (
                       <button
                         key={p.code}
@@ -322,14 +332,21 @@ export default function SubjectsPage() {
                         className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
                           exists
                             ? 'bg-green-50 text-green-600 border border-green-200 cursor-default'
-                            : 'bg-primary-50 text-primary-700 border border-primary-200 hover:bg-primary-100 cursor-pointer'
+                            : isAdding
+                              ? 'bg-primary-100 text-primary-700 border border-primary-300 cursor-wait'
+                              : 'bg-primary-50 text-primary-700 border border-primary-200 hover:bg-primary-100 cursor-pointer'
                         }`}
                       >
-                        {exists && (
+                        {isAdding ? (
+                          <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                          </svg>
+                        ) : exists ? (
                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                           </svg>
-                        )}
+                        ) : null}
                         <span className="font-mono text-[10px] opacity-70">{p.code}</span>
                         {p.name}
                       </button>

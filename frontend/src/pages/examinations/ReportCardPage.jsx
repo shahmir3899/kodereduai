@@ -1,12 +1,21 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { examinationsApi, sessionsApi, studentsApi } from '../../services/api'
+import { useAcademicYear } from '../../contexts/AcademicYearContext'
 
 export default function ReportCardPage() {
+  const { activeAcademicYear } = useAcademicYear()
   const [studentId, setStudentId] = useState('')
   const [yearId, setYearId] = useState('')
   const [termId, setTermId] = useState('')
   const [search, setSearch] = useState('')
+
+  // Sync year filter with global session switcher
+  useEffect(() => {
+    if (activeAcademicYear?.id) {
+      setYearId(String(activeAcademicYear.id))
+    }
+  }, [activeAcademicYear?.id])
 
   // Queries
   const { data: yearsRes } = useQuery({

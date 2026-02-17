@@ -51,6 +51,7 @@ class StudentSerializer(serializers.ModelSerializer):
     school_name = serializers.CharField(source='school.name', read_only=True)
     has_user_account = serializers.SerializerMethodField()
     user_username = serializers.SerializerMethodField()
+    roll_number = serializers.SerializerMethodField()
 
     class Meta:
         model = Student
@@ -69,6 +70,13 @@ class StudentSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def get_roll_number(self, obj):
+        """Return session-scoped roll number when available, else current snapshot."""
+        enrollment_roll = getattr(obj, '_enrollment_roll_number', None)
+        if enrollment_roll is not None:
+            return enrollment_roll
+        return obj.roll_number
 
     def get_has_user_account(self, obj):
         return hasattr(obj, 'user_profile') and obj.user_profile is not None
@@ -102,14 +110,22 @@ class StudentCreateSerializer(serializers.ModelSerializer):
                 'class_obj': "The selected class does not belong to this school."
             })
 
-        if Student.objects.filter(
-            school=school,
-            class_obj=class_obj,
-            roll_number=roll_number
-        ).exists():
-            raise serializers.ValidationError({
-                'roll_number': f"Roll number '{roll_number}' already exists in this class."
-            })
+        # Check roll uniqueness against enrollment for current year
+        from academic_sessions.models import AcademicYear, StudentEnrollment
+        current_year = AcademicYear.objects.filter(
+            school=school, is_current=True,
+        ).first()
+
+        if current_year:
+            if StudentEnrollment.objects.filter(
+                school=school,
+                academic_year=current_year,
+                class_obj=class_obj,
+                roll_number=roll_number,
+            ).exists():
+                raise serializers.ValidationError({
+                    'roll_number': f"Roll number '{roll_number}' already exists in this class for {current_year.name}."
+                })
 
         return attrs
 
@@ -163,26 +179,57 @@ class StudentBulkCreateSerializer(serializers.Serializer):
         class_id = validated_data['class_id']
         students_data = validated_data['students']
 
+        from academic_sessions.models import AcademicYear, StudentEnrollment
+        current_year = AcademicYear.objects.filter(
+            school_id=school_id, is_current=True,
+        ).first()
+
         created = []
         updated = []
         errors = []
 
         for student_data in students_data:
             try:
-                student, was_created = Student.objects.update_or_create(
-                    school_id=school_id,
-                    class_obj_id=class_id,
-                    roll_number=student_data['roll_number'],
-                    defaults={
-                        'name': student_data['name'],
-                        'parent_phone': student_data.get('parent_phone', ''),
-                        'parent_name': student_data.get('parent_name', ''),
-                    }
-                )
-                if was_created:
-                    created.append(student)
-                else:
+                roll = student_data['roll_number']
+                existing_enrollment = None
+
+                # Look up by enrollment (session-scoped roll)
+                if current_year:
+                    existing_enrollment = StudentEnrollment.objects.filter(
+                        school_id=school_id,
+                        academic_year=current_year,
+                        class_obj_id=class_id,
+                        roll_number=roll,
+                    ).select_related('student').first()
+
+                if existing_enrollment:
+                    # Update existing student
+                    student = existing_enrollment.student
+                    student.name = student_data['name']
+                    student.parent_phone = student_data.get('parent_phone', '')
+                    student.parent_name = student_data.get('parent_name', '')
+                    student.save(update_fields=['name', 'parent_phone', 'parent_name', 'updated_at'])
                     updated.append(student)
+                else:
+                    # Create new student
+                    student = Student.objects.create(
+                        school_id=school_id,
+                        class_obj_id=class_id,
+                        roll_number=roll,
+                        name=student_data['name'],
+                        parent_phone=student_data.get('parent_phone', ''),
+                        parent_name=student_data.get('parent_name', ''),
+                    )
+                    if current_year:
+                        StudentEnrollment.objects.create(
+                            school_id=school_id,
+                            student=student,
+                            academic_year=current_year,
+                            class_obj_id=class_id,
+                            roll_number=roll,
+                            status='ACTIVE',
+                        )
+                    created.append(student)
             except Exception as e:
                 errors.append({
                     'roll_number': student_data.get('roll_number'),

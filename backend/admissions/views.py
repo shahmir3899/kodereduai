@@ -1,31 +1,27 @@
-"""
-Admission views: sessions, enquiries, documents, notes, analytics, and followups.
+﻿"""
+Simplified admission views: enquiries CRUD, status updates, batch conversion,
+notes, and followups.
 """
 
-from datetime import date, timedelta
+from datetime import date
 
 from django.db import transaction
-from django.db.models import Count, Q
-from django.db.models.functions import TruncMonth
+from django.db.models import Q
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 
-from core.permissions import (
-    IsSchoolAdmin, IsSchoolAdminOrReadOnly, HasSchoolAccess, ModuleAccessMixin,
-)
+from core.permissions import IsSchoolAdmin, IsSchoolAdminOrReadOnly, HasSchoolAccess, ModuleAccessMixin
 from core.mixins import TenantQuerySetMixin, ensure_tenant_school_id
-from .models import AdmissionSession, AdmissionEnquiry, AdmissionDocument, AdmissionNote
+from .models import AdmissionEnquiry, AdmissionNote
 from .serializers import (
-    AdmissionSessionSerializer,
-    AdmissionEnquiryListSerializer,
-    AdmissionEnquiryDetailSerializer,
-    AdmissionEnquiryCreateSerializer,
-    AdmissionEnquiryStageSerializer,
-    AdmissionEnquiryConvertSerializer,
-    AdmissionDocumentSerializer,
+    EnquiryListSerializer,
+    EnquiryDetailSerializer,
+    EnquiryCreateSerializer,
+    EnquiryStatusSerializer,
+    BatchConvertSerializer,
     AdmissionNoteSerializer,
 )
 
@@ -35,7 +31,6 @@ def _resolve_school_id(request):
     sid = ensure_tenant_school_id(request)
     if sid:
         return sid
-    # If X-School-ID header was sent but rejected, don't fall back
     if request.headers.get('X-School-ID'):
         return None
     sid = (
@@ -50,87 +45,36 @@ def _resolve_school_id(request):
     return None
 
 
-# ── Admission Session ────────────────────────────────────────
-
-class AdmissionSessionViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
-    """CRUD for admission session windows (admin only)."""
-    required_module = 'admissions'
-    queryset = AdmissionSession.objects.all()
-    serializer_class = AdmissionSessionSerializer
-    permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
-
-
-    def get_queryset(self):
-        queryset = super().get_queryset().select_related(
-            'school', 'academic_year',
-        )
-
-        is_active = self.request.query_params.get('is_active')
-        if is_active is not None:
-            queryset = queryset.filter(is_active=is_active.lower() == 'true')
-
-        academic_year = self.request.query_params.get('academic_year')
-        if academic_year:
-            queryset = queryset.filter(academic_year_id=academic_year)
-
-        return queryset
-
-    def perform_create(self, serializer):
-        school_id = _resolve_school_id(self.request)
-        if school_id:
-            serializer.save(school_id=school_id)
-        else:
-            serializer.save()
-
-    @action(detail=False, methods=['get'], url_path='active')
-    def active_sessions(self, request):
-        """Return only currently active admission sessions."""
-        queryset = self.get_queryset().filter(is_active=True)
-        serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)
-
-
-# ── Admission Enquiry ────────────────────────────────────────
+# -- Enquiry ViewSet --
 
 class AdmissionEnquiryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
-    """CRUD + stage transitions + conversion for admission enquiries."""
+    """CRUD + status updates + batch conversion for admission enquiries."""
     required_module = 'admissions'
     queryset = AdmissionEnquiry.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
 
-
     def get_serializer_class(self):
         if self.action == 'list':
-            return AdmissionEnquiryListSerializer
+            return EnquiryListSerializer
         if self.action in ('create', 'update', 'partial_update'):
-            return AdmissionEnquiryCreateSerializer
-        if self.action == 'update_stage':
-            return AdmissionEnquiryStageSerializer
-        if self.action == 'convert':
-            return AdmissionEnquiryConvertSerializer
-        return AdmissionEnquiryDetailSerializer
+            return EnquiryCreateSerializer
+        if self.action == 'update_status':
+            return EnquiryStatusSerializer
+        if self.action == 'batch_convert':
+            return BatchConvertSerializer
+        return EnquiryDetailSerializer
 
     def get_queryset(self):
-        queryset = super().get_queryset().select_related(
-            'school', 'session',
-            'assigned_to', 'converted_student',
-        )
+        queryset = super().get_queryset().select_related('school', 'converted_student')
 
         if self.action == 'retrieve':
-            queryset = queryset.prefetch_related('documents').annotate(
-                notes_count=Count('activity_notes'),
-            )
-        elif self.action == 'list':
-            queryset = queryset.annotate(
-                notes_count=Count('activity_notes'),
-            )
+            queryset = queryset.prefetch_related('activity_notes__user')
 
-        # ── Filters ──
         params = self.request.query_params
 
-        stage = params.get('stage')
-        if stage:
-            queryset = queryset.filter(stage=stage.upper())
+        status_filter = params.get('status')
+        if status_filter:
+            queryset = queryset.filter(status=status_filter.upper())
 
         grade_level = params.get('grade_level')
         if grade_level:
@@ -139,14 +83,6 @@ class AdmissionEnquiryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
         source = params.get('source')
         if source:
             queryset = queryset.filter(source=source.upper())
-
-        priority = params.get('priority')
-        if priority:
-            queryset = queryset.filter(priority=priority.upper())
-
-        assigned_to = params.get('assigned_to')
-        if assigned_to:
-            queryset = queryset.filter(assigned_to_id=assigned_to)
 
         date_from = params.get('date_from')
         if date_from:
@@ -159,9 +95,9 @@ class AdmissionEnquiryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
         search = params.get('search')
         if search:
             queryset = queryset.filter(
-                Q(child_name__icontains=search) |
-                Q(parent_name__icontains=search) |
-                Q(parent_phone__icontains=search)
+                Q(name__icontains=search)
+                | Q(father_name__icontains=search)
+                | Q(mobile__icontains=search)
             )
 
         return queryset
@@ -173,138 +109,170 @@ class AdmissionEnquiryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
             extra['school_id'] = school_id
         instance = serializer.save(**extra)
 
-        # Auto-create a system note for new enquiry
         AdmissionNote.objects.create(
             enquiry=instance,
             user=self.request.user,
-            note=f"Enquiry created for {instance.child_name}",
+            note=f"Enquiry created for {instance.name}",
             note_type='SYSTEM',
         )
 
-    # ── Stage Transition ─────────────────────────────────────
-
-    @action(detail=True, methods=['patch'], url_path='update-stage')
-    def update_stage(self, request, pk=None):
-        """Move enquiry to a new pipeline stage and auto-log a note."""
+    @action(detail=True, methods=['patch'], url_path='update-status')
+    def update_status(self, request, pk=None):
+        """Change enquiry status (NEW -> CONFIRMED, any -> CANCELLED, etc.)."""
         enquiry = self.get_object()
-        serializer = AdmissionEnquiryStageSerializer(
-            instance=enquiry,
-            data=request.data,
-            context={'request': request},
-        )
+        serializer = EnquiryStatusSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        updated = serializer.save()
-        return Response(AdmissionEnquiryDetailSerializer(updated).data)
 
-    # ── Convert to Student ───────────────────────────────────
+        old_status = enquiry.get_status_display()
+        new_status_code = serializer.validated_data['status']
 
-    @action(detail=True, methods=['post'], url_path='convert')
-    def convert(self, request, pk=None):
-        """Convert an accepted enquiry into a Student record."""
-        enquiry = self.get_object()
-
-        if enquiry.converted_student is not None:
+        if enquiry.status == 'CONVERTED':
             return Response(
-                {'detail': 'This enquiry has already been converted.'},
+                {'detail': 'Cannot change status of a converted enquiry.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        serializer = AdmissionEnquiryConvertSerializer(data=request.data)
+        enquiry.status = new_status_code
+        enquiry.save(update_fields=['status', 'updated_at'])
+
+        new_status = enquiry.get_status_display()
+        note_text = serializer.validated_data.get('note', '')
+        log_msg = f"Status changed from {old_status} to {new_status}"
+        if note_text:
+            log_msg += f": {note_text}"
+
+        AdmissionNote.objects.create(
+            enquiry=enquiry,
+            user=request.user,
+            note=log_msg,
+            note_type='STATUS_CHANGE',
+        )
+
+        return Response(EnquiryDetailSerializer(enquiry).data, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['post'], url_path='batch-convert')
+    def batch_convert(self, request):
+        """Convert multiple CONFIRMED enquiries into Student + StudentEnrollment."""
+        serializer = BatchConvertSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
+        enquiry_ids = serializer.validated_data['enquiry_ids']
+        academic_year_id = serializer.validated_data['academic_year_id']
         class_id = serializer.validated_data['class_id']
-        roll_number = serializer.validated_data['roll_number']
 
         from students.models import Student, Class as StudentClass
+        from academic_sessions.models import StudentEnrollment, AcademicYear
 
-        # Validate the class belongs to the same school
+        school_id = _resolve_school_id(request)
+
         try:
-            class_obj = StudentClass.objects.get(
-                id=class_id, school_id=enquiry.school_id,
-            )
+            class_obj = StudentClass.objects.get(id=class_id, school_id=school_id)
         except StudentClass.DoesNotExist:
             return Response(
                 {'detail': 'Class not found in this school.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Check duplicate roll number
-        if Student.objects.filter(
-            school_id=enquiry.school_id, class_obj=class_obj, roll_number=roll_number,
-        ).exists():
+        try:
+            academic_year = AcademicYear.objects.get(id=academic_year_id, school_id=school_id)
+        except AcademicYear.DoesNotExist:
             return Response(
-                {'detail': f"Roll number '{roll_number}' already exists in this class."},
+                {'detail': 'Academic year not found in this school.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        with transaction.atomic():
-            student = Student.objects.create(
-                school_id=enquiry.school_id,
-                class_obj=class_obj,
-                roll_number=roll_number,
-                name=enquiry.child_name,
-                date_of_birth=enquiry.child_dob,
-                gender=enquiry.child_gender or '',
-                parent_name=enquiry.parent_name,
-                parent_phone=enquiry.parent_phone,
-                guardian_email=enquiry.parent_email,
-                guardian_occupation=enquiry.parent_occupation,
-                address=enquiry.address,
-                previous_school=enquiry.previous_school,
-                admission_date=date.today(),
+        enquiries = AdmissionEnquiry.objects.filter(
+            id__in=enquiry_ids,
+            school_id=school_id,
+            status='CONFIRMED',
+        )
+
+        if not enquiries.exists():
+            return Response(
+                {'detail': 'No confirmed enquiries found with the given IDs.'},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
-            enquiry.stage = 'ENROLLED'
-            enquiry.converted_student = student
-            enquiry.save(update_fields=['stage', 'converted_student', 'updated_at'])
+        created_students = []
+        errors_list = []
 
-            AdmissionNote.objects.create(
-                enquiry=enquiry,
-                user=request.user,
-                note=f"Converted to student #{student.id} (Roll: {roll_number}, Class: {class_obj.name})",
-                note_type='STATUS_CHANGE',
-            )
+        # Calculate max roll from StudentEnrollment for the TARGET year only
+        # Roll numbers are session-scoped — uniqueness is per (school, year, class)
+        existing_rolls = StudentEnrollment.objects.filter(
+            school_id=school_id,
+            academic_year=academic_year,
+            class_obj=class_obj,
+        ).values_list('roll_number', flat=True)
 
-        from students.serializers import StudentSerializer
-        return Response({
-            'detail': 'Enquiry converted to student successfully.',
-            'student': StudentSerializer(student).data,
-            'enquiry': AdmissionEnquiryDetailSerializer(enquiry).data,
-        }, status=status.HTTP_201_CREATED)
+        max_roll = 0
+        for r in existing_rolls:
+            try:
+                max_roll = max(max_roll, int(r))
+            except (ValueError, TypeError):
+                pass
+
+        for enquiry in enquiries:
+            max_roll += 1
+            roll_number = str(max_roll)
+
+            try:
+                with transaction.atomic():
+                    student = Student.objects.create(
+                        school_id=school_id,
+                        class_obj=class_obj,
+                        roll_number=roll_number,
+                        name=enquiry.name,
+                        parent_name=enquiry.father_name,
+                        parent_phone=enquiry.mobile,
+                        admission_date=date.today(),
+                    )
+
+                    StudentEnrollment.objects.create(
+                        school_id=school_id,
+                        student=student,
+                        academic_year=academic_year,
+                        class_obj=class_obj,
+                        roll_number=roll_number,
+                        status='ACTIVE',
+                    )
+
+                    enquiry.status = 'CONVERTED'
+                    enquiry.converted_student = student
+                    enquiry.save(update_fields=['status', 'converted_student', 'updated_at'])
+
+                    AdmissionNote.objects.create(
+                        enquiry=enquiry,
+                        user=request.user,
+                        note=f"Converted to student #{student.id} (Roll: {roll_number}, Class: {class_obj.name})",
+                        note_type='STATUS_CHANGE',
+                    )
+
+                    created_students.append({
+                        'enquiry_id': enquiry.id,
+                        'student_id': student.id,
+                        'name': student.name,
+                        'roll_number': roll_number,
+                    })
+            except Exception as e:
+                errors_list.append({
+                    'enquiry_id': enquiry.id,
+                    'name': enquiry.name,
+                    'error': str(e),
+                })
+
+        resp_status = status.HTTP_201_CREATED if created_students else status.HTTP_400_BAD_REQUEST
+        return Response(
+            {
+                'detail': f'{len(created_students)} students created successfully.',
+                'converted': created_students,
+                'converted_count': len(created_students),
+                'errors': errors_list,
+            },
+            status=resp_status,
+        )
 
 
-# ── Admission Document ───────────────────────────────────────
-
-class AdmissionDocumentViewSet(ModuleAccessMixin, viewsets.ModelViewSet):
-    """CRUD for documents attached to an admission enquiry."""
-    required_module = 'admissions'
-    queryset = AdmissionDocument.objects.all()
-    serializer_class = AdmissionDocumentSerializer
-    permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
-
-
-    def get_queryset(self):
-        queryset = super().get_queryset()
-        enquiry_pk = self.kwargs.get('enquiry_pk')
-        if enquiry_pk:
-            queryset = queryset.filter(enquiry_id=enquiry_pk)
-
-        # Tenant isolation: only documents for enquiries belonging to the school
-        school_id = _resolve_school_id(self.request)
-        if school_id:
-            queryset = queryset.filter(enquiry__school_id=school_id)
-
-        return queryset
-
-    def perform_create(self, serializer):
-        enquiry_pk = self.kwargs.get('enquiry_pk')
-        if enquiry_pk:
-            serializer.save(enquiry_id=enquiry_pk)
-        else:
-            serializer.save()
-
-
-# ── Admission Note ───────────────────────────────────────────
+# -- Admission Note ViewSet --
 
 class AdmissionNoteViewSet(ModuleAccessMixin, viewsets.ModelViewSet):
     """CRUD for notes / activity log on an admission enquiry."""
@@ -313,14 +281,12 @@ class AdmissionNoteViewSet(ModuleAccessMixin, viewsets.ModelViewSet):
     serializer_class = AdmissionNoteSerializer
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
 
-
     def get_queryset(self):
         queryset = super().get_queryset().select_related('user')
         enquiry_pk = self.kwargs.get('enquiry_pk')
         if enquiry_pk:
             queryset = queryset.filter(enquiry_id=enquiry_pk)
 
-        # Tenant isolation
         school_id = _resolve_school_id(self.request)
         if school_id:
             queryset = queryset.filter(enquiry__school_id=school_id)
@@ -335,67 +301,7 @@ class AdmissionNoteViewSet(ModuleAccessMixin, viewsets.ModelViewSet):
         serializer.save(**extra)
 
 
-# ── Analytics ────────────────────────────────────────────────
-
-class AdmissionAnalyticsView(ModuleAccessMixin, APIView):
-    """Admission pipeline analytics: funnel, sources, conversion, trends."""
-    required_module = 'admissions'
-    permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
-
-    def get(self, request):
-        school_id = _resolve_school_id(request)
-        if not school_id:
-            return Response(
-                {'detail': 'No school associated with your account.'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        base_qs = AdmissionEnquiry.objects.filter(school_id=school_id)
-
-        # Total enquiries
-        total_enquiries = base_qs.count()
-
-        # Pipeline funnel: count per stage
-        pipeline_funnel = list(
-            base_qs.values('stage')
-            .annotate(count=Count('id'))
-            .order_by('stage')
-        )
-
-        # Source breakdown
-        source_breakdown = list(
-            base_qs.values('source')
-            .annotate(count=Count('id'))
-            .order_by('-count')
-        )
-
-        # Conversion rate
-        enrolled_count = base_qs.filter(stage='ENROLLED').count()
-        conversion_rate = round(
-            (enrolled_count / total_enquiries * 100) if total_enquiries > 0 else 0.0,
-            2,
-        )
-
-        # Monthly trend (last 6 months)
-        six_months_ago = date.today() - timedelta(days=180)
-        monthly_trend = list(
-            base_qs.filter(created_at__date__gte=six_months_ago)
-            .annotate(month=TruncMonth('created_at'))
-            .values('month')
-            .annotate(count=Count('id'))
-            .order_by('month')
-        )
-
-        return Response({
-            'total_enquiries': total_enquiries,
-            'pipeline_funnel': pipeline_funnel,
-            'source_breakdown': source_breakdown,
-            'conversion_rate': conversion_rate,
-            'monthly_trend': monthly_trend,
-        })
-
-
-# ── Followups ────────────────────────────────────────────────
+# -- Followups --
 
 class FollowupView(ModuleAccessMixin, APIView):
     """Followup reminders: today's and overdue followups."""
@@ -413,8 +319,8 @@ class FollowupView(ModuleAccessMixin, APIView):
         base_qs = AdmissionEnquiry.objects.filter(
             school_id=school_id,
         ).exclude(
-            stage__in=['ENROLLED', 'REJECTED', 'WITHDRAWN', 'LOST'],
-        ).select_related('assigned_to')
+            status__in=['CONVERTED', 'CANCELLED'],
+        )
 
         today = date.today()
 
@@ -428,5 +334,5 @@ class FollowupView(ModuleAccessMixin, APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        serializer = AdmissionEnquiryListSerializer(queryset, many=True)
+        serializer = EnquiryListSerializer(queryset, many=True)
         return Response(serializer.data)

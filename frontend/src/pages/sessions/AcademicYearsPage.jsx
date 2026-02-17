@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { sessionsApi } from '../../services/api'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
@@ -9,7 +9,7 @@ const EMPTY_TERM = { academic_year: '', name: '', term_type: 'TERM', order: 1, s
 
 export default function AcademicYearsPage() {
   const queryClient = useQueryClient()
-  const { refresh: refreshAcademicYear } = useAcademicYear()
+  const { refresh: refreshAcademicYear, activeAcademicYear } = useAcademicYear()
   const [tab, setTab] = useState('years')
 
   // Year state
@@ -25,8 +25,8 @@ export default function AcademicYearsPage() {
   const [termForm, setTermForm] = useState(EMPTY_TERM)
   const [termErrors, setTermErrors] = useState({})
 
-  // Expanded year for summary
-  const [expandedYearId, setExpandedYearId] = useState(null)
+  // Expanded year for summary - default to activeAcademicYear
+  const [expandedYearId, setExpandedYearId] = useState(activeAcademicYear?.id || null)
 
   // Setup wizard
   const [showSetupWizard, setShowSetupWizard] = useState(false)
@@ -52,6 +52,13 @@ export default function AcademicYearsPage() {
   const years = yearsRes?.data?.results || yearsRes?.data || []
   const terms = termsRes?.data?.results || termsRes?.data || []
   const summary = summaryRes?.data || null
+
+  // Sync expanded year with activeAcademicYear from dropdown
+  useEffect(() => {
+    if (activeAcademicYear?.id) {
+      setExpandedYearId(activeAcademicYear.id)
+    }
+  }, [activeAcademicYear?.id])
 
   // Year mutations
   const createYearMut = useMutation({
@@ -178,12 +185,17 @@ export default function AcademicYearsPage() {
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {years.map(y => (
-                <div key={y.id} className={`card border-2 ${y.is_current ? 'border-green-400 bg-green-50/30' : 'border-transparent'}`}>
+                <div key={y.id} className={`card border-2 ${y.id === activeAcademicYear?.id ? 'border-blue-400 bg-blue-50/30' : y.is_current ? 'border-green-400 bg-green-50/30' : 'border-transparent'}`}>
                   <div className="flex items-start justify-between mb-2">
                     <h3 className="font-semibold text-gray-900">{y.name}</h3>
-                    {y.is_current && (
-                      <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-medium">Current</span>
-                    )}
+                    <div className="flex gap-1">
+                      {y.id === activeAcademicYear?.id && (
+                        <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">Selected</span>
+                      )}
+                      {y.is_current && (
+                        <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-medium">Current</span>
+                      )}
+                    </div>
                   </div>
                   <div className="text-sm text-gray-600 space-y-1">
                     <p>Start: {y.start_date}</p>

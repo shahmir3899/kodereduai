@@ -1,6 +1,7 @@
-import { useState, useMemo } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../../contexts/AuthContext'
+import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { discountApi, classesApi, studentsApi, sessionsApi } from '../../services/api'
 import { useToast } from '../../components/Toast'
 import { GRADE_PRESETS, GRADE_LEVEL_LABELS } from '../../constants/gradePresets'
@@ -122,6 +123,7 @@ function AcademicCapIcon({ className }) {
 
 export default function DiscountsPage() {
   const { user } = useAuth()
+  const { activeAcademicYear } = useAcademicYear()
   const queryClient = useQueryClient()
   const { showError, showSuccess } = useToast()
 
@@ -152,6 +154,14 @@ export default function DiscountsPage() {
     grade_level: '',
     academic_year_id: '',
   })
+
+  // Sync assign forms with global session switcher
+  useEffect(() => {
+    if (activeAcademicYear?.id) {
+      setAssignForm(f => ({ ...f, academic_year: String(activeAcademicYear.id) }))
+      setBulkAssignForm(f => ({ ...f, academic_year_id: String(activeAcademicYear.id) }))
+    }
+  }, [activeAcademicYear?.id])
   const [studentSearch, setStudentSearch] = useState('')
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -161,37 +171,31 @@ export default function DiscountsPage() {
   const { data: discountsData, isLoading: discountsLoading } = useQuery({
     queryKey: ['discounts'],
     queryFn: () => discountApi.getDiscounts({ page_size: 9999 }),
-    staleTime: 5 * 60 * 1000,
   })
 
   const { data: scholarshipsData, isLoading: scholarshipsLoading } = useQuery({
     queryKey: ['scholarships'],
     queryFn: () => discountApi.getScholarships({ page_size: 9999 }),
-    staleTime: 5 * 60 * 1000,
   })
 
   const { data: studentDiscountsData, isLoading: assignmentsLoading } = useQuery({
     queryKey: ['studentDiscounts'],
     queryFn: () => discountApi.getStudentDiscounts({ page_size: 9999 }),
-    staleTime: 2 * 60 * 1000,
   })
 
   const { data: classesData } = useQuery({
     queryKey: ['classes'],
     queryFn: () => classesApi.getClasses({ page_size: 9999 }),
-    staleTime: 5 * 60 * 1000,
   })
 
   const { data: studentsData } = useQuery({
     queryKey: ['students'],
     queryFn: () => studentsApi.getStudents({ page_size: 9999 }),
-    staleTime: 5 * 60 * 1000,
   })
 
   const { data: sessionsData } = useQuery({
     queryKey: ['academicYears'],
     queryFn: () => sessionsApi.getAcademicYears({ page_size: 9999 }),
-    staleTime: 5 * 60 * 1000,
   })
 
   // ── Normalize data arrays ──

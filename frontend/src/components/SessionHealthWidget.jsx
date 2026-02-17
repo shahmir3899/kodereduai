@@ -36,7 +36,6 @@ export default function SessionHealthWidget() {
     queryKey: ['sessionHealth', activeAcademicYear?.id],
     queryFn: () => sessionsApi.getSessionHealth({ academic_year: activeAcademicYear?.id }),
     enabled: !!activeAcademicYear?.id,
-    staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
   })
 

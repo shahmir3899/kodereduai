@@ -32,13 +32,15 @@ export default function StaffDirectoryPage() {
   const [search, setSearch] = useState('')
   const debouncedSearch = useDebounce(search, 300)
   const [departmentFilter, setDepartmentFilter] = useState('')
-  const [statusFilter, setStatusFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState('ACTIVE')
   const [deleteConfirm, setDeleteConfirm] = useState(null)
+  const [viewMember, setViewMember] = useState(null)
 
   // Quick add state
   const [showQuickAdd, setShowQuickAdd] = useState(false)
   const [quickForm, setQuickForm] = useState({ first_name: '', last_name: '', phone: '', department: '', designation: '' })
   const [quickErrors, setQuickErrors] = useState('')
+  const [quickDuplicateWarning, setQuickDuplicateWarning] = useState(null) // { matches: [...] }
   const [quickCreateUser, setQuickCreateUser] = useState(false)
   const [quickUserForm, setQuickUserForm] = useState({ username: '', password: '', confirm_password: '', user_role: 'STAFF' })
   const quickStaffRoleOptions = getAllowableRoles().filter(r => !['SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL'].includes(r))
@@ -69,21 +71,18 @@ export default function StaffDirectoryPage() {
   const { data: staffData, isLoading } = useQuery({
     queryKey: ['hrStaff'],
     queryFn: () => hrApi.getStaff({ page_size: 9999 }),
-    staleTime: 5 * 60 * 1000,
   })
 
   // Fetch departments for filter
   const { data: deptData } = useQuery({
     queryKey: ['hrDepartments'],
     queryFn: () => hrApi.getDepartments({ page_size: 9999 }),
-    staleTime: 5 * 60 * 1000,
   })
 
   // Fetch designations for quick add
   const { data: desigData } = useQuery({
     queryKey: ['hrDesignations'],
     queryFn: () => hrApi.getDesignations({ page_size: 9999 }),
-    staleTime: 5 * 60 * 1000,
   })
 
   // Delete mutation
@@ -127,9 +126,33 @@ export default function StaffDirectoryPage() {
     }))
   }
 
+  const buildQuickPayload = () => {
+    const payload = {
+      first_name: quickForm.first_name,
+      last_name: quickForm.last_name,
+      phone: quickForm.phone || '',
+      department: quickForm.department || null,
+      designation: quickForm.designation || null,
+    }
+    if (quickCreateUser) {
+      payload.create_user_account = true
+      payload.username = quickUserForm.username
+      payload.password = quickUserForm.password
+      payload.confirm_password = quickUserForm.confirm_password
+      payload.user_role = quickUserForm.user_role
+    }
+    return payload
+  }
+
+  const submitQuickAdd = () => {
+    setQuickDuplicateWarning(null)
+    quickAddMutation.mutate(buildQuickPayload())
+  }
+
   const handleQuickSubmit = (e) => {
     e.preventDefault()
     setQuickErrors('')
+    setQuickDuplicateWarning(null)
     if (!quickForm.first_name || !quickForm.last_name) {
       setQuickErrors('First name and last name are required.')
       return
@@ -148,21 +171,20 @@ export default function StaffDirectoryPage() {
         return
       }
     }
-    const payload = {
-      first_name: quickForm.first_name,
-      last_name: quickForm.last_name,
-      phone: quickForm.phone || '',
-      department: quickForm.department || null,
-      designation: quickForm.designation || null,
+
+    // Check for duplicate names
+    const fn = quickForm.first_name.trim().toLowerCase()
+    const ln = quickForm.last_name.trim().toLowerCase()
+    const existingStaff = staffData?.data?.results || staffData?.data || []
+    const matches = existingStaff.filter(m =>
+      m.first_name?.toLowerCase() === fn && m.last_name?.toLowerCase() === ln
+    )
+    if (matches.length > 0) {
+      setQuickDuplicateWarning({ matches })
+      return
     }
-    if (quickCreateUser) {
-      payload.create_user_account = true
-      payload.username = quickUserForm.username
-      payload.password = quickUserForm.password
-      payload.confirm_password = quickUserForm.confirm_password
-      payload.user_role = quickUserForm.user_role
-    }
-    quickAddMutation.mutate(payload)
+
+    submitQuickAdd()
   }
 
   // Bulk CSV import
@@ -494,6 +516,12 @@ export default function StaffDirectoryPage() {
                   {member.phone && <p>{member.phone}</p>}
                 </div>
                 <div className="flex justify-end gap-3 mt-3 pt-3 border-t border-gray-100">
+                  <button
+                    onClick={() => setViewMember(member)}
+                    className="text-sm text-gray-600 hover:text-gray-800 font-medium"
+                  >
+                    View
+                  </button>
                   <Link
                     to={`/hr/staff/${member.id}/edit`}
                     className="text-sm text-blue-600 hover:text-blue-800 font-medium"
@@ -599,6 +627,12 @@ export default function StaffDirectoryPage() {
                     </td>
                     <td className="py-3 text-right whitespace-nowrap">
                       <div className="flex justify-end gap-3">
+                        <button
+                          onClick={() => setViewMember(member)}
+                          className="text-sm text-gray-600 hover:text-gray-800 font-medium"
+                        >
+                          View
+                        </button>
                         <Link
                           to={`/hr/staff/${member.id}/edit`}
                           className="text-sm text-blue-600 hover:text-blue-800 font-medium"
@@ -627,6 +661,137 @@ export default function StaffDirectoryPage() {
             </table>
           </div>
         </>
+      )}
+
+      {/* View Staff Detail Modal */}
+      {viewMember && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4" onClick={() => setViewMember(null)}>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-full bg-primary-100 flex items-center justify-center">
+                  <span className="text-primary-700 font-bold text-lg">
+                    {viewMember.first_name?.charAt(0)}{viewMember.last_name?.charAt(0)}
+                  </span>
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-gray-900">{viewMember.first_name} {viewMember.last_name}</h2>
+                  <p className="text-sm text-gray-500">{viewMember.employee_id}</p>
+                </div>
+              </div>
+              <button onClick={() => setViewMember(null)} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 space-y-5">
+              {/* Status badges */}
+              <div className="flex flex-wrap gap-2">
+                <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${statusBadge[viewMember.employment_status] || 'bg-gray-100 text-gray-800'}`}>
+                  {viewMember.employment_status}
+                </span>
+                <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${typeBadge[viewMember.employment_type] || 'bg-gray-100 text-gray-800'}`}>
+                  {viewMember.employment_type}
+                </span>
+                {viewMember.user ? (
+                  <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">Account: {viewMember.user_username}</span>
+                ) : (
+                  <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-500">No Account</span>
+                )}
+              </div>
+
+              {/* Work Info */}
+              <div>
+                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Work Information</h3>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <p className="text-gray-500">Department</p>
+                    <p className="font-medium text-gray-900">{viewMember.department_name || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500">Designation</p>
+                    <p className="font-medium text-gray-900">{viewMember.designation_name || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500">Date of Joining</p>
+                    <p className="font-medium text-gray-900">{viewMember.date_of_joining || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500">Date of Leaving</p>
+                    <p className="font-medium text-gray-900">{viewMember.date_of_leaving || '—'}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Personal Info */}
+              <div>
+                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Personal Information</h3>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <p className="text-gray-500">Email</p>
+                    <p className="font-medium text-gray-900">{viewMember.email || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500">Phone</p>
+                    <p className="font-medium text-gray-900">{viewMember.phone || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500">Gender</p>
+                    <p className="font-medium text-gray-900">{viewMember.gender || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500">Date of Birth</p>
+                    <p className="font-medium text-gray-900">{viewMember.date_of_birth || '—'}</p>
+                  </div>
+                </div>
+                {viewMember.address && (
+                  <div className="mt-3 text-sm">
+                    <p className="text-gray-500">Address</p>
+                    <p className="font-medium text-gray-900">{viewMember.address}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Emergency Contact */}
+              {(viewMember.emergency_contact_name || viewMember.emergency_contact_phone) && (
+                <div>
+                  <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Emergency Contact</h3>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <p className="text-gray-500">Name</p>
+                      <p className="font-medium text-gray-900">{viewMember.emergency_contact_name || '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Phone</p>
+                      <p className="font-medium text-gray-900">{viewMember.emergency_contact_phone || '—'}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Notes */}
+              {viewMember.notes && (
+                <div>
+                  <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Notes</h3>
+                  <p className="text-sm text-gray-700 bg-gray-50 rounded-lg p-3">{viewMember.notes}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200">
+              <button onClick={() => setViewMember(null)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg font-medium">
+                Close
+              </button>
+              <Link
+                to={`/hr/staff/${viewMember.id}/edit`}
+                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+              >
+                Edit
+              </Link>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Delete Confirmation Modal */}
@@ -668,6 +833,32 @@ export default function StaffDirectoryPage() {
 
             {quickErrors && (
               <div className="mb-3 p-2 bg-red-50 text-red-700 rounded-lg text-sm">{quickErrors}</div>
+            )}
+
+            {quickDuplicateWarning && (
+              <div className="mb-3 p-3 bg-yellow-50 border border-yellow-300 rounded-lg">
+                <p className="text-sm font-medium text-yellow-800 mb-1">Duplicate name detected!</p>
+                <p className="text-sm text-yellow-700 mb-2">
+                  A staff member named <strong>{quickForm.first_name} {quickForm.last_name}</strong> already exists
+                  ({quickDuplicateWarning.matches.map(m => m.employee_id).join(', ')}).
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setQuickDuplicateWarning(null)}
+                    className="px-3 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={submitQuickAdd}
+                    className="px-3 py-1 text-xs bg-yellow-600 text-white rounded hover:bg-yellow-700"
+                  >
+                    Add Anyway
+                  </button>
+                </div>
+              </div>
             )}
 
             <form onSubmit={handleQuickSubmit} className="space-y-3">

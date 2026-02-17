@@ -135,6 +135,26 @@ class StaffMemberUpdateSerializer(serializers.ModelSerializer):
             'address', 'emergency_contact_name', 'emergency_contact_phone',
             'notes', 'is_active',
         ]
+        extra_kwargs = {
+            'gender': {'allow_null': True, 'allow_blank': True, 'required': False},
+            'employment_type': {'allow_blank': True, 'required': False},
+            'employment_status': {'allow_blank': True, 'required': False},
+        }
+
+    def validate_gender(self, value):
+        """Coerce null to empty string since the DB column doesn't allow NULL."""
+        return value or ''
+
+    def validate_employee_id(self, value):
+        if not value:
+            return value
+        school_id = self.context.get('school_id')
+        qs = StaffMember.objects.filter(school_id=school_id, employee_id=value)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError('Employee ID already exists in this school.')
+        return value
 
 
 # ── Salary Structure ─────────────────────────────────────────────────────────

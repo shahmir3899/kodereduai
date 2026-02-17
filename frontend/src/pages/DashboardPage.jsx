@@ -13,14 +13,16 @@ export default function DashboardPage() {
 
   // Fetch pending reviews
   const { data: pendingReviews } = useQuery({
-    queryKey: ['pendingReviews'],
-    queryFn: () => attendanceApi.getPendingReviews(),
+    queryKey: ['pendingReviews', activeAcademicYear?.id],
+    queryFn: () => attendanceApi.getPendingReviews({
+      ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
+    }),
   })
 
   // Fetch today's report
   const { data: dailyReport } = useQuery({
-    queryKey: ['dailyReport', today, activeSchool?.id],
-    queryFn: () => attendanceApi.getDailyReport(today, activeSchool?.id),
+    queryKey: ['dailyReport', today, activeSchool?.id, activeAcademicYear?.id],
+    queryFn: () => attendanceApi.getDailyReport(today, activeSchool?.id, activeAcademicYear?.id),
     enabled: !!activeSchool?.id,
   })
 
@@ -28,8 +30,11 @@ export default function DashboardPage() {
   const currentMonth = new Date().getMonth() + 1
   const currentYear = new Date().getFullYear()
   const { data: financeSummary } = useQuery({
-    queryKey: ['financeSummaryDashboard', currentMonth, currentYear],
-    queryFn: () => financeApi.getMonthlySummary({ month: currentMonth, year: currentYear }),
+    queryKey: ['financeSummaryDashboard', currentMonth, currentYear, activeAcademicYear?.id],
+    queryFn: () => financeApi.getMonthlySummary({
+      month: currentMonth, year: currentYear,
+      ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
+    }),
     enabled: !!activeSchool?.id,
   })
 

@@ -92,21 +92,18 @@ export default function SalaryManagementPage() {
   const { data: salaryData, isLoading } = useQuery({
     queryKey: ['hrSalaryStructures'],
     queryFn: () => hrApi.getSalaryStructures({ page_size: 9999 }),
-    staleTime: 5 * 60 * 1000,
   })
 
   // Fetch staff for dropdown
   const { data: staffData } = useQuery({
     queryKey: ['hrStaff'],
     queryFn: () => hrApi.getStaff({ page_size: 9999 }),
-    staleTime: 5 * 60 * 1000,
   })
 
   // Fetch departments for filter
   const { data: deptData } = useQuery({
     queryKey: ['hrDepartments'],
     queryFn: () => hrApi.getDepartments({ page_size: 9999 }),
-    staleTime: 5 * 60 * 1000,
   })
 
   const [departmentFilter, setDepartmentFilter] = useState('')

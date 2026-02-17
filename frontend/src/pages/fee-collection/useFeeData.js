@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { financeApi, classesApi } from '../../services/api'
 import { useBackgroundTask } from '../../hooks/useBackgroundTask'
 
-export function useFeeData({ month, year, classFilter, statusFilter }) {
+export function useFeeData({ month, year, classFilter, statusFilter, academicYearId }) {
   const queryClient = useQueryClient()
 
   // Bulk fee structure state
@@ -14,34 +14,38 @@ export function useFeeData({ month, year, classFilter, statusFilter }) {
   const { data: accountsData } = useQuery({
     queryKey: ['accounts'],
     queryFn: () => financeApi.getAccounts({ page_size: 9999 }),
-    staleTime: 5 * 60 * 1000,
   })
 
   const { data: classes } = useQuery({
     queryKey: ['classes'],
     queryFn: () => classesApi.getClasses({ page_size: 9999 }),
-    staleTime: 5 * 60 * 1000,
   })
 
   const { data: feeStructures } = useQuery({
-    queryKey: ['feeStructures'],
-    queryFn: () => financeApi.getFeeStructures({ page_size: 9999 }),
-    staleTime: 5 * 60 * 1000,
+    queryKey: ['feeStructures', academicYearId],
+    queryFn: () => financeApi.getFeeStructures({
+      page_size: 9999,
+      ...(academicYearId && { academic_year: academicYearId }),
+    }),
   })
 
   const { data: payments, isLoading } = useQuery({
-    queryKey: ['feePayments', month, year, classFilter, statusFilter],
+    queryKey: ['feePayments', month, year, classFilter, statusFilter, academicYearId],
     queryFn: () => financeApi.getFeePayments({
       month, year,
       ...(classFilter && { class_id: classFilter }),
       ...(statusFilter && { status: statusFilter }),
+      ...(academicYearId && { academic_year: academicYearId }),
       page_size: 9999,
     }),
   })
 
   const { data: summary } = useQuery({
-    queryKey: ['monthlySummary', month, year],
-    queryFn: () => financeApi.getMonthlySummary({ month, year }),
+    queryKey: ['monthlySummary', month, year, academicYearId],
+    queryFn: () => financeApi.getMonthlySummary({
+      month, year,
+      ...(academicYearId && { academic_year: academicYearId }),
+    }),
   })
 
   const { data: otherIncomeData, isLoading: incomeLoading } = useQuery({

@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { examinationsApi, sessionsApi, classesApi } from '../../services/api'
+import { useAcademicYear } from '../../contexts/AcademicYearContext'
 
 const EMPTY_FORM = {
   academic_year: '', term: '', exam_type: '', class_obj: '',
@@ -17,12 +18,20 @@ const STATUS_STYLES = {
 
 export default function ExamsPage() {
   const queryClient = useQueryClient()
+  const { activeAcademicYear } = useAcademicYear()
   const [showModal, setShowModal] = useState(false)
   const [editId, setEditId] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
   const [errors, setErrors] = useState({})
   const [yearFilter, setYearFilter] = useState('')
   const [classFilter, setClassFilter] = useState('')
+
+  // Sync year filter with global session switcher
+  useEffect(() => {
+    if (activeAcademicYear?.id) {
+      setYearFilter(String(activeAcademicYear.id))
+    }
+  }, [activeAcademicYear?.id])
 
   // Queries
   const { data: examsRes, isLoading } = useQuery({

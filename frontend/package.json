@@ -9,7 +9,10 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest",
-    "test:run": "vitest run"
+    "test:run": "vitest run",
+    "test:phase3": "vitest run src/components/WorkflowProgressBar.test.jsx src/components/StageTransitionPanel.test.jsx src/components/FeePaymentWidget.test.jsx src/components/WorkflowStageNotes.test.jsx src/pages/admissions/EnquiryDetail.test.jsx",
+    "test:phase3:watch": "vitest src/components/WorkflowProgressBar.test.jsx src/components/StageTransitionPanel.test.jsx src/components/FeePaymentWidget.test.jsx src/components/WorkflowStageNotes.test.jsx src/pages/admissions/EnquiryDetail.test.jsx",
+    "test:phase3:coverage": "vitest run --coverage src/components/WorkflowProgressBar.test.jsx src/components/StageTransitionPanel.test.jsx src/components/FeePaymentWidget.test.jsx src/components/WorkflowStageNotes.test.jsx src/pages/admissions/EnquiryDetail.test.jsx"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.60.0",

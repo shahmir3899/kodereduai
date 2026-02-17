@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useAcademicYear } from '../contexts/AcademicYearContext'
 
-export default function AcademicYearSwitcher() {
+export default function AcademicYearSwitcher({ disabled = false }) {
   const { academicYears, activeAcademicYear, currentTerm, switchAcademicYear, loading } = useAcademicYear()
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
@@ -14,6 +14,11 @@ export default function AcademicYearSwitcher() {
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
 
+  // Close dropdown when disabled (e.g. navigating to non-session page)
+  useEffect(() => {
+    if (disabled) setOpen(false)
+  }, [disabled])
+
   if (loading || academicYears.length === 0) {
     return (
       <span className="text-xs text-gray-400 px-2 py-1">
@@ -25,19 +30,26 @@ export default function AcademicYearSwitcher() {
   return (
     <div className="relative" ref={ref}>
       <button
-        onClick={() => setOpen(!open)}
-        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors text-xs font-medium text-gray-600 bg-white"
+        onClick={() => !disabled && setOpen(!open)}
+        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border transition-colors text-xs font-medium ${
+          disabled
+            ? 'border-gray-100 text-gray-300 bg-gray-50 cursor-default'
+            : 'border-gray-200 text-gray-600 bg-white hover:bg-gray-50 cursor-pointer'
+        }`}
+        title={disabled ? 'Session filter is not applicable on this page' : undefined}
       >
-        <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className={`w-3.5 h-3.5 ${disabled ? 'text-gray-200' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
         </svg>
         <span>{activeAcademicYear?.name || 'Select Year'}</span>
         {currentTerm && (
-          <span className="text-gray-400">| {currentTerm.name}</span>
+          <span className={disabled ? 'text-gray-200' : 'text-gray-400'}>| {currentTerm.name}</span>
         )}
-        <svg className={`w-3.5 h-3.5 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
+        {!disabled && (
+          <svg className={`w-3.5 h-3.5 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        )}
       </button>
 
       {open && (

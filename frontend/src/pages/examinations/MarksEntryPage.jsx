@@ -1,10 +1,12 @@
-import { useState, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { examinationsApi, sessionsApi, classesApi } from '../../services/api'
+import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import * as XLSX from 'xlsx'
 
 export default function MarksEntryPage() {
   const queryClient = useQueryClient()
+  const { activeAcademicYear } = useAcademicYear()
   const fileInputRef = useRef(null)
 
   // Selection state
@@ -12,6 +14,13 @@ export default function MarksEntryPage() {
   const [selectedSubjectId, setSelectedSubjectId] = useState('')
   const [yearFilter, setYearFilter] = useState('')
   const [classFilter, setClassFilter] = useState('')
+
+  // Sync year filter with global session switcher
+  useEffect(() => {
+    if (activeAcademicYear?.id) {
+      setYearFilter(String(activeAcademicYear.id))
+    }
+  }, [activeAcademicYear?.id])
 
   // Marks grid state
   const [marksData, setMarksData] = useState([])

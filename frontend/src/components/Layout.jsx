@@ -300,10 +300,31 @@ const studentNavGroups = [
   { type: 'item', name: 'My Profile', href: '/student/profile', icon: UsersIcon },
 ]
 
+// Routes where the academic year switcher affects displayed data
+const SESSION_AWARE_PREFIXES = [
+  '/dashboard',
+  '/attendance',
+  '/students',
+  '/finance/fees',
+  '/finance/discounts',
+  '/academics/subjects',
+  '/academics/exams',
+  '/academics/marks-entry',
+  '/academics/results',
+  '/academics/report-cards',
+  '/academics/lesson-plans',
+  '/academics/assignments',
+  '/academics/sessions',
+]
+
 export default function Layout() {
   const { user, logout, isSuperAdmin, isStaffMember, isPrincipal, isHRManager, isStaffLevel, isParent, isStudent, isModuleEnabled } = useAuth()
   const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+
+  const isSessionAwarePage = SESSION_AWARE_PREFIXES.some(
+    prefix => location.pathname === prefix || location.pathname.startsWith(prefix + '/')
+  )
 
   const isActive = (href) => location.pathname === href || location.pathname.startsWith(href + '/')
 
@@ -402,16 +423,12 @@ export default function Layout() {
       type: 'item', name: 'Notifications', href: '/notifications', icon: ChatBotIcon,
     }] : []),
 
-    // Admissions CRM (admin only)
+    // Admissions (admin only)
     ...(isModuleEnabled('admissions') && !isStaffLevel ? [{
-      type: 'group',
+      type: 'link',
       name: 'Admissions',
+      href: '/admissions',
       icon: UserPlusIcon,
-      children: [
-        { name: 'Dashboard', href: '/admissions', icon: ChartIcon },
-        { name: 'Enquiries', href: '/admissions/enquiries', icon: UsersIcon },
-        { name: 'Sessions', href: '/admissions/sessions', icon: CalendarIcon },
-      ],
     }] : []),
 
     // Transport group
@@ -602,7 +619,7 @@ export default function Layout() {
                   <SchoolSwitcher />
                   <div className="hidden sm:block h-5 w-px bg-gray-200" />
                   <div className="hidden sm:block">
-                    <AcademicYearSwitcher />
+                    <AcademicYearSwitcher disabled={!isSessionAwarePage} />
                   </div>
                 </>
               )}

@@ -55,14 +55,12 @@ export default function StaffFormPage() {
   const { data: deptData } = useQuery({
     queryKey: ['hrDepartments'],
     queryFn: () => hrApi.getDepartments({ page_size: 9999 }),
-    staleTime: 5 * 60 * 1000,
   })
 
   // Fetch designations (filtered by selected department)
   const { data: desigData } = useQuery({
     queryKey: ['hrDesignations', form.department],
     queryFn: () => hrApi.getDesignations(form.department ? { department: form.department, page_size: 9999 } : { page_size: 9999 }),
-    staleTime: 5 * 60 * 1000,
   })
 
   // Auto-generate employee ID for new staff
@@ -186,7 +184,7 @@ export default function StaffFormPage() {
     if (!payload.designation) payload.designation = null
     if (!payload.date_of_birth) payload.date_of_birth = null
     if (!payload.date_of_joining) payload.date_of_joining = null
-    if (!payload.gender) payload.gender = null
+    if (!payload.gender) payload.gender = ''
 
     // Add user account fields if checkbox is checked
     if (createUserAccount && !isEdit) {

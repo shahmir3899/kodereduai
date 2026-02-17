@@ -384,6 +384,11 @@ def build_guide():
     pdf.step("You can export the student list as PDF, PNG, or Excel using the export buttons.")
 
     pdf.warning_box("Students must be assigned to a class. Make sure classes are created (Step 2) before adding students.")
+    pdf.info_box("Session Enrollment",
+                 "When you add a student (individually or via Excel upload), the system automatically "
+                 "creates an enrollment record for the school's current academic year. This links the "
+                 "student to the correct session. Roll numbers are unique per session and class, so "
+                 "different academic years can have different students with the same roll number in the same class.")
 
     pdf.section_title("Step 4: Add Subjects")
     pdf.nav_path("Sidebar > Academics > Subjects")
@@ -489,13 +494,23 @@ def build_guide():
 
     pdf.section_title("Academic Sessions (Years & Terms)")
     pdf.nav_path("Sidebar > Academics > Sessions")
-    pdf.body_text("Academic sessions define the school calendar and are critical for exams, promotions, and reports.")
+    pdf.body_text(
+        "Academic sessions define the school calendar and are critical for exams, promotions, "
+        "and reports. All student data - attendance, fees, exams, roll numbers - is scoped to "
+        "the active academic session. Use the Academic Year Switcher in the header to view "
+        "data for any session."
+    )
 
     pdf.sub_section("Managing Academic Years")
     pdf.step("In the 'Years' tab, view all academic years.")
     pdf.step("Click 'Add Academic Year' to create a new one (Name, Start Date, End Date).")
     pdf.step("Click 'Set as Current' on the year you want to make active.")
     pdf.step("The year summary shows: number of terms, exams created, students enrolled.")
+    pdf.info_box("Session-Scoped Data",
+                 "When you switch the academic year in the header, all pages update to show data "
+                 "for that session: Students, Attendance, Fees, Exams, and more. Roll numbers are "
+                 "assigned per session, so the same class can have different students with roll "
+                 "number 1 in different academic years.")
 
     pdf.sub_section("Managing Terms")
     pdf.step("Switch to the 'Terms' tab.")
@@ -508,10 +523,16 @@ def build_guide():
     pdf.step("Select the source academic year and source class.")
     pdf.step("Select the target academic year and target class.")
     pdf.step("Review the list of students eligible for promotion.")
+    pdf.step("Optionally edit each student's new roll number for the target year.")
     pdf.step("Select students to promote (or select all).")
     pdf.step("Click 'Promote' to move them to the new class/year.")
 
     pdf.warning_box("Promotion is a bulk operation. Ensure the target academic year and classes exist before promoting.")
+    pdf.info_box("Promotion & New Admissions",
+                 "New admissions can happen in a future session before promotion is run for the current "
+                 "session. For example, you can admit students to Playgroup for 2026-27 while 2025-26 "
+                 "students are still in Playgroup. Roll numbers are independent per session, so there "
+                 "are no conflicts. When you promote the old students, they move to the next class.")
 
     pdf.section_title("AI Analytics")
     pdf.nav_path("Sidebar > Academics > AI Analytics")
@@ -819,11 +840,12 @@ def build_guide():
         "to final enrollment. It tracks leads, followups, and conversion rates."
     )
 
-    pdf.section_title("Admission Sessions")
-    pdf.nav_path("Sidebar > Admissions > Sessions")
-    pdf.step("Click 'Add Admission Session' to define an admission window.")
-    pdf.step("Enter: Session Name, Start Date, End Date, Intake Capacity per grade.")
-    pdf.step("Active sessions determine which grades accept new admissions.")
+    pdf.section_title("Admission Workflow Overview")
+    pdf.body_text(
+        "Admissions uses the school's academic years (set up in Academics > Sessions). "
+        "When converting enquiries to students, you select the target academic year and class. "
+        "The system creates the student record and enrolls them in that session."
+    )
 
     pdf.section_title("Creating Enquiries")
     pdf.nav_path("Sidebar > Admissions > Enquiries")
@@ -838,49 +860,47 @@ def build_guide():
     pdf.simple_table(
         ["Stage", "Description"],
         [
-            ["NEW", "Initial enquiry received"],
-            ["CONTACTED", "First contact made with parent"],
-            ["VISIT_SCHEDULED", "School visit appointment set"],
-            ["VISIT_DONE", "Parent/student visited the school"],
-            ["FORM_SUBMITTED", "Application form submitted"],
-            ["TEST_SCHEDULED", "Entrance test scheduled"],
-            ["TEST_DONE", "Entrance test completed"],
-            ["OFFERED", "Admission offer extended"],
-            ["ACCEPTED", "Parent accepted the offer"],
-            ["ENROLLED", "Student officially enrolled"],
+            ["NEW", "Initial enquiry received - lead captured"],
+            ["CONFIRMED", "Admission confirmed - ready for conversion to student"],
+            ["CONVERTED", "Converted to a student record with enrollment"],
+            ["CANCELLED", "Enquiry cancelled or withdrawn"],
         ],
         [50, 140]
     )
 
     pdf.section_title("Managing Enquiries")
-    pdf.sub_section("List View")
     pdf.step("View all enquiries in a searchable, filterable table.")
-    pdf.step("Filter by: Stage, Grade, Source, Priority.")
-    pdf.step("Click an enquiry to view full details and update its status.")
-
-    pdf.sub_section("Kanban View")
-    pdf.step("Switch to Kanban view for a visual pipeline.")
-    pdf.step("Drag and drop enquiries between stages.")
-    pdf.step("Get a quick overview of where all leads are in the pipeline.")
+    pdf.step("Filter by: Status, Grade, Source.")
+    pdf.step("The pipeline summary at the top shows counts for each stage (New, Confirmed, Converted, Cancelled).")
+    pdf.step("Use the 'Edit' action to update enquiry details or 'Cancel' to mark as cancelled.")
+    pdf.step("Move enquiries from New to Confirmed when admission is approved.")
 
     pdf.section_title("Followup Management")
     pdf.step("Open an enquiry's detail page.")
     pdf.step("Add followup notes and schedule next followup dates.")
     pdf.step("The dashboard shows today's and overdue followups for quick action.")
 
-    pdf.section_title("Converting Enquiry to Student")
-    pdf.step("When an enquiry reaches the 'ENROLLED' stage, click 'Convert to Student'.")
-    pdf.step("The system creates a student record from the enquiry data.")
-    pdf.step("The student is automatically assigned to the target class.")
+    pdf.section_title("Converting Enquiries to Students")
+    pdf.body_text(
+        "Confirmed enquiries can be batch-converted into student records. Each converted student "
+        "gets a Student record and a StudentEnrollment record linking them to the chosen academic year."
+    )
+    pdf.step("Select one or more enquiries with 'Confirmed' status using the checkboxes.")
+    pdf.step("Click the 'Convert to Students' button that appears.")
+    pdf.step("In the modal, select the target Academic Year and Class.")
+    pdf.step("Click 'Convert'. Roll numbers are auto-assigned sequentially within that session and class.")
+    pdf.step("Converted enquiries change status to 'Converted' and link to the created student.")
+    pdf.info_box("Session-Scoped Admissions",
+                 "You can admit students into any academic year, including a future session. "
+                 "Roll numbers start from 1 for each session-class combination, independent "
+                 "of other sessions. This means admissions work even before running promotion "
+                 "for the current year.")
 
-    pdf.section_title("Admission Dashboard")
-    pdf.nav_path("Sidebar > Admissions > Dashboard")
-    pdf.body_text("The dashboard provides analytics:")
-    pdf.bullet("Pipeline Funnel Chart - Visual breakdown by stage")
-    pdf.bullet("Conversion Rate - Percentage of enquiries that become enrollments")
-    pdf.bullet("Source Analysis - Which channels bring the most enquiries")
-    pdf.bullet("Today's Followups - Enquiries needing attention today")
-    pdf.bullet("Overdue Followups - Past-due followup reminders")
+    pdf.section_title("Admission Analytics")
+    pdf.body_text("The enquiries page provides at-a-glance analytics:")
+    pdf.bullet("Pipeline Summary - Count of enquiries in each stage (New, Confirmed, Converted, Cancelled)")
+    pdf.bullet("Conversion Rate - Percentage of enquiries that become students")
+    pdf.bullet("Source Tracking - Which channels (Walk-in, Referral, etc.) bring the most enquiries")
 
     # =========================================================================
     # CHAPTER 9: TRANSPORT MODULE
@@ -1558,7 +1578,7 @@ def build_guide():
             ["Expenses", "Finance Accounts", "Create accounts first"],
             ["Payroll", "Staff, Salary Structures", "Add staff and define salaries"],
             ["Leave Mgmt", "Staff Members", "Add staff first"],
-            ["Admissions", "Admission Sessions", "Create admission session"],
+            ["Admissions", "Academic Years, Classes", "Set up academic years and classes"],
             ["Transport Assign.", "Routes, Vehicles, Students", "Set up routes and vehicles"],
             ["Library Issues", "Books in Catalog, Students", "Add books and students"],
             ["Hostel Allocation", "Hostels, Rooms, Students", "Create hostels and rooms first"],

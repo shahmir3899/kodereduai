@@ -6,9 +6,7 @@ import logging
 from datetime import datetime
 
 from django.db.models import Q
-from django.utils.decorators import method_decorator
-from django.views.decorators.cache import cache_page
-from django.views.decorators.vary import vary_on_headers
+
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -73,11 +71,6 @@ class SubjectViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
     required_module = 'academics'
     queryset = Subject.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
-
-    @method_decorator(cache_page(60 * 60))  # 1 hour
-    @method_decorator(vary_on_headers('X-School-ID'))
-    def list(self, request, *args, **kwargs):
-        return super().list(request, *args, **kwargs)
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
@@ -333,11 +326,6 @@ class TimetableSlotViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mode
     required_module = 'academics'
     queryset = TimetableSlot.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
-
-    @method_decorator(cache_page(60 * 120))  # 2 hours
-    @method_decorator(vary_on_headers('X-School-ID'))
-    def list(self, request, *args, **kwargs):
-        return super().list(request, *args, **kwargs)
 
     def get_serializer_context(self):
         context = super().get_serializer_context()

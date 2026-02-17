@@ -63,11 +63,8 @@ const ParentMessages = lazy(() => import('./pages/parent/ParentMessages'))
 const PaymentResultPage = lazy(() => import('./pages/parent/PaymentResultPage'))
 
 // Admissions pages
-const AdmissionDashboard = lazy(() => import('./pages/admissions/AdmissionDashboard'))
 const EnquiriesPage = lazy(() => import('./pages/admissions/EnquiriesPage'))
-const EnquiryDetail = lazy(() => import('./pages/admissions/EnquiryDetail'))
 const EnquiryForm = lazy(() => import('./pages/admissions/EnquiryForm'))
-const AdmissionSessionsPage = lazy(() => import('./pages/admissions/AdmissionSessionsPage'))
 
 // Finance additions
 const DiscountsPage = lazy(() => import('./pages/finance/DiscountsPage'))
@@ -350,13 +347,10 @@ function App() {
             <Route path="inventory/transactions" element={<SchoolRoute><ModuleRoute module="inventory"><StockTransactionsPage /></ModuleRoute></SchoolRoute>} />
             <Route path="inventory/assignments" element={<SchoolRoute><ModuleRoute module="inventory"><ItemAssignmentsPage /></ModuleRoute></SchoolRoute>} />
 
-            {/* Admissions CRM routes */}
-            <Route path="admissions" element={<SchoolRoute><ModuleRoute module="admissions"><AdmissionDashboard /></ModuleRoute></SchoolRoute>} />
-            <Route path="admissions/enquiries" element={<SchoolRoute><ModuleRoute module="admissions"><EnquiriesPage /></ModuleRoute></SchoolRoute>} />
-            <Route path="admissions/enquiries/new" element={<SchoolRoute><ModuleRoute module="admissions"><EnquiryForm /></ModuleRoute></SchoolRoute>} />
-            <Route path="admissions/enquiries/:id" element={<SchoolRoute><ModuleRoute module="admissions"><EnquiryDetail /></ModuleRoute></SchoolRoute>} />
-            <Route path="admissions/enquiries/:id/edit" element={<SchoolRoute><ModuleRoute module="admissions"><EnquiryForm /></ModuleRoute></SchoolRoute>} />
-            <Route path="admissions/sessions" element={<SchoolRoute><ModuleRoute module="admissions"><AdmissionSessionsPage /></ModuleRoute></SchoolRoute>} />
+            {/* Admissions routes */}
+            <Route path="admissions" element={<SchoolRoute><ModuleRoute module="admissions"><EnquiriesPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="admissions/new" element={<SchoolRoute><ModuleRoute module="admissions"><EnquiryForm /></ModuleRoute></SchoolRoute>} />
+            <Route path="admissions/:id/edit" element={<SchoolRoute><ModuleRoute module="admissions"><EnquiryForm /></ModuleRoute></SchoolRoute>} />
 
             {/* Super Admin routes */}
             <Route

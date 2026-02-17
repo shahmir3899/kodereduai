@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { useAcademicYear } from '../contexts/AcademicYearContext'
 import { studentsApi, classesApi, schoolsApi } from '../services/api'
 import { useToast } from '../components/Toast'
 import { exportStudentsPDF, exportStudentsPNG } from './studentExport'
@@ -11,6 +12,7 @@ import { useDebounce } from '../hooks/useDebounce'
 
 export default function StudentsPage() {
   const { user, activeSchool } = useAuth()
+  const { activeAcademicYear } = useAcademicYear()
   const queryClient = useQueryClient()
   const { showError, showSuccess, showWarning } = useToast()
   const isSuperAdmin = user?.role === 'SUPER_ADMIN'
@@ -67,23 +69,22 @@ export default function StudentsPage() {
     }
   }, [isSuperAdmin, schoolsData, selectedSchoolId])
 
-  // Fetch classes (cached)
+  // Fetch classes
   const { data: classesData } = useQuery({
     queryKey: ['classes', selectedSchoolId],
     queryFn: () => classesApi.getClasses({ school_id: selectedSchoolId, page_size: 9999 }),
     enabled: !!selectedSchoolId,
-    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
   })
 
   // Fetch ALL students once for this school (client-side filtering)
   const { data: studentsData, isLoading } = useQuery({
-    queryKey: ['students', selectedSchoolId],
+    queryKey: ['students', selectedSchoolId, activeAcademicYear?.id],
     queryFn: () => studentsApi.getStudents({
       school_id: selectedSchoolId,
       page_size: 9999,
+      ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
     }),
     enabled: !!selectedSchoolId,
-    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
   })
 
   // Add student mutation

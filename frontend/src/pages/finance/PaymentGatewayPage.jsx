@@ -148,7 +148,6 @@ export default function PaymentGatewayPage() {
   const { data: gatewayData, isLoading } = useQuery({
     queryKey: ['gatewayConfigs'],
     queryFn: () => paymentApi.getGatewayConfigs({ page_size: 9999 }),
-    staleTime: 5 * 60 * 1000,
   })
 
   const gateways = gatewayData?.data?.results || gatewayData?.data || []

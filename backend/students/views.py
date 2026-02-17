@@ -149,6 +149,32 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
                 db_models.Q(roll_number__icontains=search)
             )
 
+        academic_year = self.request.query_params.get('academic_year')
+        if academic_year:
+            from academic_sessions.models import StudentEnrollment
+            from django.db.models import Subquery, OuterRef
+            # Check if school uses enrollments at all (any year)
+            sid = active_school_id or school_id
+            school_has_enrollments = sid and StudentEnrollment.objects.filter(
+                school_id=sid,
+            ).exists()
+            if school_has_enrollments:
+                # Filter to students enrolled in the selected year
+                enrolled_ids = StudentEnrollment.objects.filter(
+                    academic_year_id=academic_year,
+                    is_active=True,
+                ).values_list('student_id', flat=True)
+                queryset = queryset.filter(id__in=enrolled_ids)
+
+                # Annotate with enrollment roll_number for this session
+                enrollment_roll = StudentEnrollment.objects.filter(
+                    student_id=OuterRef('pk'),
+                    academic_year_id=academic_year,
+                ).values('roll_number')[:1]
+                queryset = queryset.annotate(
+                    _enrollment_roll_number=Subquery(enrollment_roll),
+                )
+
         return queryset.order_by('class_obj__grade_level', 'class_obj__name', 'roll_number')
 
     def perform_create(self, serializer):
@@ -156,9 +182,54 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         if not school_id:
             school_id = ensure_tenant_school_id(self.request) or self.request.user.school_id
         if school_id:
-            serializer.save(school_id=school_id)
+            student = serializer.save(school_id=school_id)
         else:
-            serializer.save()
+            student = serializer.save()
+
+        # Auto-create enrollment for the current academic year
+        from academic_sessions.models import AcademicYear, StudentEnrollment
+        current_year = AcademicYear.objects.filter(
+            school_id=student.school_id, is_current=True,
+        ).first()
+        if current_year:
+            StudentEnrollment.objects.get_or_create(
+                school_id=student.school_id,
+                student=student,
+                academic_year=current_year,
+                defaults={
+                    'class_obj': student.class_obj,
+                    'roll_number': student.roll_number,
+                    'status': 'ACTIVE',
+                },
+            )
+
+    def perform_update(self, serializer):
+        student = serializer.save()
+
+        # Sync enrollment for the current academic year
+        from academic_sessions.models import AcademicYear, StudentEnrollment
+        current_year = AcademicYear.objects.filter(
+            school_id=student.school_id, is_current=True,
+        ).first()
+        if current_year:
+            enrollment = StudentEnrollment.objects.filter(
+                school_id=student.school_id,
+                student=student,
+                academic_year=current_year,
+            ).first()
+            if enrollment:
+                enrollment.roll_number = student.roll_number
+                enrollment.class_obj = student.class_obj
+                enrollment.save(update_fields=['roll_number', 'class_obj', 'updated_at'])
+            else:
+                StudentEnrollment.objects.create(
+                    school_id=student.school_id,
+                    student=student,
+                    academic_year=current_year,
+                    class_obj=student.class_obj,
+                    roll_number=student.roll_number,
+                    status='ACTIVE',
+                )
 
     @action(detail=True, methods=['post'], url_path='create-user-account')
     def create_user_account(self, request, pk=None):

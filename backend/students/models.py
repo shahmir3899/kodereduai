@@ -142,7 +142,6 @@ class Student(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = ('school', 'class_obj', 'roll_number')
         ordering = ['class_obj', 'roll_number']
         verbose_name = 'Student'
         verbose_name_plural = 'Students'
@@ -150,6 +149,7 @@ class Student(models.Model):
             models.Index(fields=['school', 'is_active']),
             models.Index(fields=['class_obj', 'is_active']),
             models.Index(fields=['school', 'class_obj']),
+            models.Index(fields=['school', 'class_obj', 'roll_number']),
         ]
 
     def __str__(self):

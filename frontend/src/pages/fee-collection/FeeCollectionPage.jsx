@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
+import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useFeeData } from './useFeeData'
 import FeeFilters, { MONTHS } from './FeeFilters'
 import FeeSummaryCards, { ClassBreakdown, PendingStudents } from './FeeSummaryCards'
@@ -14,6 +15,7 @@ import { exportFeePDF } from './feeExport'
 
 export default function FeeCollectionPage() {
   const { user, activeSchool, isStaffMember } = useAuth()
+  const { activeAcademicYear } = useAcademicYear()
   const canWrite = !isStaffMember
   const now = new Date()
 
@@ -55,7 +57,7 @@ export default function FeeCollectionPage() {
   const [deleteTarget, setDeleteTarget] = useState(null) // payment id or 'bulk'
 
   // Data hook
-  const data = useFeeData({ month, year, classFilter, statusFilter })
+  const data = useFeeData({ month, year, classFilter, statusFilter, academicYearId: activeAcademicYear?.id })
 
   // --- Handlers ---
 

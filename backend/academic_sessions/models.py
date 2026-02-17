@@ -136,6 +136,12 @@ class StudentEnrollment(models.Model):
         indexes = [
             models.Index(fields=['school', 'academic_year', 'class_obj']),
         ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['school', 'academic_year', 'class_obj', 'roll_number'],
+                name='unique_roll_per_session_class',
+            ),
+        ]
 
     def __str__(self):
         return f"{self.student.name} -> {self.class_obj.name} ({self.academic_year.name})"

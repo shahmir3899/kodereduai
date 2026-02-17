@@ -58,14 +58,12 @@ export default function DepartmentsPage() {
   const { data: deptData, isLoading: deptLoading } = useQuery({
     queryKey: ['hrDepartments'],
     queryFn: () => hrApi.getDepartments({ page_size: 9999 }),
-    staleTime: 5 * 60 * 1000,
   })
 
   // Fetch designations
   const { data: desigData, isLoading: desigLoading } = useQuery({
     queryKey: ['hrDesignations'],
     queryFn: () => hrApi.getDesignations({ page_size: 9999 }),
-    staleTime: 5 * 60 * 1000,
   })
 
   const departments = deptData?.data?.results || deptData?.data || []

@@ -57,19 +57,16 @@ export default function LeaveManagementPage() {
   const { data: appData, isLoading: appsLoading } = useQuery({
     queryKey: ['hrLeaveApplications'],
     queryFn: () => hrApi.getLeaveApplications({ page_size: 9999 }),
-    staleTime: 2 * 60 * 1000,
   })
 
   const { data: policyData, isLoading: policiesLoading } = useQuery({
     queryKey: ['hrLeavePolicies'],
     queryFn: () => hrApi.getLeavePolicies({ page_size: 9999 }),
-    staleTime: 5 * 60 * 1000,
   })
 
   const { data: staffData } = useQuery({
     queryKey: ['hrStaff'],
     queryFn: () => hrApi.getStaff({ page_size: 9999 }),
-    staleTime: 5 * 60 * 1000,
   })
 
   const allApplications = appData?.data?.results || appData?.data || []

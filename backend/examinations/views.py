@@ -2,9 +2,6 @@ import io
 from decimal import Decimal
 from django.db.models import Count, Q
 from django.http import HttpResponse
-from django.utils.decorators import method_decorator
-from django.views.decorators.cache import cache_page
-from django.views.decorators.vary import vary_on_headers
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -48,11 +45,6 @@ class ExamTypeViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelView
     required_module = 'examinations'
     queryset = ExamType.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
-
-    @method_decorator(cache_page(60 * 120))  # 2 hours
-    @method_decorator(vary_on_headers('X-School-ID'))
-    def list(self, request, *args, **kwargs):
-        return super().list(request, *args, **kwargs)
 
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):
@@ -133,8 +125,6 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
         exam.save(update_fields=['status'])
         return Response(ExamSerializer(exam).data)
 
-    @method_decorator(cache_page(60 * 15))  # 15 minutes
-    @method_decorator(vary_on_headers('X-School-ID'))
     @action(detail=True, methods=['get'])
     def results(self, request, pk=None):
         exam = self.get_object()
@@ -217,8 +207,6 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
             'results': results,
         })
 
-    @method_decorator(cache_page(60 * 15))  # 15 minutes
-    @method_decorator(vary_on_headers('X-School-ID'))
     @action(detail=True, methods=['get'])
     def class_summary(self, request, pk=None):
         exam = self.get_object()
@@ -331,6 +319,9 @@ class StudentMarkViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
         student = self.request.query_params.get('student')
         if student:
             qs = qs.filter(student_id=student)
+        academic_year = self.request.query_params.get('academic_year')
+        if academic_year:
+            qs = qs.filter(exam_subject__exam__academic_year_id=academic_year)
         return qs
 
     @action(detail=False, methods=['post'])
@@ -548,11 +539,6 @@ class GradeScaleViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
     queryset = GradeScale.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
 
-    @method_decorator(cache_page(60 * 120))  # 2 hours
-    @method_decorator(vary_on_headers('X-School-ID'))
-    def list(self, request, *args, **kwargs):
-        return super().list(request, *args, **kwargs)
-
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):
             return GradeScaleCreateSerializer
@@ -581,8 +567,6 @@ class ReportCardView(ModuleAccessMixin, APIView):
     required_module = 'examinations'
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
 
-    @method_decorator(cache_page(60 * 15))  # 15 minutes
-    @method_decorator(vary_on_headers('X-School-ID'))
     def get(self, request):
         student_id = request.query_params.get('student_id')
         academic_year_id = request.query_params.get('academic_year_id')

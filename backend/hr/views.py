@@ -8,9 +8,6 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 from django.db.models import Count, Q, Sum
-from django.utils.decorators import method_decorator
-from django.views.decorators.cache import cache_page
-from django.views.decorators.vary import vary_on_headers
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -91,11 +88,6 @@ class StaffDepartmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mo
     required_module = 'hr'
     queryset = StaffDepartment.objects.all()
     permission_classes = [IsAuthenticated, IsHRManagerOrAdminOrReadOnly, HasSchoolAccess]
-
-    @method_decorator(cache_page(60 * 120))  # 2 hours
-    @method_decorator(vary_on_headers('X-School-ID'))
-    def list(self, request, *args, **kwargs):
-        return super().list(request, *args, **kwargs)
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
@@ -336,7 +328,8 @@ class StaffMemberViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
 
     def perform_destroy(self, instance):
         instance.is_active = False
-        instance.save()
+        instance.employment_status = 'TERMINATED'
+        instance.save(update_fields=['is_active', 'employment_status'])
 
     @action(detail=True, methods=['post'], url_path='create-user-account')
     def create_user_account(self, request, pk=None):
@@ -516,8 +509,6 @@ class StaffMemberViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
             return Response({'detail': 'No school associated.'}, status=400)
         return Response({'next_employee_id': self._generate_next_employee_id(school_id)})
 
-    @method_decorator(cache_page(60 * 15))  # 15 minutes
-    @method_decorator(vary_on_headers('X-School-ID'))
     @action(detail=False, methods=['get'])
     def dashboard_stats(self, request):
         """HR dashboard summary stats."""

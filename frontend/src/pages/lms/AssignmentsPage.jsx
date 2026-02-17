@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { lmsApi, classesApi, academicsApi, hrApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
+import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useToast } from '../../components/Toast'
 
 const STATUS_BADGES = {
@@ -37,6 +38,7 @@ const EMPTY_FORM = {
 
 export default function AssignmentsPage() {
   const { user, isSchoolAdmin, isTeacher } = useAuth()
+  const { activeAcademicYear } = useAcademicYear()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const { showError, showSuccess } = useToast()
@@ -56,29 +58,27 @@ export default function AssignmentsPage() {
   const { data: classesData } = useQuery({
     queryKey: ['classes'],
     queryFn: () => classesApi.getClasses({ page_size: 9999 }),
-    staleTime: 5 * 60 * 1000,
   })
 
   const { data: subjectsData } = useQuery({
     queryKey: ['subjects'],
     queryFn: () => academicsApi.getSubjects({ page_size: 9999 }),
-    staleTime: 5 * 60 * 1000,
   })
 
   const { data: staffData } = useQuery({
     queryKey: ['hrStaff'],
     queryFn: () => hrApi.getStaff({ role: 'TEACHER', page_size: 9999 }),
-    staleTime: 5 * 60 * 1000,
   })
 
   const { data: assignmentsData, isLoading } = useQuery({
-    queryKey: ['assignments', filterClass, filterSubject, filterStatus, filterType],
+    queryKey: ['assignments', filterClass, filterSubject, filterStatus, filterType, activeAcademicYear?.id],
     queryFn: () =>
       lmsApi.getAssignments({
         ...(filterClass && { class_obj: filterClass }),
         ...(filterSubject && { subject: filterSubject }),
         ...(filterStatus && { status: filterStatus }),
         ...(filterType && { assignment_type: filterType }),
+        ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
         page_size: 9999,
       }),
   })

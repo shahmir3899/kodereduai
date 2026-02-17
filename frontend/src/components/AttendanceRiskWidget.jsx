@@ -65,7 +65,6 @@ export default function AttendanceRiskWidget() {
     queryKey: ['attendanceRisk', activeAcademicYear?.id],
     queryFn: () => sessionsApi.getAttendanceRisk({ academic_year: activeAcademicYear?.id }),
     enabled: !!activeAcademicYear?.id,
-    staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
   })
 

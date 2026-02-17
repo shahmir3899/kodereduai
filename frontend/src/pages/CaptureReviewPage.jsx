@@ -6,6 +6,7 @@ import Cropper from 'react-easy-crop'
 import Compressor from 'compressorjs'
 import { useDropzone } from 'react-dropzone'
 import { useAuth } from '../contexts/AuthContext'
+import { useAcademicYear } from '../contexts/AcademicYearContext'
 import { attendanceApi, classesApi, studentsApi } from '../services/api'
 
 // Compress image before upload - keeps quality high enough for OCR
@@ -124,7 +125,6 @@ function UploadTab({ onUploadSuccess }) {
   const { data: aiStatusData } = useQuery({
     queryKey: ['aiStatus'],
     queryFn: () => attendanceApi.getAIStatus(),
-    staleTime: 60000,
   })
 
   const createMutation = useMutation({
@@ -873,10 +873,13 @@ function PendingReviewTab({ initialReviewId }) {
   const [reviewId, setReviewId] = useState(initialReviewId || null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null)
   const queryClient = useQueryClient()
+  const { activeAcademicYear } = useAcademicYear()
 
   const { data: pendingList, isLoading } = useQuery({
-    queryKey: ['pendingReviews'],
-    queryFn: () => attendanceApi.getPendingReviews(),
+    queryKey: ['pendingReviews', activeAcademicYear?.id],
+    queryFn: () => attendanceApi.getPendingReviews({
+      ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
+    }),
   })
 
   const deleteMutation = useMutation({
@@ -944,6 +947,7 @@ export default function CaptureReviewPage() {
   const { id } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
   const reviewIdFromQuery = searchParams.get('review')
+  const { activeAcademicYear } = useAcademicYear()
 
   // Default tab: if there's a review ID, go to review tab, else upload
   const initialTab = (id || reviewIdFromQuery) ? 'review' : (searchParams.get('tab') || 'upload')
@@ -951,8 +955,10 @@ export default function CaptureReviewPage() {
 
   // Fetch pending count for badge
   const { data: pendingList } = useQuery({
-    queryKey: ['pendingReviews'],
-    queryFn: () => attendanceApi.getPendingReviews(),
+    queryKey: ['pendingReviews', activeAcademicYear?.id],
+    queryFn: () => attendanceApi.getPendingReviews({
+      ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
+    }),
   })
   const pendingCount = pendingList?.data?.length || 0
 

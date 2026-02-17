@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { lmsApi, classesApi, academicsApi, hrApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
+import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useToast } from '../../components/Toast'
 
 const STATUS_BADGES = {
@@ -25,6 +26,7 @@ const EMPTY_FORM = {
 
 export default function LessonPlansPage() {
   const { user, isSchoolAdmin, isTeacher } = useAuth()
+  const { activeAcademicYear } = useAcademicYear()
   const queryClient = useQueryClient()
   const { showError, showSuccess } = useToast()
 
@@ -41,27 +43,25 @@ export default function LessonPlansPage() {
   const { data: classesData } = useQuery({
     queryKey: ['classes'],
     queryFn: () => classesApi.getClasses({ page_size: 9999 }),
-    staleTime: 5 * 60 * 1000,
   })
 
   const { data: subjectsData } = useQuery({
     queryKey: ['subjects'],
     queryFn: () => academicsApi.getSubjects({ page_size: 9999 }),
-    staleTime: 5 * 60 * 1000,
   })
 
   const { data: staffData } = useQuery({
     queryKey: ['hrStaff'],
     queryFn: () => hrApi.getStaff({ role: 'TEACHER', page_size: 9999 }),
-    staleTime: 5 * 60 * 1000,
   })
 
   const { data: plansData, isLoading } = useQuery({
-    queryKey: ['lessonPlans', filterClass, filterSubject],
+    queryKey: ['lessonPlans', filterClass, filterSubject, activeAcademicYear?.id],
     queryFn: () =>
       lmsApi.getLessonPlans({
         ...(filterClass && { class_obj: filterClass }),
         ...(filterSubject && { subject: filterSubject }),
+        ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
         page_size: 9999,
       }),
   })

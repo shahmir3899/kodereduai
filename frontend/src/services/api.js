@@ -101,15 +101,15 @@ export const attendanceApi = {
     }),
 
   // Get pending reviews
-  getPendingReviews: () => api.get('/api/attendance/uploads/pending_review/'),
+  getPendingReviews: (params) => api.get('/api/attendance/uploads/pending_review/', { params }),
 
   // Get attendance records
   getRecords: (params) => api.get('/api/attendance/records/', { params }),
 
   // Get daily report
-  getDailyReport: (date, schoolId) =>
+  getDailyReport: (date, schoolId, academicYearId) =>
     api.get('/api/attendance/records/daily_report/', {
-      params: { date, school_id: schoolId },
+      params: { date, school_id: schoolId, ...(academicYearId && { academic_year: academicYearId }) },
     }),
 
   // Get chronic absentees
@@ -601,34 +601,22 @@ export const parentsApi = {
   reviewLeaveRequest: (id, data) => api.patch(`/api/parents/admin/leave-requests/${id}/review/`, data),
 }
 
-// Admissions CRM API
+// Admissions API
 export const admissionsApi = {
-  // Sessions
-  getSessions: (params) => api.get('/api/admissions/sessions/', { params }),
-  createSession: (data) => api.post('/api/admissions/sessions/', data),
-  updateSession: (id, data) => api.patch(`/api/admissions/sessions/${id}/`, data),
-  deleteSession: (id) => api.delete(`/api/admissions/sessions/${id}/`),
-
-  // Enquiries
+  // Enquiries CRUD
   getEnquiries: (params) => api.get('/api/admissions/enquiries/', { params }),
   getEnquiry: (id) => api.get(`/api/admissions/enquiries/${id}/`),
   createEnquiry: (data) => api.post('/api/admissions/enquiries/', data),
   updateEnquiry: (id, data) => api.patch(`/api/admissions/enquiries/${id}/`, data),
   deleteEnquiry: (id) => api.delete(`/api/admissions/enquiries/${id}/`),
-  updateStage: (id, data) => api.patch(`/api/admissions/enquiries/${id}/update_stage/`, data),
-  convertToStudent: (id, data) => api.post(`/api/admissions/enquiries/${id}/convert/`, data),
 
-  // Documents
-  getDocuments: (enquiryId) => api.get(`/api/admissions/enquiries/${enquiryId}/documents/`),
-  uploadDocument: (enquiryId, data) => api.post(`/api/admissions/enquiries/${enquiryId}/documents/`, data),
-  deleteDocument: (docId) => api.delete(`/api/admissions/documents/${docId}/`),
+  // Status & Conversion
+  updateStatus: (id, data) => api.patch(`/api/admissions/enquiries/${id}/update-status/`, data),
+  batchConvert: (data) => api.post('/api/admissions/enquiries/batch-convert/', data),
 
   // Notes
   getNotes: (enquiryId) => api.get(`/api/admissions/enquiries/${enquiryId}/notes/`),
   addNote: (enquiryId, data) => api.post(`/api/admissions/enquiries/${enquiryId}/notes/`, data),
-
-  // Analytics
-  getPipelineAnalytics: () => api.get('/api/admissions/analytics/pipeline/'),
 
   // Followups
   getTodayFollowups: () => api.get('/api/admissions/followups/today/'),

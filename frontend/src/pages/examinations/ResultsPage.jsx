@@ -1,11 +1,20 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { examinationsApi, sessionsApi, classesApi } from '../../services/api'
+import { useAcademicYear } from '../../contexts/AcademicYearContext'
 
 export default function ResultsPage() {
+  const { activeAcademicYear } = useAcademicYear()
   const [selectedExamId, setSelectedExamId] = useState('')
   const [yearFilter, setYearFilter] = useState('')
   const [classFilter, setClassFilter] = useState('')
+
+  // Sync year filter with global session switcher
+  useEffect(() => {
+    if (activeAcademicYear?.id) {
+      setYearFilter(String(activeAcademicYear.id))
+    }
+  }, [activeAcademicYear?.id])
 
   // Queries
   const { data: yearsRes } = useQuery({

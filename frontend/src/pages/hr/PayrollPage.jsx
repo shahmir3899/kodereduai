@@ -30,14 +30,12 @@ export default function PayrollPage() {
   const { data: payslipData, isLoading } = useQuery({
     queryKey: ['hrPayslips', month, year],
     queryFn: () => hrApi.getPayslips({ month, year, page_size: 9999 }),
-    staleTime: 2 * 60 * 1000,
   })
 
   // Fetch payroll summary
   const { data: summaryData } = useQuery({
     queryKey: ['hrPayrollSummary', month, year],
     queryFn: () => hrApi.getPayrollSummary({ month, year }),
-    staleTime: 2 * 60 * 1000,
   })
 
   // Generate payslips (background task)
