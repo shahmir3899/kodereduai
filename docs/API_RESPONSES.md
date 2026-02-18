@@ -126,6 +126,26 @@ School 37 = "SEED_TEST_School_Alpha" (seed/test data).
 }
 ```
 
+### GET /api/schools/completion/
+```json
+{
+  "overall_percentage": 62,
+  "total_steps": 30,
+  "completed_steps": 19,
+  "modules": [
+    {
+      "key": "students",
+      "label": "Students & Classes",
+      "percentage": 100,
+      "steps": [
+        { "name": "Classes created", "completed": true, "count": 8, "link": "/classes" },
+        { "name": "Students added", "completed": true, "count": 142, "link": "/students" }
+      ]
+    }
+  ]
+}
+```
+
 ---
 
 ## Classes
@@ -310,6 +330,38 @@ Query params: `class_obj`, `student`, `date`, `date_from`, `date_to`, `status`, 
 }
 ```
 
+### GET /api/attendance/records/my_classes/
+Returns classes available for manual attendance entry (role-aware: admin=all, teacher=assigned only).
+```json
+[
+  {"id": 5, "name": "Class 5-A"},
+  {"id": 6, "name": "Class 5-B"}
+]
+```
+
+### POST /api/attendance/records/bulk_entry/
+Manual attendance entry for a class on a date. Creates or updates records with `source=MANUAL`.
+```json
+// Request
+{
+  "class_id": 5,
+  "date": "2026-02-18",
+  "entries": [
+    {"student_id": 101, "status": "PRESENT"},
+    {"student_id": 102, "status": "ABSENT"},
+    {"student_id": 103, "status": "PRESENT"}
+  ]
+}
+
+// Response
+{
+  "created": 2,
+  "updated": 1,
+  "errors": [],
+  "message": "3 attendance records saved."
+}
+```
+
 ---
 
 ## Academic Sessions
@@ -357,6 +409,47 @@ Query params: `class_obj`, `student`, `date`, `date_from`, `date_to`, `status`, 
       "updated_at": "2026-02-15T23:04:05.515016+05:00"
     }
   ]
+}
+```
+
+### POST /api/sessions/terms/
+Request:
+```json
+{
+  "academic_year": 26,
+  "name": "Term 1",
+  "term_type": "TERM",
+  "order": 1,
+  "start_date": "2025-04-01",
+  "end_date": "2025-09-30"
+}
+```
+
+Response (201):
+```json
+{
+  "id": 40,
+  "school": 37,
+  "academic_year": 26,
+  "academic_year_name": "SEED_TEST_2025-2026",
+  "name": "Term 1",
+  "term_type": "TERM",
+  "order": 1,
+  "start_date": "2025-04-01",
+  "end_date": "2025-09-30",
+  "is_current": false,
+  "is_active": true,
+  "created_at": "2026-02-18T10:00:00.000000+05:00",
+  "updated_at": "2026-02-18T10:00:00.000000+05:00"
+}
+```
+
+Validation errors (400):
+```json
+{
+  "academic_year": "Academic year does not belong to this school.",
+  "name": "A term with this name already exists for this academic year.",
+  "end_date": "End date must be after start date."
 }
 ```
 

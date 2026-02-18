@@ -283,6 +283,26 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at', 'updated_at']
 
 
+class AttendanceBulkEntryItemSerializer(serializers.Serializer):
+    """Single student attendance entry."""
+    student_id = serializers.IntegerField()
+    status = serializers.ChoiceField(choices=['PRESENT', 'ABSENT'])
+
+
+class AttendanceBulkEntrySerializer(serializers.Serializer):
+    """Bulk manual attendance entry for a class on a date."""
+    class_id = serializers.IntegerField(
+        help_text="ID of the class to mark attendance for"
+    )
+    date = serializers.DateField(
+        help_text="Date of attendance (YYYY-MM-DD)"
+    )
+    entries = serializers.ListField(
+        child=AttendanceBulkEntryItemSerializer(),
+        help_text="List of {student_id, status} entries",
+    )
+
+
 class DailyAbsentReportSerializer(serializers.Serializer):
     """
     Serializer for daily absent report.

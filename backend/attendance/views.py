@@ -12,7 +12,7 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from django.utils import timezone
 from django.db.models import Count, Q
 
-from core.permissions import IsSchoolAdmin, HasSchoolAccess, CanConfirmAttendance, ModuleAccessMixin
+from core.permissions import IsSchoolAdmin, HasSchoolAccess, CanConfirmAttendance, CanManualAttendance, ModuleAccessMixin, get_effective_role, ADMIN_ROLES
 from core.mixins import TenantQuerySetMixin, ensure_tenant_schools, ensure_tenant_school_id
 from .models import AttendanceUpload, AttendanceRecord
 from .serializers import (
@@ -762,4 +762,131 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
         return Response({
             'school_name': school.name,
             **suggestions
+        })
+
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated, CanManualAttendance])
+    def my_classes(self, request):
+        """Return classes available for manual attendance entry (role-aware)."""
+        from students.models import Class
+
+        school_id = ensure_tenant_school_id(request) or request.user.school_id
+        if not school_id:
+            return Response({'detail': 'No school context.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        role = get_effective_role(request)
+        if role in ADMIN_ROLES:
+            classes = Class.objects.filter(school_id=school_id, is_active=True)
+        elif role == 'TEACHER':
+            from academics.models import ClassSubject
+            class_ids = ClassSubject.objects.filter(
+                school_id=school_id,
+                teacher__user=request.user,
+                is_active=True,
+            ).values_list('class_obj_id', flat=True).distinct()
+            classes = Class.objects.filter(id__in=class_ids, is_active=True)
+        else:
+            classes = Class.objects.none()
+
+        data = [{'id': c.id, 'name': c.name} for c in classes.order_by('name')]
+        return Response(data)
+
+    @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated, CanManualAttendance])
+    def bulk_entry(self, request):
+        """
+        Manually enter/update attendance for a class on a date.
+
+        POST /api/attendance/records/bulk_entry/
+        Body: {class_id, date, entries: [{student_id, status}, ...]}
+        Returns: {created, updated, errors, message}
+        """
+        from .serializers import AttendanceBulkEntrySerializer
+        from students.models import Class
+        from academic_sessions.models import AcademicYear
+
+        serializer = AttendanceBulkEntrySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        school_id = ensure_tenant_school_id(request) or request.user.school_id
+        if not school_id:
+            return Response({'detail': 'No school context.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        class_id = serializer.validated_data['class_id']
+        date = serializer.validated_data['date']
+        entries = serializer.validated_data['entries']
+
+        # Validate class belongs to school
+        try:
+            class_obj = Class.objects.get(pk=class_id, school_id=school_id, is_active=True)
+        except Class.DoesNotExist:
+            return Response(
+                {'detail': 'Class not found or does not belong to this school.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Teacher: verify class assignment via ClassSubject
+        role = get_effective_role(request)
+        if role == 'TEACHER':
+            from academics.models import ClassSubject
+            has_assignment = ClassSubject.objects.filter(
+                school_id=school_id,
+                class_obj_id=class_id,
+                teacher__user=request.user,
+                is_active=True,
+            ).exists()
+            if not has_assignment:
+                return Response(
+                    {'detail': 'You are not assigned to this class.'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+        # Auto-resolve academic year
+        academic_year = AcademicYear.objects.filter(
+            school_id=school_id, is_current=True, is_active=True,
+        ).first()
+
+        # Validate all student_ids belong to this class
+        valid_student_ids = set(
+            Student.objects.filter(
+                school_id=school_id,
+                class_obj_id=class_id,
+                is_active=True,
+            ).values_list('id', flat=True)
+        )
+
+        created = 0
+        updated = 0
+        errors = []
+
+        for entry in entries:
+            student_id = entry['student_id']
+            att_status = entry['status']
+
+            if student_id not in valid_student_ids:
+                errors.append({'student_id': student_id, 'error': 'Student not found in this class.'})
+                continue
+
+            try:
+                record, was_created = AttendanceRecord.objects.update_or_create(
+                    student_id=student_id,
+                    date=date,
+                    defaults={
+                        'school_id': school_id,
+                        'academic_year': academic_year,
+                        'status': att_status,
+                        'source': AttendanceRecord.Source.MANUAL,
+                        'upload': None,
+                    },
+                )
+                if was_created:
+                    created += 1
+                else:
+                    updated += 1
+            except Exception as e:
+                errors.append({'student_id': student_id, 'error': str(e)})
+
+        return Response({
+            'created': created,
+            'updated': updated,
+            'errors': errors,
+            'message': f'{created + updated} attendance records saved.',
         })

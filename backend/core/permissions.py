@@ -197,6 +197,21 @@ class CanConfirmAttendance(permissions.BasePermission):
         return role in ADMIN_ROLES
 
 
+class CanManualAttendance(permissions.BasePermission):
+    """
+    Permission for manual attendance entry.
+    - SUPER_ADMIN, SCHOOL_ADMIN, PRINCIPAL: can mark any class
+    - TEACHER: can mark assigned classes only (enforced in view)
+    """
+    message = "You don't have permission to enter manual attendance."
+
+    def has_permission(self, request, view):
+        if not request.user.is_authenticated:
+            return False
+        role = get_effective_role(request)
+        return role in ADMIN_ROLES or role == 'TEACHER'
+
+
 class IsParent(permissions.BasePermission):
     """Permission class that only allows Parent users."""
     message = "Only parents can perform this action."

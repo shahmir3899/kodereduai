@@ -4,7 +4,7 @@ SESSION PROMPTS — Copy-paste these at the start of each Claude Code session
 
 
 --- PROMPT 1: BUG FIX ---
-Bugs
+celery
 Read the following documentation files to understand the project:
 - CLAUDE.md (root)
 - docs/BACKEND_APPS.md
@@ -16,30 +16,28 @@ Read the following documentation files to understand the project:
 - docs/ENV_AND_DEPLOYMENT.md
 
 Now, here are the issue:
-1- https://kodereduai.onrender.com/academics/promotion at the end of wizard where students shows are not in roll number order
-2- on same page AI advisor starts and shows Tasks in background but stuck at zero on Render production env
-3- https://kodereduai.onrender.com/academics/marks-entry on this page subject filter not showing data
+1- there is celery in my app used. List each component where it is used?
+2. See the image it says 2-2026 Isnt it too many tasks? I tried generation of only 11 pay slips
 
-Based on the documentation:
-1. Identify which apps, models, serializers, API endpoints, and frontend
-   pages/components are involved
-2. Trace the data flow from frontend to backend for this feature
-3. Propose a step-by-step plan to fix the issue
-4. After implementing the fix, update the relevant docs/ files if any API
-   responses, endpoints, models, or component behavior changed
+Here is what I want you to do
+1. Identify all related modules, endpoints, and components from the docs
+2. Plan the implementation (backend models/views, frontend pages, API changes)
+
+3. In plan include Update docs/ files to reflect any new endpoints, response fields,
+   components, or model changes
 
 
+   
 --- PROMPT 2: NEW FEATURE ---
 
 Read all docs/ files for project context.
 
-I want to add [feature description — e.g., "SMS notifications when a
-student is marked absent"].
+there is OCR based attendance system. I need an option to manually update data and records on http://localhost:3000/attendance/register 
 
 1. Identify all related modules, endpoints, and components from the docs
 2. Plan the implementation (backend models/views, frontend pages, API changes)
-3. Implement it
-4. Update docs/ files to reflect any new endpoints, response fields,
+
+4. In plan include Update docs/ files to reflect any new endpoints, response fields,
    components, or model changes
 
 

@@ -131,6 +131,10 @@ export const attendanceApi = {
 
   // AI Status
   getAIStatus: () => api.get('/api/attendance/ai-status/'),
+
+  // Manual attendance entry
+  getMyAttendanceClasses: () => api.get('/api/attendance/records/my_classes/'),
+  bulkEntryAttendance: (data) => api.post('/api/attendance/records/bulk_entry/', data),
 }
 
 // Schools API
@@ -158,6 +162,9 @@ export const schoolsApi = {
   // Register configuration
   getRegisterConfig: () => api.get('/api/schools/register_config/'),
   updateRegisterConfig: (data) => api.put('/api/schools/register_config/', data),
+
+  // School completion timeline
+  getCompletion: () => api.get('/api/schools/completion/'),
 }
 
 // Students API
@@ -459,8 +466,18 @@ export const examinationsApi = {
   updateExam: (id, data) => api.patch(`/api/examinations/exams/${id}/`, data),
   deleteExam: (id) => api.delete(`/api/examinations/exams/${id}/`),
   publishExam: (id) => api.post(`/api/examinations/exams/${id}/publish/`),
+  populateExamSubjects: (id) => api.post(`/api/examinations/exams/${id}/populate-subjects/`),
   getExamResults: (id) => api.get(`/api/examinations/exams/${id}/results/`),
   getClassSummary: (id) => api.get(`/api/examinations/exams/${id}/class_summary/`),
+
+  // Exam Groups
+  getExamGroups: (params) => api.get('/api/examinations/exam-groups/', { params }),
+  wizardCreateExamGroup: (data) => api.post('/api/examinations/exam-groups/wizard-create/', data),
+  deleteExamGroup: (id) => api.delete(`/api/examinations/exam-groups/${id}/`),
+  getDateSheet: (groupId) => api.get(`/api/examinations/exam-groups/${groupId}/date-sheet/`),
+  updateDateBySubject: (groupId, data) => api.post(`/api/examinations/exam-groups/${groupId}/update-date-by-subject/`, data),
+  downloadDateSheet: (groupId) => api.get(`/api/examinations/exam-groups/${groupId}/download-date-sheet/`, { responseType: 'blob' }),
+  publishAllExams: (groupId) => api.post(`/api/examinations/exam-groups/${groupId}/publish-all/`),
 
   // Exam Subjects
   getExamSubjects: (params) => api.get('/api/examinations/exam-subjects/', { params }),

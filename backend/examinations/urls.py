@@ -1,12 +1,13 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
-    ExamTypeViewSet, ExamViewSet, ExamSubjectViewSet,
+    ExamTypeViewSet, ExamGroupViewSet, ExamViewSet, ExamSubjectViewSet,
     StudentMarkViewSet, GradeScaleViewSet, ReportCardView,
 )
 
 router = DefaultRouter()
 router.register(r'exam-types', ExamTypeViewSet, basename='exam-type')
+router.register(r'exam-groups', ExamGroupViewSet, basename='exam-group')
 router.register(r'exams', ExamViewSet, basename='exam')
 router.register(r'exam-subjects', ExamSubjectViewSet, basename='exam-subject')
 router.register(r'marks', StudentMarkViewSet, basename='student-mark')

@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import ExamType, Exam, ExamSubject, StudentMark, GradeScale
+from .models import ExamType, ExamGroup, Exam, ExamSubject, StudentMark, GradeScale
 
 
 # ── ExamType ──────────────────────────────────────────────────
@@ -38,14 +38,16 @@ class ExamSerializer(serializers.ModelSerializer):
     academic_year_name = serializers.CharField(source='academic_year.name', read_only=True)
     term_name = serializers.CharField(source='term.name', read_only=True, default=None)
     subjects_count = serializers.IntegerField(read_only=True, default=0)
+    exam_group = serializers.PrimaryKeyRelatedField(read_only=True)
+    exam_group_name = serializers.CharField(source='exam_group.name', read_only=True, default=None)
 
     class Meta:
         model = Exam
         fields = [
             'id', 'school', 'academic_year', 'academic_year_name',
             'term', 'term_name', 'exam_type', 'exam_type_name',
-            'class_obj', 'class_name', 'name',
-            'start_date', 'end_date', 'status', 'subjects_count',
+            'class_obj', 'class_name', 'exam_group', 'exam_group_name',
+            'name', 'start_date', 'end_date', 'status', 'subjects_count',
             'is_active', 'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'school', 'created_at', 'updated_at']
@@ -232,3 +234,92 @@ class GradeScaleCreateSerializer(serializers.ModelSerializer):
                     {'min_percentage': 'Min percentage cannot exceed max percentage.'}
                 )
         return data
+
+
+# ── ExamGroup ────────────────────────────────────────────────
+
+class ExamGroupSerializer(serializers.ModelSerializer):
+    exam_type_name = serializers.CharField(source='exam_type.name', read_only=True)
+    exam_type_weight = serializers.DecimalField(
+        source='exam_type.weight', read_only=True, max_digits=5, decimal_places=2,
+    )
+    academic_year_name = serializers.CharField(source='academic_year.name', read_only=True)
+    term_name = serializers.CharField(source='term.name', read_only=True, default=None)
+    classes_count = serializers.IntegerField(read_only=True, default=0)
+    exams = ExamSerializer(many=True, read_only=True, source='active_exams')
+
+    class Meta:
+        model = ExamGroup
+        fields = [
+            'id', 'school', 'academic_year', 'academic_year_name',
+            'term', 'term_name', 'exam_type', 'exam_type_name', 'exam_type_weight',
+            'name', 'description', 'start_date', 'end_date',
+            'classes_count', 'exams',
+            'is_active', 'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'school', 'created_at', 'updated_at']
+
+
+class ExamGroupCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ExamGroup
+        fields = ['academic_year', 'term', 'exam_type', 'name', 'description', 'start_date', 'end_date']
+
+    def validate(self, data):
+        if data.get('start_date') and data.get('end_date'):
+            if data['start_date'] > data['end_date']:
+                raise serializers.ValidationError(
+                    {'end_date': 'End date must be on or after start date.'}
+                )
+        school_id = self.context.get('school_id')
+        if school_id:
+            qs = ExamGroup.objects.filter(
+                school_id=school_id, name=data['name'],
+                academic_year=data['academic_year'],
+            )
+            if self.instance:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                raise serializers.ValidationError(
+                    'An exam group with this name already exists for this academic year.'
+                )
+        return data
+
+
+class ExamGroupWizardCreateSerializer(serializers.Serializer):
+    """Accepts group details + class IDs for the wizard-create action."""
+    academic_year = serializers.IntegerField()
+    term = serializers.IntegerField(required=False, allow_null=True)
+    exam_type = serializers.IntegerField()
+    name = serializers.CharField(max_length=200)
+    description = serializers.CharField(required=False, allow_blank=True, default='')
+    start_date = serializers.DateField(required=False, allow_null=True)
+    end_date = serializers.DateField(required=False, allow_null=True)
+    class_ids = serializers.ListField(
+        child=serializers.IntegerField(), min_length=1,
+    )
+    default_total_marks = serializers.DecimalField(
+        max_digits=6, decimal_places=2, default=100.00, required=False,
+    )
+    default_passing_marks = serializers.DecimalField(
+        max_digits=6, decimal_places=2, default=33.00, required=False,
+    )
+    date_sheet = serializers.DictField(
+        child=serializers.DateField(), required=False, default=dict,
+    )
+
+    def validate(self, data):
+        if data.get('start_date') and data.get('end_date'):
+            if data['start_date'] > data['end_date']:
+                raise serializers.ValidationError(
+                    {'end_date': 'End date must be on or after start date.'}
+                )
+        return data
+
+
+class DateSheetUpdateSerializer(serializers.Serializer):
+    """Bulk-update exam_date on ExamSubjects."""
+    date_sheet = serializers.ListField(
+        child=serializers.DictField(),
+        help_text="List of {exam_subject_id, exam_date} entries",
+    )

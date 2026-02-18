@@ -24,7 +24,7 @@ All pages lazy-loaded via React.lazy() with Suspense fallback.
 ## Main Dashboard & Core
 | Route | Component | Description | API Calls |
 |-------|-----------|-------------|-----------|
-| /dashboard | DashboardPage.jsx | Staff/admin main dashboard with stats | Multiple summary endpoints |
+| /dashboard | DashboardPage.jsx | Staff/admin main dashboard with stats, SchoolCompletionWidget | Multiple summary endpoints, GET /api/schools/completion/ |
 | /profile | ProfilePage.jsx | User profile edit | GET/PATCH /api/auth/me/ |
 | /settings | SettingsPage.jsx | School settings | GET/PUT /api/schools/current/ |
 | /notifications | NotificationsPage.jsx | Notification center | GET /api/notifications/my/ |
@@ -34,7 +34,7 @@ All pages lazy-loaded via React.lazy() with Suspense fallback.
 | Route | Component | Description | API Calls |
 |-------|-----------|-------------|-----------|
 | /attendance | CaptureReviewPage.jsx | Upload images & review pending | POST upload-image/, GET/POST uploads/, POST confirm/ |
-| /attendance/register | RegisterPage.jsx | Attendance records & analytics | GET records/, daily_report/ |
+| /attendance/register | RegisterPage.jsx | Attendance records, analytics & manual entry | GET records/, daily_report/, my_classes/, POST bulk_entry/ |
 | /attendance/review/:id | CaptureReviewPage.jsx | Review specific upload | GET uploads/{id}/, POST confirm/ |
 
 Redirects: /attendance/upload, /attendance/review, /attendance/records → remapped to above routes
@@ -54,7 +54,7 @@ Redirects: /attendance/upload, /attendance/review, /attendance/records → remap
 | /academics/analytics | AcademicsAnalyticsPage.jsx | Academic analytics | GET analytics/ |
 | /academics/exam-types | ExamTypesPage.jsx | Exam type config | GET/POST exam-types/ |
 | /academics/exams | ExamsPage.jsx | Exam management | GET/POST exams/ |
-| /academics/marks-entry | MarksEntryPage.jsx | Marks data entry | POST marks/bulk_entry/ |
+| /academics/marks-entry | MarksEntryPage.jsx | Marks data entry | GET exams/, exam-subjects/, marks/, students/; POST marks/bulk_entry/ |
 | /academics/results | ResultsPage.jsx | Results view | GET exams/{id}/results/ |
 | /academics/report-cards | ReportCardPage.jsx | Report cards | GET report-card/ |
 | /academics/grade-scale | GradeScalePage.jsx | Grade scale config | GET/POST grade-scales/ |

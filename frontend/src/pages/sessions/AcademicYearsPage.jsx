@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { sessionsApi } from '../../services/api'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
+import { useToast } from '../../components/Toast'
 import SessionSetupWizard from './SessionSetupWizard'
 
 const EMPTY_YEAR = { name: '', start_date: '', end_date: '' }
@@ -10,6 +11,7 @@ const EMPTY_TERM = { academic_year: '', name: '', term_type: 'TERM', order: 1, s
 export default function AcademicYearsPage() {
   const queryClient = useQueryClient()
   const { refresh: refreshAcademicYear, activeAcademicYear } = useAcademicYear()
+  const { showSuccess, showError } = useToast()
   const [tab, setTab] = useState('years')
 
   // Year state
@@ -86,19 +88,44 @@ export default function AcademicYearsPage() {
   // Term mutations
   const createTermMut = useMutation({
     mutationFn: (data) => sessionsApi.createTerm(data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['terms'] }); closeTermModal() },
-    onError: (err) => setTermErrors(err.response?.data || { detail: 'Failed to create' }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['terms'] })
+      queryClient.invalidateQueries({ queryKey: ['academicYears'] })
+      showSuccess('Term created successfully')
+      closeTermModal()
+    },
+    onError: (err) => {
+      const data = err.response?.data || {}
+      setTermErrors(data)
+      showError(data.detail || data.non_field_errors?.[0] || 'Failed to create term')
+    },
   })
 
   const updateTermMut = useMutation({
     mutationFn: ({ id, data }) => sessionsApi.updateTerm(id, data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['terms'] }); closeTermModal() },
-    onError: (err) => setTermErrors(err.response?.data || { detail: 'Failed to update' }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['terms'] })
+      queryClient.invalidateQueries({ queryKey: ['academicYears'] })
+      showSuccess('Term updated successfully')
+      closeTermModal()
+    },
+    onError: (err) => {
+      const data = err.response?.data || {}
+      setTermErrors(data)
+      showError(data.detail || data.non_field_errors?.[0] || 'Failed to update term')
+    },
   })
 
   const deleteTermMut = useMutation({
     mutationFn: (id) => sessionsApi.deleteTerm(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['terms'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['terms'] })
+      queryClient.invalidateQueries({ queryKey: ['academicYears'] })
+      showSuccess('Term deleted')
+    },
+    onError: (err) => {
+      showError(err.response?.data?.detail || 'Failed to delete term')
+    },
   })
 
   // Year modal helpers
@@ -117,7 +144,7 @@ export default function AcademicYearsPage() {
 
   // Term modal helpers
   const openCreateTerm = (yearId) => {
-    setTermForm({ ...EMPTY_TERM, academic_year: yearId || '' })
+    setTermForm({ ...EMPTY_TERM, academic_year: yearId ? parseInt(yearId) : '' })
     setEditTermId(null); setTermErrors({}); setShowTermModal(true)
   }
   const openEditTerm = (t) => {
@@ -131,7 +158,12 @@ export default function AcademicYearsPage() {
 
   const handleTermSubmit = (e) => {
     e.preventDefault()
-    const payload = { ...termForm, order: parseInt(termForm.order) || 1 }
+    const ayId = parseInt(termForm.academic_year)
+    if (!ayId) {
+      setTermErrors({ academic_year: 'Please select an academic year.' })
+      return
+    }
+    const payload = { ...termForm, academic_year: ayId, order: parseInt(termForm.order) || 1 }
     if (editTermId) updateTermMut.mutate({ id: editTermId, data: payload })
     else createTermMut.mutate(payload)
   }
@@ -409,13 +441,14 @@ export default function AcademicYearsPage() {
                     <label className="block text-sm font-medium text-gray-700 mb-1">Academic Year *</label>
                     <select
                       value={termForm.academic_year}
-                      onChange={e => setTermForm(p => ({ ...p, academic_year: e.target.value }))}
+                      onChange={e => setTermForm(p => ({ ...p, academic_year: e.target.value ? parseInt(e.target.value) : '' }))}
                       className="input w-full"
                       required
                     >
                       <option value="">Select year...</option>
                       {years.map(y => <option key={y.id} value={y.id}>{y.name}</option>)}
                     </select>
+                    {termErrors.academic_year && <p className="text-xs text-red-600 mt-1">{termErrors.academic_year}</p>}
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
@@ -451,15 +484,18 @@ export default function AcademicYearsPage() {
                         onChange={e => setTermForm(p => ({ ...p, order: e.target.value }))}
                         className="input w-full"
                       />
+                      {termErrors.order && <p className="text-xs text-red-600 mt-1">{termErrors.order}</p>}
                     </div>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Start Date *</label>
                     <input type="date" value={termForm.start_date} onChange={e => setTermForm(p => ({ ...p, start_date: e.target.value }))} className="input w-full" required />
+                    {termErrors.start_date && <p className="text-xs text-red-600 mt-1">{termErrors.start_date}</p>}
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">End Date *</label>
                     <input type="date" value={termForm.end_date} onChange={e => setTermForm(p => ({ ...p, end_date: e.target.value }))} className="input w-full" required />
+                    {termErrors.end_date && <p className="text-xs text-red-600 mt-1">{termErrors.end_date}</p>}
                   </div>
                   <div className="flex justify-end gap-3 pt-2">
                     <button type="button" onClick={closeTermModal} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>

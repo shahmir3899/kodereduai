@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { examinationsApi, sessionsApi, classesApi } from '../../services/api'
+import { examinationsApi, sessionsApi, classesApi, studentsApi } from '../../services/api'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import * as XLSX from 'xlsx'
 
@@ -47,7 +47,7 @@ export default function MarksEntryPage() {
     }),
   })
 
-  const { data: examSubjectsRes } = useQuery({
+  const { data: examSubjectsRes, isLoading: examSubjectsLoading } = useQuery({
     queryKey: ['examSubjects', selectedExamId],
     queryFn: () => examinationsApi.getExamSubjects({ exam: selectedExamId, page_size: 9999 }),
     enabled: !!selectedExamId,
@@ -65,12 +65,28 @@ export default function MarksEntryPage() {
   const examSubjects = examSubjectsRes?.data?.results || examSubjectsRes?.data || []
   const existingMarks = marksRes?.data?.results || marksRes?.data || []
 
-  // Selected subject details
+  // Selected exam and subject details
+  const selectedExam = exams.find(e => String(e.id) === selectedExamId)
   const selectedSubject = examSubjects.find(s => s.id === parseInt(selectedSubjectId))
 
+  // Fetch students from the exam's class (filtered by academic year enrollment)
+  const { data: classStudentsRes, isLoading: studentsLoading } = useQuery({
+    queryKey: ['classStudentsForMarks', selectedExam?.class_obj, selectedExam?.academic_year],
+    queryFn: () => studentsApi.getStudents({
+      class_id: selectedExam?.class_obj,
+      academic_year: selectedExam?.academic_year,
+      is_active: true,
+      page_size: 9999,
+    }),
+    enabled: !!selectedExam?.class_obj && !!selectedSubjectId,
+  })
+  const classStudents = classStudentsRes?.data?.results || classStudentsRes?.data || []
+
   // Initialize marks grid when subject is selected and marks load
-  const initGrid = () => {
+  useEffect(() => {
+    if (!selectedSubjectId) return
     if (existingMarks.length > 0) {
+      // Populate from existing marks
       setMarksData(existingMarks.map(m => ({
         student_id: m.student,
         student_name: m.student_name,
@@ -79,13 +95,18 @@ export default function MarksEntryPage() {
         is_absent: m.is_absent,
         remarks: m.remarks || '',
       })))
+    } else if (!marksLoading && classStudents.length > 0) {
+      // No marks yet — pre-populate grid with students from the class
+      setMarksData(classStudents.map(s => ({
+        student_id: s.id,
+        student_name: s.name,
+        student_roll: s.roll_number || '',
+        marks_obtained: '',
+        is_absent: false,
+        remarks: '',
+      })))
     }
-  }
-
-  // When selectedSubjectId or existingMarks change, reinit
-  useEffect(() => {
-    if (existingMarks.length > 0) initGrid()
-  }, [selectedSubjectId, existingMarks.length])
+  }, [selectedSubjectId, existingMarks.length, classStudents.length, marksLoading])
 
   // Bulk save mutation
   const bulkSaveMut = useMutation({
@@ -273,6 +294,16 @@ export default function MarksEntryPage() {
             </select>
           </div>
         </div>
+        {selectedExamId && examSubjects.length === 0 && !examSubjectsLoading && (
+          <div className="mt-3 flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+            <svg className="w-4 h-4 text-amber-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span className="text-sm text-amber-700">
+              This exam has no subjects. Go to <strong>Exams</strong> page and re-create it after assigning subjects to the class.
+            </span>
+          </div>
+        )}
         {selectedSubject && (
           <div className="mt-3 pt-3 border-t border-gray-200 flex flex-wrap items-center gap-4 text-xs text-gray-600">
             <span>Total Marks: <strong>{selectedSubject.total_marks}</strong></span>
@@ -318,14 +349,14 @@ export default function MarksEntryPage() {
           </svg>
           Select an exam and subject above to start entering marks
         </div>
-      ) : marksLoading ? (
+      ) : (marksLoading || studentsLoading) ? (
         <div className="text-center py-12">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
         </div>
       ) : marksData.length === 0 ? (
         <div className="card text-center py-8 text-gray-500">
-          <p>No student marks found for this exam subject.</p>
-          <p className="text-xs mt-2">You can download the template to fill marks in Excel, then upload it back.</p>
+          <p>No students found for this class.</p>
+          <p className="text-xs mt-2">Ensure students are enrolled in the class, or use the template to import marks.</p>
           <div className="flex justify-center gap-3 mt-4">
             <button
               onClick={handleDownloadTemplate}

@@ -11,7 +11,7 @@ from rest_framework.views import APIView
 from core.mixins import TenantQuerySetMixin, ensure_tenant_school_id
 from core.permissions import IsSchoolAdmin, IsSchoolAdminOrReadOnly, HasSchoolAccess, ModuleAccessMixin
 
-from .models import ExamType, Exam, ExamSubject, StudentMark, GradeScale
+from .models import ExamType, ExamGroup, Exam, ExamSubject, StudentMark, GradeScale
 from .serializers import (
     ExamTypeSerializer, ExamTypeCreateSerializer,
     ExamSerializer, ExamCreateSerializer,
@@ -19,6 +19,8 @@ from .serializers import (
     StudentMarkSerializer, StudentMarkCreateSerializer,
     StudentMarkBulkEntrySerializer,
     GradeScaleSerializer, GradeScaleCreateSerializer,
+    ExamGroupSerializer, ExamGroupCreateSerializer,
+    ExamGroupWizardCreateSerializer, DateSheetUpdateSerializer,
 )
 
 
@@ -70,11 +72,323 @@ class ExamTypeViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelView
         instance.save()
 
 
+class ExamGroupViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
+    required_module = 'examinations'
+    queryset = ExamGroup.objects.all()
+    permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
+
+    def get_serializer_class(self):
+        if self.action in ('create', 'update', 'partial_update'):
+            return ExamGroupCreateSerializer
+        return ExamGroupSerializer
+
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        ctx['school_id'] = _resolve_school_id(self.request)
+        return ctx
+
+    def get_queryset(self):
+        qs = super().get_queryset().select_related(
+            'school', 'academic_year', 'term', 'exam_type',
+        ).annotate(
+            classes_count=Count('exams', filter=Q(exams__is_active=True)),
+        )
+        academic_year = self.request.query_params.get('academic_year')
+        if academic_year:
+            qs = qs.filter(academic_year_id=academic_year)
+        term = self.request.query_params.get('term')
+        if term:
+            qs = qs.filter(term_id=term)
+        is_active = self.request.query_params.get('is_active')
+        if is_active is not None:
+            qs = qs.filter(is_active=is_active.lower() == 'true')
+        else:
+            qs = qs.filter(is_active=True)
+        return qs
+
+    def perform_destroy(self, instance):
+        instance.delete()  # Cascades to Exam → ExamSubject → StudentMark
+
+    @action(detail=False, methods=['post'], url_path='wizard-create')
+    def wizard_create(self, request):
+        """Create ExamGroup + per-class Exams + ExamSubjects in one transaction."""
+        serializer = ExamGroupWizardCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response({'detail': 'No school context.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        from django.db import transaction
+        from academics.models import ClassSubject
+        from students.models import Class
+
+        class_ids = data['class_ids']
+        valid_classes = list(Class.objects.filter(
+            school_id=school_id, id__in=class_ids, is_active=True,
+        ))
+        if len(valid_classes) != len(class_ids):
+            return Response(
+                {'detail': 'One or more class IDs are invalid.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Check for conflicts
+        conflicts = []
+        for cls in valid_classes:
+            existing = Exam.objects.filter(
+                school_id=school_id,
+                exam_type_id=data['exam_type'],
+                class_obj=cls,
+                term_id=data.get('term'),
+            ).first()
+            if existing:
+                conflicts.append({
+                    'class_id': cls.id,
+                    'class_name': cls.name,
+                    'existing_exam': existing.name,
+                })
+        if conflicts:
+            return Response({
+                'detail': 'Some classes already have an exam of this type for this term.',
+                'conflicts': conflicts,
+            }, status=status.HTTP_409_CONFLICT)
+
+        date_sheet = data.get('date_sheet', {})
+        default_total = data.get('default_total_marks', 100)
+        default_passing = data.get('default_passing_marks', 33)
+
+        with transaction.atomic():
+            group = ExamGroup.objects.create(
+                school_id=school_id,
+                academic_year_id=data['academic_year'],
+                term_id=data.get('term'),
+                exam_type_id=data['exam_type'],
+                name=data['name'],
+                description=data.get('description', ''),
+                start_date=data.get('start_date'),
+                end_date=data.get('end_date'),
+            )
+
+            created_exams = []
+            for cls in valid_classes:
+                exam = Exam.objects.create(
+                    school_id=school_id,
+                    academic_year_id=data['academic_year'],
+                    term_id=data.get('term'),
+                    exam_type_id=data['exam_type'],
+                    class_obj=cls,
+                    exam_group=group,
+                    name=f"{data['name']} - {cls.name}",
+                    start_date=data.get('start_date'),
+                    end_date=data.get('end_date'),
+                    status=Exam.Status.SCHEDULED,
+                )
+                created_exams.append(exam)
+
+            all_exam_subjects = []
+            for exam in created_exams:
+                class_subjects = ClassSubject.objects.filter(
+                    school_id=school_id,
+                    class_obj=exam.class_obj,
+                    is_active=True,
+                ).select_related('subject')
+                for cs in class_subjects:
+                    subject_date = date_sheet.get(str(cs.subject_id))
+                    all_exam_subjects.append(ExamSubject(
+                        school_id=school_id,
+                        exam=exam,
+                        subject=cs.subject,
+                        total_marks=default_total,
+                        passing_marks=default_passing,
+                        exam_date=subject_date,
+                    ))
+
+            if all_exam_subjects:
+                ExamSubject.objects.bulk_create(all_exam_subjects, ignore_conflicts=True)
+
+        return Response({
+            'group_id': group.id,
+            'group_name': group.name,
+            'exams_created': len(created_exams),
+            'subjects_created': len(all_exam_subjects),
+        }, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['get', 'patch'], url_path='date-sheet')
+    def date_sheet(self, request, pk=None):
+        """GET: subjects with dates. PATCH: bulk-update exam_date."""
+        group = self.get_object()
+        school_id = _resolve_school_id(request)
+
+        if request.method == 'GET':
+            exam_subjects = ExamSubject.objects.filter(
+                exam__exam_group=group,
+                exam__is_active=True,
+                is_active=True,
+                school_id=school_id,
+            ).select_related('subject', 'exam', 'exam__class_obj').order_by(
+                'subject__name', 'exam__class_obj__grade_level',
+            )
+
+            by_subject = {}
+            for es in exam_subjects:
+                sid = es.subject_id
+                if sid not in by_subject:
+                    by_subject[sid] = {
+                        'subject_id': sid,
+                        'subject_name': es.subject.name,
+                        'subject_code': es.subject.code,
+                        'exam_date': str(es.exam_date) if es.exam_date else None,
+                        'classes': [],
+                    }
+                by_subject[sid]['classes'].append({
+                    'exam_subject_id': es.id,
+                    'exam_id': es.exam_id,
+                    'class_name': es.exam.class_obj.name,
+                    'exam_date': str(es.exam_date) if es.exam_date else None,
+                })
+
+            return Response({
+                'group_id': group.id,
+                'group_name': group.name,
+                'start_date': group.start_date,
+                'end_date': group.end_date,
+                'subjects': list(by_subject.values()),
+            })
+
+        # PATCH
+        serializer = DateSheetUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        updated_count = 0
+        for entry in serializer.validated_data['date_sheet']:
+            es_id = entry.get('exam_subject_id')
+            exam_date = entry.get('exam_date')
+            if es_id:
+                count = ExamSubject.objects.filter(
+                    id=es_id, exam__exam_group=group, school_id=school_id,
+                ).update(exam_date=exam_date)
+                updated_count += count
+
+        return Response({'updated_count': updated_count})
+
+    @action(detail=True, methods=['post'], url_path='update-date-by-subject')
+    def update_date_by_subject(self, request, pk=None):
+        """Set the same exam_date for a subject across ALL classes in the group."""
+        group = self.get_object()
+        school_id = _resolve_school_id(request)
+        subject_id = request.data.get('subject_id')
+        exam_date = request.data.get('exam_date')
+
+        if not subject_id:
+            return Response({'detail': 'subject_id required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        count = ExamSubject.objects.filter(
+            exam__exam_group=group, subject_id=subject_id, school_id=school_id,
+        ).update(exam_date=exam_date or None)
+
+        return Response({'updated_count': count})
+
+    @action(detail=True, methods=['get'], url_path='download-date-sheet')
+    def download_date_sheet(self, request, pk=None):
+        """Generate and return an Excel date sheet."""
+        group = self.get_object()
+        school_id = _resolve_school_id(request)
+
+        exam_subjects = ExamSubject.objects.filter(
+            exam__exam_group=group, exam__is_active=True,
+            is_active=True, school_id=school_id,
+        ).select_related('subject', 'exam__class_obj').order_by(
+            'exam_date', 'subject__name',
+        )
+
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = 'Date Sheet'
+
+        ws.merge_cells('A1:E1')
+        ws['A1'] = f'Date Sheet - {group.name}'
+        ws['A1'].font = Font(bold=True, size=14)
+
+        ws.merge_cells('A2:E2')
+        period = ''
+        if group.start_date and group.end_date:
+            period = f' | {group.start_date} to {group.end_date}'
+        ws['A2'] = f'Exam Type: {group.exam_type.name}{period}'
+        ws['A2'].font = Font(size=10, color='555555')
+
+        headers = ['#', 'Date', 'Subject', 'Code', 'Classes']
+        header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+        header_font = Font(bold=True, color='FFFFFF', size=10)
+        thin_border = Border(
+            left=Side(style='thin'), right=Side(style='thin'),
+            top=Side(style='thin'), bottom=Side(style='thin'),
+        )
+
+        for col_idx, header in enumerate(headers, 1):
+            cell = ws.cell(row=4, column=col_idx, value=header)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = Alignment(horizontal='center')
+            cell.border = thin_border
+
+        by_subject = {}
+        for es in exam_subjects:
+            sid = es.subject_id
+            if sid not in by_subject:
+                by_subject[sid] = {
+                    'subject_name': es.subject.name,
+                    'subject_code': es.subject.code,
+                    'exam_date': es.exam_date,
+                    'classes': [],
+                }
+            by_subject[sid]['classes'].append(es.exam.class_obj.name)
+
+        sorted_subjects = sorted(
+            by_subject.values(),
+            key=lambda x: (str(x['exam_date'] or '9999-99-99'), x['subject_name']),
+        )
+
+        for row_idx, subj in enumerate(sorted_subjects, 5):
+            ws.cell(row=row_idx, column=1, value=row_idx - 4).border = thin_border
+            ws.cell(row=row_idx, column=2, value=str(subj['exam_date'] or 'TBD')).border = thin_border
+            ws.cell(row=row_idx, column=3, value=subj['subject_name']).border = thin_border
+            ws.cell(row=row_idx, column=4, value=subj['subject_code']).border = thin_border
+            ws.cell(row=row_idx, column=5, value=', '.join(subj['classes'])).border = thin_border
+
+        ws.column_dimensions['A'].width = 5
+        ws.column_dimensions['B'].width = 14
+        ws.column_dimensions['C'].width = 25
+        ws.column_dimensions['D'].width = 10
+        ws.column_dimensions['E'].width = 40
+
+        buffer = io.BytesIO()
+        wb.save(buffer)
+        buffer.seek(0)
+
+        filename = f'DateSheet_{group.name.replace(" ", "_")}.xlsx'
+        response = HttpResponse(
+            buffer.getvalue(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+
+    @action(detail=True, methods=['post'], url_path='publish-all')
+    def publish_all(self, request, pk=None):
+        """Publish all exams in the group."""
+        group = self.get_object()
+        count = group.exams.filter(is_active=True).update(status=Exam.Status.PUBLISHED)
+        return Response({'published_count': count})
+
+
 class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     required_module = 'examinations'
     queryset = Exam.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
-
 
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):
@@ -88,7 +402,7 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
 
     def get_queryset(self):
         qs = super().get_queryset().select_related(
-            'school', 'academic_year', 'term', 'exam_type', 'class_obj',
+            'school', 'academic_year', 'term', 'exam_type', 'class_obj', 'exam_group',
         ).annotate(
             subjects_count=Count('exam_subjects', filter=Q(exam_subjects__is_active=True)),
         )
@@ -107,6 +421,12 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
         status_filter = self.request.query_params.get('status')
         if status_filter:
             qs = qs.filter(status=status_filter)
+        exam_group = self.request.query_params.get('exam_group')
+        if exam_group:
+            qs = qs.filter(exam_group_id=exam_group)
+        ungrouped = self.request.query_params.get('ungrouped')
+        if ungrouped and ungrouped.lower() == 'true':
+            qs = qs.filter(exam_group__isnull=True)
         is_active = self.request.query_params.get('is_active')
         if is_active is not None:
             qs = qs.filter(is_active=is_active.lower() == 'true')
@@ -136,8 +456,7 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
             ExamSubject.objects.bulk_create(exam_subjects, ignore_conflicts=True)
 
     def perform_destroy(self, instance):
-        instance.is_active = False
-        instance.save()
+        instance.delete()  # Cascades to ExamSubject → StudentMark
 
     @action(detail=True, methods=['post'])
     def publish(self, request, pk=None):
@@ -145,6 +464,38 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
         exam.status = Exam.Status.PUBLISHED
         exam.save(update_fields=['status'])
         return Response(ExamSerializer(exam).data)
+
+    @action(detail=True, methods=['post'], url_path='populate-subjects')
+    def populate_subjects(self, request, pk=None):
+        """Re-sync exam subjects from the class's current ClassSubject assignments."""
+        exam = self.get_object()
+        school_id = _resolve_school_id(request)
+
+        from academics.models import ClassSubject
+        class_subjects = ClassSubject.objects.filter(
+            school_id=school_id,
+            class_obj=exam.class_obj,
+            is_active=True,
+        ).select_related('subject')
+
+        existing_subject_ids = set(
+            exam.exam_subjects.filter(is_active=True).values_list('subject_id', flat=True)
+        )
+
+        new_exam_subjects = [
+            ExamSubject(school_id=school_id, exam=exam, subject=cs.subject)
+            for cs in class_subjects
+            if cs.subject_id not in existing_subject_ids
+        ]
+
+        created = []
+        if new_exam_subjects:
+            created = ExamSubject.objects.bulk_create(new_exam_subjects, ignore_conflicts=True)
+
+        return Response({
+            'added_count': len(created),
+            'total_count': exam.exam_subjects.filter(is_active=True).count(),
+        })
 
     @action(detail=True, methods=['get'])
     def results(self, request, pk=None):
@@ -312,8 +663,7 @@ class ExamSubjectViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
         return qs
 
     def perform_destroy(self, instance):
-        instance.is_active = False
-        instance.save()
+        instance.delete()  # Cascades to StudentMark
 
 
 class StudentMarkViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
@@ -426,13 +776,23 @@ class StudentMarkViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        # Get students from the exam's class
+        # Get students enrolled in the exam's class for the exam's academic year
         from students.models import Student
+        from academic_sessions.models import StudentEnrollment
         students = Student.objects.filter(
             school_id=school_id,
-            student_class=exam_subject.exam.class_obj,
+            class_obj=exam_subject.exam.class_obj,
             is_active=True,
-        ).order_by('roll_number', 'name')
+        )
+        # Filter by enrollment if the school uses enrollments
+        academic_year_id = exam_subject.exam.academic_year_id
+        if academic_year_id and StudentEnrollment.objects.filter(school_id=school_id).exists():
+            enrolled_ids = StudentEnrollment.objects.filter(
+                academic_year_id=academic_year_id,
+                is_active=True,
+            ).values_list('student_id', flat=True)
+            students = students.filter(id__in=enrolled_ids)
+        students = students.order_by('roll_number', 'name')
 
         # Also check for existing marks
         existing_marks = {

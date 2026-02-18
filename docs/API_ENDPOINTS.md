@@ -45,6 +45,7 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | GET | /api/schools/current/ | Current school detail |
 | GET/PUT | /api/schools/mark_mappings/ | Mark mappings config |
 | GET/PUT | /api/schools/register_config/ | Register layout config |
+| GET | /api/schools/completion/ | School setup completion timeline with per-module progress |
 
 ## Classes
 | Method | URL | Params |
@@ -100,6 +101,8 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | GET | /api/attendance/records/chronic_absentees/ | |
 | GET | /api/attendance/records/accuracy_stats/ | |
 | GET | /api/attendance/records/mapping_suggestions/ | |
+| GET | /api/attendance/records/my_classes/ | Returns classes available for manual attendance (role-aware) |
+| POST | /api/attendance/records/bulk_entry/ | Body: {class_id, date, entries: [{student_id, status}]} |
 
 **NOTE:** URLs use underscores (`pending_review`, `daily_report`), not hyphens.
 
@@ -202,7 +205,7 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | GET | /api/sessions/academic-years/current/ | |
 | POST | /api/sessions/academic-years/{id}/set_current/ | |
 | GET | /api/sessions/academic-years/{id}/summary/ | |
-| GET/POST | /api/sessions/terms/ | |
+| GET/POST | /api/sessions/terms/ | academic_year, is_active |
 | GET/POST | /api/sessions/enrollments/ | academic_year, class_obj, student, status |
 | GET | /api/sessions/enrollments/by_class/ | class_id, academic_year |
 | POST | /api/sessions/enrollments/bulk_promote/ | |

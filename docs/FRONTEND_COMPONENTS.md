@@ -45,6 +45,10 @@ Reusable spinner component used as Suspense fallback.
 ### Dashboard Widgets
 - **SessionHealthWidget.jsx** — Session health metrics. Calls `GET /api/sessions/health/`
 - **AttendanceRiskWidget.jsx** — At-risk students. Calls `GET /api/sessions/attendance-risk/`
+- **SchoolCompletionWidget.jsx** — School setup completion timeline with per-module progress. Calls `GET /api/schools/completion/` via `schoolsApi.getCompletion()`
+
+### Attendance Components
+- **ManualEntryTab** (in RegisterPage.jsx) — Manual attendance entry with class/date selectors and P/A toggle grid. Tab within RegisterPage at `/attendance/register?tab=manual`. Calls `attendanceApi.getMyAttendanceClasses()`, `studentsApi.getStudents()`, `attendanceApi.getRecords()`, `attendanceApi.bulkEntryAttendance()`. Visible to Admin, Principal, Teacher only. Follows MarksEntryPage.jsx spreadsheet-style entry pattern.
 
 ### Modals
 - **BatchConvertModal.jsx** — Batch convert admission enquiries to students. Calls `POST /api/admissions/enquiries/batch-convert/`
@@ -127,7 +131,7 @@ Centralized axios instance with interceptors. Organized into named API modules:
 | Module | Prefix | Key Methods |
 |--------|--------|-------------|
 | attendanceApi | /api/attendance/ | uploadImageToStorage, createUpload, confirmAttendance, getRecords |
-| schoolsApi | /api/schools/ | getMySchool, getAllSchools, getMarkMappings |
+| schoolsApi | /api/schools/ | getMySchool, getAllSchools, getMarkMappings, getCompletion |
 | studentsApi | /api/students/ | getStudents, createStudent, bulkCreate, getProfileSummary |
 | classesApi | /api/classes/ | getClasses, createClass |
 | financeApi | /api/finance/ | getFeePayments, generateMonthly, getAccounts, createExpense |

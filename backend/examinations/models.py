@@ -28,6 +28,60 @@ class ExamType(models.Model):
         return self.name
 
 
+class ExamGroup(models.Model):
+    """Groups per-class Exam records created by the wizard."""
+
+    school = models.ForeignKey(
+        'schools.School',
+        on_delete=models.CASCADE,
+        related_name='exam_groups',
+    )
+    academic_year = models.ForeignKey(
+        'academic_sessions.AcademicYear',
+        on_delete=models.CASCADE,
+        related_name='exam_groups',
+    )
+    term = models.ForeignKey(
+        'academic_sessions.Term',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='exam_groups',
+    )
+    exam_type = models.ForeignKey(
+        ExamType,
+        on_delete=models.CASCADE,
+        related_name='exam_groups',
+    )
+    name = models.CharField(max_length=200)
+    description = models.TextField(blank=True)
+    start_date = models.DateField(null=True, blank=True)
+    end_date = models.DateField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('school', 'name', 'academic_year')
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['school', 'academic_year']),
+            models.Index(fields=['school', 'is_active']),
+        ]
+
+    def __str__(self):
+        return self.name
+
+    @property
+    def active_exams(self):
+        from django.db.models import Count, Q
+        return self.exams.filter(is_active=True).select_related(
+            'class_obj', 'exam_type', 'academic_year', 'term',
+        ).annotate(
+            subjects_count=Count('exam_subjects', filter=Q(exam_subjects__is_active=True)),
+        )
+
+
 class Exam(models.Model):
     """A specific exam instance for a class."""
 
@@ -63,6 +117,13 @@ class Exam(models.Model):
     class_obj = models.ForeignKey(
         'students.Class',
         on_delete=models.CASCADE,
+        related_name='exams',
+    )
+    exam_group = models.ForeignKey(
+        ExamGroup,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name='exams',
     )
     name = models.CharField(max_length=200)

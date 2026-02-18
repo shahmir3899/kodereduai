@@ -73,6 +73,11 @@ class TermCreateSerializer(serializers.ModelSerializer):
         school_id = self.context.get('school_id')
         academic_year = data.get('academic_year')
         name = data.get('name')
+        # Ensure academic_year belongs to the same school
+        if school_id and academic_year and academic_year.school_id != int(school_id):
+            raise serializers.ValidationError(
+                {'academic_year': 'Academic year does not belong to this school.'}
+            )
         if school_id and academic_year and name:
             qs = Term.objects.filter(
                 school_id=school_id, academic_year=academic_year, name=name,
