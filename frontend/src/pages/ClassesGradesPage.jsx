@@ -108,11 +108,10 @@ export default function ClassesGradesPage() {
       const baseName = GRADE_LEVEL_LABELS[level] || `Level ${level}`
       const results = []
       for (const sec of sections) {
-        const name = baseName + (sec ? `-${sec}` : '')
         try {
           const res = await classesApi.createClass({
             school: selectedSchoolId,
-            name,
+            name: baseName,
             section: sec,
             grade_level: level,
           })
@@ -183,9 +182,8 @@ export default function ClassesGradesPage() {
   const handleGradeLevelChange = (levelStr) => {
     const level = parseInt(levelStr)
     setClassForm(prev => {
-      const section = prev.section
       const baseName = GRADE_LEVEL_LABELS[level] || ''
-      const name = baseName ? (baseName + (section ? `-${section}` : '')) : prev.name
+      const name = baseName || prev.name
       return { ...prev, grade_level: levelStr, name }
     })
   }
@@ -194,14 +192,8 @@ export default function ClassesGradesPage() {
     setClassForm(prev => {
       const level = parseInt(prev.grade_level)
       const baseName = GRADE_LEVEL_LABELS[level]
-      let name
-      if (baseName) {
-        name = baseName + (section ? `-${section}` : '')
-      } else {
-        // Standalone class: strip old section suffix and append new one
-        const base = prev.name.replace(/[-\s]?[A-Z]$/, '').trim()
-        name = section ? `${base}-${section}` : base
-      }
+      // Name stays as the base grade level name; section is stored separately
+      const name = baseName || prev.name
       return { ...prev, section, name }
     })
   }
@@ -494,7 +486,7 @@ export default function ClassesGradesPage() {
                   onChange={(e) => setClassForm({ ...classForm, name: e.target.value })}
                   required
                 />
-                {classForm.grade_level && <p className="text-xs text-gray-400 mt-1">Auto-generated from grade level + section</p>}
+                {classForm.grade_level && <p className="text-xs text-gray-400 mt-1">Auto-generated from grade level</p>}
               </div>
             </div>
 

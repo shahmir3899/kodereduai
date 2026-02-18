@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { examinationsApi, sessionsApi, classesApi, academicsApi } from '../../services/api'
+import { examinationsApi, sessionsApi, academicsApi } from '../../services/api'
+import ClassSelector from '../../components/ClassSelector'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import ExamWizard from './ExamWizard'
 
@@ -86,11 +87,6 @@ export default function ExamsPage() {
     queryFn: () => examinationsApi.getExamTypes({ page_size: 9999 }),
   })
 
-  const { data: classesRes } = useQuery({
-    queryKey: ['classes'],
-    queryFn: () => classesApi.getClasses({ page_size: 9999 }),
-  })
-
   // ClassSubjects for Quick Create modal
   const { data: classSubjectsRes, isLoading: classSubjectsLoading } = useQuery({
     queryKey: ['classSubjectsForExam', form.class_obj],
@@ -109,7 +105,6 @@ export default function ExamsPage() {
   const years = yearsRes?.data?.results || yearsRes?.data || []
   const terms = termsRes?.data?.results || termsRes?.data || []
   const examTypes = examTypesRes?.data?.results || examTypesRes?.data || []
-  const classes = classesRes?.data?.results || classesRes?.data || []
 
   // ── Mutations ──
 
@@ -705,10 +700,13 @@ export default function ExamsPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Class *</label>
-                  <select value={form.class_obj} onChange={e => { setForm(p => ({ ...p, class_obj: e.target.value })); setSelectedSubjects([]) }} className="input w-full" required>
-                    <option value="">Select...</option>
-                    {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
+                  <ClassSelector
+                    value={form.class_obj}
+                    onChange={e => { setForm(p => ({ ...p, class_obj: e.target.value })); setSelectedSubjects([]) }}
+                    className="input w-full"
+                    required
+                    placeholder="Select..."
+                  />
                 </div>
               </div>
 

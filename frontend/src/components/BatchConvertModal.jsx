@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { admissionsApi, sessionsApi, classesApi } from '../services/api'
+import { admissionsApi, sessionsApi } from '../services/api'
+import ClassSelector from './ClassSelector'
 import { useToast } from './Toast'
 
 export default function BatchConvertModal({ enquiryIds, onClose, onSuccess }) {
@@ -16,14 +17,6 @@ export default function BatchConvertModal({ enquiryIds, onClose, onSuccess }) {
   })
 
   const years = yearsRes?.data?.results || yearsRes?.data || []
-
-  // Fetch classes
-  const { data: classesRes, isLoading: classesLoading } = useQuery({
-    queryKey: ['classes'],
-    queryFn: () => classesApi.getClasses({ page_size: 100 }),
-  })
-
-  const classes = classesRes?.data?.results || classesRes?.data || []
 
   // Convert mutation
   const convertMut = useMutation({
@@ -112,22 +105,12 @@ export default function BatchConvertModal({ enquiryIds, onClose, onSuccess }) {
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Class <span className="text-red-500">*</span>
             </label>
-            {classesLoading ? (
-              <div className="text-sm text-gray-400">Loading...</div>
-            ) : (
-              <select
-                value={classId}
-                onChange={(e) => setClassId(e.target.value)}
-                className="input w-full"
-              >
-                <option value="">Select class...</option>
-                {classes.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}{c.section ? ` - ${c.section}` : ''}
-                  </option>
-                ))}
-              </select>
-            )}
+            <ClassSelector
+              value={classId}
+              onChange={(e) => setClassId(e.target.value)}
+              className="input w-full"
+              required
+            />
           </div>
         </div>
 

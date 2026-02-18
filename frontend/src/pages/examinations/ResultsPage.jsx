@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { examinationsApi, sessionsApi, classesApi } from '../../services/api'
+import { examinationsApi, sessionsApi } from '../../services/api'
+import ClassSelector from '../../components/ClassSelector'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 
 export default function ResultsPage() {
@@ -20,11 +21,6 @@ export default function ResultsPage() {
   const { data: yearsRes } = useQuery({
     queryKey: ['academicYears'],
     queryFn: () => sessionsApi.getAcademicYears({ page_size: 9999 }),
-  })
-
-  const { data: classesRes } = useQuery({
-    queryKey: ['classes'],
-    queryFn: () => classesApi.getClasses({ page_size: 9999 }),
   })
 
   const { data: examsRes } = useQuery({
@@ -48,7 +44,6 @@ export default function ResultsPage() {
   })
 
   const years = yearsRes?.data?.results || yearsRes?.data || []
-  const classes = classesRes?.data?.results || classesRes?.data || []
   const exams = examsRes?.data?.results || examsRes?.data || []
   const results = resultsRes?.data?.results || resultsRes?.data || []
   const summary = summaryRes?.data || null
@@ -72,10 +67,7 @@ export default function ResultsPage() {
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">Class</label>
-            <select value={classFilter} onChange={e => { setClassFilter(e.target.value); setSelectedExamId('') }} className="input w-full text-sm">
-              <option value="">All Classes</option>
-              {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+            <ClassSelector value={classFilter} onChange={e => { setClassFilter(e.target.value); setSelectedExamId('') }} className="input w-full text-sm" showAllOption />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">Exam</label>

@@ -1,3 +1,5 @@
+import ClassSelector from '../../components/ClassSelector'
+
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December'
@@ -20,12 +22,13 @@ export default function FeeFilters({ month, setMonth, year, setYear, classFilter
       </div>
       <div>
         <label className="block text-xs font-medium text-gray-500 mb-1">Class</label>
-        <select value={classFilter} onChange={(e) => setClassFilter(e.target.value)} className="input-field text-sm">
-          <option value="">All Classes</option>
-          {classList.map(c => (
-            <option key={c.id} value={c.id}>{c.name}</option>
-          ))}
-        </select>
+        <ClassSelector
+          value={classFilter}
+          onChange={(e) => setClassFilter(e.target.value)}
+          className="input-field text-sm"
+          showAllOption
+          classes={classList}
+        />
       </div>
       <div>
         <label className="block text-xs font-medium text-gray-500 mb-1">Status</label>

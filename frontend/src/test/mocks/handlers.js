@@ -311,4 +311,115 @@ export const handlers = [
   http.get('/api/hr/designations/', () => HttpResponse.json([
     { id: 1, school: 1, name: 'Teacher', department: 1 },
   ])),
+
+  // Classes (used by classesApi.getClasses)
+  http.get('/api/classes/', () => HttpResponse.json([
+    { id: 1, school: 1, school_name: 'Test School', name: 'Class 1A', section: 'A', grade_level: 1, is_active: true, student_count: 3 },
+    { id: 2, school: 1, school_name: 'Test School', name: 'Class 2B', section: 'B', grade_level: 2, is_active: true, student_count: 2 },
+  ])),
+
+  // Face Attendance
+  http.get('/api/face-attendance/status/', () =>
+    HttpResponse.json({
+      face_recognition_available: true,
+      thresholds: { high: 0.40, medium: 0.55 },
+      enrolled_faces: 4,
+      model: 'dlib_v1',
+    })
+  ),
+  http.get('/api/face-attendance/sessions/', () =>
+    HttpResponse.json({
+      count: 1,
+      results: [{
+        id: 'uuid-session-1',
+        status: 'NEEDS_REVIEW',
+        class_obj: { id: 1, name: 'Class 1A' },
+        date: '2026-02-18',
+        image_url: 'https://example.com/photo.jpg',
+        total_faces_detected: 3,
+        faces_matched: 2,
+        faces_flagged: 1,
+        faces_ignored: 0,
+      }],
+    })
+  ),
+  http.get('/api/face-attendance/sessions/pending_review/', () =>
+    HttpResponse.json({
+      count: 1,
+      results: [{
+        id: 'uuid-session-1',
+        status: 'NEEDS_REVIEW',
+        class_obj: { id: 1, name: 'Class 1A' },
+        date: '2026-02-18',
+      }],
+    })
+  ),
+  http.get('/api/face-attendance/sessions/:id/', () =>
+    HttpResponse.json({
+      id: 'uuid-session-1',
+      status: 'NEEDS_REVIEW',
+      class_obj: { id: 1, name: 'Class 1A' },
+      date: '2026-02-18',
+      image_url: 'https://example.com/photo.jpg',
+      total_faces_detected: 3,
+      faces_matched: 2,
+      faces_flagged: 1,
+      faces_ignored: 0,
+      detections: [
+        {
+          id: 10, face_index: 0, face_crop_url: 'https://example.com/crop0.jpg',
+          match_status: 'AUTO_MATCHED',
+          matched_student: { id: 1, name: 'Ali Hassan', roll_number: '1' },
+          confidence: 92.5, quality_score: 0.88, alternative_matches: [],
+        },
+        {
+          id: 11, face_index: 1, face_crop_url: 'https://example.com/crop1.jpg',
+          match_status: 'FLAGGED',
+          matched_student: { id: 2, name: 'Sara Khan', roll_number: '2' },
+          confidence: 71.3, quality_score: 0.75,
+          alternative_matches: [{ student_id: 3, name: 'Fatima Noor', confidence: 68.1 }],
+        },
+        {
+          id: 12, face_index: 2, face_crop_url: '', match_status: 'IGNORED',
+          matched_student: null, confidence: 0, quality_score: 0.3,
+          alternative_matches: [],
+        },
+      ],
+      class_students: [
+        { id: 1, name: 'Ali Hassan', roll_number: '1', has_embedding: true, matched: true },
+        { id: 2, name: 'Sara Khan', roll_number: '2', has_embedding: true, matched: true },
+        { id: 3, name: 'Usman Ahmed', roll_number: '3', has_embedding: true, matched: false },
+        { id: 4, name: 'Fatima Noor', roll_number: '4', has_embedding: false, matched: false },
+      ],
+    })
+  ),
+  http.post('/api/face-attendance/sessions/', async ({ request }) => {
+    const body = await request.json()
+    return HttpResponse.json({ id: 'uuid-new', status: 'PROCESSING', ...body }, { status: 201 })
+  }),
+  http.post('/api/face-attendance/sessions/:id/confirm/', async () =>
+    HttpResponse.json({ success: true, message: 'Attendance confirmed', total_students: 4, present_count: 2, absent_count: 2 })
+  ),
+  http.post('/api/face-attendance/sessions/:id/reprocess/', async () =>
+    HttpResponse.json({ status: 'PROCESSING' })
+  ),
+  http.post('/api/face-attendance/upload-image/', async () =>
+    HttpResponse.json({ url: 'https://example.com/uploaded.jpg' })
+  ),
+  http.get('/api/face-attendance/enrollments/', () =>
+    HttpResponse.json({
+      count: 2,
+      results: [
+        { id: 1, student: 1, student_name: 'Ali Hassan', student_roll: '1', class_name: 'Class 1A', quality_score: 0.85, source_image_url: 'https://example.com/face1.jpg', created_at: '2026-02-18' },
+        { id: 2, student: 2, student_name: 'Sara Khan', student_roll: '2', class_name: 'Class 1A', quality_score: 0.78, source_image_url: 'https://example.com/face2.jpg', created_at: '2026-02-18' },
+      ],
+    })
+  ),
+  http.post('/api/face-attendance/enroll/', async ({ request }) => {
+    const body = await request.json()
+    return HttpResponse.json({ task_id: 'task-123', ...body }, { status: 202 })
+  }),
+  http.delete('/api/face-attendance/enrollments/:id/', () =>
+    new HttpResponse(null, { status: 204 })
+  ),
 ]

@@ -18,6 +18,7 @@ class BackgroundTask(models.Model):
         FEE_GENERATION = 'FEE_GENERATION', 'Fee Generation'
         BULK_PROMOTION = 'BULK_PROMOTION', 'Bulk Promotion'
         PROMOTION_ADVISOR = 'PROMOTION_ADVISOR', 'Promotion Advisor'
+        FACE_ATTENDANCE = 'FACE_ATTENDANCE', 'Face Attendance Processing'
 
     school = models.ForeignKey(
         'schools.School',

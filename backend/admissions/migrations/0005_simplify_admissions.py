@@ -20,6 +20,17 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        # ── Step 0: Remove old indexes FIRST (SQLite remakes tables on field
+        #    changes and fails if stale index references exist) ──
+        migrations.RemoveIndex(
+            model_name='admissionenquiry',
+            name='admissions__parent__c26545_idx',  # parent_phone
+        ),
+        migrations.RemoveIndex(
+            model_name='admissionenquiry',
+            name='admissions__school__568020_idx',  # school + stage
+        ),
+
         # ── Step 1: Rename fields (preserves existing data) ──
         migrations.RenameField(
             model_name='admissionenquiry',
@@ -100,15 +111,7 @@ class Migration(migrations.Migration):
             field=models.CharField(max_length=20),
         ),
 
-        # ── Step 6: Update indexes ──
-        migrations.RemoveIndex(
-            model_name='admissionenquiry',
-            name='admissions__school__568020_idx',  # school + stage
-        ),
-        migrations.RemoveIndex(
-            model_name='admissionenquiry',
-            name='admissions__parent__c26545_idx',  # parent_phone
-        ),
+        # ── Step 6: Add new indexes ──
         migrations.AddIndex(
             model_name='admissionenquiry',
             index=models.Index(fields=['school', 'status'], name='admissions__school__status_idx'),

@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { examinationsApi, sessionsApi, classesApi, academicsApi } from '../../services/api'
+import { examinationsApi, sessionsApi, academicsApi } from '../../services/api'
+import { useClasses } from '../../hooks/useClasses'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 
 const STEPS = [
@@ -43,10 +44,7 @@ export default function ExamWizard({ onClose, onSuccess }) {
     queryKey: ['examTypes'],
     queryFn: () => examinationsApi.getExamTypes({ page_size: 9999 }),
   })
-  const { data: classesRes } = useQuery({
-    queryKey: ['classes'],
-    queryFn: () => classesApi.getClasses({ page_size: 9999 }),
-  })
+  const { classes: classesFromHook } = useClasses()
   const { data: allClassSubjectsRes } = useQuery({
     queryKey: ['allClassSubjectsForWizard'],
     queryFn: () => academicsApi.getClassSubjects({ page_size: 9999 }),
@@ -55,7 +53,7 @@ export default function ExamWizard({ onClose, onSuccess }) {
   const years = yearsRes?.data?.results || yearsRes?.data || []
   const terms = termsRes?.data?.results || termsRes?.data || []
   const examTypes = examTypesRes?.data?.results || examTypesRes?.data || []
-  const classes = classesRes?.data?.results || classesRes?.data || []
+  const classes = classesFromHook
   const allClassSubjects = allClassSubjectsRes?.data?.results || allClassSubjectsRes?.data || []
 
   // Class → subject count map
@@ -387,7 +385,7 @@ export default function ExamWizard({ onClose, onSuccess }) {
                           : [...wizardData.class_ids, cls.id]
                         )}
                         className="rounded border-gray-300 text-sky-600 focus:ring-sky-500" />
-                      <span className="flex-1 text-sm font-medium text-gray-800">{cls.name}</span>
+                      <span className="flex-1 text-sm font-medium text-gray-800">{cls.name}{cls.section ? ` - ${cls.section}` : ''}</span>
                       {subCount > 0 ? (
                         <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">{subCount} subjects</span>
                       ) : (
@@ -492,7 +490,7 @@ export default function ExamWizard({ onClose, onSuccess }) {
                 <div className="space-y-1 max-h-40 overflow-y-auto">
                   {selectedClasses.map(cls => (
                     <div key={cls.id} className="flex items-center justify-between py-1.5 px-3 bg-gray-50 rounded text-sm">
-                      <span className="font-medium text-gray-800">{cls.name}</span>
+                      <span className="font-medium text-gray-800">{cls.name}{cls.section ? ` - ${cls.section}` : ''}</span>
                       <span className="text-xs text-gray-500">{subjectCountMap[cls.id] || 0} subjects</span>
                     </div>
                   ))}

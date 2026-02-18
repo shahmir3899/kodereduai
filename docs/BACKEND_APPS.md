@@ -1,6 +1,6 @@
 # Backend Django Apps Reference
 
-## 18 Apps Overview
+## 19 Apps Overview
 
 | App | Purpose | Key Models |
 |-----|---------|------------|
@@ -22,6 +22,7 @@
 | library | Library management | BookCategory, Book, BookIssue |
 | hostel | Hostel management | Hostel, Room, HostelAllocation, GatePass |
 | inventory | Inventory tracking | InventoryItem, Vendor, StockTransaction |
+| face_attendance | Camera-based face attendance | FaceAttendanceSession, StudentFaceEmbedding, FaceDetectionResult |
 
 ---
 
@@ -435,3 +436,18 @@ school(FK), item(FK), assigned_to(FK → User), quantity, assigned_date, return_
 
 ### StockTransaction
 school(FK), item(FK), transaction_type (PURCHASE/ISSUE/RETURN/ADJUSTMENT), quantity, unit_price, total_amount, vendor(FK nullable), reference_number, remarks, date, recorded_by(FK)
+
+---
+
+## face_attendance — Camera-Based Face Attendance
+
+Uses `face_recognition` (dlib) for face detection, embedding generation, and class-scoped matching. Runs parallel to the existing OCR attendance pipeline. See `docs/FACE_ATTENDANCE.md` for full architecture.
+
+### FaceAttendanceSession
+id(UUID PK), school(FK), class_obj(FK), academic_year(FK nullable), date, status (UPLOADING/PROCESSING/NEEDS_REVIEW/CONFIRMED/FAILED), error_message, image_url, total_faces_detected, faces_matched, faces_flagged, faces_ignored, thresholds_used(JSON), celery_task_id, created_by(FK), confirmed_by(FK nullable), confirmed_at(nullable), created_at, updated_at
+
+### StudentFaceEmbedding
+student(FK), school(FK), embedding(Binary — 128-d numpy float64), embedding_version, source_image_url, quality_score, is_active, created_at
+
+### FaceDetectionResult
+session(FK), face_index, bounding_box(JSON), face_crop_url, quality_score, embedding(Binary nullable), matched_student(FK nullable), confidence, match_status (AUTO_MATCHED/FLAGGED/IGNORED/MANUALLY_MATCHED/REMOVED), match_distance(nullable), alternative_matches(JSON), created_at

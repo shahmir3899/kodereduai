@@ -110,6 +110,11 @@ const InventoryItemsPage = lazy(() => import('./pages/inventory/InventoryItemsPa
 const StockTransactionsPage = lazy(() => import('./pages/inventory/StockTransactionsPage'))
 const ItemAssignmentsPage = lazy(() => import('./pages/inventory/ItemAssignmentsPage'))
 
+// Face Attendance pages
+const FaceAttendancePage = lazy(() => import('./pages/face-attendance/FaceAttendancePage'))
+const FaceReviewPage = lazy(() => import('./pages/face-attendance/FaceReviewPage'))
+const FaceEnrollmentPage = lazy(() => import('./pages/face-attendance/FaceEnrollmentPage'))
+
 // Error Boundary to catch runtime crashes
 class ErrorBoundary extends Component {
   constructor(props) {
@@ -243,6 +248,11 @@ function App() {
             <Route path="attendance" element={<SchoolRoute><ModuleRoute module="attendance"><CaptureReviewPage /></ModuleRoute></SchoolRoute>} />
             <Route path="attendance/review/:id" element={<SchoolRoute><ModuleRoute module="attendance"><CaptureReviewPage /></ModuleRoute></SchoolRoute>} />
             <Route path="attendance/register" element={<SchoolRoute><ModuleRoute module="attendance"><RegisterPage /></ModuleRoute></SchoolRoute>} />
+
+            {/* Face Attendance (camera-based) */}
+            <Route path="face-attendance" element={<SchoolRoute><ModuleRoute module="attendance"><FaceAttendancePage /></ModuleRoute></SchoolRoute>} />
+            <Route path="face-attendance/review/:sessionId" element={<SchoolRoute><ModuleRoute module="attendance"><FaceReviewPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="face-attendance/enrollment" element={<SchoolRoute><ModuleRoute module="attendance"><FaceEnrollmentPage /></ModuleRoute></SchoolRoute>} />
 
             {/* Redirects from old routes */}
             <Route path="attendance/upload" element={<Navigate to="/attendance" replace />} />

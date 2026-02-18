@@ -101,7 +101,10 @@
       "Bash(wmic process:*)",
       "Bash(powershell -Command \"Get-CimInstance Win32_Process -Filter \"\"Name=''python.exe''\"\" | Select-Object ProcessId, CommandLine | Format-List\")",
       "Bash(taskkill:*)",
-      "Bash(powershell -Command \"Get-CimInstance Win32_Process -Filter \"\"Name=''python.exe''\"\" | Where-Object { $_.CommandLine -like ''*manage.py runserver*'' } | Select-Object ProcessId, CommandLine | Format-List\")"
+      "Bash(powershell -Command \"Get-CimInstance Win32_Process -Filter \"\"Name=''python.exe''\"\" | Where-Object { $_.CommandLine -like ''*manage.py runserver*'' } | Select-Object ProcessId, CommandLine | Format-List\")",
+      "Bash(cmake:*)",
+      "Bash(export PATH:*)",
+      "Bash(export:*)"
     ]
   }
 }

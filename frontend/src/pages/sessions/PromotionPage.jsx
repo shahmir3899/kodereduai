@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { sessionsApi, classesApi } from '../../services/api'
+import { sessionsApi } from '../../services/api'
 import { useBackgroundTask } from '../../hooks/useBackgroundTask'
+import { useClasses } from '../../hooks/useClasses'
+import ClassSelector from '../../components/ClassSelector'
 
 // Recommendation badge component
 function RecBadge({ rec }) {
@@ -64,10 +66,7 @@ export default function PromotionPage() {
     queryFn: () => sessionsApi.getAcademicYears({ page_size: 9999 }),
   })
 
-  const { data: classesRes } = useQuery({
-    queryKey: ['classes'],
-    queryFn: () => classesApi.getClasses({ page_size: 9999 }),
-  })
+  const { classes: classesFromHook } = useClasses()
 
   const { data: enrollmentsRes, isLoading: enrollmentsLoading } = useQuery({
     queryKey: ['enrollmentsByClass', sourceClassId, sourceYearId],
@@ -88,7 +87,7 @@ export default function PromotionPage() {
   const advisorLoading = advisorTask.isSubmitting || (advisorTask.submittedTaskId && !advisorTask.isComplete && !advisorTask.isFailed)
 
   const years = yearsRes?.data?.results || yearsRes?.data || []
-  const classes = classesRes?.data?.results || classesRes?.data || []
+  const classes = classesFromHook
   const enrollments = enrollmentsRes?.data?.results || enrollmentsRes?.data || []
   const recommendations = advisorData?.recommendations || []
 
@@ -251,10 +250,7 @@ export default function PromotionPage() {
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Class *</label>
-              <select value={sourceClassId} onChange={e => setSourceClassId(e.target.value)} className="input w-full">
-                <option value="">Select class...</option>
-                {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+              <ClassSelector value={sourceClassId} onChange={e => setSourceClassId(e.target.value)} className="input w-full" classes={classes} />
             </div>
             <div className="flex justify-between pt-2">
               <button onClick={() => setStep(1)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Back</button>
@@ -468,7 +464,7 @@ export default function PromotionPage() {
                         <span>Target class for promoted students:</span>
                         <select id="advisor-target-class" className="input text-sm py-1 w-40">
                           <option value="">Select class...</option>
-                          {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                          {classes.map(c => <option key={c.id} value={c.id}>{c.name}{c.section ? ` - ${c.section}` : ''}</option>)}
                         </select>
                       </div>
                       <button
@@ -502,7 +498,7 @@ export default function PromotionPage() {
               <label className="text-xs text-gray-600">Set all target class:</label>
               <select onChange={e => setAllTargetClass(e.target.value)} className="input text-sm py-1">
                 <option value="">--</option>
-                {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                {classes.map(c => <option key={c.id} value={c.id}>{c.name}{c.section ? ` - ${c.section}` : ''}</option>)}
               </select>
             </div>
           </div>
@@ -547,7 +543,7 @@ export default function PromotionPage() {
                             disabled={!p.include}
                           >
                             <option value="">Select...</option>
-                            {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            {classes.map(c => <option key={c.id} value={c.id}>{c.name}{c.section ? ` - ${c.section}` : ''}</option>)}
                           </select>
                         </td>
                         <td className="px-3 py-2">
@@ -591,7 +587,7 @@ export default function PromotionPage() {
                           disabled={!p.include}
                         >
                           <option value="">Select...</option>
-                          {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                          {classes.map(c => <option key={c.id} value={c.id}>{c.name}{c.section ? ` - ${c.section}` : ''}</option>)}
                         </select>
                       </div>
                       <div>

@@ -373,3 +373,20 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | GET | /api/tasks/tasks/{celery_task_id}/ | Task detail |
 
 **NOTE:** Tasks endpoint is nested: `/api/tasks/tasks/`, NOT `/api/tasks/`.
+
+## Face Attendance
+| Method | URL | Description |
+|--------|-----|-------------|
+| POST | /api/face-attendance/upload-image/ | Upload image to Supabase. Body: multipart/form-data with `image` field. Returns {url} |
+| POST | /api/face-attendance/sessions/ | Create session. Body: {class_obj, date, image_url}. Dispatches Celery task, returns immediately |
+| GET | /api/face-attendance/sessions/ | List sessions. Params: class_obj, date, status, page_size |
+| GET | /api/face-attendance/sessions/{id}/ | Session detail with detections array and class_students |
+| GET | /api/face-attendance/sessions/pending_review/ | Sessions with status=NEEDS_REVIEW (auto-recovers stuck PROCESSING sessions > 5 min) |
+| POST | /api/face-attendance/sessions/{id}/confirm/ | Confirm attendance. Body: {present_student_ids, removed_detection_ids?, manual_additions?, corrections?}. Creates AttendanceRecords |
+| POST | /api/face-attendance/sessions/{id}/reprocess/ | Re-run face pipeline on existing image |
+| POST | /api/face-attendance/enroll/ | Enroll student face. Body: {student_id, image_url}. Dispatches async embedding generation |
+| GET | /api/face-attendance/enrollments/ | List face embeddings. Params: class_id, student_id, page_size |
+| DELETE | /api/face-attendance/enrollments/{id}/ | Soft-delete face embedding (sets is_active=False) |
+| GET | /api/face-attendance/status/ | Face recognition availability, thresholds, enrollment count |
+
+**NOTE:** Session IDs are UUIDs, not integers. Enrollment uses async Celery task — response returns task_id for tracking.

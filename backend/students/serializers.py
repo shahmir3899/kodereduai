@@ -31,14 +31,15 @@ class ClassCreateSerializer(serializers.ModelSerializer):
         # On update (PATCH), school isn't in attrs — use instance's school
         school = attrs.get('school') or (self.instance.school if self.instance else None)
         name = attrs.get('name') or (self.instance.name if self.instance else None)
+        section = attrs.get('section', self.instance.section if self.instance else '')
 
         if school and name:
-            qs = Class.objects.filter(school=school, name=name)
+            qs = Class.objects.filter(school=school, name=name, section=section)
             if self.instance:
                 qs = qs.exclude(pk=self.instance.pk)
             if qs.exists():
                 raise serializers.ValidationError({
-                    'name': f"A class named '{name}' already exists in this school."
+                    'name': f"A class named '{name}' with section '{section}' already exists in this school."
                 })
 
         return attrs

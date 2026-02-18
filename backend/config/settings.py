@@ -67,6 +67,7 @@ INSTALLED_APPS = [
     'library',
     'hostel',
     'inventory',
+    'face_attendance',
 ]
 
 MIDDLEWARE = [
@@ -366,6 +367,32 @@ ATTENDANCE_AI_SETTINGS = {
     'MIN_IMAGE_HEIGHT': 300,
     'OCR_CONFIDENCE_THRESHOLD': 0.7,
     'FUZZY_MATCH_THRESHOLD': 70,  # Minimum score for fuzzy name matching
+}
+
+# =============================================================================
+# Face Recognition Settings
+# =============================================================================
+FACE_RECOGNITION_SETTINGS = {
+    # Distance thresholds (L2 / Euclidean from dlib)
+    # Lower distance = better match
+    'HIGH_CONFIDENCE_THRESHOLD': 0.40,   # Auto-match (very confident)
+    'MEDIUM_CONFIDENCE_THRESHOLD': 0.55,  # Flag for review
+    # Anything >= MEDIUM is IGNORED (low confidence)
+
+    # Face detection constraints
+    'MAX_FACES_PER_IMAGE': 15,
+    'MIN_FACE_SIZE': 60,  # Minimum face width/height in pixels
+
+    # Quality filtering
+    'MIN_BLUR_SCORE': 50.0,  # Laplacian variance threshold
+
+    # Embedding
+    'EMBEDDING_MODEL': 'dlib_v1',  # face_recognition default (128-d)
+    'NUM_JITTERS': 1,  # Number of times to re-sample face for encoding (1=fast, 10=accurate)
+
+    # Storage
+    'FACE_CROPS_FOLDER': 'face-crops',  # Supabase folder for cropped faces
+    'ENROLLMENT_FOLDER': 'face-enrollment',  # Supabase folder for enrollment photos
 }
 
 # =============================================================================

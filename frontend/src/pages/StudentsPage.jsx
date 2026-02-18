@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useAcademicYear } from '../contexts/AcademicYearContext'
 import { studentsApi, classesApi, schoolsApi } from '../services/api'
 import { useToast } from '../components/Toast'
+import ClassSelector from '../components/ClassSelector'
 import { exportStudentsPDF, exportStudentsPNG } from './studentExport'
 import { useDebounce } from '../hooks/useDebounce'
 
@@ -863,19 +864,14 @@ export default function StudentsPage() {
           )}
           <div>
             <label className="label">Class</label>
-            <select
+            <ClassSelector
               className="input"
               value={selectedClass}
               onChange={(e) => setSelectedClass(e.target.value)}
               disabled={!selectedSchoolId}
-            >
-              <option value="">All Classes</option>
-              {classes.map((cls) => (
-                <option key={cls.id} value={cls.id}>
-                  {cls.name}
-                </option>
-              ))}
-            </select>
+              showAllOption
+              classes={classes}
+            />
           </div>
           <div className={isSuperAdmin ? "md:col-span-2" : "md:col-span-2"}>
             <label className="label">Search</label>
@@ -1077,20 +1073,15 @@ export default function StudentsPage() {
             <div className="space-y-4">
               <div>
                 <label className="label">Class</label>
-                <select
+                <ClassSelector
                   className="input"
                   value={studentForm.class_id}
                   onChange={(e) => setStudentForm({ ...studentForm, class_id: e.target.value })}
                   disabled={!!editingStudent}
                   required
-                >
-                  <option value="">Select a class</option>
-                  {classes.map((cls) => (
-                    <option key={cls.id} value={cls.id}>
-                      {cls.name}
-                    </option>
-                  ))}
-                </select>
+                  placeholder="Select a class"
+                  classes={classes}
+                />
                 {editingStudent && (
                   <p className="text-xs text-gray-500 mt-1">Class cannot be changed after creation</p>
                 )}

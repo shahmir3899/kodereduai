@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { useQuery, useMutation } from '@tanstack/react-query'
-import { sessionsApi, classesApi } from '../../services/api'
+import { useMutation } from '@tanstack/react-query'
+import { sessionsApi } from '../../services/api'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useToast } from '../../components/Toast'
+import { useClasses } from '../../hooks/useClasses'
 
 export default function SectionAllocator({ onClose }) {
   const { activeAcademicYear } = useAcademicYear()
@@ -15,11 +16,7 @@ export default function SectionAllocator({ onClose }) {
   const [activeTab, setActiveTab] = useState('A')
 
   // Fetch classes
-  const { data: classesRes, isLoading: classesLoading } = useQuery({
-    queryKey: ['classes'],
-    queryFn: () => classesApi.getClasses({ page_size: 200 }),
-  })
-  const classes = classesRes?.data?.results || classesRes?.data || []
+  const { classes, isLoading: classesLoading } = useClasses()
 
   // Preview mutation
   const previewMutation = useMutation({
@@ -139,7 +136,7 @@ export default function SectionAllocator({ onClose }) {
                     <option value="">Select a class...</option>
                     {classes.map(c => (
                       <option key={c.id} value={c.id}>
-                        {c.name} ({c.student_count || 0} students)
+                        {c.name}{c.section ? ` - ${c.section}` : ''} ({c.student_count || 0} students)
                       </option>
                     ))}
                   </select>

@@ -132,6 +132,9 @@ urlpatterns = [
     # Attendance
     path('api/attendance/', include('attendance.urls')),
 
+    # Face Attendance (camera-based)
+    path('api/face-attendance/', include('face_attendance.urls')),
+
     # Finance
     path('api/finance/', include('finance.urls')),
 

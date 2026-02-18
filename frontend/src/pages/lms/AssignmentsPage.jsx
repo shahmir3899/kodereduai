@@ -1,7 +1,9 @@
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { lmsApi, classesApi, academicsApi, hrApi } from '../../services/api'
+import { lmsApi, academicsApi, hrApi } from '../../services/api'
+import { useClasses } from '../../hooks/useClasses'
+import ClassSelector from '../../components/ClassSelector'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useToast } from '../../components/Toast'
@@ -55,10 +57,7 @@ export default function AssignmentsPage() {
 
   // -- Data fetching --
 
-  const { data: classesData } = useQuery({
-    queryKey: ['classes'],
-    queryFn: () => classesApi.getClasses({ page_size: 9999 }),
-  })
+  const { classes } = useClasses()
 
   const { data: subjectsData } = useQuery({
     queryKey: ['subjects'],
@@ -83,7 +82,6 @@ export default function AssignmentsPage() {
       }),
   })
 
-  const classes = classesData?.data?.results || classesData?.data || []
   const subjects = subjectsData?.data?.results || subjectsData?.data || []
   const staff = staffData?.data?.results || staffData?.data || []
   const allAssignments = assignmentsData?.data?.results || assignmentsData?.data || []
@@ -264,18 +262,13 @@ export default function AssignmentsPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 sm:gap-4">
           <div>
             <label className="label">Class</label>
-            <select
+            <ClassSelector
               className="input"
               value={filterClass}
               onChange={(e) => setFilterClass(e.target.value)}
-            >
-              <option value="">All Classes</option>
-              {classes.map((cls) => (
-                <option key={cls.id} value={cls.id}>
-                  {cls.name}
-                </option>
-              ))}
-            </select>
+              showAllOption
+              classes={classes}
+            />
           </div>
           <div>
             <label className="label">Subject</label>
@@ -581,18 +574,12 @@ export default function AssignmentsPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="label">Class *</label>
-                  <select
+                  <ClassSelector
                     className="input"
                     value={form.class_obj}
                     onChange={(e) => setForm({ ...form, class_obj: e.target.value })}
-                  >
-                    <option value="">Select Class</option>
-                    {classes.map((cls) => (
-                      <option key={cls.id} value={cls.id}>
-                        {cls.name}
-                      </option>
-                    ))}
-                  </select>
+                    classes={classes}
+                  />
                 </div>
                 <div>
                   <label className="label">Subject *</label>

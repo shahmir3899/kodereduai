@@ -424,6 +424,92 @@ def cleanup_seed_data():
     print("[SEED CLEANUP] Complete.\n")
 
 
+# ── Face Attendance Seed Data ────────────────────────────────────────────────
+
+def create_face_seed_data(seed=None):
+    """
+    Create face attendance test data (embeddings, session, detections).
+
+    Args:
+        seed: dict from get_seed_data(). If None, calls get_seed_data().
+    """
+    import numpy as np
+    from face_attendance.models import (
+        FaceAttendanceSession, StudentFaceEmbedding, FaceDetectionResult,
+    )
+    from datetime import date as date_cls
+
+    if seed is None:
+        seed = get_seed_data()
+
+    school = seed['school_a']
+    students = seed['students']
+    class_1 = seed['classes'][0]
+    ay = seed['academic_year']
+    admin = seed['users']['admin']
+
+    print("\n[FACE SEED] Creating face attendance data...")
+
+    # Create fake 128-d embeddings for first 4 students (Class 1A)
+    face_embeddings = []
+    for i, student in enumerate(students[:4]):
+        # Skip if already exists
+        if StudentFaceEmbedding.objects.filter(student=student, is_active=True).exists():
+            print(f"   Skipped embedding for {student.name} (already exists)")
+            continue
+        fake_embedding = np.random.default_rng(seed=42 + i).standard_normal(128).astype(np.float64)
+        emb = StudentFaceEmbedding.objects.create(
+            student=student,
+            school=school,
+            embedding=fake_embedding.tobytes(),
+            embedding_version='dlib_v1',
+            source_image_url=f'https://example.com/faces/{student.id}.jpg',
+            quality_score=0.85,
+            is_active=True,
+        )
+        face_embeddings.append(emb)
+        print(f"   Created embedding for {student.name}")
+
+    # Create a sample NEEDS_REVIEW session
+    session = FaceAttendanceSession.objects.create(
+        school=school,
+        class_obj=class_1,
+        academic_year=ay,
+        date=date_cls.today(),
+        status=FaceAttendanceSession.Status.NEEDS_REVIEW,
+        image_url='https://example.com/group_photo.jpg',
+        total_faces_detected=3,
+        faces_matched=2,
+        faces_flagged=1,
+        faces_ignored=0,
+        thresholds_used={'high': 0.40, 'medium': 0.55},
+        created_by=admin,
+    )
+    print(f"   Created session: {session.id}")
+
+    # Create detection results
+    det_configs = [
+        (0, students[0], 92.5, 'AUTO_MATCHED', 0.28),
+        (1, students[1], 71.3, 'FLAGGED', 0.47),
+        (2, None, 0, 'IGNORED', 0.62),
+    ]
+    for face_idx, student, confidence, match_status, distance in det_configs:
+        FaceDetectionResult.objects.create(
+            session=session,
+            face_index=face_idx,
+            bounding_box={'top': 50 * face_idx, 'right': 100, 'bottom': 50 * face_idx + 80, 'left': 20},
+            quality_score=0.8,
+            matched_student=student,
+            confidence=confidence,
+            match_status=match_status,
+            match_distance=distance,
+        )
+    print(f"   Created {len(det_configs)} detection results")
+
+    print("[FACE SEED] Complete.\n")
+    return {'session': session, 'embeddings': face_embeddings}
+
+
 # ── When run directly, create seed data ─────────────────────────────────────
 if __name__ == '__main__' or not _seed_exists():
     create_seed_data()

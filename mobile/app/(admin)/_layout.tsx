@@ -71,6 +71,7 @@ export default function AdminLayout() {
       <Tabs.Screen name="timetable" options={{ href: null }} />
       <Tabs.Screen name="results" options={{ href: null }} />
       <Tabs.Screen name="ai-assistant" options={{ href: null }} />
+      <Tabs.Screen name="face-attendance" options={{ href: null, headerShown: false }} />
     </Tabs>
   );
 }

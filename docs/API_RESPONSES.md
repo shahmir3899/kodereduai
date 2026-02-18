@@ -1391,6 +1391,139 @@ The following endpoints were found to **return 404** or have **missing operation
 - Attendance custom actions use **underscores**: `pending_review`, `daily_report`, `accuracy_stats`, `mapping_suggestions`, `profile_summary`, `dashboard_stats`, `monthly_summary`
 - Router-generated CRUD endpoints use **hyphens**: `fee-structures`, `fee-payments`, `leave-policies`, etc.
 
+---
+
+## Face Attendance
+
+### GET /api/face-attendance/status/
+```json
+{
+  "face_recognition_available": true,
+  "thresholds": { "high": 0.40, "medium": 0.55 },
+  "enrolled_faces": 4,
+  "model": "dlib_v1"
+}
+```
+
+### GET /api/face-attendance/sessions/
+```json
+{
+  "count": 1,
+  "next": null,
+  "previous": null,
+  "results": [
+    {
+      "id": "a1b2c3d4-e5f6-...",
+      "status": "NEEDS_REVIEW",
+      "class_obj": { "id": 1, "name": "Class 1A" },
+      "date": "2026-02-18",
+      "image_url": "https://storage.example.com/photo.jpg",
+      "total_faces_detected": 3,
+      "faces_matched": 2,
+      "faces_flagged": 1,
+      "faces_ignored": 0,
+      "created_at": "2026-02-18T10:30:00Z"
+    }
+  ]
+}
+```
+
+### GET /api/face-attendance/sessions/{id}/ (detail)
+```json
+{
+  "id": "a1b2c3d4-e5f6-...",
+  "status": "NEEDS_REVIEW",
+  "class_obj": { "id": 1, "name": "Class 1A" },
+  "date": "2026-02-18",
+  "image_url": "https://storage.example.com/photo.jpg",
+  "total_faces_detected": 3,
+  "faces_matched": 2,
+  "faces_flagged": 1,
+  "faces_ignored": 0,
+  "thresholds_used": { "high": 0.40, "medium": 0.55 },
+  "detections": [
+    {
+      "id": 10,
+      "face_index": 0,
+      "face_crop_url": "https://storage.example.com/crop_0.jpg",
+      "match_status": "AUTO_MATCHED",
+      "matched_student": { "id": 1, "name": "Ali Hassan", "roll_number": "1" },
+      "confidence": 92.5,
+      "quality_score": 0.88,
+      "alternative_matches": []
+    },
+    {
+      "id": 11,
+      "face_index": 1,
+      "face_crop_url": "https://storage.example.com/crop_1.jpg",
+      "match_status": "FLAGGED",
+      "matched_student": { "id": 2, "name": "Sara Khan", "roll_number": "2" },
+      "confidence": 71.3,
+      "quality_score": 0.75,
+      "alternative_matches": [
+        { "student_id": 3, "name": "Fatima Noor", "confidence": 68.1 }
+      ]
+    },
+    {
+      "id": 12,
+      "face_index": 2,
+      "face_crop_url": "",
+      "match_status": "IGNORED",
+      "matched_student": null,
+      "confidence": 0,
+      "quality_score": 0.30,
+      "alternative_matches": []
+    }
+  ],
+  "class_students": [
+    { "id": 1, "name": "Ali Hassan", "roll_number": "1", "has_embedding": true, "matched": true },
+    { "id": 2, "name": "Sara Khan", "roll_number": "2", "has_embedding": true, "matched": true },
+    { "id": 3, "name": "Usman Ahmed", "roll_number": "3", "has_embedding": true, "matched": false },
+    { "id": 4, "name": "Fatima Noor", "roll_number": "4", "has_embedding": false, "matched": false }
+  ]
+}
+```
+
+### POST /api/face-attendance/sessions/{id}/confirm/
+```json
+{
+  "success": true,
+  "message": "Attendance confirmed for 4 students",
+  "total_students": 4,
+  "present_count": 2,
+  "absent_count": 2
+}
+```
+
+### GET /api/face-attendance/enrollments/
+```json
+{
+  "count": 2,
+  "results": [
+    {
+      "id": 1,
+      "student": 1,
+      "student_name": "Ali Hassan",
+      "student_roll": "1",
+      "class_name": "Class 1A",
+      "quality_score": 0.85,
+      "source_image_url": "https://storage.example.com/face1.jpg",
+      "created_at": "2026-02-18T10:00:00Z"
+    }
+  ]
+}
+```
+
+### POST /api/face-attendance/enroll/
+```json
+{
+  "task_id": "bg-task-uuid",
+  "message": "Enrollment processing started"
+}
+```
+
+---
+
 ### Modules with No DELETE endpoint
 Most ViewSets use `ModelViewSet` which includes DELETE. However, verify these if cleanup is needed:
 - `AttendanceRecord` — no explicit destroy action seen

@@ -2,7 +2,8 @@ import { useState, useEffect, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
-import { discountApi, classesApi, studentsApi, sessionsApi } from '../../services/api'
+import { discountApi, studentsApi, sessionsApi } from '../../services/api'
+import ClassSelector from '../../components/ClassSelector'
 import { useToast } from '../../components/Toast'
 import { GRADE_PRESETS, GRADE_LEVEL_LABELS } from '../../constants/gradePresets'
 
@@ -183,11 +184,6 @@ export default function DiscountsPage() {
     queryFn: () => discountApi.getStudentDiscounts({ page_size: 9999 }),
   })
 
-  const { data: classesData } = useQuery({
-    queryKey: ['classes'],
-    queryFn: () => classesApi.getClasses({ page_size: 9999 }),
-  })
-
   const { data: studentsData } = useQuery({
     queryKey: ['students'],
     queryFn: () => studentsApi.getStudents({ page_size: 9999 }),
@@ -202,7 +198,6 @@ export default function DiscountsPage() {
   const allDiscounts = discountsData?.data?.results || discountsData?.data || []
   const allScholarships = scholarshipsData?.data?.results || scholarshipsData?.data || []
   const allAssignments = studentDiscountsData?.data?.results || studentDiscountsData?.data || []
-  const allClasses = classesData?.data?.results || classesData?.data || []
   const allStudents = studentsData?.data?.results || studentsData?.data || []
   const allSessions = sessionsData?.data?.results || sessionsData?.data || []
 
@@ -1226,16 +1221,12 @@ export default function DiscountsPage() {
               {discountForm.applies_to === 'CLASS' && (
                 <div>
                   <label className="label">Target Class</label>
-                  <select
+                  <ClassSelector
                     className="input"
                     value={discountForm.target_class}
                     onChange={(e) => setDiscountForm({ ...discountForm, target_class: e.target.value })}
-                  >
-                    <option value="">Select Class</option>
-                    {allClasses.map((c) => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </select>
+                    placeholder="Select Class"
+                  />
                 </div>
               )}
 
@@ -1647,17 +1638,13 @@ export default function DiscountsPage() {
                 </div>
                 <div>
                   <label className="label">Class</label>
-                  <select
+                  <ClassSelector
                     className="input"
                     value={bulkAssignForm.class_id}
                     onChange={(e) => setBulkAssignForm({ ...bulkAssignForm, class_id: e.target.value, grade_level: '' })}
                     disabled={!!bulkAssignForm.grade_level}
-                  >
-                    <option value="">-- Select Class --</option>
-                    {allClasses.map((c) => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </select>
+                    placeholder="-- Select Class --"
+                  />
                 </div>
               </div>
               <p className="text-xs text-gray-400 -mt-2">Choose either a grade level or a specific class, not both.</p>

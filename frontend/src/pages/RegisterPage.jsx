@@ -1,8 +1,9 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
-import { attendanceApi, classesApi, studentsApi, schoolsApi } from '../services/api'
+import { attendanceApi, studentsApi, schoolsApi } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
+import ClassSelector from '../components/ClassSelector'
 
 // ─── Utility helpers ───
 function getDaysInMonth(year, month) {
@@ -60,12 +61,6 @@ function RegisterTab() {
   const daysInMonth = getDaysInMonth(year, month)
   const dateFrom = `${year}-${pad(month + 1)}-01`
   const dateTo = `${year}-${pad(month + 1)}-${pad(daysInMonth)}`
-
-  const { data: classesData } = useQuery({
-    queryKey: ['classes'],
-    queryFn: () => classesApi.getClasses({ page_size: 9999 }),
-  })
-  const classes = classesData?.data?.results || classesData?.data || []
 
   const { data: studentsData } = useQuery({
     queryKey: ['students', classId],
@@ -138,10 +133,7 @@ function RegisterTab() {
         <div className="flex flex-col sm:flex-row items-start sm:items-end gap-3">
           <div className="w-full sm:w-auto sm:min-w-[200px]">
             <label className="block text-xs font-medium text-gray-500 mb-1">Class</label>
-            <select value={classId} onChange={e => setClassId(e.target.value)} className="input w-full">
-              <option value="">Select Class</option>
-              {classes.map(cls => <option key={cls.id} value={cls.id}>{cls.name}</option>)}
-            </select>
+            <ClassSelector value={classId} onChange={e => setClassId(e.target.value)} className="input w-full" />
           </div>
           <div className="flex items-center gap-2">
             <button onClick={prevMonth} className="btn btn-secondary px-2 py-2">
@@ -834,15 +826,14 @@ function ManualEntryTab() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">Class</label>
-            <select
+            <ClassSelector
               value={classId}
               onChange={e => { setClassId(e.target.value); setAttendanceData([]); setSaveMsg('') }}
               className="input w-full"
               disabled={classesLoading}
-            >
-              <option value="">{classesLoading ? 'Loading classes...' : 'Select Class'}</option>
-              {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+              classes={classes}
+              placeholder={classesLoading ? 'Loading classes...' : 'Select Class'}
+            />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">Date</label>

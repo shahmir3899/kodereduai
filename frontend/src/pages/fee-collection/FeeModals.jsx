@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { MONTHS } from './FeeFilters'
+import ClassSelector from '../../components/ClassSelector'
 
 const PAYMENT_METHODS = [
   { value: 'CASH', label: 'Cash' },
@@ -167,10 +168,13 @@ export function GenerateModal({ show, onClose, month, year, classFilter, setClas
           )}
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-1">Filter by Class (optional)</label>
-            <select value={classFilter} onChange={(e) => setClassFilter(e.target.value)} className="input-field">
-              <option value="">All Classes</option>
-              {classList.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+            <ClassSelector
+              value={classFilter}
+              onChange={(e) => setClassFilter(e.target.value)}
+              className="input-field"
+              showAllOption
+              classes={classList}
+            />
           </div>
           <div className="flex gap-3">
             <button onClick={() => { setConfirmed(false); onClose() }} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">Cancel</button>
@@ -229,7 +233,7 @@ export function FeeStructureModal({ show, onClose, classList, bulkFees, setBulkF
                 <div className="space-y-1">
                   {feesWithValues.length > 0 ? feesWithValues.map(c => (
                     <p key={c.id} className="text-sm text-blue-800">
-                      <span className="font-medium">{c.name}:</span> {Number(bulkFees[c.id]).toLocaleString()}/month
+                      <span className="font-medium">{c.name}{c.section ? ` - ${c.section}` : ''}:</span> {Number(bulkFees[c.id]).toLocaleString()}/month
                     </p>
                   )) : (
                     <p className="text-sm text-blue-800">No fees set. Nothing will be saved.</p>
@@ -263,7 +267,7 @@ export function FeeStructureModal({ show, onClose, classList, bulkFees, setBulkF
                 <tbody className="divide-y divide-gray-100">
                   {classList.map(c => (
                     <tr key={c.id}>
-                      <td className="px-3 py-2 text-sm text-gray-900">{c.name}</td>
+                      <td className="px-3 py-2 text-sm text-gray-900">{c.name}{c.section ? ` - ${c.section}` : ''}</td>
                       <td className="px-3 py-2">
                         <input
                           type="number" step="0.01" placeholder="0.00"

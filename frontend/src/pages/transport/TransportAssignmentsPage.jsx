@@ -1,6 +1,8 @@
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { transportApi, studentsApi, classesApi } from '../../services/api'
+import { transportApi, studentsApi } from '../../services/api'
+import { useClasses } from '../../hooks/useClasses'
+import ClassSelector from '../../components/ClassSelector'
 import { useAuth } from '../../contexts/AuthContext'
 
 const TRANSPORT_TYPES = [
@@ -53,11 +55,7 @@ export default function TransportAssignmentsPage() {
   })
 
   // Fetch classes
-  const { data: classesData } = useQuery({
-    queryKey: ['classes', activeSchool?.id],
-    queryFn: () => classesApi.getClasses({ school_id: activeSchool?.id, page_size: 9999 }),
-    enabled: !!activeSchool?.id,
-  })
+  const { classes } = useClasses()
 
   // Fetch students for assignment
   const { data: studentsData } = useQuery({
@@ -111,7 +109,6 @@ export default function TransportAssignmentsPage() {
 
   const assignments = assignmentsData?.data?.results || assignmentsData?.data || []
   const routes = routesData?.data?.results || routesData?.data || []
-  const classes = classesData?.data?.results || classesData?.data || []
   const allStudents = studentsData?.data?.results || studentsData?.data || []
   const stops = stopsData?.data?.results || stopsData?.data || []
   const vehicles = vehiclesData?.data?.results || vehiclesData?.data || []
@@ -281,16 +278,13 @@ export default function TransportAssignmentsPage() {
           </div>
           <div>
             <label className="label">Filter by Class</label>
-            <select
+            <ClassSelector
               className="input"
               value={filterClass}
               onChange={(e) => setFilterClass(e.target.value)}
-            >
-              <option value="">All Classes</option>
-              {classes.map((cls) => (
-                <option key={cls.id} value={cls.id}>{cls.name}</option>
-              ))}
-            </select>
+              showAllOption
+              classes={classes}
+            />
           </div>
         </div>
       </div>

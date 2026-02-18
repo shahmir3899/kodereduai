@@ -9,6 +9,7 @@ import json
 from datetime import date
 from decimal import Decimal
 
+import numpy as np
 import pytest
 from django.test import Client
 from django.conf import settings
@@ -279,6 +280,65 @@ def seed_data(api_client, db):
         )
         staff_members.append(sm)
 
+    # ---------- Face Attendance Seed Data ----------
+    from face_attendance.models import (
+        FaceAttendanceSession, StudentFaceEmbedding, FaceDetectionResult,
+    )
+
+    # Create fake 128-d embeddings for first 4 students (Class 1A)
+    face_embeddings = []
+    for i, student in enumerate(students[:4]):
+        fake_embedding = np.random.default_rng(seed=42 + i).standard_normal(128).astype(np.float64)
+        emb = StudentFaceEmbedding.objects.create(
+            student=student,
+            school=school_a,
+            embedding=fake_embedding.tobytes(),
+            embedding_version='dlib_v1',
+            source_image_url=f'https://example.com/faces/{student.id}.jpg',
+            quality_score=0.85,
+            is_active=True,
+        )
+        face_embeddings.append(emb)
+
+    # Create a NEEDS_REVIEW session with detections
+    face_session = FaceAttendanceSession.objects.create(
+        school=school_a,
+        class_obj=class_1,
+        academic_year=ay,
+        date=date.today(),
+        status=FaceAttendanceSession.Status.NEEDS_REVIEW,
+        image_url='https://example.com/group_photo.jpg',
+        total_faces_detected=3,
+        faces_matched=2,
+        faces_flagged=1,
+        faces_ignored=0,
+        thresholds_used={'high': 0.40, 'medium': 0.55},
+        created_by=users['admin'],
+    )
+
+    # Create detection results for the session
+    face_detections = []
+    det_configs = [
+        (0, students[0], 92.5, 'AUTO_MATCHED', 0.28),
+        (1, students[1], 71.3, 'FLAGGED', 0.47),
+        (2, None, 0, 'IGNORED', 0.62),
+    ]
+    for face_idx, student, confidence, match_status, distance in det_configs:
+        det = FaceDetectionResult.objects.create(
+            session=face_session,
+            face_index=face_idx,
+            bounding_box={
+                'top': 50 * face_idx, 'right': 100,
+                'bottom': 50 * face_idx + 80, 'left': 20,
+            },
+            quality_score=0.8,
+            matched_student=student,
+            confidence=confidence,
+            match_status=match_status,
+            match_distance=distance,
+        )
+        face_detections.append(det)
+
     # ---------- JWT Tokens ----------
     helper = APIHelper(api_client)
     tokens = {}
@@ -302,4 +362,7 @@ def seed_data(api_client, db):
         'departments': [dept_academic, dept_admin],
         'designations': [desig_teacher, desig_clerk],
         'staff': staff_members,
+        'face_embeddings': face_embeddings,
+        'face_session': face_session,
+        'face_detections': face_detections,
     }

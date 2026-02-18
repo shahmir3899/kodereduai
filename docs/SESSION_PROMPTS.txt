@@ -32,8 +32,8 @@ Here is what I want you to do
 
 Read all docs/ files for project context.
 
-there is OCR based attendance system. I need an option to manually update data and records on http://localhost:3000/attendance/register 
-
+I want you to see how New Admission flow is todays Students adding
+Is there any fee record creation system for new students. Is it connected with finance section
 1. Identify all related modules, endpoints, and components from the docs
 2. Plan the implementation (backend models/views, frontend pages, API changes)
 

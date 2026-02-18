@@ -60,10 +60,10 @@ class UserGuidePDF(FPDF):
         self.ln(3)
         modules = [
             "Dashboard | Classes & Students | Attendance (AI-Powered)",
-            "Academics & Examinations | Finance & Online Payments",
-            "HR & Staff Management | Admissions CRM | Transport",
-            "Library | Hostel Management | LMS | Notifications",
-            "Parent & Student Portals | AI Study Helper"
+            "Face Attendance (Camera-Based) | Academics & Examinations",
+            "Finance & Online Payments | HR & Staff Management",
+            "Admissions CRM | Transport | Library | Hostel Management",
+            "LMS | Notifications | Parent & Student Portals | AI Study Helper"
         ]
         self.set_font("Helvetica", "I", 9)
         for m in modules:
@@ -324,7 +324,7 @@ def build_guide():
     pdf.sub_section("Sidebar Groups (Admin/Teacher View)")
     pdf.bullet("Dashboard - Main overview page")
     pdf.bullet("Management - Classes and Students")
-    pdf.bullet("Attendance - Capture, Review, Register")
+    pdf.bullet("Attendance - Capture, Review, Register, Face Attendance")
     pdf.bullet("Academics - Subjects, Timetable, Sessions, Examinations, LMS")
     pdf.bullet("Finance - Dashboard, Fee Collection, Expenses, Payment Gateways")
     pdf.bullet("HR & Staff - Staff Directory, Departments, Payroll, Leave")
@@ -474,7 +474,190 @@ def build_guide():
                  "Settings > Mappings Tab. Add new symbols or change the default mapping.")
 
     # =========================================================================
-    # CHAPTER 4: ACADEMICS MODULE
+    # CHAPTER 4: FACE ATTENDANCE (CAMERA-BASED)
+    # =========================================================================
+    pdf.chapter_title("Face Attendance (Camera-Based)")
+
+    pdf.body_text(
+        "The Face Attendance module uses AI-powered face recognition to take attendance from a single "
+        "group photo of the class. Instead of scanning handwritten registers, a teacher or admin takes "
+        "a photo of the class, and the system automatically detects faces, matches them to enrolled "
+        "students, and marks attendance. This is faster and works well for classes where camera-based "
+        "attendance is preferred."
+    )
+
+    pdf.info_box("How It Works",
+                 "1. Enroll each student by uploading a clear portrait photo (one-time setup). "
+                 "2. Take a group photo of the class. "
+                 "3. The AI detects all faces, matches them to enrolled students, and flags uncertain matches. "
+                 "4. Review the results and confirm attendance.")
+
+    pdf.warning_box(
+        "Face Enrollment is required before using face attendance. Students without an enrolled face "
+        "photo cannot be matched automatically. Enroll all students in a class before capturing attendance."
+    )
+
+    pdf.section_title("Prerequisites")
+    pdf.body_text("Before using Face Attendance, ensure:")
+    pdf.bullet("Classes are created with students enrolled (see Chapter 2)")
+    pdf.bullet("The face recognition library is installed on the server (dlib + face_recognition)")
+    pdf.bullet("Supabase storage bucket is configured for image uploads")
+
+    pdf.section_title("Step 1: Enroll Student Faces")
+    pdf.nav_path("Sidebar > Attendance > Face Attendance > Manage Enrollments")
+    pdf.body_text(
+        "Enrollment is a one-time setup where you upload a clear portrait photo of each student. "
+        "The system extracts a facial fingerprint (embedding) that is used for matching during attendance."
+    )
+    pdf.step("Navigate to Face Attendance and click 'Manage Enrollments' (top-right button).")
+    pdf.step("Select a Class from the dropdown on the left panel.")
+    pdf.step("Select a Student from the student dropdown (shows all students in the class).")
+    pdf.step("Upload or capture a clear portrait photo of the student. The photo must show exactly one face.")
+    pdf.step("Click 'Enroll Face'. The system uploads the photo, detects the face, and stores the facial embedding.")
+    pdf.step("The enrolled student appears in the right panel with a quality score percentage.")
+    pdf.step("Repeat for all students in the class.")
+
+    pdf.info_box("Photo Tips for Enrollment",
+                 "Use a clear, well-lit portrait photo with the student facing the camera. "
+                 "Avoid group photos, sunglasses, or heavy shadows. The photo must contain exactly "
+                 "one face. Quality score above 70% is recommended for reliable matching.")
+
+    pdf.sub_section("Enrollment Summary")
+    pdf.body_text(
+        "The right panel shows all enrolled students for the selected class with their quality scores. "
+        "At the bottom, a summary shows how many students are enrolled vs. total, highlighting any "
+        "missing enrollments in orange. Students already enrolled show '[enrolled]' next to their name "
+        "in the student dropdown."
+    )
+
+    pdf.sub_section("Removing an Enrollment")
+    pdf.step("In the enrolled faces list (right panel), click 'Remove' next to the student.")
+    pdf.step("Confirm the removal in the dialog. The enrollment is deactivated (soft delete).")
+    pdf.step("You can re-enroll the student with a new photo if needed.")
+
+    pdf.section_title("Step 2: Capture Class Photo")
+    pdf.nav_path("Sidebar > Attendance > Face Attendance > Capture Tab")
+    pdf.body_text(
+        "Once students are enrolled, you can take attendance by capturing a group photo of the class."
+    )
+    pdf.step("Navigate to Face Attendance. You will see the Capture tab (default).")
+    pdf.step("Select the Class from the dropdown.")
+    pdf.step("Select the Date (defaults to today).")
+    pdf.step("Click 'Select or Capture Photo' to take a photo using the device camera or upload an existing image.")
+    pdf.step("A preview of the photo appears. Click 'Clear' to retake if needed.")
+    pdf.step("Click 'Process Attendance'. The photo is uploaded and the AI begins processing.")
+    pdf.step("You are automatically navigated to the Review page.")
+
+    pdf.warning_box(
+        "If you see a red banner saying 'Face recognition library is not installed', contact your "
+        "system administrator. The server needs the dlib and face_recognition Python libraries installed."
+    )
+
+    pdf.sub_section("Status Banners")
+    pdf.body_text("The main page shows helpful banners based on the current state:")
+    pdf.bullet("Red banner: Face recognition library not available on server")
+    pdf.bullet("Yellow banner: No students enrolled yet (with link to enrollment page)")
+    pdf.bullet("Blue banner: Sessions pending review (with 'Review Now' button)")
+
+    pdf.section_title("Step 3: Review Detected Faces")
+    pdf.nav_path("Sidebar > Attendance > Face Attendance > Review Page")
+    pdf.body_text(
+        "After processing, the Review page shows the AI's results. The page auto-refreshes every "
+        "3 seconds while processing is in progress."
+    )
+
+    pdf.sub_section("Processing State")
+    pdf.body_text(
+        "While the AI is working, you see a spinner with 'Processing Faces...' and a message that "
+        "it usually takes 10-30 seconds. The page auto-refreshes until results are ready."
+    )
+
+    pdf.sub_section("Review Layout")
+    pdf.body_text("Once processing completes, the page shows three sections:")
+    pdf.bullet("Captured Image: The original group photo you uploaded")
+    pdf.bullet("Detected Faces: Grid of cropped face thumbnails with match information")
+    pdf.bullet("Class Roll: List of all students in the class with present/absent toggles")
+
+    pdf.sub_section("Detected Faces Grid")
+    pdf.body_text("Each detected face shows:")
+    pdf.bullet("Face crop thumbnail (auto-generated from the group photo)")
+    pdf.bullet("Matched student name (or 'Unknown' if not matched)")
+    pdf.bullet("Confidence percentage")
+    pdf.bullet("Color-coded status badge:")
+
+    pdf.simple_table(
+        ["Badge", "Color", "Meaning"],
+        [
+            ["Auto", "Green", "High-confidence match (auto-accepted)"],
+            ["Review", "Yellow", "Medium-confidence match (needs your review)"],
+            ["Manual", "Blue", "Manually matched by you"],
+            ["Ignored", "Gray", "Low-confidence, no match found"],
+            ["Removed", "Red", "You removed this detection"],
+        ],
+        [35, 35, 120]
+    )
+
+    pdf.body_text(
+        "You can remove incorrect detections by clicking the red X button on each face card."
+    )
+
+    pdf.sub_section("Class Roll Call")
+    pdf.body_text(
+        "The Class Roll section lists all students in the class. Students matched by the AI are "
+        "automatically marked as Present (green 'P' badge). Unmatched students are marked Absent "
+        "(gray 'A' badge). The summary shows the count: e.g., '2 present / 2 absent'."
+    )
+    pdf.step("Review the auto-matched results in the Detected Faces grid.")
+    pdf.step("In the Class Roll, click on any student to toggle between Present and Absent.")
+    pdf.step("Students with 'matched' tag were detected in the photo.")
+    pdf.step("Students with 'no face' tag have not been enrolled yet (cannot be auto-matched).")
+
+    pdf.section_title("Step 4: Confirm Attendance")
+    pdf.step("After reviewing and adjusting the present/absent selections, click 'Confirm Attendance'.")
+    pdf.step("The system saves attendance records for all students in the class (Present or Absent).")
+    pdf.step("A success message appears and the session status changes to 'Confirmed' (green badge).")
+    pdf.step("Confirmed attendance records appear in the main Attendance Register alongside OCR-captured records.")
+
+    pdf.info_box("Reprocessing",
+                 "If you are unsatisfied with the AI results, click 'Reprocess' to re-run face detection "
+                 "and matching on the same photo. This clears existing detections and starts fresh.")
+
+    pdf.section_title("Viewing Past Sessions")
+    pdf.nav_path("Sidebar > Attendance > Face Attendance > Sessions Tab")
+    pdf.step("Click the 'Sessions' tab on the Face Attendance page.")
+    pdf.step("View all past sessions with class name, date, face count, and status badge.")
+    pdf.step("Click any session to open the Review page (view confirmed results or review pending ones).")
+    pdf.body_text("Session statuses: Processing (blue), Needs Review (yellow), Confirmed (green), Failed (red).")
+
+    pdf.section_title("Face Attendance Workflow Summary")
+    pdf.simple_table(
+        ["Step", "What to Do", "Where", "Frequency"],
+        [
+            ["1", "Enroll student faces", "Manage Enrollments", "One-time per student"],
+            ["2", "Capture class group photo", "Capture tab", "Daily"],
+            ["3", "Review AI-matched faces", "Review page", "Daily"],
+            ["4", "Confirm attendance", "Review page", "Daily"],
+        ],
+        [15, 50, 55, 70]
+    )
+
+    pdf.section_title("Match Confidence Thresholds")
+    pdf.body_text(
+        "The AI uses distance-based matching to compare detected faces against enrolled student photos. "
+        "Matches are classified into three categories based on confidence:"
+    )
+    pdf.simple_table(
+        ["Category", "Threshold", "Action"],
+        [
+            ["Auto-Matched", "Distance < 0.40 (high confidence)", "Automatically accepted"],
+            ["Flagged", "Distance 0.40-0.55 (medium)", "Flagged for manual review"],
+            ["Ignored", "Distance >= 0.55 (low)", "No match, ignored"],
+        ],
+        [40, 70, 80]
+    )
+
+    # =========================================================================
+    # CHAPTER 5: ACADEMICS MODULE
     # =========================================================================
     pdf.chapter_title("Academics Module")
 
@@ -1565,6 +1748,7 @@ def build_guide():
         [
             ["Students", "Classes", "Create classes before adding students"],
             ["Attendance", "Classes, Students", "Need classes with students enrolled"],
+            ["Face Attendance", "Classes, Students, Enrolled Faces", "Enroll student faces first"],
             ["Subjects", "Classes (for assignment)", "Create classes first"],
             ["Timetable", "Subjects assigned to classes", "Assign subjects to classes"],
             ["Exam Types", "None", "Can be created independently"],
@@ -1608,6 +1792,7 @@ def build_guide():
     pdf.step("Set up Transport Routes and Vehicles")
     pdf.step("Set up Library Categories and Books")
     pdf.step("Set up Hostels and Rooms (if using Hostel module)")
+    pdf.step("Enroll Student Faces for Face Attendance (if using camera-based attendance)")
     pdf.step("Configure Attendance Settings (Mappings)")
     pdf.step("Create Notification Templates")
     pdf.step("Set up Admission Sessions (if using Admissions CRM)")
@@ -1630,7 +1815,9 @@ def build_guide():
         ["Task", "Who", "Module", "Navigation"],
         [
             ["Mark student attendance", "Teacher", "Attendance", "Attendance > Upload"],
+            ["Take face attendance photo", "Teacher", "Face Attend.", "Face Attendance > Capture"],
             ["Review AI-captured attendance", "Admin", "Attendance", "Attendance > Review"],
+            ["Review face attendance", "Admin", "Face Attend.", "Face Attendance > Sessions"],
             ["Record fee payments", "Admin/Staff", "Finance", "Finance > Fees"],
             ["Mark staff attendance", "HR", "HR", "HR > Attendance"],
             ["Mark transport attendance", "Transport", "Transport", "Transport > Attendance"],
@@ -1674,11 +1861,22 @@ def build_guide():
     pdf.bullet("Use the search and filter features to quickly find records in any list")
     pdf.bullet("Export data regularly as backups (Excel, PDF)")
 
-    pdf.section_title("Attendance Tips")
+    pdf.section_title("Attendance Tips (OCR)")
     pdf.bullet("Take clear, well-lit photos of attendance registers for best AI OCR results")
     pdf.bullet("Ensure the register is flat and not crumpled when photographing")
     pdf.bullet("Use the crop tool to focus on the data area only")
     pdf.bullet("Always review AI-extracted data before approving")
+
+    pdf.section_title("Face Attendance Tips")
+    pdf.bullet("Enroll all students in a class before taking face attendance for that class")
+    pdf.bullet("Use clear, well-lit portrait photos for enrollment (one face per photo)")
+    pdf.bullet("Aim for enrollment quality scores above 70% for reliable matching")
+    pdf.bullet("When taking group photos, ensure good lighting and all students facing the camera")
+    pdf.bullet("Avoid backlighting (windows behind students) as it creates shadows on faces")
+    pdf.bullet("Students wearing sunglasses or face coverings will not be matched automatically")
+    pdf.bullet("Re-enroll students if their appearance changes significantly (new glasses, major haircut)")
+    pdf.bullet("Always review flagged (yellow) matches before confirming attendance")
+    pdf.bullet("Use 'Reprocess' if the photo quality was poor; retake and reprocess if needed")
 
     pdf.section_title("Finance Tips")
     pdf.bullet("Set up accounts before the start of the academic year")

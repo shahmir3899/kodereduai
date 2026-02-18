@@ -893,3 +893,47 @@ export const tasksApi = {
   getMyTasks: () => api.get('/api/tasks/tasks/'),
   getTask: (taskId) => api.get(`/api/tasks/tasks/${taskId}/`),
 }
+
+// ─── Face Attendance (Camera-Based) ──────────────────────────────────────────
+export const faceAttendanceApi = {
+  // Upload face image to storage
+  uploadImage: (file, schoolId, classId) => {
+    const formData = new FormData()
+    formData.append('image', file)
+    formData.append('school_id', schoolId)
+    formData.append('class_id', classId)
+    return api.post('/api/face-attendance/upload-image/', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+
+  // Create face attendance session (triggers async processing)
+  createSession: (data) => api.post('/api/face-attendance/sessions/', data),
+
+  // List sessions
+  getSessions: (params) => api.get('/api/face-attendance/sessions/', { params }),
+
+  // Get session detail with detections
+  getSession: (id) => api.get(`/api/face-attendance/sessions/${id}/`),
+
+  // Get sessions pending review
+  getPendingReview: (params) => api.get('/api/face-attendance/sessions/pending_review/', { params }),
+
+  // Confirm face attendance
+  confirmSession: (id, data) => api.post(`/api/face-attendance/sessions/${id}/confirm/`, data),
+
+  // Reprocess session
+  reprocessSession: (id) => api.post(`/api/face-attendance/sessions/${id}/reprocess/`),
+
+  // Enroll student face
+  enrollFace: (data) => api.post('/api/face-attendance/enroll/', data),
+
+  // List enrolled faces
+  getEnrollments: (params) => api.get('/api/face-attendance/enrollments/', { params }),
+
+  // Delete face enrollment
+  deleteEnrollment: (id) => api.delete(`/api/face-attendance/enrollments/${id}/`),
+
+  // Check face recognition status
+  getStatus: () => api.get('/api/face-attendance/status/'),
+}

@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { examinationsApi, sessionsApi, classesApi, studentsApi } from '../../services/api'
+import { examinationsApi, sessionsApi, studentsApi } from '../../services/api'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
+import ClassSelector from '../../components/ClassSelector'
 import * as XLSX from 'xlsx'
 
 export default function MarksEntryPage() {
@@ -33,11 +34,6 @@ export default function MarksEntryPage() {
     queryFn: () => sessionsApi.getAcademicYears({ page_size: 9999 }),
   })
 
-  const { data: classesRes } = useQuery({
-    queryKey: ['classes'],
-    queryFn: () => classesApi.getClasses({ page_size: 9999 }),
-  })
-
   const { data: examsRes } = useQuery({
     queryKey: ['exams', yearFilter, classFilter],
     queryFn: () => examinationsApi.getExams({
@@ -60,7 +56,7 @@ export default function MarksEntryPage() {
   })
 
   const years = yearsRes?.data?.results || yearsRes?.data || []
-  const classes = classesRes?.data?.results || classesRes?.data || []
+
   const exams = examsRes?.data?.results || examsRes?.data || []
   const examSubjects = examSubjectsRes?.data?.results || examSubjectsRes?.data || []
   const existingMarks = marksRes?.data?.results || marksRes?.data || []
@@ -274,10 +270,7 @@ export default function MarksEntryPage() {
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">Class</label>
-            <select value={classFilter} onChange={e => { setClassFilter(e.target.value); setSelectedExamId(''); setSelectedSubjectId(''); setMarksData([]) }} className="input w-full text-sm">
-              <option value="">All Classes</option>
-              {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+            <ClassSelector value={classFilter} onChange={e => { setClassFilter(e.target.value); setSelectedExamId(''); setSelectedSubjectId(''); setMarksData([]) }} className="input w-full text-sm" showAllOption />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">Exam</label>

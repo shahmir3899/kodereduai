@@ -234,6 +234,7 @@ class AttendanceRecord(models.Model):
     class Source(models.TextChoices):
         IMAGE_AI = 'IMAGE_AI', 'Image AI'
         MANUAL = 'MANUAL', 'Manual'
+        FACE_CAMERA = 'FACE_CAMERA', 'Face Camera'
 
     # Tenant association
     school = models.ForeignKey(
@@ -277,6 +278,14 @@ class AttendanceRecord(models.Model):
         blank=True,
         related_name='records',
         help_text="The upload that created this record (if source is IMAGE_AI)"
+    )
+    face_session = models.ForeignKey(
+        'face_attendance.FaceAttendanceSession',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='attendance_records',
+        help_text="The face session that created this record (if source is FACE_CAMERA)"
     )
 
     # Notification tracking

@@ -36,7 +36,7 @@ class Class(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = ('school', 'name')
+        unique_together = ('school', 'name', 'section')
         ordering = ['grade_level', 'section', 'name']
         verbose_name = 'Class'
         verbose_name_plural = 'Classes'

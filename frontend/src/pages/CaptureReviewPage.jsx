@@ -7,7 +7,8 @@ import Compressor from 'compressorjs'
 import { useDropzone } from 'react-dropzone'
 import { useAuth } from '../contexts/AuthContext'
 import { useAcademicYear } from '../contexts/AcademicYearContext'
-import { attendanceApi, classesApi, studentsApi } from '../services/api'
+import { attendanceApi, studentsApi } from '../services/api'
+import ClassSelector from '../components/ClassSelector'
 
 // Compress image before upload - keeps quality high enough for OCR
 const compressImage = (file) => {
@@ -115,12 +116,6 @@ function UploadTab({ onUploadSuccess }) {
   const [crop, setCrop] = useState({ x: 0, y: 0 })
   const [zoom, setZoom] = useState(1)
   const [croppedAreaPixels, setCroppedAreaPixels] = useState(null)
-
-  const { data: classesData } = useQuery({
-    queryKey: ['classes', activeSchool?.id],
-    queryFn: () => classesApi.getClasses({ school_id: activeSchool?.id, page_size: 9999 }),
-    enabled: !!activeSchool?.id,
-  })
 
   const { data: aiStatusData } = useQuery({
     queryKey: ['aiStatus'],
@@ -269,10 +264,12 @@ function UploadTab({ onUploadSuccess }) {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
           <div>
             <label className="label">Class</label>
-            <select className="input" value={selectedClass} onChange={e => setSelectedClass(e.target.value)}>
-              <option value="">Select a class</option>
-              {(classesData?.data?.results || classesData?.data || []).map(cls => <option key={cls.id} value={cls.id}>{cls.name}</option>)}
-            </select>
+            <ClassSelector
+              className="input"
+              value={selectedClass}
+              onChange={e => setSelectedClass(e.target.value)}
+              placeholder="Select a class"
+            />
           </div>
           <div>
             <label className="label">Date</label>

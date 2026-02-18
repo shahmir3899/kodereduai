@@ -433,3 +433,31 @@ export const hostelApi = {
   returnGatePass: (id: number) =>
     api.patch(`/api/hostel/gate-passes/${id}/return/`),
 };
+
+// Face Attendance (Camera-Based)
+export const faceAttendanceApi = {
+  uploadImage: (formData: FormData) =>
+    api.post('/api/face-attendance/upload-image/', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  createSession: (data: Record<string, unknown>) =>
+    api.post('/api/face-attendance/sessions/', data),
+  getSessions: (params?: Record<string, unknown>) =>
+    api.get('/api/face-attendance/sessions/', { params }),
+  getSession: (id: string) =>
+    api.get(`/api/face-attendance/sessions/${id}/`),
+  getPendingReview: (params?: Record<string, unknown>) =>
+    api.get('/api/face-attendance/sessions/pending_review/', { params }),
+  confirmSession: (id: string, data: Record<string, unknown>) =>
+    api.post(`/api/face-attendance/sessions/${id}/confirm/`, data),
+  reprocessSession: (id: string) =>
+    api.post(`/api/face-attendance/sessions/${id}/reprocess/`),
+  enrollFace: (data: Record<string, unknown>) =>
+    api.post('/api/face-attendance/enroll/', data),
+  getEnrollments: (params?: Record<string, unknown>) =>
+    api.get('/api/face-attendance/enrollments/', { params }),
+  deleteEnrollment: (id: number) =>
+    api.delete(`/api/face-attendance/enrollments/${id}/`),
+  getStatus: () =>
+    api.get('/api/face-attendance/status/'),
+};

@@ -1,7 +1,9 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { academicsApi, classesApi, hrApi } from '../../services/api'
+import { academicsApi, hrApi } from '../../services/api'
 import { useBackgroundTask } from '../../hooks/useBackgroundTask'
+import { useClasses } from '../../hooks/useClasses'
+import ClassSelector from '../../components/ClassSelector'
 
 const DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
 const DAY_LABELS = { MON: 'Mon', TUE: 'Tue', WED: 'Wed', THU: 'Thu', FRI: 'Fri', SAT: 'Sat' }
@@ -66,10 +68,7 @@ export default function TimetablePage() {
   const [suggestError, setSuggestError] = useState('')
 
   // Queries
-  const { data: classesData } = useQuery({
-    queryKey: ['classes'],
-    queryFn: () => classesApi.getClasses({ page_size: 9999 }),
-  })
+  const { classes: classesFromHook } = useClasses()
 
   const { data: slotsData, isLoading: slotsLoading } = useQuery({
     queryKey: ['timetableSlots'],
@@ -100,7 +99,7 @@ export default function TimetablePage() {
     enabled: !!selectedClassId && !!timetableData?.data?.entries?.length && !hasChanges,
   })
 
-  const classes = classesData?.data?.results || classesData?.data || []
+  const classes = classesFromHook
   const slots = slotsData?.data?.results || slotsData?.data || []
   const classSubjects = classSubjectsData?.data || []
   const staffList = staffData?.data?.results || staffData?.data || []
@@ -442,14 +441,13 @@ export default function TimetablePage() {
         <div className="flex-1 flex items-center gap-2">
           <div>
             <label className="block text-xs text-gray-500 mb-1">Select Class</label>
-            <select
+            <ClassSelector
               value={selectedClassId}
               onChange={e => setSelectedClassId(e.target.value)}
               className="input w-full sm:w-52"
-            >
-              <option value="">-- Select Class --</option>
-              {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+              placeholder="-- Select Class --"
+              classes={classes}
+            />
           </div>
           {/* Quality Score Badge */}
           {qualityScore && qualityScore.overall_score > 0 && (

@@ -20,6 +20,7 @@ const QUERY_INVALIDATION_MAP = {
   FEE_GENERATION: [['feePayments'], ['monthlySummary']],
   BULK_PROMOTION: [['enrollments'], ['enrollmentsByClass']],
   PROMOTION_ADVISOR: [['promotionAdvisor']],
+  FACE_ATTENDANCE: [['faceSessions'], ['pendingFaceReviews'], ['faceEnrollments']],
 }
 
 export function BackgroundTaskProvider({ children }) {

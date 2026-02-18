@@ -1,6 +1,8 @@
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { academicsApi, classesApi, hrApi } from '../../services/api'
+import { academicsApi, hrApi } from '../../services/api'
+import { useClasses } from '../../hooks/useClasses'
+import ClassSelector from '../../components/ClassSelector'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useDebounce } from '../../hooks/useDebounce'
 
@@ -87,10 +89,7 @@ export default function SubjectsPage() {
     enabled: tab === 'assignments',
   })
 
-  const { data: classesData } = useQuery({
-    queryKey: ['classes'],
-    queryFn: () => classesApi.getClasses({ page_size: 9999 }),
-  })
+  const { classes } = useClasses()
 
   const { data: staffData } = useQuery({
     queryKey: ['hrStaffActive'],
@@ -121,7 +120,6 @@ export default function SubjectsPage() {
 
   const subjects = extractList(subjectRes)
   const assignments = extractList(assignRes)
-  const classes = extractList(classesData)
   const staffList = extractList(staffData)
   const workloadData = workloadRes?.data || {}
   const gapData = gapRes?.data || {}
@@ -561,14 +559,13 @@ export default function SubjectsPage() {
       {tab === 'assignments' && (
         <>
           <div className="flex flex-col sm:flex-row gap-3 mb-4">
-            <select
+            <ClassSelector
               value={classFilter}
               onChange={e => setClassFilter(e.target.value)}
               className="input w-full sm:w-52"
-            >
-              <option value="">All Classes</option>
-              {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+              showAllOption
+              classes={classes}
+            />
             <button onClick={openCreateAssign} className="btn-primary text-sm px-4 py-2 whitespace-nowrap">
               + Assign Subject
             </button>
@@ -667,15 +664,13 @@ export default function SubjectsPage() {
                 <form onSubmit={handleAssignSubmit} className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Class *</label>
-                    <select
+                    <ClassSelector
                       value={assignForm.class_obj}
                       onChange={e => setAssignForm(p => ({ ...p, class_obj: e.target.value }))}
                       className="input w-full"
                       required
-                    >
-                      <option value="">Select class...</option>
-                      {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    </select>
+                      classes={classes}
+                    />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">

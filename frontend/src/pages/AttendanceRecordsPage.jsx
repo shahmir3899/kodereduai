@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { attendanceApi, classesApi, studentsApi } from '../services/api'
+import { attendanceApi, studentsApi } from '../services/api'
+import ClassSelector from '../components/ClassSelector'
 
 function getDaysInMonth(year, month) {
   return new Date(year, month + 1, 0).getDate()
@@ -23,13 +24,6 @@ export default function AttendanceRecordsPage() {
   const daysInMonth = getDaysInMonth(year, month)
   const dateFrom = `${year}-${pad(month + 1)}-01`
   const dateTo = `${year}-${pad(month + 1)}-${pad(daysInMonth)}`
-
-  // Fetch classes
-  const { data: classesData } = useQuery({
-    queryKey: ['classes'],
-    queryFn: () => classesApi.getClasses({ page_size: 9999 }),
-  })
-  const classes = classesData?.data?.results || classesData?.data || []
 
   // Fetch all enrolled students for the selected class (from DB)
   const { data: studentsData } = useQuery({
@@ -134,18 +128,11 @@ export default function AttendanceRecordsPage() {
           {/* Class (required) */}
           <div className="w-full sm:w-auto sm:min-w-[200px]">
             <label className="block text-xs font-medium text-gray-500 mb-1">Class</label>
-            <select
+            <ClassSelector
               value={classId}
               onChange={(e) => setClassId(e.target.value)}
               className="input w-full"
-            >
-              <option value="">Select Class</option>
-              {classes.map((cls) => (
-                <option key={cls.id} value={cls.id}>
-                  {cls.name}
-                </option>
-              ))}
-            </select>
+            />
           </div>
 
           {/* Month navigation */}
