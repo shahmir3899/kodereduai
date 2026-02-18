@@ -159,8 +159,11 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | GET/POST | /api/hr/salary-structures/ | |
 | GET | /api/hr/salary-structures/current/ | |
 | GET/POST | /api/hr/payslips/ | month, year, status |
-| POST | /api/hr/payslips/generate_payslips/ | |
+| DELETE | /api/hr/payslips/{id}/ | DRAFT only |
+| POST | /api/hr/payslips/generate_payslips/ | Sync <50 staff, async 50+ |
+| POST | /api/hr/payslips/bulk_delete/ | body: { ids: [...] }, DRAFT only |
 | GET | /api/hr/payslips/payroll_summary/ | |
+| GET | /api/hr/payslips/{id}/download-pdf/ | Returns PDF file |
 | POST | /api/hr/payslips/{id}/approve/ | |
 | POST | /api/hr/payslips/{id}/mark_paid/ | |
 | GET/POST | /api/hr/leave-policies/ | |

@@ -93,6 +93,19 @@ gunicorn config.wsgi:application
 - Time limit: 30 minutes per task
 - Concurrency: 2 workers (free tier)
 
+### Smart Sync/Async Dispatch
+
+On-demand background tasks use a smart sync/async pattern via `run_task_sync()` and `dispatch_background_task()` in `core/task_utils.py`. Small workloads run synchronously for instant results; large workloads dispatch to Celery.
+
+| Task | Sync Threshold | Async Trigger |
+|------|---------------|---------------|
+| Payslip generation | <50 active staff | 50+ staff |
+| Timetable generation | <15 class subjects | 15+ subjects |
+| Bulk student promotion | <50 students | 50+ students |
+| Promotion advisor | <30 enrolled students | 30+ students |
+| Monthly fee generation | <100 students | 100+ students |
+| Report generation | XLSX format | PDF format |
+
 ### Scheduled Tasks (Celery Beat)
 
 | Task | Schedule | Purpose |

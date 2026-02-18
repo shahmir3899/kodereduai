@@ -307,6 +307,9 @@ export const hrApi = {
   generatePayslips: (data) => api.post('/api/hr/payslips/generate_payslips/', data),
   approvePayslip: (id) => api.post(`/api/hr/payslips/${id}/approve/`),
   markPayslipPaid: (id, data) => api.post(`/api/hr/payslips/${id}/mark_paid/`, data),
+  deletePayslip: (id) => api.delete(`/api/hr/payslips/${id}/`),
+  bulkDeletePayslips: (data) => api.post('/api/hr/payslips/bulk_delete/', data),
+  downloadPayslipPdf: (id) => api.get(`/api/hr/payslips/${id}/download-pdf/`, { responseType: 'blob' }),
   getPayrollSummary: (params) => api.get('/api/hr/payslips/payroll_summary/', { params }),
 
   // Leave Policies

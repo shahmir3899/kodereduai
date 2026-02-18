@@ -769,22 +769,33 @@ _(No data — expected fields from serializer)_
 ```
 
 ### GET /api/hr/payslips/
-_(No data — expected fields from serializer)_
 ```json
 {
   "results": [
     {
-      "id": 0, "school": 0, "staff": 0, "staff_name": "",
-      "salary_structure": 0, "month": 1, "year": 2026,
-      "basic_amount": "0.00", "allowances": {}, "deductions": {},
-      "gross_amount": "0.00", "net_amount": "0.00",
-      "status": "DRAFT|APPROVED|PAID",
-      "approved_by": null, "approved_by_name": null, "paid_date": null,
-      "created_at": "", "updated_at": ""
+      "id": 1, "school": 37, "staff_member": 5, "staff_member_name": "Hina Meer",
+      "staff_employee_id": "EMP-002", "department_name": "Teaching",
+      "month": 2, "year": 2026,
+      "basic_salary": "9900.00", "total_allowances": "0.00", "total_deductions": "0.00",
+      "net_salary": "9900.00",
+      "allowances_breakdown": {}, "deductions_breakdown": {},
+      "working_days": null, "present_days": null,
+      "status": "DRAFT", "status_display": "Draft",
+      "payment_date": null, "notes": "",
+      "generated_by": 1, "generated_by_name": "Admin",
+      "created_at": "2026-02-18T12:59:17Z", "updated_at": "2026-02-18T12:59:17Z"
     }
   ]
 }
 ```
+
+### POST /api/hr/payslips/bulk_delete/
+```json
+{ "deleted": 3 }
+```
+
+### GET /api/hr/payslips/{id}/download-pdf/
+Returns a PDF file (`Content-Type: application/pdf`).
 
 ### GET /api/hr/dashboard_stats/
 Returns empty body when no substantial HR data exists.

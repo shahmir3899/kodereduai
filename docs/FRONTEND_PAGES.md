@@ -85,7 +85,7 @@ Redirects: /attendance/upload, /attendance/review, /attendance/records → remap
 | /hr/staff/:id/edit | StaffFormPage.jsx | Edit staff | PUT staff/{id}/ |
 | /hr/departments | DepartmentsPage.jsx | Departments & designations | GET/POST departments/, designations/ |
 | /hr/salary | SalaryManagementPage.jsx | Salary structures | GET/POST salary-structures/ |
-| /hr/payroll | PayrollPage.jsx | Payslip generation | GET/POST payslips/ |
+| /hr/payroll | PayrollPage.jsx | Payslip generation, PDF download, delete | GET/POST/DELETE payslips/, download-pdf/ |
 | /hr/leave | LeaveManagementPage.jsx | Leave policies & applications | GET/POST leave-policies/, leave-applications/ |
 | /hr/attendance | StaffAttendancePage.jsx | Staff attendance | GET/POST attendance/ |
 | /hr/appraisals | PerformanceAppraisalPage.jsx | Performance reviews | GET/POST appraisals/ |

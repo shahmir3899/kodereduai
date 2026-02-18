@@ -218,29 +218,44 @@ class StudentEnrollmentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         target_year = serializer.validated_data['target_academic_year']
         promotions = serializer.validated_data['promotions']
 
-        from core.task_utils import dispatch_background_task
         from core.models import BackgroundTask
         from .tasks import bulk_promote_task
 
-        bg_task = dispatch_background_task(
-            celery_task_func=bulk_promote_task,
-            task_type=BackgroundTask.TaskType.BULK_PROMOTION,
-            title=f"Promoting {len(promotions)} students",
-            school_id=school_id,
-            user=request.user,
-            task_kwargs={
-                'school_id': school_id,
-                'source_year_id': source_year.id,
-                'target_year_id': target_year.id,
-                'promotions': promotions,
-            },
-            progress_total=len(promotions),
-        )
+        task_kwargs = {
+            'school_id': school_id,
+            'source_year_id': source_year.id,
+            'target_year_id': target_year.id,
+            'promotions': promotions,
+        }
+        title = f"Promoting {len(promotions)} students"
 
-        return Response({
-            'task_id': bg_task.celery_task_id,
-            'message': 'Bulk promotion started.',
-        }, status=202)
+        if len(promotions) < 50:
+            from core.task_utils import run_task_sync
+            try:
+                bg_task = run_task_sync(
+                    bulk_promote_task, BackgroundTask.TaskType.BULK_PROMOTION,
+                    title, school_id, request.user,
+                    task_kwargs=task_kwargs, progress_total=len(promotions),
+                )
+            except Exception as e:
+                return Response({'detail': str(e)}, status=500)
+            return Response({
+                'task_id': bg_task.celery_task_id,
+                'message': bg_task.result_data.get('message', 'Promotion complete.') if bg_task.result_data else 'Promotion complete.',
+                'result': bg_task.result_data,
+            })
+        else:
+            from core.task_utils import dispatch_background_task
+            bg_task = dispatch_background_task(
+                celery_task_func=bulk_promote_task,
+                task_type=BackgroundTask.TaskType.BULK_PROMOTION,
+                title=title, school_id=school_id, user=request.user,
+                task_kwargs=task_kwargs, progress_total=len(promotions),
+            )
+            return Response({
+                'task_id': bg_task.celery_task_id,
+                'message': 'Bulk promotion started.',
+            }, status=202)
 
 
 class PromotionAdvisorView(APIView):
@@ -264,28 +279,50 @@ class PromotionAdvisorView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        from core.task_utils import dispatch_background_task
         from core.models import BackgroundTask
         from .tasks import promotion_advisor_task
 
-        bg_task = dispatch_background_task(
-            celery_task_func=promotion_advisor_task,
-            task_type=BackgroundTask.TaskType.PROMOTION_ADVISOR,
-            title="Running promotion analysis",
-            school_id=school_id,
-            user=request.user,
-            task_kwargs={
-                'school_id': school_id,
-                'academic_year_id': int(academic_year),
-                'class_id': int(class_id),
-            },
-            progress_total=100,
-        )
+        task_kwargs = {
+            'school_id': school_id,
+            'academic_year_id': int(academic_year),
+            'class_id': int(class_id),
+        }
+        title = "Running promotion analysis"
 
-        return Response({
-            'task_id': bg_task.celery_task_id,
-            'message': 'Promotion analysis started.',
-        }, status=202)
+        enrollment_count = StudentEnrollment.objects.filter(
+            school_id=school_id,
+            academic_year_id=int(academic_year),
+            class_obj_id=int(class_id),
+            is_active=True,
+        ).count()
+
+        if enrollment_count < 30:
+            from core.task_utils import run_task_sync
+            try:
+                bg_task = run_task_sync(
+                    promotion_advisor_task, BackgroundTask.TaskType.PROMOTION_ADVISOR,
+                    title, school_id, request.user,
+                    task_kwargs=task_kwargs, progress_total=100,
+                )
+            except Exception as e:
+                return Response({'detail': str(e)}, status=500)
+            return Response({
+                'task_id': bg_task.celery_task_id,
+                'message': bg_task.result_data.get('message', 'Analysis complete.') if bg_task.result_data else 'Analysis complete.',
+                'result': bg_task.result_data,
+            })
+        else:
+            from core.task_utils import dispatch_background_task
+            bg_task = dispatch_background_task(
+                celery_task_func=promotion_advisor_task,
+                task_type=BackgroundTask.TaskType.PROMOTION_ADVISOR,
+                title=title, school_id=school_id, user=request.user,
+                task_kwargs=task_kwargs, progress_total=100,
+            )
+            return Response({
+                'task_id': bg_task.celery_task_id,
+                'message': 'Promotion analysis started.',
+            }, status=202)
 
 
 class SessionHealthView(APIView):

@@ -682,24 +682,42 @@ class TimetableEntryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
 
         class_id = serializer.validated_data['class_id']
 
-        from core.task_utils import dispatch_background_task
         from core.models import BackgroundTask
         from .tasks import auto_generate_timetable_task
 
-        bg_task = dispatch_background_task(
-            celery_task_func=auto_generate_timetable_task,
-            task_type=BackgroundTask.TaskType.TIMETABLE_GENERATION,
-            title="Auto-generating timetable",
-            school_id=school_id,
-            user=request.user,
-            task_kwargs={'school_id': school_id, 'class_id': class_id},
-            progress_total=100,
-        )
+        task_kwargs = {'school_id': school_id, 'class_id': class_id}
+        title = "Auto-generating timetable"
 
-        return Response({
-            'task_id': bg_task.celery_task_id,
-            'message': 'Timetable generation started.',
-        }, status=202)
+        subject_count = ClassSubject.objects.filter(
+            school_id=school_id, class_obj_id=class_id, is_active=True,
+        ).count()
+
+        if subject_count < 15:
+            from core.task_utils import run_task_sync
+            try:
+                bg_task = run_task_sync(
+                    auto_generate_timetable_task, BackgroundTask.TaskType.TIMETABLE_GENERATION,
+                    title, school_id, request.user, task_kwargs=task_kwargs, progress_total=100,
+                )
+            except Exception as e:
+                return Response({'detail': str(e)}, status=500)
+            return Response({
+                'task_id': bg_task.celery_task_id,
+                'message': bg_task.result_data.get('message', 'Timetable generated.') if bg_task.result_data else 'Timetable generated.',
+                'result': bg_task.result_data,
+            })
+        else:
+            from core.task_utils import dispatch_background_task
+            bg_task = dispatch_background_task(
+                celery_task_func=auto_generate_timetable_task,
+                task_type=BackgroundTask.TaskType.TIMETABLE_GENERATION,
+                title=title, school_id=school_id, user=request.user,
+                task_kwargs=task_kwargs, progress_total=100,
+            )
+            return Response({
+                'task_id': bg_task.celery_task_id,
+                'message': 'Timetable generation started.',
+            }, status=202)
 
     @action(detail=False, methods=['get'])
     def suggest_resolution(self, request):

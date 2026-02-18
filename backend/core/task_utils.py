@@ -33,6 +33,33 @@ def dispatch_background_task(
     """
     task_kwargs = task_kwargs or {}
 
+    # Check if Celery is in eager mode (local dev — tasks run synchronously)
+    from django.conf import settings
+    is_eager = getattr(settings, 'CELERY_TASK_ALWAYS_EAGER', False)
+
+    if is_eager:
+        # Eager mode: .delay() runs synchronously, so create the DB record
+        # BEFORE dispatching so that progress/success updates find it.
+        celery_task_id = str(uuid.uuid4())
+        bg_task = BackgroundTask.objects.create(
+            school_id=school_id,
+            celery_task_id=celery_task_id,
+            task_type=task_type,
+            title=title,
+            status=BackgroundTask.Status.IN_PROGRESS,
+            progress_total=progress_total,
+            triggered_by=user,
+        )
+        try:
+            celery_task_func.apply(
+                args=task_args, kwargs=task_kwargs, task_id=celery_task_id,
+            )
+        except Exception as task_exc:
+            logger.exception(f"Eager task failed for '{title}'")
+            mark_task_failed(celery_task_id, str(task_exc)[:500])
+        logger.info(f"Dispatched background task {celery_task_id}: {title}")
+        return bg_task
+
     try:
         result = celery_task_func.delay(*task_args, **task_kwargs)
         celery_task_id = result.id
@@ -50,8 +77,6 @@ def dispatch_background_task(
             triggered_by=user,
         )
         try:
-            # Use .apply() to properly set up Celery task context (self.request.id)
-            # so that task functions using self.request.id for progress tracking work
             celery_task_func.apply(
                 args=task_args, kwargs=task_kwargs, task_id=celery_task_id,
             )
@@ -72,6 +97,37 @@ def dispatch_background_task(
 
     logger.info(f"Dispatched background task {celery_task_id}: {title}")
     return bg_task
+
+
+def run_task_sync(
+    celery_task_func, task_type, title, school_id, user,
+    task_kwargs=None, progress_total=0,
+):
+    """
+    Run a Celery task synchronously with BackgroundTask tracking.
+
+    Creates the BackgroundTask record first, then runs the task inline.
+    Returns the refreshed BackgroundTask instance (with result_data).
+    Raises on failure after marking the task as FAILED.
+    """
+    task_kwargs = task_kwargs or {}
+    celery_task_id = str(uuid.uuid4())
+    BackgroundTask.objects.create(
+        school_id=school_id,
+        celery_task_id=celery_task_id,
+        task_type=task_type,
+        title=title,
+        status=BackgroundTask.Status.IN_PROGRESS,
+        progress_total=progress_total,
+        triggered_by=user,
+    )
+    try:
+        celery_task_func.apply(kwargs=task_kwargs, task_id=celery_task_id)
+    except Exception as e:
+        logger.exception(f"Sync task failed for '{title}'")
+        mark_task_failed(celery_task_id, str(e)[:500])
+        raise
+    return BackgroundTask.objects.get(celery_task_id=celery_task_id)
 
 
 def update_task_progress(celery_task_id, current, total=None):

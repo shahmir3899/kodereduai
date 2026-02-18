@@ -714,7 +714,8 @@ class PayslipViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
 
     def get_queryset(self):
         queryset = Payslip.objects.select_related(
-            'school', 'staff_member', 'staff_member__department', 'generated_by',
+            'school', 'staff_member', 'staff_member__department',
+            'staff_member__designation', 'generated_by',
         )
         if _is_school_header_rejected(self.request):
             return queryset.none()
@@ -754,9 +755,31 @@ class PayslipViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             raise ValidationError({'detail': 'No school associated with your account.'})
         serializer.save(school_id=school_id, generated_by=self.request.user)
 
+    def perform_destroy(self, instance):
+        if instance.status != 'DRAFT':
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({'detail': f'Cannot delete payslip with status {instance.status}. Only DRAFT payslips can be deleted.'})
+        instance.delete()
+
+    @action(detail=False, methods=['post'])
+    def bulk_delete(self, request):
+        """Bulk delete DRAFT payslips by IDs."""
+        ids = request.data.get('ids', [])
+        if not ids:
+            return Response({'detail': 'No IDs provided.'}, status=400)
+
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response({'detail': 'No school associated.'}, status=400)
+
+        payslips = Payslip.objects.filter(id__in=ids, school_id=school_id, status='DRAFT')
+        deleted_count = payslips.count()
+        payslips.delete()
+        return Response({'deleted': deleted_count})
+
     @action(detail=False, methods=['post'])
     def generate_payslips(self, request):
-        """Bulk generate payslips for all active staff (background task)."""
+        """Bulk generate payslips for all active staff."""
         school_id = _resolve_school_id(request)
         if not school_id:
             return Response({'detail': 'No school selected.'}, status=400)
@@ -766,28 +789,48 @@ class PayslipViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         if not month or not year:
             return Response({'detail': 'month and year are required.'}, status=400)
 
-        from core.task_utils import dispatch_background_task
-        from core.models import BackgroundTask
         from .tasks import generate_payslips_task
 
-        bg_task = dispatch_background_task(
-            celery_task_func=generate_payslips_task,
-            task_type=BackgroundTask.TaskType.PAYSLIP_GENERATION,
-            title=f"Generating payslips for {int(month)}/{int(year)}",
-            school_id=school_id,
-            user=request.user,
-            task_kwargs={
-                'school_id': school_id,
-                'user_id': request.user.id,
-                'month': int(month),
-                'year': int(year),
-            },
-        )
+        active_count = StaffMember.objects.filter(
+            school_id=school_id, is_active=True, employment_status='ACTIVE',
+        ).count()
 
-        return Response({
-            'task_id': bg_task.celery_task_id,
-            'message': 'Payslip generation started.',
-        }, status=202)
+        task_kwargs = {
+            'school_id': school_id,
+            'user_id': request.user.id,
+            'month': int(month),
+            'year': int(year),
+        }
+
+        from core.models import BackgroundTask
+        title = f"Generating payslips for {int(month)}/{int(year)}"
+
+        if active_count < 50:
+            from core.task_utils import run_task_sync
+            try:
+                bg_task = run_task_sync(
+                    generate_payslips_task, BackgroundTask.TaskType.PAYSLIP_GENERATION,
+                    title, school_id, request.user, task_kwargs=task_kwargs,
+                )
+            except Exception as e:
+                return Response({'detail': str(e)}, status=500)
+            return Response({
+                'task_id': bg_task.celery_task_id,
+                'message': bg_task.result_data.get('message', 'Payslips generated.') if bg_task.result_data else 'Payslips generated.',
+                'result': bg_task.result_data,
+            })
+        else:
+            from core.task_utils import dispatch_background_task
+            bg_task = dispatch_background_task(
+                celery_task_func=generate_payslips_task,
+                task_type=BackgroundTask.TaskType.PAYSLIP_GENERATION,
+                title=title, school_id=school_id, user=request.user,
+                task_kwargs=task_kwargs,
+            )
+            return Response({
+                'task_id': bg_task.celery_task_id,
+                'message': 'Payslip generation started.',
+            }, status=202)
 
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
@@ -853,6 +896,134 @@ class PayslipViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             'approved_count': status_counts.get('APPROVED', 0),
             'paid_count': status_counts.get('PAID', 0),
         })
+
+    @action(detail=True, methods=['get'], url_path='download-pdf')
+    def download_pdf(self, request, pk=None):
+        """Generate and return a PDF payslip."""
+        payslip = self.get_object()
+        school = payslip.school
+
+        from fpdf import FPDF
+        from django.http import HttpResponse
+        from datetime import datetime
+
+        MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
+                  'July', 'August', 'September', 'October', 'November', 'December']
+
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_auto_page_break(auto=True, margin=15)
+
+        # School header
+        pdf.set_font('Helvetica', 'B', 16)
+        pdf.cell(0, 10, school.name, ln=True, align='C')
+        if school.address:
+            pdf.set_font('Helvetica', '', 9)
+            pdf.cell(0, 5, school.address, ln=True, align='C')
+        contact_parts = []
+        if school.contact_email:
+            contact_parts.append(school.contact_email)
+        if school.contact_phone:
+            contact_parts.append(school.contact_phone)
+        if contact_parts:
+            pdf.set_font('Helvetica', '', 8)
+            pdf.cell(0, 5, ' | '.join(contact_parts), ln=True, align='C')
+
+        pdf.ln(3)
+        pdf.set_draw_color(0, 0, 0)
+        pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+        pdf.ln(5)
+
+        # Title
+        pdf.set_font('Helvetica', 'B', 14)
+        month_name = MONTHS[payslip.month - 1] if 1 <= payslip.month <= 12 else str(payslip.month)
+        pdf.cell(0, 10, f'Payslip - {month_name} {payslip.year}', ln=True, align='C')
+        pdf.ln(5)
+
+        # Staff details
+        staff = payslip.staff_member
+        details = [
+            ('Employee Name', staff.full_name),
+            ('Employee ID', staff.employee_id or 'N/A'),
+            ('Department', staff.department.name if staff.department else 'N/A'),
+            ('Designation', staff.designation.name if staff.designation else 'N/A'),
+            ('Status', payslip.get_status_display()),
+        ]
+        if payslip.payment_date:
+            details.append(('Payment Date', str(payslip.payment_date)))
+
+        for label, value in details:
+            pdf.set_font('Helvetica', 'B', 10)
+            pdf.cell(50, 7, f'{label}:', 0, 0)
+            pdf.set_font('Helvetica', '', 10)
+            pdf.cell(0, 7, str(value), ln=True)
+
+        pdf.ln(5)
+
+        # Earnings table
+        col_w = [130, 60]
+        pdf.set_font('Helvetica', 'B', 11)
+        pdf.cell(0, 8, 'Earnings', ln=True)
+        pdf.set_font('Helvetica', '', 10)
+        pdf.cell(col_w[0], 7, 'Basic Salary', 1)
+        pdf.cell(col_w[1], 7, str(payslip.basic_salary), 1, ln=True, align='R')
+
+        if payslip.allowances_breakdown:
+            for key, value in payslip.allowances_breakdown.items():
+                label = key.replace('_', ' ').title()
+                pdf.cell(col_w[0], 7, label, 1)
+                pdf.cell(col_w[1], 7, str(value), 1, ln=True, align='R')
+
+        pdf.set_font('Helvetica', 'B', 10)
+        gross = float(payslip.basic_salary) + float(payslip.total_allowances)
+        pdf.cell(col_w[0], 7, 'Gross Salary', 1)
+        pdf.cell(col_w[1], 7, f'{gross:,.2f}', 1, ln=True, align='R')
+
+        pdf.ln(5)
+
+        # Deductions table
+        pdf.set_font('Helvetica', 'B', 11)
+        pdf.cell(0, 8, 'Deductions', ln=True)
+        pdf.set_font('Helvetica', '', 10)
+
+        if payslip.deductions_breakdown:
+            for key, value in payslip.deductions_breakdown.items():
+                label = key.replace('_', ' ').title()
+                pdf.cell(col_w[0], 7, label, 1)
+                pdf.cell(col_w[1], 7, str(value), 1, ln=True, align='R')
+
+        pdf.set_font('Helvetica', 'B', 10)
+        pdf.cell(col_w[0], 7, 'Total Deductions', 1)
+        pdf.cell(col_w[1], 7, str(payslip.total_deductions), 1, ln=True, align='R')
+
+        pdf.ln(8)
+
+        # Net salary
+        pdf.set_font('Helvetica', 'B', 12)
+        pdf.set_fill_color(240, 240, 240)
+        pdf.cell(col_w[0], 10, 'Net Salary', 1, 0, fill=True)
+        pdf.cell(col_w[1], 10, str(payslip.net_salary), 1, ln=True, align='R', fill=True)
+
+        pdf.ln(15)
+
+        # Signatures
+        pdf.set_font('Helvetica', '', 10)
+        pdf.cell(95, 7, '_________________________', 0, 0, align='C')
+        pdf.cell(95, 7, '_________________________', 0, ln=True, align='C')
+        pdf.cell(95, 7, 'Employee Signature', 0, 0, align='C')
+        pdf.cell(95, 7, 'Authorized Signature', 0, ln=True, align='C')
+
+        pdf.ln(10)
+
+        # Footer
+        pdf.set_font('Helvetica', 'I', 8)
+        pdf.cell(0, 5, f'Generated on {datetime.now().strftime("%d %B %Y at %I:%M %p")}', ln=True, align='C')
+
+        staff_name = staff.full_name.replace(' ', '_')
+        filename = f"payslip_{staff_name}_{payslip.month}_{payslip.year}.pdf"
+        response = HttpResponse(pdf.output(), content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
 
 
 # ── Leave Policy ViewSet ─────────────────────────────────────────────────────

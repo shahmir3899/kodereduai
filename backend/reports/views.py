@@ -51,33 +51,50 @@ class GenerateReportView(APIView):
         if not generator_class:
             return Response({'error': f"Unknown report type: {data['report_type']}"}, status=400)
 
-        from core.task_utils import dispatch_background_task
         from core.models import BackgroundTask
         from .tasks import generate_report_task
 
         fmt = data.get('format', 'PDF')
         report_label = data['report_type'].replace('_', ' ').title()
+        title = f"Generating {report_label} ({fmt})"
 
-        bg_task = dispatch_background_task(
-            celery_task_func=generate_report_task,
-            task_type=BackgroundTask.TaskType.REPORT_GENERATION,
-            title=f"Generating {report_label} ({fmt})",
-            school_id=school_id,
-            user=request.user,
-            task_kwargs={
-                'school_id': school_id,
-                'user_id': request.user.id,
-                'report_type': data['report_type'],
-                'format': fmt,
-                'parameters': data.get('parameters', {}),
-            },
-            progress_total=3,
-        )
+        task_kwargs = {
+            'school_id': school_id,
+            'user_id': request.user.id,
+            'report_type': data['report_type'],
+            'format': fmt,
+            'parameters': data.get('parameters', {}),
+        }
 
-        return Response({
-            'task_id': bg_task.celery_task_id,
-            'message': f'{report_label} report generation started.',
-        }, status=202)
+        if fmt == 'XLSX':
+            # XLSX generation is fast — run synchronously
+            from core.task_utils import run_task_sync
+            try:
+                bg_task = run_task_sync(
+                    generate_report_task, BackgroundTask.TaskType.REPORT_GENERATION,
+                    title, school_id, request.user,
+                    task_kwargs=task_kwargs, progress_total=3,
+                )
+            except Exception as e:
+                return Response({'detail': str(e)}, status=500)
+            return Response({
+                'task_id': bg_task.celery_task_id,
+                'message': bg_task.result_data.get('message', f'{report_label} report generated.') if bg_task.result_data else f'{report_label} report generated.',
+                'result': bg_task.result_data,
+            })
+        else:
+            # PDF generation is slow — use async
+            from core.task_utils import dispatch_background_task
+            bg_task = dispatch_background_task(
+                celery_task_func=generate_report_task,
+                task_type=BackgroundTask.TaskType.REPORT_GENERATION,
+                title=title, school_id=school_id, user=request.user,
+                task_kwargs=task_kwargs, progress_total=3,
+            )
+            return Response({
+                'task_id': bg_task.celery_task_id,
+                'message': f'{report_label} report generation started.',
+            }, status=202)
 
 
 class ReportDownloadView(APIView):

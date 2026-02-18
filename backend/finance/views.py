@@ -292,28 +292,48 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
                 'detail': f'Period {year}/{month:02d} is closed. Reopen it before generating fees.'
             }, status=400)
 
-        from core.task_utils import dispatch_background_task
         from core.models import BackgroundTask
         from .tasks import generate_monthly_fees_task
 
-        bg_task = dispatch_background_task(
-            celery_task_func=generate_monthly_fees_task,
-            task_type=BackgroundTask.TaskType.FEE_GENERATION,
-            title=f"Generating fees for {month}/{year}",
-            school_id=school_id,
-            user=request.user,
-            task_kwargs={
-                'school_id': school_id,
-                'month': month,
-                'year': year,
-                'class_id': class_id,
-            },
-        )
+        task_kwargs = {
+            'school_id': school_id,
+            'month': month,
+            'year': year,
+            'class_id': class_id,
+        }
+        title = f"Generating fees for {month}/{year}"
 
-        return Response({
-            'task_id': bg_task.celery_task_id,
-            'message': 'Fee generation started.',
-        }, status=202)
+        student_qs = Student.objects.filter(school_id=school_id, is_active=True)
+        if class_id:
+            student_qs = student_qs.filter(class_obj_id=class_id)
+        student_count = student_qs.count()
+
+        if student_count < 100:
+            from core.task_utils import run_task_sync
+            try:
+                bg_task = run_task_sync(
+                    generate_monthly_fees_task, BackgroundTask.TaskType.FEE_GENERATION,
+                    title, school_id, request.user, task_kwargs=task_kwargs,
+                )
+            except Exception as e:
+                return Response({'detail': str(e)}, status=500)
+            return Response({
+                'task_id': bg_task.celery_task_id,
+                'message': bg_task.result_data.get('message', 'Fees generated.') if bg_task.result_data else 'Fees generated.',
+                'result': bg_task.result_data,
+            })
+        else:
+            from core.task_utils import dispatch_background_task
+            bg_task = dispatch_background_task(
+                celery_task_func=generate_monthly_fees_task,
+                task_type=BackgroundTask.TaskType.FEE_GENERATION,
+                title=title, school_id=school_id, user=request.user,
+                task_kwargs=task_kwargs,
+            )
+            return Response({
+                'task_id': bg_task.celery_task_id,
+                'message': 'Fee generation started.',
+            }, status=202)
 
     @action(detail=False, methods=['post'])
     def bulk_update(self, request):

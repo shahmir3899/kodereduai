@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { hrApi } from '../../services/api'
 import { useToast } from '../../components/Toast'
@@ -25,6 +25,11 @@ export default function PayrollPage() {
   const [statusFilter, setStatusFilter] = useState('')
   const [generateConfirm, setGenerateConfirm] = useState(false)
   const [detailSlip, setDetailSlip] = useState(null)
+  const [deleteConfirm, setDeleteConfirm] = useState(null) // payslip object or 'bulk'
+  const [selectedIds, setSelectedIds] = useState(new Set())
+
+  // Clear selections when filters change
+  useEffect(() => { setSelectedIds(new Set()) }, [month, year, statusFilter])
 
   // Fetch payslips for selected month/year
   const { data: payslipData, isLoading } = useQuery({
@@ -46,28 +51,43 @@ export default function PayrollPage() {
     onSubmitted: () => setGenerateConfirm(false),
   })
 
+  const invalidateAll = () => {
+    queryClient.invalidateQueries({ queryKey: ['hrPayslips', month, year] })
+    queryClient.invalidateQueries({ queryKey: ['hrPayrollSummary', month, year] })
+    queryClient.invalidateQueries({ queryKey: ['hrDashboardStats'] })
+  }
+
   // Approve mutation
   const approveMutation = useMutation({
     mutationFn: (id) => hrApi.approvePayslip(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['hrPayslips', month, year] })
-      queryClient.invalidateQueries({ queryKey: ['hrPayrollSummary', month, year] })
-      queryClient.invalidateQueries({ queryKey: ['hrDashboardStats'] })
-      showSuccess('Payslip approved!')
-    },
+    onSuccess: () => { invalidateAll(); showSuccess('Payslip approved!') },
     onError: (err) => showError(err.response?.data?.detail || 'Failed to approve'),
   })
 
   // Mark paid mutation
   const markPaidMutation = useMutation({
     mutationFn: (id) => hrApi.markPayslipPaid(id, {}),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['hrPayslips', month, year] })
-      queryClient.invalidateQueries({ queryKey: ['hrPayrollSummary', month, year] })
-      queryClient.invalidateQueries({ queryKey: ['hrDashboardStats'] })
-      showSuccess('Payslip marked as paid!')
-    },
+    onSuccess: () => { invalidateAll(); showSuccess('Payslip marked as paid!') },
     onError: (err) => showError(err.response?.data?.detail || 'Failed to mark paid'),
+  })
+
+  // Delete mutation
+  const deleteMutation = useMutation({
+    mutationFn: (id) => hrApi.deletePayslip(id),
+    onSuccess: () => { invalidateAll(); setDeleteConfirm(null); showSuccess('Payslip deleted') },
+    onError: (err) => showError(err.response?.data?.detail || 'Failed to delete'),
+  })
+
+  // Bulk delete mutation
+  const bulkDeleteMutation = useMutation({
+    mutationFn: (data) => hrApi.bulkDeletePayslips(data),
+    onSuccess: (res) => {
+      invalidateAll()
+      setSelectedIds(new Set())
+      setDeleteConfirm(null)
+      showSuccess(`${res.data.deleted} payslip(s) deleted`)
+    },
+    onError: (err) => showError(err.response?.data?.detail || 'Failed to delete'),
   })
 
   const allPayslips = payslipData?.data?.results || payslipData?.data || []
@@ -75,6 +95,42 @@ export default function PayrollPage() {
   const filteredPayslips = statusFilter
     ? allPayslips.filter((p) => p.status === statusFilter)
     : allPayslips
+
+  const draftPayslips = filteredPayslips.filter((p) => p.status === 'DRAFT')
+  const allDraftsSelected = draftPayslips.length > 0 && draftPayslips.every((p) => selectedIds.has(p.id))
+
+  const toggleSelect = (id) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const toggleSelectAll = () => {
+    if (allDraftsSelected) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(draftPayslips.map((p) => p.id)))
+    }
+  }
+
+  const handleDownloadPdf = async (id, staffName) => {
+    try {
+      const res = await hrApi.downloadPayslipPdf(id)
+      const url = window.URL.createObjectURL(new Blob([res.data]))
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', `payslip_${staffName.replace(/\s+/g, '_')}_${month}_${year}.pdf`)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    } catch {
+      showError('Failed to download payslip PDF')
+    }
+  }
 
   const fmt = (v) => {
     const n = parseFloat(v)
@@ -159,6 +215,25 @@ export default function PayrollPage() {
         </div>
       )}
 
+      {/* Bulk Actions Bar */}
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-4 mb-3 px-4 py-2 bg-red-50 border border-red-200 rounded-lg">
+          <span className="text-sm font-medium text-red-800">{selectedIds.size} selected</span>
+          <button
+            onClick={() => setDeleteConfirm('bulk')}
+            className="text-sm text-red-600 hover:text-red-800 font-medium"
+          >
+            Delete Selected
+          </button>
+          <button
+            onClick={() => setSelectedIds(new Set())}
+            className="text-sm text-gray-500 hover:text-gray-700 ml-auto"
+          >
+            Clear
+          </button>
+        </div>
+      )}
+
       {/* Loading */}
       {isLoading ? (
         <div className="text-center py-8">
@@ -176,14 +251,24 @@ export default function PayrollPage() {
           <div className="sm:hidden space-y-3">
             {filteredPayslips.map((p) => (
               <div key={p.id} className="card">
-                <div className="flex items-center justify-between mb-2">
-                  <div>
-                    <p className="font-semibold text-gray-900">{p.staff_member_name}</p>
-                    {p.staff_employee_id && <p className="text-xs text-gray-500">ID: {p.staff_employee_id}</p>}
+                <div className="flex items-center gap-3 mb-2">
+                  {p.status === 'DRAFT' && (
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(p.id)}
+                      onChange={() => toggleSelect(p.id)}
+                      className="h-4 w-4 rounded border-gray-300"
+                    />
+                  )}
+                  <div className="flex-1 flex items-center justify-between">
+                    <div>
+                      <p className="font-semibold text-gray-900">{p.staff_member_name}</p>
+                      {p.staff_employee_id && <p className="text-xs text-gray-500">ID: {p.staff_employee_id}</p>}
+                    </div>
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusBadge[p.status]}`}>
+                      {p.status_display}
+                    </span>
                   </div>
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusBadge[p.status]}`}>
-                    {p.status_display}
-                  </span>
                 </div>
                 <div className="text-sm text-gray-500 space-y-1">
                   <p>Basic: {fmt(p.basic_salary)} | Net: {fmt(p.net_salary)}</p>
@@ -191,11 +276,15 @@ export default function PayrollPage() {
                 </div>
                 <div className="flex justify-end gap-3 mt-3 pt-3 border-t border-gray-100">
                   <button onClick={() => setDetailSlip(p)} className="text-sm text-gray-600 hover:text-gray-800 font-medium">View</button>
+                  <button onClick={() => handleDownloadPdf(p.id, p.staff_member_name)} className="text-sm text-purple-600 hover:text-purple-800 font-medium">PDF</button>
                   {p.status === 'DRAFT' && (
                     <button onClick={() => approveMutation.mutate(p.id)} className="text-sm text-blue-600 hover:text-blue-800 font-medium">Approve</button>
                   )}
                   {(p.status === 'DRAFT' || p.status === 'APPROVED') && (
                     <button onClick={() => markPaidMutation.mutate(p.id)} className="text-sm text-green-600 hover:text-green-800 font-medium">Mark Paid</button>
+                  )}
+                  {p.status === 'DRAFT' && (
+                    <button onClick={() => setDeleteConfirm(p)} className="text-sm text-red-600 hover:text-red-800 font-medium">Delete</button>
                   )}
                 </div>
               </div>
@@ -207,6 +296,16 @@ export default function PayrollPage() {
             <table className="min-w-full">
               <thead>
                 <tr className="border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="pb-3 pr-2 w-8">
+                    {draftPayslips.length > 0 && (
+                      <input
+                        type="checkbox"
+                        checked={allDraftsSelected}
+                        onChange={toggleSelectAll}
+                        className="h-4 w-4 rounded border-gray-300"
+                      />
+                    )}
+                  </th>
                   <th className="pb-3 pr-4">Staff Member</th>
                   <th className="pb-3 pr-4">Department</th>
                   <th className="pb-3 pr-4 text-right">Basic</th>
@@ -220,6 +319,16 @@ export default function PayrollPage() {
               <tbody className="divide-y divide-gray-100">
                 {filteredPayslips.map((p) => (
                   <tr key={p.id} className="hover:bg-gray-50">
+                    <td className="py-3 pr-2">
+                      {p.status === 'DRAFT' && (
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(p.id)}
+                          onChange={() => toggleSelect(p.id)}
+                          className="h-4 w-4 rounded border-gray-300"
+                        />
+                      )}
+                    </td>
                     <td className="py-3 pr-4">
                       <p className="text-sm font-medium text-gray-900">{p.staff_member_name}</p>
                       {p.staff_employee_id && <p className="text-xs text-gray-500">{p.staff_employee_id}</p>}
@@ -237,6 +346,7 @@ export default function PayrollPage() {
                     <td className="py-3 text-right">
                       <div className="flex justify-end gap-3">
                         <button onClick={() => setDetailSlip(p)} className="text-sm text-gray-600 hover:text-gray-800 font-medium">View</button>
+                        <button onClick={() => handleDownloadPdf(p.id, p.staff_member_name)} className="text-sm text-purple-600 hover:text-purple-800 font-medium">PDF</button>
                         {p.status === 'DRAFT' && (
                           <button
                             onClick={() => approveMutation.mutate(p.id)}
@@ -253,6 +363,14 @@ export default function PayrollPage() {
                             className="text-sm text-green-600 hover:text-green-800 font-medium"
                           >
                             Mark Paid
+                          </button>
+                        )}
+                        {p.status === 'DRAFT' && (
+                          <button
+                            onClick={() => setDeleteConfirm(p)}
+                            className="text-sm text-red-600 hover:text-red-800 font-medium"
+                          >
+                            Delete
                           </button>
                         )}
                       </div>
@@ -282,6 +400,38 @@ export default function PayrollPage() {
                 className="btn btn-primary"
               >
                 {generateTask.isSubmitting ? 'Starting...' : 'Generate'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
+            <h2 className="text-xl font-bold text-gray-900 mb-2">
+              Delete Payslip{deleteConfirm === 'bulk' ? 's' : ''}
+            </h2>
+            <p className="text-gray-600 mb-6">
+              {deleteConfirm === 'bulk'
+                ? `Delete ${selectedIds.size} selected draft payslip(s)? This cannot be undone.`
+                : `Delete payslip for ${deleteConfirm.staff_member_name}? This cannot be undone.`}
+            </p>
+            <div className="flex justify-end gap-3">
+              <button onClick={() => setDeleteConfirm(null)} className="btn btn-secondary">Cancel</button>
+              <button
+                onClick={() => {
+                  if (deleteConfirm === 'bulk') {
+                    bulkDeleteMutation.mutate({ ids: [...selectedIds] })
+                  } else {
+                    deleteMutation.mutate(deleteConfirm.id)
+                  }
+                }}
+                disabled={deleteMutation.isPending || bulkDeleteMutation.isPending}
+                className="btn btn-danger"
+              >
+                {deleteMutation.isPending || bulkDeleteMutation.isPending ? 'Deleting...' : 'Delete'}
               </button>
             </div>
           </div>
@@ -365,8 +515,14 @@ export default function PayrollPage() {
               )}
             </div>
 
-            <div className="flex justify-end mt-6">
+            <div className="flex justify-end gap-3 mt-6">
               <button onClick={() => setDetailSlip(null)} className="btn btn-secondary">Close</button>
+              <button
+                onClick={() => handleDownloadPdf(detailSlip.id, detailSlip.staff_member_name)}
+                className="btn btn-primary"
+              >
+                Download PDF
+              </button>
             </div>
           </div>
         </div>
