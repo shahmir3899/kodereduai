@@ -252,14 +252,21 @@ school(FK), name, min_percentage, max_percentage, grade_point
 
 ## finance — Fee Management & Accounting
 
+### FeeType Choices
+`MONTHLY`, `ANNUAL`, `ADMISSION`, `BOOKS`, `FINE`
+
 ### Account
 school(FK), name, account_type (CASH/BANK/MOBILE), description, is_default, is_active
 
 ### FeeStructure
-school(FK), name, class_obj(FK nullable), amount, fee_type, academic_year(FK), frequency (MONTHLY/QUARTERLY/ANNUAL/ONE_TIME)
+school(FK), name, class_obj(FK nullable), amount, fee_type (FeeType, default=MONTHLY), academic_year(FK), frequency (MONTHLY/QUARTERLY/ANNUAL/ONE_TIME)
 
 ### FeePayment
-school(FK), student(FK), fee_structure(FK nullable), amount, paid_amount, discount_amount, balance, month, year, status (PENDING/PARTIAL/PAID/OVERDUE), payment_date, payment_method, receipt_number, account(FK nullable), academic_year(FK)
+school(FK), student(FK), fee_structure(FK nullable), amount, paid_amount, discount_amount, balance, fee_type (FeeType, default=MONTHLY), month, year, status (PENDING/PARTIAL/PAID/OVERDUE), payment_date, payment_method, receipt_number, account(FK nullable), academic_year(FK)
+
+**Unique constraint:** (school, student, month, year, fee_type)
+
+**Note:** `resolve_fee_amount(student, fee_type='MONTHLY')` accepts a fee_type parameter. `FeePayment.save()/delete()` skip MonthlyClosing lock for month=0 records (used by non-MONTHLY fee types).
 
 ### Expense
 school(FK), category, description, amount, date, account(FK), payment_method, receipt_number, created_by(FK), academic_year(FK)
@@ -323,7 +330,7 @@ school(FK), student_name, parent_name, contact_phone, email, class_applied(FK nu
 ### AdmissionNote
 enquiry(FK), note, created_by(FK), created_at
 
-**Key:** `batch-convert` action converts enquiries directly into Student records.
+**Key:** `batch-convert` action converts enquiries directly into Student records. Accepts optional `generate_fees` (bool) and `fee_types` (list of FeeType choices, e.g. `["MONTHLY", "ADMISSION"]`) parameters to auto-create FeePayment records during conversion.
 
 ---
 

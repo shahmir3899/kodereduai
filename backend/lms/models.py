@@ -1,6 +1,135 @@
 from django.db import models
 
 
+# ---------------------------------------------------------------------------
+# Curriculum Hierarchy: Book → Chapter → Topic
+# ---------------------------------------------------------------------------
+
+class Book(models.Model):
+    """
+    A prescribed textbook for a specific class-subject combination.
+    Supports RTL languages via the language field.
+    """
+
+    class Language(models.TextChoices):
+        ENGLISH = 'en', 'English'
+        URDU = 'ur', 'Urdu'
+        ARABIC = 'ar', 'Arabic'
+        SINDHI = 'sd', 'Sindhi'
+        PASHTO = 'ps', 'Pashto'
+        PUNJABI = 'pa', 'Punjabi'
+        OTHER = 'other', 'Other'
+
+    RTL_LANGUAGES = {'ur', 'ar', 'sd', 'ps'}
+
+    school = models.ForeignKey(
+        'schools.School',
+        on_delete=models.CASCADE,
+        related_name='curriculum_books',
+    )
+    class_obj = models.ForeignKey(
+        'students.Class',
+        on_delete=models.CASCADE,
+        related_name='curriculum_books',
+        verbose_name='Class',
+    )
+    subject = models.ForeignKey(
+        'academics.Subject',
+        on_delete=models.CASCADE,
+        related_name='curriculum_books',
+    )
+    title = models.CharField(max_length=300)
+    author = models.CharField(max_length=200, blank=True)
+    publisher = models.CharField(max_length=200, blank=True)
+    edition = models.CharField(max_length=50, blank=True)
+    language = models.CharField(
+        max_length=10,
+        choices=Language.choices,
+        default=Language.ENGLISH,
+    )
+    description = models.TextField(blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['class_obj', 'subject', 'title']
+        verbose_name = 'Curriculum Book'
+        verbose_name_plural = 'Curriculum Books'
+        indexes = [
+            models.Index(fields=['school', 'class_obj', 'subject']),
+        ]
+
+    def __str__(self):
+        return f"{self.title} ({self.class_obj.name} - {self.subject.name})"
+
+    @property
+    def is_rtl(self):
+        return self.language in self.RTL_LANGUAGES
+
+
+class Chapter(models.Model):
+    """A chapter within a book, ordered sequentially."""
+
+    book = models.ForeignKey(
+        Book,
+        on_delete=models.CASCADE,
+        related_name='chapters',
+    )
+    title = models.CharField(max_length=300)
+    chapter_number = models.PositiveIntegerField(
+        help_text='Chapter ordering number (1, 2, 3...)',
+    )
+    description = models.TextField(blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('book', 'chapter_number')
+        ordering = ['chapter_number']
+        verbose_name = 'Chapter'
+        verbose_name_plural = 'Chapters'
+
+    def __str__(self):
+        return f"Ch {self.chapter_number}: {self.title}"
+
+
+class Topic(models.Model):
+    """A topic within a chapter, ordered sequentially."""
+
+    chapter = models.ForeignKey(
+        Chapter,
+        on_delete=models.CASCADE,
+        related_name='topics',
+    )
+    title = models.CharField(max_length=300)
+    topic_number = models.PositiveIntegerField(
+        help_text='Topic ordering within chapter (1, 2, 3...)',
+    )
+    description = models.TextField(blank=True)
+    estimated_periods = models.PositiveIntegerField(
+        default=1,
+        help_text='Estimated teaching periods needed',
+    )
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('chapter', 'topic_number')
+        ordering = ['topic_number']
+        verbose_name = 'Topic'
+        verbose_name_plural = 'Topics'
+
+    def __str__(self):
+        return f"{self.chapter.chapter_number}.{self.topic_number}: {self.title}"
+
+
+# ---------------------------------------------------------------------------
+# Lesson Plans & Assignments
+# ---------------------------------------------------------------------------
+
 class LessonPlan(models.Model):
     """
     A lesson plan created by a teacher for a specific class and subject.
@@ -50,6 +179,28 @@ class LessonPlan(models.Model):
     materials_needed = models.TextField(blank=True)
     teaching_methods = models.TextField(blank=True)
 
+    # Structured curriculum links
+    planned_topics = models.ManyToManyField(
+        'lms.Topic',
+        blank=True,
+        related_name='lesson_plans',
+        help_text='Topics planned for this lesson (from curriculum books)',
+    )
+    display_text = models.TextField(
+        blank=True,
+        help_text='Pre-formatted topic display text, computed on save',
+    )
+    content_mode = models.CharField(
+        max_length=10,
+        choices=[('TOPICS', 'Topics'), ('FREEFORM', 'Free-form')],
+        default='FREEFORM',
+        help_text='Whether this plan uses structured topics or free-form text',
+    )
+    ai_generated = models.BooleanField(
+        default=False,
+        help_text='Whether the content was AI-generated',
+    )
+
     status = models.CharField(
         max_length=10,
         choices=Status.choices,
@@ -61,13 +212,32 @@ class LessonPlan(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = ('school', 'class_obj', 'subject', 'lesson_date')
         ordering = ['-lesson_date']
         verbose_name = 'Lesson Plan'
         verbose_name_plural = 'Lesson Plans'
 
     def __str__(self):
         return f"{self.title} - {self.class_obj.name} ({self.lesson_date})"
+
+    def compute_display_text(self):
+        """Build pre-formatted text from planned topics, grouped by chapter."""
+        if not self.pk:
+            return ''
+        topics = self.planned_topics.select_related(
+            'chapter', 'chapter__book',
+        ).order_by('chapter__chapter_number', 'topic_number')
+        if not topics:
+            return ''
+        lines = []
+        current_chapter = None
+        for t in topics:
+            if t.chapter_id != (current_chapter and current_chapter.id):
+                current_chapter = t.chapter
+                lines.append(f"Ch {t.chapter.chapter_number}: {t.chapter.title}")
+            lines.append(f"  {t.chapter.chapter_number}.{t.topic_number} {t.title}")
+        self.display_text = '\n'.join(lines)
+        self.save(update_fields=['display_text'])
+        return self.display_text
 
 
 class LessonAttachment(models.Model):

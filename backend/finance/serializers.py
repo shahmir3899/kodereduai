@@ -78,6 +78,7 @@ class FeeStructureSerializer(serializers.ModelSerializer):
     student_name = serializers.CharField(source='student.name', read_only=True, default=None)
     school_name = serializers.CharField(source='school.name', read_only=True)
     academic_year_name = serializers.CharField(source='academic_year.name', read_only=True, default=None)
+    fee_type_display = serializers.CharField(source='get_fee_type_display', read_only=True)
 
     class Meta:
         model = FeeStructure
@@ -86,6 +87,7 @@ class FeeStructureSerializer(serializers.ModelSerializer):
             'class_obj', 'class_name',
             'student', 'student_name',
             'academic_year', 'academic_year_name',
+            'fee_type', 'fee_type_display',
             'monthly_amount', 'effective_from', 'effective_to',
             'is_active', 'created_at', 'updated_at'
         ]
@@ -95,7 +97,7 @@ class FeeStructureSerializer(serializers.ModelSerializer):
 class FeeStructureCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = FeeStructure
-        fields = ['class_obj', 'student', 'monthly_amount', 'effective_from', 'effective_to']
+        fields = ['class_obj', 'student', 'fee_type', 'monthly_amount', 'effective_from', 'effective_to']
 
     def validate(self, attrs):
         if not attrs.get('class_obj') and not attrs.get('student'):
@@ -110,6 +112,12 @@ class FeeStructureCreateSerializer(serializers.ModelSerializer):
 class BulkFeeStructureItemSerializer(serializers.Serializer):
     class_obj = serializers.IntegerField()
     monthly_amount = serializers.DecimalField(max_digits=10, decimal_places=2)
+    fee_type = serializers.ChoiceField(
+        choices=[('MONTHLY', 'Monthly'), ('ANNUAL', 'Annual'), ('ADMISSION', 'Admission'),
+                 ('BOOKS', 'Books'), ('FINE', 'Fine')],
+        default='MONTHLY',
+        required=False,
+    )
 
 
 class BulkFeeStructureSerializer(serializers.Serializer):
@@ -124,6 +132,7 @@ class FeePaymentSerializer(serializers.ModelSerializer):
     collected_by_name = serializers.CharField(source='collected_by.username', read_only=True, default=None)
     account_name = serializers.CharField(source='account.name', read_only=True, default=None)
     academic_year_name = serializers.CharField(source='academic_year.name', read_only=True, default=None)
+    fee_type_display = serializers.CharField(source='get_fee_type_display', read_only=True)
 
     class Meta:
         model = FeePayment
@@ -131,6 +140,7 @@ class FeePaymentSerializer(serializers.ModelSerializer):
             'id', 'school', 'student',
             'student_name', 'student_roll', 'class_name',
             'academic_year', 'academic_year_name',
+            'fee_type', 'fee_type_display',
             'month', 'year', 'previous_balance', 'amount_due', 'amount_paid',
             'status', 'payment_date', 'payment_method',
             'receipt_number', 'notes',
@@ -145,15 +155,22 @@ class FeePaymentCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = FeePayment
         fields = [
-            'school', 'student', 'month', 'year',
+            'school', 'student', 'fee_type', 'month', 'year',
             'amount_due', 'amount_paid',
             'payment_date', 'payment_method',
             'receipt_number', 'notes'
         ]
 
     def validate(self, attrs):
-        if attrs.get('month') and (attrs['month'] < 1 or attrs['month'] > 12):
-            raise serializers.ValidationError({'month': 'Month must be between 1 and 12.'})
+        fee_type = attrs.get('fee_type', 'MONTHLY')
+        month = attrs.get('month')
+        if fee_type == 'MONTHLY':
+            if month is not None and (month < 1 or month > 12):
+                raise serializers.ValidationError({'month': 'Month must be between 1 and 12 for monthly fees.'})
+        else:
+            # ANNUAL, ADMISSION, BOOKS, FINE use month=0
+            if month is not None and month != 0:
+                raise serializers.ValidationError({'month': 'Month should be 0 for non-monthly fee types.'})
         return attrs
 
 
@@ -180,6 +197,29 @@ class GenerateMonthlySerializer(serializers.Serializer):
     month = serializers.IntegerField(min_value=1, max_value=12)
     year = serializers.IntegerField(min_value=2020, max_value=2100)
     class_id = serializers.IntegerField(required=False)
+
+
+class GenerateOnetimeFeesSerializer(serializers.Serializer):
+    """For generating ADMISSION/ANNUAL/BOOKS fee records for specific students."""
+    student_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        min_length=1,
+        help_text='List of student IDs to generate fees for.',
+    )
+    fee_types = serializers.ListField(
+        child=serializers.ChoiceField(
+            choices=['ADMISSION', 'ANNUAL', 'BOOKS', 'FINE', 'MONTHLY'],
+        ),
+        min_length=1,
+        help_text='Which fee types to generate.',
+    )
+    year = serializers.IntegerField(min_value=2020, max_value=2100)
+    month = serializers.IntegerField(
+        min_value=0, max_value=12,
+        required=False,
+        default=0,
+        help_text='Month for monthly fee (1-12). Use 0 for annual/admission/books/fine.',
+    )
 
 
 class ExpenseSerializer(serializers.ModelSerializer):

@@ -204,18 +204,52 @@ export function GenerateModal({ show, onClose, month, year, classFilter, setClas
   )
 }
 
-export function FeeStructureModal({ show, onClose, classList, bulkFees, setBulkFees, bulkEffectiveFrom, setBulkEffectiveFrom, onSubmit, mutation }) {
+const FEE_TYPE_TABS = [
+  { value: 'MONTHLY', label: 'Monthly' },
+  { value: 'ANNUAL', label: 'Annual' },
+  { value: 'ADMISSION', label: 'Admission' },
+  { value: 'BOOKS', label: 'Books' },
+  { value: 'FINE', label: 'Fine' },
+]
+
+const FEE_TYPE_DESCRIPTIONS = {
+  MONTHLY: 'Set the monthly recurring fee for each class.',
+  ANNUAL: 'Set the annual fee for each class (charged once per year).',
+  ADMISSION: 'Set the one-time admission fee for each class.',
+  BOOKS: 'Set the books/materials fee for each class.',
+  FINE: 'Set a default fine amount for each class.',
+}
+
+export function FeeStructureModal({ show, onClose, classList, bulkFees, setBulkFees, bulkEffectiveFrom, setBulkEffectiveFrom, onSubmit, mutation, feeTypeFilter }) {
   const [showConfirm, setShowConfirm] = useState(false)
+  const [structureFeeType, setStructureFeeType] = useState(feeTypeFilter || 'MONTHLY')
   if (!show) return null
 
   const feesWithValues = classList.filter(c => bulkFees[c.id] && Number(bulkFees[c.id]) > 0)
+  const feeLabel = FEE_TYPE_TABS.find(t => t.value === structureFeeType)?.label || 'Monthly'
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[80vh] flex flex-col">
         <div className="p-6 flex-shrink-0">
           <h3 className="text-lg font-semibold mb-1">Set Fee Structure</h3>
-          <p className="text-sm text-gray-600 mb-4">Set the monthly fee for each class. Leave blank to skip a class.</p>
+          <div className="flex flex-wrap gap-1.5 mb-3">
+            {FEE_TYPE_TABS.map(ft => (
+              <button
+                key={ft.value}
+                type="button"
+                onClick={() => setStructureFeeType(ft.value)}
+                className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-colors ${
+                  structureFeeType === ft.value
+                    ? 'bg-primary-600 text-white'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                {ft.label}
+              </button>
+            ))}
+          </div>
+          <p className="text-sm text-gray-600 mb-4">{FEE_TYPE_DESCRIPTIONS[structureFeeType]}</p>
           {!showConfirm && (
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-1">Effective From</label>
@@ -233,7 +267,7 @@ export function FeeStructureModal({ show, onClose, classList, bulkFees, setBulkF
                 <div className="space-y-1">
                   {feesWithValues.length > 0 ? feesWithValues.map(c => (
                     <p key={c.id} className="text-sm text-blue-800">
-                      <span className="font-medium">{c.name}{c.section ? ` - ${c.section}` : ''}:</span> {Number(bulkFees[c.id]).toLocaleString()}/month
+                      <span className="font-medium">{c.name}{c.section ? ` - ${c.section}` : ''}:</span> {Number(bulkFees[c.id]).toLocaleString()} ({feeLabel})
                     </p>
                   )) : (
                     <p className="text-sm text-blue-800">No fees set. Nothing will be saved.</p>
@@ -244,7 +278,7 @@ export function FeeStructureModal({ show, onClose, classList, bulkFees, setBulkF
             <div className="p-6 flex gap-3 border-t flex-shrink-0">
               <button type="button" onClick={() => setShowConfirm(false)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">Back</button>
               <button
-                onClick={(e) => { onSubmit(e); setShowConfirm(false) }}
+                onClick={(e) => { onSubmit(e, structureFeeType); setShowConfirm(false) }}
                 disabled={mutation.isPending || feesWithValues.length === 0}
                 className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50"
               >
@@ -261,7 +295,7 @@ export function FeeStructureModal({ show, onClose, classList, bulkFees, setBulkF
                 <thead className="bg-gray-50 sticky top-0">
                   <tr>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Class</th>
-                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Monthly Fee</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">{feeLabel} Fee</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">

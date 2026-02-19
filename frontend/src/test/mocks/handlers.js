@@ -422,4 +422,82 @@ export const handlers = [
   http.delete('/api/face-attendance/enrollments/:id/', () =>
     new HttpResponse(null, { status: 204 })
   ),
+
+  // Finance fee-payments (fee type support)
+  http.get('/api/finance/fee-payments/', ({ request }) => {
+    const url = new URL(request.url)
+    const feeType = url.searchParams.get('fee_type')
+    const month = url.searchParams.get('month')
+    const year = url.searchParams.get('year')
+
+    const allPayments = [
+      {
+        id: 1, student: 1, student_name: 'Ali Hassan', student_roll: '1',
+        class_name: 'Class 1A', fee_type: 'MONTHLY', fee_type_display: 'Monthly',
+        month: 2, year: 2026, amount_due: '2500.00', amount_paid: '2500.00',
+        previous_balance: '0.00', status: 'PAID',
+      },
+      {
+        id: 2, student: 2, student_name: 'Sara Khan', student_roll: '2',
+        class_name: 'Class 1A', fee_type: 'MONTHLY', fee_type_display: 'Monthly',
+        month: 2, year: 2026, amount_due: '2500.00', amount_paid: '0.00',
+        previous_balance: '0.00', status: 'UNPAID',
+      },
+      {
+        id: 3, student: 1, student_name: 'Ali Hassan', student_roll: '1',
+        class_name: 'Class 1A', fee_type: 'ANNUAL', fee_type_display: 'Annual',
+        month: 0, year: 2026, amount_due: '15000.00', amount_paid: '0.00',
+        previous_balance: '0.00', status: 'UNPAID',
+      },
+      {
+        id: 4, student: 1, student_name: 'Ali Hassan', student_roll: '1',
+        class_name: 'Class 1A', fee_type: 'ADMISSION', fee_type_display: 'Admission',
+        month: 0, year: 2026, amount_due: '10000.00', amount_paid: '10000.00',
+        previous_balance: '0.00', status: 'PAID',
+      },
+    ]
+
+    let filtered = allPayments
+    if (feeType) filtered = filtered.filter(p => p.fee_type === feeType)
+    if (month) filtered = filtered.filter(p => p.month === parseInt(month))
+    if (year) filtered = filtered.filter(p => p.year === parseInt(year))
+
+    return HttpResponse.json({ count: filtered.length, results: filtered })
+  }),
+
+  http.get('/api/finance/fee-payments/monthly_summary/', ({ request }) => {
+    const url = new URL(request.url)
+    const feeType = url.searchParams.get('fee_type') || 'MONTHLY'
+    return HttpResponse.json({
+      total_students: 10,
+      total_due: feeType === 'MONTHLY' ? 25000 : 150000,
+      total_collected: feeType === 'MONTHLY' ? 15000 : 50000,
+      total_outstanding: feeType === 'MONTHLY' ? 10000 : 100000,
+      collection_rate: feeType === 'MONTHLY' ? 60.0 : 33.3,
+      class_breakdown: [],
+    })
+  }),
+
+  http.get('/api/finance/fee-structures/', () =>
+    HttpResponse.json({ count: 0, results: [] })
+  ),
+
+  http.get('/api/finance/accounts/', () =>
+    HttpResponse.json([{ id: 1, name: 'Cash Account', account_type: 'CASH', is_active: true }])
+  ),
+
+  http.get('/api/finance/other-income/', () =>
+    HttpResponse.json({ count: 0, results: [] })
+  ),
+
+  // Admissions batch-convert
+  http.post('/api/admissions/enquiries/batch-convert/', async ({ request }) => {
+    const body = await request.json()
+    const feeCount = body.generate_fees ? (body.fee_types || []).length * body.enquiry_ids.length : 0
+    return HttpResponse.json({
+      converted_count: body.enquiry_ids.length,
+      fees_generated_count: feeCount,
+      errors: [],
+    })
+  }),
 ]

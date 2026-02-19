@@ -42,17 +42,18 @@ def generate_monthly_fees_task(self, school_id, month, year, class_id=None):
             prev_month = 12
             prev_year = year - 1
 
-        # Existing records for this month
+        # Existing MONTHLY records for this month
         existing_ids = set(
             FeePayment.objects.filter(
-                school_id=school_id, month=month, year=year
+                school_id=school_id, month=month, year=year, fee_type='MONTHLY'
             ).values_list('student_id', flat=True)
         )
 
-        # Fee structures — build lookup in memory
+        # MONTHLY fee structures only — build lookup in memory
         today = date.today()
         fee_structures = FeeStructure.objects.filter(
             school_id=school_id, is_active=True, effective_from__lte=today,
+            fee_type='MONTHLY',
         ).filter(
             Q(effective_to__isnull=True) | Q(effective_to__gte=today)
         ).order_by('-effective_from')
@@ -67,10 +68,10 @@ def generate_monthly_fees_task(self, school_id, month, year, class_id=None):
                 if fs.class_obj_id not in class_fees:
                     class_fees[fs.class_obj_id] = fs.monthly_amount
 
-        # Previous month balances for carry-forward
+        # Previous month balances for carry-forward (MONTHLY only)
         prev_balances = {}
         for fp in FeePayment.objects.filter(
-            school_id=school_id, month=prev_month, year=prev_year
+            school_id=school_id, month=prev_month, year=prev_year, fee_type='MONTHLY'
         ):
             prev_balances[fp.student_id] = fp.amount_due - fp.amount_paid
 
@@ -94,6 +95,7 @@ def generate_monthly_fees_task(self, school_id, month, year, class_id=None):
                     to_create.append(FeePayment(
                         school_id=school_id,
                         student=student,
+                        fee_type='MONTHLY',
                         month=month,
                         year=year,
                         previous_balance=prev_balance,

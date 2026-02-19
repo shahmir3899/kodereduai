@@ -15,13 +15,31 @@ const statusBadge = (status) => {
   )
 }
 
+const FEE_TYPE_BADGE = {
+  ADMISSION: 'bg-purple-100 text-purple-700',
+  ANNUAL: 'bg-indigo-100 text-indigo-700',
+  BOOKS: 'bg-amber-100 text-amber-700',
+  FINE: 'bg-red-100 text-red-700',
+}
+
+const FEE_TYPE_LABEL = {
+  MONTHLY: 'Monthly Fee',
+  ANNUAL: 'Annual Fee',
+  ADMISSION: 'Admission Fee',
+  BOOKS: 'Books Fee',
+  FINE: 'Fine',
+}
+
 export default function FeeTable({
   paymentList, isLoading, month, year,
   selectedIds, onToggleSelect, onToggleSelectAll,
   editingCell, setEditingCell, editValue, setEditValue,
   onInlineUpdate, onRecordPayment, onSetStudentFee, onDelete,
-  canWrite = true,
+  canWrite = true, feeTypeFilter = 'MONTHLY',
 }) {
+  const isMonthly = !feeTypeFilter || feeTypeFilter === 'MONTHLY'
+  const showPrevBal = isMonthly
+  const feeColumnLabel = FEE_TYPE_LABEL[feeTypeFilter] || 'Fee Amount'
   const headerCheckboxRef = useRef(null)
 
   // Manage indeterminate state
@@ -45,11 +63,14 @@ export default function FeeTable({
   }
 
   if (paymentList.length === 0) {
+    const periodLabel = isMonthly ? `${MONTHS[month - 1]} ${year}` : `${year}`
     return (
       <div className="card">
         <div className="text-center py-8">
-          <p className="text-gray-500 mb-2">No fee records for {MONTHS[month - 1]} {year}</p>
-          <p className="text-sm text-gray-400">Click "Generate Records" to create fee entries for students</p>
+          <p className="text-gray-500 mb-2">No {feeColumnLabel.toLowerCase()} records for {periodLabel}</p>
+          <p className="text-sm text-gray-400">
+            {isMonthly ? 'Click "Generate Records" to create fee entries for students' : `No ${feeColumnLabel.toLowerCase()} records found`}
+          </p>
         </div>
       </div>
     )
@@ -176,8 +197,8 @@ export default function FeeTable({
               <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase">Roll#</th>
               <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Student</th>
               <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Class</th>
-              <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">Prev Bal</th>
-              <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">Monthly Fee</th>
+              {showPrevBal && <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">Prev Bal</th>}
+              <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">{feeColumnLabel}</th>
               <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">Total Payable</th>
               <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">Received</th>
               <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">Balance</th>
@@ -205,11 +226,20 @@ export default function FeeTable({
                     </td>
                   )}
                   <td className="px-3 py-3 text-sm text-gray-500 text-center">{payment.student_roll}</td>
-                  <td className="px-3 py-3 text-sm text-gray-900">{payment.student_name}</td>
-                  <td className="px-3 py-3 text-sm text-gray-500">{payment.class_name}</td>
-                  <td className={`px-3 py-3 text-sm text-right ${prevBal > 0 ? 'text-orange-700 font-medium' : prevBal < 0 ? 'text-blue-700 font-medium' : 'text-gray-400'}`}>
-                    {prevBal > 0 ? prevBal.toLocaleString() : prevBal < 0 ? `-${Math.abs(prevBal).toLocaleString()}` : '\u2014'}
+                  <td className="px-3 py-3 text-sm text-gray-900">
+                    {payment.student_name}
+                    {!feeTypeFilter && payment.fee_type && payment.fee_type !== 'MONTHLY' && (
+                      <span className={`ml-2 px-1.5 py-0.5 text-xs rounded ${FEE_TYPE_BADGE[payment.fee_type] || 'bg-gray-100 text-gray-700'}`}>
+                        {payment.fee_type_display || payment.fee_type}
+                      </span>
+                    )}
                   </td>
+                  <td className="px-3 py-3 text-sm text-gray-500">{payment.class_name}</td>
+                  {showPrevBal && (
+                    <td className={`px-3 py-3 text-sm text-right ${prevBal > 0 ? 'text-orange-700 font-medium' : prevBal < 0 ? 'text-blue-700 font-medium' : 'text-gray-400'}`}>
+                      {prevBal > 0 ? prevBal.toLocaleString() : prevBal < 0 ? `-${Math.abs(prevBal).toLocaleString()}` : '\u2014'}
+                    </td>
+                  )}
                   <td className="px-3 py-3 text-sm text-gray-900 text-right">{monthlyFee.toLocaleString()}</td>
                   <td className="px-3 py-3 text-sm font-medium text-gray-900 text-right">{Math.max(0, Number(payment.amount_due)).toLocaleString()}</td>
                   <td

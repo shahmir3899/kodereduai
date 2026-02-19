@@ -118,11 +118,12 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | GET | /api/finance/accounts/recent_entries/ | |
 | POST | /api/finance/accounts/{id}/reopen/ | |
 | GET/POST | /api/finance/transfers/ | |
-| GET/POST | /api/finance/fee-structures/ | class_obj, academic_year |
-| POST | /api/finance/fee-structures/bulk_set/ | |
-| GET/POST | /api/finance/fee-payments/ | student, class_obj, month, year, status, academic_year |
-| POST | /api/finance/fee-payments/generate_monthly/ | |
-| GET | /api/finance/fee-payments/monthly_summary/ | month, year |
+| GET/POST | /api/finance/fee-structures/ | class_obj, academic_year, fee_type |
+| POST | /api/finance/fee-structures/bulk_set/ | Body: {items: [{class_id, amount, fee_type?}]}. fee_type per item (default MONTHLY) |
+| GET/POST | /api/finance/fee-payments/ | student, class_obj, month, year, status, academic_year, fee_type |
+| POST | /api/finance/fee-payments/generate_monthly/ | Scoped to MONTHLY fee_type only |
+| POST | /api/finance/fee-payments/generate_onetime_fees/ | Body: {student_ids, fee_types, year, month}. Generates non-MONTHLY fee records |
+| GET | /api/finance/fee-payments/monthly_summary/ | month, year, fee_type |
 | GET | /api/finance/fee-payments/monthly_summary_all/ | |
 | GET | /api/finance/fee-payments/student_ledger/ | student_id |
 | POST | /api/finance/fee-payments/bulk_update/ | |
@@ -281,7 +282,7 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | GET/POST | /api/admissions/enquiries/ | status, search, class_applied |
 | GET/PUT/DELETE | /api/admissions/enquiries/{id}/ | |
 | POST | /api/admissions/enquiries/{id}/update-status/ | Body: {status} |
-| POST | /api/admissions/enquiries/batch-convert/ | |
+| POST | /api/admissions/enquiries/batch-convert/ | Body includes optional generate_fees (bool), fee_types (list of FeeType choices). When generate_fees=true, creates FeePayment records during conversion |
 | GET/POST | /api/admissions/enquiries/{id}/notes/ | |
 | GET | /api/admissions/followups/today/ | |
 | GET | /api/admissions/followups/overdue/ | |

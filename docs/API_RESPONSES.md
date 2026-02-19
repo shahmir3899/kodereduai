@@ -538,7 +538,7 @@ Query params: `academic_year`, `class_obj`, `student`, `status`, `page_size`
 ```
 
 ### GET /api/finance/fee-structures/
-Query params: `class_obj`, `student`, `academic_year`, `is_active`, `page_size`
+Query params: `class_obj`, `student`, `academic_year`, `fee_type`, `is_active`, `page_size`
 ```json
 {
   "count": 234,
@@ -553,6 +553,8 @@ Query params: `class_obj`, `student`, `academic_year`, `is_active`, `page_size`
       "student_name": "Ashal Abbas",
       "academic_year": null,
       "academic_year_name": null,
+      "fee_type": "MONTHLY",
+      "fee_type_display": "Monthly",
       "monthly_amount": "1750.00",
       "effective_from": "2026-02-01",
       "effective_to": null,
@@ -565,7 +567,7 @@ Query params: `class_obj`, `student`, `academic_year`, `is_active`, `page_size`
 ```
 
 ### GET /api/finance/fee-payments/
-Query params: `student`, `class_obj`, `month`, `year`, `status`, `academic_year`, `account`, `page_size`
+Query params: `student`, `class_obj`, `month`, `year`, `status`, `academic_year`, `fee_type`, `account`, `page_size`
 ```json
 {
   "count": 234,
@@ -579,6 +581,8 @@ Query params: `student`, `class_obj`, `month`, `year`, `status`, `academic_year`
       "class_name": "Playgroup",
       "academic_year": null,
       "academic_year_name": null,
+      "fee_type": "MONTHLY",
+      "fee_type_display": "Monthly",
       "month": 2,
       "year": 2026,
       "previous_balance": "0.00",
@@ -597,6 +601,23 @@ Query params: `student`, `class_obj`, `month`, `year`, `status`, `academic_year`
       "updated_at": "2026-02-11T15:33:41.743440+05:00"
     }
   ]
+}
+```
+
+### POST /api/finance/fee-payments/generate_onetime_fees/
+```json
+// Request
+{
+  "student_ids": [182, 183],
+  "fee_types": ["ADMISSION", "BOOKS"],
+  "year": 2026,
+  "month": 0
+}
+
+// Response (201)
+{
+  "created": 4,
+  "message": "4 fee records created for 2 students."
 }
 ```
 
@@ -902,6 +923,29 @@ Query params: `status`, `source`, `applying_for_grade_level`, `search`, `page_si
       "created_at": "2026-02-16T22:46:11.205754+05:00",
       "updated_at": "2026-02-17T13:52:57.580213+05:00"
     }
+  ]
+}
+```
+
+### POST /api/admissions/enquiries/batch-convert/
+```json
+// Request
+{
+  "enquiry_ids": [11, 12],
+  "generate_fees": true,
+  "fee_types": ["MONTHLY", "ADMISSION"]
+}
+
+// Response (200)
+{
+  "converted": 2,
+  "students": [
+    {"id": 615, "name": "Mahnoor Fatima", "class_name": "Playgroup"}
+  ],
+  "fees_generated_count": 4,
+  "fees_generated": [
+    {"student_id": 615, "fee_type": "MONTHLY", "amount": "900.00"},
+    {"student_id": 615, "fee_type": "ADMISSION", "amount": "5000.00"}
   ]
 }
 ```

@@ -29,7 +29,7 @@ from .serializers import (
     TransferSerializer, TransferCreateSerializer,
     FeeStructureSerializer, FeeStructureCreateSerializer, BulkFeeStructureSerializer,
     FeePaymentSerializer, FeePaymentCreateSerializer, FeePaymentUpdateSerializer,
-    GenerateMonthlySerializer,
+    GenerateMonthlySerializer, GenerateOnetimeFeesSerializer,
     ExpenseSerializer, ExpenseCreateSerializer,
     OtherIncomeSerializer, OtherIncomeCreateSerializer,
     FinanceAIChatMessageSerializer, FinanceAIChatInputSerializer,
@@ -130,6 +130,10 @@ class FeeStructureViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Model
         if student_id:
             queryset = queryset.filter(student_id=student_id)
 
+        fee_type = self.request.query_params.get('fee_type')
+        if fee_type:
+            queryset = queryset.filter(fee_type=fee_type.upper())
+
         return queryset
 
     def perform_create(self, serializer):
@@ -169,12 +173,14 @@ class FeeStructureViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Model
             for item in structures:
                 class_id = item['class_obj']
                 monthly_amount = item['monthly_amount']
+                fee_type = item.get('fee_type', 'MONTHLY')
 
-                # Deactivate existing active class-level fee structures for this class
+                # Deactivate existing active class-level fee structures for this class + fee_type
                 FeeStructure.objects.filter(
                     school_id=school_id,
                     class_obj_id=class_id,
                     student__isnull=True,
+                    fee_type=fee_type,
                     is_active=True,
                 ).update(is_active=False)
 
@@ -182,6 +188,7 @@ class FeeStructureViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Model
                 FeeStructure.objects.create(
                     school_id=school_id,
                     class_obj_id=class_id,
+                    fee_type=fee_type,
                     monthly_amount=monthly_amount,
                     effective_from=effective_from,
                 )
@@ -254,6 +261,10 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
             queryset = queryset.filter(status=fee_status.upper())
         if student_id:
             queryset = queryset.filter(student_id=student_id)
+
+        fee_type = self.request.query_params.get('fee_type')
+        if fee_type:
+            queryset = queryset.filter(fee_type=fee_type.upper())
 
         return queryset
 
@@ -335,6 +346,59 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
                 'message': 'Fee generation started.',
             }, status=202)
 
+    @action(detail=False, methods=['post'], url_path='generate_onetime_fees')
+    def generate_onetime_fees(self, request):
+        """Generate one-time fee records (ADMISSION, ANNUAL, BOOKS, etc.) for specified students."""
+        serializer = GenerateOnetimeFeesSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        student_ids = serializer.validated_data['student_ids']
+        fee_types = serializer.validated_data['fee_types']
+        year = serializer.validated_data['year']
+        month_for_monthly = serializer.validated_data.get('month', 0)
+
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response({'detail': 'No school associated.'}, status=400)
+
+        students = Student.objects.filter(
+            id__in=student_ids, school_id=school_id, is_active=True
+        ).select_related('class_obj')
+
+        created_count = 0
+        skipped_count = 0
+        no_fee_count = 0
+
+        for student in students:
+            for ft in fee_types:
+                m = month_for_monthly if (ft == 'MONTHLY' and month_for_monthly >= 1) else (date.today().month if ft == 'MONTHLY' else 0)
+
+                if FeePayment.objects.filter(
+                    school_id=school_id, student=student,
+                    month=m, year=year, fee_type=ft,
+                ).exists():
+                    skipped_count += 1
+                    continue
+
+                amount = resolve_fee_amount(student, ft)
+                if amount is None:
+                    no_fee_count += 1
+                    continue
+
+                FeePayment.objects.create(
+                    school_id=school_id, student=student,
+                    fee_type=ft, month=m, year=year,
+                    amount_due=amount, amount_paid=0,
+                )
+                created_count += 1
+
+        return Response({
+            'created': created_count,
+            'skipped': skipped_count,
+            'no_fee_structure': no_fee_count,
+            'message': f'{created_count} fee record(s) created.',
+        })
+
     @action(detail=False, methods=['post'])
     def bulk_update(self, request):
         """Bulk update amount_paid for multiple fee payment records."""
@@ -415,6 +479,10 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         payments = FeePayment.objects.filter(
             school_id=school_id, month=month, year=year
         )
+
+        fee_type = request.query_params.get('fee_type')
+        if fee_type:
+            payments = payments.filter(fee_type=fee_type.upper())
 
         totals = payments.aggregate(
             total_due=Sum('amount_due'),

@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { financeApi, classesApi } from '../../services/api'
 import { useBackgroundTask } from '../../hooks/useBackgroundTask'
 
-export function useFeeData({ month, year, classFilter, statusFilter, academicYearId }) {
+export function useFeeData({ month, year, classFilter, statusFilter, feeTypeFilter }) {
   const queryClient = useQueryClient()
 
   // Bulk fee structure state
@@ -22,29 +22,32 @@ export function useFeeData({ month, year, classFilter, statusFilter, academicYea
   })
 
   const { data: feeStructures } = useQuery({
-    queryKey: ['feeStructures', academicYearId],
+    queryKey: ['feeStructures', feeTypeFilter],
     queryFn: () => financeApi.getFeeStructures({
       page_size: 9999,
-      ...(academicYearId && { academic_year: academicYearId }),
+      ...(feeTypeFilter && { fee_type: feeTypeFilter }),
     }),
   })
 
+  const isMonthlyType = !feeTypeFilter || feeTypeFilter === 'MONTHLY'
+  const apiMonth = isMonthlyType ? month : 0
+
   const { data: payments, isLoading } = useQuery({
-    queryKey: ['feePayments', month, year, classFilter, statusFilter, academicYearId],
+    queryKey: ['feePayments', apiMonth, year, classFilter, statusFilter, feeTypeFilter],
     queryFn: () => financeApi.getFeePayments({
-      month, year,
+      month: apiMonth, year,
       ...(classFilter && { class_id: classFilter }),
       ...(statusFilter && { status: statusFilter }),
-      ...(academicYearId && { academic_year: academicYearId }),
+      ...(feeTypeFilter && { fee_type: feeTypeFilter }),
       page_size: 9999,
     }),
   })
 
   const { data: summary } = useQuery({
-    queryKey: ['monthlySummary', month, year, academicYearId],
+    queryKey: ['monthlySummary', apiMonth, year, feeTypeFilter],
     queryFn: () => financeApi.getMonthlySummary({
-      month, year,
-      ...(academicYearId && { academic_year: academicYearId }),
+      month: apiMonth, year,
+      ...(feeTypeFilter && { fee_type: feeTypeFilter }),
     }),
   })
 
@@ -69,7 +72,7 @@ export function useFeeData({ month, year, classFilter, statusFilter, academicYea
       })
       setBulkFees(existing)
     }
-  }, [feeStructures, classes])
+  }, [feeStructures, classes, feeTypeFilter])
 
   // Generate monthly fees (background task)
   const generateMutation = useBackgroundTask({

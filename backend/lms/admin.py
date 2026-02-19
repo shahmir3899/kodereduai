@@ -1,9 +1,56 @@
 from django.contrib import admin
 from .models import (
+    Book, Chapter, Topic,
     LessonPlan, LessonAttachment,
     Assignment, AssignmentAttachment, AssignmentSubmission,
 )
 
+
+# ---------------------------------------------------------------------------
+# Curriculum: Book → Chapter → Topic
+# ---------------------------------------------------------------------------
+
+class ChapterInline(admin.TabularInline):
+    model = Chapter
+    extra = 0
+    fields = ['chapter_number', 'title', 'is_active']
+
+
+class TopicInline(admin.TabularInline):
+    model = Topic
+    extra = 0
+    fields = ['topic_number', 'title', 'estimated_periods', 'is_active']
+
+
+@admin.register(Book)
+class BookAdmin(admin.ModelAdmin):
+    list_display = ['title', 'school', 'class_obj', 'subject', 'language', 'is_active']
+    list_filter = ['language', 'is_active', 'school']
+    search_fields = ['title', 'author']
+    raw_id_fields = ['school', 'class_obj', 'subject']
+    inlines = [ChapterInline]
+
+
+@admin.register(Chapter)
+class ChapterAdmin(admin.ModelAdmin):
+    list_display = ['title', 'book', 'chapter_number', 'is_active']
+    list_filter = ['is_active']
+    search_fields = ['title']
+    raw_id_fields = ['book']
+    inlines = [TopicInline]
+
+
+@admin.register(Topic)
+class TopicAdmin(admin.ModelAdmin):
+    list_display = ['title', 'chapter', 'topic_number', 'estimated_periods', 'is_active']
+    list_filter = ['is_active']
+    search_fields = ['title']
+    raw_id_fields = ['chapter']
+
+
+# ---------------------------------------------------------------------------
+# Lesson Plans
+# ---------------------------------------------------------------------------
 
 class LessonAttachmentInline(admin.TabularInline):
     model = LessonAttachment

@@ -5,15 +5,30 @@ const MONTHS = [
   'July', 'August', 'September', 'October', 'November', 'December'
 ]
 
-export default function FeeFilters({ month, setMonth, year, setYear, classFilter, setClassFilter, statusFilter, setStatusFilter, classList }) {
+export default function FeeFilters({ month, setMonth, year, setYear, classFilter, setClassFilter, statusFilter, setStatusFilter, feeTypeFilter, setFeeTypeFilter, classList }) {
+  const isMonthly = !feeTypeFilter || feeTypeFilter === 'MONTHLY'
+
   return (
     <>
       <div>
-        <label className="block text-xs font-medium text-gray-500 mb-1">Month</label>
-        <select value={month} onChange={(e) => setMonth(parseInt(e.target.value))} className="input-field text-sm">
-          {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+        <label className="block text-xs font-medium text-gray-500 mb-1">Fee Type</label>
+        <select value={feeTypeFilter || ''} onChange={(e) => setFeeTypeFilter(e.target.value)} className="input-field text-sm">
+          <option value="">All Types</option>
+          <option value="MONTHLY">Monthly</option>
+          <option value="ANNUAL">Annual</option>
+          <option value="ADMISSION">Admission</option>
+          <option value="BOOKS">Books</option>
+          <option value="FINE">Fine</option>
         </select>
       </div>
+      {isMonthly && (
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">Month</label>
+          <select value={month} onChange={(e) => setMonth(parseInt(e.target.value))} className="input-field text-sm">
+            {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+          </select>
+        </div>
+      )}
       <div>
         <label className="block text-xs font-medium text-gray-500 mb-1">Year</label>
         <select value={year} onChange={(e) => setYear(parseInt(e.target.value))} className="input-field text-sm">

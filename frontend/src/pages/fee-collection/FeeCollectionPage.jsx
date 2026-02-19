@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
-import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useFeeData } from './useFeeData'
 import FeeFilters, { MONTHS } from './FeeFilters'
 import FeeSummaryCards, { ClassBreakdown, PendingStudents } from './FeeSummaryCards'
@@ -15,7 +14,6 @@ import { exportFeePDF } from './feeExport'
 
 export default function FeeCollectionPage() {
   const { user, activeSchool, isStaffMember } = useAuth()
-  const { activeAcademicYear } = useAcademicYear()
   const canWrite = !isStaffMember
   const now = new Date()
 
@@ -24,6 +22,7 @@ export default function FeeCollectionPage() {
   const [year, setYear] = useState(now.getFullYear())
   const [classFilter, setClassFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
+  const [feeTypeFilter, setFeeTypeFilter] = useState('MONTHLY')
   const [activeTab, setActiveTab] = useState('fees')
 
   // Analytics toggle
@@ -57,7 +56,7 @@ export default function FeeCollectionPage() {
   const [deleteTarget, setDeleteTarget] = useState(null) // payment id or 'bulk'
 
   // Data hook
-  const data = useFeeData({ month, year, classFilter, statusFilter, academicYearId: activeAcademicYear?.id })
+  const data = useFeeData({ month, year, classFilter, statusFilter, feeTypeFilter })
 
   // --- Handlers ---
 
@@ -80,11 +79,11 @@ export default function FeeCollectionPage() {
     })
   }
 
-  const handleBulkFeeSubmit = (e) => {
+  const handleBulkFeeSubmit = (e, feeType = 'MONTHLY') => {
     e.preventDefault()
     const structures = Object.entries(data.bulkFees)
       .filter(([_, amount]) => amount && parseFloat(amount) > 0)
-      .map(([classId, amount]) => ({ class_obj: parseInt(classId), monthly_amount: amount }))
+      .map(([classId, amount]) => ({ class_obj: parseInt(classId), monthly_amount: amount, fee_type: feeType }))
     if (structures.length === 0) return
     data.bulkFeeMutation.mutate({ structures, effective_from: data.bulkEffectiveFrom }, {
       onSuccess: () => setShowFeeStructureModal(false),
@@ -303,6 +302,7 @@ export default function FeeCollectionPage() {
                 year={year} setYear={setYear}
                 classFilter={classFilter} setClassFilter={setClassFilter}
                 statusFilter={statusFilter} setStatusFilter={setStatusFilter}
+                feeTypeFilter={feeTypeFilter} setFeeTypeFilter={setFeeTypeFilter}
                 classList={data.classList}
               />
               <div className="flex-1" />
@@ -321,6 +321,7 @@ export default function FeeCollectionPage() {
             paymentList={data.paymentList}
             isLoading={data.isLoading}
             month={month} year={year}
+            feeTypeFilter={feeTypeFilter}
             selectedIds={selectedIds}
             onToggleSelect={canWrite ? handleToggleSelect : undefined}
             onToggleSelectAll={canWrite ? handleToggleSelectAll : undefined}
@@ -387,6 +388,7 @@ export default function FeeCollectionPage() {
         bulkEffectiveFrom={data.bulkEffectiveFrom} setBulkEffectiveFrom={data.setBulkEffectiveFrom}
         onSubmit={handleBulkFeeSubmit}
         mutation={data.bulkFeeMutation}
+        feeTypeFilter={feeTypeFilter}
       />
 
       <IncomeModal

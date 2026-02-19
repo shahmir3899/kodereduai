@@ -3,6 +3,14 @@ from django.db import models
 from django.utils import timezone
 
 
+class FeeType(models.TextChoices):
+    MONTHLY = 'MONTHLY', 'Monthly'
+    ANNUAL = 'ANNUAL', 'Annual'
+    ADMISSION = 'ADMISSION', 'Admission'
+    BOOKS = 'BOOKS', 'Books'
+    FINE = 'FINE', 'Fine'
+
+
 class Account(models.Model):
     """
     Represents a cash account, bank account, or person account
@@ -194,10 +202,16 @@ class FeeStructure(models.Model):
         blank=True,
         help_text="Override fee for a specific student (takes precedence over class fee)"
     )
+    fee_type = models.CharField(
+        max_length=20,
+        choices=FeeType.choices,
+        default=FeeType.MONTHLY,
+        help_text="Type of fee: monthly recurring, annual, one-time admission, books, or fine"
+    )
     monthly_amount = models.DecimalField(
         max_digits=10,
         decimal_places=2,
-        help_text="Monthly fee amount"
+        help_text="Fee amount (field name kept for backward compat; stores amount for any fee type)"
     )
     effective_from = models.DateField(
         help_text="Date from which this fee structure is effective"
@@ -222,12 +236,13 @@ class FeeStructure(models.Model):
 
     def __str__(self):
         target = self.student.name if self.student else (self.class_obj.name if self.class_obj else 'Unknown')
-        return f"{target} - {self.monthly_amount}/month"
+        type_label = self.get_fee_type_display()
+        return f"{target} - {self.monthly_amount} ({type_label})"
 
 
-def resolve_fee_amount(student):
+def resolve_fee_amount(student, fee_type='MONTHLY'):
     """
-    Resolve the monthly fee for a student.
+    Resolve the fee for a student by fee_type.
     Priority: student-level FeeStructure > class-level FeeStructure.
     Returns Decimal amount or None if no fee structure found.
     """
@@ -238,6 +253,7 @@ def resolve_fee_amount(student):
     student_fee = FeeStructure.objects.filter(
         school=student.school,
         student=student,
+        fee_type=fee_type,
         is_active=True,
         effective_from__lte=today,
     ).filter(
@@ -252,6 +268,7 @@ def resolve_fee_amount(student):
         school=student.school,
         class_obj=student.class_obj,
         student__isnull=True,
+        fee_type=fee_type,
         is_active=True,
         effective_from__lte=today,
     ).filter(
@@ -298,7 +315,13 @@ class FeePayment(models.Model):
         on_delete=models.CASCADE,
         related_name='fee_payments'
     )
-    month = models.IntegerField(help_text="Month number (1-12)")
+    fee_type = models.CharField(
+        max_length=20,
+        choices=FeeType.choices,
+        default=FeeType.MONTHLY,
+        help_text="Type of fee this payment record belongs to"
+    )
+    month = models.IntegerField(help_text="Month number (1-12 for monthly, 0 for annual/admission/books/fine)")
     year = models.IntegerField(help_text="Year (e.g. 2026)")
     amount_due = models.DecimalField(
         max_digits=10,
@@ -360,17 +383,20 @@ class FeePayment(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = ('school', 'student', 'month', 'year')
+        unique_together = ('school', 'student', 'month', 'year', 'fee_type')
         ordering = ['-year', '-month', 'student__class_obj', 'student__roll_number']
         verbose_name = 'Fee Payment'
         verbose_name_plural = 'Fee Payments'
         indexes = [
             models.Index(fields=['school', 'year', 'month']),
             models.Index(fields=['school', 'status']),
+            models.Index(fields=['school', 'fee_type']),
         ]
 
     def __str__(self):
-        return f"{self.student.name} - {self.month}/{self.year}: {self.get_status_display()}"
+        type_label = self.get_fee_type_display() if self.fee_type != 'MONTHLY' else ''
+        prefix = f"[{type_label}] " if type_label else ''
+        return f"{prefix}{self.student.name} - {self.month}/{self.year}: {self.get_status_display()}"
 
     def save(self, *args, **kwargs):
         """Validate payment fields, check period locks, then auto-compute status."""
@@ -388,17 +414,19 @@ class FeePayment(models.Model):
                 )
 
         # --- Safeguard 2: reject writes to closed periods ---
-        # FeePayment belongs to a specific month/year — use that as the period
-        is_locked = MonthlyClosing.objects.filter(
-            school_id=self.school_id,
-            year=self.year,
-            month=self.month,
-        ).exists()
-        if is_locked:
-            raise ValidationError(
-                f"Period {self.year}/{self.month:02d} is closed. "
-                f"Reopen it before modifying fee records."
-            )
+        # Only check period lock for MONTHLY fees (month 1-12).
+        # ANNUAL/ADMISSION/BOOKS/FINE use month=0 and are not tied to a calendar month.
+        if self.month >= 1 and self.month <= 12:
+            is_locked = MonthlyClosing.objects.filter(
+                school_id=self.school_id,
+                year=self.year,
+                month=self.month,
+            ).exists()
+            if is_locked:
+                raise ValidationError(
+                    f"Period {self.year}/{self.month:02d} is closed. "
+                    f"Reopen it before modifying fee records."
+                )
 
         if self.amount_due == 0 and self.amount_paid == 0:
             self.status = self.PaymentStatus.PAID
@@ -421,15 +449,16 @@ class FeePayment(models.Model):
         super().save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):
-        """Block deletion of fee records in closed periods."""
-        is_locked = MonthlyClosing.objects.filter(
-            school_id=self.school_id, year=self.year, month=self.month,
-        ).exists()
-        if is_locked:
-            raise ValidationError(
-                f"Period {self.year}/{self.month:02d} is closed. "
-                f"Reopen it before deleting fee records."
-            )
+        """Block deletion of fee records in closed periods (monthly only)."""
+        if self.month >= 1 and self.month <= 12:
+            is_locked = MonthlyClosing.objects.filter(
+                school_id=self.school_id, year=self.year, month=self.month,
+            ).exists()
+            if is_locked:
+                raise ValidationError(
+                    f"Period {self.year}/{self.month:02d} is closed. "
+                    f"Reopen it before deleting fee records."
+                )
         super().delete(*args, **kwargs)
 
 

@@ -108,3 +108,23 @@ class BatchConvertSerializer(serializers.Serializer):
     )
     academic_year_id = serializers.IntegerField(help_text='Target academic year.')
     class_id = serializers.IntegerField(help_text='Target class to enrol students into.')
+    generate_fees = serializers.BooleanField(
+        default=False,
+        required=False,
+        help_text='Whether to auto-generate fee records for converted students.',
+    )
+    fee_types = serializers.ListField(
+        child=serializers.ChoiceField(
+            choices=['ADMISSION', 'ANNUAL', 'BOOKS', 'MONTHLY'],
+        ),
+        required=False,
+        default=[],
+        help_text='Which fee types to generate (e.g., ["ADMISSION", "ANNUAL"]).',
+    )
+
+    def validate(self, attrs):
+        if attrs.get('generate_fees') and not attrs.get('fee_types'):
+            raise serializers.ValidationError({
+                'fee_types': 'At least one fee type is required when generate_fees is True.'
+            })
+        return attrs

@@ -214,6 +214,7 @@ export const financeApi = {
   recordPayment: (id, data) => api.patch(`/api/finance/fee-payments/${id}/`, data),
   createPayment: (data) => api.post('/api/finance/fee-payments/', data),
   generateMonthly: (data) => api.post('/api/finance/fee-payments/generate_monthly/', data),
+  generateOnetimeFees: (data) => api.post('/api/finance/fee-payments/generate_onetime_fees/', data),
   getMonthlySummary: (params) => api.get('/api/finance/fee-payments/monthly_summary/', { params }),
   getMonthlySummaryAll: (params) => api.get('/api/finance/fee-payments/monthly_summary_all/', { params }),
   getStudentLedger: (params) => api.get('/api/finance/fee-payments/student_ledger/', { params }),

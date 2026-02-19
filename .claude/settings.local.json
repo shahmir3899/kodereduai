@@ -104,7 +104,11 @@
       "Bash(powershell -Command \"Get-CimInstance Win32_Process -Filter \"\"Name=''python.exe''\"\" | Where-Object { $_.CommandLine -like ''*manage.py runserver*'' } | Select-Object ProcessId, CommandLine | Format-List\")",
       "Bash(cmake:*)",
       "Bash(export PATH:*)",
-      "Bash(export:*)"
+      "Bash(export:*)",
+      "Bash(git -C d:/Personal/smart-attendance ls-files)",
+      "Bash(test:*)",
+      "WebFetch(domain:opencurriculum.org)",
+      "WebFetch(domain:www.magicschool.ai)"
     ]
   }
 }

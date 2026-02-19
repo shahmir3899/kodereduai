@@ -5,9 +5,98 @@ Uses Read + Create serializer pattern for each model.
 
 from rest_framework import serializers
 from .models import (
+    Book, Chapter, Topic,
     LessonPlan, LessonAttachment,
     Assignment, AssignmentAttachment, AssignmentSubmission,
 )
+
+
+# ---------------------------------------------------------------------------
+# Curriculum: Book → Chapter → Topic
+# ---------------------------------------------------------------------------
+
+class TopicSerializer(serializers.ModelSerializer):
+    is_covered = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Topic
+        fields = [
+            'id', 'chapter', 'title', 'topic_number', 'description',
+            'estimated_periods', 'is_active', 'is_covered',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def get_is_covered(self, obj):
+        """Check if this topic has been used in any published lesson plan."""
+        return obj.lesson_plans.filter(status='PUBLISHED').exists()
+
+
+class ChapterReadSerializer(serializers.ModelSerializer):
+    topics = TopicSerializer(many=True, read_only=True)
+    topic_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Chapter
+        fields = [
+            'id', 'book', 'title', 'chapter_number', 'description',
+            'is_active', 'topics', 'topic_count',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def get_topic_count(self, obj):
+        return obj.topics.count()
+
+
+class ChapterCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Chapter
+        fields = [
+            'id', 'book', 'title', 'chapter_number',
+            'description', 'is_active',
+        ]
+        read_only_fields = ['id']
+
+
+class BookReadSerializer(serializers.ModelSerializer):
+    class_name = serializers.CharField(source='class_obj.name', read_only=True)
+    subject_name = serializers.CharField(source='subject.name', read_only=True)
+    school_name = serializers.CharField(source='school.name', read_only=True)
+    chapters = ChapterReadSerializer(many=True, read_only=True)
+    chapter_count = serializers.SerializerMethodField()
+    is_rtl = serializers.BooleanField(read_only=True)
+    language_display = serializers.CharField(
+        source='get_language_display', read_only=True,
+    )
+
+    class Meta:
+        model = Book
+        fields = [
+            'id', 'school', 'school_name',
+            'class_obj', 'class_name',
+            'subject', 'subject_name',
+            'title', 'author', 'publisher', 'edition',
+            'language', 'language_display', 'is_rtl',
+            'description', 'is_active',
+            'chapters', 'chapter_count',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def get_chapter_count(self, obj):
+        return obj.chapters.count()
+
+
+class BookCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Book
+        fields = [
+            'id', 'school', 'class_obj', 'subject',
+            'title', 'author', 'publisher', 'edition',
+            'language', 'description', 'is_active',
+        ]
+        read_only_fields = ['id']
 
 
 # ---------------------------------------------------------------------------
@@ -39,6 +128,10 @@ class LessonPlanReadSerializer(serializers.ModelSerializer):
     )
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     attachments = LessonAttachmentSerializer(many=True, read_only=True)
+    planned_topics = TopicSerializer(many=True, read_only=True)
+    display_text = serializers.CharField(read_only=True)
+    content_mode = serializers.CharField(read_only=True)
+    ai_generated = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = LessonPlan
@@ -51,6 +144,8 @@ class LessonPlanReadSerializer(serializers.ModelSerializer):
             'title', 'description', 'objectives',
             'lesson_date', 'duration_minutes',
             'materials_needed', 'teaching_methods',
+            'planned_topics', 'display_text',
+            'content_mode', 'ai_generated',
             'status', 'status_display',
             'is_active', 'attachments',
             'created_at', 'updated_at',
@@ -60,6 +155,11 @@ class LessonPlanReadSerializer(serializers.ModelSerializer):
 
 class LessonPlanCreateSerializer(serializers.ModelSerializer):
     """Write serializer with flat FK fields for creation/update."""
+    planned_topic_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        write_only=True,
+    )
 
     class Meta:
         model = LessonPlan
@@ -69,9 +169,29 @@ class LessonPlanCreateSerializer(serializers.ModelSerializer):
             'title', 'description', 'objectives',
             'lesson_date', 'duration_minutes',
             'materials_needed', 'teaching_methods',
+            'content_mode', 'ai_generated',
+            'planned_topic_ids',
             'status', 'is_active',
         ]
         read_only_fields = ['id']
+
+    def create(self, validated_data):
+        topic_ids = validated_data.pop('planned_topic_ids', [])
+        instance = super().create(validated_data)
+        if topic_ids:
+            instance.planned_topics.set(topic_ids)
+            instance.content_mode = 'TOPICS'
+            instance.save(update_fields=['content_mode'])
+            instance.compute_display_text()
+        return instance
+
+    def update(self, instance, validated_data):
+        topic_ids = validated_data.pop('planned_topic_ids', None)
+        instance = super().update(instance, validated_data)
+        if topic_ids is not None:
+            instance.planned_topics.set(topic_ids)
+            instance.compute_display_text()
+        return instance
 
 
 # ---------------------------------------------------------------------------

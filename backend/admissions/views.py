@@ -152,13 +152,17 @@ class AdmissionEnquiryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
 
     @action(detail=False, methods=['post'], url_path='batch-convert')
     def batch_convert(self, request):
-        """Convert multiple CONFIRMED enquiries into Student + StudentEnrollment."""
+        """Convert multiple CONFIRMED enquiries into Student + StudentEnrollment.
+        Optionally generate fee records (ADMISSION, ANNUAL, BOOKS, MONTHLY).
+        """
         serializer = BatchConvertSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
         enquiry_ids = serializer.validated_data['enquiry_ids']
         academic_year_id = serializer.validated_data['academic_year_id']
         class_id = serializer.validated_data['class_id']
+        generate_fees = serializer.validated_data.get('generate_fees', False)
+        fee_types_to_generate = serializer.validated_data.get('fee_types', [])
 
         from students.models import Student, Class as StudentClass
         from academic_sessions.models import StudentEnrollment, AcademicYear
@@ -195,6 +199,7 @@ class AdmissionEnquiryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
 
         created_students = []
         errors_list = []
+        fees_generated_count = 0
 
         # Calculate max roll from StudentEnrollment for the TARGET year only
         # Roll numbers are session-scoped — uniqueness is per (school, year, class)
@@ -247,11 +252,36 @@ class AdmissionEnquiryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
                         note_type='STATUS_CHANGE',
                     )
 
+                    # Generate fee records if requested
+                    student_fees = []
+                    if generate_fees and fee_types_to_generate:
+                        from finance.models import FeePayment, resolve_fee_amount
+                        current_date = date.today()
+
+                        for ft in fee_types_to_generate:
+                            m = current_date.month if ft == 'MONTHLY' else 0
+                            y = current_date.year
+
+                            amount = resolve_fee_amount(student, ft)
+                            if amount is not None:
+                                FeePayment.objects.create(
+                                    school_id=school_id,
+                                    student=student,
+                                    fee_type=ft,
+                                    month=m,
+                                    year=y,
+                                    amount_due=amount,
+                                    amount_paid=0,
+                                )
+                                fees_generated_count += 1
+                                student_fees.append(ft)
+
                     created_students.append({
                         'enquiry_id': enquiry.id,
                         'student_id': student.id,
                         'name': student.name,
                         'roll_number': roll_number,
+                        'fees_generated': student_fees,
                     })
             except Exception as e:
                 errors_list.append({
@@ -260,12 +290,14 @@ class AdmissionEnquiryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
                     'error': str(e),
                 })
 
+        fee_msg = f' ({fees_generated_count} fee records created)' if fees_generated_count else ''
         resp_status = status.HTTP_201_CREATED if created_students else status.HTTP_400_BAD_REQUEST
         return Response(
             {
-                'detail': f'{len(created_students)} students created successfully.',
+                'detail': f'{len(created_students)} students created successfully.{fee_msg}',
                 'converted': created_students,
                 'converted_count': len(created_students),
+                'fees_generated_count': fees_generated_count,
                 'errors': errors_list,
             },
             status=resp_status,

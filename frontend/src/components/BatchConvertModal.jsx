@@ -4,11 +4,20 @@ import { admissionsApi, sessionsApi } from '../services/api'
 import ClassSelector from './ClassSelector'
 import { useToast } from './Toast'
 
+const FEE_TYPE_OPTIONS = [
+  { value: 'ADMISSION', label: 'Admission Fee (one-time)' },
+  { value: 'ANNUAL', label: 'Annual Fee (yearly)' },
+  { value: 'BOOKS', label: 'Books Fee' },
+  { value: 'MONTHLY', label: 'Monthly Fee (current month)' },
+]
+
 export default function BatchConvertModal({ enquiryIds, onClose, onSuccess }) {
   const { showError, showSuccess } = useToast()
   const queryClient = useQueryClient()
   const [academicYearId, setAcademicYearId] = useState('')
   const [classId, setClassId] = useState('')
+  const [generateFees, setGenerateFees] = useState(false)
+  const [selectedFeeTypes, setSelectedFeeTypes] = useState(['ADMISSION', 'ANNUAL'])
 
   // Fetch academic years
   const { data: yearsRes, isLoading: yearsLoading } = useQuery({
@@ -24,20 +33,29 @@ export default function BatchConvertModal({ enquiryIds, onClose, onSuccess }) {
     onSuccess: (res) => {
       const result = res?.data
       const count = result?.converted_count ?? 0
+      const feesCount = result?.fees_generated_count ?? 0
       const errors = result?.errors || []
       if (count > 0) {
-        showSuccess(`${count} enquir${count === 1 ? 'y' : 'ies'} converted to students!`)
+        const feeMsg = feesCount > 0 ? ` with ${feesCount} fee record${feesCount === 1 ? '' : 's'}` : ''
+        showSuccess(`${count} enquir${count === 1 ? 'y' : 'ies'} converted to students${feeMsg}!`)
       }
       if (errors.length > 0) {
         showError(`${errors.length} failed: ${errors[0]?.error?.split('\n')[0] || 'Unknown error'}`)
       }
       queryClient.invalidateQueries({ queryKey: ['students'] })
+      queryClient.invalidateQueries({ queryKey: ['feePayments'] })
       onSuccess()
     },
     onError: (err) => {
       showError(err.response?.data?.detail || 'Failed to convert enquiries')
     },
   })
+
+  const handleFeeTypeToggle = (value) => {
+    setSelectedFeeTypes(prev =>
+      prev.includes(value) ? prev.filter(t => t !== value) : [...prev, value]
+    )
+  }
 
   const handleConvert = () => {
     if (!academicYearId) {
@@ -48,10 +66,16 @@ export default function BatchConvertModal({ enquiryIds, onClose, onSuccess }) {
       showError('Please select a class')
       return
     }
+    if (generateFees && selectedFeeTypes.length === 0) {
+      showError('Please select at least one fee type')
+      return
+    }
     convertMut.mutate({
       enquiry_ids: enquiryIds,
       academic_year_id: parseInt(academicYearId),
       class_id: parseInt(classId),
+      generate_fees: generateFees,
+      fee_types: generateFees ? selectedFeeTypes : [],
     })
   }
 
@@ -111,6 +135,39 @@ export default function BatchConvertModal({ enquiryIds, onClose, onSuccess }) {
               className="input w-full"
               required
             />
+          </div>
+
+          {/* Fee Generation */}
+          <div className="border-t border-gray-200 pt-4">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={generateFees}
+                onChange={(e) => setGenerateFees(e.target.checked)}
+                className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+              />
+              <span className="text-sm font-medium text-gray-700">Auto-generate fee records</span>
+            </label>
+
+            {generateFees && (
+              <div className="mt-3 ml-6 space-y-2">
+                <p className="text-xs text-gray-500">Select fee types to generate:</p>
+                {FEE_TYPE_OPTIONS.map(ft => (
+                  <label key={ft.value} className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedFeeTypes.includes(ft.value)}
+                      onChange={() => handleFeeTypeToggle(ft.value)}
+                      className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                    />
+                    <span className="text-sm text-gray-600">{ft.label}</span>
+                  </label>
+                ))}
+                <p className="text-xs text-gray-400 mt-1">
+                  Fee structures must be configured in Finance for the selected class.
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
