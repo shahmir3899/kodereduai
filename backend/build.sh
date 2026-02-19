@@ -6,6 +6,11 @@ set -o errexit
 
 echo "==> Installing Python dependencies..."
 pip install --upgrade pip
+
+# Limit dlib compilation parallelism to avoid OOM on Render (face_recognition dependency)
+export CMAKE_BUILD_PARALLEL_LEVEL=1
+export MAKEFLAGS="-j1"
+
 pip install -r requirements.txt
 
 echo "==> Collecting static files..."
