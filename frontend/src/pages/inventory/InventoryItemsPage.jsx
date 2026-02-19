@@ -51,6 +51,14 @@ export default function InventoryItemsPage() {
   // Active management tab
   const [manageTab, setManageTab] = useState(null) // null | 'categories' | 'vendors'
 
+  // AI Suggest modal
+  const [showAISuggestModal, setShowAISuggestModal] = useState(false)
+  const [aiContext, setAIContext] = useState('')
+  const [aiSuggestions, setAISuggestions] = useState(null)
+  const [selectedCategories, setSelectedCategories] = useState({})
+  const [selectedItems, setSelectedItems] = useState({})
+  const [aiAdding, setAiAdding] = useState(false)
+
   // ---- Queries ----
   const { data: itemsData, isLoading } = useQuery({
     queryKey: ['inventoryItems', search, categoryFilter, stockFilter],
@@ -128,6 +136,21 @@ export default function InventoryItemsPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['inventoryVendors'] }),
   })
 
+  // ---- AI Suggest Mutation ----
+  const aiSuggestMutation = useMutation({
+    mutationFn: (data) => inventoryApi.aiSuggest(data),
+    onSuccess: (response) => {
+      const data = response.data
+      setAISuggestions(data)
+      const catSelection = {}
+      ;(data.categories || []).forEach((_, i) => { catSelection[i] = true })
+      setSelectedCategories(catSelection)
+      const itemSelection = {}
+      ;(data.items || []).forEach((_, i) => { itemSelection[i] = true })
+      setSelectedItems(itemSelection)
+    },
+  })
+
   // ---- Modal Handlers ----
   const openItemModal = (item = null) => {
     if (item) {
@@ -169,6 +192,61 @@ export default function InventoryItemsPage() {
     setShowVendorModal(true)
   }
   const closeVendorModal = () => { setShowVendorModal(false); setEditingVendor(null); setVendorForm(emptyVendorForm) }
+
+  // ---- AI Suggest Handlers ----
+  const openAISuggestModal = () => {
+    setAIContext('')
+    setAISuggestions(null)
+    setSelectedCategories({})
+    setSelectedItems({})
+    setAiAdding(false)
+    setShowAISuggestModal(true)
+  }
+  const closeAISuggestModal = () => { setShowAISuggestModal(false); setAISuggestions(null) }
+
+  const handleAddSelected = async () => {
+    if (aiAdding) return
+    setAiAdding(true)
+    try {
+      // Build name->id map from existing categories
+      const categoryNameToId = {}
+      categories.forEach((c) => { categoryNameToId[c.name.toLowerCase()] = c.id })
+
+      // Create selected new categories sequentially
+      const selectedCats = (aiSuggestions?.categories || []).filter((_, i) => selectedCategories[i])
+      for (const cat of selectedCats) {
+        if (!categoryNameToId[cat.name.toLowerCase()]) {
+          try {
+            const res = await inventoryApi.createCategory({ name: cat.name, description: cat.description || '' })
+            categoryNameToId[cat.name.toLowerCase()] = res.data.id
+          } catch (err) {
+            console.error(`Failed to create category "${cat.name}":`, err)
+          }
+        }
+      }
+
+      // Create selected items in parallel
+      const selectedItms = (aiSuggestions?.items || []).filter((_, i) => selectedItems[i])
+      await Promise.all(selectedItms.map((item) => {
+        const catId = categoryNameToId[(item.category_name || '').toLowerCase()]
+        if (!catId) return Promise.resolve(null)
+        return inventoryApi.createItem({
+          name: item.name, category: catId, unit: item.unit || 'PCS',
+          minimum_stock: item.minimum_stock || 5, unit_price: item.unit_price || 0,
+          current_stock: 0, sku: '', location: '', is_active: true,
+        }).catch((err) => { console.error(`Failed to create item "${item.name}":`, err); return null })
+      }))
+
+      queryClient.invalidateQueries({ queryKey: ['inventoryItems'] })
+      queryClient.invalidateQueries({ queryKey: ['inventoryCategories'] })
+      queryClient.invalidateQueries({ queryKey: ['inventoryDashboard'] })
+      closeAISuggestModal()
+    } catch (err) {
+      console.error('Bulk add failed:', err)
+    } finally {
+      setAiAdding(false)
+    }
+  }
 
   // ---- Submit Handlers ----
   const handleItemSubmit = (e) => {
@@ -215,7 +293,7 @@ export default function InventoryItemsPage() {
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Inventory Items</h1>
           <p className="text-sm sm:text-base text-gray-600">Manage items, categories & vendors</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
             onClick={() => setManageTab(manageTab === 'categories' ? null : 'categories')}
             className={`px-3 py-2 text-sm font-medium rounded-lg border transition-colors ${
@@ -231,6 +309,15 @@ export default function InventoryItemsPage() {
             }`}
           >
             Vendors
+          </button>
+          <button
+            onClick={openAISuggestModal}
+            className="px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 transition-colors flex items-center gap-1.5"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+            </svg>
+            AI Suggest
           </button>
           <button
             onClick={() => openItemModal()}
@@ -614,6 +701,195 @@ export default function InventoryItemsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ============ AI Suggest Modal ============ */}
+      {showAISuggestModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                </svg>
+                AI Inventory Suggestions
+              </h2>
+              <button onClick={closeAISuggestModal} className="text-gray-400 hover:text-gray-600">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Context input */}
+            <div className="mb-4">
+              <label className="block text-xs font-medium text-gray-500 uppercase mb-1">
+                What kind of items do you need? (optional)
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="e.g., science lab supplies, sports equipment, classroom furniture..."
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                  value={aiContext}
+                  onChange={(e) => setAIContext(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') aiSuggestMutation.mutate({ context: aiContext }) }}
+                />
+                <button
+                  onClick={() => aiSuggestMutation.mutate({ context: aiContext })}
+                  disabled={aiSuggestMutation.isPending}
+                  className="px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                >
+                  {aiSuggestMutation.isPending ? 'Generating...' : 'Generate'}
+                </button>
+              </div>
+            </div>
+
+            {/* Quick context chips */}
+            {!aiSuggestions && !aiSuggestMutation.isPending && (
+              <div className="mb-4 flex flex-wrap gap-2">
+                {['General School Essentials', 'Science Lab', 'Sports Equipment', 'Computer Lab', 'Library', 'Cleaning & Maintenance'].map((ctx) => (
+                  <button
+                    key={ctx}
+                    onClick={() => { setAIContext(ctx); aiSuggestMutation.mutate({ context: ctx }) }}
+                    className="px-3 py-1.5 text-xs font-medium text-purple-700 bg-purple-50 border border-purple-200 rounded-full hover:bg-purple-100 transition-colors"
+                  >
+                    {ctx}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Loading */}
+            {aiSuggestMutation.isPending && (
+              <div className="text-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto"></div>
+                <p className="text-gray-500 mt-3 text-sm">AI is generating suggestions...</p>
+              </div>
+            )}
+
+            {/* Error */}
+            {aiSuggestMutation.error && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                {errorMessage(aiSuggestMutation.error)}
+              </div>
+            )}
+
+            {/* Suggestions */}
+            {aiSuggestions && !aiSuggestMutation.isPending && (
+              <>
+                {aiSuggestions.is_fallback && (
+                  <div className="mb-3 p-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700">
+                    AI service unavailable. Showing default suggestions.
+                  </div>
+                )}
+
+                {/* Categories */}
+                {aiSuggestions.categories?.length > 0 && (
+                  <div className="mb-4">
+                    <h3 className="text-sm font-semibold text-gray-700 mb-2">
+                      Suggested Categories ({Object.values(selectedCategories).filter(Boolean).length}/{aiSuggestions.categories.length} selected)
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {aiSuggestions.categories.map((cat, idx) => (
+                        <label
+                          key={idx}
+                          className={`flex items-start gap-2 p-3 border rounded-lg cursor-pointer transition-colors ${
+                            selectedCategories[idx]
+                              ? 'border-purple-300 bg-purple-50'
+                              : 'border-gray-200 hover:bg-gray-50'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={!!selectedCategories[idx]}
+                            onChange={() => setSelectedCategories((prev) => ({ ...prev, [idx]: !prev[idx] }))}
+                            className="mt-0.5 rounded text-purple-600 focus:ring-purple-500"
+                          />
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">{cat.name}</p>
+                            {cat.description && <p className="text-xs text-gray-500">{cat.description}</p>}
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Items */}
+                {aiSuggestions.items?.length > 0 && (
+                  <div className="mb-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="text-sm font-semibold text-gray-700">
+                        Suggested Items ({Object.values(selectedItems).filter(Boolean).length}/{aiSuggestions.items.length} selected)
+                      </h3>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => { const all = {}; aiSuggestions.items.forEach((_, i) => { all[i] = true }); setSelectedItems(all) }}
+                          className="text-xs text-purple-600 hover:text-purple-800"
+                        >Select All</button>
+                        <button onClick={() => setSelectedItems({})} className="text-xs text-gray-500 hover:text-gray-700">Deselect All</button>
+                      </div>
+                    </div>
+                    <div className="space-y-1.5 max-h-60 overflow-y-auto">
+                      {aiSuggestions.items.map((item, idx) => (
+                        <label
+                          key={idx}
+                          className={`flex items-center gap-3 p-2.5 border rounded-lg cursor-pointer transition-colors ${
+                            selectedItems[idx]
+                              ? 'border-purple-300 bg-purple-50'
+                              : 'border-gray-200 hover:bg-gray-50'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={!!selectedItems[idx]}
+                            onChange={() => setSelectedItems((prev) => ({ ...prev, [idx]: !prev[idx] }))}
+                            className="rounded text-purple-600 focus:ring-purple-500"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900">{item.name}</p>
+                            <p className="text-xs text-gray-500">
+                              {item.category_name} | {item.unit} | Min: {item.minimum_stock} | Rs {Number(item.unit_price || 0).toLocaleString()}
+                            </p>
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* No suggestions */}
+                {(!aiSuggestions.categories?.length && !aiSuggestions.items?.length) && (
+                  <div className="text-center py-6 text-gray-500 text-sm">
+                    No new suggestions available. Your inventory already covers common items.
+                  </div>
+                )}
+
+                {/* Actions */}
+                <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+                  <button type="button" onClick={closeAISuggestModal}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleAddSelected}
+                    disabled={aiAdding || (
+                      Object.values(selectedCategories).filter(Boolean).length === 0 &&
+                      Object.values(selectedItems).filter(Boolean).length === 0
+                    )}
+                    className="px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {aiAdding ? 'Adding...' : `Add Selected (${
+                      Object.values(selectedCategories).filter(Boolean).length +
+                      Object.values(selectedItems).filter(Boolean).length
+                    })`}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

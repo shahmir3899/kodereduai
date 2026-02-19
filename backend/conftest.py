@@ -280,6 +280,16 @@ def seed_data(api_client, db):
         )
         staff_members.append(sm)
 
+    # ---------- Subjects (for LMS tests) ----------
+    from academics.models import Subject
+
+    subject_math = Subject.objects.create(
+        school=school_a, name=f"{SEED_PREFIX}Mathematics", code=f"{SEED_PREFIX}MATH",
+    )
+    subject_urdu = Subject.objects.create(
+        school=school_a, name=f"{SEED_PREFIX}Urdu", code=f"{SEED_PREFIX}URD",
+    )
+
     # ---------- Face Attendance Seed Data ----------
     from face_attendance.models import (
         FaceAttendanceSession, StudentFaceEmbedding, FaceDetectionResult,
@@ -362,6 +372,7 @@ def seed_data(api_client, db):
         'departments': [dept_academic, dept_admin],
         'designations': [desig_teacher, desig_clerk],
         'staff': staff_members,
+        'subjects': [subject_math, subject_urdu],
         'face_embeddings': face_embeddings,
         'face_session': face_session,
         'face_detections': face_detections,

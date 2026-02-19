@@ -6,7 +6,7 @@ from datetime import date
 
 from django.db.models import Sum, Count, Q, F
 from rest_framework import viewsets, status
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, permission_classes as perm_classes
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
@@ -376,3 +376,40 @@ class InventoryDashboardView(ModuleAccessMixin, APIView):
             'recent_transactions': recent_transactions,
             'low_stock_items': low_stock_items,
         })
+
+
+# =============================================================================
+# AI Inventory Suggestions
+# =============================================================================
+
+@api_view(['POST'])
+@perm_classes([IsAuthenticated, HasSchoolAccess])
+def ai_suggest_inventory(request):
+    """
+    Generate AI-powered inventory category and item suggestions.
+
+    POST /api/inventory/ai-suggest/
+    Body: { "context": "science lab supplies" }  (optional)
+    """
+    from .ai_service import suggest_inventory_items
+    from schools.models import School
+
+    school_id = ensure_tenant_school_id(request)
+    if not school_id:
+        return Response(
+            {'detail': 'No school associated with your account.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        school = School.objects.get(id=school_id)
+    except School.DoesNotExist:
+        return Response(
+            {'detail': 'School not found.'},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    user_context = request.data.get('context', '')
+    result = suggest_inventory_items(school, user_context)
+
+    return Response(result)

@@ -71,6 +71,7 @@ const DiscountsPage = lazy(() => import('./pages/finance/DiscountsPage'))
 const PaymentGatewayPage = lazy(() => import('./pages/finance/PaymentGatewayPage'))
 
 // LMS pages
+const CurriculumPage = lazy(() => import('./pages/lms/CurriculumPage'))
 const LessonPlansPage = lazy(() => import('./pages/lms/LessonPlansPage'))
 const AssignmentsPage = lazy(() => import('./pages/lms/AssignmentsPage'))
 const SubmissionReviewPage = lazy(() => import('./pages/lms/SubmissionReviewPage'))
@@ -318,6 +319,7 @@ function App() {
             <Route path="parent/payment-result" element={<ParentRoute><PaymentResultPage /></ParentRoute>} />
 
             {/* LMS routes */}
+            <Route path="academics/curriculum" element={<SchoolRoute><ModuleRoute module="lms"><CurriculumPage /></ModuleRoute></SchoolRoute>} />
             <Route path="academics/lesson-plans" element={<SchoolRoute><ModuleRoute module="lms"><LessonPlansPage /></ModuleRoute></SchoolRoute>} />
             <Route path="academics/assignments" element={<SchoolRoute><ModuleRoute module="lms"><AssignmentsPage /></ModuleRoute></SchoolRoute>} />
             <Route path="academics/assignments/:id/submissions" element={<SchoolRoute><ModuleRoute module="lms"><SubmissionReviewPage /></ModuleRoute></SchoolRoute>} />

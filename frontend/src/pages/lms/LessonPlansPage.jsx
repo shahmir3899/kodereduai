@@ -6,6 +6,7 @@ import ClassSelector from '../../components/ClassSelector'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useToast } from '../../components/Toast'
+import LessonPlanWizard from './LessonPlanWizard'
 
 const STATUS_BADGES = {
   DRAFT: 'bg-gray-100 text-gray-800',
@@ -36,6 +37,7 @@ export default function LessonPlansPage() {
   const [filterClass, setFilterClass] = useState('')
   const [filterSubject, setFilterSubject] = useState('')
   const [showModal, setShowModal] = useState(false)
+  const [showWizard, setShowWizard] = useState(false)
   const [editingPlan, setEditingPlan] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [form, setForm] = useState({ ...EMPTY_FORM })
@@ -51,15 +53,15 @@ export default function LessonPlansPage() {
 
   const { data: staffData } = useQuery({
     queryKey: ['hrStaff'],
-    queryFn: () => hrApi.getStaff({ role: 'TEACHER', page_size: 9999 }),
+    queryFn: () => hrApi.getStaff({ status: 'ACTIVE', page_size: 9999 }),
   })
 
   const { data: plansData, isLoading } = useQuery({
     queryKey: ['lessonPlans', filterClass, filterSubject, activeAcademicYear?.id],
     queryFn: () =>
       lmsApi.getLessonPlans({
-        ...(filterClass && { class_obj: filterClass }),
-        ...(filterSubject && { subject: filterSubject }),
+        ...(filterClass && { class_id: filterClass }),
+        ...(filterSubject && { subject_id: filterSubject }),
         ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
         page_size: 9999,
       }),
@@ -217,7 +219,7 @@ export default function LessonPlansPage() {
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Lesson Plans</h1>
           <p className="text-sm text-gray-600">Create and manage lesson plans for your classes</p>
         </div>
-        <button onClick={openAddModal} className="btn btn-primary">
+        <button onClick={() => setShowWizard(true)} className="btn btn-primary">
           Add Lesson Plan
         </button>
       </div>
@@ -300,6 +302,23 @@ export default function LessonPlansPage() {
                       {plan.status}
                     </span>
                   </div>
+                  {plan.planned_topics?.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {plan.planned_topics.slice(0, 3).map((topic) => (
+                        <span key={topic.id} className="px-1.5 py-0.5 bg-blue-50 text-blue-700 text-xs rounded">
+                          {topic.title}
+                        </span>
+                      ))}
+                      {plan.planned_topics.length > 3 && (
+                        <span className="text-xs text-gray-500">+{plan.planned_topics.length - 3} more</span>
+                      )}
+                    </div>
+                  )}
+                  {plan.ai_generated && (
+                    <span className="inline-block mt-1 px-1.5 py-0.5 bg-purple-50 text-purple-700 text-xs rounded">
+                      AI Generated
+                    </span>
+                  )}
                   <div className="flex gap-3 mt-2 pt-2 border-t border-gray-100">
                     <button
                       onClick={() => openEditModal(plan)}
@@ -360,8 +379,25 @@ export default function LessonPlansPage() {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {plans.map((plan) => (
                     <tr key={plan.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 text-sm font-medium text-gray-900 max-w-[200px] truncate">
-                        {plan.title}
+                      <td className="px-4 py-3 text-sm max-w-[250px]">
+                        <div className="font-medium text-gray-900 truncate">{plan.title}</div>
+                        {plan.planned_topics?.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {plan.planned_topics.slice(0, 2).map((topic) => (
+                              <span key={topic.id} className="px-1.5 py-0.5 bg-blue-50 text-blue-700 text-xs rounded">
+                                {topic.title}
+                              </span>
+                            ))}
+                            {plan.planned_topics.length > 2 && (
+                              <span className="text-xs text-gray-500">+{plan.planned_topics.length - 2}</span>
+                            )}
+                          </div>
+                        )}
+                        {plan.ai_generated && (
+                          <span className="inline-block mt-1 px-1.5 py-0.5 bg-purple-50 text-purple-700 text-xs rounded">
+                            AI
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-500">
                         {plan.class_name || '--'}
@@ -588,6 +624,17 @@ export default function LessonPlansPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Lesson Plan Wizard (for new plans) */}
+      {showWizard && (
+        <LessonPlanWizard
+          onClose={() => setShowWizard(false)}
+          onSuccess={() => {
+            setShowWizard(false)
+            queryClient.invalidateQueries({ queryKey: ['lessonPlans'] })
+          }}
+        />
       )}
 
       {/* Delete Confirmation Modal */}

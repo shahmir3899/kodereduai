@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Noto+Naskh+Arabic:wght@400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -61,4 +63,19 @@ body {
   .animate-spin {
     animation-duration: 1.5s;
   }
+}
+
+/* RTL support for Urdu/Arabic curriculum content */
+.font-rtl {
+  font-family: 'Noto Naskh Arabic', 'Jameel Noori Nastaleeq', serif;
+}
+
+[dir="rtl"] {
+  text-align: right;
+}
+
+input[dir="rtl"],
+textarea[dir="rtl"] {
+  text-align: right;
+  direction: rtl;
 }

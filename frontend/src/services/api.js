@@ -757,6 +757,32 @@ export const transportApi = {
 
 // LMS (Learning Management System) API
 export const lmsApi = {
+  // Curriculum Books
+  getBooks: (params) => api.get('/api/lms/books/', { params }),
+  getBook: (id) => api.get(`/api/lms/books/${id}/`),
+  createBook: (data) => api.post('/api/lms/books/', data),
+  updateBook: (id, data) => api.patch(`/api/lms/books/${id}/`, data),
+  deleteBook: (id) => api.delete(`/api/lms/books/${id}/`),
+  getBookTree: (id) => api.get(`/api/lms/books/${id}/tree/`),
+  bulkTOC: (id, data) => api.post(`/api/lms/books/${id}/bulk_toc/`, data),
+  getBooksForClassSubject: (params) => api.get('/api/lms/books/for_class_subject/', { params }),
+  getSyllabusProgress: (params) => api.get('/api/lms/books/syllabus_progress/', { params }),
+
+  // Chapters
+  getChapters: (params) => api.get('/api/lms/chapters/', { params }),
+  createChapter: (data) => api.post('/api/lms/chapters/', data),
+  updateChapter: (id, data) => api.patch(`/api/lms/chapters/${id}/`, data),
+  deleteChapter: (id) => api.delete(`/api/lms/chapters/${id}/`),
+
+  // Topics
+  getTopics: (params) => api.get('/api/lms/topics/', { params }),
+  createTopic: (data) => api.post('/api/lms/topics/', data),
+  updateTopic: (id, data) => api.patch(`/api/lms/topics/${id}/`, data),
+  deleteTopic: (id) => api.delete(`/api/lms/topics/${id}/`),
+
+  // AI Generation
+  generateLessonPlan: (data) => api.post('/api/lms/generate-lesson-plan/', data),
+
   // Lesson Plans
   getLessonPlans: (params) => api.get('/api/lms/lesson-plans/', { params }),
   getLessonPlan: (id) => api.get(`/api/lms/lesson-plans/${id}/`),
@@ -884,6 +910,9 @@ export const inventoryApi = {
   // Transactions
   getTransactions: (params) => api.get('/api/inventory/transactions/', { params }),
   createTransaction: (data) => api.post('/api/inventory/transactions/', data),
+
+  // AI Suggestions
+  aiSuggest: (data) => api.post('/api/inventory/ai-suggest/', data),
 
   // Search helpers
   searchUsers: (params) => api.get('/api/users/', { params }),

@@ -319,6 +319,7 @@ const SESSION_AWARE_PREFIXES = [
   '/academics/marks-entry',
   '/academics/results',
   '/academics/report-cards',
+  '/academics/curriculum',
   '/academics/lesson-plans',
   '/academics/assignments',
   '/academics/sessions',
@@ -389,6 +390,7 @@ export default function Layout() {
         ] : []),
         { name: 'AI Analytics', href: '/academics/analytics', icon: ChartIcon },
         ...(isModuleEnabled('lms') ? [
+          { name: 'Curriculum', href: '/academics/curriculum', icon: BookOpenIcon },
           { name: 'Lesson Plans', href: '/academics/lesson-plans', icon: BookOpenIcon },
           { name: 'Assignments', href: '/academics/assignments', icon: PencilIcon },
         ] : []),
