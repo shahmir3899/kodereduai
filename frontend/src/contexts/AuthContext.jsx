@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react'
+import { createContext, useContext, useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import api, { authApi } from '../services/api'
 
@@ -149,6 +149,31 @@ export function AuthProvider({ children }) {
     setUser(null)
     setActiveSchool(null)
   }, [queryClient])
+
+  // Auto-logout after 30 minutes of inactivity
+  const inactivityTimer = useRef(null)
+  const INACTIVITY_TIMEOUT = 30 * 60 * 1000 // 30 minutes
+
+  useEffect(() => {
+    if (!user) return
+
+    const resetTimer = () => {
+      if (inactivityTimer.current) clearTimeout(inactivityTimer.current)
+      inactivityTimer.current = setTimeout(() => {
+        logout()
+        window.location.href = '/login'
+      }, INACTIVITY_TIMEOUT)
+    }
+
+    const events = ['mousedown', 'keydown', 'touchstart', 'scroll']
+    events.forEach(e => window.addEventListener(e, resetTimer, { passive: true }))
+    resetTimer() // start the timer
+
+    return () => {
+      if (inactivityTimer.current) clearTimeout(inactivityTimer.current)
+      events.forEach(e => window.removeEventListener(e, resetTimer))
+    }
+  }, [user, logout])
 
   const switchSchool = async (schoolId) => {
     try {

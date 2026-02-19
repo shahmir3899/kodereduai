@@ -382,6 +382,7 @@ export const academicsApi = {
 
   // Timetable Entries
   getTimetableEntries: (params) => api.get('/api/academics/timetable-entries/', { params }),
+  getMyTimetable: (params) => api.get('/api/academics/timetable-entries/my_timetable/', { params }),
   getTimetableByClass: (classId) =>
     api.get('/api/academics/timetable-entries/by_class/', { params: { class_id: classId } }),
   bulkSaveTimetable: (data) => api.post('/api/academics/timetable-entries/bulk_save/', data),

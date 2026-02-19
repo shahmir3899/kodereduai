@@ -47,6 +47,16 @@ Reusable spinner component used as Suspense fallback.
 - **AttendanceRiskWidget.jsx** — At-risk students. Calls `GET /api/sessions/attendance-risk/`
 - **SchoolCompletionWidget.jsx** — School setup completion timeline with per-module progress. Calls `GET /api/schools/completion/` via `schoolsApi.getCompletion()`
 
+### Role-Specific Dashboards (src/pages/)
+The `/dashboard` route renders **DashboardRouter.jsx** which switches on `effectiveRole`:
+
+- **DashboardRouter.jsx** — Switcher component. Lazy-loads role-specific dashboards, eagerly imports DashboardPage (most common).
+- **DashboardPage.jsx** — SCHOOL_ADMIN / PRINCIPAL dashboard. Accepts `variant` prop; `variant="principal"` shows academic quick actions (Lesson Plans, Examinations, Class Management) instead of admin actions (Upload/Review Attendance, Manage Students).
+- **TeacherDashboard.jsx** (src/pages/teacher/) — Today's timetable (`academicsApi.getMyTimetable`), stats (attendance to mark, pending grading, active assignments), submissions needing grading, 6 quick actions, notifications.
+- **HRManagerDashboard.jsx** — 4 KPI cards from `hrApi.getDashboardStats()`, 6 quick actions linking to /hr sub-pages, notifications.
+- **AccountantDashboard.jsx** — 4 KPI cards from `financeApi.getAccountBalances()`, `getMonthlySummary()`, `getFinanceSummary()`, 5 quick actions linking to /finance, notifications.
+- **StaffDashboard.jsx** (src/pages/staff/) — Notifications list, conditional quick links (Profile, Notifications, Library if module enabled, Inventory if module enabled).
+
 ### Attendance Components
 - **ManualEntryTab** (in RegisterPage.jsx) — Manual attendance entry with class/date selectors and P/A toggle grid. Tab within RegisterPage at `/attendance/register?tab=manual`. Calls `attendanceApi.getMyAttendanceClasses()`, `studentsApi.getStudents()`, `attendanceApi.getRecords()`, `attendanceApi.bulkEntryAttendance()`. Visible to Admin, Principal, Teacher only. Follows MarksEntryPage.jsx spreadsheet-style entry pattern.
 

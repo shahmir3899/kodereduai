@@ -8,14 +8,8 @@ export default function LoginPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  const { login, isAuthenticated, isSuperAdmin } = useAuth()
+  const { login } = useAuth()
   const navigate = useNavigate()
-
-  // Redirect if already logged in
-  if (isAuthenticated) {
-    navigate(isSuperAdmin ? '/admin' : '/dashboard', { replace: true })
-    return null
-  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()

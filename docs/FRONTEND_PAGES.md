@@ -22,9 +22,21 @@ All pages lazy-loaded via React.lazy() with Suspense fallback.
 | /register | RegisterPage.jsx | User registration | POST /api/auth/register/ |
 
 ## Main Dashboard & Core
+
+The `/dashboard` route uses **DashboardRouter.jsx** to render a role-specific dashboard:
+
+| Role | Component | Description |
+|------|-----------|-------------|
+| SCHOOL_ADMIN | DashboardPage.jsx | Admin dashboard with attendance stats, finance overview, SchoolCompletionWidget |
+| PRINCIPAL | DashboardPage.jsx (variant="principal") | Same as admin but quick actions show Lesson Plans, Examinations, Class Management |
+| TEACHER | TeacherDashboard.jsx | Daily command center: today's timetable, grading queue, assignments, quick actions |
+| HR_MANAGER | HRManagerDashboard.jsx | HR KPIs (staff count, leave, attendance), quick links to /hr |
+| ACCOUNTANT | AccountantDashboard.jsx | Finance KPIs (balances, fees, collection rate), quick links to /finance |
+| STAFF | StaffDashboard.jsx | Minimal: notifications + conditional quick links (profile, library, inventory) |
+
 | Route | Component | Description | API Calls |
 |-------|-----------|-------------|-----------|
-| /dashboard | DashboardPage.jsx | Staff/admin main dashboard with stats, SchoolCompletionWidget | Multiple summary endpoints, GET /api/schools/completion/ |
+| /dashboard | DashboardRouter.jsx → role-specific | See above | Varies by role |
 | /profile | ProfilePage.jsx | User profile edit | GET/PATCH /api/auth/me/ |
 | /settings | SettingsPage.jsx | School settings | GET/PUT /api/schools/current/ |
 | /notifications | NotificationsPage.jsx | Notification center | GET /api/notifications/my/ |

@@ -135,6 +135,7 @@ class StudentEnrollment(models.Model):
         verbose_name_plural = 'Student Enrollments'
         indexes = [
             models.Index(fields=['school', 'academic_year', 'class_obj']),
+            models.Index(fields=['academic_year', 'is_active', 'student']),
         ]
         constraints = [
             models.UniqueConstraint(

@@ -10,7 +10,7 @@ import LoadingSpinner from './components/LoadingSpinner'
 import LoginPage from './pages/LoginPage'
 
 // Lazy-loaded pages
-const DashboardPage = lazy(() => import('./pages/DashboardPage'))
+const DashboardRouter = lazy(() => import('./pages/DashboardRouter'))
 const CaptureReviewPage = lazy(() => import('./pages/CaptureReviewPage'))
 const RegisterPage = lazy(() => import('./pages/RegisterPage'))
 const StudentsPage = lazy(() => import('./pages/StudentsPage'))
@@ -243,7 +243,7 @@ function App() {
           >
             <Route index element={<RootRedirect />} />
             <Route path="profile" element={<ProfilePage />} />
-            <Route path="dashboard" element={<SchoolRoute><DashboardPage /></SchoolRoute>} />
+            <Route path="dashboard" element={<SchoolRoute><DashboardRouter /></SchoolRoute>} />
 
             {/* Attendance — consolidated into 2 pages */}
             <Route path="attendance" element={<SchoolRoute><ModuleRoute module="attendance"><CaptureReviewPage /></ModuleRoute></SchoolRoute>} />

@@ -151,29 +151,21 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
 
         academic_year = self.request.query_params.get('academic_year')
         if academic_year:
-            from academic_sessions.models import StudentEnrollment
             from django.db.models import Subquery, OuterRef
-            # Check if school uses enrollments at all (any year)
-            sid = active_school_id or school_id
-            school_has_enrollments = sid and StudentEnrollment.objects.filter(
-                school_id=sid,
-            ).exists()
-            if school_has_enrollments:
-                # Filter to students enrolled in the selected year
-                enrolled_ids = StudentEnrollment.objects.filter(
-                    academic_year_id=academic_year,
-                    is_active=True,
-                ).values_list('student_id', flat=True)
-                queryset = queryset.filter(id__in=enrolled_ids)
-
-                # Annotate with enrollment roll_number for this session
-                enrollment_roll = StudentEnrollment.objects.filter(
-                    student_id=OuterRef('pk'),
-                    academic_year_id=academic_year,
-                ).values('roll_number')[:1]
-                queryset = queryset.annotate(
-                    _enrollment_roll_number=Subquery(enrollment_roll),
-                )
+            # Use a JOIN to filter enrolled students (much faster than IN subquery)
+            queryset = queryset.filter(
+                enrollments__academic_year_id=academic_year,
+                enrollments__is_active=True,
+            )
+            # Annotate with enrollment roll_number for this session
+            from academic_sessions.models import StudentEnrollment
+            enrollment_roll = StudentEnrollment.objects.filter(
+                student_id=OuterRef('pk'),
+                academic_year_id=academic_year,
+            ).values('roll_number')[:1]
+            queryset = queryset.annotate(
+                _enrollment_roll_number=Subquery(enrollment_roll),
+            )
 
         return queryset.order_by('class_obj__grade_level', 'class_obj__name', 'roll_number')
 

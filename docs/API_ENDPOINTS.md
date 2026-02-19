@@ -199,6 +199,7 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | GET | /api/academics/timetable-entries/by_class/ | class_id |
 | GET | /api/academics/timetable-entries/quality_score/ | |
 | GET | /api/academics/timetable-entries/teacher_conflicts/ | |
+| GET | /api/academics/timetable-entries/my_timetable/ | Teacher's own entries. Params: day (MON/TUE/etc), academic_year |
 | POST | /api/academics/ai-chat/ | Academics AI chat |
 | GET | /api/academics/analytics/ | |
 

@@ -55,7 +55,7 @@ class AcademicYearViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         qs = super().get_queryset().select_related('school').annotate(
             terms_count=Count('terms', filter=Q(terms__is_active=True)),
             enrollment_count=Count('enrollments', filter=Q(enrollments__is_active=True)),
-        )
+        ).order_by('-start_date')
         is_active = self.request.query_params.get('is_active')
         if is_active is not None:
             qs = qs.filter(is_active=is_active.lower() == 'true')

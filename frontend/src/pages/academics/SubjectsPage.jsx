@@ -127,6 +127,22 @@ export default function SubjectsPage() {
   // Set of existing subject codes for quick-add checks
   const existingCodes = useMemo(() => new Set(subjects.map(s => (s.code || '').toUpperCase())), [subjects])
 
+  // Matrix data: transform flat assignments into rows (classes) × columns (subjects)
+  const matrixData = useMemo(() => {
+    if (assignments.length === 0) return { classRows: [], subjectCols: [], lookup: new Map() }
+    const classMap = new Map()
+    const subjectMap = new Map()
+    const lookup = new Map()
+    for (const a of assignments) {
+      if (!classMap.has(a.class_obj)) classMap.set(a.class_obj, { id: a.class_obj, name: a.class_name })
+      if (!subjectMap.has(a.subject)) subjectMap.set(a.subject, { id: a.subject, code: a.subject_code, name: a.subject_name })
+      lookup.set(`${a.class_obj}-${a.subject}`, a)
+    }
+    const classRows = [...classMap.values()].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
+    const subjectCols = [...subjectMap.values()].sort((a, b) => a.code.localeCompare(b.code))
+    return { classRows, subjectCols, lookup }
+  }, [assignments])
+
   // Collapsible sections for gap analysis
   const [expandedGap, setExpandedGap] = useState({ red: true, orange: true, yellow: true, blue: true })
 
@@ -252,6 +268,15 @@ export default function SubjectsPage() {
     setEditAssignId(a.id); setAssignErrors({}); setShowAssignModal(true)
   }
   const closeAssignModal = () => { setShowAssignModal(false); setEditAssignId(null); setAssignForm(EMPTY_ASSIGNMENT); setAssignErrors({}) }
+
+  // Matrix helpers: pre-fill modal for a specific class + subject cell
+  const openCreateAssignFor = (classId, subjectId) => {
+    setAssignForm({ class_obj: classId, subjects: [subjectId], teacher: '', subjectPeriods: { [subjectId]: 1 } })
+    setEditAssignId(null); setAssignErrors({}); setShowAssignModal(true)
+  }
+  const matrixCellClass = (a) =>
+    a ? (a.teacher_name ? 'bg-green-50 hover:bg-green-100' : 'bg-yellow-50 hover:bg-yellow-100')
+      : 'bg-gray-50 hover:bg-gray-100'
 
   const handleAssignSubmit = async (e) => {
     e.preventDefault()
@@ -587,35 +612,49 @@ export default function SubjectsPage() {
             </div>
           ) : (
             <>
-              {/* Desktop Table */}
-              <div className="hidden md:block overflow-x-auto">
-                <table className="min-w-full bg-white rounded-xl shadow-sm border border-gray-200">
+              {/* Desktop Matrix Grid */}
+              <div className="hidden md:block overflow-x-auto rounded-xl shadow-sm border border-gray-200">
+                <table className="min-w-full border-collapse bg-white">
                   <thead>
-                    <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
-                      <th className="px-4 py-3 text-left">Class</th>
-                      <th className="px-4 py-3 text-left">Subject</th>
-                      <th className="px-4 py-3 text-left">Teacher</th>
-                      <th className="px-4 py-3 text-center">Periods/Week</th>
-                      <th className="px-4 py-3 text-right">Actions</th>
+                    <tr className="bg-gray-50">
+                      <th className="sticky left-0 z-10 bg-gray-50 px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase border-b border-r border-gray-200 min-w-[120px]">
+                        Class
+                      </th>
+                      {matrixData.subjectCols.map(subj => (
+                        <th key={subj.id} className="px-2 py-2.5 text-center text-xs font-semibold text-gray-500 uppercase border-b border-gray-200 whitespace-nowrap min-w-[90px]" title={subj.name}>
+                          {subj.code}
+                        </th>
+                      ))}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {assignments.map(a => (
-                      <tr key={a.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-2 text-sm font-medium text-gray-900">{a.class_name}</td>
-                        <td className="px-4 py-2 text-sm">
-                          <span className="inline-block px-1.5 py-0.5 bg-primary-50 text-primary-700 rounded text-xs font-mono mr-1">{a.subject_code}</span>
-                          {a.subject_name}
+                  <tbody>
+                    {matrixData.classRows.map(cls => (
+                      <tr key={cls.id} className="border-b border-gray-100">
+                        <td className="sticky left-0 z-10 bg-white px-3 py-2 text-sm font-medium text-gray-900 border-r border-gray-200 whitespace-nowrap">
+                          {cls.name}
                         </td>
-                        <td className="px-4 py-2 text-sm text-gray-600">{a.teacher_name || <span className="text-gray-400 italic">Unassigned</span>}</td>
-                        <td className="px-4 py-2 text-sm text-center">{a.periods_per_week}</td>
-                        <td className="px-4 py-2 text-right">
-                          <button onClick={() => openEditAssign(a)} className="text-xs text-primary-600 hover:underline mr-2">Edit</button>
-                          <button
-                            onClick={() => { if (confirm('Remove this assignment?')) deleteAssignMut.mutate(a.id) }}
-                            className="text-xs text-red-600 hover:underline"
-                          >Remove</button>
-                        </td>
+                        {matrixData.subjectCols.map(subj => {
+                          const a = matrixData.lookup.get(`${cls.id}-${subj.id}`)
+                          return (
+                            <td
+                              key={subj.id}
+                              onClick={() => a ? openEditAssign(a) : openCreateAssignFor(cls.id, subj.id)}
+                              className={`px-2 py-2 text-center cursor-pointer transition-colors border-r border-gray-100 last:border-r-0 ${matrixCellClass(a)}`}
+                              title={a ? `${subj.name} — ${a.teacher_name || 'No teacher'} (${a.periods_per_week}/wk)` : `Assign ${subj.name} to ${cls.name}`}
+                            >
+                              {a ? (
+                                <div className="text-xs leading-tight">
+                                  <span className={`font-medium ${a.teacher_name ? 'text-gray-800' : 'text-yellow-700 italic'}`}>
+                                    {a.teacher_name ? a.teacher_name.split(' ')[0] : 'No teacher'}
+                                  </span>
+                                  <span className="text-gray-400 ml-0.5">({a.periods_per_week})</span>
+                                </div>
+                              ) : (
+                                <span className="text-gray-300 text-xs">—</span>
+                              )}
+                            </td>
+                          )
+                        })}
                       </tr>
                     ))}
                   </tbody>

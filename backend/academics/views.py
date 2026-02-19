@@ -561,6 +561,26 @@ class TimetableEntryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
             'entries': serializer.data,
         })
 
+    @action(detail=False, methods=['get'])
+    def my_timetable(self, request):
+        """Return timetable entries for the logged-in teacher, optionally filtered by day."""
+        from hr.models import StaffMember
+
+        school_id = _resolve_school_id(request)
+        try:
+            staff = StaffMember.objects.get(user=request.user, school_id=school_id)
+        except StaffMember.DoesNotExist:
+            return Response([])
+
+        queryset = self.get_queryset().filter(teacher=staff)
+        day = request.query_params.get('day')
+        if day:
+            queryset = queryset.filter(day=day.upper())
+        queryset = queryset.order_by('slot__order')
+
+        serializer = TimetableEntrySerializer(queryset, many=True)
+        return Response(serializer.data)
+
     @action(detail=False, methods=['post'])
     def bulk_save(self, request):
         """
