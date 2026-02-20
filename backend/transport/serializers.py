@@ -7,6 +7,7 @@ from .models import (
     TransportRoute, TransportStop, TransportVehicle,
     TransportAssignment, TransportAttendance,
     StudentJourney, LocationUpdate,
+    RouteJourney, RouteLocationUpdate,
 )
 
 
@@ -20,6 +21,7 @@ class TransportRouteReadSerializer(serializers.ModelSerializer):
     stops_count = serializers.IntegerField(read_only=True, default=0)
     vehicles_count = serializers.IntegerField(read_only=True, default=0)
     students_count = serializers.IntegerField(read_only=True, default=0)
+    total_capacity = serializers.IntegerField(read_only=True, default=0)
 
     class Meta:
         model = TransportRoute
@@ -27,9 +29,11 @@ class TransportRouteReadSerializer(serializers.ModelSerializer):
             'id', 'school', 'school_name',
             'name', 'description',
             'start_location', 'end_location',
+            'start_latitude', 'start_longitude',
+            'end_latitude', 'end_longitude',
             'distance_km', 'estimated_duration_minutes',
             'is_active',
-            'stops_count', 'vehicles_count', 'students_count',
+            'stops_count', 'vehicles_count', 'students_count', 'total_capacity',
             'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
@@ -43,6 +47,8 @@ class TransportRouteCreateSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'description',
             'start_location', 'end_location',
+            'start_latitude', 'start_longitude',
+            'end_latitude', 'end_longitude',
             'distance_km', 'estimated_duration_minutes',
             'is_active',
         ]
@@ -77,13 +83,16 @@ class TransportStopSerializer(serializers.ModelSerializer):
 # =============================================================================
 
 class TransportVehicleReadSerializer(serializers.ModelSerializer):
-    """Read serializer with nested route name."""
+    """Read serializer with nested route name and driver user info."""
     school_name = serializers.CharField(source='school.name', read_only=True)
     route_name = serializers.CharField(
         source='assigned_route.name', read_only=True, default=None
     )
     vehicle_type_display = serializers.CharField(
         source='get_vehicle_type_display', read_only=True
+    )
+    driver_user_name = serializers.CharField(
+        source='driver_user.get_full_name', read_only=True, default=None
     )
 
     class Meta:
@@ -93,6 +102,7 @@ class TransportVehicleReadSerializer(serializers.ModelSerializer):
             'vehicle_number', 'vehicle_type', 'vehicle_type_display',
             'capacity', 'make_model',
             'driver_name', 'driver_phone', 'driver_license',
+            'driver_user', 'driver_user_name',
             'assigned_route', 'route_name',
             'is_active',
             'created_at', 'updated_at',
@@ -109,7 +119,7 @@ class TransportVehicleCreateSerializer(serializers.ModelSerializer):
             'id', 'vehicle_number', 'vehicle_type',
             'capacity', 'make_model',
             'driver_name', 'driver_phone', 'driver_license',
-            'assigned_route', 'is_active',
+            'driver_user', 'assigned_route', 'is_active',
         ]
         read_only_fields = ['id']
 
@@ -129,6 +139,8 @@ class TransportAssignmentReadSerializer(serializers.ModelSerializer):
     )
     route_name = serializers.CharField(source='route.name', read_only=True)
     stop_name = serializers.CharField(source='stop.name', read_only=True)
+    stop_pickup_time = serializers.TimeField(source='stop.pickup_time', read_only=True, default=None)
+    stop_drop_time = serializers.TimeField(source='stop.drop_time', read_only=True, default=None)
     vehicle_number = serializers.CharField(
         source='vehicle.vehicle_number', read_only=True, default=None
     )
@@ -146,7 +158,7 @@ class TransportAssignmentReadSerializer(serializers.ModelSerializer):
             'academic_year', 'academic_year_name',
             'student', 'student_name', 'student_roll_number', 'student_class_name',
             'route', 'route_name',
-            'stop', 'stop_name',
+            'stop', 'stop_name', 'stop_pickup_time', 'stop_drop_time',
             'vehicle', 'vehicle_number',
             'transport_type', 'transport_type_display',
             'is_active',
@@ -302,5 +314,69 @@ class JourneyUpdateSerializer(serializers.Serializer):
     latitude = serializers.DecimalField(max_digits=9, decimal_places=6)
     longitude = serializers.DecimalField(max_digits=9, decimal_places=6)
     accuracy = serializers.FloatField()
+    speed = serializers.FloatField(required=False, allow_null=True)
+    battery_level = serializers.IntegerField(required=False, allow_null=True)
+
+
+# =============================================================================
+# Route Journey Serializers (driver/vehicle-centric tracking)
+# =============================================================================
+
+class RouteLocationUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RouteLocationUpdate
+        fields = ['id', 'latitude', 'longitude', 'accuracy', 'speed', 'battery_level', 'source', 'timestamp']
+        read_only_fields = ['id', 'timestamp']
+
+
+class RouteJourneyReadSerializer(serializers.ModelSerializer):
+    route_name = serializers.CharField(source='route.name', read_only=True)
+    vehicle_number = serializers.CharField(source='vehicle.vehicle_number', read_only=True, default=None)
+    driver_name = serializers.SerializerMethodField()
+    journey_type_display = serializers.CharField(source='get_journey_type_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    tracking_mode_display = serializers.CharField(source='get_tracking_mode_display', read_only=True)
+    latest_location = serializers.SerializerMethodField()
+
+    class Meta:
+        model = RouteJourney
+        fields = [
+            'id', 'school', 'route', 'route_name',
+            'vehicle', 'vehicle_number',
+            'driver', 'driver_name',
+            'journey_type', 'journey_type_display',
+            'status', 'status_display',
+            'tracking_mode', 'tracking_mode_display',
+            'started_at', 'ended_at',
+            'start_latitude', 'start_longitude',
+            'end_latitude', 'end_longitude',
+            'latest_location',
+        ]
+
+    def get_driver_name(self, obj):
+        if obj.driver:
+            full = obj.driver.get_full_name()
+            return full if full.strip() else obj.driver.username
+        return None
+
+    def get_latest_location(self, obj):
+        loc = obj.locations.first()
+        if loc:
+            return RouteLocationUpdateSerializer(loc).data
+        return None
+
+
+class RouteJourneyCreateSerializer(serializers.Serializer):
+    journey_type = serializers.ChoiceField(choices=[('TO_SCHOOL', 'To School'), ('FROM_SCHOOL', 'From School')])
+    latitude = serializers.DecimalField(max_digits=9, decimal_places=6, required=False, allow_null=True)
+    longitude = serializers.DecimalField(max_digits=9, decimal_places=6, required=False, allow_null=True)
+    route_id = serializers.IntegerField(required=False, help_text='Required for admin manual mode')
+
+
+class RouteJourneyUpdateSerializer(serializers.Serializer):
+    journey_id = serializers.IntegerField()
+    latitude = serializers.DecimalField(max_digits=9, decimal_places=6)
+    longitude = serializers.DecimalField(max_digits=9, decimal_places=6)
+    accuracy = serializers.FloatField(default=0)
     speed = serializers.FloatField(required=False, allow_null=True)
     battery_level = serializers.IntegerField(required=False, allow_null=True)

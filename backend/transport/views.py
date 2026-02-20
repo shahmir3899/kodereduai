@@ -13,12 +13,14 @@ from rest_framework.views import APIView
 
 from core.permissions import (
     IsSchoolAdmin, IsSchoolAdminOrReadOnly, HasSchoolAccess, ModuleAccessMixin,
+    IsDriverOrAdmin, ADMIN_ROLES, get_effective_role,
 )
 from core.mixins import TenantQuerySetMixin, ensure_tenant_school_id
 
 from .models import (
     TransportRoute, TransportStop, TransportVehicle,
     TransportAssignment, TransportAttendance,
+    RouteJourney, RouteLocationUpdate,
 )
 from .serializers import (
     TransportRouteReadSerializer, TransportRouteCreateSerializer,
@@ -27,6 +29,8 @@ from .serializers import (
     TransportAssignmentReadSerializer, TransportAssignmentCreateSerializer,
     TransportAttendanceReadSerializer, TransportAttendanceCreateSerializer,
     BulkTransportAttendanceSerializer,
+    RouteJourneyReadSerializer, RouteJourneyCreateSerializer,
+    RouteJourneyUpdateSerializer, RouteLocationUpdateSerializer,
 )
 
 logger = logging.getLogger(__name__)
@@ -114,11 +118,12 @@ class TransportRouteViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
         return TransportRouteReadSerializer
 
     def get_queryset(self):
-        from django.db.models import Count, Q
+        from django.db.models import Count, Q, Sum
         queryset = TransportRoute.objects.select_related('school').annotate(
             stops_count=Count('stops'),
             vehicles_count=Count('vehicles', filter=Q(vehicles__is_active=True)),
             students_count=Count('transport_assignments', filter=Q(transport_assignments__is_active=True)),
+            total_capacity=Sum('vehicles__capacity', filter=Q(vehicles__is_active=True), default=0),
         )
 
         school_id = _resolve_school_id(self.request)
@@ -143,7 +148,77 @@ class TransportRouteViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
         if not school_id:
             from rest_framework.exceptions import ValidationError
             raise ValidationError({'detail': 'No school associated with your account.'})
-        serializer.save(school_id=school_id)
+        instance = serializer.save(school_id=school_id)
+        self._auto_distance(instance)
+
+    def perform_update(self, serializer):
+        instance = serializer.save()
+        self._auto_distance(instance)
+
+    def _auto_distance(self, route):
+        """Auto-calculate distance_km if not explicitly set and coords exist."""
+        if not route.distance_km and route.start_latitude and route.end_latitude:
+            from .utils import auto_calculate_route_distance
+            dist = auto_calculate_route_distance(route)
+            if dist:
+                route.distance_km = dist
+                route.save(update_fields=['distance_km'])
+
+    @action(detail=True, methods=['post'], url_path='duplicate',
+            permission_classes=[IsAuthenticated, IsSchoolAdmin, HasSchoolAccess])
+    def duplicate(self, request, pk=None):
+        """Clone a route and all its stops."""
+        original = self.get_object()
+        stops = TransportStop.objects.filter(route=original)
+
+        # Find a unique name
+        base_name = f"{original.name} (Copy)"
+        name = base_name
+        counter = 2
+        while TransportRoute.objects.filter(school=original.school, name=name).exists():
+            name = f"{base_name} {counter}"
+            counter += 1
+
+        new_route = TransportRoute.objects.create(
+            school=original.school,
+            name=name,
+            description=original.description,
+            start_location=original.start_location,
+            end_location=original.end_location,
+            start_latitude=original.start_latitude,
+            start_longitude=original.start_longitude,
+            end_latitude=original.end_latitude,
+            end_longitude=original.end_longitude,
+            distance_km=original.distance_km,
+            estimated_duration_minutes=original.estimated_duration_minutes,
+            is_active=original.is_active,
+        )
+
+        for stop in stops:
+            TransportStop.objects.create(
+                route=new_route,
+                name=stop.name,
+                address=stop.address,
+                latitude=stop.latitude,
+                longitude=stop.longitude,
+                stop_order=stop.stop_order,
+                pickup_time=stop.pickup_time,
+                drop_time=stop.drop_time,
+            )
+
+        # Re-fetch with annotations
+        from django.db.models import Count, Q, Sum
+        annotated = TransportRoute.objects.filter(id=new_route.id).annotate(
+            stops_count=Count('stops'),
+            vehicles_count=Count('vehicles', filter=Q(vehicles__is_active=True)),
+            students_count=Count('transport_assignments', filter=Q(transport_assignments__is_active=True)),
+            total_capacity=Sum('vehicles__capacity', filter=Q(vehicles__is_active=True), default=0),
+        ).first()
+
+        return Response(
+            TransportRouteReadSerializer(annotated).data,
+            status=status.HTTP_201_CREATED,
+        )
 
     @action(detail=True, methods=['get'], url_path='students')
     def students(self, request, pk=None):
@@ -217,11 +292,26 @@ class TransportVehicleViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
     """
     CRUD for transport vehicles.
     Admins get full access; other authenticated users get read-only access.
+    Includes a 'my' action for drivers to fetch their assigned vehicle.
     """
     required_module = 'transport'
     queryset = TransportVehicle.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
 
+    @action(detail=False, methods=['get'], url_path='my',
+            permission_classes=[IsAuthenticated])
+    def my_vehicle(self, request):
+        """GET /api/transport/vehicles/my/ — Driver fetches their assigned vehicle."""
+        vehicle = TransportVehicle.objects.filter(
+            driver_user=request.user, is_active=True,
+        ).select_related('school', 'assigned_route').first()
+
+        if not vehicle:
+            return Response(
+                {'detail': 'No vehicle assigned to your account.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(TransportVehicleReadSerializer(vehicle).data)
 
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):
@@ -313,6 +403,10 @@ class TransportAssignmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewset
         is_active = self.request.query_params.get('is_active')
         if is_active is not None:
             queryset = queryset.filter(is_active=is_active.lower() == 'true')
+
+        transport_type = self.request.query_params.get('transport_type')
+        if transport_type:
+            queryset = queryset.filter(transport_type=transport_type.upper())
 
         return queryset
 
@@ -722,3 +816,231 @@ class ActiveJourneysView(APIView):
             school_id=school_id, status='ACTIVE',
         )
         return Response(StudentJourneyReadSerializer(journeys, many=True).data)
+
+
+# =============================================================================
+# Route Journey Views (driver/vehicle-centric tracking)
+# =============================================================================
+
+class RouteJourneyStartView(APIView):
+    """
+    POST /api/transport/route-journey/start/
+    Driver starts a journey (auto-detects vehicle/route from driver_user),
+    or admin starts a manual journey by providing route_id.
+    """
+    permission_classes = [IsAuthenticated, IsDriverOrAdmin]
+
+    def post(self, request):
+        serializer = RouteJourneyCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        d = serializer.validated_data
+
+        role = get_effective_role(request)
+
+        if role == 'DRIVER':
+            # Driver mode: find vehicle assigned to this user
+            vehicle = TransportVehicle.objects.filter(
+                driver_user=request.user, is_active=True,
+            ).select_related('assigned_route', 'school').first()
+
+            if not vehicle:
+                return Response(
+                    {'error': 'No active vehicle assigned to your account.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if not vehicle.assigned_route:
+                return Response(
+                    {'error': 'Your vehicle is not assigned to any route.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            route = vehicle.assigned_route
+            school = vehicle.school
+            tracking_mode = 'DRIVER_APP'
+        elif role in ADMIN_ROLES:
+            # Admin manual mode: route_id required
+            route_id = d.get('route_id')
+            if not route_id:
+                return Response(
+                    {'error': 'route_id is required for admin-initiated journeys.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            school_id = _resolve_school_id(request)
+            try:
+                route = TransportRoute.objects.get(id=route_id, school_id=school_id)
+            except TransportRoute.DoesNotExist:
+                return Response({'error': 'Route not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+            vehicle = route.vehicles.filter(is_active=True).first()
+            school = route.school
+            tracking_mode = 'MANUAL'
+        else:
+            return Response({'error': 'Unauthorized role.'}, status=status.HTTP_403_FORBIDDEN)
+
+        # Check for existing active journey on this route
+        active = RouteJourney.objects.filter(route=route, status='ACTIVE').first()
+        if active:
+            return Response(
+                {'error': 'An active journey already exists for this route.', 'journey_id': active.id},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        journey = RouteJourney.objects.create(
+            school=school,
+            route=route,
+            vehicle=vehicle,
+            driver=request.user,
+            journey_type=d['journey_type'],
+            tracking_mode=tracking_mode,
+            start_latitude=d.get('latitude'),
+            start_longitude=d.get('longitude'),
+        )
+
+        # Trigger departure notification
+        try:
+            from .triggers import trigger_bus_departed
+            trigger_bus_departed(journey)
+        except Exception:
+            logger.exception("Failed to send bus departed notification")
+
+        return Response(RouteJourneyReadSerializer(journey).data, status=status.HTTP_201_CREATED)
+
+
+class RouteJourneyEndView(APIView):
+    """POST /api/transport/route-journey/end/ — Driver or admin ends a journey."""
+    permission_classes = [IsAuthenticated, IsDriverOrAdmin]
+
+    def post(self, request):
+        from django.utils import timezone
+
+        journey_id = request.data.get('journey_id')
+        if not journey_id:
+            return Response({'error': 'journey_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            journey = RouteJourney.objects.get(id=journey_id, status='ACTIVE')
+        except RouteJourney.DoesNotExist:
+            return Response({'error': 'Active journey not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Verify user is the driver or an admin
+        role = get_effective_role(request)
+        if role not in ADMIN_ROLES and journey.driver_id != request.user.id:
+            return Response({'error': 'Not authorized to end this journey.'}, status=status.HTTP_403_FORBIDDEN)
+
+        latitude = request.data.get('latitude')
+        longitude = request.data.get('longitude')
+
+        journey.status = 'COMPLETED'
+        journey.ended_at = timezone.now()
+        if latitude and longitude:
+            journey.end_latitude = latitude
+            journey.end_longitude = longitude
+        journey.save()
+
+        # Trigger completion notification
+        try:
+            from .triggers import trigger_journey_completed
+            trigger_journey_completed(journey)
+        except Exception:
+            logger.exception("Failed to send journey completed notification")
+
+        return Response(RouteJourneyReadSerializer(journey).data)
+
+
+class RouteJourneyUpdateView(APIView):
+    """POST /api/transport/route-journey/update/ — GPS ping every 30s from driver app."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = RouteJourneyUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        d = serializer.validated_data
+
+        try:
+            journey = RouteJourney.objects.get(id=d['journey_id'], status='ACTIVE')
+        except RouteJourney.DoesNotExist:
+            return Response({'error': 'Active journey not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        RouteLocationUpdate.objects.create(
+            journey=journey,
+            latitude=d['latitude'],
+            longitude=d['longitude'],
+            accuracy=d.get('accuracy', 0),
+            speed=d.get('speed'),
+            battery_level=d.get('battery_level'),
+            source='APP',
+        )
+
+        # Geofence check (runs async-safe, catches its own exceptions)
+        from .utils import check_geofence
+        check_geofence(journey, d['latitude'], d['longitude'])
+
+        return Response({'status': 'ok'})
+
+
+class RouteJourneyTrackView(APIView):
+    """
+    GET /api/transport/route-journey/track/<student_id>/
+    Parent tracks their child's bus by looking up the student's route assignment
+    and finding the active RouteJourney for that route.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, student_id):
+        # Find student's active transport assignment -> route
+        assignment = TransportAssignment.objects.filter(
+            student_id=student_id, is_active=True,
+        ).select_related('route').first()
+
+        if not assignment:
+            return Response({'active': False, 'message': 'No transport assignment found for this student.'})
+
+        # Find active RouteJourney for this route
+        journey = RouteJourney.objects.filter(
+            route=assignment.route, status='ACTIVE',
+        ).first()
+
+        if not journey:
+            return Response({'active': False, 'message': 'No active journey on this route.'})
+
+        locations = journey.locations.all()[:50]
+        return Response({
+            'active': True,
+            'journey': RouteJourneyReadSerializer(journey).data,
+            'locations': RouteLocationUpdateSerializer(locations, many=True).data,
+            'student_stop': {
+                'id': assignment.stop_id,
+                'name': assignment.stop.name if assignment.stop else None,
+            },
+        })
+
+
+class ActiveRouteJourneysView(APIView):
+    """GET /api/transport/route-journey/active/ — Admin: all active route journeys."""
+    permission_classes = [IsAuthenticated, IsSchoolAdmin]
+
+    def get(self, request):
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response({'detail': 'No school selected.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        journeys = RouteJourney.objects.filter(
+            school_id=school_id, status='ACTIVE',
+        ).select_related('route', 'vehicle', 'driver')
+        return Response(RouteJourneyReadSerializer(journeys, many=True).data)
+
+
+class RouteJourneyHistoryView(APIView):
+    """GET /api/transport/route-journey/history/ — Past route journeys, filterable by route_id."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        school_id = _resolve_school_id(request)
+        queryset = RouteJourney.objects.filter(school_id=school_id).order_by('-started_at')
+
+        route_id = request.query_params.get('route_id')
+        if route_id:
+            queryset = queryset.filter(route_id=route_id)
+
+        return Response(RouteJourneyReadSerializer(queryset[:20], many=True).data)

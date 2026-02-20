@@ -1,5 +1,117 @@
 import { http, HttpResponse } from 'msw'
 
+// ---- LMS Curriculum Mock Data ----
+
+const mockLmsBooks = [
+  {
+    id: 1, school: 1, school_name: 'Test School',
+    class_obj: 1, class_name: 'Class 1A',
+    subject: 1, subject_name: 'Mathematics',
+    title: 'Mathematics Textbook', author: 'Dr. Smith',
+    publisher: 'EduPress', edition: '3rd',
+    language: 'en', language_display: 'English', is_rtl: false,
+    description: '', is_active: true,
+    chapter_count: 2,
+    chapters: [
+      {
+        id: 1, book: 1, title: 'Algebra', chapter_number: 1,
+        description: '', is_active: true, topic_count: 2,
+        topics: [
+          { id: 1, chapter: 1, title: 'Variables', topic_number: 1, estimated_periods: 2, is_covered: true, is_active: true },
+          { id: 2, chapter: 1, title: 'Expressions', topic_number: 2, estimated_periods: 1, is_covered: false, is_active: true },
+        ],
+      },
+      {
+        id: 2, book: 1, title: 'Geometry', chapter_number: 2,
+        description: '', is_active: true, topic_count: 2,
+        topics: [
+          { id: 3, chapter: 2, title: 'Angles', topic_number: 1, estimated_periods: 3, is_covered: false, is_active: true },
+          { id: 4, chapter: 2, title: 'Triangles', topic_number: 2, estimated_periods: 2, is_covered: false, is_active: true },
+        ],
+      },
+    ],
+    created_at: '2026-01-01', updated_at: '2026-01-01',
+  },
+  {
+    id: 2, school: 1, school_name: 'Test School',
+    class_obj: 1, class_name: 'Class 1A',
+    subject: 2, subject_name: 'Urdu',
+    title: 'Urdu Textbook', author: 'Prof. Ahmed',
+    publisher: 'NatBooks', edition: '1st',
+    language: 'ur', language_display: 'Urdu', is_rtl: true,
+    description: '', is_active: true,
+    chapter_count: 1,
+    chapters: [
+      {
+        id: 3, book: 2, title: 'باب اول', chapter_number: 1,
+        description: '', is_active: true, topic_count: 1,
+        topics: [
+          { id: 5, chapter: 3, title: 'موضوع اول', topic_number: 1, estimated_periods: 2, is_covered: false, is_active: true },
+        ],
+      },
+    ],
+    created_at: '2026-01-01', updated_at: '2026-01-01',
+  },
+]
+
+const mockLessonPlans = [
+  {
+    id: 1, school: 1, school_name: 'Test School',
+    academic_year: 1, academic_year_name: '2025-2026',
+    class_obj: 1, class_name: 'Class 1A',
+    subject: 1, subject_name: 'Mathematics',
+    teacher: 1, teacher_name: 'Ali Khan',
+    title: 'Introduction to Algebra',
+    description: 'Learning basic algebra concepts',
+    objectives: 'Students will understand variables',
+    lesson_date: '2026-03-15', duration_minutes: 45,
+    materials_needed: 'Whiteboard, markers',
+    teaching_methods: 'Direct instruction',
+    planned_topics: [
+      { id: 1, chapter: 1, title: 'Variables', topic_number: 1, estimated_periods: 2, is_covered: true, is_active: true },
+    ],
+    display_text: 'Ch 1: Algebra\n  1.1 Variables',
+    content_mode: 'TOPICS', ai_generated: false,
+    status: 'DRAFT', status_display: 'Draft',
+    is_active: true, attachments: [],
+    created_at: '2026-03-01', updated_at: '2026-03-01',
+  },
+  {
+    id: 2, school: 1, school_name: 'Test School',
+    academic_year: 1, academic_year_name: '2025-2026',
+    class_obj: 1, class_name: 'Class 1A',
+    subject: 1, subject_name: 'Mathematics',
+    teacher: 1, teacher_name: 'Ali Khan',
+    title: 'Geometry Basics',
+    description: 'Learning angles and triangles',
+    objectives: 'Understand angle types',
+    lesson_date: '2026-03-20', duration_minutes: 40,
+    materials_needed: 'Protractor, ruler',
+    teaching_methods: 'Interactive demonstration',
+    planned_topics: [
+      { id: 3, chapter: 2, title: 'Angles', topic_number: 1, estimated_periods: 3, is_covered: true, is_active: true },
+    ],
+    display_text: 'Ch 2: Geometry\n  2.1 Angles',
+    content_mode: 'TOPICS', ai_generated: true,
+    status: 'PUBLISHED', status_display: 'Published',
+    is_active: true, attachments: [],
+    created_at: '2026-03-05', updated_at: '2026-03-05',
+  },
+]
+
+const mockSyllabusProgress = {
+  total_topics: 4, covered_topics: 1, percentage: 25,
+  books: [
+    { book_id: 1, book_title: 'Mathematics Textbook', total_topics: 4, covered_topics: 1, percentage: 25 },
+  ],
+}
+
+const mockSubjects = [
+  { id: 1, school: 1, name: 'Mathematics', code: 'MATH' },
+  { id: 2, school: 1, name: 'Urdu', code: 'URD' },
+  { id: 3, school: 1, name: 'English', code: 'ENG' },
+]
+
 // Default mock data
 const mockCategories = [
   { id: 1, school: 1, name: 'Science', description: 'Science books' },
@@ -22,6 +134,19 @@ const mockRoutes = [
     id: 1, name: 'Route North', start_location: 'School Gate',
     end_location: 'North Colony', distance_km: 12.5,
     estimated_duration_minutes: 45, is_active: true,
+    stops_count: 2, students_count: 2, vehicles_count: 1, total_capacity: 40,
+    start_latitude: '31.520400', start_longitude: '74.358700',
+    end_latitude: '31.540000', end_longitude: '74.370000',
+  },
+]
+
+const mockRouteJourneys = [
+  {
+    id: 1, route: 1, route_name: 'Route North', vehicle: 1, vehicle_number: 'LEA-1234',
+    driver: 10, driver_name: 'Driver Ali', journey_type: 'TO_SCHOOL', status: 'ACTIVE',
+    tracking_mode: 'DRIVER_APP', started_at: '2026-02-20T07:00:00Z', ended_at: null,
+    start_latitude: '31.520400', start_longitude: '74.358700',
+    latest_location: { latitude: 31.53, longitude: 74.365, speed: 25, timestamp: '2026-02-20T07:15:00Z' },
   },
 ]
 
@@ -106,6 +231,136 @@ const mockStaffWithAccounts = [
 ]
 
 export const handlers = [
+  // LMS Books
+  http.get('/api/lms/books/', ({ request }) => {
+    const url = new URL(request.url)
+    const classId = url.searchParams.get('class_id')
+    const subjectId = url.searchParams.get('subject_id')
+    let books = mockLmsBooks
+    if (classId) books = books.filter(b => b.class_obj === parseInt(classId))
+    if (subjectId) books = books.filter(b => b.subject === parseInt(subjectId))
+    return HttpResponse.json({ count: books.length, results: books })
+  }),
+  http.get('/api/lms/books/:id/', ({ params }) => {
+    const book = mockLmsBooks.find(b => b.id === parseInt(params.id))
+    return book ? HttpResponse.json(book) : new HttpResponse(null, { status: 404 })
+  }),
+  http.post('/api/lms/books/', async ({ request }) => {
+    const body = await request.json()
+    return HttpResponse.json({ id: 10, school: 1, chapter_count: 0, chapters: [], ...body }, { status: 201 })
+  }),
+  http.patch('/api/lms/books/:id/', async ({ request, params }) => {
+    const body = await request.json()
+    const book = mockLmsBooks.find(b => b.id === parseInt(params.id))
+    return HttpResponse.json({ ...book, ...body })
+  }),
+  http.delete('/api/lms/books/:id/', () => new HttpResponse(null, { status: 204 })),
+
+  http.get('/api/lms/books/:id/tree/', ({ params }) => {
+    const book = mockLmsBooks.find(b => b.id === parseInt(params.id))
+    return book ? HttpResponse.json(book) : new HttpResponse(null, { status: 404 })
+  }),
+  http.post('/api/lms/books/:id/bulk_toc/', async () =>
+    HttpResponse.json({ chapters_created: 2, topics_created: 3, errors: [] }, { status: 201 })
+  ),
+  http.get('/api/lms/books/for_class_subject/', ({ request }) => {
+    const url = new URL(request.url)
+    const classId = url.searchParams.get('class_id')
+    const subjectId = url.searchParams.get('subject_id')
+    const books = mockLmsBooks.filter(b =>
+      b.class_obj === parseInt(classId) && b.subject === parseInt(subjectId)
+    )
+    return HttpResponse.json(books)
+  }),
+  http.get('/api/lms/books/syllabus_progress/', () =>
+    HttpResponse.json(mockSyllabusProgress)
+  ),
+
+  // LMS Chapters
+  http.post('/api/lms/chapters/', async ({ request }) => {
+    const body = await request.json()
+    return HttpResponse.json({ id: 10, topics: [], topic_count: 0, ...body }, { status: 201 })
+  }),
+  http.patch('/api/lms/chapters/:id/', async ({ request }) => {
+    const body = await request.json()
+    return HttpResponse.json({ id: 1, ...body })
+  }),
+  http.delete('/api/lms/chapters/:id/', () => new HttpResponse(null, { status: 204 })),
+
+  // LMS Topics
+  http.post('/api/lms/topics/', async ({ request }) => {
+    const body = await request.json()
+    return HttpResponse.json({ id: 10, is_covered: false, ...body }, { status: 201 })
+  }),
+  http.patch('/api/lms/topics/:id/', async ({ request }) => {
+    const body = await request.json()
+    return HttpResponse.json({ id: 1, ...body })
+  }),
+  http.delete('/api/lms/topics/:id/', () => new HttpResponse(null, { status: 204 })),
+
+  // LMS Lesson Plans
+  http.get('/api/lms/lesson-plans/', ({ request }) => {
+    const url = new URL(request.url)
+    const classId = url.searchParams.get('class_id')
+    const subjectId = url.searchParams.get('subject_id')
+    let plans = mockLessonPlans
+    if (classId) plans = plans.filter(p => p.class_obj === parseInt(classId))
+    if (subjectId) plans = plans.filter(p => p.subject === parseInt(subjectId))
+    return HttpResponse.json({ count: plans.length, results: plans })
+  }),
+  http.get('/api/lms/lesson-plans/:id/', ({ params }) => {
+    const plan = mockLessonPlans.find(p => p.id === parseInt(params.id))
+    return plan ? HttpResponse.json(plan) : new HttpResponse(null, { status: 404 })
+  }),
+  http.post('/api/lms/lesson-plans/', async ({ request }) => {
+    const body = await request.json()
+    return HttpResponse.json({
+      id: 10, school: 1, school_name: 'Test School',
+      status: body.status || 'DRAFT', status_display: body.status === 'PUBLISHED' ? 'Published' : 'Draft',
+      planned_topics: [], display_text: '', content_mode: body.content_mode || 'FREEFORM',
+      ai_generated: body.ai_generated || false, attachments: [],
+      ...body,
+    }, { status: 201 })
+  }),
+  http.patch('/api/lms/lesson-plans/:id/', async ({ request, params }) => {
+    const body = await request.json()
+    const plan = mockLessonPlans.find(p => p.id === parseInt(params.id))
+    return HttpResponse.json({ ...plan, ...body })
+  }),
+  http.delete('/api/lms/lesson-plans/:id/', () => new HttpResponse(null, { status: 204 })),
+  http.post('/api/lms/lesson-plans/:id/publish/', ({ params }) => {
+    const plan = mockLessonPlans.find(p => p.id === parseInt(params.id))
+    return HttpResponse.json({ ...plan, status: 'PUBLISHED', status_display: 'Published' })
+  }),
+
+  // AI Generate
+  http.post('/api/lms/generate-lesson-plan/', async () =>
+    HttpResponse.json({
+      success: true,
+      title: 'AI Generated Lesson',
+      objectives: 'AI objectives',
+      description: 'AI description',
+      teaching_methods: 'AI methods',
+      materials_needed: 'AI materials',
+    })
+  ),
+
+  // Academics Subjects
+  http.get('/api/academics/subjects/', () =>
+    HttpResponse.json({ count: mockSubjects.length, results: mockSubjects })
+  ),
+
+  // Academics Class-Subjects
+  http.get('/api/academics/class-subjects/', ({ request }) => {
+    const url = new URL(request.url)
+    const classId = url.searchParams.get('class_id')
+    const subjects = classId ? [
+      { id: 1, class_obj: parseInt(classId), subject: 1, subject_name: 'Mathematics', teacher: 1, teacher_name: 'Ali Khan' },
+      { id: 2, class_obj: parseInt(classId), subject: 2, subject_name: 'Urdu', teacher: null, teacher_name: null },
+    ] : []
+    return HttpResponse.json({ count: subjects.length, results: subjects })
+  }),
+
   // Auth
   http.get('/api/auth/me/', () =>
     HttpResponse.json({ id: 1, username: 'admin', role: 'SCHOOL_ADMIN', schools: [{ id: 1, name: 'Test School', role: 'SCHOOL_ADMIN', is_default: true }] })
@@ -183,8 +438,41 @@ export const handlers = [
     new HttpResponse(null, { status: 204 })
   ),
 
+  // Transport route duplicate
+  http.post('/api/transport/routes/:id/duplicate/', ({ params }) => {
+    const route = mockRoutes.find(r => r.id === parseInt(params.id))
+    return HttpResponse.json({ ...route, id: 99, name: `${route?.name || 'Route'} (Copy)` }, { status: 201 })
+  }),
+
   // Transport vehicles
   http.get('/api/transport/vehicles/', () => HttpResponse.json([])),
+  http.get('/api/transport/vehicles/my/', () =>
+    HttpResponse.json({ id: 1, vehicle_number: 'LEA-1234', vehicle_type: 'BUS', capacity: 40, assigned_route: 1, assigned_route_name: 'Route North' })
+  ),
+
+  // Route Journey (driver/admin)
+  http.post('/api/transport/route-journey/start/', async ({ request }) => {
+    const body = await request.json()
+    return HttpResponse.json({
+      id: 10, route: 1, route_name: 'Route North', journey_type: body.journey_type,
+      status: 'ACTIVE', tracking_mode: 'DRIVER_APP', started_at: new Date().toISOString(),
+    }, { status: 201 })
+  }),
+  http.post('/api/transport/route-journey/end/', async () =>
+    HttpResponse.json({ id: 10, status: 'COMPLETED', ended_at: new Date().toISOString() })
+  ),
+  http.post('/api/transport/route-journey/update/', async () =>
+    HttpResponse.json({ id: 1, status: 'ok' })
+  ),
+  http.get('/api/transport/route-journey/active/', () =>
+    HttpResponse.json(mockRouteJourneys)
+  ),
+  http.get('/api/transport/route-journey/track/:studentId/', () =>
+    HttpResponse.json({ active: true, journey: mockRouteJourneys[0], locations: [] })
+  ),
+  http.get('/api/transport/route-journey/history/', () =>
+    HttpResponse.json({ count: 0, results: [] })
+  ),
 
   // Transport assignments
   http.get('/api/transport/assignments/', () =>

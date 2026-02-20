@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
+import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useFeeData } from './useFeeData'
 import FeeFilters, { MONTHS } from './FeeFilters'
 import FeeSummaryCards, { ClassBreakdown, PendingStudents } from './FeeSummaryCards'
@@ -9,11 +10,13 @@ import BulkActionsBar from './BulkActionsBar'
 import {
   PaymentModal, GenerateModal, FeeStructureModal,
   IncomeModal, StudentFeeModal, DeleteConfirmModal,
+  CreateSingleFeeModal,
 } from './FeeModals'
 import { exportFeePDF } from './feeExport'
 
 export default function FeeCollectionPage() {
   const { user, activeSchool, isStaffMember } = useAuth()
+  const { activeAcademicYear } = useAcademicYear()
   const canWrite = !isStaffMember
   const now = new Date()
 
@@ -34,6 +37,7 @@ export default function FeeCollectionPage() {
   const [showFeeStructureModal, setShowFeeStructureModal] = useState(false)
   const [showIncomeModal, setShowIncomeModal] = useState(false)
   const [showStudentFeeModal, setShowStudentFeeModal] = useState(null)
+  const [showCreateFeeModal, setShowCreateFeeModal] = useState(false)
 
   // Form state
   const [paymentForm, setPaymentForm] = useState({
@@ -56,7 +60,7 @@ export default function FeeCollectionPage() {
   const [deleteTarget, setDeleteTarget] = useState(null) // payment id or 'bulk'
 
   // Data hook
-  const data = useFeeData({ month, year, classFilter, statusFilter, feeTypeFilter })
+  const data = useFeeData({ month, year, classFilter, statusFilter, feeTypeFilter, academicYearId: activeAcademicYear?.id, feeStructureModalOpen: showFeeStructureModal })
 
   // --- Handlers ---
 
@@ -79,9 +83,10 @@ export default function FeeCollectionPage() {
     })
   }
 
-  const handleBulkFeeSubmit = (e, feeType = 'MONTHLY') => {
+  const handleBulkFeeSubmit = (e, feeType = 'MONTHLY', feesData) => {
     e.preventDefault()
-    const structures = Object.entries(data.bulkFees)
+    const fees = feesData || data.bulkFees
+    const structures = Object.entries(fees)
       .filter(([_, amount]) => amount && parseFloat(amount) > 0)
       .map(([classId, amount]) => ({ class_obj: parseInt(classId), monthly_amount: amount, fee_type: feeType }))
     if (structures.length === 0) return
@@ -177,11 +182,12 @@ export default function FeeCollectionPage() {
   }
 
   // Bulk update handler
-  const handleBulkUpdate = (amount, accountId) => {
+  const handleBulkUpdate = (amount, accountId, paymentMethod = 'CASH') => {
     const today = new Date().toISOString().split('T')[0]
     const records = [...selectedIds].map(id => ({
       id, amount_paid: amount,
       payment_date: today,
+      payment_method: paymentMethod,
       ...(accountId && { account: accountId }),
     }))
     data.bulkUpdateMutation.mutate({ records }, {
@@ -233,6 +239,12 @@ export default function FeeCollectionPage() {
                 className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 text-sm"
               >
                 Set Fee Structure
+              </button>
+              <button
+                onClick={() => setShowCreateFeeModal(true)}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+              >
+                Create Fee
               </button>
               <button
                 onClick={() => setShowGenerateModal(true)}
@@ -377,18 +389,19 @@ export default function FeeCollectionPage() {
         classFilter={classFilter} setClassFilter={setClassFilter}
         classList={data.classList}
         mutation={data.generateMutation}
-        existingCount={data.paymentList.length}
+        onetimeMutation={data.generateOnetimeMutation}
+        academicYearId={activeAcademicYear?.id}
       />
 
       <FeeStructureModal
         show={showFeeStructureModal}
         onClose={() => setShowFeeStructureModal(false)}
         classList={data.classList}
-        bulkFees={data.bulkFees} setBulkFees={data.setBulkFees}
         bulkEffectiveFrom={data.bulkEffectiveFrom} setBulkEffectiveFrom={data.setBulkEffectiveFrom}
         onSubmit={handleBulkFeeSubmit}
         mutation={data.bulkFeeMutation}
         feeTypeFilter={feeTypeFilter}
+        academicYearId={activeAcademicYear?.id}
       />
 
       <IncomeModal
@@ -421,6 +434,23 @@ export default function FeeCollectionPage() {
         onConfirm={handleDeleteConfirm}
         onCancel={() => setDeleteTarget(null)}
         isPending={data.deleteFeePaymentMutation.isPending || data.bulkDeleteMutation.isPending}
+      />
+
+      <CreateSingleFeeModal
+        show={showCreateFeeModal}
+        onClose={() => setShowCreateFeeModal(false)}
+        onSubmit={(payload) => {
+          data.createFeePaymentMutation.mutate(payload, {
+            onSuccess: () => setShowCreateFeeModal(false),
+          })
+        }}
+        isPending={data.createFeePaymentMutation.isPending}
+        error={data.createFeePaymentMutation.isError ? data.createFeePaymentMutation.error : null}
+        isSuccess={data.createFeePaymentMutation.isSuccess}
+        classList={data.classList}
+        activeSchoolId={activeSchool?.id}
+        academicYearId={activeAcademicYear?.id}
+        accountsList={data.accountsList}
       />
     </div>
   )

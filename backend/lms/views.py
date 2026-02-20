@@ -190,6 +190,10 @@ class ChapterViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
 
         return queryset
 
+    def perform_create(self, serializer):
+        """Chapter has no school FK — skip tenant injection."""
+        serializer.save()
+
 
 class TopicViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     """CRUD for topics within chapters."""
@@ -213,6 +217,10 @@ class TopicViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet
             queryset = queryset.filter(chapter__book_id=book_id)
 
         return queryset
+
+    def perform_create(self, serializer):
+        """Topic has no school FK — skip tenant injection."""
+        serializer.save()
 
 
 # ---------------------------------------------------------------------------

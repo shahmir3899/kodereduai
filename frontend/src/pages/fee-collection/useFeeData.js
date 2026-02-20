@@ -1,53 +1,48 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { financeApi, classesApi } from '../../services/api'
 import { useBackgroundTask } from '../../hooks/useBackgroundTask'
 
-export function useFeeData({ month, year, classFilter, statusFilter, feeTypeFilter }) {
+export function useFeeData({ month, year, classFilter, statusFilter, feeTypeFilter, academicYearId, feeStructureModalOpen }) {
   const queryClient = useQueryClient()
 
   // Bulk fee structure state
   const [bulkFees, setBulkFees] = useState({})
   const [bulkEffectiveFrom, setBulkEffectiveFrom] = useState(new Date().toISOString().split('T')[0])
 
-  // Queries
+  // Queries — reference data with longer staleTime (rarely changes mid-session)
   const { data: accountsData } = useQuery({
     queryKey: ['accounts'],
     queryFn: () => financeApi.getAccounts({ page_size: 9999 }),
+    staleTime: 5 * 60_000,
   })
 
   const { data: classes } = useQuery({
     queryKey: ['classes'],
     queryFn: () => classesApi.getClasses({ page_size: 9999 }),
+    staleTime: 5 * 60_000,
   })
 
   const { data: feeStructures } = useQuery({
-    queryKey: ['feeStructures', feeTypeFilter],
+    queryKey: ['feeStructures', academicYearId, feeTypeFilter],
     queryFn: () => financeApi.getFeeStructures({
       page_size: 9999,
+      ...(academicYearId && { academic_year: academicYearId }),
       ...(feeTypeFilter && { fee_type: feeTypeFilter }),
     }),
+    enabled: !!feeStructureModalOpen,
   })
 
   const isMonthlyType = !feeTypeFilter || feeTypeFilter === 'MONTHLY'
   const apiMonth = isMonthlyType ? month : 0
 
   const { data: payments, isLoading } = useQuery({
-    queryKey: ['feePayments', apiMonth, year, classFilter, statusFilter, feeTypeFilter],
+    queryKey: ['feePayments', apiMonth, year, feeTypeFilter, academicYearId],
     queryFn: () => financeApi.getFeePayments({
       month: apiMonth, year,
-      ...(classFilter && { class_id: classFilter }),
-      ...(statusFilter && { status: statusFilter }),
       ...(feeTypeFilter && { fee_type: feeTypeFilter }),
+      ...(academicYearId && { academic_year: academicYearId }),
       page_size: 9999,
-    }),
-  })
-
-  const { data: summary } = useQuery({
-    queryKey: ['monthlySummary', apiMonth, year, feeTypeFilter],
-    queryFn: () => financeApi.getMonthlySummary({
-      month: apiMonth, year,
-      ...(feeTypeFilter && { fee_type: feeTypeFilter }),
     }),
   })
 
@@ -85,7 +80,6 @@ export function useFeeData({ month, year, classFilter, statusFilter, feeTypeFilt
     mutationFn: ({ id, data }) => financeApi.recordPayment(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['feePayments'] })
-      queryClient.invalidateQueries({ queryKey: ['monthlySummary'] })
     },
   })
 
@@ -122,7 +116,6 @@ export function useFeeData({ month, year, classFilter, statusFilter, feeTypeFilt
     mutationFn: (id) => financeApi.deleteFeePayment(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['feePayments'] })
-      queryClient.invalidateQueries({ queryKey: ['monthlySummary'] })
     },
   })
 
@@ -130,7 +123,6 @@ export function useFeeData({ month, year, classFilter, statusFilter, feeTypeFilt
     mutationFn: (data) => financeApi.bulkUpdatePayments(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['feePayments'] })
-      queryClient.invalidateQueries({ queryKey: ['monthlySummary'] })
     },
   })
 
@@ -138,14 +130,77 @@ export function useFeeData({ month, year, classFilter, statusFilter, feeTypeFilt
     mutationFn: (data) => financeApi.bulkDeletePayments(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['feePayments'] })
-      queryClient.invalidateQueries({ queryKey: ['monthlySummary'] })
     },
   })
 
-  // Derived data
-  const summaryData = summary?.data
-  const paymentList = payments?.data?.results || payments?.data || []
+  const generateOnetimeMutation = useMutation({
+    mutationFn: (data) => financeApi.generateOnetimeFees(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['feePayments'] })
+    },
+  })
+
+  const createFeePaymentMutation = useMutation({
+    mutationFn: (data) => financeApi.createPayment(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['feePayments'] })
+    },
+  })
+
+  // All payments for the period (unfiltered)
+  const allPayments = payments?.data?.results || payments?.data || []
+
   const classList = classes?.data?.results || classes?.data || []
+
+  // Client-side filtering by class and status (instant, no API call)
+  const filteredPayments = useMemo(() => {
+    let list = allPayments
+    if (classFilter) {
+      const cid = Number(classFilter)
+      // Match by class_obj_id (preferred), fall back to class name
+      const selectedClass = classList.find(c => c.id === cid)
+      list = list.filter(p => {
+        if (p.class_obj_id != null) return p.class_obj_id === cid
+        return selectedClass && p.class_name === selectedClass.name
+      })
+    }
+    if (statusFilter) {
+      list = list.filter(p => p.status === statusFilter)
+    }
+    return list
+  }, [allPayments, classFilter, statusFilter, classList])
+
+  // Client-side summary from ALL payments (month-wide totals regardless of table filter)
+  const summaryData = useMemo(() => {
+    if (allPayments.length === 0) return null
+    const total_due = allPayments.reduce((s, p) => s + Number(p.amount_due), 0)
+    const total_collected = allPayments.reduce((s, p) => s + Number(p.amount_paid), 0)
+    let paid_count = 0, partial_count = 0, unpaid_count = 0, advance_count = 0
+    const classMap = {}
+    allPayments.forEach(p => {
+      if (p.status === 'PAID') paid_count++
+      else if (p.status === 'PARTIAL') partial_count++
+      else if (p.status === 'UNPAID') unpaid_count++
+      else if (p.status === 'ADVANCE') advance_count++
+      const key = p.class_obj_id || p.class_name || 'unknown'
+      if (!classMap[key]) {
+        classMap[key] = { class_id: p.class_obj_id, class_name: p.class_name || 'Unknown', total_due: 0, total_collected: 0, count: 0 }
+      }
+      classMap[key].total_due += Number(p.amount_due)
+      classMap[key].total_collected += Number(p.amount_paid)
+      classMap[key].count++
+    })
+    return {
+      month: apiMonth, year,
+      total_due, total_collected,
+      total_pending: Math.max(0, total_due - total_collected),
+      paid_count, partial_count, unpaid_count, advance_count,
+      by_class: Object.values(classMap).sort((a, b) => (a.class_name || '').localeCompare(b.class_name || '')),
+    }
+  }, [allPayments, apiMonth, year])
+
+  // Derived data
+  const paymentList = filteredPayments
   const incomeList = otherIncomeData?.data?.results || otherIncomeData?.data || []
   const accountsList = accountsData?.data?.results || accountsData?.data || []
 
@@ -174,5 +229,7 @@ export function useFeeData({ month, year, classFilter, statusFilter, feeTypeFilt
     deleteFeePaymentMutation,
     bulkUpdateMutation,
     bulkDeleteMutation,
+    generateOnetimeMutation,
+    createFeePaymentMutation,
   }
 }

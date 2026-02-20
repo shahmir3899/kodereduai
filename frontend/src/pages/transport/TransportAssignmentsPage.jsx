@@ -1,9 +1,9 @@
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { transportApi, studentsApi } from '../../services/api'
-import { useClasses } from '../../hooks/useClasses'
 import ClassSelector from '../../components/ClassSelector'
 import { useAuth } from '../../contexts/AuthContext'
+import { useAcademicYear } from '../../contexts/AcademicYearContext'
 
 const TRANSPORT_TYPES = [
   { value: 'PICKUP', label: 'Pickup Only' },
@@ -13,18 +13,21 @@ const TRANSPORT_TYPES = [
 
 export default function TransportAssignmentsPage() {
   const { user, activeSchool } = useAuth()
+  const { activeAcademicYear } = useAcademicYear()
   const queryClient = useQueryClient()
 
   const [filterRoute, setFilterRoute] = useState('')
   const [filterClass, setFilterClass] = useState('')
+  const [filterTransportType, setFilterTransportType] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [showBulkModal, setShowBulkModal] = useState(false)
   const [selectedStudents, setSelectedStudents] = useState([])
   const [studentSearch, setStudentSearch] = useState('')
+  const [modalClassFilter, setModalClassFilter] = useState('')
+  const [modalSelectedStudents, setModalSelectedStudents] = useState([])
 
   const [assignForm, setAssignForm] = useState({
-    student: '',
     route: '',
     stop: '',
     vehicle: '',
@@ -40,10 +43,11 @@ export default function TransportAssignmentsPage() {
 
   // Fetch assignments
   const { data: assignmentsData, isLoading, error } = useQuery({
-    queryKey: ['transport-assignments', filterRoute, filterClass],
+    queryKey: ['transport-assignments', filterRoute, filterClass, filterTransportType],
     queryFn: () => transportApi.getAssignments({
       ...(filterRoute && { route: filterRoute }),
       ...(filterClass && { class_id: filterClass }),
+      ...(filterTransportType && { transport_type: filterTransportType }),
       page_size: 9999,
     }),
   })
@@ -54,13 +58,13 @@ export default function TransportAssignmentsPage() {
     queryFn: () => transportApi.getRoutes({ page_size: 9999 }),
   })
 
-  // Fetch classes
-  const { classes } = useClasses()
-
-  // Fetch students for assignment
+  // Fetch students for assignment (session-aware)
   const { data: studentsData } = useQuery({
-    queryKey: ['students', activeSchool?.id],
-    queryFn: () => studentsApi.getStudents({ school_id: activeSchool?.id, page_size: 9999 }),
+    queryKey: ['students', activeSchool?.id, activeAcademicYear?.id],
+    queryFn: () => studentsApi.getStudents({
+      page_size: 9999,
+      ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
+    }),
     enabled: !!activeSchool?.id,
   })
 
@@ -103,7 +107,8 @@ export default function TransportAssignmentsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transport-assignments'] })
       queryClient.invalidateQueries({ queryKey: ['transport-dashboard'] })
-      closeBulkModal()
+      if (showBulkModal) closeBulkModal()
+      if (showModal) closeModal()
     },
   })
 
@@ -113,54 +118,92 @@ export default function TransportAssignmentsPage() {
   const stops = stopsData?.data?.results || stopsData?.data || []
   const vehicles = vehiclesData?.data?.results || vehiclesData?.data || []
 
-  // Filter students for search in modal
+  // Filter students for search + class filter in modal
   const filteredStudents = useMemo(() => {
-    if (!studentSearch.trim()) return allStudents.slice(0, 20)
-    const searchLower = studentSearch.toLowerCase()
-    return allStudents.filter((s) =>
-      s.name?.toLowerCase().includes(searchLower) ||
-      s.roll_number?.toLowerCase().includes(searchLower) ||
-      s.class_name?.toLowerCase().includes(searchLower)
-    ).slice(0, 20)
-  }, [allStudents, studentSearch])
+    let result = allStudents
+    // Filter by class
+    if (modalClassFilter) {
+      result = result.filter((s) => String(s.class_obj) === String(modalClassFilter))
+    }
+    // Filter by search
+    if (studentSearch.trim()) {
+      const searchLower = studentSearch.toLowerCase()
+      result = result.filter((s) =>
+        s.name?.toLowerCase().includes(searchLower) ||
+        s.roll_number?.toLowerCase().includes(searchLower) ||
+        s.class_name?.toLowerCase().includes(searchLower)
+      )
+    }
+    // Exclude already-selected students from list
+    const selectedIds = new Set(modalSelectedStudents.map((s) => s.id))
+    result = result.filter((s) => !selectedIds.has(s.id))
+    return result.slice(0, 30)
+  }, [allStudents, studentSearch, modalClassFilter, modalSelectedStudents])
 
   // Modal handlers
   const openAddModal = () => {
     setAssignForm({
-      student: '',
       route: '',
       stop: '',
       vehicle: '',
       transport_type: 'BOTH',
     })
     setStudentSearch('')
+    setModalClassFilter('')
+    setModalSelectedStudents([])
     setShowModal(true)
   }
 
   const closeModal = () => {
     setShowModal(false)
     setAssignForm({
-      student: '',
       route: '',
       stop: '',
       vehicle: '',
       transport_type: 'BOTH',
     })
     setStudentSearch('')
+    setModalClassFilter('')
+    setModalSelectedStudents([])
   }
 
   const handleSubmit = () => {
-    if (!assignForm.student || !assignForm.route) return
+    if (modalSelectedStudents.length === 0 || !assignForm.route) return
 
-    const payload = {
-      student: parseInt(assignForm.student),
-      route: parseInt(assignForm.route),
-      stop: assignForm.stop ? parseInt(assignForm.stop) : null,
-      vehicle: assignForm.vehicle ? parseInt(assignForm.vehicle) : null,
-      transport_type: assignForm.transport_type,
+    if (modalSelectedStudents.length === 1) {
+      createMutation.mutate({
+        student: modalSelectedStudents[0].id,
+        route: parseInt(assignForm.route),
+        stop: assignForm.stop ? parseInt(assignForm.stop) : null,
+        vehicle: assignForm.vehicle ? parseInt(assignForm.vehicle) : null,
+        transport_type: assignForm.transport_type,
+      })
+    } else {
+      bulkAssignMutation.mutate({
+        student_ids: modalSelectedStudents.map((s) => s.id),
+        route: parseInt(assignForm.route),
+        stop: assignForm.stop ? parseInt(assignForm.stop) : null,
+        vehicle: assignForm.vehicle ? parseInt(assignForm.vehicle) : null,
+        transport_type: assignForm.transport_type,
+      })
     }
+  }
 
-    createMutation.mutate(payload)
+  const addStudentToSelection = (student) => {
+    setModalSelectedStudents((prev) => [...prev, student])
+    setStudentSearch('')
+  }
+
+  const removeStudentFromSelection = (studentId) => {
+    setModalSelectedStudents((prev) => prev.filter((s) => s.id !== studentId))
+  }
+
+  const addAllFilteredStudents = () => {
+    setModalSelectedStudents((prev) => {
+      const existingIds = new Set(prev.map((s) => s.id))
+      const newStudents = filteredStudents.filter((s) => !existingIds.has(s.id))
+      return [...prev, ...newStudents]
+    })
   }
 
   // Bulk assign handlers
@@ -262,7 +305,7 @@ export default function TransportAssignmentsPage() {
 
       {/* Filters */}
       <div className="card mb-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
             <label className="label">Filter by Route</label>
             <select
@@ -283,8 +326,20 @@ export default function TransportAssignmentsPage() {
               value={filterClass}
               onChange={(e) => setFilterClass(e.target.value)}
               showAllOption
-              classes={classes}
             />
+          </div>
+          <div>
+            <label className="label">Filter by Transport Type</label>
+            <select
+              className="input"
+              value={filterTransportType}
+              onChange={(e) => setFilterTransportType(e.target.value)}
+            >
+              <option value="">All Types</option>
+              {TRANSPORT_TYPES.map((t) => (
+                <option key={t.value} value={t.value}>{t.label}</option>
+              ))}
+            </select>
           </div>
         </div>
       </div>
@@ -338,6 +393,7 @@ export default function TransportAssignmentsPage() {
                   <div className="mt-2 text-xs text-gray-500 space-y-0.5 ml-7">
                     <p>Route: {assignment.route_name || '--'}</p>
                     <p>Stop: {assignment.stop_name || '--'}</p>
+                    <p>Pickup: {assignment.stop_pickup_time || '--'} | Drop: {assignment.stop_drop_time || '--'}</p>
                     <p>Vehicle: {assignment.vehicle_number || '--'}</p>
                   </div>
                   <div className="flex gap-3 mt-2 pt-2 border-t border-gray-100 ml-7">
@@ -364,8 +420,10 @@ export default function TransportAssignmentsPage() {
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Class</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Route</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Stop</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pickup</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Drop</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vehicle</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Transport Type</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
                   </tr>
                 </thead>
@@ -384,6 +442,8 @@ export default function TransportAssignmentsPage() {
                       <td className="px-4 py-3 text-sm text-gray-500">{assignment.class_name || '--'}</td>
                       <td className="px-4 py-3 text-sm text-gray-500">{assignment.route_name || '--'}</td>
                       <td className="px-4 py-3 text-sm text-gray-500">{assignment.stop_name || '--'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-500">{assignment.stop_pickup_time || '--'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-500">{assignment.stop_drop_time || '--'}</td>
                       <td className="px-4 py-3 text-sm text-gray-500">{assignment.vehicle_number || '--'}</td>
                       <td className="px-4 py-3">
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${getTransportTypeBadge(assignment.transport_type)}`}>
@@ -414,49 +474,89 @@ export default function TransportAssignmentsPage() {
             <h2 className="text-xl font-bold text-gray-900 mb-4">New Transport Assignment</h2>
 
             <div className="space-y-4">
-              {/* Student Search & Select */}
+              {/* Student Selection */}
               <div>
-                <label className="label">Student *</label>
-                <input
-                  type="text"
-                  className="input mb-2"
-                  placeholder="Search students by name, roll no, or class..."
-                  value={studentSearch}
-                  onChange={(e) => setStudentSearch(e.target.value)}
-                />
-                {assignForm.student ? (
-                  <div className="flex items-center justify-between p-2 bg-primary-50 border border-primary-200 rounded-lg">
-                    <span className="text-sm font-medium text-primary-800">
-                      {allStudents.find((s) => s.id === parseInt(assignForm.student))?.name || 'Selected'}
-                      <span className="text-primary-600 ml-1">
-                        ({allStudents.find((s) => s.id === parseInt(assignForm.student))?.class_name || ''})
+                <label className="label">Students *</label>
+
+                {/* Selected students chips */}
+                {modalSelectedStudents.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {modalSelectedStudents.map((s) => (
+                      <span
+                        key={s.id}
+                        className="inline-flex items-center gap-1 px-2 py-1 bg-primary-50 border border-primary-200 rounded-full text-xs font-medium text-primary-800"
+                      >
+                        {s.name}
+                        <button
+                          onClick={() => removeStudentFromSelection(s.id)}
+                          className="text-primary-500 hover:text-primary-700"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
                       </span>
-                    </span>
+                    ))}
                     <button
-                      onClick={() => setAssignForm({ ...assignForm, student: '' })}
-                      className="text-xs text-primary-600 hover:text-primary-800 font-medium"
+                      onClick={() => setModalSelectedStudents([])}
+                      className="text-xs text-gray-500 hover:text-red-600 px-1"
                     >
-                      Change
+                      Clear all
                     </button>
                   </div>
-                ) : (
-                  <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-lg">
-                    {filteredStudents.length === 0 ? (
-                      <p className="text-sm text-gray-400 text-center py-3">No students found</p>
-                    ) : (
-                      filteredStudents.map((student) => (
+                )}
+
+                {/* Class filter + search */}
+                <div className="flex gap-2 mb-2">
+                  <ClassSelector
+                    className="input w-1/3 text-sm"
+                    value={modalClassFilter}
+                    onChange={(e) => setModalClassFilter(e.target.value)}
+                    showAllOption
+                    allOptionLabel="All Classes"
+                  />
+                  <input
+                    type="text"
+                    className="input flex-1 text-sm"
+                    placeholder="Search by name or roll no..."
+                    value={studentSearch}
+                    onChange={(e) => setStudentSearch(e.target.value)}
+                  />
+                </div>
+
+                {/* Student list */}
+                <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-lg">
+                  {filteredStudents.length === 0 ? (
+                    <p className="text-sm text-gray-400 text-center py-3">
+                      {allStudents.length === 0 ? 'No students in current session' : 'No matching students'}
+                    </p>
+                  ) : (
+                    <>
+                      {(modalClassFilter || studentSearch.trim()) && filteredStudents.length > 1 && (
+                        <button
+                          onClick={addAllFilteredStudents}
+                          className="w-full text-left px-3 py-1.5 bg-gray-50 hover:bg-gray-100 border-b border-gray-200 text-xs font-medium text-primary-600"
+                        >
+                          + Add all {filteredStudents.length} shown
+                        </button>
+                      )}
+                      {filteredStudents.map((student) => (
                         <button
                           key={student.id}
-                          onClick={() => setAssignForm({ ...assignForm, student: student.id.toString() })}
+                          onClick={() => addStudentToSelection(student)}
                           className="w-full text-left px-3 py-2 hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
                         >
                           <span className="text-sm font-medium text-gray-900">{student.name}</span>
                           <span className="text-xs text-gray-500 ml-2">Roll #{student.roll_number} | {student.class_name}</span>
                         </button>
-                      ))
-                    )}
-                  </div>
-                )}
+                      ))}
+                    </>
+                  )}
+                </div>
+                <p className="text-xs text-gray-400 mt-1">
+                  {modalSelectedStudents.length} student{modalSelectedStudents.length !== 1 ? 's' : ''} selected
+                  {activeAcademicYear && <span> | Session: {activeAcademicYear.name}</span>}
+                </p>
               </div>
 
               {/* Route */}
@@ -525,10 +625,11 @@ export default function TransportAssignmentsPage() {
               </div>
             </div>
 
-            {createMutation.isError && (
+            {(createMutation.isError || bulkAssignMutation.isError) && (
               <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
                 {createMutation.error?.response?.data?.detail ||
                   createMutation.error?.response?.data?.non_field_errors?.[0] ||
+                  bulkAssignMutation.error?.response?.data?.detail ||
                   'Failed to create assignment. Please try again.'}
               </div>
             )}
@@ -539,10 +640,12 @@ export default function TransportAssignmentsPage() {
               </button>
               <button
                 onClick={handleSubmit}
-                disabled={createMutation.isPending || !assignForm.student || !assignForm.route}
+                disabled={createMutation.isPending || bulkAssignMutation.isPending || modalSelectedStudents.length === 0 || !assignForm.route}
                 className="btn btn-primary"
               >
-                {createMutation.isPending ? 'Saving...' : 'Assign Student'}
+                {(createMutation.isPending || bulkAssignMutation.isPending)
+                  ? 'Saving...'
+                  : `Assign ${modalSelectedStudents.length || ''} Student${modalSelectedStudents.length !== 1 ? 's' : ''}`}
               </button>
             </div>
           </div>

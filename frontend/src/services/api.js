@@ -221,6 +221,8 @@ export const financeApi = {
   deleteFeePayment: (id) => api.delete(`/api/finance/fee-payments/${id}/`),
   bulkUpdatePayments: (data) => api.post('/api/finance/fee-payments/bulk_update/', data),
   bulkDeletePayments: (data) => api.post('/api/finance/fee-payments/bulk_delete/', data),
+  resolveFeeAmount: (params) => api.get('/api/finance/fee-payments/resolve_amount/', { params }),
+  previewGeneration: (params) => api.get('/api/finance/fee-payments/preview_generation/', { params }),
 
   // Other Income
   getOtherIncome: (params) => api.get('/api/finance/other-income/', { params }),
@@ -754,6 +756,20 @@ export const transportApi = {
   getAttendance: (params) => api.get('/api/transport/attendance/', { params }),
   markAttendance: (data) => api.post('/api/transport/attendance/', data),
   bulkMarkAttendance: (data) => api.post('/api/transport/attendance/bulk_mark/', data),
+
+  // Route duplication
+  duplicateRoute: (id) => api.post(`/api/transport/routes/${id}/duplicate/`),
+
+  // Driver vehicle
+  getMyVehicle: () => api.get('/api/transport/vehicles/my/'),
+
+  // Route Journey (driver/vehicle-centric tracking)
+  startRouteJourney: (data) => api.post('/api/transport/route-journey/start/', data),
+  endRouteJourney: (data) => api.post('/api/transport/route-journey/end/', data),
+  updateRouteJourney: (data) => api.post('/api/transport/route-journey/update/', data),
+  trackStudentBus: (studentId) => api.get(`/api/transport/route-journey/track/${studentId}/`),
+  getActiveRouteJourneys: () => api.get('/api/transport/route-journey/active/'),
+  getRouteJourneyHistory: (params) => api.get('/api/transport/route-journey/history/', { params }),
 }
 
 // LMS (Learning Management System) API

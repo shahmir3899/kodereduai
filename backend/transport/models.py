@@ -33,6 +33,10 @@ class TransportRoute(models.Model):
         max_length=200,
         help_text="Ending point of the route (usually the school)",
     )
+    start_latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    start_longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    end_latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    end_longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     distance_km = models.DecimalField(
         max_digits=6,
         decimal_places=2,
@@ -55,18 +59,6 @@ class TransportRoute(models.Model):
 
     def __str__(self):
         return f"{self.name} - {self.school.name}"
-
-    @property
-    def stops_count(self):
-        return self.stops.count()
-
-    @property
-    def vehicles_count(self):
-        return self.vehicles.filter(is_active=True).count()
-
-    @property
-    def students_count(self):
-        return self.transport_assignments.filter(is_active=True).count()
 
 
 class TransportStop(models.Model):
@@ -168,6 +160,14 @@ class TransportVehicle(models.Model):
         blank=True,
         default='',
         help_text="Driver's license number",
+    )
+    driver_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='driven_vehicles',
+        help_text="Linked driver user account (for app-based tracking)",
     )
     assigned_route = models.ForeignKey(
         TransportRoute,
@@ -374,6 +374,113 @@ class LocationUpdate(models.Model):
         ]
         verbose_name = 'Location Update'
         verbose_name_plural = 'Location Updates'
+
+    def __str__(self):
+        return f"({self.latitude}, {self.longitude}) at {self.timestamp}"
+
+
+class RouteJourney(models.Model):
+    """
+    Tracks a driver/vehicle journey along a route.
+    Supports multiple tracking modes: driver app GPS, admin manual updates,
+    or hardware GPS device integration.
+    """
+
+    JOURNEY_TYPE_CHOICES = [
+        ('TO_SCHOOL', 'To School'),
+        ('FROM_SCHOOL', 'From School'),
+    ]
+    STATUS_CHOICES = [
+        ('ACTIVE', 'Active'),
+        ('COMPLETED', 'Completed'),
+        ('CANCELLED', 'Cancelled'),
+    ]
+    TRACKING_MODE_CHOICES = [
+        ('DRIVER_APP', 'Driver App'),
+        ('MANUAL', 'Manual (Admin)'),
+        ('HARDWARE_GPS', 'Hardware GPS Device'),
+    ]
+
+    school = models.ForeignKey(
+        'schools.School',
+        on_delete=models.CASCADE,
+        related_name='route_journeys',
+    )
+    route = models.ForeignKey(
+        TransportRoute,
+        on_delete=models.CASCADE,
+        related_name='route_journeys',
+    )
+    vehicle = models.ForeignKey(
+        TransportVehicle,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='route_journeys',
+    )
+    driver = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='route_journeys',
+    )
+    journey_type = models.CharField(max_length=15, choices=JOURNEY_TYPE_CHOICES)
+    status = models.CharField(max_length=15, choices=STATUS_CHOICES, default='ACTIVE')
+    tracking_mode = models.CharField(max_length=15, choices=TRACKING_MODE_CHOICES, default='DRIVER_APP')
+    started_at = models.DateTimeField(auto_now_add=True)
+    ended_at = models.DateTimeField(null=True, blank=True)
+    start_latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    start_longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    end_latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    end_longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    notified_stops = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="List of stop IDs that have triggered geofence notifications this journey",
+    )
+
+    class Meta:
+        ordering = ['-started_at']
+        indexes = [
+            models.Index(fields=['school', 'status']),
+        ]
+        verbose_name = 'Route Journey'
+        verbose_name_plural = 'Route Journeys'
+
+    def __str__(self):
+        return f"{self.route.name} - {self.get_journey_type_display()} ({self.get_status_display()})"
+
+
+class RouteLocationUpdate(models.Model):
+    """Individual GPS ping during a route journey (driver/vehicle tracking)."""
+
+    SOURCE_CHOICES = [
+        ('APP', 'Driver App'),
+        ('HARDWARE', 'Hardware GPS'),
+        ('MANUAL', 'Manual Entry'),
+    ]
+
+    journey = models.ForeignKey(
+        RouteJourney,
+        on_delete=models.CASCADE,
+        related_name='locations',
+    )
+    latitude = models.DecimalField(max_digits=9, decimal_places=6)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6)
+    accuracy = models.FloatField(help_text='GPS accuracy in meters', default=0)
+    speed = models.FloatField(null=True, blank=True, help_text='Speed in m/s')
+    battery_level = models.IntegerField(null=True, blank=True, help_text='Battery % (0-100)')
+    source = models.CharField(max_length=10, choices=SOURCE_CHOICES, default='APP')
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-timestamp']
+        indexes = [
+            models.Index(fields=['journey', '-timestamp']),
+        ]
+        verbose_name = 'Route Location Update'
+        verbose_name_plural = 'Route Location Updates'
 
     def __str__(self):
         return f"({self.latitude}, {self.longitude}) at {self.timestamp}"

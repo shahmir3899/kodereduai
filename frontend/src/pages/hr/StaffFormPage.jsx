@@ -41,7 +41,7 @@ export default function StaffFormPage() {
   const staffRoleOptions = getAllowableRoles().filter(r => !['SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL'].includes(r))
 
   const ROLE_LABELS = {
-    HR_MANAGER: 'HR Manager', ACCOUNTANT: 'Accountant', TEACHER: 'Teacher', STAFF: 'Staff',
+    HR_MANAGER: 'HR Manager', ACCOUNTANT: 'Accountant', TEACHER: 'Teacher', STAFF: 'Staff', DRIVER: 'Driver',
   }
 
   // Fetch existing staff member for edit

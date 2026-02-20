@@ -5,6 +5,7 @@ import { transportApi } from './api';
 const BACKGROUND_LOCATION_TASK = 'background-location-task';
 
 let activeJourneyId: number | null = null;
+let journeyMode: 'student' | 'route' = 'student';
 
 /**
  * Define the background location task.
@@ -23,15 +24,21 @@ TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }: { data:
 
   const latest = locations[locations.length - 1];
 
+  const payload = {
+    journey_id: activeJourneyId,
+    latitude: latest.coords.latitude,
+    longitude: latest.coords.longitude,
+    accuracy: latest.coords.accuracy ?? 0,
+    speed: latest.coords.speed,
+    battery_level: null,
+  };
+
   try {
-    await transportApi.updateJourney({
-      journey_id: activeJourneyId,
-      latitude: latest.coords.latitude,
-      longitude: latest.coords.longitude,
-      accuracy: latest.coords.accuracy ?? 0,
-      speed: latest.coords.speed,
-      battery_level: null,
-    });
+    if (journeyMode === 'route') {
+      await transportApi.updateRouteJourney(payload);
+    } else {
+      await transportApi.updateJourney(payload);
+    }
   } catch (err) {
     console.error('Failed to send location update:', err);
   }
@@ -63,9 +70,17 @@ export async function getCurrentLocation(): Promise<Location.LocationObject | nu
 
 /**
  * Start background location updates for a journey.
+ * @param journeyId - The journey ID to send updates for.
+ * @param mode - 'student' for student self-tracking, 'route' for driver route journey.
+ * @param notificationBody - Custom notification body text.
  */
-export async function startBackgroundLocationUpdates(journeyId: number): Promise<void> {
+export async function startBackgroundLocationUpdates(
+  journeyId: number,
+  mode: 'student' | 'route' = 'student',
+  notificationBody?: string,
+): Promise<void> {
   activeJourneyId = journeyId;
+  journeyMode = mode;
 
   const isStarted = await Location.hasStartedLocationUpdatesAsync(BACKGROUND_LOCATION_TASK).catch(() => false);
   if (isStarted) return;
@@ -78,7 +93,9 @@ export async function startBackgroundLocationUpdates(journeyId: number): Promise
     showsBackgroundLocationIndicator: true,
     foregroundService: {
       notificationTitle: 'Journey in progress',
-      notificationBody: 'Your location is being shared with your parents.',
+      notificationBody: notificationBody || (mode === 'route'
+        ? 'Bus location is being tracked.'
+        : 'Your location is being shared with your parents.'),
       notificationColor: '#4F46E5',
     },
   });

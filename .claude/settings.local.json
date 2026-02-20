@@ -108,7 +108,18 @@
       "Bash(git -C d:/Personal/smart-attendance ls-files)",
       "Bash(test:*)",
       "WebFetch(domain:opencurriculum.org)",
-      "WebFetch(domain:www.magicschool.ai)"
+      "WebFetch(domain:www.magicschool.ai)",
+      "Bash(echo:*)",
+      "Bash(npx:*)",
+      "WebFetch(domain:www.safebus.io)",
+      "WebFetch(domain:www.trackschoolbus.com)",
+      "WebFetch(domain:www.buswhere.com)",
+      "WebFetch(domain:turtler.io)",
+      "WebFetch(domain:www.busboss.com)",
+      "Bash(\"/c/Program Files/PostgreSQL/18/bin/pg_dump\" --version)",
+      "Bash(\"/c/Program Files/PostgreSQL/18/bin/pg_restore\" --verbose --no-owner --no-privileges -d \"postgresql://postgres.irolonccjqhkutbbhebk:L5p6VgowLMazozri@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres\" \"D:/Personal/smart-attendance/supabase_backup.dump\")",
+      "Bash(\"/c/Program Files/PostgreSQL/18/bin/psql\" \"postgresql://postgres.irolonccjqhkutbbhebk:L5p6VgowLMazozri@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres\" -c \"SELECT tablename FROM pg_tables WHERE schemaname=''public'' ORDER BY tablename;\")",
+      "Bash(\"/c/Program Files/PostgreSQL/18/bin/psql\" \"postgresql://postgres.irolonccjqhkutbbhebk:L5p6VgowLMazozri@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres\" -c \"SELECT \\(SELECT count\\(*\\) FROM users_user\\) as users, \\(SELECT count\\(*\\) FROM schools_school\\) as schools, \\(SELECT count\\(*\\) FROM students_student\\) as students, \\(SELECT count\\(*\\) FROM finance_feepayment\\) as fee_payments;\")"
     ]
   }
 }

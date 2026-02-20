@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 @shared_task(bind=True, time_limit=600)
-def generate_monthly_fees_task(self, school_id, month, year, class_id=None):
+def generate_monthly_fees_task(self, school_id, month, year, class_id=None, academic_year_id=None):
     """Bulk generate fee payment records for a month/year."""
     from core.task_utils import update_task_progress, mark_task_success, mark_task_failed
 
@@ -101,6 +101,7 @@ def generate_monthly_fees_task(self, school_id, month, year, class_id=None):
                         previous_balance=prev_balance,
                         amount_due=prev_balance + monthly_fee,
                         amount_paid=0,
+                        academic_year_id=academic_year_id,
                     ))
                     created_count += 1
 

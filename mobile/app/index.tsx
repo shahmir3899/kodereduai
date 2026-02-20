@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import Spinner from '../components/ui/Spinner';
 
 export default function Index() {
-  const { loading, isAuthenticated, isParent, isStudent } = useAuth();
+  const { loading, isAuthenticated, isParent, isStudent, isDriver } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
@@ -16,14 +16,16 @@ export default function Index() {
     }
 
     // Route to role-appropriate dashboard
-    if (isParent) {
+    if (isDriver) {
+      router.replace('/(driver)/dashboard');
+    } else if (isParent) {
       router.replace('/(parent)/dashboard');
     } else if (isStudent) {
       router.replace('/(student)/dashboard');
     } else {
       router.replace('/(admin)/dashboard');
     }
-  }, [loading, isAuthenticated, isParent, isStudent, router]);
+  }, [loading, isAuthenticated, isParent, isStudent, isDriver, router]);
 
   return <Spinner fullScreen message="Loading..." />;
 }

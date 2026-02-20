@@ -1,29 +1,40 @@
 import { useState } from 'react'
 
+const BULK_PAYMENT_METHODS = [
+  { value: 'CASH', label: 'Cash' },
+  { value: 'BANK_TRANSFER', label: 'Bank Transfer' },
+  { value: 'ONLINE', label: 'Online' },
+  { value: 'OTHER', label: 'Other' },
+]
+
 export default function BulkActionsBar({ selectedCount, onBulkUpdate, onBulkDelete, isPending, accountsList }) {
   const [bulkAmount, setBulkAmount] = useState('')
   const [bulkAccount, setBulkAccount] = useState('')
+  const [bulkMethod, setBulkMethod] = useState('CASH')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [showUpdateConfirm, setShowUpdateConfirm] = useState(false)
 
   if (selectedCount === 0) return null
 
   const selectedAccountName = (accountsList || []).find(a => String(a.id) === String(bulkAccount))?.name
+  const selectedMethodLabel = BULK_PAYMENT_METHODS.find(m => m.value === bulkMethod)?.label || bulkMethod
 
   return (
-    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 bg-white rounded-xl shadow-2xl border border-gray-200 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-center gap-3 max-w-2xl">
+    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 bg-white rounded-xl shadow-2xl border border-gray-200 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-center gap-3 max-w-3xl">
       <span className="text-sm font-medium text-gray-700">{selectedCount} selected</span>
 
       <div className="w-px h-8 bg-gray-200 hidden sm:block" />
 
-      {/* Bulk set paid amount + account */}
+      {/* Bulk set paid amount + account + method */}
       <div className="flex items-center gap-2 flex-wrap">
         {showUpdateConfirm ? (
           <>
-            <span className="text-xs text-blue-700">Set {Number(bulkAmount).toLocaleString()} to {selectedAccountName}?</span>
+            <span className="text-xs text-blue-700">
+              Set {Number(bulkAmount).toLocaleString()} via {selectedMethodLabel} to {selectedAccountName}?
+            </span>
             <button
               onClick={() => {
-                onBulkUpdate(parseFloat(bulkAmount), parseInt(bulkAccount))
+                onBulkUpdate(parseFloat(bulkAmount), parseInt(bulkAccount), bulkMethod)
                 setBulkAmount('')
                 setShowUpdateConfirm(false)
               }}
@@ -54,9 +65,18 @@ export default function BulkActionsBar({ selectedCount, onBulkUpdate, onBulkDele
               onChange={(e) => setBulkAccount(e.target.value)}
               className="input-field text-sm w-36 py-1"
             >
-              <option value="">-- Select Account --</option>
+              <option value="">-- Account --</option>
               {(accountsList || []).filter(a => a.is_active).map(a => (
                 <option key={a.id} value={a.id}>{a.name}</option>
+              ))}
+            </select>
+            <select
+              value={bulkMethod}
+              onChange={(e) => setBulkMethod(e.target.value)}
+              className="input-field text-sm w-28 py-1"
+            >
+              {BULK_PAYMENT_METHODS.map(m => (
+                <option key={m.value} value={m.value}>{m.label}</option>
               ))}
             </select>
             <button

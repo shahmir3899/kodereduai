@@ -120,7 +120,7 @@ class FeeStructureViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Model
 
         academic_year = self.request.query_params.get('academic_year')
         if academic_year:
-            queryset = queryset.filter(academic_year_id=academic_year)
+            queryset = queryset.filter(Q(academic_year_id=academic_year) | Q(academic_year__isnull=True))
 
         class_id = self.request.query_params.get('class_id')
         if class_id:
@@ -269,11 +269,20 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         return queryset
 
     def perform_create(self, serializer):
+        from academic_sessions.models import AcademicYear
         school_id = self.request.data.get('school') or _resolve_school_id(self.request)
+        extra_kwargs = {'collected_by': self.request.user}
         if school_id:
-            serializer.save(school_id=school_id, collected_by=self.request.user)
-        else:
-            serializer.save(collected_by=self.request.user)
+            extra_kwargs['school_id'] = school_id
+        # Auto-resolve academic year if not provided
+        if not serializer.validated_data.get('academic_year'):
+            if school_id:
+                ay = AcademicYear.objects.filter(
+                    school_id=school_id, is_current=True, is_active=True
+                ).first()
+                if ay:
+                    extra_kwargs['academic_year'] = ay
+        serializer.save(**extra_kwargs)
 
     def perform_update(self, serializer):
         instance = serializer.instance
@@ -282,6 +291,93 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
             serializer.save(collected_by=self.request.user, payment_date=date.today())
         else:
             serializer.save(collected_by=self.request.user)
+
+    @action(detail=False, methods=['get'])
+    def resolve_amount(self, request):
+        """Resolve fee amount for a student + fee_type from FeeStructure."""
+        student_id = request.query_params.get('student_id')
+        fee_type = request.query_params.get('fee_type', 'MONTHLY')
+
+        if not student_id:
+            return Response({'detail': 'student_id is required.'}, status=400)
+
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response({'detail': 'No school context.'}, status=400)
+
+        try:
+            student = Student.objects.get(id=student_id, school_id=school_id)
+        except Student.DoesNotExist:
+            return Response({'detail': 'Student not found.'}, status=404)
+
+        amount = resolve_fee_amount(student, fee_type)
+        source = None
+        if amount is not None:
+            has_student_override = FeeStructure.objects.filter(
+                school_id=school_id, student=student, fee_type=fee_type, is_active=True
+            ).exists()
+            source = 'student_override' if has_student_override else 'class_default'
+
+        return Response({
+            'student_id': int(student_id),
+            'fee_type': fee_type,
+            'amount': str(amount) if amount is not None else None,
+            'source': source,
+        })
+
+    @action(detail=False, methods=['get'])
+    def preview_generation(self, request):
+        """Dry-run preview: shows what generate would create without making changes."""
+        fee_type = request.query_params.get('fee_type', 'MONTHLY')
+        class_id = request.query_params.get('class_id')
+        year_param = request.query_params.get('year', date.today().year)
+        month_param = request.query_params.get('month', date.today().month)
+
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response({'detail': 'No school context.'}, status=400)
+
+        students = Student.objects.filter(school_id=school_id, is_active=True)
+        if class_id:
+            students = students.filter(class_obj_id=class_id)
+        students = students.select_related('class_obj')
+
+        m = int(month_param) if fee_type == 'MONTHLY' else 0
+        existing_ids = set(
+            FeePayment.objects.filter(
+                school_id=school_id, month=m, year=int(year_param), fee_type=fee_type
+            ).values_list('student_id', flat=True)
+        )
+
+        will_create = []
+        already_exist = 0
+        no_fee_structure = 0
+        for s in students:
+            if s.id in existing_ids:
+                already_exist += 1
+                continue
+            amount = resolve_fee_amount(s, fee_type)
+            if amount is None:
+                no_fee_structure += 1
+            else:
+                will_create.append({
+                    'student_id': s.id,
+                    'student_name': s.name,
+                    'class_name': s.class_obj.name if s.class_obj else '',
+                    'amount': str(amount),
+                })
+
+        from decimal import Decimal as D
+        total = sum(D(s['amount']) for s in will_create)
+
+        return Response({
+            'will_create': len(will_create),
+            'already_exist': already_exist,
+            'no_fee_structure': no_fee_structure,
+            'total_amount': str(total),
+            'students': will_create[:50],
+            'has_more': len(will_create) > 50,
+        })
 
     @action(detail=False, methods=['post'])
     def generate_monthly(self, request):
@@ -292,6 +388,7 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         month = serializer.validated_data['month']
         year = serializer.validated_data['year']
         class_id = serializer.validated_data.get('class_id')
+        academic_year_id = serializer.validated_data.get('academic_year')
 
         school_id = _resolve_school_id(request)
         if not school_id:
@@ -311,6 +408,7 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
             'month': month,
             'year': year,
             'class_id': class_id,
+            'academic_year_id': academic_year_id,
         }
         title = f"Generating fees for {month}/{year}"
 
@@ -361,6 +459,16 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         if not school_id:
             return Response({'detail': 'No school associated.'}, status=400)
 
+        # Resolve academic year
+        from academic_sessions.models import AcademicYear
+        academic_year_id = serializer.validated_data.get('academic_year')
+        if not academic_year_id:
+            ay = AcademicYear.objects.filter(
+                school_id=school_id, is_current=True, is_active=True
+            ).first()
+            if ay:
+                academic_year_id = ay.id
+
         students = Student.objects.filter(
             id__in=student_ids, school_id=school_id, is_active=True
         ).select_related('class_obj')
@@ -389,6 +497,7 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
                     school_id=school_id, student=student,
                     fee_type=ft, month=m, year=year,
                     amount_due=amount, amount_paid=0,
+                    academic_year_id=academic_year_id,
                 )
                 created_count += 1
 
@@ -479,6 +588,10 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         payments = FeePayment.objects.filter(
             school_id=school_id, month=month, year=year
         )
+
+        academic_year = request.query_params.get('academic_year')
+        if academic_year:
+            payments = payments.filter(academic_year_id=academic_year)
 
         fee_type = request.query_params.get('fee_type')
         if fee_type:

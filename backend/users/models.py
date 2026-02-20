@@ -45,6 +45,7 @@ class User(AbstractUser):
         ACCOUNTANT = 'ACCOUNTANT', 'Accountant'
         TEACHER = 'TEACHER', 'Teacher'
         STAFF = 'STAFF', 'Staff'
+        DRIVER = 'DRIVER', 'Driver'
 
     # Role field
     role = models.CharField(
@@ -127,6 +128,11 @@ class User(AbstractUser):
     def is_accountant(self) -> bool:
         """Check if user is an Accountant."""
         return self.role == self.Role.ACCOUNTANT
+
+    @property
+    def is_driver(self) -> bool:
+        """Check if user is a Driver."""
+        return self.role == self.Role.DRIVER
 
     def can_access_school(self, school_id: int) -> bool:
         """Check if user can access a specific school's data."""

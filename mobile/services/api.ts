@@ -389,7 +389,11 @@ export const transportApi = {
     api.get('/api/transport/routes/', { params }),
   getVehicles: (params?: Record<string, unknown>) =>
     api.get('/api/transport/vehicles/', { params }),
-  // GPS Journey
+  getMyVehicle: () =>
+    api.get('/api/transport/vehicles/my/'),
+  getStops: (params?: Record<string, unknown>) =>
+    api.get('/api/transport/stops/', { params }),
+  // Student GPS Journey (existing)
   startJourney: (data: { journey_type: string; latitude: number; longitude: number }) =>
     api.post('/api/transport/journey/start/', data),
   endJourney: (data: { journey_id: number; latitude?: number; longitude?: number }) =>
@@ -402,6 +406,15 @@ export const transportApi = {
     api.get(`/api/transport/journey/history/${studentId}/`),
   getActiveJourneys: () =>
     api.get('/api/transport/journey/active/'),
+  // Route Journey (driver/admin)
+  startRouteJourney: (data: { journey_type: string; latitude?: number; longitude?: number; route_id?: number }) =>
+    api.post('/api/transport/route-journey/start/', data),
+  endRouteJourney: (data: { journey_id: number }) =>
+    api.post('/api/transport/route-journey/end/', data),
+  updateRouteJourney: (data: { journey_id: number; latitude: number; longitude: number; accuracy: number; speed?: number | null; battery_level?: number | null }) =>
+    api.post('/api/transport/route-journey/update/', data),
+  getActiveRouteJourneys: () =>
+    api.get('/api/transport/route-journey/active/'),
 };
 
 // ─── Library API ─────────────────────────────────────────────────────────────

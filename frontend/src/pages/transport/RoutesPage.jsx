@@ -1,13 +1,35 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { transportApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
+import LocationPickerMap from '../../components/LocationPickerMap'
+import RouteMapView from '../../components/RouteMapView'
+
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const R = 6371
+  const toRad = (v) => (v * Math.PI) / 180
+  const dLat = toRad(lat2 - lat1)
+  const dLon = toRad(lon2 - lon1)
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
+function CapacityBadge({ students, capacity }) {
+  if (!capacity) return <span className="text-gray-400">--</span>
+  const pct = capacity > 0 ? (students / capacity) * 100 : 0
+  const color = pct > 90 ? 'bg-red-100 text-red-800' : pct > 70 ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'
+  return <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${color}`}>{students}/{capacity}</span>
+}
 
 const emptyRouteForm = {
   name: '',
   description: '',
   start_location: '',
   end_location: '',
+  start_latitude: null,
+  start_longitude: null,
+  end_latitude: null,
+  end_longitude: null,
   distance_km: '',
   estimated_duration_minutes: '',
 }
@@ -15,6 +37,8 @@ const emptyRouteForm = {
 const emptyStopForm = {
   name: '',
   address: '',
+  latitude: null,
+  longitude: null,
   stop_order: '',
   pickup_time: '',
   drop_time: '',
@@ -75,6 +99,14 @@ export default function RoutesPage() {
     },
   })
 
+  const duplicateRouteMutation = useMutation({
+    mutationFn: (id) => transportApi.duplicateRoute(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['transport-routes'] })
+      queryClient.invalidateQueries({ queryKey: ['transport-dashboard'] })
+    },
+  })
+
   // Stop mutations
   const createStopMutation = useMutation({
     mutationFn: (data) => transportApi.createStop(data),
@@ -116,6 +148,10 @@ export default function RoutesPage() {
       description: route.description || '',
       start_location: route.start_location || '',
       end_location: route.end_location || '',
+      start_latitude: route.start_latitude ? parseFloat(route.start_latitude) : null,
+      start_longitude: route.start_longitude ? parseFloat(route.start_longitude) : null,
+      end_latitude: route.end_latitude ? parseFloat(route.end_latitude) : null,
+      end_longitude: route.end_longitude ? parseFloat(route.end_longitude) : null,
       distance_km: route.distance_km || '',
       estimated_duration_minutes: route.estimated_duration_minutes || '',
     })
@@ -161,6 +197,8 @@ export default function RoutesPage() {
     setStopForm({
       name: stop.name || '',
       address: stop.address || '',
+      latitude: stop.latitude ? parseFloat(stop.latitude) : null,
+      longitude: stop.longitude ? parseFloat(stop.longitude) : null,
       stop_order: stop.stop_order?.toString() || '',
       pickup_time: stop.pickup_time || '',
       drop_time: stop.drop_time || '',
@@ -252,14 +290,15 @@ export default function RoutesPage() {
                     <p className="text-xs text-gray-500 mt-1">
                       {route.start_location || 'Start'} → {route.end_location || 'End'}
                     </p>
-                    <div className="flex gap-4 mt-2 text-xs text-gray-500">
+                    <div className="flex flex-wrap gap-3 mt-2 text-xs text-gray-500">
                       {route.distance_km && <span>{route.distance_km} km</span>}
                       {route.estimated_duration_minutes && <span>{route.estimated_duration_minutes} min</span>}
-                      <span>{route.vehicles_count || 0} vehicles</span>
-                      <span>{route.students_count || 0} students</span>
+                      <span>{route.stops_count || 0} stops</span>
+                      <CapacityBadge students={route.students_count || 0} capacity={route.total_capacity} />
                     </div>
                     <div className="flex gap-3 mt-2 pt-2 border-t border-gray-100">
                       <button onClick={() => openEditRouteModal(route)} className="text-xs text-blue-600 font-medium">Edit</button>
+                      <button onClick={() => duplicateRouteMutation.mutate(route.id)} className="text-xs text-emerald-600 font-medium">Duplicate</button>
                       <button onClick={() => setDeleteConfirm(route)} className="text-xs text-red-600 font-medium">Delete</button>
                     </div>
                   </div>
@@ -273,6 +312,7 @@ export default function RoutesPage() {
                           + Add Stop
                         </button>
                       </div>
+                      {!stopsLoading && <RouteMapView route={route} stops={stops} />}
                       {stopsLoading ? (
                         <p className="text-xs text-gray-400 py-2">Loading stops...</p>
                       ) : stops.length === 0 ? (
@@ -312,8 +352,8 @@ export default function RoutesPage() {
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">End Location</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Distance</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Duration</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vehicles</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Students</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Stops</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Capacity</th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
                   </tr>
                 </thead>
@@ -326,8 +366,8 @@ export default function RoutesPage() {
                         <td className="px-4 py-3 text-sm text-gray-500">{route.end_location || '--'}</td>
                         <td className="px-4 py-3 text-sm text-gray-500">{route.distance_km ? `${route.distance_km} km` : '--'}</td>
                         <td className="px-4 py-3 text-sm text-gray-500">{route.estimated_duration_minutes ? `${route.estimated_duration_minutes} min` : '--'}</td>
-                        <td className="px-4 py-3 text-sm text-gray-500">{route.vehicles_count || 0}</td>
-                        <td className="px-4 py-3 text-sm text-gray-500">{route.students_count || 0}</td>
+                        <td className="px-4 py-3 text-sm text-gray-500">{route.stops_count || 0}</td>
+                        <td className="px-4 py-3"><CapacityBadge students={route.students_count || 0} capacity={route.total_capacity} /></td>
                         <td className="px-4 py-3 text-right">
                           <button
                             onClick={() => toggleExpand(route.id)}
@@ -340,6 +380,13 @@ export default function RoutesPage() {
                             className="text-sm text-blue-600 hover:text-blue-800 font-medium mr-3"
                           >
                             Edit
+                          </button>
+                          <button
+                            onClick={() => duplicateRouteMutation.mutate(route.id)}
+                            disabled={duplicateRouteMutation.isPending}
+                            className="text-sm text-emerald-600 hover:text-emerald-800 font-medium mr-3"
+                          >
+                            Duplicate
                           </button>
                           <button
                             onClick={() => setDeleteConfirm(route)}
@@ -364,6 +411,8 @@ export default function RoutesPage() {
                                   + Add Stop
                                 </button>
                               </div>
+
+                              {!stopsLoading && <RouteMapView route={route} stops={stops} />}
 
                               {stopsLoading ? (
                                 <div className="text-center py-4">
@@ -478,9 +527,74 @@ export default function RoutesPage() {
                 </div>
               </div>
 
+              {/* Start Point Map */}
+              <div>
+                <label className="label">Start Point on Map</label>
+                <p className="text-xs text-gray-400 mb-1">Click to set the start point</p>
+                <LocationPickerMap
+                  latitude={routeForm.start_latitude}
+                  longitude={routeForm.start_longitude}
+                  onChange={(lat, lng) => setRouteForm({ ...routeForm, start_latitude: lat, start_longitude: lng })}
+                  height="180px"
+                />
+                {routeForm.start_latitude && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    {routeForm.start_latitude}, {routeForm.start_longitude}
+                    <button
+                      type="button"
+                      onClick={() => setRouteForm({ ...routeForm, start_latitude: null, start_longitude: null })}
+                      className="ml-2 text-red-500 hover:text-red-700"
+                    >
+                      Clear
+                    </button>
+                  </p>
+                )}
+              </div>
+
+              {/* End Point Map */}
+              <div>
+                <label className="label">End Point on Map</label>
+                <p className="text-xs text-gray-400 mb-1">Click to set the end point</p>
+                <LocationPickerMap
+                  latitude={routeForm.end_latitude}
+                  longitude={routeForm.end_longitude}
+                  onChange={(lat, lng) => setRouteForm({ ...routeForm, end_latitude: lat, end_longitude: lng })}
+                  height="180px"
+                />
+                {routeForm.end_latitude && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    {routeForm.end_latitude}, {routeForm.end_longitude}
+                    <button
+                      type="button"
+                      onClick={() => setRouteForm({ ...routeForm, end_latitude: null, end_longitude: null })}
+                      className="ml-2 text-red-500 hover:text-red-700"
+                    >
+                      Clear
+                    </button>
+                  </p>
+                )}
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="label">Distance (km)</label>
+                  <label className="label">
+                    Distance (km)
+                    {routeForm.start_latitude && routeForm.end_latitude && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const dist = haversineKm(
+                            routeForm.start_latitude, routeForm.start_longitude,
+                            routeForm.end_latitude, routeForm.end_longitude
+                          )
+                          setRouteForm({ ...routeForm, distance_km: dist.toFixed(1) })
+                        }}
+                        className="ml-2 text-xs text-primary-600 hover:text-primary-800 font-normal"
+                      >
+                        Auto-calculate
+                      </button>
+                    )}
+                  </label>
                   <input
                     type="number"
                     step="0.1"
@@ -532,7 +646,7 @@ export default function RoutesPage() {
       {/* Stop Create/Edit Modal */}
       {showStopModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-md mx-4">
+          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
             <h2 className="text-xl font-bold text-gray-900 mb-4">
               {editingStop ? 'Edit Stop' : 'Add Stop'}
             </h2>
@@ -558,6 +672,30 @@ export default function RoutesPage() {
                   value={stopForm.address}
                   onChange={(e) => setStopForm({ ...stopForm, address: e.target.value })}
                 />
+              </div>
+
+              {/* Stop Location Map */}
+              <div>
+                <label className="label">Location on Map</label>
+                <p className="text-xs text-gray-400 mb-1">Click to set this stop's location</p>
+                <LocationPickerMap
+                  latitude={stopForm.latitude}
+                  longitude={stopForm.longitude}
+                  onChange={(lat, lng) => setStopForm({ ...stopForm, latitude: lat, longitude: lng })}
+                  height="180px"
+                />
+                {stopForm.latitude && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    {stopForm.latitude}, {stopForm.longitude}
+                    <button
+                      type="button"
+                      onClick={() => setStopForm({ ...stopForm, latitude: null, longitude: null })}
+                      className="ml-2 text-red-500 hover:text-red-700"
+                    >
+                      Clear
+                    </button>
+                  </p>
+                )}
               </div>
 
               <div>

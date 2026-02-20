@@ -71,6 +71,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    'core.db_retry_middleware.DatabaseRetryMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'corsheaders.middleware.CorsMiddleware',
@@ -108,8 +109,22 @@ WSGI_APPLICATION = 'config.wsgi.application'
 if os.getenv('DATABASE_URL'):
     import dj_database_url
     DATABASES = {
-        'default': dj_database_url.config(default=os.getenv('DATABASE_URL'))
+        'default': dj_database_url.config(
+            default=os.getenv('DATABASE_URL'),
+            conn_max_age=600,
+            conn_health_checks=True,
+            ssl_require=True,
+        )
     }
+    # Transaction pooler (port 6543) doesn't support server-side cursors
+    DATABASES['default']['DISABLE_SERVER_SIDE_CURSORS'] = True
+    # Keepalive settings to prevent connection drops
+    DATABASES['default'].setdefault('OPTIONS', {}).update({
+        'keepalives': 1,
+        'keepalives_idle': 30,
+        'keepalives_interval': 10,
+        'keepalives_count': 5,
+    })
 else:
     DATABASES = {
         'default': {

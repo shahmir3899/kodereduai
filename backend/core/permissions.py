@@ -11,15 +11,15 @@ ADMIN_ROLES = ('SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL')
 
 # Roles that are staff-level (non-admin). These get read-only access to
 # existing modules (finance, attendance) and are subject to sensitive-data filtering.
-STAFF_LEVEL_ROLES = ('STAFF', 'TEACHER', 'HR_MANAGER', 'ACCOUNTANT')
+STAFF_LEVEL_ROLES = ('STAFF', 'TEACHER', 'HR_MANAGER', 'ACCOUNTANT', 'DRIVER')
 PARENT_ROLES = ('PARENT',)
 STUDENT_ROLES = ('STUDENT',)
 
 # Which roles each role is allowed to create
 ROLE_HIERARCHY = {
-    'SUPER_ADMIN': ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL', 'HR_MANAGER', 'ACCOUNTANT', 'TEACHER', 'STAFF'],
-    'SCHOOL_ADMIN': ['PRINCIPAL', 'HR_MANAGER', 'ACCOUNTANT', 'TEACHER', 'STAFF'],
-    'PRINCIPAL': ['HR_MANAGER', 'ACCOUNTANT', 'TEACHER', 'STAFF'],
+    'SUPER_ADMIN': ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL', 'HR_MANAGER', 'ACCOUNTANT', 'TEACHER', 'STAFF', 'DRIVER'],
+    'SCHOOL_ADMIN': ['PRINCIPAL', 'HR_MANAGER', 'ACCOUNTANT', 'TEACHER', 'STAFF', 'DRIVER'],
+    'PRINCIPAL': ['HR_MANAGER', 'ACCOUNTANT', 'TEACHER', 'STAFF', 'DRIVER'],
 }
 
 
@@ -210,6 +210,17 @@ class CanManualAttendance(permissions.BasePermission):
             return False
         role = get_effective_role(request)
         return role in ADMIN_ROLES or role == 'TEACHER'
+
+
+class IsDriverOrAdmin(permissions.BasePermission):
+    """Allow drivers (for journey operations) or admins."""
+    message = "Only drivers or admins can perform this action."
+
+    def has_permission(self, request, view):
+        if not request.user.is_authenticated:
+            return False
+        role = get_effective_role(request)
+        return role in ADMIN_ROLES or role == 'DRIVER'
 
 
 class IsParent(permissions.BasePermission):

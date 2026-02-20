@@ -626,12 +626,19 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
         """Get daily attendance report."""
         date = request.query_params.get('date', timezone.now().date())
         school_id = request.query_params.get('school_id') or ensure_tenant_school_id(request) or request.user.school_id
+        academic_year = request.query_params.get('academic_year')
 
         if not school_id:
             return Response({'error': 'school_id is required'}, status=400)
 
-        # Get counts
-        total = Student.objects.filter(school_id=school_id, is_active=True).count()
+        # Get counts — session-aware when academic_year is provided
+        students_qs = Student.objects.filter(school_id=school_id, is_active=True)
+        if academic_year:
+            students_qs = students_qs.filter(
+                enrollments__academic_year_id=academic_year,
+                enrollments__is_active=True,
+            )
+        total = students_qs.count()
         records = AttendanceRecord.objects.filter(school_id=school_id, date=date)
 
         absent_records = records.filter(status=AttendanceRecord.AttendanceStatus.ABSENT)

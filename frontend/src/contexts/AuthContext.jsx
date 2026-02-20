@@ -195,7 +195,8 @@ export function AuthProvider({ children }) {
   // Determine role based on active school membership
   const effectiveRole = activeSchool?.role || user?.role
   const isSchoolAdmin = user?.is_super_admin || effectiveRole === 'SCHOOL_ADMIN' || effectiveRole === 'PRINCIPAL'
-  const isStaffLevel = ['STAFF', 'TEACHER', 'HR_MANAGER', 'ACCOUNTANT'].includes(effectiveRole)
+  const isStaffLevel = ['STAFF', 'TEACHER', 'HR_MANAGER', 'ACCOUNTANT', 'DRIVER'].includes(effectiveRole)
+  const isDriver = effectiveRole === 'DRIVER'
   const isParent = effectiveRole === 'PARENT'
   const isStudent = effectiveRole === 'STUDENT'
 
@@ -209,9 +210,9 @@ export function AuthProvider({ children }) {
 
   // Role hierarchy: which roles can the current user create?
   const getAllowableRoles = useCallback(() => {
-    if (user?.is_super_admin) return ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL', 'HR_MANAGER', 'ACCOUNTANT', 'TEACHER', 'STAFF']
-    if (effectiveRole === 'SCHOOL_ADMIN') return ['PRINCIPAL', 'HR_MANAGER', 'ACCOUNTANT', 'TEACHER', 'STAFF']
-    if (effectiveRole === 'PRINCIPAL') return ['HR_MANAGER', 'ACCOUNTANT', 'TEACHER', 'STAFF']
+    if (user?.is_super_admin) return ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL', 'HR_MANAGER', 'ACCOUNTANT', 'TEACHER', 'STAFF', 'DRIVER']
+    if (effectiveRole === 'SCHOOL_ADMIN') return ['PRINCIPAL', 'HR_MANAGER', 'ACCOUNTANT', 'TEACHER', 'STAFF', 'DRIVER']
+    if (effectiveRole === 'PRINCIPAL') return ['HR_MANAGER', 'ACCOUNTANT', 'TEACHER', 'STAFF', 'DRIVER']
     return []
   }, [user?.is_super_admin, effectiveRole])
 
@@ -231,6 +232,7 @@ export function AuthProvider({ children }) {
     isHRManager: effectiveRole === 'HR_MANAGER',
     isTeacher: effectiveRole === 'TEACHER',
     isAccountant: effectiveRole === 'ACCOUNTANT',
+    isDriver,
     isParent,
     isStudent,
     isStaffLevel,

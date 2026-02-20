@@ -272,6 +272,7 @@ class AdmissionEnquiryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
                                     year=y,
                                     amount_due=amount,
                                     amount_paid=0,
+                                    academic_year_id=academic_year_id,
                                 )
                                 fees_generated_count += 1
                                 student_fees.append(ft)
