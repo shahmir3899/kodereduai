@@ -74,6 +74,17 @@ class AttendanceUpload(models.Model):
         blank=True,
         help_text="AI confidence score (0.00 - 1.00)"
     )
+    pipeline_used = models.CharField(
+        max_length=50,
+        blank=True,
+        default='',
+        help_text="Which AI pipeline processed this upload (google, groq, tesseract, vote)"
+    )
+    pipeline_details = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Detailed pipeline execution info (providers tried, fallbacks, voting results)"
+    )
 
     # Status tracking
     status = models.CharField(
@@ -397,3 +408,108 @@ class AttendanceFeedback(models.Model):
 
     def __str__(self):
         return f"{self.school.name} - {self.correction_type} - {self.created_at.date()}"
+
+
+class AccuracySnapshot(models.Model):
+    """
+    Daily snapshot of AI accuracy metrics per school.
+    Used for drift detection — when accuracy drops significantly from baseline,
+    admins are alerted so they can investigate (new handwriting, register format change, etc.)
+    """
+    school = models.ForeignKey(
+        'schools.School',
+        on_delete=models.CASCADE,
+        related_name='accuracy_snapshots',
+    )
+    date = models.DateField()
+    total_predictions = models.IntegerField(default=0)
+    total_corrections = models.IntegerField(default=0)
+    false_positives = models.IntegerField(default=0)
+    false_negatives = models.IntegerField(default=0)
+    name_mismatches = models.IntegerField(default=0)
+    accuracy = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="Accuracy for this day (0.0 - 1.0)"
+    )
+    drift_detected = models.BooleanField(default=False)
+    drift_details = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        unique_together = ('school', 'date')
+        ordering = ['-date']
+        verbose_name = 'Accuracy Snapshot'
+        verbose_name_plural = 'Accuracy Snapshots'
+        indexes = [
+            models.Index(fields=['school', 'date']),
+            models.Index(fields=['drift_detected']),
+        ]
+
+    def __str__(self):
+        drift = ' [DRIFT]' if self.drift_detected else ''
+        acc = f'{self.accuracy:.0%}' if self.accuracy is not None else 'N/A'
+        return f"{self.school.name} - {self.date}: {acc}{drift}"
+
+
+class AttendanceAnomaly(models.Model):
+    """
+    Automatically detected unusual attendance patterns.
+    Created by the daily anomaly detection task.
+    """
+
+    class AnomalyType(models.TextChoices):
+        CLASS_BULK = 'CLASS_BULK', 'Bulk class absence'
+        STUDENT_PATTERN = 'STUDENT_PATTERN', 'Student pattern change'
+        UNUSUAL_DAY = 'UNUSUAL_DAY', 'Unusual day pattern'
+
+    class Severity(models.TextChoices):
+        LOW = 'LOW', 'Low'
+        MEDIUM = 'MEDIUM', 'Medium'
+        HIGH = 'HIGH', 'High'
+
+    school = models.ForeignKey(
+        'schools.School',
+        on_delete=models.CASCADE,
+        related_name='attendance_anomalies',
+    )
+    anomaly_type = models.CharField(max_length=20, choices=AnomalyType.choices)
+    severity = models.CharField(max_length=10, choices=Severity.choices)
+    date = models.DateField()
+    class_obj = models.ForeignKey(
+        'students.Class',
+        on_delete=models.CASCADE,
+        null=True, blank=True,
+        related_name='attendance_anomalies',
+    )
+    student = models.ForeignKey(
+        'students.Student',
+        on_delete=models.CASCADE,
+        null=True, blank=True,
+        related_name='attendance_anomalies',
+    )
+    description = models.TextField()
+    details = models.JSONField(default=dict, blank=True)
+    is_resolved = models.BooleanField(default=False)
+    resolved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='resolved_anomalies',
+    )
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    resolution_notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-date', '-severity']
+        verbose_name = 'Attendance Anomaly'
+        verbose_name_plural = 'Attendance Anomalies'
+        indexes = [
+            models.Index(fields=['school', 'date']),
+            models.Index(fields=['is_resolved']),
+            models.Index(fields=['anomaly_type']),
+        ]
+
+    def __str__(self):
+        resolved = ' [Resolved]' if self.is_resolved else ''
+        return f"{self.school.name} - {self.get_anomaly_type_display()} - {self.date}{resolved}"

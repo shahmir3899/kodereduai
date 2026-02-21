@@ -86,7 +86,7 @@ The OCR system has already extracted the following structured data:
   "overall_confidence": 0.85
 }}"""
 
-    def __init__(self, school, class_obj, target_date: date):
+    def __init__(self, school, class_obj, target_date: date, threshold_service=None):
         """
         Initialize reasoner.
 
@@ -94,10 +94,16 @@ The OCR system has already extracted the following structured data:
             school: School model instance
             class_obj: Class model instance
             target_date: Date being processed
+            threshold_service: ThresholdService for per-school threshold config
         """
         self.school = school
         self.class_obj = class_obj
         self.target_date = target_date
+
+        if threshold_service is None:
+            from .threshold_service import ThresholdService
+            threshold_service = ThresholdService(school)
+        self.threshold_service = threshold_service
 
     def get_student_list(self) -> str:
         """Get formatted list of enrolled students."""
@@ -170,10 +176,11 @@ The OCR system has already extracted the following structured data:
         target_day = self.target_date.day
 
         # Use rules if all marks have high confidence
+        rule_confidence = self.threshold_service.get('rule_confidence')
         for student in table.students:
             if target_day in student.attendance_marks:
                 mark = student.attendance_marks[target_day]
-                if mark.confidence < 0.7:
+                if mark.confidence < rule_confidence:
                     return False
 
         return True
@@ -210,17 +217,20 @@ The OCR system has already extracted the following structured data:
             if student.roll_number and student.roll_number in enrolled:
                 matched_student = enrolled[student.roll_number]
 
+            high_conf = self.threshold_service.get('high_confidence')
+            uncertain_thresh = self.threshold_service.get('uncertain_threshold')
+
             student_info = {
                 'roll': student.roll_number,
                 'name': matched_student.name if matched_student else student.name,
                 'student_id': matched_student.id if matched_student else None,
                 'raw_mark': mark.raw_text,
-                'confidence': 'high' if mark.confidence >= 0.8 else 'medium',
+                'confidence': 'high' if mark.confidence >= high_conf else 'medium',
                 'ocr_confidence': mark.confidence,
                 'page': student.page_number
             }
 
-            if mark.confidence < 0.6:
+            if mark.confidence < uncertain_thresh:
                 student_info['reason'] = f"Low OCR confidence ({int(mark.confidence * 100)}%)"
                 uncertain.append(student_info)
             elif mark.normalized_status == 'ABSENT':
@@ -344,12 +354,13 @@ The OCR system has already extracted the following structured data:
                     break
 
             # Fallback to name match
+            student_match_score = self.threshold_service.get('student_match_score')
             if not student and name:
                 best_match = None
                 best_score = 0
                 for s in enrolled:
                     score = fuzz.ratio(name.lower(), s.name.lower())
-                    if score > best_score and score >= 70:
+                    if score > best_score and score >= student_match_score:
                         best_score = score
                         best_match = s
 

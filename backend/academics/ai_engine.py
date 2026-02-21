@@ -252,6 +252,247 @@ class TimetableGenerator:
         )
 
 
+# ── OR-Tools Timetable Generator ───────────────────────────────────────────
+
+class ORToolsTimetableGenerator:
+    """
+    Generates an optimal timetable using Google OR-Tools CP-SAT solver.
+
+    Uses constraint programming to find a provably optimal schedule:
+    - Hard constraints: no teacher double-booking, each slot gets at most 1 subject,
+      each subject gets its required periods_per_week.
+    - Soft objectives: spread subjects across days, prefer morning for core subjects.
+    - Falls back to the greedy TimetableGenerator if OR-Tools is unavailable or
+      the solver finds no solution within the time limit.
+    """
+
+    SOLVER_TIME_LIMIT_SECONDS = 30
+
+    def __init__(self, school_id: int, class_id: int):
+        self.school_id = school_id
+        self.class_id = class_id
+        self.slots = []
+        self.class_subjects = []
+        self.teacher_busy_map: Dict[int, Set[Tuple[str, int]]] = {}
+
+    def _load_data(self):
+        from .models import ClassSubject, TimetableEntry, TimetableSlot
+
+        self.slots = list(
+            TimetableSlot.objects.filter(
+                school_id=self.school_id, slot_type='PERIOD', is_active=True
+            ).order_by('order')
+        )
+        self.class_subjects = list(
+            ClassSubject.objects.filter(
+                school_id=self.school_id, class_obj_id=self.class_id, is_active=True
+            ).select_related('subject', 'teacher')
+        )
+        other_entries = TimetableEntry.objects.filter(
+            school_id=self.school_id
+        ).exclude(class_obj_id=self.class_id).values_list('teacher_id', 'day', 'slot_id')
+
+        self.teacher_busy_map = {}
+        for teacher_id, day, slot_id in other_entries:
+            if teacher_id:
+                self.teacher_busy_map.setdefault(teacher_id, set()).add((day, slot_id))
+
+    def generate(self) -> TimetableGenerationResult:
+        try:
+            self._load_data()
+        except Exception as e:
+            return TimetableGenerationResult(
+                grid={}, success=False, error=f'Failed to load data: {e}'
+            )
+
+        if not self.slots:
+            return TimetableGenerationResult(
+                grid={}, success=False,
+                error='No time slots defined. Please create time slots first.'
+            )
+        if not self.class_subjects:
+            return TimetableGenerationResult(
+                grid={}, success=False,
+                error='No subjects assigned to this class. Please assign subjects first.'
+            )
+
+        try:
+            from ortools.sat.python import cp_model
+        except ImportError:
+            logger.warning("OR-Tools not installed, falling back to greedy generator.")
+            fallback = TimetableGenerator(self.school_id, self.class_id)
+            result = fallback.generate()
+            result.warnings.insert(0, 'OR-Tools not available. Used greedy algorithm instead.')
+            return result
+
+        warnings = []
+
+        # Index mappings
+        day_indices = {day: i for i, day in enumerate(DAYS)}
+        slot_indices = {slot.id: i for i, slot in enumerate(self.slots)}
+        num_days = len(DAYS)
+        num_slots = len(self.slots)
+        num_subjects = len(self.class_subjects)
+
+        total_required = sum(cs.periods_per_week for cs in self.class_subjects)
+        total_available = num_slots * num_days
+        if total_required > total_available:
+            warnings.append(
+                f'Required periods ({total_required}) exceed available slots '
+                f'({total_available}). Some subjects may not be fully scheduled.'
+            )
+
+        # Classify slots as morning/afternoon
+        mid = num_slots // 2
+
+        # ── Build CP-SAT model ──
+        model = cp_model.CpModel()
+
+        # Decision variables: x[s, d, p] = 1 if subject s is assigned to day d, slot p
+        x = {}
+        for s in range(num_subjects):
+            for d in range(num_days):
+                for p in range(num_slots):
+                    x[s, d, p] = model.new_bool_var(f'x_s{s}_d{d}_p{p}')
+
+        # ── Hard constraints ──
+
+        # 1. Each (day, slot) has at most 1 subject
+        for d in range(num_days):
+            for p in range(num_slots):
+                model.add(sum(x[s, d, p] for s in range(num_subjects)) <= 1)
+
+        # 2. Each subject gets exactly its required periods (or <= if not enough slots)
+        for s in range(num_subjects):
+            cs = self.class_subjects[s]
+            required = min(cs.periods_per_week, total_available)
+            model.add(
+                sum(x[s, d, p] for d in range(num_days) for p in range(num_slots))
+                == required
+            )
+
+        # 3. No teacher double-booking (within this class: a teacher's subjects
+        #    can't overlap in the same day+slot)
+        teacher_subjects: Dict[int, List[int]] = {}
+        for s, cs in enumerate(self.class_subjects):
+            if cs.teacher_id:
+                teacher_subjects.setdefault(cs.teacher_id, []).append(s)
+
+        for teacher_id, subjects in teacher_subjects.items():
+            if len(subjects) > 1:
+                for d in range(num_days):
+                    for p in range(num_slots):
+                        model.add(
+                            sum(x[s, d, p] for s in subjects) <= 1
+                        )
+
+        # 4. No teacher conflict with OTHER classes
+        for s, cs in enumerate(self.class_subjects):
+            if cs.teacher_id:
+                busy_set = self.teacher_busy_map.get(cs.teacher_id, set())
+                for day_str, slot_id in busy_set:
+                    if day_str in day_indices and slot_id in slot_indices:
+                        d = day_indices[day_str]
+                        p = slot_indices[slot_id]
+                        model.add(x[s, d, p] == 0)
+
+        # ── Soft objectives ──
+        penalties = []
+
+        # 5. Penalize same subject appearing multiple times on the same day
+        #    For each subject and day, count occurrences. Penalize if > 1.
+        for s in range(num_subjects):
+            for d in range(num_days):
+                day_count = model.new_int_var(0, num_slots, f'daycount_s{s}_d{d}')
+                model.add(day_count == sum(x[s, d, p] for p in range(num_slots)))
+                # Penalize: if day_count > 1, add penalty
+                repeat = model.new_bool_var(f'repeat_s{s}_d{d}')
+                model.add(day_count >= 2).only_enforce_if(repeat)
+                model.add(day_count <= 1).only_enforce_if(repeat.negated())
+                penalties.append((repeat, 50))  # -50 for same-day repeats
+
+        # 6. Prefer morning slots for core (non-elective) subjects
+        for s, cs in enumerate(self.class_subjects):
+            if not cs.subject.is_elective:
+                for d in range(num_days):
+                    for p in range(num_slots):
+                        if p < mid:  # Morning slot
+                            penalties.append((x[s, d, p], -5))  # +5 bonus (negative penalty)
+
+        # Build objective: minimize total penalty
+        if penalties:
+            model.minimize(
+                sum(var * cost for var, cost in penalties)
+            )
+
+        # ── Solve ──
+        solver = cp_model.CpSolver()
+        solver.parameters.max_time_in_seconds = self.SOLVER_TIME_LIMIT_SECONDS
+
+        status = solver.solve(model)
+
+        if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+            logger.warning(
+                f"OR-Tools solver status={solver.status_name(status)}, "
+                f"falling back to greedy generator."
+            )
+            fallback = TimetableGenerator(self.school_id, self.class_id)
+            result = fallback.generate()
+            result.warnings.insert(
+                0,
+                f'OR-Tools could not find a solution (status: {solver.status_name(status)}). '
+                f'Used greedy algorithm instead.'
+            )
+            return result
+
+        if status == cp_model.FEASIBLE:
+            warnings.append('Solver found a feasible (not proven optimal) solution within the time limit.')
+
+        # ── Extract solution ──
+        grid: Dict[str, Dict[int, dict]] = {day: {} for day in DAYS}
+        day_subjects: Dict[str, List[int]] = {day: [] for day in DAYS}
+
+        for s in range(num_subjects):
+            cs = self.class_subjects[s]
+            for d in range(num_days):
+                for p in range(num_slots):
+                    if solver.value(x[s, d, p]) == 1:
+                        day = DAYS[d]
+                        slot = self.slots[p]
+                        grid[day][slot.id] = {
+                            'slot_id': slot.id,
+                            'subject_id': cs.subject_id,
+                            'teacher_id': cs.teacher_id,
+                            'subject_name': cs.subject.name,
+                            'teacher_name': cs.teacher.full_name if cs.teacher else None,
+                            'room': '',
+                        }
+                        day_subjects[day].append(cs.subject_id)
+
+        # Convert grid to API format
+        result_grid = {}
+        for day in DAYS:
+            entries = []
+            for slot in self.slots:
+                entry = grid[day].get(slot.id)
+                if entry:
+                    entries.append(entry)
+            result_grid[day] = entries
+
+        # Score using existing scorer
+        scorer = TimetableQualityScorer.__new__(TimetableQualityScorer)
+        scorer.school_id = self.school_id
+        scorer.class_id = self.class_id
+        score = scorer._score_generated_grid(grid, self.slots, self.class_subjects, day_subjects)
+
+        return TimetableGenerationResult(
+            grid=result_grid,
+            score=score,
+            warnings=warnings,
+            success=True,
+        )
+
+
 # ── Conflict Resolver ───────────────────────────────────────────────────────
 
 class ConflictResolver:

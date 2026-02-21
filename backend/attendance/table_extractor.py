@@ -55,18 +55,24 @@ class TableExtractor:
     Uses school-specific configuration to interpret the register layout.
     """
 
-    def __init__(self, school, target_date: date):
+    def __init__(self, school, target_date: date, threshold_service=None):
         """
         Initialize extractor with school configuration.
 
         Args:
             school: School model instance with register_config and mark_mappings
             target_date: The date we're extracting attendance for
+            threshold_service: ThresholdService for per-school threshold config
         """
         self.school = school
         self.target_date = target_date
         self.config = school.register_config
         self.mark_mappings = school.mark_mappings
+
+        if threshold_service is None:
+            from .threshold_service import ThresholdService
+            threshold_service = ThresholdService(school)
+        self.threshold_service = threshold_service
 
     def extract_table(self, ocr_result: OCRResult) -> StructuredTable:
         """
@@ -125,8 +131,8 @@ class TableExtractor:
     def _build_grid_from_cells(
         self,
         cells: List[OCRCell],
-        row_tolerance: int = 15,
-        col_tolerance: int = 10
+        row_tolerance: int = None,
+        col_tolerance: int = None
     ) -> List[List[OCRCell]]:
         """
         Build a 2D grid from OCR cells based on their positions.
@@ -139,6 +145,11 @@ class TableExtractor:
         Returns:
             2D grid of cells
         """
+        if row_tolerance is None:
+            row_tolerance = int(self.threshold_service.get('row_tolerance'))
+        if col_tolerance is None:
+            col_tolerance = int(self.threshold_service.get('col_tolerance'))
+
         if not cells:
             return []
 

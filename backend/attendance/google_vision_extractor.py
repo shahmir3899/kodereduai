@@ -62,11 +62,17 @@ class GoogleVisionExtractor:
     - Serial number reconstruction for missing entries
     """
 
-    def __init__(self, school, class_obj, target_date: date):
+    def __init__(self, school, class_obj, target_date: date, threshold_service=None):
         self.school = school
         self.class_obj = class_obj
         self.target_date = target_date
         self.target_day = target_date.day
+
+        # Threshold service for configurable per-school thresholds
+        if threshold_service is None:
+            from .threshold_service import ThresholdService
+            threshold_service = ThresholdService(school)
+        self.threshold_service = threshold_service
 
         # Get enrolled students for matching
         self.enrolled_students = list(
@@ -711,13 +717,16 @@ class GoogleVisionExtractor:
     # FUZZY NAME MATCHING
     # ==========================================================
 
-    def _fuzzy_match_name(self, extracted_name: str, threshold: float = 0.45) -> Tuple[Optional[Dict], float]:
+    def _fuzzy_match_name(self, extracted_name: str, threshold: float = None) -> Tuple[Optional[Dict], float]:
         """
         Find the best matching database student by name similarity.
 
         Uses SequenceMatcher for fuzzy string comparison, plus
         partial word matching for handling OCR truncation/errors.
         """
+        if threshold is None:
+            threshold = self.threshold_service.get('fuzzy_name_match')
+
         if not extracted_name or len(extracted_name) < 2:
             return None, 0.0
 

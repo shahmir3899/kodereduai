@@ -330,6 +330,113 @@ Query params: `class_obj`, `student`, `date`, `date_from`, `date_to`, `status`, 
 }
 ```
 
+### GET /api/attendance/records/threshold_status/
+```json
+{
+  "thresholds": {
+    "fuzzy_name_match": 0.45,
+    "rule_confidence": 0.7,
+    "high_confidence": 0.8,
+    "uncertain_threshold": 0.6,
+    "student_match_score": 70,
+    "row_tolerance": 15,
+    "col_tolerance": 10
+  },
+  "auto_tune_enabled": false,
+  "last_tuned_at": null,
+  "tune_history": [],
+  "pipeline": {
+    "primary": "google",
+    "fallback_chain": ["groq", "tesseract"],
+    "voting_enabled": false
+  }
+}
+```
+
+### POST /api/attendance/records/tune_thresholds/
+```json
+// Request
+{
+  "auto_tune_enabled": true,
+  "thresholds": {
+    "fuzzy_name_match": 0.50
+  }
+}
+
+// Response
+{
+  "message": "Thresholds updated successfully",
+  "thresholds": { "...merged thresholds..." },
+  "auto_tune_enabled": true
+}
+```
+
+### GET /api/attendance/records/drift_history/
+Query params: `days` (default 30)
+```json
+{
+  "snapshots": [
+    {
+      "id": 1,
+      "date": "2026-02-20",
+      "total_predictions": 45,
+      "total_corrections": 3,
+      "false_positives": 1,
+      "false_negatives": 2,
+      "name_mismatches": 0,
+      "accuracy": 93.3,
+      "drift_detected": false,
+      "drift_details": {}
+    }
+  ],
+  "current_drift": false,
+  "baseline_accuracy": 91.5
+}
+```
+
+### GET /api/attendance/anomalies/
+Query params: `is_resolved`, `anomaly_type`, `severity`, `page_size`
+```json
+{
+  "count": 2,
+  "results": [
+    {
+      "id": 1,
+      "school": 37,
+      "anomaly_type": "CLASS_BULK",
+      "anomaly_type_display": "Bulk class absence",
+      "severity": "HIGH",
+      "date": "2026-02-19",
+      "class_obj": 73,
+      "class_name": "Class 1A",
+      "student": null,
+      "student_name": null,
+      "description": "65% of students absent in Class 1A",
+      "details": {"absent_count": 13, "total_enrolled": 20, "absent_rate": 65.0},
+      "is_resolved": false,
+      "resolved_by": null,
+      "resolved_at": null,
+      "resolution_notes": "",
+      "created_at": "2026-02-19T21:30:00Z"
+    }
+  ]
+}
+```
+
+### POST /api/attendance/anomalies/{id}/resolve/
+```json
+// Request
+{ "resolution_notes": "School event - sports day" }
+
+// Response
+{
+  "id": 1,
+  "is_resolved": true,
+  "resolved_at": "2026-02-20T10:00:00Z",
+  "resolution_notes": "School event - sports day"
+}
+```
+
 ### GET /api/attendance/records/my_classes/
 Returns classes available for manual attendance entry (role-aware: admin=all, teacher=assigned only).
 ```json
@@ -578,7 +685,8 @@ Query params: `student`, `class_obj`, `month`, `year`, `status`, `academic_year`
       "student": 182,
       "student_name": "Eshaal Fatima",
       "student_roll": "1",
-      "class_name": "Playgroup",
+      "class_name": "Playgroup - A",
+      "class_obj_id": 5,
       "academic_year": null,
       "academic_year_name": null,
       "fee_type": "MONTHLY",
@@ -620,6 +728,39 @@ Query params: `student`, `class_obj`, `month`, `year`, `status`, `academic_year`
   "message": "4 fee records created for 2 students."
 }
 ```
+
+### GET /api/finance/fee-payments/resolve_amount/
+Query params: `student_id` (required), `fee_type` (default: MONTHLY)
+```json
+{
+  "student_id": 182,
+  "fee_type": "MONTHLY",
+  "amount": "900.00",
+  "source": "class_default"
+}
+```
+`source` is `"student_override"` if student has a personal fee structure, `"class_default"` if using class-level fee, or `null` if no fee structure found.
+
+### GET /api/finance/fee-payments/preview_generation/
+Query params: `fee_type`, `class_id`, `year`, `month`
+```json
+{
+  "will_create": 25,
+  "already_exist": 3,
+  "no_fee_structure": 2,
+  "total_amount": "22500.00",
+  "students": [
+    {
+      "student_id": 182,
+      "student_name": "Eshaal Fatima",
+      "class_name": "Playgroup - A",
+      "amount": "900.00"
+    }
+  ],
+  "has_more": false
+}
+```
+`students` array is capped at 50 entries. `has_more` is true when there are more than 50.
 
 ### GET /api/finance/expenses/
 Query params: `category`, `account`, `date_from`, `date_to`, `page_size`
@@ -878,8 +1019,51 @@ _(No exam data in current schools — expected fields from serializers)_
       "student": 0, "student_name": "", "student_roll_number": "",
       "subject_name": "", "total_marks": 0, "passing_marks": 0,
       "marks_obtained": "0.00", "is_absent": false, "remarks": "",
+      "ai_comment": "",
       "percentage": 0.0, "is_pass": true,
       "created_at": "", "updated_at": ""
+    }
+  ]
+}
+```
+
+### POST /api/examinations/exams/{id}/generate-comments/
+```json
+// Request
+{ "force": false }
+
+// Response
+{
+  "message": "Generated 25 AI comments for Mid-Term Exam",
+  "generated": 25,
+  "skipped": 3,
+  "errors": 0,
+  "total": 28
+}
+```
+
+### GET /api/examinations/exams/{id}/results/ (updated)
+Each mark in the results response now includes `ai_comment`:
+```json
+{
+  "students": [
+    {
+      "student_id": 611,
+      "student_name": "Ali Hassan",
+      "roll_number": "1",
+      "marks": [
+        {
+          "subject_name": "Mathematics",
+          "total_marks": 100,
+          "passing_marks": 33,
+          "marks_obtained": "85.00",
+          "is_absent": false,
+          "percentage": 85.0,
+          "is_pass": true,
+          "grade": "A",
+          "ai_comment": "Good performance in Mathematics with 85%. Shows solid understanding of key concepts. Continue building on this strong foundation."
+        }
+      ]
     }
   ]
 }
@@ -968,6 +1152,7 @@ Query params: `status`, `source`, `applying_for_grade_level`, `search`, `page_si
   "quiet_hours_end": null,
   "fee_reminder_day": 5,
   "daily_absence_summary_time": null,
+  "smart_scheduling_enabled": false,
   "created_at": "2026-02-13T13:01:53.878412+05:00",
   "updated_at": "2026-02-13T13:01:53.878432+05:00"
 }
@@ -1004,7 +1189,8 @@ _(No data — expected fields from serializer)_
       "channel": "IN_APP", "event_type": "GENERAL",
       "recipient_type": "", "recipient_identifier": "",
       "title": "", "body": "",
-      "status": "PENDING|SENT|DELIVERED|FAILED|READ",
+      "status": "PENDING|SCHEDULED|SENT|DELIVERED|FAILED|READ",
+      "scheduled_for": null,
       "metadata": {}, "sent_at": null,
       "created_at": "", "updated_at": ""
     }
@@ -1380,6 +1566,46 @@ _(No data — expected fields from serializers)_
       "created_at": "", "updated_at": ""
     }
   ]
+}
+```
+
+---
+
+## AI Insights
+
+### GET /api/tasks/ai-insights/
+```json
+{
+  "insights": [
+    {
+      "type": "alert",
+      "module": "attendance",
+      "priority": 9,
+      "title": "Accuracy drift detected",
+      "detail": "AI accuracy dropped from 92% to 78% over the last 7 days",
+      "action": "Review recent uploads and consider adjusting thresholds",
+      "link": "/attendance"
+    },
+    {
+      "type": "warning",
+      "module": "finance",
+      "priority": 7,
+      "title": "Low fee collection rate",
+      "detail": "Only 35% of fees collected and it's past the 15th",
+      "action": "Send fee reminders to parents with pending balances",
+      "link": "/finance/fees"
+    },
+    {
+      "type": "info",
+      "module": "academics",
+      "priority": 3,
+      "title": "3 classes missing subject assignments",
+      "detail": "Classes 5A, 6B, 7C have no subjects assigned yet",
+      "action": "Assign subjects to these classes",
+      "link": "/academics/subjects"
+    }
+  ],
+  "generated_at": "2026-02-21T10:00:00Z"
 }
 ```
 

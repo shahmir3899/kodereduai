@@ -27,7 +27,7 @@ The `/dashboard` route uses **DashboardRouter.jsx** to render a role-specific da
 
 | Role | Component | Description |
 |------|-----------|-------------|
-| SCHOOL_ADMIN | DashboardPage.jsx | Admin dashboard with attendance stats, finance overview, SchoolCompletionWidget |
+| SCHOOL_ADMIN | DashboardPage.jsx | Admin dashboard with attendance stats, finance overview, SchoolCompletionWidget, AIInsightsCard |
 | PRINCIPAL | DashboardPage.jsx (variant="principal") | Same as admin but quick actions show Lesson Plans, Examinations, Class Management |
 | TEACHER | TeacherDashboard.jsx | Daily command center: today's timetable, grading queue, assignments, quick actions |
 | HR_MANAGER | HRManagerDashboard.jsx | HR KPIs (staff count, leave, attendance), quick links to /hr |
@@ -39,7 +39,7 @@ The `/dashboard` route uses **DashboardRouter.jsx** to render a role-specific da
 | /dashboard | DashboardRouter.jsx → role-specific | See above | Varies by role |
 | /profile | ProfilePage.jsx | User profile edit | GET/PATCH /api/auth/me/ |
 | /settings | SettingsPage.jsx | School settings | GET/PUT /api/schools/current/ |
-| /notifications | NotificationsPage.jsx | Notification center | GET /api/notifications/my/ |
+| /notifications | NotificationsPage.jsx | Notification center. Settings include Smart Notification Scheduling toggle | GET /api/notifications/my/, GET/PUT /api/notifications/config/ |
 | /admin | SuperAdminDashboard.jsx | Super admin only — all schools overview | GET /api/admin/schools/, platform_stats/ |
 
 ## Attendance
@@ -47,7 +47,8 @@ The `/dashboard` route uses **DashboardRouter.jsx** to render a role-specific da
 |-------|-----------|-------------|-----------|
 | /attendance | CaptureReviewPage.jsx | Upload images & review pending | POST upload-image/, GET/POST uploads/, POST confirm/ |
 | /attendance/register | RegisterPage.jsx | Attendance records, analytics & manual entry | GET records/, daily_report/, my_classes/, POST bulk_entry/ |
-| /attendance/review/:id | CaptureReviewPage.jsx | Review specific upload | GET uploads/{id}/, POST confirm/ |
+| /attendance/review/:id | CaptureReviewPage.jsx | Review specific upload. Includes AI Threshold Config, Pipeline Config, and Drift Monitor cards in accuracy dashboard | GET uploads/{id}/, POST confirm/, GET threshold_status/, GET drift_history/ |
+| /attendance/anomalies | AnomaliesPage.jsx | Attendance anomaly detection - bulk absence, student streaks, unusual days. Filterable, resolvable | GET anomalies/, POST anomalies/{id}/resolve/ |
 
 Redirects: /attendance/upload, /attendance/review, /attendance/records → remapped to above routes
 
@@ -62,12 +63,12 @@ Redirects: /attendance/upload, /attendance/review, /attendance/records → remap
 | Route | Component | Description | API Calls |
 |-------|-----------|-------------|-----------|
 | /academics/subjects | SubjectsPage.jsx | Subject CRUD | GET/POST subjects/ |
-| /academics/timetable | TimetablePage.jsx | Timetable grid editor | GET/POST timetable-entries/ |
+| /academics/timetable | TimetablePage.jsx | Timetable grid editor. Auto-generate supports algorithm selector (Greedy/OR-Tools) | GET/POST timetable-entries/, POST auto_generate/ with {algorithm} |
 | /academics/analytics | AcademicsAnalyticsPage.jsx | Academic analytics | GET analytics/ |
 | /academics/exam-types | ExamTypesPage.jsx | Exam type config | GET/POST exam-types/ |
 | /academics/exams | ExamsPage.jsx | Exam management | GET/POST exams/ |
 | /academics/marks-entry | MarksEntryPage.jsx | Marks data entry | GET exams/, exam-subjects/, marks/, students/; POST marks/bulk_entry/ |
-| /academics/results | ResultsPage.jsx | Results view | GET exams/{id}/results/ |
+| /academics/results | ResultsPage.jsx | Results view with expandable AI report card comments. Generate/Regenerate AI Comments button | GET exams/{id}/results/, POST exams/{id}/generate-comments/ |
 | /academics/report-cards | ReportCardPage.jsx | Report cards | GET report-card/ |
 | /academics/grade-scale | GradeScalePage.jsx | Grade scale config | GET/POST grade-scales/ |
 | /academics/lesson-plans | LessonPlansPage.jsx | Lesson plans | GET/POST lesson-plans/ |
@@ -80,7 +81,7 @@ Redirects: /attendance/upload, /attendance/review, /attendance/records → remap
 | Route | Component | Description | API Calls |
 |-------|-----------|-------------|-----------|
 | /finance | FinanceDashboardPage.jsx | Finance overview | GET balances/, monthly_summary/ |
-| /finance/fees | FeeCollectionPage.jsx | Fee collection (complex, sub-components) | GET/POST fee-payments/, fee-structures/ |
+| /finance/fees | FeeCollectionPage.jsx | Fee collection (complex, sub-components). Client-side class/status filtering, client-side summary. | GET fee-payments/ (single fetch), fee-structures/, resolve_amount/, preview_generation/ |
 | /finance/expenses | ExpensesPage.jsx | Expense tracking | GET/POST expenses/ |
 | /finance/discounts | DiscountsPage.jsx | Discounts & scholarships | GET/POST discounts/, scholarships/ |
 | /finance/payment-gateways | PaymentGatewayPage.jsx | Payment gateway config | GET/POST gateway-config/ |

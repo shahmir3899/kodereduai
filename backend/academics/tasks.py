@@ -9,8 +9,13 @@ logger = logging.getLogger(__name__)
 
 
 @shared_task(bind=True, time_limit=120)
-def auto_generate_timetable_task(self, school_id, class_id):
-    """Auto-generate a timetable using the CSP algorithm."""
+def auto_generate_timetable_task(self, school_id, class_id, algorithm='greedy'):
+    """Auto-generate a timetable using the selected algorithm.
+
+    Args:
+        algorithm: 'greedy' for fast heuristic-based generation,
+                   'or_tools' for constraint programming solver (up to 30s).
+    """
     from core.task_utils import update_task_progress, mark_task_success, mark_task_failed
 
     task_id = self.request.id
@@ -18,8 +23,13 @@ def auto_generate_timetable_task(self, school_id, class_id):
     try:
         update_task_progress(task_id, current=10, total=100)
 
-        from academics.ai_engine import TimetableGenerator
-        generator = TimetableGenerator(school_id, class_id)
+        if algorithm == 'or_tools':
+            from academics.ai_engine import ORToolsTimetableGenerator
+            generator = ORToolsTimetableGenerator(school_id, class_id)
+        else:
+            from academics.ai_engine import TimetableGenerator
+            generator = TimetableGenerator(school_id, class_id)
+
         result = generator.generate()
 
         update_task_progress(task_id, current=90, total=100)
@@ -32,7 +42,8 @@ def auto_generate_timetable_task(self, school_id, class_id):
             'grid': result.grid,
             'score': result.score,
             'warnings': result.warnings,
-            'message': f'Timetable generated with score {result.score}.',
+            'algorithm': algorithm,
+            'message': f'Timetable generated with score {result.score} using {algorithm}.',
         }
         mark_task_success(task_id, result_data=result_data)
         return result_data

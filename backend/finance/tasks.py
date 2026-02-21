@@ -28,10 +28,16 @@ def generate_monthly_fees_task(self, school_id, month, year, class_id=None, acad
             mark_task_failed(task_id, f'Period {year}/{month:02d} is closed.')
             return {'error': f'Period {year}/{month:02d} is closed.'}
 
-        # Fetch students
-        students = list(Student.objects.filter(school_id=school_id, is_active=True))
+        # Fetch students (filtered by enrollment if academic year provided)
+        student_qs = Student.objects.filter(school_id=school_id, is_active=True)
+        if academic_year_id:
+            student_qs = student_qs.filter(
+                enrollments__academic_year_id=academic_year_id,
+                enrollments__is_active=True,
+            )
         if class_id:
-            students = [s for s in students if s.class_obj_id == int(class_id)]
+            student_qs = student_qs.filter(class_obj_id=int(class_id))
+        students = list(student_qs)
 
         total = len(students)
         update_task_progress(task_id, current=0, total=total)

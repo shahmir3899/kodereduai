@@ -701,12 +701,15 @@ class TimetableEntryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
             return Response({'detail': 'No school selected.'}, status=400)
 
         class_id = serializer.validated_data['class_id']
+        algorithm = request.data.get('algorithm', 'greedy')
+        if algorithm not in ('greedy', 'or_tools'):
+            algorithm = 'greedy'
 
         from core.models import BackgroundTask
         from .tasks import auto_generate_timetable_task
 
-        task_kwargs = {'school_id': school_id, 'class_id': class_id}
-        title = "Auto-generating timetable"
+        task_kwargs = {'school_id': school_id, 'class_id': class_id, 'algorithm': algorithm}
+        title = f"Auto-generating timetable ({algorithm})"
 
         subject_count = ClassSubject.objects.filter(
             school_id=school_id, class_obj_id=class_id, is_active=True,

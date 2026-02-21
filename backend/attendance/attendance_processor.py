@@ -22,6 +22,7 @@ from .table_extractor import TableExtractor, StructuredTable
 from .llm_reasoner import LLMReasoner, ReasoningResult
 from .vision_extractor import VisionExtractor, VisionExtractionResult
 from .google_vision_extractor import GoogleVisionExtractor, GoogleVisionResult
+from .threshold_service import ThresholdService
 
 logger = logging.getLogger(__name__)
 
@@ -110,22 +111,55 @@ class AttendanceProcessor:
         self.class_obj = upload.class_obj
         self.target_date = upload.date
 
+        # Create per-school threshold service
+        self.threshold_service = ThresholdService(self.school)
+
+        # Read pipeline config from school.ai_config
+        ai_config = getattr(self.school, 'ai_config', None) or {}
+        pipeline_config = ai_config.get('pipeline', {})
+
         # Determine which pipeline to use
         self.use_vision = use_vision if use_vision is not None else USE_VISION_PIPELINE
-        self.vision_provider = vision_provider or VISION_PROVIDER
+        self.vision_provider = vision_provider or pipeline_config.get('primary', VISION_PROVIDER)
+        self.fallback_chain = pipeline_config.get('fallback_chain', [])
+        self.voting_enabled = pipeline_config.get('voting_enabled', False)
 
-        # Initialize pipeline components based on mode
+        # Initialize primary vision extractor
         if self.use_vision:
-            if self.vision_provider == 'google':
-                logger.info(f"Initializing Google Vision extractor for upload {upload.id}")
-                self.vision_extractor = GoogleVisionExtractor(self.school, self.class_obj, self.target_date)
-            else:
-                logger.info(f"Initializing Groq Vision extractor for upload {upload.id}")
-                self.vision_extractor = VisionExtractor(self.school, self.class_obj, self.target_date)
+            self._init_vision_extractor(self.vision_provider)
         else:
             self.ocr_service = OCRService()
-            self.table_extractor = TableExtractor(self.school, self.target_date)
-            self.llm_reasoner = LLMReasoner(self.school, self.class_obj, self.target_date)
+            self.table_extractor = TableExtractor(
+                self.school, self.target_date,
+                threshold_service=self.threshold_service
+            )
+            self.llm_reasoner = LLMReasoner(
+                self.school, self.class_obj, self.target_date,
+                threshold_service=self.threshold_service
+            )
+
+    def _init_vision_extractor(self, provider: str):
+        """Initialize the primary vision extractor."""
+        if provider == 'google':
+            logger.info(f"Initializing Google Vision extractor for upload {self.upload.id}")
+            self.vision_extractor = GoogleVisionExtractor(
+                self.school, self.class_obj, self.target_date,
+                threshold_service=self.threshold_service
+            )
+        else:
+            logger.info(f"Initializing Groq Vision extractor for upload {self.upload.id}")
+            self.vision_extractor = VisionExtractor(self.school, self.class_obj, self.target_date)
+
+    def _create_vision_extractor(self, provider: str):
+        """Create a vision extractor for a specific provider (for fallback/voting)."""
+        if provider == 'google':
+            return GoogleVisionExtractor(
+                self.school, self.class_obj, self.target_date,
+                threshold_service=self.threshold_service
+            )
+        elif provider == 'groq':
+            return VisionExtractor(self.school, self.class_obj, self.target_date)
+        return None
 
     def process(self) -> ProcessingResult:
         """
@@ -156,18 +190,11 @@ class AttendanceProcessor:
 
     def _process_with_vision(self) -> ProcessingResult:
         """
-        Process using Vision AI pipeline (recommended for handwritten registers).
+        Process using Vision AI pipeline with fallback chain and optional voting.
 
-        This sends images directly to a vision-capable AI model which can
-        understand handwritten text much better than OCR.
+        1. If voting enabled: run all providers, cross-validate with PipelineVoter
+        2. Otherwise: try primary, then fallback chain in order
         """
-        result = ProcessingResult(success=False)
-        provider_name = 'google_vision' if self.vision_provider == 'google' else 'groq_vision'
-        result.pipeline_stages = {
-            provider_name: {'status': 'pending', 'provider': self.vision_provider}
-        }
-        stage_key = provider_name
-
         # Gather all image URLs
         image_urls = []
         multi_page_images = list(self.upload.images.all().order_by('page_number'))
@@ -178,22 +205,114 @@ class AttendanceProcessor:
             image_urls = [self.upload.image_url]
 
         if not image_urls:
-            result.error = "No images to process"
+            return ProcessingResult(
+                success=False, error="No images to process", error_stage='vision'
+            )
+
+        # Voting mode: run multiple providers and cross-validate
+        if self.voting_enabled and self.fallback_chain:
+            return self._process_with_voting(image_urls, multi_page_images)
+
+        # Standard mode: try primary then fallbacks
+        providers = [self.vision_provider] + list(self.fallback_chain)
+        pipeline_details = {'providers_tried': [], 'errors': {}}
+
+        for provider in providers:
+            logger.info(f"[Pipeline] Trying provider: {provider} for upload {self.upload.id}")
+            pipeline_details['providers_tried'].append(provider)
+
+            result = self._run_single_provider(provider, image_urls, multi_page_images)
+            if result.success:
+                # Record which pipeline was used
+                is_fallback = provider != self.vision_provider
+                self.upload.pipeline_used = provider + (' (fallback)' if is_fallback else '')
+                self.upload.pipeline_details = pipeline_details
+                self.upload.save(update_fields=['pipeline_used', 'pipeline_details'])
+                return result
+            else:
+                pipeline_details['errors'][provider] = result.error or 'Unknown error'
+                logger.warning(f"[Pipeline] Provider {provider} failed: {result.error}")
+
+        # All providers failed
+        self.upload.pipeline_details = pipeline_details
+        self.upload.save(update_fields=['pipeline_details'])
+
+        return ProcessingResult(
+            success=False,
+            error=f"All providers failed: {pipeline_details['errors']}",
+            error_stage='vision',
+            pipeline_stages={'fallback_chain': pipeline_details},
+        )
+
+    def _process_with_voting(self, image_urls, multi_page_images) -> ProcessingResult:
+        """Run multiple providers and cross-validate with PipelineVoter."""
+        from .pipeline_voter import PipelineVoter
+
+        providers = [self.vision_provider] + list(self.fallback_chain)
+        all_outputs = []
+        pipeline_details = {'mode': 'voting', 'providers': {}}
+
+        for provider in providers:
+            logger.info(f"[Voting] Running provider: {provider}")
+            result = self._run_single_provider(provider, image_urls, multi_page_images)
+            if result.success:
+                ai_output = result.to_ai_output_json()
+                all_outputs.append(ai_output)
+                pipeline_details['providers'][provider] = 'success'
+            else:
+                pipeline_details['providers'][provider] = f'failed: {result.error}'
+                logger.warning(f"[Voting] Provider {provider} failed: {result.error}")
+
+        if not all_outputs:
+            return ProcessingResult(
+                success=False, error="All providers failed in voting mode",
+                error_stage='voting', pipeline_stages={'voting': pipeline_details},
+            )
+
+        # Run voter
+        voter = PipelineVoter(all_outputs, threshold=min(2, len(all_outputs)))
+        voted = voter.vote()
+
+        # Build result
+        final = ProcessingResult(success=True)
+        final.matched = voted['matched']
+        final.unmatched = voted['unmatched']
+        final.matched_count = voted['matched_count']
+        final.unmatched_count = voted['unmatched_count']
+        final.uncertain = voted.get('uncertain', [])
+        final.confidence = voted.get('confidence', 0.0)
+        final.notes = voted.get('notes', '')
+        final.pipeline_stages = {'voting': pipeline_details, 'vote_metadata': voted.get('vote_metadata', {})}
+
+        self.upload.pipeline_used = 'vote'
+        self.upload.pipeline_details = pipeline_details
+        self.upload.save(update_fields=['pipeline_used', 'pipeline_details'])
+
+        logger.info(f"[Voting] Complete: {final.matched_count} matched, {len(final.uncertain)} uncertain")
+        return final
+
+    def _run_single_provider(self, provider: str, image_urls: list, multi_page_images: list) -> ProcessingResult:
+        """Run a single vision provider and return a ProcessingResult."""
+        result = ProcessingResult(success=False)
+        stage_key = f'{provider}_vision'
+        result.pipeline_stages = {stage_key: {'status': 'pending', 'provider': provider}}
+
+        extractor = self._create_vision_extractor(provider)
+        if not extractor:
+            result.error = f"No extractor available for provider: {provider}"
             result.error_stage = stage_key
-            result.pipeline_stages[stage_key]['status'] = 'failed'
             return result
 
-        # Run vision extraction
         result.pipeline_stages[stage_key]['status'] = 'running'
         result.pipeline_stages[stage_key]['pages'] = len(image_urls)
 
         try:
             if len(image_urls) == 1:
-                vision_result = self.vision_extractor.extract_from_image(image_urls[0])
+                vision_result = extractor.extract_from_image(image_urls[0])
             else:
-                vision_result = self.vision_extractor.extract_multi_page(image_urls)
+                vision_result = extractor.extract_multi_page(image_urls)
         except Exception as e:
-            logger.error(f"Vision extraction failed ({self.vision_provider}): {e}")
+            logger.error(f"Vision extraction failed ({provider}): {e}")
             result.error = str(e)
             result.error_stage = stage_key
             result.pipeline_stages[stage_key]['status'] = 'failed'
@@ -212,8 +331,8 @@ class AttendanceProcessor:
         result.pipeline_stages[stage_key]['students_found'] = len(vision_result.students)
         result.pipeline_stages[stage_key]['date_columns'] = vision_result.date_columns
 
-        # Save structured table (for debug comparison view)
-        self.upload.structured_table_json = self.vision_extractor.to_structured_table_json(vision_result)
+        # Save structured table
+        self.upload.structured_table_json = extractor.to_structured_table_json(vision_result)
         self.upload.save(update_fields=['structured_table_json'])
 
         # Update multi-page image statuses
@@ -222,9 +341,8 @@ class AttendanceProcessor:
             img.save(update_fields=['processing_status'])
 
         # Convert to ai_output_json format
-        ai_output = self.vision_extractor.to_ai_output_json(vision_result)
+        ai_output = extractor.to_ai_output_json(vision_result)
 
-        # Populate result
         result.matched = ai_output['matched']
         result.unmatched = ai_output['unmatched']
         result.matched_count = ai_output['matched_count']
@@ -236,12 +354,7 @@ class AttendanceProcessor:
         result.pipeline_stages = ai_output.get('pipeline_stages', result.pipeline_stages)
         result.success = True
 
-        provider_display = "Google Vision" if self.vision_provider == 'google' else "Groq Vision"
-        logger.info(
-            f"[{provider_display}] Complete: {result.matched_count} matched absent, "
-            f"{result.unmatched_count} unmatched, {len(result.uncertain)} uncertain"
-        )
-
+        logger.info(f"[{provider}] Complete: {result.matched_count} matched, {result.unmatched_count} unmatched")
         return result
 
     def _process_single_image(self) -> ProcessingResult:

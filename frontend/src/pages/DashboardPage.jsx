@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../contexts/AuthContext'
 import { useAcademicYear } from '../contexts/AcademicYearContext'
-import { attendanceApi, financeApi } from '../services/api'
+import { attendanceApi, financeApi, tasksApi } from '../services/api'
 import { Link } from 'react-router-dom'
 import SchoolCompletionWidget from '../components/SchoolCompletionWidget'
 import SessionHealthWidget from '../components/SessionHealthWidget'
@@ -112,6 +112,9 @@ export default function DashboardPage({ variant }) {
 
       {/* Attendance Risk Monitor */}
       <AttendanceRiskWidget />
+
+      {/* AI Insights */}
+      <AIInsightsCard />
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
@@ -302,6 +305,75 @@ export default function DashboardPage({ variant }) {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+function AIInsightsCard() {
+  const { data, isLoading } = useQuery({
+    queryKey: ['aiInsights'],
+    queryFn: () => tasksApi.getAIInsights(),
+    refetchInterval: 5 * 60 * 1000,
+  })
+
+  const insights = data?.data?.insights || []
+
+  if (isLoading) return null
+  if (insights.length === 0) return null
+
+  const typeStyles = {
+    alert: 'bg-red-50 border-red-200 text-red-800',
+    warning: 'bg-amber-50 border-amber-200 text-amber-800',
+    info: 'bg-blue-50 border-blue-200 text-blue-800',
+  }
+
+  const typeIcons = {
+    alert: (
+      <svg className="w-5 h-5 text-red-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+      </svg>
+    ),
+    warning: (
+      <svg className="w-5 h-5 text-amber-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    ),
+    info: (
+      <svg className="w-5 h-5 text-blue-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    ),
+  }
+
+  return (
+    <div className="card mb-6">
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900">AI Insights</h2>
+          <p className="text-xs text-gray-500">
+            Automated analysis across attendance, finance, academics, and HR
+          </p>
+        </div>
+        <span className="text-xs text-gray-400">
+          {insights.length} insight{insights.length !== 1 ? 's' : ''}
+        </span>
+      </div>
+      <div className="space-y-2">
+        {insights.map((insight, idx) => (
+          <div key={idx} className={`flex items-start gap-3 p-3 rounded-lg border ${typeStyles[insight.type] || typeStyles.info}`}>
+            {typeIcons[insight.type] || typeIcons.info}
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium">{insight.title}</p>
+              <p className="text-xs mt-0.5 opacity-80">{insight.detail}</p>
+            </div>
+            {insight.link && (
+              <Link to={insight.link} className="text-xs font-medium underline shrink-0 hover:no-underline">
+                {insight.action || 'View'}
+              </Link>
+            )}
+          </div>
+        ))}
+      </div>
     </div>
   )
 }

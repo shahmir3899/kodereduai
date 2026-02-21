@@ -217,6 +217,16 @@ class StudentMark(models.Model):
     )
     is_absent = models.BooleanField(default=False)
     remarks = models.CharField(max_length=200, blank=True)
+    ai_comment = models.TextField(
+        blank=True,
+        default='',
+        help_text="AI-generated report card comment based on marks, grade, and attendance"
+    )
+    ai_comment_generated_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the AI comment was generated"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

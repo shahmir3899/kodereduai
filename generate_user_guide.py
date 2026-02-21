@@ -53,7 +53,7 @@ class UserGuidePDF(FPDF):
         self.set_font("Helvetica", "", 12)
         self.set_text_color(100, 100, 100)
         self.cell(0, 8, "School Management System", align="C", new_x="LMARGIN", new_y="NEXT")
-        self.cell(0, 8, "Version 2.0", align="C", new_x="LMARGIN", new_y="NEXT")
+        self.cell(0, 8, "Version 3.0 - AI Intelligence Edition", align="C", new_x="LMARGIN", new_y="NEXT")
         self.ln(40)
         self.set_font("Helvetica", "", 10)
         self.cell(0, 6, "Modules Covered:", align="C", new_x="LMARGIN", new_y="NEXT")
@@ -63,7 +63,9 @@ class UserGuidePDF(FPDF):
             "Face Attendance (Camera-Based) | Academics & Examinations",
             "Finance & Online Payments | HR & Staff Management",
             "Admissions CRM | Transport | Library | Hostel Management",
-            "LMS | Notifications | Parent & Student Portals | AI Study Helper"
+            "LMS | Notifications | Parent & Student Portals | AI Study Helper",
+            "AI Intelligence: Adaptive Thresholds | Drift Detection | Anomaly Alerts",
+            "Pipeline Fallback | OR-Tools Timetable | AI Report Comments | Smart Scheduling"
         ]
         self.set_font("Helvetica", "I", 9)
         for m in modules:
@@ -784,6 +786,8 @@ def build_guide():
     pdf.step("Select the Exam and Class to view computed results.")
     pdf.step("Results show: Subject-wise marks, grades (auto-calculated from grade scale), GPA.")
     pdf.step("Review results for accuracy.")
+    pdf.step("Click 'Generate AI Comments' to create personalized per-subject comments for all students.")
+    pdf.step("Click on any student row to expand and view/edit their AI-generated comments.")
     pdf.step("Click 'Publish Results' to make them visible to students and parents.")
 
     pdf.section_title("Step 6: Generate Report Cards")
@@ -857,24 +861,66 @@ def build_guide():
         "Each page includes the school name, period, generation date, and page numbers."
     )
 
-    pdf.section_title("Generating Fee Structures")
-    pdf.nav_path("Sidebar > Finance > Fee Collection")
-    pdf.step("Navigate to Fee Collection.")
-    pdf.step("Click 'Generate Fee Structure' button.")
-    pdf.step("Select the class(es) to generate fees for.")
-    pdf.step("Define fee components: Tuition, Transport, Library, Lab, etc.")
-    pdf.step("Set the amount for each component.")
-    pdf.step("Choose frequency: Monthly, Quarterly, Annually.")
-    pdf.step("Click 'Generate' - fee records are created for all students in selected classes.")
+    pdf.section_title("Setting Fee Structures")
+    pdf.nav_path("Sidebar > Finance > Fee Collection > Set Fee Structure")
+    pdf.step("Click 'Set Fee Structure' to open the fee structure modal.")
+    pdf.step("Use the fee type tabs (Monthly, Annual, Admission, Books, Fine) to switch between fee types.")
+    pdf.step("Enter the fee amount for each class. Leave as 0 for classes that don't pay this fee.")
+    pdf.step("Set the 'Effective From' date (when this fee amount takes effect).")
+    pdf.step("Click 'Review Changes' to see a confirmation summary of all non-zero fees.")
+    pdf.step("Confirm to save. Fee structures are used to auto-calculate amounts when generating fee records.")
+    pdf.info_box("Fee Priority",
+                 "Student-level fee overrides take precedence over class-level defaults. "
+                 "You can set a per-student override from the fee table by clicking the 'Fee' button on a student's row.")
 
-    pdf.section_title("Collecting Fees (Recording Payments)")
+    pdf.section_title("Generating Fee Records")
+    pdf.nav_path("Sidebar > Finance > Fee Collection > Generate Records")
+    pdf.step("Click 'Generate Records' to open the generation modal.")
+    pdf.step("For Monthly fees: select the month and year. The system shows a preview of how many "
+             "records will be created, how many already exist (will be skipped), and the total amount.")
+    pdf.step("For non-monthly fees (Annual, Admission, Books, Fine): select the class to preview. "
+             "The system shows per-student amounts resolved from fee structures.")
+    pdf.step("Review the preview, then click 'Generate' and confirm. Fee records are created for all "
+             "eligible students. Students without a fee structure or with existing records are skipped.")
+    pdf.warning_box("Fee generation requires fee structures to be set first. Students without a matching "
+                    "fee structure will be listed as 'no fee structure' in the preview and will not receive a record.")
+
+    pdf.section_title("Creating Individual Fee Records")
+    pdf.nav_path("Sidebar > Finance > Fee Collection > Create Fee")
+    pdf.step("Click 'Create Fee' to open the single fee creation modal.")
+    pdf.step("Select a class, then search for a student using the searchable dropdown.")
+    pdf.step("The fee amount auto-fills from the student's fee structure (class default or student override).")
+    pdf.step("If the student has already paid, enter the paid amount. Payment fields (Account, Method, Date) "
+             "appear automatically when a paid amount is entered.")
+    pdf.step("The system warns if a duplicate fee record already exists for the same student/type/period.")
+    pdf.step("Click 'Create' to save the fee record.")
+
+    pdf.section_title("Fee Collection Page")
     pdf.nav_path("Sidebar > Finance > Fee Collection")
-    pdf.step("View the fee collection table showing all students and their payment status.")
-    pdf.step("Use the search bar to find a student, or filter by class and payment status.")
-    pdf.step("Click on a student's row to open the payment modal.")
-    pdf.step("Enter: Amount Paid, Payment Method (Cash/Bank/Cheque/Online), Date, Account to credit.")
-    pdf.step("Click 'Record Payment'. The student's balance updates immediately.")
-    pdf.step("For bulk collection, select multiple students and use 'Bulk Collect'.")
+    pdf.body_text(
+        "The fee collection page loads all fee records for the selected month/year in a single request. "
+        "Switching class or status filters is instant (no loading delay) because filtering happens on your browser."
+    )
+    pdf.sub_section("Summary Cards")
+    pdf.body_text("Four KPI cards show month-wide totals: Total Payable, Received, Balance, and Collection Rate.")
+    pdf.sub_section("Analytics")
+    pdf.body_text("Click 'Show Analytics' to reveal class-wise bar charts, payment status donut, and pending student breakdown.")
+    pdf.sub_section("Filters")
+    pdf.body_text("Use the Fee Type, Month, Year, Class, and Status dropdowns to narrow the table view. "
+                  "Class and Status filters apply instantly without re-fetching data.")
+
+    pdf.section_title("Recording Payments")
+    pdf.nav_path("Sidebar > Finance > Fee Collection")
+    pdf.step("In the fee table, click the row's payment area or use the inline edit feature.")
+    pdf.step("Enter: Amount Paid, select the receiving Account, Payment Method, and Date.")
+    pdf.step("Click 'Save'. The student's status updates automatically (PAID, PARTIAL, UNPAID, ADVANCE).")
+
+    pdf.section_title("Bulk Operations")
+    pdf.step("Select multiple students using the checkboxes in the fee table.")
+    pdf.step("The bulk action bar appears at the bottom with options to:")
+    pdf.bullet("Set paid amount, account, and payment method for all selected records at once")
+    pdf.bullet("Delete all selected records (with confirmation)")
+    pdf.step("Confirm the bulk action. All selected records update simultaneously.")
 
     pdf.section_title("Managing Discounts & Scholarships")
     pdf.nav_path("Sidebar > Finance > Discounts & Scholarships")
@@ -1267,6 +1313,22 @@ def build_guide():
     pdf.bullet("Read Rate - Percentage of notifications opened/read")
     pdf.bullet("Breakdown by type and recipient group")
 
+    pdf.section_title("Smart Notification Scheduling")
+    pdf.body_text(
+        "The system can intelligently schedule non-urgent notifications for optimal delivery times. "
+        "Instead of sending immediately, the AI analyzes when recipients are most likely to read "
+        "messages and schedules delivery accordingly. In-app notifications are always immediate."
+    )
+    pdf.nav_path("Sidebar > Notifications > Settings > Smart Scheduling Toggle")
+    pdf.step("Navigate to Notification Settings (config page).")
+    pdf.step("Toggle 'Enable AI-optimized send times' to ON.")
+    pdf.step("The system learns from read patterns over 2-4 weeks for best results.")
+    pdf.step("In-app notifications are always delivered immediately regardless of this setting.")
+    pdf.info_box("How It Works",
+                 "The AI analyzes historical notification read rates by channel (SMS, WhatsApp, Email) "
+                 "and recipient type (parent, teacher, staff). It identifies optimal hours and defers "
+                 "non-urgent messages to those windows. Scheduled notifications are dispatched every 5 minutes.")
+
     pdf.section_title("Automated Notifications (Scheduled)")
     pdf.body_text(
         "The system automatically sends scheduled notifications without manual intervention. "
@@ -1278,9 +1340,13 @@ def build_guide():
             ["Fee Reminders", "5th of every month at 9 AM", "Parents with pending fees"],
             ["Overdue Fee Alerts", "Every Monday at 10 AM", "Parents with overdue fees"],
             ["Daily Absence Summary", "Every day at 5 PM", "School administrators"],
+            ["Scheduled Notification Dispatch", "Every 5 minutes", "System (sends deferred notifications)"],
             ["Failed Notification Retry", "Every 5 minutes", "System (auto-retries failed sends)"],
             ["Old Upload Cleanup", "Every Sunday at 2 AM", "System (deletes uploads > 90 days)"],
             ["Failed OCR Retry", "Every 6 hours", "System (retries failed OCR jobs)"],
+            ["Auto-Tune Thresholds", "Every Sunday at 3 AM", "System (adjusts AI thresholds)"],
+            ["Accuracy Drift Detection", "Daily at 10 PM", "System (checks for AI accuracy drops)"],
+            ["Anomaly Detection", "Daily at 9:30 PM", "System (detects attendance anomalies)"],
         ],
         [55, 60, 75]
     )
@@ -1850,6 +1916,164 @@ def build_guide():
     pdf.bullet("Generate and distribute report cards")
     pdf.bullet("Conduct student promotions (end of year)")
     pdf.bullet("Set up the new academic year and terms")
+
+    # =========================================================================
+    # CHAPTER: AI INTELLIGENCE FEATURES
+    # =========================================================================
+    pdf.chapter_title("AI Intelligence Features")
+
+    pdf.body_text(
+        "KoderEduAI includes a suite of AI-powered intelligence features that operate across "
+        "modules to improve accuracy, surface insights, and automate routine analysis. These "
+        "features learn from your school's data patterns and become more effective over time."
+    )
+
+    pdf.section_title("Auto-Adaptive Thresholds")
+    pdf.body_text(
+        "The AI attendance pipeline uses configurable thresholds for name matching, confidence "
+        "scoring, and table extraction. Instead of hard-coded values, each school can customize "
+        "these thresholds and optionally enable auto-tuning based on correction patterns."
+    )
+    pdf.nav_path("Sidebar > Attendance > Capture & Review > Accuracy Dashboard")
+    pdf.step("Navigate to the Accuracy Dashboard section of the Capture & Review page.")
+    pdf.step("Find the 'AI Threshold Configuration' card.")
+    pdf.step("View current threshold values: Fuzzy Name Match, Rule Confidence, High Confidence, etc.")
+    pdf.step("Toggle 'Auto-tune thresholds' to let the system adjust weekly based on your corrections.")
+    pdf.step("The system needs at least 50 processed uploads before auto-tuning produces meaningful adjustments.")
+    pdf.info_box("How Auto-Tuning Works",
+                 "Every Sunday at 3 AM, the system analyzes the last 14 days of correction data. "
+                 "If name mismatches exceed 5%, fuzzy match threshold increases. If false positives "
+                 "are high, confidence thresholds increase. Changes are small (0.02-0.05) and capped "
+                 "at safe limits. Tune history is preserved for review.")
+
+    pdf.section_title("Pipeline Fallback & Voting")
+    pdf.body_text(
+        "If the primary OCR provider (Google Vision) fails, the system automatically tries "
+        "alternative providers instead of failing completely. You can also enable multi-pipeline "
+        "voting for maximum accuracy."
+    )
+    pdf.step("In the 'Pipeline Configuration' card, select your primary provider.")
+    pdf.step("Arrange the fallback chain (other providers to try if primary fails).")
+    pdf.step("Optionally enable 'Multi-pipeline voting' for critical uploads.")
+    pdf.step("When voting is enabled, multiple providers process the same image and results are "
+             "cross-validated using majority agreement.")
+    pdf.simple_table(
+        ["Provider", "Speed", "Best For"],
+        [
+            ["Google Vision", "Fast", "Most register types (recommended primary)"],
+            ["Groq Vision", "Fast", "Good alternative with LLM reasoning"],
+            ["Tesseract", "Medium", "Fallback when cloud services unavailable"],
+        ],
+        [50, 30, 110]
+    )
+    pdf.info_box("Pipeline Badge",
+                 "After processing, each upload shows which pipeline was used: "
+                 "'Google Vision' (green), 'Groq Vision (fallback)' (amber), or "
+                 "'Multi-pipeline vote' (blue).")
+
+    pdf.section_title("Accuracy Drift Detection")
+    pdf.body_text(
+        "The system monitors AI accuracy daily and alerts administrators when performance "
+        "degrades. Drift often indicates register format changes or new handwriting styles."
+    )
+    pdf.step("The 'Accuracy Drift Monitor' card shows a line chart of daily accuracy percentages.")
+    pdf.step("Red dots on the chart indicate dates where significant drift was detected.")
+    pdf.step("Drift is flagged when accuracy drops more than 10 percentage points from the 30-day baseline.")
+    pdf.step("When drift is detected, an alert banner appears with recommended actions.")
+    pdf.warning_box("Accuracy drift alerts are generated automatically every night at 10 PM. "
+                    "If you see a drift alert, review recent uploads for new register formats "
+                    "and consider adjusting thresholds or mark mappings.")
+
+    pdf.section_title("Attendance Anomaly Detection")
+    pdf.nav_path("Sidebar > Attendance > Anomalies")
+    pdf.body_text(
+        "The system automatically detects unusual attendance patterns every night and creates "
+        "anomaly records for administrator review. Three types of anomalies are detected:"
+    )
+    pdf.simple_table(
+        ["Type", "Trigger", "Severity"],
+        [
+            ["Bulk Class Absence", ">60% of class absent on a day", "HIGH"],
+            ["Student Streak", "Student absent 3+ consecutive days", "MEDIUM"],
+            ["Unusual School Day", "School-wide absence >30%", "HIGH"],
+        ],
+        [50, 80, 60]
+    )
+    pdf.step("Navigate to Attendance > Anomalies to view detected anomalies.")
+    pdf.step("Filter by type, severity, or resolved status.")
+    pdf.step("Review each anomaly's details (affected class, date, absence counts).")
+    pdf.step("Click 'Resolve' and add notes (e.g., 'School sports day', 'Weather event').")
+    pdf.step("Resolved anomalies are archived but remain visible for historical reference.")
+    pdf.info_box("Automated Alerts",
+                 "When anomalies are detected, administrators receive an in-app notification "
+                 "with details. The anomaly detection runs daily at 9:30 PM.")
+
+    pdf.section_title("AI Dashboard Insights")
+    pdf.nav_path("Dashboard (Admin view)")
+    pdf.body_text(
+        "The admin dashboard features an AI Insights card that surfaces actionable items "
+        "across all modules. The AI analyzes attendance, finance, academics, and HR data "
+        "to highlight what needs your attention today."
+    )
+    pdf.sub_section("Types of Insights")
+    pdf.bullet("Alert (red) - Urgent issues: accuracy drift, bulk absences, pipeline failures")
+    pdf.bullet("Warning (amber) - Important: low fee collection, pending reviews, leave backlogs")
+    pdf.bullet("Info (blue) - Informational: unassigned classes, timetable gaps, setup reminders")
+    pdf.body_text(
+        "Each insight includes a title, explanation, recommended action, and a direct link "
+        "to the relevant page. Insights are sorted by priority and refresh automatically."
+    )
+    pdf.info_box("Role-Specific Insights",
+                 "Teachers see attendance-only insights for their classes. Accountants see "
+                 "finance-only insights. HR Managers see HR-only insights. Admin and Principal "
+                 "roles see insights from all modules.")
+
+    pdf.section_title("OR-Tools Timetable Optimization")
+    pdf.nav_path("Sidebar > Academics > Timetable > Auto-Generate")
+    pdf.body_text(
+        "The timetable auto-generation now supports two algorithms. The original greedy "
+        "heuristic is fast but may not find the optimal arrangement. The new OR-Tools "
+        "constraint programming solver produces higher quality schedules."
+    )
+    pdf.step("Navigate to Academics > Timetable and select a class.")
+    pdf.step("Click 'Auto-Generate' to open the generation dialog.")
+    pdf.step("Choose the algorithm: 'Quick (Greedy)' for fast results or 'Optimal (OR-Tools)' for better quality.")
+    pdf.step("Click 'Generate'. OR-Tools takes up to 30 seconds; Greedy is near-instant.")
+    pdf.step("After generation, review the score badge showing algorithm used and quality score.")
+    pdf.simple_table(
+        ["Algorithm", "Speed", "Quality", "Best For"],
+        [
+            ["Quick (Greedy)", "< 1 second", "Good", "Initial drafts, simple schedules"],
+            ["Optimal (OR-Tools)", "Up to 30 seconds", "Excellent", "Final schedules, complex constraints"],
+        ],
+        [40, 35, 35, 80]
+    )
+    pdf.info_box("Constraint Programming",
+                 "OR-Tools enforces hard constraints (no teacher double-booking, exact periods "
+                 "per week) and optimizes soft objectives (spread subjects across days, morning "
+                 "slots for core subjects). If no optimal solution exists, it falls back to greedy.")
+
+    pdf.section_title("AI Report Card Comments")
+    pdf.nav_path("Sidebar > Academics > Examinations > Results")
+    pdf.body_text(
+        "The system can generate personalized, professional comments for each student's "
+        "exam performance. Comments are based on marks, grade, pass/fail status, and "
+        "attendance record. Teachers can review and edit comments before printing report cards."
+    )
+    pdf.step("Navigate to Results and select an exam.")
+    pdf.step("Click 'Generate AI Comments' to generate comments for all students in the exam.")
+    pdf.step("The system generates 2-3 sentence comments per subject per student.")
+    pdf.step("Click on any student row to expand and view their per-subject AI comments.")
+    pdf.step("Use 'Regenerate All' to force-regenerate comments (overwrites existing ones).")
+    pdf.step("Comments appear on report cards automatically after generation.")
+    pdf.info_box("Comment Examples",
+                 "Strong performance: 'Outstanding performance in Mathematics with 92%. "
+                 "Demonstrates excellent understanding of the subject. Keep up the great work.' "
+                 "Weak with low attendance: 'Needs improvement in Science with 48%. Would benefit "
+                 "from additional practice. Attendance (65%) is a concern affecting learning outcomes.'")
+    pdf.warning_box("AI comments require either a Groq API key (for LLM-generated comments) or "
+                    "fall back to rule-based comments. Rule-based comments are generated even without "
+                    "an API key. Teachers should always review AI-generated text before sharing with parents.")
 
     # =========================================================================
     # APPENDIX: KEYBOARD SHORTCUTS & TIPS

@@ -465,6 +465,37 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
         exam.save(update_fields=['status'])
         return Response(ExamSerializer(exam).data)
 
+    @action(detail=True, methods=['post'], url_path='generate-comments')
+    def generate_comments(self, request, pk=None):
+        """AI: Generate personalized report card comments for all marks in this exam.
+
+        Uses AI to generate 2-3 sentence comments based on each student's marks,
+        grade, and attendance record. Comments can be edited by teachers after generation.
+        Skips marks that already have AI comments (use force=true to regenerate all).
+        """
+        exam = self.get_object()
+        school_id = _resolve_school_id(request)
+        force = request.data.get('force', False)
+
+        if not school_id:
+            return Response({'detail': 'No school selected.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # If force=true, clear existing AI comments first
+        if force:
+            StudentMark.objects.filter(
+                exam_subject__exam=exam,
+                school_id=school_id,
+            ).update(ai_comment='', ai_comment_generated_at=None)
+
+        from schools.models import School
+        school = School.objects.get(id=school_id)
+
+        from .ai_comments_service import ReportCardCommentGenerator
+        generator = ReportCardCommentGenerator(school)
+        result = generator.generate_for_exam(exam.id)
+
+        return Response(result)
+
     @action(detail=True, methods=['post'], url_path='populate-subjects')
     def populate_subjects(self, request, pk=None):
         """Re-sync exam subjects from the class's current ClassSubject assignments."""
@@ -542,6 +573,7 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
                     'marks_obtained': float(obtained) if obtained is not None else None,
                     'is_absent': is_absent,
                     'is_pass': obtained is not None and obtained >= es.passing_marks,
+                    'ai_comment': mark.ai_comment if mark else '',
                 })
 
                 if obtained is not None:
@@ -1021,6 +1053,7 @@ class ReportCardView(ModuleAccessMixin, APIView):
                     'total_marks': float(es.total_marks),
                     'marks_obtained': float(mark.marks_obtained) if mark and mark.marks_obtained else None,
                     'is_absent': mark.is_absent if mark else False,
+                    'ai_comment': mark.ai_comment if mark else '',
                 }
 
             exam_data.append({

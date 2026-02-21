@@ -123,6 +123,29 @@ def default_register_config():
     }
 
 
+def default_ai_config():
+    """Default AI pipeline configuration per school."""
+    return {
+        "thresholds": {
+            "fuzzy_name_match": 0.45,
+            "rule_confidence": 0.7,
+            "high_confidence": 0.8,
+            "uncertain_threshold": 0.6,
+            "student_match_score": 70,
+            "row_tolerance": 15,
+            "col_tolerance": 10,
+        },
+        "pipeline": {
+            "primary": "google",
+            "fallback_chain": ["groq", "tesseract"],
+            "voting_enabled": False,
+        },
+        "auto_tune_enabled": False,
+        "last_tuned_at": None,
+        "tune_history": [],
+    }
+
+
 class School(models.Model):
     """
     Tenant model - each school is a separate tenant in the platform.
@@ -168,6 +191,13 @@ class School(models.Model):
     enabled_modules = models.JSONField(
         default=get_default_modules,
         help_text="Per-school module toggles: {'attendance': true, 'finance': true, ...}"
+    )
+
+    # AI pipeline configuration (per-school thresholds, pipeline settings, auto-tuning)
+    ai_config = models.JSONField(
+        default=default_ai_config,
+        blank=True,
+        help_text="Per-school AI pipeline config: thresholds, providers, auto-tune settings"
     )
 
     # Status

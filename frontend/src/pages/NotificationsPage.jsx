@@ -440,6 +440,30 @@ function SettingsTab() {
           </label>
         </div>
 
+        {/* Smart Scheduling */}
+        <div className="border-t pt-4">
+          <label className="flex items-center justify-between">
+            <div>
+              <span className="text-sm font-medium text-gray-700">Smart Notification Scheduling</span>
+              <p className="text-xs text-gray-500 mt-0.5 max-w-xs">
+                When enabled, the AI analyzes when parents are most likely to read messages and schedules
+                non-urgent notifications for optimal delivery times. In-app notifications are always immediate.
+              </p>
+            </div>
+            <input
+              type="checkbox"
+              checked={config.smart_scheduling_enabled || false}
+              onChange={(e) => setConfig({ ...config, smart_scheduling_enabled: e.target.checked })}
+              className="rounded"
+            />
+          </label>
+          {config.smart_scheduling_enabled && (
+            <p className="text-xs text-green-700 bg-green-50 rounded px-3 py-1.5 mt-2">
+              The system learns from read patterns. Best results after 2-4 weeks of data.
+            </p>
+          )}
+        </div>
+
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="text-xs text-gray-500">Fee Reminder Day</label>

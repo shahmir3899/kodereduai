@@ -581,6 +581,18 @@ function ReviewDetail({ uploadId, onBack }) {
           <p className="text-sm text-gray-600">Confidence: {Math.round((upload.confidence_score || 0) * 100)}%</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {upload.pipeline_used && (
+            <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+              upload.pipeline_used === 'vote' ? 'bg-blue-100 text-blue-700' :
+              upload.pipeline_used?.includes('fallback') ? 'bg-amber-100 text-amber-700' :
+              'bg-green-100 text-green-700'
+            }`}>
+              Processed by: {upload.pipeline_used === 'vote' ? 'Multi-pipeline vote' :
+                upload.pipeline_used?.includes('fallback') ? upload.pipeline_used :
+                upload.pipeline_used === 'google' ? 'Google Vision' :
+                upload.pipeline_used === 'groq' ? 'Groq Vision' : upload.pipeline_used}
+            </span>
+          )}
           <span className={`px-3 py-1 rounded-full text-xs font-medium ${upload.status === 'CONFIRMED' ? 'bg-green-100 text-green-800' : upload.status === 'REVIEW_REQUIRED' ? 'bg-yellow-100 text-yellow-800' : upload.status === 'PROCESSING' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`}>{upload.status_display}</span>
           {!isConfirmed && (
             <>

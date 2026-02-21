@@ -132,6 +132,18 @@ export const attendanceApi = {
   // AI Status
   getAIStatus: () => api.get('/api/attendance/ai-status/'),
 
+  // AI Threshold configuration
+  getThresholdStatus: (params) => api.get('/api/attendance/records/threshold_status/', { params }),
+  tuneThresholds: (data) => api.post('/api/attendance/records/tune_thresholds/', data),
+
+  // Drift detection
+  getDriftHistory: (params) => api.get('/api/attendance/records/drift_history/', { params }),
+
+  // Anomaly detection
+  getAnomalies: (params) => api.get('/api/attendance/anomalies/', { params }),
+  getAnomaly: (id) => api.get(`/api/attendance/anomalies/${id}/`),
+  resolveAnomaly: (id, data) => api.post(`/api/attendance/anomalies/${id}/resolve/`, data),
+
   // Manual attendance entry
   getMyAttendanceClasses: () => api.get('/api/attendance/records/my_classes/'),
   bulkEntryAttendance: (data) => api.post('/api/attendance/records/bulk_entry/', data),
@@ -512,6 +524,10 @@ export const examinationsApi = {
 
   // Report Card
   getReportCard: (params) => api.get('/api/examinations/report-card/', { params }),
+
+  // AI Comments
+  generateComments: (examId, force = false) =>
+    api.post(`/api/examinations/exams/${examId}/generate-comments/`, { force }),
 }
 
 // Auth API (school switching + profile)
@@ -939,6 +955,7 @@ export const inventoryApi = {
 export const tasksApi = {
   getMyTasks: () => api.get('/api/tasks/tasks/'),
   getTask: (taskId) => api.get(`/api/tasks/tasks/${taskId}/`),
+  getAIInsights: (params) => api.get('/api/tasks/ai-insights/', { params }),
 }
 
 // ─── Face Attendance (Camera-Based) ──────────────────────────────────────────

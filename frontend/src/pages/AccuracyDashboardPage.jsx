@@ -1,16 +1,43 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { attendanceApi } from '../services/api'
 
 export default function AccuracyDashboardPage() {
   const [days, setDays] = useState(30)
+  const queryClient = useQueryClient()
 
   // Fetch accuracy stats
   const { data: statsData, isLoading, error } = useQuery({
     queryKey: ['accuracyStats', days],
     queryFn: () => attendanceApi.getAccuracyStats({ days })
   })
+
+  // Fetch threshold status
+  const { data: thresholdData } = useQuery({
+    queryKey: ['thresholdStatus'],
+    queryFn: () => attendanceApi.getThresholdStatus()
+  })
+
+  const thresholdStatus = thresholdData?.data || {}
+  const thresholds = thresholdStatus.thresholds || {}
+  const defaults = thresholdStatus.defaults || {}
+
+  // Toggle auto-tune mutation
+  const tuneMutation = useMutation({
+    mutationFn: (data) => attendanceApi.tuneThresholds(data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['thresholdStatus'] })
+  })
+
+  // Fetch drift history
+  const { data: driftData } = useQuery({
+    queryKey: ['driftHistory', days],
+    queryFn: () => attendanceApi.getDriftHistory({ days })
+  })
+
+  const driftHistory = driftData?.data || {}
+  const driftSnapshots = driftHistory.snapshots || []
+  const activeDrift = driftHistory.active_drift || {}
 
   const stats = statsData?.data || {}
   const periodStats = stats.period_stats || {}
@@ -148,6 +175,171 @@ export default function AccuracyDashboardPage() {
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* AI Threshold Configuration */}
+          <div className="card">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-medium text-gray-900">AI Threshold Configuration</h3>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <span className="text-sm text-gray-600">Auto-tune</span>
+                <input
+                  type="checkbox"
+                  checked={thresholdStatus.auto_tune_enabled || false}
+                  onChange={(e) => tuneMutation.mutate({ auto_tune_enabled: e.target.checked })}
+                  className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                  disabled={tuneMutation.isPending}
+                />
+              </label>
+            </div>
+            <p className="text-sm text-gray-500 mb-4">
+              These thresholds control how strictly the AI matches names and interprets marks.
+              Enable auto-tuning to let the system adjust thresholds weekly based on your correction patterns.
+            </p>
+
+            {thresholdStatus.auto_tune_enabled ? (
+              <p className="text-xs text-green-700 bg-green-50 rounded px-3 py-1.5 mb-3">
+                Auto-tune is active. Last tuned: {thresholdStatus.last_tuned_at
+                  ? new Date(thresholdStatus.last_tuned_at).toLocaleDateString()
+                  : 'Never — needs 50+ processed uploads'}
+              </p>
+            ) : (
+              <p className="text-xs text-gray-500 bg-gray-50 rounded px-3 py-1.5 mb-3">
+                Auto-tune is off. Enable it after processing 50+ uploads for best results.
+              </p>
+            )}
+
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200 text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Threshold</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Current</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Default</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {Object.entries(defaults).map(([key, defaultVal]) => (
+                    <tr key={key}>
+                      <td className="px-3 py-2 text-gray-700">{key.replace(/_/g, ' ')}</td>
+                      <td className="px-3 py-2 font-medium">
+                        <span className={thresholds[key] !== defaultVal ? 'text-primary-600' : 'text-gray-900'}>
+                          {thresholds[key] ?? defaultVal}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-gray-500">{defaultVal}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {(thresholdStatus.tune_history || []).length > 0 && (
+              <div className="mt-4 border-t pt-3">
+                <h4 className="text-xs font-medium text-gray-500 uppercase mb-2">Recent Auto-Tune Changes</h4>
+                <div className="space-y-1.5">
+                  {(thresholdStatus.tune_history || []).slice(-3).reverse().map((entry, idx) => (
+                    <div key={idx} className="text-xs bg-gray-50 rounded p-2">
+                      <span className="text-gray-500">{new Date(entry.date).toLocaleDateString()}</span>
+                      {entry.changes.map((c, i) => (
+                        <span key={i} className="ml-2 text-gray-700">{c}</span>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Pipeline Configuration */}
+          <div className="card">
+            <h3 className="font-medium text-gray-900 mb-2">Pipeline Configuration</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              Choose which AI provider processes your registers. Enable fallback to try alternatives
+              if the primary fails. Voting mode runs multiple providers and cross-validates for maximum accuracy.
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">Primary Provider</label>
+                <select
+                  value={thresholds.primary || thresholdStatus.thresholds?.primary || 'google'}
+                  disabled
+                  className="w-full text-sm border-gray-300 rounded-lg bg-gray-50"
+                >
+                  <option value="google">Google Vision</option>
+                  <option value="groq">Groq Vision</option>
+                  <option value="tesseract">Tesseract (Legacy)</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">Fallback Chain</label>
+                <p className="text-sm text-gray-700 bg-gray-50 px-3 py-2 rounded-lg">
+                  {(thresholdStatus.fallback_chain || ['groq', 'tesseract']).join(' → ') || 'None'}
+                </p>
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">Multi-Pipeline Voting</label>
+                <p className="text-sm text-gray-700 bg-gray-50 px-3 py-2 rounded-lg">
+                  {thresholdStatus.voting_enabled ? 'Enabled (slower, more accurate)' : 'Disabled'}
+                </p>
+              </div>
+            </div>
+            <p className="text-xs text-gray-400 mt-3">
+              Pipeline settings are configured per-school by your administrator. Contact support to change providers.
+            </p>
+          </div>
+
+          {/* Accuracy Drift Monitor */}
+          <div className="card">
+            <h3 className="font-medium text-gray-900 mb-2">Accuracy Drift Monitor</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              Tracks daily AI accuracy. Red markers indicate significant drops from the 30-day baseline.
+              Drift often means register format changed or new handwriting styles appeared.
+            </p>
+
+            {activeDrift?.detected && (
+              <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-3">
+                <p className="text-sm font-medium text-red-800">
+                  Accuracy drift detected on {activeDrift.date}!
+                </p>
+                <p className="text-sm text-red-700 mt-1">
+                  {activeDrift.details?.message || 'Accuracy dropped significantly from baseline.'}
+                  {' '}Review recent uploads and consider adjusting thresholds.
+                </p>
+              </div>
+            )}
+
+            {driftSnapshots.length === 0 ? (
+              <p className="text-gray-500 text-center py-4">No drift data yet. Snapshots are recorded daily after confirmed uploads.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <div className="flex items-end gap-1 h-32 min-w-fit">
+                  {driftSnapshots.map((s, idx) => {
+                    const height = s.accuracy != null ? Math.max(s.accuracy * 100, 5) : 5
+                    return (
+                      <div key={idx} className="flex flex-col items-center" title={`${s.date}: ${s.accuracy != null ? (s.accuracy * 100).toFixed(1) + '%' : 'N/A'}${s.drift_detected ? ' [DRIFT]' : ''}`}>
+                        <div
+                          className={`w-3 rounded-t ${s.drift_detected ? 'bg-red-500' : s.accuracy >= 0.9 ? 'bg-green-500' : s.accuracy >= 0.7 ? 'bg-yellow-500' : 'bg-red-400'}`}
+                          style={{ height: `${height}%` }}
+                        />
+                        {idx % 5 === 0 && (
+                          <span className="text-[9px] text-gray-400 mt-1 -rotate-45 origin-top-left whitespace-nowrap">
+                            {new Date(s.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                          </span>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+                <div className="flex items-center gap-4 mt-3 text-xs text-gray-500">
+                  <span className="flex items-center gap-1"><span className="w-3 h-3 bg-green-500 rounded" /> &ge;90%</span>
+                  <span className="flex items-center gap-1"><span className="w-3 h-3 bg-yellow-500 rounded" /> 70-89%</span>
+                  <span className="flex items-center gap-1"><span className="w-3 h-3 bg-red-400 rounded" /> &lt;70%</span>
+                  <span className="flex items-center gap-1"><span className="w-3 h-3 bg-red-500 rounded" /> Drift event</span>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Weekly Trend */}

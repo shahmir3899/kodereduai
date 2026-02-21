@@ -83,6 +83,7 @@ class NotificationLog(models.Model):
 
     STATUS_CHOICES = [
         ('PENDING', 'Pending'),
+        ('SCHEDULED', 'Scheduled'),
         ('SENT', 'Sent'),
         ('DELIVERED', 'Delivered'),
         ('FAILED', 'Failed'),
@@ -131,6 +132,11 @@ class NotificationLog(models.Model):
     title = models.CharField(max_length=200, blank=True, default='')
     body = models.TextField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+    scheduled_for = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='When to dispatch this notification (for AI-optimized scheduling)',
+    )
     metadata = models.JSONField(
         default=dict,
         blank=True,
@@ -242,6 +248,10 @@ class SchoolNotificationConfig(models.Model):
         null=True,
         blank=True,
         help_text='Time to send daily absence summary to admins',
+    )
+    smart_scheduling_enabled = models.BooleanField(
+        default=False,
+        help_text='When enabled, AI analyzes read patterns to schedule non-urgent notifications at optimal times',
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

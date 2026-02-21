@@ -286,6 +286,22 @@ CELERY_BEAT_SCHEDULE = {
         'schedule': crontab(minute=0),  # Every hour
         'kwargs': {'hours': 2},
     },
+    'weekly-auto-tune-thresholds': {
+        'task': 'attendance.tasks.auto_tune_thresholds',
+        'schedule': crontab(day_of_week='sunday', hour=3, minute=0),
+    },
+    'dispatch-scheduled-notifications': {
+        'task': 'notifications.tasks.dispatch_scheduled_notifications',
+        'schedule': crontab(minute='*/5'),
+    },
+    'daily-accuracy-drift-detection': {
+        'task': 'attendance.tasks.detect_accuracy_drift',
+        'schedule': crontab(hour=22, minute=0),
+    },
+    'daily-attendance-anomaly-detection': {
+        'task': 'attendance.tasks.detect_attendance_anomalies',
+        'schedule': crontab(hour=21, minute=30),
+    },
 }
 
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'

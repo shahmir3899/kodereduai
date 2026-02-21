@@ -61,8 +61,9 @@ class SchoolNotificationConfigSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'school', 'school_name',
             'whatsapp_enabled', 'sms_enabled', 'in_app_enabled', 'email_enabled',
-            'quiet_hours_start', 'quiet_hours_end',
+            'push_enabled', 'quiet_hours_start', 'quiet_hours_end',
             'fee_reminder_day', 'daily_absence_summary_time',
+            'smart_scheduling_enabled',
             'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']

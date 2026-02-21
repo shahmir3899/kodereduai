@@ -179,3 +179,65 @@ def process_notification_queue():
 
     logger.info(f"Notification queue processed: {retried} retried")
     return {'retried': retried}
+
+
+@shared_task
+def dispatch_scheduled_notifications():
+    """
+    Dispatch notifications that were deferred by smart scheduling.
+    Runs every 5 minutes. Picks up SCHEDULED notifications whose
+    scheduled_for time has arrived.
+    """
+    from .models import NotificationLog
+    from .engine import NotificationEngine
+
+    now = timezone.now()
+
+    scheduled = NotificationLog.objects.filter(
+        status='SCHEDULED',
+        scheduled_for__lte=now,
+    ).select_related('school')[:100]
+
+    sent = 0
+    failed = 0
+
+    for log in scheduled:
+        try:
+            engine = NotificationEngine(log.school)
+            handler = engine._get_channel_handler(log.channel)
+            if not handler:
+                log.status = 'FAILED'
+                log.metadata = {'error': f'No handler for channel: {log.channel}'}
+                log.save(update_fields=['status', 'metadata'])
+                failed += 1
+                continue
+
+            success = handler.send(
+                recipient=log.recipient_identifier,
+                title=log.title,
+                body=log.body,
+                metadata={'log_id': log.id},
+            )
+            if success:
+                log.status = 'SENT'
+                log.sent_at = timezone.now()
+            else:
+                log.status = 'FAILED'
+                log.metadata = {'error': 'Channel handler returned False'}
+
+            log.save(update_fields=['status', 'sent_at', 'metadata'])
+
+            if success:
+                sent += 1
+            else:
+                failed += 1
+
+        except Exception as e:
+            log.status = 'FAILED'
+            log.metadata = {'error': str(e)}
+            log.save(update_fields=['status', 'metadata'])
+            failed += 1
+            logger.error(f"Scheduled dispatch failed for log {log.id}: {e}")
+
+    logger.info(f"Scheduled notifications dispatched: {sent} sent, {failed} failed")
+    return {'sent': sent, 'failed': failed}

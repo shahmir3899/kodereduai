@@ -322,3 +322,22 @@ class ChronicAbsenteeSerializer(serializers.Serializer):
     absent_count = serializers.IntegerField()
     total_days = serializers.IntegerField()
     absence_percentage = serializers.FloatField()
+
+
+class AttendanceAnomalySerializer(serializers.ModelSerializer):
+    class_name = serializers.CharField(source='class_obj.name', read_only=True, default=None)
+    student_name = serializers.CharField(source='student.name', read_only=True, default=None)
+    resolved_by_name = serializers.CharField(source='resolved_by.get_full_name', read_only=True, default=None)
+
+    class Meta:
+        from .models import AttendanceAnomaly
+        model = AttendanceAnomaly
+        fields = [
+            'id', 'anomaly_type', 'severity', 'date',
+            'class_obj', 'class_name', 'student', 'student_name',
+            'description', 'details',
+            'is_resolved', 'resolved_by', 'resolved_by_name',
+            'resolved_at', 'resolution_notes', 'created_at',
+        ]
+        read_only_fields = ['id', 'anomaly_type', 'severity', 'date', 'description',
+                            'details', 'created_at', 'resolved_by', 'resolved_at']

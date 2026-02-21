@@ -771,6 +771,130 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
             **suggestions
         })
 
+    @action(detail=False, methods=['get'])
+    def threshold_status(self, request):
+        """
+        Get current AI threshold configuration for the school.
+        Shows per-school thresholds, auto-tune status, and recent tune history.
+        """
+        from .threshold_service import ThresholdService
+
+        school_id = request.query_params.get('school_id') or ensure_tenant_school_id(request) or request.user.school_id
+        if not school_id:
+            return Response({'error': 'school_id is required'}, status=400)
+
+        try:
+            from schools.models import School
+            school = School.objects.get(id=school_id)
+        except School.DoesNotExist:
+            return Response({'error': 'School not found'}, status=404)
+
+        ts = ThresholdService(school)
+        ai_config = school.ai_config or {}
+
+        return Response({
+            'school_name': school.name,
+            'thresholds': ts.get_all(),
+            'defaults': ThresholdService.DEFAULTS,
+            'auto_tune_enabled': ai_config.get('auto_tune_enabled', False),
+            'last_tuned_at': ai_config.get('last_tuned_at'),
+            'tune_history': ai_config.get('tune_history', [])[-5:],
+        })
+
+    @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated, IsSchoolAdmin])
+    def tune_thresholds(self, request):
+        """
+        Update AI threshold settings for the school.
+
+        Accepts:
+        - auto_tune_enabled (bool): Toggle weekly auto-tuning
+        - thresholds (dict): Manual threshold overrides (partial updates allowed)
+        """
+        school_id = request.data.get('school_id') or ensure_tenant_school_id(request) or request.user.school_id
+        if not school_id:
+            return Response({'error': 'school_id is required'}, status=400)
+
+        try:
+            from schools.models import School
+            school = School.objects.get(id=school_id)
+        except School.DoesNotExist:
+            return Response({'error': 'School not found'}, status=404)
+
+        ai_config = school.ai_config or {}
+
+        # Toggle auto-tune
+        if 'auto_tune_enabled' in request.data:
+            ai_config['auto_tune_enabled'] = bool(request.data['auto_tune_enabled'])
+
+        # Update thresholds (partial update)
+        if 'thresholds' in request.data:
+            from .threshold_service import ThresholdService
+            current = ai_config.get('thresholds', {})
+            for key, value in request.data['thresholds'].items():
+                if key in ThresholdService.DEFAULTS:
+                    try:
+                        current[key] = float(value)
+                    except (ValueError, TypeError):
+                        return Response(
+                            {'error': f'Invalid value for threshold {key}'},
+                            status=400,
+                        )
+            ai_config['thresholds'] = current
+
+        school.ai_config = ai_config
+        school.save(update_fields=['ai_config'])
+
+        return Response({
+            'success': True,
+            'message': 'Threshold settings updated.',
+            'auto_tune_enabled': ai_config.get('auto_tune_enabled', False),
+            'thresholds': ai_config.get('thresholds', {}),
+        })
+
+    @action(detail=False, methods=['get'])
+    def drift_history(self, request):
+        """
+        Get accuracy drift history for the school.
+        Returns daily accuracy snapshots with drift event markers.
+        """
+        from .models import AccuracySnapshot
+
+        school_id = request.query_params.get('school_id') or ensure_tenant_school_id(request) or request.user.school_id
+        if not school_id:
+            return Response({'error': 'school_id is required'}, status=400)
+
+        days = int(request.query_params.get('days', 30))
+        since = timezone.now() - timezone.timedelta(days=days)
+
+        snapshots = AccuracySnapshot.objects.filter(
+            school_id=school_id,
+            date__gte=since.date(),
+        ).order_by('date')
+
+        active_drift = snapshots.filter(drift_detected=True).order_by('-date').first()
+
+        return Response({
+            'snapshots': [
+                {
+                    'date': s.date,
+                    'accuracy': s.accuracy,
+                    'total_predictions': s.total_predictions,
+                    'total_corrections': s.total_corrections,
+                    'false_positives': s.false_positives,
+                    'false_negatives': s.false_negatives,
+                    'drift_detected': s.drift_detected,
+                    'drift_details': s.drift_details,
+                }
+                for s in snapshots
+            ],
+            'active_drift': {
+                'detected': active_drift is not None,
+                'date': active_drift.date if active_drift else None,
+                'details': active_drift.drift_details if active_drift else None,
+            } if active_drift else {'detected': False},
+            'days': days,
+        })
+
     @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated, CanManualAttendance])
     def my_classes(self, request):
         """Return classes available for manual attendance entry (role-aware)."""
@@ -897,3 +1021,69 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
             'errors': errors,
             'message': f'{created + updated} attendance records saved.',
         })
+
+
+class AttendanceAnomalyViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for viewing and resolving attendance anomalies.
+
+    GET  /api/attendance/anomalies/       - List anomalies (filterable)
+    GET  /api/attendance/anomalies/{id}/  - Detail
+    POST /api/attendance/anomalies/{id}/resolve/ - Mark as resolved
+    """
+    required_module = 'attendance'
+    permission_classes = [IsAuthenticated, HasSchoolAccess]
+
+    def get_queryset(self):
+        from .models import AttendanceAnomaly
+
+        queryset = AttendanceAnomaly.objects.select_related(
+            'school', 'class_obj', 'student', 'resolved_by',
+        )
+
+        active_school_id = ensure_tenant_school_id(self.request)
+        if active_school_id:
+            queryset = queryset.filter(school_id=active_school_id)
+        elif not self.request.user.is_super_admin:
+            tenant_schools = ensure_tenant_schools(self.request)
+            if tenant_schools:
+                queryset = queryset.filter(school_id__in=tenant_schools)
+            else:
+                return queryset.none()
+
+        # Filters
+        anomaly_type = self.request.query_params.get('anomaly_type')
+        if anomaly_type:
+            queryset = queryset.filter(anomaly_type=anomaly_type)
+
+        severity = self.request.query_params.get('severity')
+        if severity:
+            queryset = queryset.filter(severity=severity)
+
+        is_resolved = self.request.query_params.get('is_resolved')
+        if is_resolved is not None:
+            queryset = queryset.filter(is_resolved=is_resolved.lower() == 'true')
+
+        return queryset.order_by('-date', '-severity')
+
+    def get_serializer_class(self):
+        from .serializers import AttendanceAnomalySerializer
+        return AttendanceAnomalySerializer
+
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated, IsSchoolAdmin])
+    def resolve(self, request, pk=None):
+        """Mark an anomaly as resolved with notes."""
+        from .models import AttendanceAnomaly
+
+        anomaly = self.get_object()
+        if anomaly.is_resolved:
+            return Response({'error': 'Already resolved'}, status=400)
+
+        anomaly.is_resolved = True
+        anomaly.resolved_by = request.user
+        anomaly.resolved_at = timezone.now()
+        anomaly.resolution_notes = request.data.get('notes', '')
+        anomaly.save(update_fields=['is_resolved', 'resolved_by', 'resolved_at', 'resolution_notes'])
+
+        from .serializers import AttendanceAnomalySerializer
+        return Response(AttendanceAnomalySerializer(anomaly).data)

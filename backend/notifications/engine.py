@@ -4,7 +4,8 @@ Renders templates, checks preferences, dispatches to channels, and logs results.
 """
 
 import logging
-from typing import Optional
+from datetime import datetime, timedelta
+from typing import Optional, Tuple
 from django.utils import timezone
 
 logger = logging.getLogger(__name__)
@@ -115,6 +116,64 @@ class NotificationEngine:
         from .models import NotificationLog
         return NotificationLog.objects.create(school=self.school, **kwargs)
 
+    def _should_defer(self, channel: str, recipient_type: str) -> Tuple[bool, Optional[datetime]]:
+        """
+        Check if this notification should be deferred to an optimal send time.
+
+        In-app notifications are always immediate. For other channels, uses the
+        NotificationOptimizerService to find the best delivery time.
+
+        Returns:
+            (should_defer, scheduled_for) tuple
+        """
+        # In-app always immediate
+        if channel == 'IN_APP':
+            return False, None
+
+        # Check if smart scheduling is enabled for this school
+        from .models import SchoolNotificationConfig
+        try:
+            config = self.school.notification_config
+            if not config.smart_scheduling_enabled:
+                return False, None
+        except SchoolNotificationConfig.DoesNotExist:
+            return False, None
+
+        try:
+            from .ai_service import NotificationOptimizerService
+            optimizer = NotificationOptimizerService(self.school)
+            optimal = optimizer.get_optimal_send_time(channel, recipient_type)
+            if not optimal or 'hour' not in optimal:
+                return False, None
+
+            optimal_hour = optimal['hour']
+            now = timezone.now()
+
+            # If we're within +/-1 hour of optimal time, send now
+            if abs(now.hour - optimal_hour) <= 1:
+                return False, None
+
+            # Compute next occurrence of optimal hour
+            scheduled = now.replace(hour=optimal_hour, minute=0, second=0, microsecond=0)
+            if scheduled <= now:
+                scheduled += timedelta(days=1)
+
+            # Respect quiet hours
+            if config.quiet_hours_start and config.quiet_hours_end:
+                scheduled_time = scheduled.time()
+                if config.quiet_hours_start <= scheduled_time or scheduled_time <= config.quiet_hours_end:
+                    # Push to end of quiet hours
+                    scheduled = scheduled.replace(
+                        hour=config.quiet_hours_end.hour,
+                        minute=config.quiet_hours_end.minute + 5,
+                    )
+
+            return True, scheduled
+
+        except Exception as e:
+            logger.debug(f"Smart scheduling unavailable: {e}")
+            return False, None
+
     def send(
         self,
         event_type: str,
@@ -183,6 +242,15 @@ class NotificationEngine:
             body=body,
             status='PENDING',
         )
+
+        # Check if notification should be deferred for optimal delivery
+        should_defer, scheduled_for = self._should_defer(channel, recipient_type)
+        if should_defer and scheduled_for:
+            log.status = 'SCHEDULED'
+            log.scheduled_for = scheduled_for
+            log.save(update_fields=['status', 'scheduled_for'])
+            logger.info(f"Notification {log.id} scheduled for {scheduled_for}")
+            return log
 
         # Dispatch to channel handler
         handler = self._get_channel_handler(channel)

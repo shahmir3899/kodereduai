@@ -46,6 +46,15 @@ Reusable spinner component used as Suspense fallback.
 - **SessionHealthWidget.jsx** — Session health metrics. Calls `GET /api/sessions/health/`
 - **AttendanceRiskWidget.jsx** — At-risk students. Calls `GET /api/sessions/attendance-risk/`
 - **SchoolCompletionWidget.jsx** — School setup completion timeline with per-module progress. Calls `GET /api/schools/completion/` via `schoolsApi.getCompletion()`
+- **AIInsightsCard.jsx** — Cross-module AI insights card on admin dashboard. Shows top 10 actionable insights (alerts, warnings, info) from attendance, finance, academics, HR. Color-coded by type with action links. Calls `GET /api/tasks/ai-insights/` via `tasksApi.getAIInsights()`
+
+### AI Accuracy Dashboard Cards (in CaptureReviewPage.jsx)
+- **Threshold Configuration Card** — Displays current per-school AI thresholds (fuzzy match, confidence, etc.), auto-tune toggle, last tuned date, history. Calls `GET/POST threshold_status/`, `tune_thresholds/`
+- **Pipeline Configuration Card** — Primary provider selector (Google Vision / Groq Vision / Tesseract), fallback chain, multi-pipeline voting toggle. Pipeline badge on reviewed uploads.
+- **Drift Monitor Card** — Line chart of daily accuracy with red dots for drift events. Alert banner when active drift detected. Calls `GET drift_history/`
+
+### Attendance Anomaly Components (AnomaliesPage.jsx)
+- **AnomaliesPage.jsx** — Full page at `/attendance/anomalies`. Filter bar (type, severity, resolved toggle), table with Date/Class/Description/Severity/Status/Actions columns. Severity badges: HIGH=red, MEDIUM=amber, LOW=blue. Resolve dialog with notes input. Calls `GET anomalies/`, `POST anomalies/{id}/resolve/`
 
 ### Role-Specific Dashboards (src/pages/)
 The `/dashboard` route renders **DashboardRouter.jsx** which switches on `effectiveRole`:
@@ -66,14 +75,17 @@ The `/dashboard` route renders **DashboardRouter.jsx** which switches on `effect
 
 ## Fee Collection Sub-components (src/pages/fee-collection/)
 Complex page broken into:
-- **FeeFilters.jsx** — Filter controls (month, year, class, status)
-- **FeeSummaryCards.jsx** — Collection total cards
-- **FeeCharts.jsx** — Recharts visualizations
-- **FeeTable.jsx** — Table with inline editing, bulk selection
-- **FeeModals.jsx** — Payment, fee structure, income modals
-- **BulkActionsBar.jsx** — Bulk action toolbar
-- **useFeeData.js** — Custom hook for fee data management
+- **FeeFilters.jsx** — Filter controls (month, year, class, status). Class/status filters apply client-side (no backend call)
+- **FeeSummaryCards.jsx** — KPI cards (Total Payable, Received, Balance, Collection Rate). Summary computed client-side from cached payment data
+- **FeeCharts.jsx** — Recharts visualizations (class-wise bar chart, status donut)
+- **FeeTable.jsx** — Table with inline editing, bulk selection, sort by class/roll
+- **FeeModals.jsx** — Multiple modals: CreateSingleFeeModal (auto-fills amount from fee structure via `resolve_amount`, conditional payment fields when amount_paid > 0, duplicate warning, searchable student dropdown), GenerateModal (preview via `preview_generation` before generation, confirmation step), FeeStructureModal (per-type fee tabs, confirmation review), PaymentModal, IncomeModal, StudentFeeModal
+- **BulkActionsBar.jsx** — Bulk action toolbar with payment method selector, account picker, confirmation dialogs
+- **useFeeData.js** — Custom hook: single fetch per month/year/feeType, client-side class/status filtering via `useMemo`, client-side summary computation (replaces monthlySummary API call)
 - **feeExport.js** — PDF/Excel export utilities
+
+## Reusable Components (src/components/)
+- **SearchableSelect.jsx** — Zero-dependency searchable dropdown. Text-input filtering, keyboard navigation (Arrow keys, Enter, Escape), click-outside close, loading/disabled/clear states. Used in CreateSingleFeeModal for student selection
 
 ## Utility Files
 - **studentExport.js** — PDF/PNG export for student lists
@@ -102,7 +114,7 @@ Manages academic year selection per school.
 Tracks long-running Celery tasks.
 - **State**: tasks list, polling status
 - **Features**: Auto-polling every 3s while tasks active, toast on completion/failure, React Query invalidation on success
-- **Task types**: REPORT_GENERATION, PAYSLIP_GENERATION, TIMETABLE_GENERATION, FEE_GENERATION, BULK_PROMOTION, PROMOTION_ADVISOR
+- **Task types**: REPORT_GENERATION, PAYSLIP_GENERATION, TIMETABLE_GENERATION, FEE_GENERATION, BULK_PROMOTION, PROMOTION_ADVISOR, AI_COMMENT_GENERATION
 - **Methods**: addTask(task), dismissTask(id)
 
 ---
@@ -140,15 +152,15 @@ Centralized axios instance with interceptors. Organized into named API modules:
 
 | Module | Prefix | Key Methods |
 |--------|--------|-------------|
-| attendanceApi | /api/attendance/ | uploadImageToStorage, createUpload, confirmAttendance, getRecords |
+| attendanceApi | /api/attendance/ | uploadImageToStorage, createUpload, confirmAttendance, getRecords, getThresholdStatus, tuneThresholds, getDriftHistory, getAnomalies, resolveAnomaly |
 | schoolsApi | /api/schools/ | getMySchool, getAllSchools, getMarkMappings, getCompletion |
 | studentsApi | /api/students/ | getStudents, createStudent, bulkCreate, getProfileSummary |
 | classesApi | /api/classes/ | getClasses, createClass |
-| financeApi | /api/finance/ | getFeePayments, generateMonthly, getAccounts, createExpense |
+| financeApi | /api/finance/ | getFeePayments, generateMonthly, resolveFeeAmount, previewGeneration, getAccounts, createExpense, bulkUpdatePayments, bulkDeletePayments, createPayment |
 | hrApi | /api/hr/ | getStaff, getDashboardStats, generatePayslips |
 | academicsApi | /api/academics/ | getSubjects, getTimetableEntries, autoGenerate |
 | sessionsApi | /api/sessions/ | getAcademicYears, getEnrollments, bulkPromote, getHealth |
-| examinationsApi | /api/examinations/ | getExams, getMarks, bulkEntry, getReportCard |
+| examinationsApi | /api/examinations/ | getExams, getMarks, bulkEntry, getReportCard, generateComments |
 | admissionsApi | /api/admissions/ | getEnquiries, batchConvert, updateStatus |
 | notificationsApi | /api/notifications/ | getTemplates, sendNotification, getMyNotifications |
 | parentPortalApi | /api/parents/ | getMyChildren, getChildOverview, submitLeave |
@@ -158,7 +170,7 @@ Centralized axios instance with interceptors. Organized into named API modules:
 | hostelApi | /api/hostel/ | getHostels, getRooms, approveGatePass |
 | inventoryApi | /api/inventory/ | getItems, getDashboard, createTransaction |
 | lmsApi | /api/lms/ | getLessonPlans, getAssignments, gradeSubmission |
-| tasksApi | /api/tasks/ | getMyTasks, getTask |
+| tasksApi | /api/tasks/ | getMyTasks, getTask, getAIInsights |
 | reportsApi | /api/reports/ | generateReport, getReportList |
 
 ---

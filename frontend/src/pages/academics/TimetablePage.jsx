@@ -38,6 +38,7 @@ export default function TimetablePage() {
   // AI feature state
   const [autoGenerating, setAutoGenerating] = useState(false)
   const [showAutoGenConfirm, setShowAutoGenConfirm] = useState(false)
+  const [selectedAlgorithm, setSelectedAlgorithm] = useState('greedy')
   const [showScoreModal, setShowScoreModal] = useState(false)
   const [conflictInfo, setConflictInfo] = useState(null)
   const [resolutionData, setResolutionData] = useState(null)
@@ -267,7 +268,8 @@ export default function TimetablePage() {
         }
         setLocalGrid(newGrid)
         setHasChanges(true)
-        let msg = `AI generated timetable (score: ${resultData.score?.toFixed(0) || '?'}/100).`
+        const algoLabel = resultData.algorithm === 'or_tools' ? 'OR-Tools' : 'Greedy'
+        let msg = `Generated using ${algoLabel} (score: ${resultData.score?.toFixed(0) || '?'}/100).`
         if (resultData.warnings?.length) msg += ' Warnings: ' + resultData.warnings.join('; ')
         msg += ' Review and click "Save Timetable" to apply.'
         setSaveMsg(msg)
@@ -277,7 +279,7 @@ export default function TimetablePage() {
 
   const handleAutoGenerate = () => {
     setSaveMsg('')
-    autoGenTask.trigger({ class_id: parseInt(selectedClassId) })
+    autoGenTask.trigger({ class_id: parseInt(selectedClassId), algorithm: selectedAlgorithm })
   }
 
   // Substitute teacher search
@@ -759,12 +761,33 @@ export default function TimetablePage() {
       {/* Auto-Generate Confirm Modal */}
       {showAutoGenConfirm && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setShowAutoGenConfirm(false)}>
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
             <h3 className="text-sm font-semibold text-gray-900 mb-2">AI Auto-Generate Timetable</h3>
             <p className="text-xs text-gray-600 mb-4">
               This will generate a new timetable for <strong>{classes.find(c => c.id == selectedClassId)?.name}</strong> using
               AI. Your current unsaved changes will be replaced. You can review and edit before saving.
             </p>
+
+            <div className="mb-4">
+              <label className="block text-xs font-medium text-gray-700 mb-2">Choose Generation Algorithm</label>
+              <div className="space-y-2">
+                <label className={`flex items-start gap-3 p-2.5 rounded-lg border cursor-pointer transition-colors ${selectedAlgorithm === 'greedy' ? 'border-indigo-300 bg-indigo-50' : 'border-gray-200 hover:bg-gray-50'}`}>
+                  <input type="radio" name="algorithm" value="greedy" checked={selectedAlgorithm === 'greedy'} onChange={() => setSelectedAlgorithm('greedy')} className="mt-0.5" />
+                  <div>
+                    <span className="text-xs font-medium text-gray-900">Quick (Greedy)</span>
+                    <p className="text-[11px] text-gray-500 mt-0.5">Fast heuristic-based generation. Good for most schedules. Completes in under a second.</p>
+                  </div>
+                </label>
+                <label className={`flex items-start gap-3 p-2.5 rounded-lg border cursor-pointer transition-colors ${selectedAlgorithm === 'or_tools' ? 'border-indigo-300 bg-indigo-50' : 'border-gray-200 hover:bg-gray-50'}`}>
+                  <input type="radio" name="algorithm" value="or_tools" checked={selectedAlgorithm === 'or_tools'} onChange={() => setSelectedAlgorithm('or_tools')} className="mt-0.5" />
+                  <div>
+                    <span className="text-xs font-medium text-gray-900">Optimal (OR-Tools)</span>
+                    <p className="text-[11px] text-gray-500 mt-0.5">Constraint programming solver. Takes up to 30s but produces higher quality scores with better subject distribution.</p>
+                  </div>
+                </label>
+              </div>
+            </div>
+
             <div className="flex justify-end gap-2">
               <button onClick={() => setShowAutoGenConfirm(false)} className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>
               <button onClick={handleAutoGenerate} className="px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Generate</button>

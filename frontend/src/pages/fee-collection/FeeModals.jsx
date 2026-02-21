@@ -143,6 +143,8 @@ export function GenerateModal({ show, onClose, month, year, classFilter, setClas
   const [onetimeClass, setOnetimeClass] = useState('')
   const [showConfirm, setShowConfirm] = useState(false)
   const [showStudentList, setShowStudentList] = useState(false)
+  const [modalMonth, setModalMonth] = useState(month)
+  const [modalYear, setModalYear] = useState(year)
 
   const isMonthly = generateFeeType === 'MONTHLY'
 
@@ -154,6 +156,8 @@ export function GenerateModal({ show, onClose, month, year, classFilter, setClas
       setOnetimeClass('')
       setShowConfirm(false)
       setShowStudentList(false)
+      setModalMonth(month)
+      setModalYear(year)
       mutation.reset?.()
       onetimeMutation?.reset?.()
     }
@@ -161,10 +165,11 @@ export function GenerateModal({ show, onClose, month, year, classFilter, setClas
 
   // Preview: dry-run showing what will be created (monthly)
   const { data: monthlyPreview, isFetching: monthlyPreviewLoading } = useQuery({
-    queryKey: ['generate-preview', 'MONTHLY', classFilter, month, year],
+    queryKey: ['generate-preview', 'MONTHLY', classFilter, modalMonth, modalYear, academicYearId],
     queryFn: () => financeApi.previewGeneration({
-      fee_type: 'MONTHLY', year, month,
+      fee_type: 'MONTHLY', year: modalYear, month: modalMonth,
       ...(classFilter && { class_id: classFilter }),
+      ...(academicYearId && { academic_year: academicYearId }),
     }),
     enabled: show && isMonthly,
     staleTime: 30_000,
@@ -172,9 +177,10 @@ export function GenerateModal({ show, onClose, month, year, classFilter, setClas
 
   // Preview: dry-run for non-monthly
   const { data: onetimePreview, isFetching: onetimePreviewLoading } = useQuery({
-    queryKey: ['generate-preview', generateFeeType, onetimeClass, year],
+    queryKey: ['generate-preview', generateFeeType, onetimeClass, modalYear, academicYearId],
     queryFn: () => financeApi.previewGeneration({
-      fee_type: generateFeeType, class_id: onetimeClass, year, month: 0,
+      fee_type: generateFeeType, class_id: onetimeClass, year: modalYear, month: 0,
+      ...(academicYearId && { academic_year: academicYearId }),
     }),
     enabled: show && !isMonthly && !!onetimeClass,
     staleTime: 30_000,
@@ -192,6 +198,8 @@ export function GenerateModal({ show, onClose, month, year, classFilter, setClas
     setOnetimeClass('')
     setShowConfirm(false)
     setShowStudentList(false)
+    setModalMonth(month)
+    setModalYear(year)
     onClose()
   }
 
@@ -222,8 +230,22 @@ export function GenerateModal({ show, onClose, month, year, classFilter, setClas
           {/* MONTHLY tab */}
           {isMonthly && (
             <>
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Month</label>
+                  <select value={modalMonth} onChange={(e) => setModalMonth(parseInt(e.target.value))} className="input-field text-sm">
+                    {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Year</label>
+                  <select value={modalYear} onChange={(e) => setModalYear(parseInt(e.target.value))} className="input-field text-sm">
+                    {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
+                  </select>
+                </div>
+              </div>
               <p className="text-sm text-gray-600 mb-2">
-                Create monthly fee records for all active students for <strong>{MONTHS[month - 1]} {year}</strong>.
+                Create monthly fee records for all enrolled students for <strong>{MONTHS[modalMonth - 1]} {modalYear}</strong>.
               </p>
               <p className="text-sm text-gray-500 mb-4">
                 Unpaid balances from the previous month will be automatically carried forward.
@@ -268,7 +290,7 @@ export function GenerateModal({ show, onClose, month, year, classFilter, setClas
                 <button onClick={handleClose} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">Cancel</button>
                 <button
                   onClick={() => {
-                    const data = { month, year, ...(classFilter && { class_id: parseInt(classFilter) }), ...(academicYearId && { academic_year: academicYearId }) }
+                    const data = { month: modalMonth, year: modalYear, ...(classFilter && { class_id: parseInt(classFilter) }), ...(academicYearId && { academic_year: academicYearId }) }
                     if (mutation.trigger) mutation.trigger(data)
                     else mutation.mutate(data)
                   }}
@@ -292,7 +314,7 @@ export function GenerateModal({ show, onClose, month, year, classFilter, setClas
           {!isMonthly && !showConfirm && (
             <>
               <p className="text-sm text-gray-600 mb-4">
-                Generate <strong>{feeLabel}</strong> fee records for all active students in the selected class for <strong>{year}</strong>.
+                Generate <strong>{feeLabel}</strong> fee records for all enrolled students in the selected class for <strong>{modalYear}</strong>.
               </p>
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Class <span className="text-red-500">*</span></label>
@@ -302,6 +324,12 @@ export function GenerateModal({ show, onClose, month, year, classFilter, setClas
                   className="input-field"
                   classes={classList}
                 />
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Year</label>
+                <select value={modalYear} onChange={(e) => setModalYear(parseInt(e.target.value))} className="input-field">
+                  {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
+                </select>
               </div>
 
               {/* Live preview for non-monthly */}
@@ -373,7 +401,7 @@ export function GenerateModal({ show, onClose, month, year, classFilter, setClas
                 <div className="text-sm text-blue-800 space-y-1">
                   <p><span className="font-medium">Class:</span> {classList.find(c => String(c.id) === String(onetimeClass))?.name}</p>
                   <p><span className="font-medium">Fee Type:</span> {feeLabel}</p>
-                  <p><span className="font-medium">Year:</span> {year}</p>
+                  <p><span className="font-medium">Year:</span> {modalYear}</p>
                   <p><span className="font-medium">Records:</span> {oPreview?.will_create} new</p>
                   <p><span className="font-medium">Total Amount:</span> {Number(oPreview?.total_amount || 0).toLocaleString()}</p>
                 </div>
@@ -385,7 +413,7 @@ export function GenerateModal({ show, onClose, month, year, classFilter, setClas
                     onetimeMutation.mutate({
                       student_ids: oPreview.students.map(s => s.student_id),
                       fee_types: [generateFeeType],
-                      year,
+                      year: modalYear,
                       month: 0,
                       ...(academicYearId && { academic_year: academicYearId }),
                     })
@@ -750,6 +778,7 @@ export function CreateSingleFeeModal({ show, onClose, onSubmit, isPending, error
       year: parseInt(form.year),
       amount_due: parseFloat(form.amount_due),
       amount_paid: parseFloat(form.amount_paid || 0),
+      ...(academicYearId && { academic_year: parseInt(academicYearId) }),
       ...(form.notes && { notes: form.notes }),
       ...(hasPaid && {
         account: parseInt(form.account),

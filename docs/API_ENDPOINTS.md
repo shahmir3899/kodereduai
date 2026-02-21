@@ -100,9 +100,19 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | GET | /api/attendance/records/daily_report/ | date, class_obj |
 | GET | /api/attendance/records/chronic_absentees/ | |
 | GET | /api/attendance/records/accuracy_stats/ | |
+| GET | /api/attendance/records/threshold_status/ | Current AI thresholds, auto_tune status, tune_history |
+| POST | /api/attendance/records/tune_thresholds/ | Toggle auto_tune, manually update thresholds. Body: {auto_tune_enabled, thresholds} |
+| GET | /api/attendance/records/drift_history/ | Params: days (default 30). Returns accuracy snapshots + current drift status |
 | GET | /api/attendance/records/mapping_suggestions/ | |
 | GET | /api/attendance/records/my_classes/ | Returns classes available for manual attendance (role-aware) |
 | POST | /api/attendance/records/bulk_entry/ | Body: {class_id, date, entries: [{student_id, status}]} |
+
+### Attendance Anomalies
+| Method | URL | Params |
+|--------|-----|--------|
+| GET | /api/attendance/anomalies/ | is_resolved, anomaly_type, severity, page_size |
+| GET | /api/attendance/anomalies/{id}/ | |
+| POST | /api/attendance/anomalies/{id}/resolve/ | Body: {resolution_notes} |
 
 **NOTE:** URLs use underscores (`pending_review`, `daily_report`), not hyphens.
 
@@ -128,6 +138,8 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | GET | /api/finance/fee-payments/student_ledger/ | student_id |
 | POST | /api/finance/fee-payments/bulk_update/ | |
 | POST | /api/finance/fee-payments/bulk_delete/ | |
+| GET | /api/finance/fee-payments/resolve_amount/ | student_id, fee_type. Returns resolved fee amount from fee structure (student override > class default) |
+| GET | /api/finance/fee-payments/preview_generation/ | fee_type, class_id, year, month. Dry-run preview of fee generation (counts, amounts, per-student details) |
 | GET/POST | /api/finance/expenses/ | category, date range |
 | GET | /api/finance/expenses/category_summary/ | |
 | GET/POST | /api/finance/other-income/ | |
@@ -194,7 +206,7 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | POST | /api/academics/timetable-slots/bulk_create_slots/ | |
 | POST | /api/academics/timetable-slots/suggest_slots/ | AI suggest |
 | GET/POST | /api/academics/timetable-entries/ | class_obj, day_of_week |
-| POST | /api/academics/timetable-entries/auto_generate/ | AI auto-generate |
+| POST | /api/academics/timetable-entries/auto_generate/ | AI auto-generate. Body accepts {algorithm: 'greedy'|'or_tools'} |
 | POST | /api/academics/timetable-entries/bulk_save/ | |
 | GET | /api/academics/timetable-entries/by_class/ | class_id |
 | GET | /api/academics/timetable-entries/quality_score/ | |
@@ -226,7 +238,8 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | GET/POST | /api/examinations/exam-types/ | |
 | GET/POST | /api/examinations/exams/ | academic_year, exam_type | POST auto-creates ExamSubjects from class's assigned subjects |
 | POST | /api/examinations/exams/{id}/publish/ | |
-| GET | /api/examinations/exams/{id}/results/ | |
+| POST | /api/examinations/exams/{id}/generate-comments/ | Generate AI report card comments. Body: {force: bool}. force=true regenerates all |
+| GET | /api/examinations/exams/{id}/results/ | Now includes ai_comment per mark |
 | GET | /api/examinations/exams/{id}/class_summary/ | |
 | GET/POST | /api/examinations/exam-subjects/ | exam, class_obj |
 | GET/POST | /api/examinations/marks/ | exam_subject, student |
@@ -234,7 +247,7 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | GET | /api/examinations/marks/by_student/ | student_id |
 | GET | /api/examinations/marks/download_template/ | exam_subject_id |
 | GET/POST | /api/examinations/grade-scales/ | |
-| GET | /api/examinations/report-card/ | student_id, academic_year_id |
+| GET | /api/examinations/report-card/ | student_id, academic_year_id. Now includes ai_comment per mark |
 
 ## Notifications
 | Method | URL | Description |
@@ -242,7 +255,7 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | GET/POST | /api/notifications/templates/ | Notification templates |
 | GET | /api/notifications/logs/ | Logs. Params: channel, status, event_type |
 | GET/POST | /api/notifications/preferences/ | User preferences |
-| GET/PUT | /api/notifications/config/ | School config (single object, NOT paginated) |
+| GET/PUT | /api/notifications/config/ | School config (single object, NOT paginated). Includes smart_scheduling_enabled field |
 | GET | /api/notifications/my/ | My in-app notifications |
 | GET | /api/notifications/unread-count/ | Unread count |
 | POST | /api/notifications/{id}/mark-read/ | Mark as read |
@@ -373,6 +386,7 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 |--------|-----|-------------|
 | GET | /api/tasks/tasks/ | Background task list |
 | GET | /api/tasks/tasks/{celery_task_id}/ | Task detail |
+| GET | /api/tasks/ai-insights/ | Top 10 cross-module AI insights + generated_at timestamp |
 
 **NOTE:** Tasks endpoint is nested: `/api/tasks/tasks/`, NOT `/api/tasks/`.
 

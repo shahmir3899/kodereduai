@@ -332,12 +332,18 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         class_id = request.query_params.get('class_id')
         year_param = request.query_params.get('year', date.today().year)
         month_param = request.query_params.get('month', date.today().month)
+        academic_year_id = request.query_params.get('academic_year')
 
         school_id = _resolve_school_id(request)
         if not school_id:
             return Response({'detail': 'No school context.'}, status=400)
 
         students = Student.objects.filter(school_id=school_id, is_active=True)
+        if academic_year_id:
+            students = students.filter(
+                enrollments__academic_year_id=academic_year_id,
+                enrollments__is_active=True,
+            )
         if class_id:
             students = students.filter(class_obj_id=class_id)
         students = students.select_related('class_obj')
@@ -413,6 +419,11 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         title = f"Generating fees for {month}/{year}"
 
         student_qs = Student.objects.filter(school_id=school_id, is_active=True)
+        if academic_year_id:
+            student_qs = student_qs.filter(
+                enrollments__academic_year_id=academic_year_id,
+                enrollments__is_active=True,
+            )
         if class_id:
             student_qs = student_qs.filter(class_obj_id=class_id)
         student_count = student_qs.count()
