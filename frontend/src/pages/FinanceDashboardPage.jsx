@@ -605,7 +605,7 @@ export default function FinanceDashboardPage() {
       {canWrite && (
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
           <Link
-            to="/finance/fees"
+            to="/finance/fees/collect"
             className="card flex items-center justify-center py-3 hover:bg-gray-50 transition-colors"
           >
             <span className="text-sm font-medium text-primary-700">Record Fee Payment</span>

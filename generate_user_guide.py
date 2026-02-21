@@ -882,6 +882,8 @@ def build_guide():
              "The system shows per-student amounts resolved from fee structures.")
     pdf.step("Review the preview, then click 'Generate' and confirm. Fee records are created for all "
              "eligible students. Students without a fee structure or with existing records are skipped.")
+    pdf.step("The generation modal auto-closes after successful completion and the fee table refreshes "
+             "automatically to show the newly created records.")
     pdf.warning_box("Fee generation requires fee structures to be set first. Students without a matching "
                     "fee structure will be listed as 'no fee structure' in the preview and will not receive a record.")
 
@@ -919,6 +921,9 @@ def build_guide():
     pdf.step("Select multiple students using the checkboxes in the fee table.")
     pdf.step("The bulk action bar appears at the bottom with options to:")
     pdf.bullet("Set paid amount, account, and payment method for all selected records at once")
+    pdf.bullet("Pay Full - One click to mark all selected students as fully paid (amount paid = total payable). "
+               "Select an account, then click the green 'Pay Full' button. Each student's paid amount is set to "
+               "their individual total (amount due + previous balance), saving time during month-end collection.")
     pdf.bullet("Delete all selected records (with confirmation)")
     pdf.step("Confirm the bulk action. All selected records update simultaneously.")
 
@@ -969,6 +974,23 @@ def build_guide():
     pdf.info_box("Payment Security", "All payment transactions use cryptographic signatures "
                  "(HMAC-SHA256 for JazzCash, SHA-256 for Easypaisa) to prevent tampering. "
                  "Callback URLs are verified before updating payment status.")
+
+    pdf.section_title("Financial Record Safety (Student Deletion)")
+    pdf.body_text(
+        "When a student is deleted from the system, all their financial records are preserved. "
+        "Fee payments, online payments, fee structures, and discount records remain intact with "
+        "the student field showing 'Deleted Student' instead of being deleted along with the student."
+    )
+    pdf.info_box("Why This Matters",
+                 "Financial records represent actual money received and amounts due. Deleting a student "
+                 "should never cause payment history to vanish - that would make account totals impossible "
+                 "to reconcile. The system uses SET_NULL on student references so records survive deletion.")
+    pdf.bullet("Fee payments - Preserved, shows 'Deleted Student' in the student column")
+    pdf.bullet("Online payments - Preserved, transaction history intact")
+    pdf.bullet("Fee structures - Preserved, shows student-level overrides")
+    pdf.bullet("Discount records - Preserved, scholarship history maintained")
+    pdf.warning_box("Even though financial records survive student deletion, it is best practice to "
+                    "avoid deleting students who have financial history. Consider marking them as inactive instead.")
 
     pdf.section_title("Inter-Account Transfers")
     pdf.step("On the Finance Dashboard, click 'Transfer'.")
@@ -2108,6 +2130,8 @@ def build_guide():
     pdf.bullet("Use discounts/scholarships feature instead of manual fee adjustments")
     pdf.bullet("Download PDF reports monthly from the Finance Dashboard for record-keeping")
     pdf.bullet("Use the period selector to compare This Month vs Last Month or view yearly trends")
+    pdf.bullet("Use 'Pay Full' bulk action for quick month-end collection when most students pay in full")
+    pdf.bullet("Financial records are preserved when students are deleted - no need to worry about losing payment history")
 
     pdf.section_title("Security Tips")
     pdf.bullet("Use strong, unique passwords for each user account")

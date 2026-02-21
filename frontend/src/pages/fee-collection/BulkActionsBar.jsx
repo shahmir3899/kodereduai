@@ -7,11 +7,10 @@ const BULK_PAYMENT_METHODS = [
   { value: 'OTHER', label: 'Other' },
 ]
 
-export default function BulkActionsBar({ selectedCount, onBulkUpdate, onBulkDelete, isPending, accountsList }) {
+export default function BulkActionsBar({ selectedCount, onBulkUpdate, onPayFull, onBulkDelete, isPending, accountsList, showWarning }) {
   const [bulkAmount, setBulkAmount] = useState('')
   const [bulkAccount, setBulkAccount] = useState('')
   const [bulkMethod, setBulkMethod] = useState('CASH')
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [showUpdateConfirm, setShowUpdateConfirm] = useState(false)
 
   if (selectedCount === 0) return null
@@ -82,7 +81,7 @@ export default function BulkActionsBar({ selectedCount, onBulkUpdate, onBulkDele
             <button
               onClick={() => {
                 if (!bulkAccount) {
-                  alert('Please select account')
+                  showWarning?.('Please select an account first')
                   return
                 }
                 if (bulkAmount) {
@@ -94,39 +93,33 @@ export default function BulkActionsBar({ selectedCount, onBulkUpdate, onBulkDele
             >
               Update
             </button>
+            <button
+              onClick={() => {
+                if (!bulkAccount) {
+                  showWarning?.('Please select an account first')
+                  return
+                }
+                onPayFull(parseInt(bulkAccount), bulkMethod)
+              }}
+              disabled={!bulkAccount || isPending}
+              className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 disabled:opacity-50"
+            >
+              Pay Full
+            </button>
           </>
         )}
       </div>
 
       <div className="w-px h-8 bg-gray-200 hidden sm:block" />
 
-      {/* Bulk delete */}
-      {showDeleteConfirm ? (
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-red-600">Delete all?</span>
-          <button
-            onClick={() => { onBulkDelete(); setShowDeleteConfirm(false) }}
-            disabled={isPending}
-            className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs disabled:opacity-50"
-          >
-            Yes
-          </button>
-          <button
-            onClick={() => setShowDeleteConfirm(false)}
-            className="px-3 py-1.5 border border-gray-300 rounded-lg text-xs"
-          >
-            No
-          </button>
-        </div>
-      ) : (
-        <button
-          onClick={() => setShowDeleteConfirm(true)}
-          disabled={isPending}
-          className="px-3 py-1.5 text-red-600 border border-red-300 rounded-lg text-sm hover:bg-red-50 disabled:opacity-50"
-        >
-          Delete
-        </button>
-      )}
+      {/* Bulk delete — goes straight to DeleteConfirmModal */}
+      <button
+        onClick={onBulkDelete}
+        disabled={isPending}
+        className="px-3 py-1.5 text-red-600 border border-red-300 rounded-lg text-sm hover:bg-red-50 disabled:opacity-50"
+      >
+        Delete
+      </button>
     </div>
   )
 }

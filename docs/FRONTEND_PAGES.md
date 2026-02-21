@@ -81,7 +81,7 @@ Redirects: /attendance/upload, /attendance/review, /attendance/records → remap
 | Route | Component | Description | API Calls |
 |-------|-----------|-------------|-----------|
 | /finance | FinanceDashboardPage.jsx | Finance overview | GET balances/, monthly_summary/ |
-| /finance/fees | FeeCollectionPage.jsx | Fee collection (complex, sub-components). Client-side class/status filtering, client-side summary. | GET fee-payments/ (single fetch), fee-structures/, resolve_amount/, preview_generation/ |
+| /finance/fees | FeeCollectionPage.jsx | Fee collection (complex, sub-components). Client-side class/status filtering, client-side summary. Bulk "Pay Full" sets each student's paid = total payable. | GET fee-payments/ (single fetch), fee-structures/, resolve_amount/, preview_generation/, PATCH bulk_update/ (mode=pay_full) |
 | /finance/expenses | ExpensesPage.jsx | Expense tracking | GET/POST expenses/ |
 | /finance/discounts | DiscountsPage.jsx | Discounts & scholarships | GET/POST discounts/, scholarships/ |
 | /finance/payment-gateways | PaymentGatewayPage.jsx | Payment gateway config | GET/POST gateway-config/ |

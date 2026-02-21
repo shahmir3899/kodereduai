@@ -61,6 +61,20 @@ api.interceptors.response.use(
       }
     }
 
+    // 5xx server errors — dispatch global toast event
+    if (error.response && error.response.status >= 500) {
+      window.dispatchEvent(new CustomEvent('api-error', {
+        detail: { message: 'Server error — please try again later.' },
+      }))
+    }
+
+    // Network errors (no response — server unreachable)
+    if (!error.response && error.message === 'Network Error') {
+      window.dispatchEvent(new CustomEvent('api-error', {
+        detail: { message: 'Network error — please check your connection.' },
+      }))
+    }
+
     return Promise.reject(error)
   }
 )
@@ -220,6 +234,7 @@ export const financeApi = {
   updateFeeStructure: (id, data) => api.patch(`/api/finance/fee-structures/${id}/`, data),
   deleteFeeStructure: (id) => api.delete(`/api/finance/fee-structures/${id}/`),
   bulkSetFeeStructures: (data) => api.post('/api/finance/fee-structures/bulk_set/', data),
+  bulkSetStudentFeeStructures: (data) => api.post('/api/finance/fee-structures/bulk_set_students/', data),
 
   // Fee Payments
   getFeePayments: (params) => api.get('/api/finance/fee-payments/', { params }),
@@ -235,6 +250,18 @@ export const financeApi = {
   bulkDeletePayments: (data) => api.post('/api/finance/fee-payments/bulk_delete/', data),
   resolveFeeAmount: (params) => api.get('/api/finance/fee-payments/resolve_amount/', { params }),
   previewGeneration: (params) => api.get('/api/finance/fee-payments/preview_generation/', { params }),
+
+  // Expense Categories
+  getExpenseCategories: (params) => api.get('/api/finance/expense-categories/', { params }),
+  createExpenseCategory: (data) => api.post('/api/finance/expense-categories/', data),
+  updateExpenseCategory: (id, data) => api.patch(`/api/finance/expense-categories/${id}/`, data),
+  deleteExpenseCategory: (id) => api.delete(`/api/finance/expense-categories/${id}/`),
+
+  // Income Categories
+  getIncomeCategories: (params) => api.get('/api/finance/income-categories/', { params }),
+  createIncomeCategory: (data) => api.post('/api/finance/income-categories/', data),
+  updateIncomeCategory: (id, data) => api.patch(`/api/finance/income-categories/${id}/`, data),
+  deleteIncomeCategory: (id) => api.delete(`/api/finance/income-categories/${id}/`),
 
   // Other Income
   getOtherIncome: (params) => api.get('/api/finance/other-income/', { params }),

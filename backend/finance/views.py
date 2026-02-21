@@ -18,18 +18,23 @@ from rest_framework.permissions import IsAuthenticated
 from core.permissions import IsSchoolAdmin, IsSchoolAdminOrStaffReadOnly, HasSchoolAccess, get_effective_role, ModuleAccessMixin
 from core.mixins import TenantQuerySetMixin, ensure_tenant_schools, ensure_tenant_school_id
 from students.models import Student, Class
+from django.utils import timezone
 from .models import (
     Account, Transfer, FeeStructure, FeePayment, Expense, OtherIncome,
+    ExpenseCategory, IncomeCategory,
+    DEFAULT_EXPENSE_CATEGORIES, DEFAULT_INCOME_CATEGORIES,
     FinanceAIChatMessage, MonthlyClosing, AccountSnapshot,
     Discount, Scholarship, StudentDiscount, PaymentGatewayConfig, OnlinePayment,
+    SiblingGroup, SiblingGroupMember, SiblingSuggestion,
     resolve_fee_amount,
 )
 from .serializers import (
     AccountSerializer, AccountCreateSerializer,
     TransferSerializer, TransferCreateSerializer,
-    FeeStructureSerializer, FeeStructureCreateSerializer, BulkFeeStructureSerializer,
+    FeeStructureSerializer, FeeStructureCreateSerializer, BulkFeeStructureSerializer, BulkStudentFeeStructureSerializer,
     FeePaymentSerializer, FeePaymentCreateSerializer, FeePaymentUpdateSerializer,
     GenerateMonthlySerializer, GenerateOnetimeFeesSerializer,
+    ExpenseCategorySerializer, IncomeCategorySerializer,
     ExpenseSerializer, ExpenseCreateSerializer,
     OtherIncomeSerializer, OtherIncomeCreateSerializer,
     FinanceAIChatMessageSerializer, FinanceAIChatInputSerializer,
@@ -39,6 +44,8 @@ from .serializers import (
     PaymentGatewayConfigSerializer,
     OnlinePaymentSerializer, OnlinePaymentInitiateSerializer,
     FeeBreakdownSerializer, SiblingDetectionSerializer,
+    SiblingGroupMemberSerializer, SiblingGroupSerializer,
+    SiblingSuggestionSerializer,
 )
 
 logger = logging.getLogger(__name__)
@@ -199,6 +206,55 @@ class FeeStructureViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Model
 
         return Response({'created': created_count})
 
+    @action(detail=False, methods=['post'], url_path='bulk_set_students')
+    def bulk_set_students(self, request):
+        """Bulk set student-level fee structure overrides for a class."""
+        serializer = BulkStudentFeeStructureSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response({'detail': 'No school associated with user.'}, status=400)
+
+        class_id = serializer.validated_data['class_id']
+        fee_type = serializer.validated_data['fee_type']
+        effective_from = serializer.validated_data['effective_from']
+        students_data = serializer.validated_data['students']
+
+        created_count = 0
+
+        try:
+            with transaction.atomic():
+                for item in students_data:
+                    student_id = item['student_id']
+                    monthly_amount = item['monthly_amount']
+
+                    # Deactivate any existing student-level fee structure
+                    FeeStructure.objects.filter(
+                        school_id=school_id,
+                        student_id=student_id,
+                        fee_type=fee_type,
+                        is_active=True,
+                    ).update(is_active=False)
+
+                    # Create student-level fee structure (no academic_year,
+                    # consistent with class-level bulk_set; resolve_fee_amount
+                    # uses effective_from, not academic_year)
+                    FeeStructure.objects.create(
+                        school_id=school_id,
+                        student_id=student_id,
+                        fee_type=fee_type,
+                        monthly_amount=monthly_amount,
+                        effective_from=effective_from,
+                    )
+                    created_count += 1
+
+        except Exception as e:
+            logger.error(f"Bulk student fee structure error: {e}")
+            return Response({'detail': str(e)}, status=400)
+
+        return Response({'created': created_count})
+
 
 class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     """CRUD + bulk generation + summaries for fee payments."""
@@ -346,7 +402,7 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
             )
         if class_id:
             students = students.filter(class_obj_id=class_id)
-        students = students.select_related('class_obj')
+        students = students.select_related('class_obj').distinct()
 
         m = int(month_param) if fee_type == 'MONTHLY' else 0
         existing_ids = set(
@@ -426,6 +482,7 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
             )
         if class_id:
             student_qs = student_qs.filter(class_obj_id=class_id)
+        student_qs = student_qs.distinct()
         student_count = student_qs.count()
 
         if student_count < 100:
@@ -521,14 +578,43 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
 
     @action(detail=False, methods=['post'])
     def bulk_update(self, request):
-        """Bulk update amount_paid for multiple fee payment records."""
-        records = request.data.get('records', [])
-        if not records:
-            return Response({'detail': 'No records provided.'}, status=400)
+        """Bulk update amount_paid for multiple fee payment records.
 
+        Supports two modes:
+        - Normal: records=[{id, amount_paid, account, ...}]
+        - Pay full: pay_full=true, ids=[...], account=N, payment_method=...
+          Sets each record's amount_paid = amount_due automatically.
+        """
+        pay_full = request.data.get('pay_full', False)
         school_id = _resolve_school_id(request)
         if not school_id:
             return Response({'detail': 'No school associated with your account.'}, status=400)
+
+        if pay_full:
+            ids = request.data.get('ids', [])
+            account_id = request.data.get('account')
+            payment_method = request.data.get('payment_method', 'CASH')
+            if not ids:
+                return Response({'detail': 'No IDs provided.'}, status=400)
+            if not account_id:
+                return Response({'detail': 'Please select account'}, status=400)
+
+            payments = FeePayment.objects.filter(id__in=ids, school_id=school_id)
+            updated_count = 0
+            for payment in payments:
+                payment.amount_paid = payment.amount_due
+                payment.account_id = account_id
+                payment.payment_method = payment_method
+                payment.collected_by = request.user
+                if not payment.payment_date:
+                    payment.payment_date = date.today()
+                payment.save()
+                updated_count += 1
+            return Response({'updated': updated_count, 'errors': []})
+
+        records = request.data.get('records', [])
+        if not records:
+            return Response({'detail': 'No records provided.'}, status=400)
 
         # Validate that all records have an account
         for item in records:
@@ -705,6 +791,58 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         })
 
 
+def _seed_expense_categories(school_id):
+    """Create default expense categories for a school if none exist."""
+    for code, name in DEFAULT_EXPENSE_CATEGORIES:
+        ExpenseCategory.objects.get_or_create(
+            school_id=school_id, name=name, defaults={'code': code},
+        )
+
+
+def _seed_income_categories(school_id):
+    """Create default income categories for a school if none exist."""
+    for code, name in DEFAULT_INCOME_CATEGORIES:
+        IncomeCategory.objects.get_or_create(
+            school_id=school_id, name=name, defaults={'code': code},
+        )
+
+
+class ExpenseCategoryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
+    """CRUD for school expense categories. Auto-seeds defaults on first access."""
+    required_module = 'finance'
+    queryset = ExpenseCategory.objects.all()
+    serializer_class = ExpenseCategorySerializer
+    permission_classes = [IsAuthenticated, IsSchoolAdminOrStaffReadOnly, HasSchoolAccess]
+
+    def list(self, request, *args, **kwargs):
+        school_id = _resolve_school_id(request)
+        if school_id and not ExpenseCategory.objects.filter(school_id=school_id).exists():
+            _seed_expense_categories(school_id)
+        return super().list(request, *args, **kwargs)
+
+    def perform_create(self, serializer):
+        school_id = _resolve_school_id(self.request)
+        serializer.save(school_id=school_id)
+
+
+class IncomeCategoryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
+    """CRUD for school income categories. Auto-seeds defaults on first access."""
+    required_module = 'finance'
+    queryset = IncomeCategory.objects.all()
+    serializer_class = IncomeCategorySerializer
+    permission_classes = [IsAuthenticated, IsSchoolAdminOrStaffReadOnly, HasSchoolAccess]
+
+    def list(self, request, *args, **kwargs):
+        school_id = _resolve_school_id(request)
+        if school_id and not IncomeCategory.objects.filter(school_id=school_id).exists():
+            _seed_income_categories(school_id)
+        return super().list(request, *args, **kwargs)
+
+    def perform_create(self, serializer):
+        school_id = _resolve_school_id(self.request)
+        serializer.save(school_id=school_id)
+
+
 class ExpenseViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     """CRUD + category summaries for school expenses."""
     required_module = 'finance'
@@ -718,7 +856,7 @@ class ExpenseViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         return ExpenseSerializer
 
     def get_queryset(self):
-        queryset = Expense.objects.select_related('school', 'recorded_by', 'account')
+        queryset = Expense.objects.select_related('school', 'recorded_by', 'account', 'category')
 
         # Filter by active school (works for all users including super admin)
         school_id = _resolve_school_id(self.request)
@@ -746,7 +884,7 @@ class ExpenseViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         date_to = self.request.query_params.get('date_to')
 
         if category:
-            queryset = queryset.filter(category=category.upper())
+            queryset = queryset.filter(category_id=category)
         if date_from:
             queryset = queryset.filter(date__gte=date_from)
         if date_to:
@@ -768,7 +906,7 @@ class ExpenseViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         if not school_id:
             return Response({'detail': 'No school associated with your account. Please contact an administrator.'}, status=400)
 
-        queryset = Expense.objects.filter(school_id=school_id)
+        queryset = Expense.objects.filter(school_id=school_id).select_related('category')
 
         # Staff: hide sensitive expenses and restrict to visible accounts
         if _is_staff_user(request):
@@ -785,17 +923,15 @@ class ExpenseViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         if date_to:
             queryset = queryset.filter(date__lte=date_to)
 
-        summary = queryset.values('category').annotate(
+        summary = queryset.values('category', 'category__name').annotate(
             total_amount=Sum('amount'),
             count=Count('id'),
         ).order_by('-total_amount')
 
-        # Add display names
-        category_map = dict(Expense.Category.choices)
         result = [
             {
                 'category': item['category'],
-                'category_display': category_map.get(item['category'], item['category']),
+                'category_display': item['category__name'] or 'Uncategorized',
                 'total_amount': item['total_amount'],
                 'count': item['count'],
             }
@@ -823,7 +959,7 @@ class OtherIncomeViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
         return OtherIncomeSerializer
 
     def get_queryset(self):
-        queryset = OtherIncome.objects.select_related('school', 'recorded_by', 'account')
+        queryset = OtherIncome.objects.select_related('school', 'recorded_by', 'account', 'category')
 
         # Filter by active school (works for all users including super admin)
         school_id = _resolve_school_id(self.request)
@@ -1377,14 +1513,14 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         other_income = (
             OtherIncome.objects
             .filter(school_id=school_id)
-            .select_related('account', 'recorded_by')
+            .select_related('account', 'recorded_by', 'category')
             .order_by('-created_at')[:limit]
         )
         for oi in other_income:
             entries.append({
                 'type': 'other_income',
                 'id': oi.id,
-                'description': f"{oi.get_category_display()}{(' — ' + oi.description) if oi.description else ''}",
+                'description': f"{oi.category.name if oi.category else 'Uncategorized'}{(' — ' + oi.description) if oi.description else ''}",
                 'amount': float(oi.amount),
                 'date': str(oi.date),
                 'account_name': oi.account.name if oi.account else None,
@@ -1396,14 +1532,14 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         expenses = (
             Expense.objects
             .filter(school_id=school_id)
-            .select_related('account', 'recorded_by')
+            .select_related('account', 'recorded_by', 'category')
             .order_by('-created_at')[:limit]
         )
         for exp in expenses:
             entries.append({
                 'type': 'expense',
                 'id': exp.id,
-                'description': f"{exp.get_category_display()}{(' — ' + exp.description) if exp.description else ''}",
+                'description': f"{exp.category.name if exp.category else 'Uncategorized'}{(' — ' + exp.description) if exp.description else ''}",
                 'amount': float(exp.amount),
                 'date': str(exp.date),
                 'account_name': exp.account.name if exp.account else None,
@@ -2381,12 +2517,182 @@ class SiblingDetectionView(ModuleAccessMixin, APIView):
 
         matched_phone = ', '.join(sorted(phones))
 
+        # Confirmed sibling group info
+        membership = SiblingGroupMember.objects.filter(
+            student=student, group__is_active=True,
+        ).select_related('group').first()
+
+        sibling_group_info = None
+        if membership:
+            group = membership.group
+            members = group.members.select_related('student__class_obj').all()
+            sibling_group_info = {
+                'group_id': group.id,
+                'group_name': group.name,
+                'members': [
+                    {
+                        'id': m.student.id,
+                        'name': m.student.name,
+                        'class_name': m.student.class_obj.name if m.student.class_obj else '',
+                        'order_index': m.order_index,
+                    }
+                    for m in members
+                ],
+            }
+
+        # Pending suggestions count
+        pending_count = SiblingSuggestion.objects.filter(
+            Q(student_a=student) | Q(student_b=student),
+            school_id=school_id,
+            status='PENDING',
+        ).count()
+
         return Response(SiblingDetectionSerializer({
             'student_id': student.id,
             'student_name': student.name,
             'matched_phone': matched_phone,
             'siblings': sibling_list,
+            'sibling_group': sibling_group_info,
+            'pending_suggestions_count': pending_count,
         }).data)
+
+
+# =============================================================================
+# Phase 6a: Sibling Suggestion & Group Management
+# =============================================================================
+
+class SiblingSuggestionListView(ModuleAccessMixin, APIView):
+    """
+    GET: List sibling suggestions for the current school.
+    Query params: ?status=PENDING (default), ?page=1&page_size=20
+    """
+    required_module = 'finance'
+    permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
+
+    def get(self, request):
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response({'detail': 'No school associated with your account.'}, status=400)
+
+        status_filter = request.query_params.get('status', 'PENDING').upper()
+        suggestions = SiblingSuggestion.objects.filter(
+            school_id=school_id,
+            status=status_filter,
+        ).select_related(
+            'student_a__class_obj', 'student_b__class_obj', 'reviewed_by',
+            'sibling_group',
+        ).order_by('-confidence_score', '-created_at')
+
+        page = int(request.query_params.get('page', 1))
+        page_size = int(request.query_params.get('page_size', 20))
+        start = (page - 1) * page_size
+        end = start + page_size
+
+        total = suggestions.count()
+        results = suggestions[start:end]
+
+        return Response({
+            'count': total,
+            'results': SiblingSuggestionSerializer(results, many=True).data,
+        })
+
+
+class SiblingSuggestionActionView(ModuleAccessMixin, APIView):
+    """
+    POST /api/finance/sibling-suggestions/<id>/confirm/
+    POST /api/finance/sibling-suggestions/<id>/reject/
+    """
+    required_module = 'finance'
+    permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
+
+    def post(self, request, suggestion_id, action):
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response({'detail': 'No school associated with your account.'}, status=400)
+
+        try:
+            suggestion = SiblingSuggestion.objects.select_related(
+                'student_a__class_obj', 'student_b__class_obj',
+            ).get(id=suggestion_id, school_id=school_id, status='PENDING')
+        except SiblingSuggestion.DoesNotExist:
+            return Response(
+                {'detail': 'Suggestion not found or already reviewed.'},
+                status=404,
+            )
+
+        if action == 'reject':
+            suggestion.status = 'REJECTED'
+            suggestion.reviewed_by = request.user
+            suggestion.reviewed_at = timezone.now()
+            suggestion.save(update_fields=['status', 'reviewed_by', 'reviewed_at'])
+            return Response({'detail': 'Suggestion rejected.'})
+
+        if action == 'confirm':
+            from finance.sibling_confirmation import confirm_sibling_suggestion
+            group = confirm_sibling_suggestion(suggestion, request.user)
+            members = group.members.select_related('student__class_obj').all()
+            return Response({
+                'detail': 'Siblings confirmed.',
+                'sibling_group_id': group.id,
+                'sibling_group_name': group.name,
+                'members': SiblingGroupMemberSerializer(members, many=True).data,
+            })
+
+        return Response({'detail': f'Unknown action: {action}'}, status=400)
+
+
+class SiblingSuggestionSummaryView(ModuleAccessMixin, APIView):
+    """GET: Count of pending sibling suggestions (for dashboard badge)."""
+    required_module = 'finance'
+    permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
+
+    def get(self, request):
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response({'detail': 'No school associated with your account.'}, status=400)
+
+        pending_count = SiblingSuggestion.objects.filter(
+            school_id=school_id, status='PENDING',
+        ).count()
+
+        high_confidence_count = SiblingSuggestion.objects.filter(
+            school_id=school_id, status='PENDING', confidence_score__gte=70,
+        ).count()
+
+        return Response({
+            'pending_count': pending_count,
+            'high_confidence_count': high_confidence_count,
+        })
+
+
+class SiblingGroupListView(ModuleAccessMixin, APIView):
+    """GET: List confirmed sibling groups for the current school."""
+    required_module = 'finance'
+    permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
+
+    def get(self, request):
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response({'detail': 'No school associated with your account.'}, status=400)
+
+        groups = SiblingGroup.objects.filter(
+            school_id=school_id, is_active=True,
+        ).prefetch_related(
+            'members__student__class_obj',
+        ).select_related('confirmed_by').order_by('-created_at')
+
+        page = int(request.query_params.get('page', 1))
+        page_size = int(request.query_params.get('page_size', 20))
+        start = (page - 1) * page_size
+        end = start + page_size
+
+        total = groups.count()
+        results = groups[start:end]
+
+        return Response({
+            'count': total,
+            'results': SiblingGroupSerializer(results, many=True).data,
+        })
 
 
 # =============================================================================

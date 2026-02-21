@@ -37,7 +37,7 @@ def generate_monthly_fees_task(self, school_id, month, year, class_id=None, acad
             )
         if class_id:
             student_qs = student_qs.filter(class_obj_id=int(class_id))
-        students = list(student_qs)
+        students = list(student_qs.distinct())
 
         total = len(students)
         update_task_progress(task_id, current=0, total=total)
@@ -133,3 +133,55 @@ def generate_monthly_fees_task(self, school_id, month, year, class_id=None, acad
         logger.exception(f"Fee generation failed: {e}")
         mark_task_failed(task_id, str(e))
         raise
+
+
+# =============================================================================
+# Sibling Detection Tasks
+# =============================================================================
+
+@shared_task(bind=True, time_limit=300)
+def detect_siblings_for_student_task(self, student_id):
+    """Detect siblings for a single student (triggered by post_save signal)."""
+    from students.models import Student
+    from finance.sibling_detection import detect_siblings_for_student
+
+    try:
+        student = Student.objects.get(id=student_id, is_active=True)
+    except Student.DoesNotExist:
+        logger.warning(f"Sibling detection: Student {student_id} not found or inactive.")
+        return {'student_id': student_id, 'suggestions_created': 0}
+
+    count = detect_siblings_for_student(student)
+    logger.info(f"Sibling detection for student {student_id}: {count} suggestion(s) created.")
+    return {'student_id': student_id, 'suggestions_created': count}
+
+
+@shared_task(bind=True, time_limit=1800)
+def scan_all_siblings_task(self):
+    """
+    Nightly full scan: detect siblings across all active schools
+    with the finance module enabled. Idempotent — skips pairs that
+    already have pending/confirmed suggestions.
+    """
+    from schools.models import School
+    from students.models import Student
+    from finance.sibling_detection import detect_siblings_for_student
+
+    schools = School.objects.filter(is_active=True)
+    total_suggestions = 0
+
+    for school in schools:
+        enabled = school.enabled_modules if hasattr(school, 'enabled_modules') else {}
+        if isinstance(enabled, dict) and not enabled.get('finance', False):
+            continue
+
+        students = Student.objects.filter(
+            school=school, is_active=True,
+        ).order_by('id')
+
+        for student in students.iterator(chunk_size=100):
+            count = detect_siblings_for_student(student)
+            total_suggestions += count
+
+    logger.info(f"Nightly sibling scan complete: {total_suggestions} new suggestion(s).")
+    return {'total_suggestions': total_suggestions}

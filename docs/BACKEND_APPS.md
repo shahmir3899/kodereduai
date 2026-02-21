@@ -259,14 +259,16 @@ school(FK), name, min_percentage, max_percentage, grade_point
 school(FK), name, account_type (CASH/BANK/MOBILE), description, is_default, is_active
 
 ### FeeStructure
-school(FK), name, class_obj(FK nullable), amount, fee_type (FeeType, default=MONTHLY), academic_year(FK), frequency (MONTHLY/QUARTERLY/ANNUAL/ONE_TIME)
+school(FK), name, class_obj(FK nullable), student(FK SET_NULL nullable), amount, fee_type (FeeType, default=MONTHLY), academic_year(FK), frequency (MONTHLY/QUARTERLY/ANNUAL/ONE_TIME)
 
 ### FeePayment
-school(FK), student(FK), fee_structure(FK nullable), amount, paid_amount, discount_amount, balance, fee_type (FeeType, default=MONTHLY), month, year, status (PENDING/PARTIAL/PAID/OVERDUE), payment_date, payment_method, receipt_number, account(FK nullable), academic_year(FK)
+school(FK), student(FK SET_NULL nullable), fee_structure(FK nullable), amount, paid_amount, discount_amount, balance, fee_type (FeeType, default=MONTHLY), month, year, status (PENDING/PARTIAL/PAID/OVERDUE), payment_date, payment_method, receipt_number, account(FK nullable), academic_year(FK)
 
 **Unique constraint:** (school, student, month, year, fee_type)
 
 **Note:** `resolve_fee_amount(student, fee_type='MONTHLY')` accepts a fee_type parameter. `FeePayment.save()/delete()` skip MonthlyClosing lock for month=0 records (used by non-MONTHLY fee types).
+
+**Financial Record Safety:** FeePayment, FeeStructure, OnlinePayment, and StudentDiscount use `on_delete=SET_NULL` on student ForeignKeys. Deleting a student preserves all financial records (student field becomes NULL, displayed as "Deleted Student" in the UI).
 
 ### Expense
 school(FK), category, description, amount, date, account(FK), payment_method, receipt_number, created_by(FK), academic_year(FK)
@@ -281,13 +283,13 @@ school(FK), name, discount_type (PERCENTAGE/FIXED), value, applies_to, is_active
 school(FK), name, amount, criteria, is_active
 
 ### StudentDiscount
-student(FK), discount(FK nullable), scholarship(FK nullable), custom_amount
+student(FK SET_NULL nullable), discount(FK nullable), scholarship(FK nullable), custom_amount
 
 ### PaymentGatewayConfig
 school(FK), provider (JAZZCASH/EASYPAISA), config(JSON), is_active, is_default
 
 ### OnlinePayment
-school(FK), student(FK), fee_payment(FK), amount, order_id, provider, status, gateway_response(JSON)
+school(FK), student(FK SET_NULL nullable), fee_payment(FK), amount, order_id, provider, status, gateway_response(JSON)
 
 ---
 

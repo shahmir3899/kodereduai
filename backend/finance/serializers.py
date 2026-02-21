@@ -5,6 +5,7 @@ Finance serializers for fee structures, payments, expenses, other income, and AI
 from rest_framework import serializers
 from .models import (
     Account, Transfer, FeeStructure, FeePayment, Expense, OtherIncome,
+    ExpenseCategory, IncomeCategory,
     FinanceAIChatMessage, MonthlyClosing, AccountSnapshot,
     Discount, Scholarship, StudentDiscount, PaymentGatewayConfig, OnlinePayment,
 )
@@ -125,9 +126,24 @@ class BulkFeeStructureSerializer(serializers.Serializer):
     effective_from = serializers.DateField()
 
 
+class BulkStudentFeeStructureItemSerializer(serializers.Serializer):
+    student_id = serializers.IntegerField()
+    monthly_amount = serializers.DecimalField(max_digits=10, decimal_places=2)
+
+
+class BulkStudentFeeStructureSerializer(serializers.Serializer):
+    class_id = serializers.IntegerField()
+    fee_type = serializers.ChoiceField(
+        choices=[('MONTHLY', 'Monthly'), ('ANNUAL', 'Annual'), ('ADMISSION', 'Admission'),
+                 ('BOOKS', 'Books'), ('FINE', 'Fine')],
+    )
+    effective_from = serializers.DateField()
+    students = BulkStudentFeeStructureItemSerializer(many=True)
+
+
 class FeePaymentSerializer(serializers.ModelSerializer):
-    student_name = serializers.CharField(source='student.name', read_only=True)
-    student_roll = serializers.CharField(source='student.roll_number', read_only=True)
+    student_name = serializers.CharField(source='student.name', read_only=True, default='Deleted Student')
+    student_roll = serializers.CharField(source='student.roll_number', read_only=True, default=None)
     class_name = serializers.SerializerMethodField()
     class_obj_id = serializers.IntegerField(source='student.class_obj.id', read_only=True, default=None)
     collected_by_name = serializers.CharField(source='collected_by.username', read_only=True, default=None)
@@ -235,15 +251,27 @@ class GenerateOnetimeFeesSerializer(serializers.Serializer):
     )
 
 
+class ExpenseCategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ExpenseCategory
+        fields = ['id', 'name', 'code', 'is_active']
+
+
+class IncomeCategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = IncomeCategory
+        fields = ['id', 'name', 'code', 'is_active']
+
+
 class ExpenseSerializer(serializers.ModelSerializer):
     recorded_by_name = serializers.CharField(source='recorded_by.username', read_only=True, default=None)
-    category_display = serializers.CharField(source='get_category_display', read_only=True)
+    category_name = serializers.CharField(source='category.name', read_only=True, default=None)
     account_name = serializers.CharField(source='account.name', read_only=True, default=None)
 
     class Meta:
         model = Expense
         fields = [
-            'id', 'school', 'category', 'category_display',
+            'id', 'school', 'category', 'category_name',
             'amount', 'date', 'description',
             'recorded_by', 'recorded_by_name',
             'account', 'account_name',
@@ -290,13 +318,13 @@ class FinanceAIChatMessageSerializer(serializers.ModelSerializer):
 
 class OtherIncomeSerializer(serializers.ModelSerializer):
     recorded_by_name = serializers.CharField(source='recorded_by.username', read_only=True, default=None)
-    category_display = serializers.CharField(source='get_category_display', read_only=True)
+    category_name = serializers.CharField(source='category.name', read_only=True, default=None)
     account_name = serializers.CharField(source='account.name', read_only=True, default=None)
 
     class Meta:
         model = OtherIncome
         fields = [
-            'id', 'school', 'category', 'category_display',
+            'id', 'school', 'category', 'category_name',
             'amount', 'date', 'description',
             'recorded_by', 'recorded_by_name',
             'account', 'account_name',
@@ -442,7 +470,7 @@ class ScholarshipSerializer(serializers.ModelSerializer):
 
 class StudentDiscountSerializer(serializers.ModelSerializer):
     """Read serializer for StudentDiscount with nested names."""
-    student_name = serializers.CharField(source='student.name', read_only=True)
+    student_name = serializers.CharField(source='student.name', read_only=True, default='Deleted Student')
     student_roll = serializers.CharField(source='student.roll_number', read_only=True, default=None)
     class_name = serializers.CharField(source='student.class_obj.name', read_only=True, default=None)
     discount_name = serializers.CharField(source='discount.name', read_only=True, default=None)
@@ -520,7 +548,7 @@ class PaymentGatewayConfigSerializer(serializers.ModelSerializer):
 
 class OnlinePaymentSerializer(serializers.ModelSerializer):
     """Read-only serializer for OnlinePayment."""
-    student_name = serializers.CharField(source='student.name', read_only=True)
+    student_name = serializers.CharField(source='student.name', read_only=True, default='Deleted Student')
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     fee_payment_month = serializers.IntegerField(source='fee_payment.month', read_only=True)
     fee_payment_year = serializers.IntegerField(source='fee_payment.year', read_only=True)
@@ -600,3 +628,77 @@ class SiblingDetectionSerializer(serializers.Serializer):
     student_name = serializers.CharField()
     matched_phone = serializers.CharField()
     siblings = SiblingStudentSerializer(many=True)
+    sibling_group = serializers.DictField(allow_null=True, required=False)
+    pending_suggestions_count = serializers.IntegerField(required=False, default=0)
+
+
+# =============================================================================
+# Sibling Group & Suggestion Serializers
+# =============================================================================
+
+class SiblingGroupMemberSerializer(serializers.Serializer):
+    """Read-only representation of a sibling group member."""
+    id = serializers.IntegerField(source='student.id')
+    name = serializers.CharField(source='student.name')
+    class_name = serializers.SerializerMethodField()
+    roll_number = serializers.CharField(source='student.roll_number')
+    order_index = serializers.IntegerField()
+    has_sibling_discount = serializers.SerializerMethodField()
+
+    def get_class_name(self, obj):
+        return obj.student.class_obj.name if obj.student.class_obj else ''
+
+    def get_has_sibling_discount(self, obj):
+        from finance.models import StudentDiscount
+        return StudentDiscount.objects.filter(
+            student=obj.student,
+            discount__applies_to='SIBLING',
+            is_active=True,
+        ).exists()
+
+
+class SiblingGroupSerializer(serializers.Serializer):
+    """Read-only serializer for a confirmed sibling group."""
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    is_active = serializers.BooleanField()
+    confirmed_by_name = serializers.SerializerMethodField()
+    confirmed_at = serializers.DateTimeField()
+    member_count = serializers.SerializerMethodField()
+    members = SiblingGroupMemberSerializer(many=True, read_only=True)
+    created_at = serializers.DateTimeField()
+
+    def get_confirmed_by_name(self, obj):
+        return obj.confirmed_by.username if obj.confirmed_by else None
+
+    def get_member_count(self, obj):
+        return obj.members.count()
+
+
+class SiblingSuggestionSerializer(serializers.Serializer):
+    """Read-only serializer for sibling suggestions."""
+    id = serializers.IntegerField()
+    student_a = serializers.IntegerField(source='student_a.id')
+    student_a_name = serializers.CharField(source='student_a.name')
+    student_a_class = serializers.SerializerMethodField()
+    student_a_roll = serializers.CharField(source='student_a.roll_number')
+    student_b = serializers.IntegerField(source='student_b.id')
+    student_b_name = serializers.CharField(source='student_b.name')
+    student_b_class = serializers.SerializerMethodField()
+    student_b_roll = serializers.CharField(source='student_b.roll_number')
+    confidence_score = serializers.IntegerField()
+    match_signals = serializers.JSONField()
+    status = serializers.CharField()
+    reviewed_by_name = serializers.SerializerMethodField()
+    reviewed_at = serializers.DateTimeField()
+    sibling_group = serializers.IntegerField(source='sibling_group.id', allow_null=True, default=None)
+    created_at = serializers.DateTimeField()
+
+    def get_student_a_class(self, obj):
+        return obj.student_a.class_obj.name if obj.student_a.class_obj else ''
+
+    def get_student_b_class(self, obj):
+        return obj.student_b.class_obj.name if obj.student_b.class_obj else ''
+
+    def get_reviewed_by_name(self, obj):
+        return obj.reviewed_by.username if obj.reviewed_by else None

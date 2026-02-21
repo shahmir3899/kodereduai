@@ -302,6 +302,10 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'attendance.tasks.detect_attendance_anomalies',
         'schedule': crontab(hour=21, minute=30),
     },
+    'nightly-sibling-detection': {
+        'task': 'finance.tasks.scan_all_siblings_task',
+        'schedule': crontab(hour=2, minute=30),
+    },
 }
 
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'

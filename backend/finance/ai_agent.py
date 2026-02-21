@@ -207,7 +207,7 @@ class FinanceAIAgent:
 
         qs = Expense.objects.filter(school_id=self.school_id)
         if category:
-            qs = qs.filter(category=category.upper())
+            qs = qs.filter(category__name__iexact=category)
         if date_from:
             qs = qs.filter(date__gte=date_from)
         if date_to:
@@ -341,17 +341,16 @@ class FinanceAIAgent:
         if date_to:
             qs = qs.filter(date__lte=date_to)
 
-        breakdown = qs.values('category').annotate(
+        breakdown = qs.values('category', 'category__name').annotate(
             total=Sum('amount'),
             count=Count('id'),
         ).order_by('-total')
 
-        category_map = dict(Expense.Category.choices)
         return {
             "categories": [
                 {
                     "category": item['category'],
-                    "name": category_map.get(item['category'], item['category']),
+                    "name": item['category__name'] or 'Uncategorized',
                     "total": float(item['total']),
                     "count": item['count'],
                 }
@@ -367,16 +366,15 @@ class FinanceAIAgent:
 
         qs = OtherIncome.objects.filter(school_id=self.school_id)
         if category:
-            qs = qs.filter(category=category.upper())
+            qs = qs.filter(category__name__iexact=category)
         if date_from:
             qs = qs.filter(date__gte=date_from)
         if date_to:
             qs = qs.filter(date__lte=date_to)
 
         total = qs.aggregate(total=Sum('amount'))['total'] or 0
-        category_map = dict(OtherIncome.Category.choices)
 
-        breakdown = qs.values('category').annotate(
+        breakdown = qs.values('category', 'category__name').annotate(
             total=Sum('amount'), count=Count('id'),
         ).order_by('-total')
 
@@ -387,7 +385,7 @@ class FinanceAIAgent:
             "categories": [
                 {
                     "category": item['category'],
-                    "name": category_map.get(item['category'], item['category']),
+                    "name": item['category__name'] or 'Uncategorized',
                     "total": float(item['total']),
                     "count": item['count'],
                 }

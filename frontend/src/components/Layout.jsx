@@ -172,8 +172,8 @@ const ClockIcon = () => (
 // Collapsible sidebar group component
 function SidebarGroup({ group, onNavigate }) {
   const location = useLocation()
-  // Sort children by href length descending so longer paths match first
-  const sortedChildren = [...group.children].sort((a, b) => b.href.length - a.href.length)
+  // Sort children by href length descending so longer paths match first (skip dividers)
+  const sortedChildren = group.children.filter(c => c.type !== 'divider').sort((a, b) => b.href.length - a.href.length)
 
   const isChildActive = (href) => {
     // Check if this child is the best (longest) match
@@ -183,7 +183,7 @@ function SidebarGroup({ group, onNavigate }) {
     return matchingChild?.href === href
   }
 
-  const hasActiveChild = group.children.some(child => isChildActive(child.href))
+  const hasActiveChild = group.children.filter(c => c.type !== 'divider').some(child => isChildActive(child.href))
   const [expanded, setExpanded] = useState(hasActiveChild)
 
   useEffect(() => {
@@ -207,21 +207,27 @@ function SidebarGroup({ group, onNavigate }) {
 
       {expanded && (
         <div className="ml-4 mt-0.5 space-y-0.5">
-          {group.children.map((child) => (
-            <Link
-              key={child.href}
-              to={child.href}
-              className={`flex items-center px-4 py-2 rounded-lg transition-colors text-sm ${
-                isChildActive(child.href)
-                  ? 'bg-primary-50 text-primary-700'
-                  : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
-              }`}
-              onClick={onNavigate}
-            >
-              <child.icon />
-              <span className="ml-3">{child.name}</span>
-            </Link>
-          ))}
+          {group.children.map((child, idx) =>
+            child.type === 'divider' ? (
+              <div key={child.label || idx} className="pt-2 pb-1 px-4">
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">{child.label}</p>
+              </div>
+            ) : (
+              <Link
+                key={child.href}
+                to={child.href}
+                className={`flex items-center px-4 py-2 rounded-lg transition-colors text-sm ${
+                  isChildActive(child.href)
+                    ? 'bg-primary-50 text-primary-700'
+                    : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
+                }`}
+                onClick={onNavigate}
+              >
+                <child.icon />
+                <span className="ml-3">{child.name}</span>
+              </Link>
+            )
+          )}
         </div>
       )}
     </div>
@@ -313,6 +319,7 @@ const SESSION_AWARE_PREFIXES = [
   '/attendance',
   '/students',
   '/finance/fees',
+  '/finance/income',
   '/finance/discounts',
   '/academics/subjects',
   '/academics/exams',
@@ -360,10 +367,18 @@ export default function Layout() {
       icon: CurrencyIcon,
       children: [
         { name: 'Dashboard', href: '/finance', icon: ChartIcon },
-        { name: 'Fee Collection', href: '/finance/fees', icon: ReceiptIcon },
+        { type: 'divider', label: 'Fees' },
+        { name: 'Fee Overview', href: '/finance/fees', icon: ClipboardCheckIcon },
+        { name: 'Collect Payments', href: '/finance/fees/collect', icon: ReceiptIcon },
+        ...(!isStaffLevel
+          ? [{ name: 'Fee Setup', href: '/finance/fees/setup', icon: CogIcon }]
+          : []),
+        { type: 'divider', label: 'Income & Expenses' },
+        { name: 'Other Income', href: '/finance/income', icon: BanknotesIcon },
         { name: 'Expenses', href: '/finance/expenses', icon: WalletIcon },
         ...(!isStaffLevel
           ? [
+              { name: 'Discounts', href: '/finance/discounts', icon: TagIcon },
               { name: 'Payment Gateways', href: '/finance/payment-gateways', icon: CogIcon },
             ]
           : []),
@@ -494,15 +509,7 @@ export default function Layout() {
       ],
     }] : []),
 
-    // Finance: Discounts & Scholarships (added under Finance for admin)
-    ...(isModuleEnabled('finance') && !isStaffLevel ? [{
-      type: 'group',
-      name: 'Discounts',
-      icon: TagIcon,
-      children: [
-        { name: 'Discounts & Scholarships', href: '/finance/discounts', icon: TagIcon },
-      ],
-    }] : []),
+    // Discounts moved into Finance group above
 
     // Settings - admin only (SCHOOL_ADMIN, not staff-level roles)
     ...(!isStaffLevel

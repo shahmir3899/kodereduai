@@ -18,7 +18,10 @@ const StudentsPage = lazy(() => import('./pages/StudentsPage'))
 const ClassesGradesPage = lazy(() => import('./pages/ClassesGradesPage'))
 const SuperAdminDashboard = lazy(() => import('./pages/SuperAdminDashboard'))
 const ProfilePage = lazy(() => import('./pages/ProfilePage'))
-const FeeCollectionPage = lazy(() => import('./pages/fee-collection/FeeCollectionPage'))
+const FeeOverviewPage = lazy(() => import('./pages/fee-collection/FeeOverviewPage'))
+const FeeCollectPage = lazy(() => import('./pages/fee-collection/FeeCollectPage'))
+const FeeSetupPage = lazy(() => import('./pages/fee-collection/FeeSetupPage'))
+const OtherIncomePage = lazy(() => import('./pages/fee-collection/OtherIncomePage'))
 const ExpensesPage = lazy(() => import('./pages/ExpensesPage'))
 const FinanceDashboardPage = lazy(() => import('./pages/FinanceDashboardPage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
@@ -302,7 +305,10 @@ function App() {
 
             {/* Finance routes */}
             <Route path="finance" element={<SchoolRoute><ModuleRoute module="finance"><FinanceDashboardPage /></ModuleRoute></SchoolRoute>} />
-            <Route path="finance/fees" element={<SchoolRoute><ModuleRoute module="finance"><FeeCollectionPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="finance/fees" element={<SchoolRoute><ModuleRoute module="finance"><FeeOverviewPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="finance/fees/collect" element={<SchoolRoute><ModuleRoute module="finance"><FeeCollectPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="finance/fees/setup" element={<SchoolRoute><ModuleRoute module="finance"><FeeSetupPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="finance/income" element={<SchoolRoute><ModuleRoute module="finance"><OtherIncomePage /></ModuleRoute></SchoolRoute>} />
             <Route path="finance/accounts" element={<Navigate to="/settings?tab=accounts" replace />} />
             <Route path="finance/expenses" element={<SchoolRoute><ModuleRoute module="finance"><ExpensesPage /></ModuleRoute></SchoolRoute>} />
             <Route path="finance/reports" element={<Navigate to="/finance" replace />} />

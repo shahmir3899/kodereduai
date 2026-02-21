@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { schoolsApi, attendanceApi, financeApi, usersApi } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
+import { getErrorMessage } from '../utils/errorUtils'
 
 const ACCOUNT_TYPES = [
   { value: 'CASH', label: 'Cash' },
@@ -14,20 +15,6 @@ const typeColors = {
   CASH: 'bg-green-100 text-green-800',
   BANK: 'bg-blue-100 text-blue-800',
   PERSON: 'bg-purple-100 text-purple-800',
-}
-
-const getErrorMessage = (error, fallback = 'Something went wrong') => {
-  const data = error?.response?.data
-  if (!data) return fallback
-  if (typeof data === 'string') return data
-  if (data.detail) return data.detail
-  if (data.non_field_errors) return data.non_field_errors.join(', ')
-  const messages = []
-  for (const [key, val] of Object.entries(data)) {
-    if (Array.isArray(val)) messages.push(`${key}: ${val.join(', ')}`)
-    else if (typeof val === 'string') messages.push(`${key}: ${val}`)
-  }
-  return messages.length > 0 ? messages.join('; ') : fallback
 }
 
 export default function SettingsPage() {

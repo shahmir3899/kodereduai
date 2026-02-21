@@ -79,8 +79,8 @@ Complex page broken into:
 - **FeeSummaryCards.jsx** — KPI cards (Total Payable, Received, Balance, Collection Rate). Summary computed client-side from cached payment data
 - **FeeCharts.jsx** — Recharts visualizations (class-wise bar chart, status donut)
 - **FeeTable.jsx** — Table with inline editing, bulk selection, sort by class/roll
-- **FeeModals.jsx** — Multiple modals: CreateSingleFeeModal (auto-fills amount from fee structure via `resolve_amount`, conditional payment fields when amount_paid > 0, duplicate warning, searchable student dropdown), GenerateModal (preview via `preview_generation` before generation, confirmation step), FeeStructureModal (per-type fee tabs, confirmation review), PaymentModal, IncomeModal, StudentFeeModal
-- **BulkActionsBar.jsx** — Bulk action toolbar with payment method selector, account picker, confirmation dialogs
+- **FeeModals.jsx** — Multiple modals: CreateSingleFeeModal (auto-fills amount from fee structure via `resolve_amount`, conditional payment fields when amount_paid > 0, duplicate warning, searchable student dropdown), GenerateModal (preview via `preview_generation` before generation, confirmation step, auto-closes on success after 1.5s), FeeStructureModal (per-type fee tabs, confirmation review), PaymentModal, IncomeModal, StudentFeeModal
+- **BulkActionsBar.jsx** — Bulk action toolbar with payment method selector, account picker, "Pay Full" button (sets each student's paid amount = their total payable in one click), confirmation dialogs
 - **useFeeData.js** — Custom hook: single fetch per month/year/feeType, client-side class/status filtering via `useMemo`, client-side summary computation (replaces monthlySummary API call)
 - **feeExport.js** — PDF/Excel export utilities
 

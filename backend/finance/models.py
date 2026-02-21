@@ -167,6 +167,63 @@ class Transfer(models.Model):
         return f"{self.from_account.name} -> {self.to_account.name}: {self.amount} ({self.date})"
 
 
+DEFAULT_EXPENSE_CATEGORIES = [
+    ('SALARY', 'Salary'),
+    ('RENT', 'Rent'),
+    ('UTILITIES', 'Utilities'),
+    ('SUPPLIES', 'Supplies'),
+    ('MAINTENANCE', 'Maintenance'),
+    ('MISC', 'Miscellaneous'),
+]
+
+DEFAULT_INCOME_CATEGORIES = [
+    ('SALE', 'Sale (Books/Copies/Uniform)'),
+    ('DONATION', 'Donation'),
+    ('EVENT', 'Event Income'),
+    ('MISC', 'Miscellaneous'),
+]
+
+
+class ExpenseCategory(models.Model):
+    """Custom expense categories per school."""
+    school = models.ForeignKey(
+        'schools.School', on_delete=models.CASCADE, related_name='expense_categories',
+    )
+    name = models.CharField(max_length=100)
+    code = models.CharField(max_length=30, blank=True, help_text="Short code (e.g. SALARY)")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('school', 'name')
+        ordering = ['name']
+        verbose_name = 'Expense Category'
+        verbose_name_plural = 'Expense Categories'
+
+    def __str__(self):
+        return self.name
+
+
+class IncomeCategory(models.Model):
+    """Custom income categories per school."""
+    school = models.ForeignKey(
+        'schools.School', on_delete=models.CASCADE, related_name='income_categories',
+    )
+    name = models.CharField(max_length=100)
+    code = models.CharField(max_length=30, blank=True, help_text="Short code (e.g. SALE)")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('school', 'name')
+        ordering = ['name']
+        verbose_name = 'Income Category'
+        verbose_name_plural = 'Income Categories'
+
+    def __str__(self):
+        return self.name
+
+
 class FeeStructure(models.Model):
     """
     Defines monthly fee amount. Can be set at class level or overridden per student.
@@ -196,7 +253,7 @@ class FeeStructure(models.Model):
     )
     student = models.ForeignKey(
         'students.Student',
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
         related_name='fee_structures',
         null=True,
         blank=True,
@@ -312,7 +369,9 @@ class FeePayment(models.Model):
     )
     student = models.ForeignKey(
         'students.Student',
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name='fee_payments'
     )
     fee_type = models.CharField(
@@ -396,7 +455,8 @@ class FeePayment(models.Model):
     def __str__(self):
         type_label = self.get_fee_type_display() if self.fee_type != 'MONTHLY' else ''
         prefix = f"[{type_label}] " if type_label else ''
-        return f"{prefix}{self.student.name} - {self.month}/{self.year}: {self.get_status_display()}"
+        student_name = self.student.name if self.student else 'Deleted Student'
+        return f"{prefix}{student_name} - {self.month}/{self.year}: {self.get_status_display()}"
 
     def save(self, *args, **kwargs):
         """Validate payment fields, check period locks, then auto-compute status."""
@@ -466,22 +526,17 @@ class Expense(models.Model):
     """
     Tracks school expenses with simple category-based classification.
     """
-    class Category(models.TextChoices):
-        SALARY = 'SALARY', 'Salary'
-        RENT = 'RENT', 'Rent'
-        UTILITIES = 'UTILITIES', 'Utilities'
-        SUPPLIES = 'SUPPLIES', 'Supplies'
-        MAINTENANCE = 'MAINTENANCE', 'Maintenance'
-        MISC = 'MISC', 'Miscellaneous'
-
     school = models.ForeignKey(
         'schools.School',
         on_delete=models.CASCADE,
         related_name='expenses'
     )
-    category = models.CharField(
-        max_length=20,
-        choices=Category.choices
+    category = models.ForeignKey(
+        ExpenseCategory,
+        on_delete=models.PROTECT,
+        related_name='expenses',
+        null=True,
+        blank=True,
     )
     amount = models.DecimalField(
         max_digits=10,
@@ -521,7 +576,6 @@ class Expense(models.Model):
         verbose_name_plural = 'Expenses'
         indexes = [
             models.Index(fields=['school', 'date']),
-            models.Index(fields=['school', 'category']),
         ]
 
     def save(self, *args, **kwargs):
@@ -553,7 +607,8 @@ class Expense(models.Model):
         super().delete(*args, **kwargs)
 
     def __str__(self):
-        return f"{self.get_category_display()} - {self.amount} ({self.date})"
+        cat_name = self.category.name if self.category else 'Uncategorized'
+        return f"{cat_name} - {self.amount} ({self.date})"
 
 
 class FinanceAIChatMessage(models.Model):
@@ -599,20 +654,17 @@ class OtherIncome(models.Model):
     """
     Tracks non-student-linked income (book sales, donations, events, etc.).
     """
-    class Category(models.TextChoices):
-        SALE = 'SALE', 'Sale (Books/Copies/Uniform)'
-        DONATION = 'DONATION', 'Donation'
-        EVENT = 'EVENT', 'Event Income'
-        MISC = 'MISC', 'Miscellaneous'
-
     school = models.ForeignKey(
         'schools.School',
         on_delete=models.CASCADE,
         related_name='other_incomes'
     )
-    category = models.CharField(
-        max_length=20,
-        choices=Category.choices
+    category = models.ForeignKey(
+        IncomeCategory,
+        on_delete=models.PROTECT,
+        related_name='incomes',
+        null=True,
+        blank=True,
     )
     amount = models.DecimalField(
         max_digits=10,
@@ -652,7 +704,6 @@ class OtherIncome(models.Model):
         verbose_name_plural = 'Other Incomes'
         indexes = [
             models.Index(fields=['school', 'date']),
-            models.Index(fields=['school', 'category']),
         ]
 
     def save(self, *args, **kwargs):
@@ -684,7 +735,8 @@ class OtherIncome(models.Model):
         super().delete(*args, **kwargs)
 
     def __str__(self):
-        return f"{self.get_category_display()} - {self.amount} ({self.date})"
+        cat_name = self.category.name if self.category else 'Uncategorized'
+        return f"{cat_name} - {self.amount} ({self.date})"
 
 
 class MonthlyClosing(models.Model):
@@ -880,7 +932,9 @@ class StudentDiscount(models.Model):
     )
     student = models.ForeignKey(
         'students.Student',
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name='student_discounts',
     )
     discount = models.ForeignKey(
@@ -920,7 +974,153 @@ class StudentDiscount(models.Model):
 
     def __str__(self):
         target = self.discount.name if self.discount else (self.scholarship.name if self.scholarship else 'N/A')
-        return f"{self.student.name} - {target}"
+        student_name = self.student.name if self.student else 'Deleted Student'
+        return f"{student_name} - {target}"
+
+
+# =============================================================================
+# Phase 3b: Sibling Detection & Grouping Models
+# =============================================================================
+
+class SiblingGroup(models.Model):
+    """A confirmed group of sibling students within a school."""
+    school = models.ForeignKey(
+        'schools.School',
+        on_delete=models.CASCADE,
+        related_name='sibling_groups',
+    )
+    name = models.CharField(
+        max_length=200,
+        blank=True,
+        default='',
+        help_text="Auto-generated label, e.g. 'Khan Family (3 siblings)'",
+    )
+    confirmed_by = models.ForeignKey(
+        'users.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Sibling Group'
+        verbose_name_plural = 'Sibling Groups'
+        indexes = [
+            models.Index(fields=['school', 'is_active']),
+        ]
+
+    def __str__(self):
+        return self.name or f"Sibling Group #{self.id}"
+
+
+class SiblingGroupMember(models.Model):
+    """Links a student to a sibling group. order_index determines discount priority."""
+    group = models.ForeignKey(
+        SiblingGroup,
+        on_delete=models.CASCADE,
+        related_name='members',
+    )
+    student = models.OneToOneField(
+        'students.Student',
+        on_delete=models.CASCADE,
+        related_name='sibling_membership',
+    )
+    order_index = models.PositiveIntegerField(
+        default=0,
+        help_text="0 = eldest/first enrolled (pays full), 1+ = gets sibling discount",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['order_index']
+        unique_together = ('group', 'student')
+        verbose_name = 'Sibling Group Member'
+        verbose_name_plural = 'Sibling Group Members'
+        indexes = [
+            models.Index(fields=['student']),
+        ]
+
+    def __str__(self):
+        return f"{self.student.name} in {self.group} (order={self.order_index})"
+
+
+class SiblingSuggestion(models.Model):
+    """Pending sibling detection for admin review."""
+    STATUS_CHOICES = [
+        ('PENDING', 'Pending Review'),
+        ('CONFIRMED', 'Confirmed'),
+        ('REJECTED', 'Rejected'),
+        ('DISMISSED', 'Dismissed'),
+    ]
+
+    school = models.ForeignKey(
+        'schools.School',
+        on_delete=models.CASCADE,
+        related_name='sibling_suggestions',
+    )
+    student_a = models.ForeignKey(
+        'students.Student',
+        on_delete=models.CASCADE,
+        related_name='sibling_suggestions_as_a',
+    )
+    student_b = models.ForeignKey(
+        'students.Student',
+        on_delete=models.CASCADE,
+        related_name='sibling_suggestions_as_b',
+    )
+    confidence_score = models.IntegerField(
+        help_text="Computed match score (0-100)",
+    )
+    match_signals = models.JSONField(
+        default=dict,
+        help_text="Which signals matched: {'parent_phone': true, 'parent_name': true, ...}",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='PENDING',
+    )
+    reviewed_by = models.ForeignKey(
+        'users.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='reviewed_sibling_suggestions',
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    sibling_group = models.ForeignKey(
+        SiblingGroup,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="Set when suggestion is confirmed and group is created/joined",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-confidence_score', '-created_at']
+        verbose_name = 'Sibling Suggestion'
+        verbose_name_plural = 'Sibling Suggestions'
+        indexes = [
+            models.Index(fields=['school', 'status']),
+            models.Index(fields=['student_a']),
+            models.Index(fields=['student_b']),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['school', 'student_a', 'student_b'],
+                condition=models.Q(status='PENDING'),
+                name='unique_pending_suggestion_pair',
+            ),
+        ]
+
+    def __str__(self):
+        return f"Suggestion: {self.student_a.name} <-> {self.student_b.name} ({self.confidence_score}%)"
 
 
 # =============================================================================
@@ -985,7 +1185,9 @@ class OnlinePayment(models.Model):
     )
     student = models.ForeignKey(
         'students.Student',
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name='online_payments',
     )
     gateway = models.CharField(max_length=20)
@@ -1020,4 +1222,5 @@ class OnlinePayment(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.student.name} - {self.amount} {self.currency} ({self.get_status_display()})"
+        student_name = self.student.name if self.student else 'Deleted Student'
+        return f"{student_name} - {self.amount} {self.currency} ({self.get_status_display()})"

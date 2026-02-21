@@ -34,7 +34,7 @@ export default function FeeTable({
   paymentList, isLoading, month, year,
   selectedIds, onToggleSelect, onToggleSelectAll,
   editingCell, setEditingCell, editValue, setEditValue,
-  onInlineUpdate, onRecordPayment, onSetStudentFee, onDelete,
+  onInlineUpdate, onRecordPayment, onDelete,
   canWrite = true, feeTypeFilter = 'MONTHLY',
 }) {
   const isMonthly = !feeTypeFilter || feeTypeFilter === 'MONTHLY'
@@ -155,14 +155,6 @@ export default function FeeTable({
                       Record Payment
                     </button>
                   )}
-                  {onSetStudentFee && (
-                    <button
-                      onClick={() => onSetStudentFee(payment, monthlyFee)}
-                      className="text-xs px-2 py-1.5 border border-gray-300 text-gray-600 rounded hover:bg-gray-50"
-                    >
-                      Fee
-                    </button>
-                  )}
                   {onDelete && (
                     <button
                       onClick={() => onDelete(payment.id)}
@@ -276,15 +268,6 @@ export default function FeeTable({
                             className="text-sm px-3 py-1 bg-primary-600 text-white rounded hover:bg-primary-700"
                           >
                             Pay
-                          </button>
-                        )}
-                        {payment.status !== 'ADVANCE' && onSetStudentFee && (
-                          <button
-                            onClick={() => onSetStudentFee(payment, monthlyFee)}
-                            title="Set custom fee for this student"
-                            className="text-xs px-2 py-1 border border-gray-300 text-gray-600 rounded hover:bg-gray-50"
-                          >
-                            Fee
                           </button>
                         )}
                         {onDelete && (

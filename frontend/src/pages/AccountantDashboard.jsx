@@ -61,7 +61,7 @@ export default function AccountantDashboard() {
   ]
 
   const quickActions = [
-    { to: '/finance/fees', label: 'Record Fee Payment', desc: 'Collect student fees', bg: 'bg-green-50 hover:bg-green-100' },
+    { to: '/finance/fees/collect', label: 'Record Fee Payment', desc: 'Collect student fees', bg: 'bg-green-50 hover:bg-green-100' },
     { to: '/finance/expenses', label: 'Add Expense', desc: 'Record an expense', bg: 'bg-red-50 hover:bg-red-100' },
     { to: '/finance', label: 'Finance Dashboard', desc: 'Full financial overview', bg: 'bg-blue-50 hover:bg-blue-100' },
     { to: '/finance/discounts', label: 'Fee Discounts', desc: 'Manage discounts', bg: 'bg-purple-50 hover:bg-purple-100' },

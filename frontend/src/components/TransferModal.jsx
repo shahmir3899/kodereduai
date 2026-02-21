@@ -2,20 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { financeApi } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
-
-const getErrorMessage = (error, fallback = 'Something went wrong') => {
-  const data = error?.response?.data
-  if (!data) return fallback
-  if (typeof data === 'string') return data
-  if (data.detail) return data.detail
-  if (data.non_field_errors) return data.non_field_errors.join(', ')
-  const messages = []
-  for (const [key, val] of Object.entries(data)) {
-    if (Array.isArray(val)) messages.push(`${key}: ${val.join(', ')}`)
-    else if (typeof val === 'string') messages.push(`${key}: ${val}`)
-  }
-  return messages.length > 0 ? messages.join('; ') : fallback
-}
+import { getErrorMessage } from '../utils/errorUtils'
 
 export default function TransferModal({ isOpen, onClose, onSuccess }) {
   const queryClient = useQueryClient()

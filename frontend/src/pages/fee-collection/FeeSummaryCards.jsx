@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
+import { Link } from 'react-router-dom'
 
 export default function FeeSummaryCards({ summaryData }) {
   if (!summaryData) return null
@@ -29,9 +30,36 @@ export default function FeeSummaryCards({ summaryData }) {
   )
 }
 
-export function ClassBreakdown({ summaryData }) {
+/**
+ * Enhanced ClassBreakdown with expandable student-level detail rows.
+ * Used by FeeOverviewPage. Pass `allPayments` to enable student expansion.
+ * Falls back to non-expandable mode when `allPayments` is not provided.
+ */
+export function ClassBreakdown({ summaryData, allPayments, month, year, showCollectLink = false }) {
+  const [expandedClasses, setExpandedClasses] = useState({})
   const byClass = summaryData?.by_class || []
   if (byClass.length === 0) return null
+
+  const canExpand = !!allPayments
+
+  const toggleClass = (classId) => {
+    if (!canExpand) return
+    setExpandedClasses(prev => ({ ...prev, [classId]: !prev[classId] }))
+  }
+
+  // Group payments by class for student-level expansion
+  const paymentsByClass = {}
+  if (canExpand) {
+    allPayments.forEach(p => {
+      const key = p.class_obj_id || p.class_name || 'unknown'
+      if (!paymentsByClass[key]) paymentsByClass[key] = []
+      paymentsByClass[key].push(p)
+    })
+    // Sort students by roll number within each class
+    Object.values(paymentsByClass).forEach(students => {
+      students.sort((a, b) => (parseInt(a.student_roll) || 0) - (parseInt(b.student_roll) || 0))
+    })
+  }
 
   return (
     <div className="card">
@@ -41,19 +69,56 @@ export function ClassBreakdown({ summaryData }) {
       <div className="sm:hidden space-y-2">
         {byClass.map((cls) => {
           const balance = Number(cls.total_due) - Number(cls.total_collected)
+          const rate = cls.total_due > 0 ? Math.round((cls.total_collected / cls.total_due) * 100) : 0
+          const classKey = cls.class_id || cls.class_name
+          const isExpanded = expandedClasses[classKey]
+          const students = paymentsByClass[classKey] || []
           return (
-            <div key={cls.class_id} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
-              <div>
-                <p className="text-sm font-medium text-gray-900">{cls.class_name}</p>
-                <p className="text-xs text-gray-500">{cls.count} students</p>
+            <div key={classKey}>
+              <div
+                onClick={() => toggleClass(classKey)}
+                className={`flex items-center justify-between py-2 px-3 border-b border-gray-100 last:border-0 ${canExpand ? 'cursor-pointer hover:bg-gray-50' : ''}`}
+              >
+                <div className="flex items-center gap-2">
+                  {canExpand && (
+                    <svg className={`w-4 h-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  )}
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">{cls.class_name}</p>
+                    <p className="text-xs text-gray-500">{cls.count} students - {rate}%</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-medium text-gray-900">{Number(cls.total_due).toLocaleString()}</p>
+                  <p className="text-xs">
+                    <span className="text-green-700">{Number(cls.total_collected).toLocaleString()}</span>
+                    {balance > 0 && <span className="text-orange-700 ml-2">-{balance.toLocaleString()}</span>}
+                  </p>
+                </div>
               </div>
-              <div className="text-right">
-                <p className="text-sm font-medium text-gray-900">{Number(cls.total_due).toLocaleString()}</p>
-                <p className="text-xs">
-                  <span className="text-green-700">{Number(cls.total_collected).toLocaleString()}</span>
-                  {balance > 0 && <span className="text-orange-700 ml-2">-{balance.toLocaleString()}</span>}
-                </p>
-              </div>
+              {isExpanded && students.length > 0 && (
+                <div className="ml-6 mb-2 space-y-1">
+                  {students.map(s => {
+                    const sBal = Number(s.amount_due) - Number(s.amount_paid)
+                    return (
+                      <div key={s.id} className="flex items-center justify-between py-1 px-2 text-xs">
+                        <div className="flex items-center gap-2">
+                          <span className="text-gray-400 w-6">#{s.student_roll}</span>
+                          <span className="text-gray-900">{s.student_name}</span>
+                          <span className={`px-1.5 py-0.5 rounded ${
+                            s.status === 'PAID' ? 'bg-green-100 text-green-700' :
+                            s.status === 'PARTIAL' ? 'bg-yellow-100 text-yellow-700' :
+                            s.status === 'UNPAID' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
+                          }`}>{s.status}</span>
+                        </div>
+                        <span className={sBal > 0 ? 'text-orange-700 font-medium' : 'text-green-700'}>{sBal > 0 ? sBal.toLocaleString() : 'Paid'}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           )
         })}
@@ -64,26 +129,85 @@ export function ClassBreakdown({ summaryData }) {
         <table className="min-w-full">
           <thead>
             <tr className="border-b border-gray-200">
+              {canExpand && <th className="w-8 py-2"></th>}
               <th className="text-left text-xs font-medium text-gray-500 uppercase py-2 pr-4">Class</th>
               <th className="text-center text-xs font-medium text-gray-500 uppercase py-2 px-4">Students</th>
               <th className="text-right text-xs font-medium text-gray-500 uppercase py-2 px-4">Total Fee</th>
               <th className="text-right text-xs font-medium text-gray-500 uppercase py-2 px-4">Received</th>
-              <th className="text-right text-xs font-medium text-gray-500 uppercase py-2 pl-4">Balance</th>
+              <th className="text-right text-xs font-medium text-gray-500 uppercase py-2 px-4">Balance</th>
+              <th className="text-right text-xs font-medium text-gray-500 uppercase py-2 pl-4">Rate</th>
             </tr>
           </thead>
           <tbody>
             {byClass.map((cls) => {
               const balance = Number(cls.total_due) - Number(cls.total_collected)
+              const rate = cls.total_due > 0 ? Math.round((cls.total_collected / cls.total_due) * 100) : 0
+              const classKey = cls.class_id || cls.class_name
+              const isExpanded = expandedClasses[classKey]
+              const students = paymentsByClass[classKey] || []
               return (
-                <tr key={cls.class_id} className="border-b border-gray-100 last:border-0">
-                  <td className="py-2 pr-4 text-sm font-medium text-gray-900">{cls.class_name}</td>
-                  <td className="py-2 px-4 text-sm text-gray-500 text-center">{cls.count}</td>
-                  <td className="py-2 px-4 text-sm text-gray-900 text-right">{Number(cls.total_due).toLocaleString()}</td>
-                  <td className="py-2 px-4 text-sm text-green-700 text-right">{Number(cls.total_collected).toLocaleString()}</td>
-                  <td className={`py-2 pl-4 text-sm font-medium text-right ${balance > 0 ? 'text-orange-700' : 'text-green-700'}`}>
-                    {balance.toLocaleString()}
-                  </td>
-                </tr>
+                <Fragment key={classKey}>
+                  <tr
+                    onClick={() => toggleClass(classKey)}
+                    className={`border-b border-gray-100 last:border-0 ${canExpand ? 'cursor-pointer hover:bg-gray-50' : ''}`}
+                  >
+                    {canExpand && (
+                      <td className="py-2 pr-1">
+                        <svg className={`w-4 h-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </td>
+                    )}
+                    <td className="py-2 pr-4 text-sm font-medium text-gray-900">{cls.class_name}</td>
+                    <td className="py-2 px-4 text-sm text-gray-500 text-center">{cls.count}</td>
+                    <td className="py-2 px-4 text-sm text-gray-900 text-right">{Number(cls.total_due).toLocaleString()}</td>
+                    <td className="py-2 px-4 text-sm text-green-700 text-right">{Number(cls.total_collected).toLocaleString()}</td>
+                    <td className={`py-2 px-4 text-sm font-medium text-right ${balance > 0 ? 'text-orange-700' : 'text-green-700'}`}>
+                      {balance.toLocaleString()}
+                    </td>
+                    <td className={`py-2 pl-4 text-sm font-medium text-right ${rate >= 80 ? 'text-green-700' : rate >= 50 ? 'text-yellow-700' : 'text-red-700'}`}>
+                      {rate}%
+                    </td>
+                  </tr>
+                  {isExpanded && students.map(s => {
+                    const prevBal = Number(s.previous_balance || 0)
+                    const sBal = Number(s.amount_due) - Number(s.amount_paid)
+                    return (
+                      <tr key={s.id} className="bg-gray-50/50">
+                        {canExpand && <td></td>}
+                        <td className="py-1.5 pr-4 pl-4 text-xs text-gray-500">
+                          <span className="text-gray-400 mr-2">#{s.student_roll}</span>
+                          {s.student_name}
+                        </td>
+                        <td className="py-1.5 px-4 text-xs text-center">
+                          <span className={`px-1.5 py-0.5 rounded-full text-xs ${
+                            s.status === 'PAID' ? 'bg-green-100 text-green-700' :
+                            s.status === 'PARTIAL' ? 'bg-yellow-100 text-yellow-700' :
+                            s.status === 'UNPAID' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
+                          }`}>{s.status}</span>
+                        </td>
+                        <td className="py-1.5 px-4 text-xs text-gray-500 text-right">
+                          {Number(s.amount_due).toLocaleString()}
+                          {prevBal > 0 && <span className="text-orange-600 ml-1">(+{prevBal.toLocaleString()})</span>}
+                        </td>
+                        <td className="py-1.5 px-4 text-xs text-green-700 text-right">{Number(s.amount_paid).toLocaleString()}</td>
+                        <td className={`py-1.5 px-4 text-xs font-medium text-right ${sBal > 0 ? 'text-orange-700' : 'text-green-700'}`}>
+                          {sBal > 0 ? sBal.toLocaleString() : 0}
+                        </td>
+                        <td className="py-1.5 pl-4 text-right">
+                          {showCollectLink && s.status !== 'PAID' && s.status !== 'ADVANCE' && (
+                            <Link
+                              to={`/finance/fees/collect?student=${s.student_id || s.id}&month=${month}&year=${year}`}
+                              className="text-xs text-primary-600 hover:text-primary-800"
+                            >
+                              Collect
+                            </Link>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </Fragment>
               )
             })}
           </tbody>

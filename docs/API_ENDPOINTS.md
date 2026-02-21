@@ -136,7 +136,7 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | GET | /api/finance/fee-payments/monthly_summary/ | month, year, fee_type |
 | GET | /api/finance/fee-payments/monthly_summary_all/ | |
 | GET | /api/finance/fee-payments/student_ledger/ | student_id |
-| POST | /api/finance/fee-payments/bulk_update/ | |
+| POST | /api/finance/fee-payments/bulk_update/ | Body: {ids, amount_paid, account, payment_method, payment_date}. Supports `mode=pay_full` to set each student's paid amount = their total payable (amount_due + previous_balance) |
 | POST | /api/finance/fee-payments/bulk_delete/ | |
 | GET | /api/finance/fee-payments/resolve_amount/ | student_id, fee_type. Returns resolved fee amount from fee structure (student override > class default) |
 | GET | /api/finance/fee-payments/preview_generation/ | fee_type, class_id, year, month. Dry-run preview of fee generation (counts, amounts, per-student details) |

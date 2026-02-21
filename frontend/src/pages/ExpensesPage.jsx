@@ -5,23 +5,18 @@ import { useAuth } from '../contexts/AuthContext'
 import { financeApi } from '../services/api'
 import TransferModal from '../components/TransferModal'
 
-const CATEGORIES = [
-  { value: 'SALARY', label: 'Salary' },
-  { value: 'RENT', label: 'Rent' },
-  { value: 'UTILITIES', label: 'Utilities' },
-  { value: 'SUPPLIES', label: 'Supplies' },
-  { value: 'MAINTENANCE', label: 'Maintenance' },
-  { value: 'MISC', label: 'Miscellaneous' },
+const COLOR_PALETTE = [
+  'bg-blue-100 text-blue-800',
+  'bg-purple-100 text-purple-800',
+  'bg-yellow-100 text-yellow-800',
+  'bg-green-100 text-green-800',
+  'bg-orange-100 text-orange-800',
+  'bg-pink-100 text-pink-800',
+  'bg-teal-100 text-teal-800',
+  'bg-indigo-100 text-indigo-800',
+  'bg-red-100 text-red-800',
+  'bg-gray-100 text-gray-800',
 ]
-
-const categoryColors = {
-  SALARY: 'bg-blue-100 text-blue-800',
-  RENT: 'bg-purple-100 text-purple-800',
-  UTILITIES: 'bg-yellow-100 text-yellow-800',
-  SUPPLIES: 'bg-green-100 text-green-800',
-  MAINTENANCE: 'bg-orange-100 text-orange-800',
-  MISC: 'bg-gray-100 text-gray-800',
-}
 
 export default function ExpensesPage() {
   const { user, isStaffMember } = useAuth()
@@ -39,8 +34,9 @@ export default function ExpensesPage() {
   const [showModal, setShowModal] = useState(false)
   const [editingExpense, setEditingExpense] = useState(null)
   const [form, setForm] = useState({
-    category: 'SALARY', amount: '', date: new Date().toISOString().split('T')[0], description: '', account: '', is_sensitive: false
+    category: '', amount: '', date: new Date().toISOString().split('T')[0], description: '', account: '', is_sensitive: false
   })
+  const [newCategoryName, setNewCategoryName] = useState('')
 
   // Transfer state
   const [tfrDateFrom, setTfrDateFrom] = useState('')
@@ -55,6 +51,28 @@ export default function ExpensesPage() {
       setSearchParams({})
     }
   }
+
+  // --- Expense Categories ---
+  const { data: categoriesData } = useQuery({
+    queryKey: ['expenseCategories'],
+    queryFn: () => financeApi.getExpenseCategories({ page_size: 9999 }),
+  })
+  const categories = categoriesData?.data?.results || categoriesData?.data || []
+
+  const getCategoryColor = (categoryId) => {
+    const idx = categories.findIndex(c => c.id === categoryId)
+    return COLOR_PALETTE[idx % COLOR_PALETTE.length] || COLOR_PALETTE[COLOR_PALETTE.length - 1]
+  }
+
+  const addCategoryMutation = useMutation({
+    mutationFn: (data) => financeApi.createExpenseCategory(data),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['expenseCategories'] })
+      const newCat = res?.data
+      if (newCat?.id) setForm(f => ({ ...f, category: newCat.id }))
+      setNewCategoryName('')
+    },
+  })
 
   // --- Expense Queries ---
   const { data: accountsData } = useQuery({
@@ -131,7 +149,8 @@ export default function ExpensesPage() {
   const closeModal = () => {
     setShowModal(false)
     setEditingExpense(null)
-    setForm({ category: 'SALARY', amount: '', date: new Date().toISOString().split('T')[0], description: '', account: '', is_sensitive: false })
+    setForm({ category: categories[0]?.id || '', amount: '', date: new Date().toISOString().split('T')[0], description: '', account: '', is_sensitive: false })
+    setNewCategoryName('')
   }
 
   const openEdit = (expense) => {
@@ -153,12 +172,22 @@ export default function ExpensesPage() {
       alert('Please select account')
       return
     }
-    const data = { ...form, amount: parseFloat(form.amount), account: parseInt(form.account) }
+    if (!form.category) {
+      alert('Please select a category')
+      return
+    }
+    const data = { ...form, amount: parseFloat(form.amount), account: parseInt(form.account), category: parseInt(form.category) }
     if (editingExpense) {
       updateMutation.mutate({ id: editingExpense.id, data })
     } else {
       createMutation.mutate(data)
     }
+  }
+
+  const handleAddCategory = () => {
+    const name = newCategoryName.trim()
+    if (!name) return
+    addCategoryMutation.mutate({ name })
   }
 
   const expenseList = expenses?.data?.results || expenses?.data || []
@@ -226,7 +255,7 @@ export default function ExpensesPage() {
                 <label className="block text-xs font-medium text-gray-500 mb-1">Category</label>
                 <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="input-field text-sm">
                   <option value="">All Categories</option>
-                  {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                  {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </div>
             </div>
@@ -241,7 +270,7 @@ export default function ExpensesPage() {
                   const pct = summaryTotal > 0 ? (cat.total_amount / summaryTotal * 100) : 0
                   return (
                     <div key={cat.category} className="flex items-center gap-3">
-                      <span className={`px-2 py-0.5 rounded text-xs font-medium w-24 text-center ${categoryColors[cat.category] || 'bg-gray-100'}`}>
+                      <span className={`px-2 py-0.5 rounded text-xs font-medium w-24 text-center ${getCategoryColor(cat.category)}`}>
                         {cat.category_display}
                       </span>
                       <div className="flex-1 bg-gray-200 rounded-full h-4 overflow-hidden">
@@ -276,8 +305,8 @@ export default function ExpensesPage() {
                   {expenseList.map((expense) => (
                     <div key={expense.id} className="border rounded-lg p-3">
                       <div className="flex items-center justify-between mb-2">
-                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${categoryColors[expense.category]}`}>
-                          {expense.category_display}
+                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${getCategoryColor(expense.category)}`}>
+                          {expense.category_name || 'Uncategorized'}
                         </span>
                         <span className="text-sm text-gray-500">{expense.date}</span>
                       </div>
@@ -311,7 +340,7 @@ export default function ExpensesPage() {
                         <tr key={expense.id}>
                           <td className="px-4 py-3 text-sm text-gray-900">{expense.date}</td>
                           <td className="px-4 py-3">
-                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${categoryColors[expense.category]}`}>{expense.category_display}</span>
+                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${getCategoryColor(expense.category)}`}>{expense.category_name || 'Uncategorized'}</span>
                           </td>
                           <td className="px-4 py-3 text-sm font-medium text-gray-900 text-right">{Number(expense.amount).toLocaleString()}</td>
                           <td className="px-4 py-3 text-sm text-gray-600 max-w-xs truncate">{expense.description || '-'}</td>
@@ -427,8 +456,29 @@ export default function ExpensesPage() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
                   <select value={form.category} onChange={(e) => setForm(f => ({ ...f, category: e.target.value }))} className="input-field" required>
-                    {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                    <option value="">-- Select Category --</option>
+                    {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
+                  {canWrite && (
+                    <div className="flex gap-2 mt-2">
+                      <input
+                        type="text"
+                        value={newCategoryName}
+                        onChange={(e) => setNewCategoryName(e.target.value)}
+                        placeholder="New category name..."
+                        className="input-field text-sm flex-1"
+                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddCategory() } }}
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddCategory}
+                        disabled={!newCategoryName.trim() || addCategoryMutation.isPending}
+                        className="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50"
+                      >
+                        + Add
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
