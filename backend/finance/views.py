@@ -2073,6 +2073,15 @@ class StudentDiscountViewSet(ModuleAccessMixin, viewsets.ModelViewSet):
                 status=400,
             )
 
+        # Validate FKs belong to the same school (multi-tenancy)
+        if discount_id and not Discount.objects.filter(id=discount_id, school_id=school_id).exists():
+            return Response({'detail': 'Discount not found for your school.'}, status=400)
+        if scholarship_id and not Scholarship.objects.filter(id=scholarship_id, school_id=school_id).exists():
+            return Response({'detail': 'Scholarship not found for your school.'}, status=400)
+        from academic_sessions.models import AcademicYear
+        if not AcademicYear.objects.filter(id=academic_year_id, school_id=school_id).exists():
+            return Response({'detail': 'Academic year not found for your school.'}, status=400)
+
         # Build student queryset
         students_qs = Student.objects.filter(school_id=school_id, is_active=True)
         if class_id:

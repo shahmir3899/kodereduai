@@ -789,16 +789,71 @@ Query params: `category`, `account`, `date_from`, `date_to`, `page_size`
 ```
 
 ### GET /api/finance/discounts/
-_(No data — expected fields)_
 ```json
 {
   "results": [
     {
-      "id": 0, "school": 0, "name": "", "discount_type": "PERCENTAGE|FIXED",
-      "value": "0.00", "applies_to": "", "is_active": true,
-      "created_at": "", "updated_at": ""
+      "id": 1, "school": 1, "academic_year": 5, "academic_year_name": "2025-2026",
+      "name": "Sibling Discount", "discount_type": "PERCENTAGE", "discount_type_display": "Percentage",
+      "value": "10.00", "applies_to": "SIBLING", "applies_to_display": "Siblings (auto-detect)",
+      "target_grade_level": null, "target_class": null, "target_class_name": null,
+      "start_date": null, "end_date": null, "is_active": true,
+      "max_uses": null, "stackable": false, "usage_count": 3,
+      "created_at": "2026-02-01T10:00:00+05:00", "updated_at": "2026-02-01T10:00:00+05:00"
     }
   ]
+}
+```
+
+### GET /api/finance/scholarships/
+```json
+{
+  "results": [
+    {
+      "id": 1, "school": 1, "academic_year": 5, "academic_year_name": "2025-2026",
+      "name": "Merit Scholarship", "description": "Top 3 students per class",
+      "scholarship_type": "MERIT", "scholarship_type_display": "Merit-Based",
+      "coverage": "PERCENTAGE", "coverage_display": "Percentage Off",
+      "value": "50.00", "max_recipients": 10, "is_active": true,
+      "recipient_count": 2,
+      "created_at": "2026-02-01T10:00:00+05:00", "updated_at": "2026-02-01T10:00:00+05:00"
+    }
+  ]
+}
+```
+
+### GET /api/finance/student-discounts/
+Query params: `student_id`, `discount_id`, `scholarship_id`, `academic_year`, `is_active`
+```json
+{
+  "results": [
+    {
+      "id": 1, "school": 1,
+      "student": 182, "student_name": "Eshaal Fatima", "student_roll": "1", "class_name": "Playgroup - A",
+      "discount": 1, "discount_name": "Sibling Discount",
+      "scholarship": null, "scholarship_name": null,
+      "academic_year": 5, "academic_year_name": "2025-2026",
+      "approved_by": 2, "approved_by_name": "focus3899", "approved_at": "2026-02-15T10:30:00+05:00",
+      "is_active": true, "notes": "", "created_at": "2026-02-15T10:30:00+05:00"
+    }
+  ]
+}
+```
+
+### POST /api/finance/student-discounts/bulk_assign/
+```json
+// Request
+{
+  "discount_id": 1,
+  "class_id": 5,
+  "academic_year_id": 5
+}
+
+// Response (200)
+{
+  "created": 20,
+  "skipped": 3,
+  "total_students": 23
 }
 ```
 
@@ -1153,6 +1208,11 @@ Query params: `status`, `source`, `applying_for_grade_level`, `search`, `page_si
   "fee_reminder_day": 5,
   "daily_absence_summary_time": null,
   "smart_scheduling_enabled": false,
+  "absence_notification_enabled": true,
+  "fee_reminder_enabled": true,
+  "fee_overdue_enabled": true,
+  "exam_result_enabled": true,
+  "daily_absence_summary_enabled": false,
   "created_at": "2026-02-13T13:01:53.878412+05:00",
   "updated_at": "2026-02-13T13:01:53.878432+05:00"
 }

@@ -978,6 +978,17 @@ export const inventoryApi = {
   searchUsers: (params) => api.get('/api/users/', { params }),
 }
 
+// Messaging API
+export const messagingApi = {
+  getThreads: () => api.get('/api/messaging/threads/'),
+  getThread: (threadId) => api.get(`/api/messaging/threads/${threadId}/`),
+  createThread: (data) => api.post('/api/messaging/threads/', data),
+  reply: (threadId, data) => api.post(`/api/messaging/threads/${threadId}/reply/`, data),
+  markRead: (threadId) => api.patch(`/api/messaging/threads/${threadId}/read/`),
+  getRecipients: () => api.get('/api/messaging/recipients/'),
+  getUnreadCount: () => api.get('/api/messaging/unread-count/'),
+}
+
 // Background Tasks API
 export const tasksApi = {
   getMyTasks: () => api.get('/api/tasks/tasks/'),

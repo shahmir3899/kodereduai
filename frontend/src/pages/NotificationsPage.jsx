@@ -405,68 +405,160 @@ function SettingsTab() {
 
   if (isLoading || !config) return <div className="text-center py-10 text-gray-500">Loading settings...</div>
 
+  const ToggleSwitch = ({ checked, onChange }) => (
+    <button
+      type="button"
+      onClick={() => onChange(!checked)}
+      className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 ${
+        checked ? 'bg-primary-600' : 'bg-gray-200'
+      }`}
+    >
+      <span className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+        checked ? 'translate-x-4' : 'translate-x-0'
+      }`} />
+    </button>
+  )
+
   return (
-    <div className="max-w-xl">
-      <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-4">
-        <h3 className="text-sm font-semibold text-gray-900">Notification Settings</h3>
-
+    <div className="max-w-2xl space-y-6">
+      {/* Channels */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <h3 className="text-sm font-semibold text-gray-900 mb-4">Notification Channels</h3>
         <div className="space-y-3">
-          <label className="flex items-center justify-between">
+          <div className="flex items-center justify-between">
             <span className="text-sm text-gray-700">WhatsApp Notifications</span>
-            <input
-              type="checkbox"
-              checked={config.whatsapp_enabled || false}
-              onChange={(e) => setConfig({ ...config, whatsapp_enabled: e.target.checked })}
-              className="rounded"
-            />
-          </label>
-          <label className="flex items-center justify-between">
+            <ToggleSwitch checked={config.whatsapp_enabled || false} onChange={(v) => setConfig({ ...config, whatsapp_enabled: v })} />
+          </div>
+          <div className="flex items-center justify-between">
             <span className="text-sm text-gray-700">SMS Notifications</span>
-            <input
-              type="checkbox"
-              checked={config.sms_enabled || false}
-              onChange={(e) => setConfig({ ...config, sms_enabled: e.target.checked })}
-              className="rounded"
-            />
-          </label>
-          <label className="flex items-center justify-between">
+            <ToggleSwitch checked={config.sms_enabled || false} onChange={(v) => setConfig({ ...config, sms_enabled: v })} />
+          </div>
+          <div className="flex items-center justify-between">
             <span className="text-sm text-gray-700">In-App Notifications</span>
-            <input
-              type="checkbox"
-              checked={config.in_app_enabled !== false}
-              onChange={(e) => setConfig({ ...config, in_app_enabled: e.target.checked })}
-              className="rounded"
-            />
-          </label>
+            <ToggleSwitch checked={config.in_app_enabled !== false} onChange={(v) => setConfig({ ...config, in_app_enabled: v })} />
+          </div>
         </div>
+      </div>
 
-        {/* Smart Scheduling */}
-        <div className="border-t pt-4">
-          <label className="flex items-center justify-between">
-            <div>
-              <span className="text-sm font-medium text-gray-700">Smart Notification Scheduling</span>
-              <p className="text-xs text-gray-500 mt-0.5 max-w-xs">
-                When enabled, the AI analyzes when parents are most likely to read messages and schedules
-                non-urgent notifications for optimal delivery times. In-app notifications are always immediate.
+      {/* Automated Notifications */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <h3 className="text-sm font-semibold text-gray-900 mb-1">Automated Notifications</h3>
+        <p className="text-xs text-gray-500 mb-4">Control which automated notifications are sent by the system. Not every institution needs all of these.</p>
+
+        <div className="space-y-4">
+          {/* Absence */}
+          <div className="flex items-start justify-between gap-4 pb-4 border-b border-gray-100">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-gray-800">Absence Alerts</p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Sends WhatsApp to parents when a student is marked absent. Also notifies admins in-app.
+              </p>
+              <p className="text-[11px] text-amber-700 bg-amber-50 rounded px-2 py-0.5 mt-1.5 inline-block">
+                Sent each time attendance is confirmed with absent students
               </p>
             </div>
-            <input
-              type="checkbox"
-              checked={config.smart_scheduling_enabled || false}
-              onChange={(e) => setConfig({ ...config, smart_scheduling_enabled: e.target.checked })}
-              className="rounded"
+            <ToggleSwitch
+              checked={config.absence_notification_enabled !== false}
+              onChange={(v) => setConfig({ ...config, absence_notification_enabled: v })}
             />
-          </label>
-          {config.smart_scheduling_enabled && (
-            <p className="text-xs text-green-700 bg-green-50 rounded px-3 py-1.5 mt-2">
-              The system learns from read patterns. Best results after 2-4 weeks of data.
+          </div>
+
+          {/* Fee Reminders */}
+          <div className="flex items-start justify-between gap-4 pb-4 border-b border-gray-100">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-gray-800">Fee Reminders</p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Sends WhatsApp reminders to parents of students with pending or partially paid fees.
+              </p>
+              <p className="text-[11px] text-amber-700 bg-amber-50 rounded px-2 py-0.5 mt-1.5 inline-block">
+                Sent monthly on day {config.fee_reminder_day || 5} of each month
+              </p>
+            </div>
+            <ToggleSwitch
+              checked={config.fee_reminder_enabled !== false}
+              onChange={(v) => setConfig({ ...config, fee_reminder_enabled: v })}
+            />
+          </div>
+
+          {/* Fee Overdue */}
+          <div className="flex items-start justify-between gap-4 pb-4 border-b border-gray-100">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-gray-800">Fee Overdue Alerts</p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Sends WhatsApp alerts to parents whose fees are completely unpaid for the previous month.
+              </p>
+              <p className="text-[11px] text-amber-700 bg-amber-50 rounded px-2 py-0.5 mt-1.5 inline-block">
+                Checked weekly (automated)
+              </p>
+            </div>
+            <ToggleSwitch
+              checked={config.fee_overdue_enabled !== false}
+              onChange={(v) => setConfig({ ...config, fee_overdue_enabled: v })}
+            />
+          </div>
+
+          {/* Exam Results */}
+          <div className="flex items-start justify-between gap-4 pb-4 border-b border-gray-100">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-gray-800">Exam Result Notifications</p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Sends WhatsApp notification to parents when exam results are published for their child.
+              </p>
+              <p className="text-[11px] text-amber-700 bg-amber-50 rounded px-2 py-0.5 mt-1.5 inline-block">
+                Sent when results are published
+              </p>
+            </div>
+            <ToggleSwitch
+              checked={config.exam_result_enabled !== false}
+              onChange={(v) => setConfig({ ...config, exam_result_enabled: v })}
+            />
+          </div>
+
+          {/* Daily Absence Summary */}
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-gray-800">Daily Absence Summary</p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Sends a summary of the day's absent/present counts to school admins via in-app notification.
+              </p>
+              <p className="text-[11px] text-amber-700 bg-amber-50 rounded px-2 py-0.5 mt-1.5 inline-block">
+                Sent daily{config.daily_absence_summary_time ? ` at ${config.daily_absence_summary_time}` : ' at configured time'}
+              </p>
+            </div>
+            <ToggleSwitch
+              checked={config.daily_absence_summary_enabled || false}
+              onChange={(v) => setConfig({ ...config, daily_absence_summary_enabled: v })}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Scheduling & Timing */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <h3 className="text-sm font-semibold text-gray-900 mb-4">Scheduling & Timing</h3>
+
+        <div className="flex items-start justify-between gap-4 mb-4 pb-4 border-b border-gray-100">
+          <div>
+            <p className="text-sm font-medium text-gray-800">Smart Notification Scheduling</p>
+            <p className="text-xs text-gray-500 mt-0.5 max-w-sm">
+              AI analyzes when parents are most likely to read messages and schedules non-urgent notifications
+              for optimal delivery times. In-app notifications are always immediate.
             </p>
-          )}
+            {config.smart_scheduling_enabled && (
+              <p className="text-xs text-green-700 bg-green-50 rounded px-2 py-1 mt-2 inline-block">
+                Learning from read patterns. Best results after 2-4 weeks of data.
+              </p>
+            )}
+          </div>
+          <ToggleSwitch
+            checked={config.smart_scheduling_enabled || false}
+            onChange={(v) => setConfig({ ...config, smart_scheduling_enabled: v })}
+          />
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="text-xs text-gray-500">Fee Reminder Day</label>
+            <label className="text-xs font-medium text-gray-600">Fee Reminder Day</label>
             <input
               type="number"
               min={1}
@@ -475,26 +567,29 @@ function SettingsTab() {
               onChange={(e) => setConfig({ ...config, fee_reminder_day: parseInt(e.target.value) || 5 })}
               className="w-full text-sm border-gray-300 rounded-lg mt-1"
             />
+            <p className="text-[11px] text-gray-400 mt-0.5">Day of month (1-28)</p>
           </div>
           <div>
-            <label className="text-xs text-gray-500">Quiet Hours Start</label>
+            <label className="text-xs font-medium text-gray-600">Quiet Hours Start</label>
             <input
               type="time"
               value={config.quiet_hours_start || ''}
               onChange={(e) => setConfig({ ...config, quiet_hours_start: e.target.value || null })}
               className="w-full text-sm border-gray-300 rounded-lg mt-1"
             />
+            <p className="text-[11px] text-gray-400 mt-0.5">No notifications before this time</p>
           </div>
         </div>
-
-        <button
-          onClick={() => saveMutation.mutate(config)}
-          disabled={saveMutation.isPending}
-          className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50"
-        >
-          {saveMutation.isPending ? 'Saving...' : 'Save Settings'}
-        </button>
       </div>
+
+      {/* Save */}
+      <button
+        onClick={() => saveMutation.mutate(config)}
+        disabled={saveMutation.isPending}
+        className="px-5 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-medium disabled:opacity-50 transition-colors"
+      >
+        {saveMutation.isPending ? 'Saving...' : 'Save Settings'}
+      </button>
     </div>
   )
 }

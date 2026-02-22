@@ -253,6 +253,29 @@ class SchoolNotificationConfig(models.Model):
         default=False,
         help_text='When enabled, AI analyzes read patterns to schedule non-urgent notifications at optimal times',
     )
+
+    # Automated trigger toggles
+    absence_notification_enabled = models.BooleanField(
+        default=True,
+        help_text='Send notifications to parents when a student is marked absent',
+    )
+    fee_reminder_enabled = models.BooleanField(
+        default=True,
+        help_text='Send monthly fee reminders for unpaid/partial fees',
+    )
+    fee_overdue_enabled = models.BooleanField(
+        default=True,
+        help_text='Send alerts when fees are completely overdue',
+    )
+    exam_result_enabled = models.BooleanField(
+        default=True,
+        help_text='Notify parents when exam results are published',
+    )
+    daily_absence_summary_enabled = models.BooleanField(
+        default=False,
+        help_text='Send daily absence summary to admins',
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

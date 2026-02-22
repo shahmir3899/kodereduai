@@ -448,6 +448,9 @@ export default function Layout() {
       type: 'item', name: 'Notifications', href: '/notifications', icon: ChatBotIcon,
     }] : []),
 
+    // Messages
+    { type: 'item', name: 'Messages', href: '/messages', icon: MailIcon },
+
     // Admissions (admin only)
     ...(isModuleEnabled('admissions') && !isStaffLevel ? [{
       type: 'link',

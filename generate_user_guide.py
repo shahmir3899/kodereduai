@@ -63,7 +63,7 @@ class UserGuidePDF(FPDF):
             "Face Attendance (Camera-Based) | Academics & Examinations",
             "Finance & Online Payments | HR & Staff Management",
             "Admissions CRM | Transport | Library | Hostel Management",
-            "LMS | Notifications | Parent & Student Portals | AI Study Helper",
+            "LMS | Notifications | Messaging | Parent & Student Portals | AI Study Helper",
             "AI Intelligence: Adaptive Thresholds | Drift Detection | Anomaly Alerts",
             "Pipeline Fallback | OR-Tools Timetable | AI Report Comments | Smart Scheduling"
         ]
@@ -861,31 +861,60 @@ def build_guide():
         "Each page includes the school name, period, generation date, and page numbers."
     )
 
-    pdf.section_title("Setting Fee Structures")
-    pdf.nav_path("Sidebar > Finance > Fee Collection > Set Fee Structure")
-    pdf.step("Click 'Set Fee Structure' to open the fee structure modal.")
+    pdf.section_title("Fee Setup Page")
+    pdf.nav_path("Sidebar > Finance > Fee Setup")
+    pdf.body_text(
+        "The Fee Setup page is a dedicated configuration page with three tabs: "
+        "Fee Structures, Generate Records, and Student Discounts."
+    )
+
+    pdf.sub_section("Tab 1: Fee Structures")
+    pdf.body_text("Set base fee amounts by class or by individual student.")
+    pdf.step("Use the 'By Class' / 'By Student' toggle to switch modes.")
     pdf.step("Use the fee type tabs (Monthly, Annual, Admission, Books, Fine) to switch between fee types.")
-    pdf.step("Enter the fee amount for each class. Leave as 0 for classes that don't pay this fee.")
+    pdf.step("By Class: Enter the fee amount for each class. Leave as 0 for classes that don't pay this fee.")
+    pdf.step("By Student: Select a class, then override individual student fees. "
+             "Overrides are highlighted in blue. Students without an override use the class default.")
     pdf.step("Set the 'Effective From' date (when this fee amount takes effect).")
-    pdf.step("Click 'Review Changes' to see a confirmation summary of all non-zero fees.")
+    pdf.step("Click 'Review Changes' (by class) or 'Review & Save' (by student) to see a confirmation summary.")
     pdf.step("Confirm to save. Fee structures are used to auto-calculate amounts when generating fee records.")
     pdf.info_box("Fee Priority",
                  "Student-level fee overrides take precedence over class-level defaults. "
-                 "You can set a per-student override from the fee table by clicking the 'Fee' button on a student's row.")
+                 "You can set a per-student override from the By Student mode.")
 
-    pdf.section_title("Generating Fee Records")
-    pdf.nav_path("Sidebar > Finance > Fee Collection > Generate Records")
-    pdf.step("Click 'Generate Records' to open the generation modal.")
+    pdf.sub_section("Tab 2: Generate Records")
+    pdf.step("Use the fee type tabs to select which type of fee to generate.")
     pdf.step("For Monthly fees: select the month and year. The system shows a preview of how many "
              "records will be created, how many already exist (will be skipped), and the total amount.")
     pdf.step("For non-monthly fees (Annual, Admission, Books, Fine): select the class to preview. "
              "The system shows per-student amounts resolved from fee structures.")
     pdf.step("Review the preview, then click 'Generate' and confirm. Fee records are created for all "
              "eligible students. Students without a fee structure or with existing records are skipped.")
-    pdf.step("The generation modal auto-closes after successful completion and the fee table refreshes "
-             "automatically to show the newly created records.")
     pdf.warning_box("Fee generation requires fee structures to be set first. Students without a matching "
                     "fee structure will be listed as 'no fee structure' in the preview and will not receive a record.")
+
+    pdf.sub_section("Tab 3: Student Discounts")
+    pdf.body_text(
+        "Assign discounts or scholarships to individual students directly from the Fee Setup page. "
+        "This tab shows each student's base monthly fee, the applied discount/scholarship, "
+        "and the calculated effective fee - all in one view."
+    )
+    pdf.step("Select a class from the dropdown. The student table loads with columns: "
+             "Roll, Student Name, Base Fee, Discount/Scholarship, Effective Fee, and Action.")
+    pdf.step("Students with an assigned discount show a colored badge (blue for discounts, "
+             "purple for scholarships) and their row is highlighted green.")
+    pdf.step("Click 'Assign' on a student row to open the assignment modal.")
+    pdf.step("In the modal, toggle between 'Discount' and 'Scholarship', select from the dropdown "
+             "(shows name, type, and value), add optional notes, then click 'Assign'.")
+    pdf.step("To remove a discount, click 'Remove' on the student row and confirm.")
+    pdf.step("Use the 'Bulk Assign' button to assign one discount or scholarship to all students "
+             "in the selected class at once. The system shows how many were created and how many "
+             "were skipped (already assigned).")
+    pdf.info_box("Effective Fee Calculation",
+                 "Percentage discounts: Effective = Base Fee - (Base Fee x Percentage / 100). "
+                 "Fixed discounts: Effective = Base Fee - Fixed Amount. "
+                 "Full scholarships: Effective = 0. "
+                 "The effective fee column updates instantly when a discount is assigned or removed.")
 
     pdf.section_title("Creating Individual Fee Records")
     pdf.nav_path("Sidebar > Finance > Fee Collection > Create Fee")
@@ -928,12 +957,28 @@ def build_guide():
     pdf.step("Confirm the bulk action. All selected records update simultaneously.")
 
     pdf.section_title("Managing Discounts & Scholarships")
-    pdf.nav_path("Sidebar > Finance > Discounts & Scholarships")
-    pdf.step("Click 'Add Discount Rule'.")
+    pdf.nav_path("Sidebar > Finance > Discounts")
+    pdf.body_text(
+        "The Discounts page has three tabs for managing discount rules, scholarship programs, "
+        "and viewing all student assignments across the school."
+    )
+    pdf.sub_section("Creating Discount Rules")
+    pdf.step("Go to the 'Discounts' tab and click 'Add Discount'.")
     pdf.step("Define: Discount Name, Type (Percentage or Fixed Amount), Value.")
-    pdf.step("Set eligibility criteria if applicable.")
-    pdf.step("Apply discounts to individual students or in bulk.")
-    pdf.step("Discounts automatically adjust the student's fee balance.")
+    pdf.step("Set 'Applies To': All Students, Grade Level, Specific Class, Individual Student, or Siblings.")
+    pdf.step("Optionally set start/end dates, max uses, and whether the discount is stackable.")
+    pdf.sub_section("Creating Scholarships")
+    pdf.step("Go to the 'Scholarships' tab and click 'Add Scholarship'.")
+    pdf.step("Define: Name, Type (Merit, Need, Sports, Staff Child, Other).")
+    pdf.step("Set coverage: Full Fee Waiver, Percentage Off, or Fixed Amount Off.")
+    pdf.sub_section("Assigning to Students")
+    pdf.body_text(
+        "Student assignments can be managed from two places: the Discounts page (Student Assignments tab) "
+        "or the Fee Setup page (Student Discounts tab). The Fee Setup page is recommended because it shows "
+        "base fees and effective fees alongside the discount assignments."
+    )
+    pdf.info_box("Tip", "Navigate to Finance > Fee Setup > Student Discounts tab for the most efficient workflow. "
+                 "Select a class to see all students with their base fee, assigned discount, and effective fee in one view.")
 
     pdf.section_title("Recording Expenses")
     pdf.nav_path("Sidebar > Finance > Expenses")
@@ -1351,10 +1396,35 @@ def build_guide():
                  "and recipient type (parent, teacher, staff). It identifies optimal hours and defers "
                  "non-urgent messages to those windows. Scheduled notifications are dispatched every 5 minutes.")
 
-    pdf.section_title("Automated Notifications (Scheduled)")
+    pdf.section_title("Automated Notification Controls")
+    pdf.nav_path("Sidebar > Notifications > Settings > Automated Notifications")
     pdf.body_text(
-        "The system automatically sends scheduled notifications without manual intervention. "
-        "These are powered by Celery Beat, a background task scheduler."
+        "Each automated notification type can be individually enabled or disabled per school. "
+        "Not every institution needs all automated messages. Use the toggle switches to control which "
+        "notifications are active. Each toggle shows a description and when the notification fires."
+    )
+    pdf.simple_table(
+        ["Notification", "Default", "Trigger Timing"],
+        [
+            ["Absence Alerts", "ON", "Sent within minutes of attendance being marked"],
+            ["Fee Reminders", "ON", "Sent monthly on the configured reminder day"],
+            ["Fee Overdue Alerts", "ON", "Sent weekly on Mondays for overdue fees"],
+            ["Exam Results Published", "ON", "Sent when admin publishes exam results"],
+            ["Daily Absence Summary", "OFF", "Sent daily at 5 PM to administrators"],
+        ],
+        [50, 25, 115]
+    )
+    pdf.step("Navigate to Notifications > Settings tab.")
+    pdf.step("Scroll to the 'Automated Notifications' section.")
+    pdf.step("Toggle each notification type ON or OFF as needed.")
+    pdf.step("Changes save automatically when you click 'Save Settings'.")
+    pdf.info_box("Per-School Control", "These settings are per-school. Each school in a multi-school "
+                 "setup can have different automated notification preferences.")
+
+    pdf.section_title("Scheduled Background Tasks")
+    pdf.body_text(
+        "The system runs scheduled background tasks automatically using Celery Beat. "
+        "These include both the automated notifications above (when enabled) and system maintenance tasks."
     )
     pdf.simple_table(
         ["Notification", "Schedule", "Recipients"],
@@ -1377,7 +1447,69 @@ def build_guide():
                  "Notification Analytics tab.")
 
     # =========================================================================
-    # CHAPTER 13: PARENT PORTAL
+    # CHAPTER 13: MESSAGING
+    # =========================================================================
+    pdf.chapter_title("Messaging")
+
+    pdf.body_text(
+        "The Messaging module provides a unified, threaded conversation system for all school roles. "
+        "Admins, Teachers, Staff, Parents, and Students can exchange messages with role-based "
+        "access controls determining who can contact whom."
+    )
+
+    pdf.section_title("Who Can Message Whom")
+    pdf.simple_table(
+        ["Sender Role", "Can Message", "Student Context"],
+        [
+            ["School Admin / Principal", "Any staff member in the school", "Not required"],
+            ["Teacher", "Parents of students in their classes", "Required (auto-set)"],
+            ["Teacher", "Students with accounts in their classes", "Required (auto-set)"],
+            ["Teacher", "Admins and Principal", "Not required"],
+            ["Other Staff", "Admins and Principal", "Not required"],
+            ["Parent", "Teachers of their children's classes", "Required (auto-set)"],
+        ],
+        [45, 65, 80]
+    )
+
+    pdf.section_title("Accessing Messages")
+    pdf.nav_path("Sidebar > Messages")
+    pdf.body_text(
+        "All roles access the same Messages page from the sidebar. The page shows a split-panel "
+        "layout: thread list on the left, conversation view on the right. On mobile devices, "
+        "the view switches between list and conversation."
+    )
+
+    pdf.section_title("Starting a New Conversation")
+    pdf.nav_path("Messages > New Message button")
+    pdf.step("Click the 'New Message' button (top of the thread list).")
+    pdf.step("Select a recipient from the dropdown. Recipients are grouped by role (Teachers, Parents, Students, Staff).")
+    pdf.step("For teacher-parent/student conversations, the student context is automatically set based on the recipient.")
+    pdf.step("Optionally enter a subject line for the conversation.")
+    pdf.step("Type your message and click 'Send'.")
+    pdf.info_box("Thread Reuse", "If you already have an active conversation with the same person "
+                 "(and same student context), your new message will be added to the existing thread "
+                 "instead of creating a duplicate.")
+
+    pdf.section_title("Replying to Messages")
+    pdf.step("Click on any thread in the thread list to open the conversation.")
+    pdf.step("All messages in the thread are displayed chronologically (oldest first).")
+    pdf.step("Your messages appear on the right side, the other person's on the left.")
+    pdf.step("Type your reply in the input box at the bottom and click 'Send' or press Enter.")
+    pdf.step("The thread is automatically marked as read when you open it.")
+
+    pdf.section_title("Unread Message Indicators")
+    pdf.body_text(
+        "Unread threads are highlighted in the thread list with a blue badge showing the unread "
+        "message count. The Messages navigation item in the sidebar also shows a total unread "
+        "count badge. The badge updates automatically every 15 seconds."
+    )
+
+    pdf.section_title("Searching Conversations")
+    pdf.step("Use the search box at the top of the thread list to filter conversations.")
+    pdf.step("Search matches against participant names and the latest message preview.")
+
+    # =========================================================================
+    # CHAPTER 14: PARENT PORTAL
     # =========================================================================
     pdf.chapter_title("Parent Portal")
 
@@ -1442,8 +1574,11 @@ def build_guide():
     pdf.step("Submit the application. Track its status (Pending, Approved, Rejected).")
 
     pdf.section_title("Messages")
-    pdf.nav_path("Parent Portal > Messages")
-    pdf.body_text("Parents can send and receive messages from the school administration.")
+    pdf.nav_path("Sidebar > Messages")
+    pdf.body_text(
+        "Parents can send and receive threaded messages with their children's teachers. "
+        "See the Messaging chapter for full details on how conversations work."
+    )
 
     # =========================================================================
     # CHAPTER 14: STUDENT PORTAL

@@ -14,7 +14,7 @@ Main layout wrapper for all authenticated routes. Contains:
 - **Header**: SchoolSwitcher, AcademicYearSwitcher, NotificationBell, TaskDrawer button, user profile menu, logout
 - **Sidebar**: Role-based navigation menu with module availability checks, collapsible sections, active state highlighting
 - **Content**: `<Outlet/>` renders page content
-- Navigation sections: Attendance, Students, Academics, Finance, HR, Sessions, Admissions, Hostel, Transport, Library, Inventory, Settings
+- Navigation sections: Attendance, Students, Academics, Finance, HR, Sessions, Admissions, Hostel, Transport, Library, Inventory, Messages, Settings
 
 ### SchoolSwitcher.jsx
 Dropdown for switching active school. Reads from `useAuth().schools`. Calls `POST /api/auth/switch-school/`. Triggers page reload on switch.
@@ -81,6 +81,11 @@ Complex page broken into:
 - **FeeTable.jsx** — Table with inline editing, bulk selection, sort by class/roll
 - **FeeModals.jsx** — Multiple modals: CreateSingleFeeModal (auto-fills amount from fee structure via `resolve_amount`, conditional payment fields when amount_paid > 0, duplicate warning, searchable student dropdown), GenerateModal (preview via `preview_generation` before generation, confirmation step, auto-closes on success after 1.5s), FeeStructureModal (per-type fee tabs, confirmation review), PaymentModal, IncomeModal, StudentFeeModal
 - **BulkActionsBar.jsx** — Bulk action toolbar with payment method selector, account picker, "Pay Full" button (sets each student's paid amount = their total payable in one click), confirmation dialogs
+- **FeeSetupPage.jsx** — Dedicated 3-tab fee configuration page:
+  - **Tab 1: Fee Structures** — By Class mode (fee amount per class for each fee type) and By Student mode (per-student overrides with blue highlight). Both have confirmation review step before saving.
+  - **Tab 2: Generate Records** — Monthly fee generation (with preview: will_create, already_exist, no_fee_structure counts) and one-time fee generation (Annual, Admission, Books, Fine) with class selection and per-student preview.
+  - **Tab 3: Student Discounts** — Select class to see students with columns: Roll, Name, Base Fee, Discount/Scholarship (badge), Effective Fee, Action. Per-student assign/remove modals (toggle discount vs scholarship, dropdown selection with value preview). Bulk assign button to apply one discount/scholarship to all students in class. Uses `discountApi` (getDiscounts, getScholarships, getStudentDiscounts, assignDiscount, bulkAssign, removeStudentDiscount).
+- **useFeeSetup.js** — Custom hook for FeeSetupPage: fetches classes, all fee structures, class students, class fee structures. Provides bulkFeeMutation, bulkStudentFeeMutation, generateMutation, generateOnetimeMutation.
 - **useFeeData.js** — Custom hook: single fetch per month/year/feeType, client-side class/status filtering via `useMemo`, client-side summary computation (replaces monthlySummary API call)
 - **feeExport.js** — PDF/Excel export utilities
 
@@ -170,6 +175,7 @@ Centralized axios instance with interceptors. Organized into named API modules:
 | hostelApi | /api/hostel/ | getHostels, getRooms, approveGatePass |
 | inventoryApi | /api/inventory/ | getItems, getDashboard, createTransaction |
 | lmsApi | /api/lms/ | getLessonPlans, getAssignments, gradeSubmission |
+| messagingApi | /api/messaging/ | getThreads, getThread, createThread, reply, markRead, getRecipients, getUnreadCount |
 | tasksApi | /api/tasks/ | getMyTasks, getTask, getAIInsights |
 | reportsApi | /api/reports/ | generateReport, getReportList |
 

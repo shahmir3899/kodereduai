@@ -64,6 +64,9 @@ class SchoolNotificationConfigSerializer(serializers.ModelSerializer):
             'push_enabled', 'quiet_hours_start', 'quiet_hours_end',
             'fee_reminder_day', 'daily_absence_summary_time',
             'smart_scheduling_enabled',
+            'absence_notification_enabled', 'fee_reminder_enabled',
+            'fee_overdue_enabled', 'exam_result_enabled',
+            'daily_absence_summary_enabled',
             'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']

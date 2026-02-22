@@ -145,8 +145,8 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | GET/POST | /api/finance/other-income/ | |
 | GET/POST | /api/finance/discounts/ | |
 | GET/POST | /api/finance/scholarships/ | |
-| GET/POST | /api/finance/student-discounts/ | |
-| POST | /api/finance/student-discounts/bulk_assign/ | |
+| GET/POST | /api/finance/student-discounts/ | student_id, discount_id, scholarship_id, academic_year, is_active. Returns student discount/scholarship assignments with student_name, class_name, discount_name, scholarship_name |
+| POST | /api/finance/student-discounts/bulk_assign/ | Body: {discount_id or scholarship_id, class_id or grade_level, academic_year_id}. Assigns to all active students in class/grade. Returns {created, skipped, total_students} |
 | GET/POST | /api/finance/gateway-config/ | |
 | GET/POST | /api/finance/online-payments/ | |
 | POST | /api/finance/online-payments/initiate/ | |
@@ -255,7 +255,7 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | GET/POST | /api/notifications/templates/ | Notification templates |
 | GET | /api/notifications/logs/ | Logs. Params: channel, status, event_type |
 | GET/POST | /api/notifications/preferences/ | User preferences |
-| GET/PUT | /api/notifications/config/ | School config (single object, NOT paginated). Includes smart_scheduling_enabled field |
+| GET/PUT | /api/notifications/config/ | School config (single object, NOT paginated). Includes smart_scheduling_enabled, absence_notification_enabled, fee_reminder_enabled, fee_overdue_enabled, exam_result_enabled, daily_absence_summary_enabled fields |
 | GET | /api/notifications/my/ | My in-app notifications |
 | GET | /api/notifications/unread-count/ | Unread count |
 | POST | /api/notifications/{id}/mark-read/ | Mark as read |
@@ -263,6 +263,19 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | POST | /api/notifications/send/ | Send notification |
 | GET | /api/notifications/analytics/ | Analytics |
 | POST | /api/notifications/ai-chat/ | Communication AI |
+
+## Messaging
+| Method | URL | Description |
+|--------|-----|-------------|
+| GET | /api/messaging/threads/ | List user's message threads (with unread counts) |
+| POST | /api/messaging/threads/ | Create new thread + first message. Body: `{recipient_user_id, message, student_id?, subject?, message_type?}` |
+| GET | /api/messaging/threads/{uuid}/ | Get thread detail with all messages (auto-marks as read) |
+| POST | /api/messaging/threads/{uuid}/reply/ | Reply to thread. Body: `{message}` |
+| PATCH | /api/messaging/threads/{uuid}/read/ | Mark thread as read |
+| GET | /api/messaging/recipients/ | Role-based available recipients list |
+| GET | /api/messaging/unread-count/ | Total unread count for badge |
+
+**Recipient rules:** Admins → any staff. Teachers → parents/students of their classes + admins. Staff → admins. Parents → teachers of their children's classes.
 
 ## Parents
 | Method | URL | Description |

@@ -68,6 +68,7 @@ INSTALLED_APPS = [
     'hostel',
     'inventory',
     'face_attendance',
+    'messaging',
 ]
 
 MIDDLEWARE = [

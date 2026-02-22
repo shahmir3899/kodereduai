@@ -177,6 +177,9 @@ urlpatterns = [
     # Inventory & Store
     path('api/inventory/', include('inventory.urls')),
 
+    # Messaging
+    path('api/messaging/', include('messaging.urls')),
+
     # Background Tasks
     path('api/tasks/', include('core.urls')),
 ]

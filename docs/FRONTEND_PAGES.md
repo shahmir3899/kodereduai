@@ -39,7 +39,7 @@ The `/dashboard` route uses **DashboardRouter.jsx** to render a role-specific da
 | /dashboard | DashboardRouter.jsx → role-specific | See above | Varies by role |
 | /profile | ProfilePage.jsx | User profile edit | GET/PATCH /api/auth/me/ |
 | /settings | SettingsPage.jsx | School settings | GET/PUT /api/schools/current/ |
-| /notifications | NotificationsPage.jsx | Notification center. Settings include Smart Notification Scheduling toggle | GET /api/notifications/my/, GET/PUT /api/notifications/config/ |
+| /notifications | NotificationsPage.jsx | Notification center. Settings tab includes: Notification Channels (WhatsApp/SMS/In-App toggles), Automated Notifications (per-trigger toggles with timing badges for absence, fee reminders, fee overdue, exam results, daily summary), Scheduling & Timing (smart scheduling, fee reminder day, quiet hours) | GET /api/notifications/my/, GET/PUT /api/notifications/config/ |
 | /admin | SuperAdminDashboard.jsx | Super admin only — all schools overview | GET /api/admin/schools/, platform_stats/ |
 
 ## Attendance
@@ -82,8 +82,10 @@ Redirects: /attendance/upload, /attendance/review, /attendance/records → remap
 |-------|-----------|-------------|-----------|
 | /finance | FinanceDashboardPage.jsx | Finance overview | GET balances/, monthly_summary/ |
 | /finance/fees | FeeCollectionPage.jsx | Fee collection (complex, sub-components). Client-side class/status filtering, client-side summary. Bulk "Pay Full" sets each student's paid = total payable. | GET fee-payments/ (single fetch), fee-structures/, resolve_amount/, preview_generation/, PATCH bulk_update/ (mode=pay_full) |
+| /finance/fees/collect | FeeCollectPage.jsx | Payment recording with inline editing, bulk actions | GET fee-payments/, PATCH bulk_update/ |
+| /finance/fees/setup | FeeSetupPage.jsx | 3-tab page: Fee Structures (by class/student), Generate Records, Student Discounts (assign discounts/scholarships to students with base fee + effective fee view, per-student assign/remove, bulk assign to class) | GET/POST fee-structures/, bulk_set/, students/, discounts/, scholarships/, student-discounts/, bulk_assign/ |
 | /finance/expenses | ExpensesPage.jsx | Expense tracking | GET/POST expenses/ |
-| /finance/discounts | DiscountsPage.jsx | Discounts & scholarships | GET/POST discounts/, scholarships/ |
+| /finance/discounts | DiscountsPage.jsx | Discounts & scholarships management (3 tabs: Discount rules, Scholarship programs, Student assignments). For assigning discounts to students, prefer Fee Setup > Student Discounts tab. | GET/POST discounts/, scholarships/, student-discounts/, bulk_assign/ |
 | /finance/payment-gateways | PaymentGatewayPage.jsx | Payment gateway config | GET/POST gateway-config/ |
 | /finance-ai | FinanceAIPage.jsx | Finance AI chat | POST ai-chat/ |
 | /accounts | AccountsPage.jsx | Account management | GET/POST accounts/ |
@@ -151,6 +153,11 @@ Redirects: /attendance/upload, /attendance/review, /attendance/records → remap
 | /inventory/items | InventoryItemsPage.jsx | Item management | GET/POST items/ |
 | /inventory/transactions | StockTransactionsPage.jsx | Stock transactions | GET/POST transactions/ |
 | /inventory/assignments | ItemAssignmentsPage.jsx | Item assignments | GET/POST assignments/ |
+
+## Messaging
+| Route | Component | Description | API Calls |
+|-------|-----------|-------------|-----------|
+| /messages | MessagesPage.jsx | Unified messaging for all roles. Split-panel: thread list (left) + conversation (right). New message modal with role-based recipient picker. Auto-refresh 15s. Mobile-responsive. | GET /api/messaging/threads/, GET /api/messaging/threads/{uuid}/, POST /api/messaging/threads/, POST /api/messaging/threads/{uuid}/reply/, PATCH /api/messaging/threads/{uuid}/read/, GET /api/messaging/recipients/, GET /api/messaging/unread-count/ |
 
 ## Parent Portal
 | Route | Component | Description | API Calls |

@@ -115,6 +115,9 @@ const InventoryItemsPage = lazy(() => import('./pages/inventory/InventoryItemsPa
 const StockTransactionsPage = lazy(() => import('./pages/inventory/StockTransactionsPage'))
 const ItemAssignmentsPage = lazy(() => import('./pages/inventory/ItemAssignmentsPage'))
 
+// Messaging
+const MessagesPage = lazy(() => import('./pages/messaging/MessagesPage'))
+
 // Face Attendance pages
 const FaceAttendancePage = lazy(() => import('./pages/face-attendance/FaceAttendancePage'))
 const FaceReviewPage = lazy(() => import('./pages/face-attendance/FaceReviewPage'))
@@ -302,6 +305,9 @@ function App() {
 
             {/* Notifications */}
             <Route path="notifications" element={<SchoolRoute><ModuleRoute module="notifications"><NotificationsPage /></ModuleRoute></SchoolRoute>} />
+
+            {/* Messaging */}
+            <Route path="messages" element={<MessagesPage />} />
 
             {/* Finance routes */}
             <Route path="finance" element={<SchoolRoute><ModuleRoute module="finance"><FinanceDashboardPage /></ModuleRoute></SchoolRoute>} />

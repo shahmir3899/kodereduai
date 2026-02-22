@@ -277,13 +277,13 @@ school(FK), category, description, amount, date, account(FK), payment_method, re
 school(FK), source, description, amount, date, account(FK), academic_year(FK)
 
 ### Discount
-school(FK), name, discount_type (PERCENTAGE/FIXED), value, applies_to, is_active
+school(FK), academic_year(FK nullable), name, discount_type (PERCENTAGE/FIXED), value, applies_to (ALL/GRADE_LEVEL/CLASS/STUDENT/SIBLING), target_grade_level(nullable), target_class(FK nullable), start_date, end_date, is_active, max_uses, stackable
 
 ### Scholarship
-school(FK), name, amount, criteria, is_active
+school(FK), academic_year(FK nullable), name, description, scholarship_type (MERIT/NEED/SPORTS/STAFF_CHILD/OTHER), coverage (FULL/PERCENTAGE/FIXED), value, max_recipients, is_active
 
 ### StudentDiscount
-student(FK SET_NULL nullable), discount(FK nullable), scholarship(FK nullable), custom_amount
+school(FK), student(FK SET_NULL nullable), discount(FK nullable), scholarship(FK nullable), academic_year(FK), approved_by(FK nullable), approved_at, is_active, notes
 
 ### PaymentGatewayConfig
 school(FK), provider (JAZZCASH/EASYPAISA), config(JSON), is_active, is_default
@@ -345,7 +345,25 @@ school(FK), name, event_type (FEE_DUE/ABSENCE/EXAM/GENERAL), channel (IN_APP/SMS
 school(FK), template(FK nullable), channel, event_type, recipient_type, recipient_identifier, title, body, status (PENDING/SENT/DELIVERED/FAILED/READ), metadata(JSON), sent_at
 
 ### SchoolNotificationConfig
-school(OneToOne), whatsapp_enabled, sms_enabled, in_app_enabled, email_enabled, quiet_hours_start/end, fee_reminder_day
+school(OneToOne), whatsapp_enabled, sms_enabled, in_app_enabled, email_enabled, push_enabled, quiet_hours_start/end, fee_reminder_day, daily_absence_summary_time, smart_scheduling_enabled, absence_notification_enabled, fee_reminder_enabled, fee_overdue_enabled, exam_result_enabled, daily_absence_summary_enabled
+
+### NotificationPreference
+school(FK), user(FK nullable), student(FK nullable), channel, event_type, is_enabled
+
+---
+
+## messaging — Internal Messaging
+
+### MessageThread
+id(UUID PK), school(FK), message_type (ADMIN_STAFF/TEACHER_PARENT/TEACHER_STUDENT/GENERAL), student(FK nullable), subject, created_by(FK), is_active, created_at, updated_at
+
+### ThreadParticipant
+thread(FK), user(FK), last_read_at, joined_at. Unique: (thread, user)
+
+### Message
+thread(FK), sender(FK), body, created_at
+
+**Key:** Thread-based messaging system. Admins can message any staff. Teachers can message parents/students of classes they teach (validated via ClassSubject). Recipients endpoint returns role-filtered available contacts. Thread reuse: if a thread already exists between same two users + same student context, messages are appended.
 
 ---
 

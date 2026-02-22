@@ -3,12 +3,21 @@ Finance serializers for fee structures, payments, expenses, other income, and AI
 """
 
 from rest_framework import serializers
+from core.mixins import ensure_tenant_school_id
 from .models import (
     Account, Transfer, FeeStructure, FeePayment, Expense, OtherIncome,
     ExpenseCategory, IncomeCategory,
     FinanceAIChatMessage, MonthlyClosing, AccountSnapshot,
     Discount, Scholarship, StudentDiscount, PaymentGatewayConfig, OnlinePayment,
 )
+
+
+def _serializer_school_id(serializer_instance):
+    """Extract school_id from serializer request context."""
+    request = serializer_instance.context.get('request')
+    if not request:
+        return None
+    return ensure_tenant_school_id(request)
 
 
 class AccountSerializer(serializers.ModelSerializer):
@@ -195,6 +204,14 @@ class FeePaymentCreateSerializer(serializers.ModelSerializer):
             # ANNUAL, ADMISSION, BOOKS, FINE use month=0
             if month is not None and month != 0:
                 raise serializers.ValidationError({'month': 'Month should be 0 for non-monthly fee types.'})
+
+        # Validate account belongs to the same school (multi-tenancy)
+        school_id = _serializer_school_id(self)
+        account = attrs.get('account')
+        if school_id and account:
+            if account.school_id and account.school_id != school_id:
+                raise serializers.ValidationError({'account': 'Account does not belong to your school.'})
+
         return attrs
 
 
@@ -214,6 +231,13 @@ class FeePaymentUpdateSerializer(serializers.ModelSerializer):
         if amount is not None and amount > 0:
             if not account and (not self.instance or not self.instance.account):
                 raise serializers.ValidationError({'account': 'Please select account'})
+
+        # Validate account belongs to the same school (multi-tenancy)
+        school_id = _serializer_school_id(self)
+        if school_id and account:
+            if account.school_id and account.school_id != school_id:
+                raise serializers.ValidationError({'account': 'Account does not belong to your school.'})
+
         return attrs
 
 
@@ -428,6 +452,17 @@ class DiscountSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {'value': 'Percentage value must be between 0 and 100.'}
                 )
+
+        # Validate target_class and academic_year belong to the same school (multi-tenancy)
+        school_id = _serializer_school_id(self)
+        if school_id:
+            target_class = attrs.get('target_class')
+            if target_class and target_class.school_id != school_id:
+                raise serializers.ValidationError({'target_class': 'Class does not belong to your school.'})
+            academic_year = attrs.get('academic_year')
+            if academic_year and academic_year.school_id != school_id:
+                raise serializers.ValidationError({'academic_year': 'Academic year does not belong to your school.'})
+
         return attrs
 
 
@@ -509,6 +544,25 @@ class StudentDiscountCreateSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 'Provide either discount_id or scholarship_id, not both.'
             )
+
+        # Validate FKs belong to the same school (multi-tenancy)
+        school_id = _serializer_school_id(self)
+        if school_id:
+            if attrs.get('discount_id'):
+                if not Discount.objects.filter(id=attrs['discount_id'], school_id=school_id).exists():
+                    raise serializers.ValidationError({'discount_id': 'Discount not found for your school.'})
+            if attrs.get('scholarship_id'):
+                if not Scholarship.objects.filter(id=attrs['scholarship_id'], school_id=school_id).exists():
+                    raise serializers.ValidationError({'scholarship_id': 'Scholarship not found for your school.'})
+            from academic_sessions.models import AcademicYear
+            if attrs.get('academic_year_id'):
+                if not AcademicYear.objects.filter(id=attrs['academic_year_id'], school_id=school_id).exists():
+                    raise serializers.ValidationError({'academic_year_id': 'Academic year not found for your school.'})
+            from students.models import Student
+            if attrs.get('student_id'):
+                if not Student.objects.filter(id=attrs['student_id'], school_id=school_id).exists():
+                    raise serializers.ValidationError({'student_id': 'Student not found for your school.'})
+
         return attrs
 
 

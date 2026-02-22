@@ -9,6 +9,15 @@ from django.utils import timezone
 logger = logging.getLogger(__name__)
 
 
+def _get_config(school):
+    """Get school notification config, returns None if not configured."""
+    from .models import SchoolNotificationConfig
+    try:
+        return SchoolNotificationConfig.objects.get(school=school)
+    except SchoolNotificationConfig.DoesNotExist:
+        return None
+
+
 def trigger_absence_notification(attendance_record):
     """
     Send absence notification to parent after attendance confirmation.
@@ -20,6 +29,11 @@ def trigger_absence_notification(attendance_record):
 
     student = attendance_record.student
     school = attendance_record.school
+
+    config = _get_config(school)
+    if config and not config.absence_notification_enabled:
+        logger.info(f"Absence notifications disabled for {school.name}, skipping")
+        return None
 
     if not student.parent_phone:
         logger.info(f"No parent phone for {student.name}, skipping notification")
@@ -76,6 +90,11 @@ def trigger_fee_reminder(school, month, year):
         month: Month number (1-12)
         year: Year (e.g. 2025)
     """
+    config = _get_config(school)
+    if config and not config.fee_reminder_enabled:
+        logger.info(f"Fee reminders disabled for {school.name}, skipping")
+        return 0
+
     from finance.models import FeePayment
     from .engine import NotificationEngine
 
@@ -121,6 +140,11 @@ def trigger_fee_overdue(school, month, year):
     """
     Send overdue fee alerts for payments not received after the due period.
     """
+    config = _get_config(school)
+    if config and not config.fee_overdue_enabled:
+        logger.info(f"Fee overdue alerts disabled for {school.name}, skipping")
+        return 0
+
     from finance.models import FeePayment
     from .engine import NotificationEngine
 
@@ -169,6 +193,11 @@ def trigger_exam_result(student, exam):
     from .engine import NotificationEngine
 
     school = student.school
+
+    config = _get_config(school)
+    if config and not config.exam_result_enabled:
+        logger.info(f"Exam result notifications disabled for {school.name}, skipping")
+        return None
 
     if not student.parent_phone:
         return None
