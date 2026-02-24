@@ -1,14 +1,18 @@
 import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { examinationsApi, sessionsApi, studentsApi } from '../../services/api'
+import { examinationsApi, sessionsApi, studentsApi, schoolsApi } from '../../services/api'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
+import { exportReportCardPDF } from './reportCardExport'
+import ClassSelector from '../../components/ClassSelector'
 
 export default function ReportCardPage() {
   const { activeAcademicYear } = useAcademicYear()
+  const [classId, setClassId] = useState('')
   const [studentId, setStudentId] = useState('')
   const [yearId, setYearId] = useState('')
   const [termId, setTermId] = useState('')
   const [search, setSearch] = useState('')
+  const [downloading, setDownloading] = useState(false)
 
   // Sync year filter with global session switcher
   useEffect(() => {
@@ -30,8 +34,9 @@ export default function ReportCardPage() {
   })
 
   const { data: studentsRes } = useQuery({
-    queryKey: ['students', search],
-    queryFn: () => studentsApi.getStudents({ search: search || undefined, page_size: 50 }),
+    queryKey: ['students', classId, search],
+    queryFn: () => studentsApi.getStudents({ class_id: classId, search: search || undefined, is_active: true, page_size: 9999 }),
+    enabled: !!classId,
   })
 
   const { data: reportRes, isLoading: reportLoading } = useQuery({
@@ -44,10 +49,28 @@ export default function ReportCardPage() {
     enabled: !!studentId,
   })
 
+  const { data: schoolRes } = useQuery({
+    queryKey: ['currentSchool'],
+    queryFn: () => schoolsApi.getMySchool(),
+  })
+
   const years = yearsRes?.data?.results || yearsRes?.data || []
   const terms = termsRes?.data?.results || termsRes?.data || []
   const students = studentsRes?.data?.results || studentsRes?.data || []
   const report = reportRes?.data || null
+  const schoolData = schoolRes?.data
+
+  const handleDownloadPDF = async () => {
+    if (!report) return
+    setDownloading(true)
+    try {
+      await exportReportCardPDF({ report, schoolData })
+    } catch (err) {
+      console.error('PDF export failed:', err)
+    } finally {
+      setDownloading(false)
+    }
+  }
 
   return (
     <div>
@@ -58,7 +81,16 @@ export default function ReportCardPage() {
 
       {/* Selection */}
       <div className="card mb-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Class</label>
+            <ClassSelector
+              value={classId}
+              onChange={e => { setClassId(e.target.value); setStudentId(''); setSearch('') }}
+              className="input w-full text-sm"
+              placeholder="Select class..."
+            />
+          </div>
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">Search Student</label>
             <input
@@ -67,12 +99,13 @@ export default function ReportCardPage() {
               onChange={e => setSearch(e.target.value)}
               className="input w-full text-sm"
               placeholder="Search by name..."
+              disabled={!classId}
             />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">Student</label>
-            <select value={studentId} onChange={e => setStudentId(e.target.value)} className="input w-full text-sm">
-              <option value="">Select student...</option>
+            <select value={studentId} onChange={e => setStudentId(e.target.value)} className="input w-full text-sm" disabled={!classId}>
+              <option value="">{classId ? 'Select student...' : 'Select class first'}</option>
               {students.map(s => <option key={s.id} value={s.id}>{s.name} ({s.roll_number})</option>)}
             </select>
           </div>
@@ -110,6 +143,20 @@ export default function ReportCardPage() {
         <div className="card text-center py-8 text-gray-500">No report card data available.</div>
       ) : (
         <div className="card max-w-3xl mx-auto">
+          {/* Actions */}
+          <div className="flex justify-end mb-3">
+            <button
+              onClick={handleDownloadPDF}
+              disabled={downloading}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              {downloading ? 'Generating...' : 'Download PDF'}
+            </button>
+          </div>
+
           {/* Header */}
           <div className="text-center border-b border-gray-200 pb-4 mb-4">
             <h2 className="text-lg font-bold text-gray-900">{report.school_name || 'Report Card'}</h2>

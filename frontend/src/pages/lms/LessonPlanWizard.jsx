@@ -66,13 +66,13 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
 
   const { data: classSubjectsData } = useQuery({
     queryKey: ['classSubjects', selectedClass],
-    queryFn: () => academicsApi.getClassSubjects({ class_id: selectedClass, page_size: 9999 }),
+    queryFn: () => academicsApi.getClassSubjects({ class_obj: selectedClass, page_size: 9999 }),
     enabled: !!selectedClass,
   })
 
   const { data: staffData } = useQuery({
-    queryKey: ['hrStaffActive'],
-    queryFn: () => hrApi.getStaff({ status: 'ACTIVE', page_size: 9999 }),
+    queryKey: ['hrStaffTeachers'],
+    queryFn: () => hrApi.getStaff({ employment_status: 'ACTIVE', role: 'TEACHER', page_size: 9999 }),
   })
 
   const { data: booksData, isLoading: booksLoading } = useQuery({

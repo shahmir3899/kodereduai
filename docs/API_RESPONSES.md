@@ -89,6 +89,7 @@ School 37 = "SEED_TEST_School_Alpha" (seed/test data).
   "name": "The Focus Montessori and School - Branch 1",
   "subdomain": "focus",
   "logo": null,
+  "letterhead_url": null,
   "address": "Usterzai Payan Kohat",
   "contact_email": "thefocus2018@gmail.com",
   "contact_phone": "03329831884",
@@ -123,6 +124,48 @@ School 37 = "SEED_TEST_School_Alpha" (seed/test data).
     "default": "ABSENT"
   },
   "school_name": "The Focus Montessori and School - Branch 1"
+}
+```
+
+### POST /api/schools/upload_asset/
+FormData: `file` (image) + `asset_type` ('logo' or 'letterhead'). Admin only.
+```json
+{
+  "url": "https://<supabase-url>/storage/v1/object/public/atten-reg/school-assets/1/logo.png",
+  "asset_type": "logo",
+  "message": "logo uploaded successfully"
+}
+```
+
+### DELETE /api/schools/delete_asset/?asset_type=logo
+```json
+{
+  "message": "logo removed successfully"
+}
+```
+
+### GET /api/schools/exam_config/
+```json
+{
+  "exam_config": {
+    "weighted_average_enabled": false
+  },
+  "school_name": "The Focus Montessori and School - Branch 1"
+}
+```
+
+### PUT /api/schools/exam_config/
+```json
+// Request
+{ "weighted_average_enabled": true }
+
+// Response
+{
+  "success": true,
+  "message": "Exam configuration updated successfully.",
+  "exam_config": {
+    "weighted_average_enabled": true
+  }
 }
 ```
 
@@ -1138,6 +1181,44 @@ Each mark in the results response now includes `ai_comment`:
 }
 ```
 
+### GET /api/examinations/report-card/?student_id=1&academic_year_id=1
+```json
+{
+  "student_name": "Ahmed Hassan",
+  "roll_number": "15",
+  "class_name": "Junior 2",
+  "school_name": "The Focus Montessori",
+  "academic_year_name": "2025-2026",
+  "term_name": "3rd Term",
+  "student": {
+    "id": 1, "name": "Ahmed Hassan", "roll_number": "15",
+    "class_name": "Junior 2", "school_name": "The Focus Montessori"
+  },
+  "subjects": [
+    {
+      "subject_name": "Mathematics", "total_marks": 100.0, "marks_obtained": 85.0,
+      "percentage": 85.0, "grade": "A", "is_pass": true, "is_absent": false
+    }
+  ],
+  "exams": [
+    {
+      "exam_id": 1, "exam_name": "Final Term", "exam_type": "Final",
+      "term": "3rd Term",
+      "marks": { "1": { "total_marks": 100.0, "marks_obtained": 85.0, "is_absent": false, "ai_comment": "" } }
+    }
+  ],
+  "summary": {
+    "total_marks": 500.0, "obtained_marks": 378.0,
+    "total_obtained": 378.0, "total_possible": 500.0,
+    "percentage": 75.6, "grade": "B+",
+    "overall_pass": false, "calculation_mode": "simple"
+  },
+  "grade_scales": [
+    { "grade_label": "A+", "min_percentage": 90.0, "max_percentage": 100.0, "gpa_points": 4.0 }
+  ]
+}
+```
+
 ---
 
 ## Admissions
@@ -1584,7 +1665,67 @@ _(Expected fields from serializers)_
 
 ## LMS
 
-_(No data — expected fields from serializers)_
+### GET /api/lms/books/?class_id=5&subject_id=3
+```json
+{
+  "results": [
+    {
+      "id": 1, "school": 37, "class_obj": 5, "class_name": "Grade 5",
+      "subject": 3, "subject_name": "Mathematics",
+      "title": "Mathematics Grade 5", "author": "Punjab Textbook Board",
+      "publisher": "PTB", "edition": "2024",
+      "language": "en", "language_display": "English", "is_rtl": false,
+      "description": "", "is_active": true,
+      "chapter_count": 12,
+      "chapters": [
+        {
+          "id": 1, "title": "Whole Numbers", "chapter_number": 1,
+          "description": "", "topic_count": 4,
+          "topics": [
+            {"id": 1, "title": "Place Value", "topic_number": 1, "estimated_periods": 2, "is_covered": true},
+            {"id": 2, "title": "Rounding Numbers", "topic_number": 2, "estimated_periods": 1, "is_covered": false}
+          ]
+        }
+      ],
+      "created_at": "", "updated_at": ""
+    }
+  ]
+}
+```
+
+### GET /api/lms/books/{id}/tree/
+```json
+{
+  "id": 1, "title": "Mathematics Grade 5", "author": "PTB",
+  "publisher": "PTB", "edition": "2024", "language": "en", "is_rtl": false,
+  "description": "",
+  "chapters": [
+    {
+      "id": 1, "title": "Whole Numbers", "chapter_number": 1,
+      "description": "",
+      "topics": [
+        {"id": 1, "title": "Place Value", "topic_number": 1, "estimated_periods": 2, "is_covered": true},
+        {"id": 2, "title": "Rounding Numbers", "topic_number": 2, "estimated_periods": 1, "is_covered": false}
+      ]
+    }
+  ]
+}
+```
+
+### POST /api/lms/books/{id}/bulk_toc/
+```json
+{"chapters_created": 5, "topics_created": 18, "errors": []}
+```
+
+### POST /api/lms/books/{id}/ocr_toc/
+```json
+{"text": "Chapter 1: Introduction\n  1.1 Overview\n  1.2 Background\nChapter 2: Fundamentals", "language": "en"}
+```
+
+### GET /api/lms/books/syllabus_progress/?class_id=5&subject_id=3
+```json
+{"total_topics": 48, "covered_topics": 12}
+```
 
 ### GET /api/lms/lesson-plans/
 ```json

@@ -123,6 +123,13 @@ def default_register_config():
     }
 
 
+def default_exam_config():
+    """Default examination configuration per school."""
+    return {
+        "weighted_average_enabled": False,
+    }
+
+
 def default_ai_config():
     """Default AI pipeline configuration per school."""
     return {
@@ -166,6 +173,7 @@ class School(models.Model):
         help_text="Unique subdomain for the school (e.g., 'focus' for focus.kodereduai.pk)"
     )
     logo = models.URLField(blank=True, null=True)
+    letterhead_url = models.URLField(blank=True, null=True)
     address = models.TextField(blank=True)
     contact_email = models.EmailField(blank=True)
     contact_phone = models.CharField(max_length=20, blank=True)
@@ -198,6 +206,13 @@ class School(models.Model):
         default=default_ai_config,
         blank=True,
         help_text="Per-school AI pipeline config: thresholds, providers, auto-tune settings"
+    )
+
+    # Examination configuration (per-school weighted average toggle, etc.)
+    exam_config = models.JSONField(
+        default=default_exam_config,
+        blank=True,
+        help_text="Per-school exam config: weighted average toggle, etc."
     )
 
     # Status

@@ -1,0 +1,5227 @@
+{
+  "meta": {
+    "title": "KoderEduAI",
+    "subtitle": "School Administration Guide",
+    "version": "3.0 - AI Intelligence Edition",
+    "generatedAt": "2026-02-24T12:59:58.815433+00:00",
+    "totalChapters": 21,
+    "modules": [
+      "Dashboard | Classes & Students | Attendance (AI-Powered)",
+      "Face Attendance (Camera-Based) | Academics & Examinations",
+      "Finance & Online Payments | HR & Staff Management",
+      "Admissions CRM | Transport | Library | Hostel Management",
+      "LMS | Notifications | Messaging | Parent & Student Portals | AI Study Helper",
+      "AI Intelligence: Adaptive Thresholds | Drift Detection | Anomaly Alerts",
+      "Pipeline Fallback | OR-Tools Timetable | AI Report Comments | Smart Scheduling"
+    ]
+  },
+  "chapters": [
+    {
+      "id": 1,
+      "title": "Getting Started",
+      "slug": "getting-started",
+      "sections": [
+        {
+          "id": "1.1",
+          "title": "Overview",
+          "slug": "overview",
+          "content": [
+            {
+              "type": "body_text",
+              "text": "KoderEduAI is a comprehensive School Management System that covers every aspect of school administration - from student enrollment and attendance tracking to finance, HR, academics, examinations, transport, library, and more. The system supports multiple user roles and provides dedicated portals for administrators, teachers, parents, and students."
+            }
+          ]
+        },
+        {
+          "id": "1.2",
+          "title": "User Roles",
+          "slug": "user-roles",
+          "content": [
+            {
+              "type": "body_text",
+              "text": "The system supports the following roles, each with different access levels:"
+            },
+            {
+              "type": "table",
+              "headers": [
+                "Role",
+                "Access Level",
+                "Description"
+              ],
+              "rows": [
+                [
+                  "School Admin",
+                  "Full School",
+                  "Full access; can create users within their school"
+                ],
+                [
+                  "Principal",
+                  "School-wide",
+                  "School operations; can create staff-level users"
+                ],
+                [
+                  "Teacher",
+                  "Assigned Classes",
+                  "Attendance, marks entry, lesson plans"
+                ],
+                [
+                  "HR Manager",
+                  "HR Module",
+                  "Staff management, payroll, leave"
+                ],
+                [
+                  "Accountant",
+                  "Finance Module",
+                  "Fee management, expenses, reports"
+                ],
+                [
+                  "Staff",
+                  "Limited",
+                  "Basic access, notifications"
+                ],
+                [
+                  "Parent",
+                  "Parent Portal",
+                  "View child's attendance, fees, results"
+                ],
+                [
+                  "Student",
+                  "Student Portal",
+                  "View own attendance, timetable, assignments"
+                ]
+              ]
+            },
+            {
+              "type": "body_text",
+              "text": "User Management: School Admins can create Principal, HR Manager, Accountant, Teacher, and Staff users. Principals can create HR Manager, Accountant, Teacher, and Staff users. See the User Management chapter for full details."
+            }
+          ]
+        },
+        {
+          "id": "1.3",
+          "title": "Logging In",
+          "slug": "logging-in",
+          "content": [
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Open the application URL in your web browser."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Enter your username/email and password on the Login page."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Click 'Sign In' to access your dashboard."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "If you manage multiple schools, use the School Switcher (top bar) to select the active school."
+            },
+            {
+              "type": "info_box",
+              "title": "First-Time Setup",
+              "text": "Your School Admin account is pre-configured for you. Once you receive your credentials, log in and follow the Initial Setup steps in Chapter 2. You can then create other users from Settings > Users tab."
+            }
+          ]
+        },
+        {
+          "id": "1.4",
+          "title": "Navigating the Application",
+          "slug": "navigating-the-application",
+          "content": [
+            {
+              "type": "body_text",
+              "text": "The application uses a sidebar navigation on the left side of the screen. The sidebar is organized into groups and expandable sections. On mobile devices, the sidebar collapses into a hamburger menu."
+            },
+            {
+              "type": "sub_section",
+              "title": "Top Bar Features"
+            },
+            {
+              "type": "bullet",
+              "text": "School Switcher - Switch between schools if you have access to multiple schools"
+            },
+            {
+              "type": "bullet",
+              "text": "Academic Year Switcher - Change the active academic year/session"
+            },
+            {
+              "type": "bullet",
+              "text": "Notification Bell - View unread notifications"
+            },
+            {
+              "type": "bullet",
+              "text": "User Menu - Profile settings, logout"
+            },
+            {
+              "type": "sub_section",
+              "title": "Sidebar Groups (Admin/Teacher View)"
+            },
+            {
+              "type": "bullet",
+              "text": "Dashboard - Main overview page"
+            },
+            {
+              "type": "bullet",
+              "text": "Management - Classes and Students"
+            },
+            {
+              "type": "bullet",
+              "text": "Attendance - Capture, Review, Register, Face Attendance"
+            },
+            {
+              "type": "bullet",
+              "text": "Academics - Subjects, Timetable, Sessions, Examinations, LMS"
+            },
+            {
+              "type": "bullet",
+              "text": "Finance - Dashboard, Fee Collection, Expenses, Payment Gateways"
+            },
+            {
+              "type": "bullet",
+              "text": "HR & Staff - Staff Directory, Departments, Payroll, Leave"
+            },
+            {
+              "type": "bullet",
+              "text": "Admissions - CRM pipeline for new admissions"
+            },
+            {
+              "type": "bullet",
+              "text": "Transport - Routes, Vehicles, Assignments"
+            },
+            {
+              "type": "bullet",
+              "text": "Library - Book Catalog, Issue/Return, Overdue"
+            },
+            {
+              "type": "bullet",
+              "text": "Hostel - Dashboard, Rooms, Allocations, Gate Passes"
+            },
+            {
+              "type": "bullet",
+              "text": "Notifications - Inbox, Templates, Send"
+            },
+            {
+              "type": "bullet",
+              "text": "Settings - System configuration"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Initial Setup - Order of Operations",
+      "slug": "initial-setup-order-of-operations",
+      "sections": [
+        {
+          "id": "2.0",
+          "title": "Introduction",
+          "slug": "introduction",
+          "content": [
+            {
+              "type": "body_text",
+              "text": "Before using the system, you must set up foundational data in the correct order. Each step depends on the previous one being completed. Follow this sequence carefully."
+            },
+            {
+              "type": "warning_box",
+              "text": "The setup order matters! For example, you cannot add students before creating classes, and you cannot create exams before setting up academic years and subjects. Follow the order below to avoid errors."
+            }
+          ]
+        },
+        {
+          "id": "2.1",
+          "title": "Step 1: Academic Year & Terms",
+          "slug": "step-1-academic-year-terms",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Academics > Sessions"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Log in with your School Admin credentials."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Navigate to Academics > Sessions in the sidebar."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "In the 'Years' tab, click 'Add Academic Year'."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Enter: Name (e.g., '2025-2026'), Start Date, End Date."
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "Click 'Set as Current' to make it the active year."
+            },
+            {
+              "type": "step",
+              "number": 6,
+              "text": "Switch to the 'Terms' tab and click 'Add Term'."
+            },
+            {
+              "type": "step",
+              "number": 7,
+              "text": "Enter: Name (e.g., 'Term 1'), Term Type (Term/Semester/Quarter), Start Date, End Date, Order."
+            },
+            {
+              "type": "step",
+              "number": 8,
+              "text": "Add all terms for the academic year."
+            },
+            {
+              "type": "info_box",
+              "title": "Why This Matters",
+              "text": "Academic years and terms are required for exams, report cards, fee structures, and student promotions. Set this up first."
+            }
+          ]
+        },
+        {
+          "id": "2.2",
+          "title": "Step 2: Create Classes",
+          "slug": "step-2-create-classes",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Management > Classes"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Navigate to 'Classes' in the sidebar under Management."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Click 'Add Class'."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Enter: Class Name (e.g., 'Class 5-A'), Section (e.g., 'A'), Grade Level (e.g., 'Grade 5')."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Save the class. Repeat for all classes and sections."
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "Classes are displayed grouped by grade level. Use the 'Grid' toggle for an alternate view."
+            },
+            {
+              "type": "info_box",
+              "title": "Tip",
+              "text": "Create all sections for a grade. For example: Class 5-A, Class 5-B, Class 5-C. The grade level grouping will organize them automatically."
+            }
+          ]
+        },
+        {
+          "id": "2.3",
+          "title": "Step 3: Add Students",
+          "slug": "step-3-add-students",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Management > Students"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Navigate to 'Students' in the sidebar."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "To add one student: Click 'Add Student' and fill in Name, Roll Number, Class, Parent Name, Parent Phone, Admission Number."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "To bulk import: Click 'Import from Excel', download the template, fill it in, and upload."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Students will appear in the list. Use the class filter to view students by class."
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "You can export the student list as PDF, PNG, or Excel using the export buttons."
+            },
+            {
+              "type": "warning_box",
+              "text": "Students must be assigned to a class. Make sure classes are created (Step 2) before adding students."
+            },
+            {
+              "type": "info_box",
+              "title": "Session Enrollment",
+              "text": "When you add a student (individually or via Excel upload), the system automatically creates an enrollment record for the school's current academic year. This links the student to the correct session. Roll numbers are unique per session and class, so different academic years can have different students with the same roll number in the same class."
+            }
+          ]
+        },
+        {
+          "id": "2.4",
+          "title": "Step 4: Add Subjects",
+          "slug": "step-4-add-subjects",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Academics > Subjects"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Navigate to Academics > Subjects in the sidebar."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "In the 'Subjects' tab, click 'Add Subject'."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Enter: Subject Name, Subject Code, Description, and whether it is an Elective."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Save. Repeat for all subjects taught in the school."
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "Switch to the 'Assignments' tab to assign subjects to classes."
+            },
+            {
+              "type": "step",
+              "number": 6,
+              "text": "Select a class, pick a subject, choose the teacher, set periods per week, then save."
+            }
+          ]
+        },
+        {
+          "id": "2.5",
+          "title": "Step 5: Create Timetable",
+          "slug": "step-5-create-timetable",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Academics > Timetable"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Navigate to Academics > Timetable."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Select a class to create its timetable."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Define time slots (period start time, end time)."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Assign subjects and teachers to each period for each day of the week."
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "Save the timetable. Students and parents can now view it in their portals."
+            },
+            {
+              "type": "info_box",
+              "title": "Prerequisite",
+              "text": "Subjects must be assigned to classes (Step 4) before creating timetables."
+            }
+          ]
+        },
+        {
+          "id": "2.6",
+          "title": "Setup Checklist Summary",
+          "slug": "setup-checklist-summary",
+          "content": [
+            {
+              "type": "table",
+              "headers": [
+                "Step",
+                "What to Do",
+                "Prerequisite",
+                "Who Does It"
+              ],
+              "rows": [
+                [
+                  "1",
+                  "Set up Academic Year & Terms",
+                  "Logged into school",
+                  "School Admin"
+                ],
+                [
+                  "2",
+                  "Create Classes",
+                  "None",
+                  "School Admin"
+                ],
+                [
+                  "3",
+                  "Add Students",
+                  "Classes exist",
+                  "School Admin"
+                ],
+                [
+                  "4",
+                  "Add Subjects & Assign to Classes",
+                  "Classes exist",
+                  "School Admin"
+                ],
+                [
+                  "5",
+                  "Create Timetable",
+                  "Subjects assigned",
+                  "School Admin"
+                ]
+              ]
+            }
+          ]
+        },
+        {
+          "id": "2.7",
+          "title": "Module Dependency Reference",
+          "slug": "module-dependency-reference",
+          "content": [
+            {
+              "type": "body_text",
+              "text": "Use this table to understand what must be set up before each feature works:"
+            },
+            {
+              "type": "table",
+              "headers": [
+                "Module / Feature",
+                "Depends On"
+              ],
+              "rows": [
+                [
+                  "Attendance",
+                  "Classes, Students"
+                ],
+                [
+                  "Face Attendance",
+                  "Classes, Students, Enrolled Faces"
+                ],
+                [
+                  "Timetable",
+                  "Subjects assigned to classes"
+                ],
+                [
+                  "Exams & Marks",
+                  "Academic Year, Terms, Classes, Subjects"
+                ],
+                [
+                  "Report Cards",
+                  "Published exam results"
+                ],
+                [
+                  "Fee Collection",
+                  "Fee Structures, Finance Accounts"
+                ],
+                [
+                  "Payroll",
+                  "Staff, Salary Structures"
+                ],
+                [
+                  "Transport",
+                  "Routes, Vehicles, Students"
+                ],
+                [
+                  "Library Issues",
+                  "Books in Catalog, Students/Staff"
+                ],
+                [
+                  "Hostel",
+                  "Hostels, Rooms, Students"
+                ],
+                [
+                  "LMS",
+                  "Subjects assigned to classes"
+                ]
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Attendance Module (AI-Powered)",
+      "slug": "attendance-module-aipowered",
+      "sections": [
+        {
+          "id": "3.0",
+          "title": "Introduction",
+          "slug": "introduction",
+          "content": [
+            {
+              "type": "body_text",
+              "text": "The Attendance module uses AI-powered OCR to capture attendance from handwritten registers. Teachers upload photos of attendance registers, and the AI extracts student names and marks. The system supports review and approval workflows."
+            }
+          ]
+        },
+        {
+          "id": "3.1",
+          "title": "Capturing Attendance",
+          "slug": "capturing-attendance",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Attendance > Capture & Review > Upload Tab"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Navigate to the Attendance section and click 'Capture & Review'."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "You will see three tabs: Upload, Review, and Approve. Select the 'Upload' tab."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Select the Class from the dropdown and pick the Date."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Upload an image of the handwritten attendance register (photo or scan)."
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "Use the crop/zoom tool to frame the register area correctly."
+            },
+            {
+              "type": "step",
+              "number": 6,
+              "text": "Click 'Process' - the AI will extract student names and attendance marks (P, A, L, etc.)."
+            },
+            {
+              "type": "step",
+              "number": 7,
+              "text": "Review the AI-extracted data on screen. Correct any errors if needed."
+            },
+            {
+              "type": "step",
+              "number": 8,
+              "text": "Click 'Submit' to save the captured attendance for review."
+            }
+          ]
+        },
+        {
+          "id": "3.2",
+          "title": "Reviewing Attendance",
+          "slug": "reviewing-attendance",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Attendance > Capture & Review > Review Tab"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Switch to the 'Review' tab to see all pending attendance records."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Click on a record to see the side-by-side view: original image vs. extracted data."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Verify each student's mark. Edit any incorrect marks directly in the table."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Click 'Approve' to confirm the attendance or 'Reject' to send it back for re-capture."
+            }
+          ]
+        },
+        {
+          "id": "3.3",
+          "title": "Viewing the Attendance Register",
+          "slug": "viewing-the-attendance-register",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Attendance > Register & Analytics"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Navigate to 'Register & Analytics' under Attendance."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Select a class and date range to view the full attendance register."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "The register shows a grid: students as rows, dates as columns, with marks in each cell."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Use the Analytics tab to view attendance trends, percentages, and accuracy metrics."
+            }
+          ]
+        },
+        {
+          "id": "3.4",
+          "title": "Attendance Mark Meanings",
+          "slug": "attendance-mark-meanings",
+          "content": [
+            {
+              "type": "table",
+              "headers": [
+                "Symbol",
+                "Meaning",
+                "Status"
+              ],
+              "rows": [
+                [
+                  "P",
+                  "Present",
+                  "Student was in class"
+                ],
+                [
+                  "A",
+                  "Absent",
+                  "Student was not in class"
+                ],
+                [
+                  "L",
+                  "Late",
+                  "Student arrived late"
+                ],
+                [
+                  "Le",
+                  "Leave",
+                  "Student on approved leave"
+                ],
+                [
+                  "HD",
+                  "Half Day",
+                  "Student was present for half the day"
+                ]
+              ]
+            },
+            {
+              "type": "info_box",
+              "title": "Customization",
+              "text": "You can customize attendance marks and their meanings in Settings > Mappings Tab. Add new symbols or change the default mapping."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Face Attendance (Camera-Based)",
+      "slug": "face-attendance-camerabased",
+      "sections": [
+        {
+          "id": "4.0",
+          "title": "Introduction",
+          "slug": "introduction",
+          "content": [
+            {
+              "type": "body_text",
+              "text": "The Face Attendance module uses AI-powered face recognition to take attendance from a single group photo of the class. Instead of scanning handwritten registers, a teacher or admin takes a photo of the class, and the system automatically detects faces, matches them to enrolled students, and marks attendance. This is faster and works well for classes where camera-based attendance is preferred."
+            },
+            {
+              "type": "info_box",
+              "title": "How It Works",
+              "text": "1. Enroll each student by uploading a clear portrait photo (one-time setup). 2. Take a group photo of the class. 3. The AI detects all faces, matches them to enrolled students, and flags uncertain matches. 4. Review the results and confirm attendance."
+            },
+            {
+              "type": "warning_box",
+              "text": "Face Enrollment is required before using face attendance. Students without an enrolled face photo cannot be matched automatically. Enroll all students in a class before capturing attendance."
+            }
+          ]
+        },
+        {
+          "id": "4.1",
+          "title": "Prerequisites",
+          "slug": "prerequisites",
+          "content": [
+            {
+              "type": "body_text",
+              "text": "Before using Face Attendance, ensure:"
+            },
+            {
+              "type": "bullet",
+              "text": "Classes are created with students enrolled (see Chapter 2)"
+            },
+            {
+              "type": "bullet",
+              "text": "The face recognition library is installed on the server (dlib + face_recognition)"
+            },
+            {
+              "type": "bullet",
+              "text": "Supabase storage bucket is configured for image uploads"
+            }
+          ]
+        },
+        {
+          "id": "4.2",
+          "title": "Step 1: Enroll Student Faces",
+          "slug": "step-1-enroll-student-faces",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Attendance > Face Attendance > Manage Enrollments"
+            },
+            {
+              "type": "body_text",
+              "text": "Enrollment is a one-time setup where you upload a clear portrait photo of each student. The system extracts a facial fingerprint (embedding) that is used for matching during attendance."
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Navigate to Face Attendance and click 'Manage Enrollments' (top-right button)."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Select a Class from the dropdown on the left panel."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Select a Student from the student dropdown (shows all students in the class)."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Upload or capture a clear portrait photo of the student. The photo must show exactly one face."
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "Click 'Enroll Face'. The system uploads the photo, detects the face, and stores the facial embedding."
+            },
+            {
+              "type": "step",
+              "number": 6,
+              "text": "The enrolled student appears in the right panel with a quality score percentage."
+            },
+            {
+              "type": "step",
+              "number": 7,
+              "text": "Repeat for all students in the class."
+            },
+            {
+              "type": "info_box",
+              "title": "Photo Tips",
+              "text": "Use a clear, well-lit portrait photo with the student facing the camera. Avoid group photos, sunglasses, or heavy shadows. Quality score above 70% is recommended. The right panel shows all enrolled students with quality scores. To remove an enrollment, click 'Remove' next to the student and confirm."
+            }
+          ]
+        },
+        {
+          "id": "4.3",
+          "title": "Step 2: Capture Class Photo",
+          "slug": "step-2-capture-class-photo",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Attendance > Face Attendance > Capture Tab"
+            },
+            {
+              "type": "body_text",
+              "text": "Once students are enrolled, you can take attendance by capturing a group photo of the class."
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Navigate to Face Attendance. You will see the Capture tab (default)."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Select the Class from the dropdown."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Select the Date (defaults to today)."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Click 'Select or Capture Photo' to take a photo using the device camera or upload an existing image."
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "A preview of the photo appears. Click 'Clear' to retake if needed."
+            },
+            {
+              "type": "step",
+              "number": 6,
+              "text": "Click 'Process Attendance'. The photo is uploaded and the AI begins processing."
+            },
+            {
+              "type": "step",
+              "number": 7,
+              "text": "You are automatically navigated to the Review page."
+            }
+          ]
+        },
+        {
+          "id": "4.4",
+          "title": "Step 3: Review Detected Faces",
+          "slug": "step-3-review-detected-faces",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Attendance > Face Attendance > Review Page"
+            },
+            {
+              "type": "body_text",
+              "text": "After processing (10-30 seconds), the Review page shows three sections: the captured photo, a grid of detected face thumbnails with match info, and the Class Roll with present/absent toggles. The page auto-refreshes while processing."
+            },
+            {
+              "type": "table",
+              "headers": [
+                "Badge",
+                "Color",
+                "Meaning"
+              ],
+              "rows": [
+                [
+                  "Auto",
+                  "Green",
+                  "High-confidence match (auto-accepted)"
+                ],
+                [
+                  "Review",
+                  "Yellow",
+                  "Medium-confidence (needs your review)"
+                ],
+                [
+                  "Manual",
+                  "Blue",
+                  "Manually matched by you"
+                ],
+                [
+                  "Ignored",
+                  "Gray",
+                  "No match found"
+                ]
+              ]
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Review the detected faces grid. Remove incorrect detections with the red X button."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "In the Class Roll, click any student to toggle Present/Absent. AI-matched students are auto-marked Present; unmatched are marked Absent."
+            }
+          ]
+        },
+        {
+          "id": "4.5",
+          "title": "Step 4: Confirm Attendance",
+          "slug": "step-4-confirm-attendance",
+          "content": [
+            {
+              "type": "step",
+              "number": 1,
+              "text": "After reviewing and adjusting the present/absent selections, click 'Confirm Attendance'."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "The system saves attendance records for all students in the class (Present or Absent)."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "A success message appears and the session status changes to 'Confirmed' (green badge)."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Confirmed attendance records appear in the main Attendance Register alongside OCR-captured records."
+            },
+            {
+              "type": "info_box",
+              "title": "Reprocessing",
+              "text": "If you are unsatisfied with the AI results, click 'Reprocess' to re-run face detection and matching on the same photo. This clears existing detections and starts fresh."
+            }
+          ]
+        },
+        {
+          "id": "4.6",
+          "title": "Viewing Past Sessions",
+          "slug": "viewing-past-sessions",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Attendance > Face Attendance > Sessions Tab"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Click the 'Sessions' tab on the Face Attendance page."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "View all past sessions with class name, date, face count, and status badge."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Click any session to open the Review page (view confirmed results or review pending ones)."
+            },
+            {
+              "type": "body_text",
+              "text": "Session statuses: Processing (blue), Needs Review (yellow), Confirmed (green), Failed (red)."
+            }
+          ]
+        },
+        {
+          "id": "4.7",
+          "title": "Match Confidence Thresholds",
+          "slug": "match-confidence-thresholds",
+          "content": [
+            {
+              "type": "body_text",
+              "text": "The AI uses distance-based matching to compare detected faces against enrolled student photos. Matches are classified into three categories based on confidence:"
+            },
+            {
+              "type": "table",
+              "headers": [
+                "Category",
+                "Threshold",
+                "Action"
+              ],
+              "rows": [
+                [
+                  "Auto-Matched",
+                  "Distance < 0.40 (high confidence)",
+                  "Automatically accepted"
+                ],
+                [
+                  "Flagged",
+                  "Distance 0.40-0.55 (medium)",
+                  "Flagged for manual review"
+                ],
+                [
+                  "Ignored",
+                  "Distance >= 0.55 (low)",
+                  "No match, ignored"
+                ]
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Academics Module",
+      "slug": "academics-module",
+      "sections": [
+        {
+          "id": "5.1",
+          "title": "Managing Subjects",
+          "slug": "managing-subjects",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Academics > Subjects > Subjects Tab"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Click 'Add Subject' to create a new subject."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Fill in: Subject Name, Code (e.g., MATH, ENG), Description."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Check 'Is Elective' if the subject is optional for students."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Save. The subject appears in the list with AI-generated insights about workload."
+            },
+            {
+              "type": "sub_section",
+              "title": "Assigning Subjects to Classes"
+            },
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Academics > Subjects > Assignments Tab"
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "Switch to the 'Assignments' tab."
+            },
+            {
+              "type": "step",
+              "number": 6,
+              "text": "Click 'Assign Subject' and select: Class, Subject, Teacher, Periods Per Week."
+            },
+            {
+              "type": "step",
+              "number": 7,
+              "text": "Save. This links the subject, teacher, and class together."
+            },
+            {
+              "type": "step",
+              "number": 8,
+              "text": "Repeat for all subject-class-teacher combinations."
+            }
+          ]
+        },
+        {
+          "id": "5.2",
+          "title": "Academic Sessions (Years & Terms)",
+          "slug": "academic-sessions-years-terms",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Academics > Sessions"
+            },
+            {
+              "type": "body_text",
+              "text": "Academic sessions define the school calendar and are critical for exams, promotions, and reports. All student data - attendance, fees, exams, roll numbers - is scoped to the active academic session. Use the Academic Year Switcher in the header to view data for any session."
+            },
+            {
+              "type": "sub_section",
+              "title": "Managing Academic Years"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "In the 'Years' tab, view all academic years."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Click 'Add Academic Year' to create a new one (Name, Start Date, End Date)."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Click 'Set as Current' on the year you want to make active."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "The year summary shows: number of terms, exams created, students enrolled."
+            },
+            {
+              "type": "info_box",
+              "title": "Session-Scoped Data",
+              "text": "When you switch the academic year in the header, all pages update to show data for that session: Students, Attendance, Fees, Exams, and more. Roll numbers are assigned per session, so the same class can have different students with roll number 1 in different academic years."
+            },
+            {
+              "type": "sub_section",
+              "title": "Managing Terms"
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "Switch to the 'Terms' tab."
+            },
+            {
+              "type": "step",
+              "number": 6,
+              "text": "Filter by Academic Year if needed."
+            },
+            {
+              "type": "step",
+              "number": 7,
+              "text": "Click 'Add Term' and fill in: Name, Type (Term/Semester/Quarter), Order, Dates."
+            },
+            {
+              "type": "step",
+              "number": 8,
+              "text": "Terms define when exams happen and how report cards are structured."
+            }
+          ]
+        },
+        {
+          "id": "5.3",
+          "title": "Student Promotion",
+          "slug": "student-promotion",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Academics > Promotion"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Select the source academic year and source class."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Select the target academic year and target class."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Review the list of students eligible for promotion."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Optionally edit each student's new roll number for the target year."
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "Select students to promote (or select all)."
+            },
+            {
+              "type": "step",
+              "number": 6,
+              "text": "Click 'Promote' to move them to the new class/year."
+            },
+            {
+              "type": "warning_box",
+              "text": "Promotion is a bulk operation. Ensure the target academic year and classes exist before promoting."
+            },
+            {
+              "type": "info_box",
+              "title": "Promotion & New Admissions",
+              "text": "New admissions can happen in a future session before promotion is run for the current session. For example, you can admit students to Playgroup for 2026-27 while 2025-26 students are still in Playgroup. Roll numbers are independent per session, so there are no conflicts. When you promote the old students, they move to the next class."
+            }
+          ]
+        },
+        {
+          "id": "5.4",
+          "title": "AI Analytics",
+          "slug": "ai-analytics",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Academics > AI Analytics"
+            },
+            {
+              "type": "body_text",
+              "text": "The AI Analytics page provides intelligent insights about academic performance, subject workload balance, attendance correlation with grades, and more. Use it to identify struggling students and subjects that need attention."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Examinations Module",
+      "slug": "examinations-module",
+      "sections": [
+        {
+          "id": "6.0",
+          "title": "Introduction",
+          "slug": "introduction",
+          "content": [
+            {
+              "type": "body_text",
+              "text": "The Examinations module covers the complete exam lifecycle: defining grade scales, creating exam types, scheduling exams, entering marks, viewing results, and generating report cards."
+            }
+          ]
+        },
+        {
+          "id": "6.1",
+          "title": "Step 1: Define Grade Scale",
+          "slug": "step-1-define-grade-scale",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Academics > Examinations > Grade Scale"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Navigate to Grade Scale under Examinations."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Click 'Add Grade' and define each grade level."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "For each grade, enter: Grade Name (A+, A, B+...), Min Marks, Max Marks, Grade Point (GPA)."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Save all grades. This scale is used to auto-calculate student grades from marks."
+            },
+            {
+              "type": "table",
+              "headers": [
+                "Grade",
+                "Min %",
+                "Max %",
+                "Grade Point"
+              ],
+              "rows": [
+                [
+                  "A+",
+                  "90",
+                  "100",
+                  "4.0"
+                ],
+                [
+                  "A",
+                  "80",
+                  "89",
+                  "3.7"
+                ],
+                [
+                  "B+",
+                  "70",
+                  "79",
+                  "3.3"
+                ],
+                [
+                  "B",
+                  "60",
+                  "69",
+                  "3.0"
+                ],
+                [
+                  "C+",
+                  "50",
+                  "59",
+                  "2.5"
+                ],
+                [
+                  "C",
+                  "40",
+                  "49",
+                  "2.0"
+                ],
+                [
+                  "F",
+                  "0",
+                  "39",
+                  "0.0"
+                ]
+              ]
+            }
+          ]
+        },
+        {
+          "id": "6.2",
+          "title": "Step 2: Create Exam Types",
+          "slug": "step-2-create-exam-types",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Academics > Examinations > Exam Types"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Click 'Add Exam Type'."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Enter: Type Name (e.g., 'Mid-Term Exam', 'Final Exam', 'Unit Test')."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Set the weightage (how much this exam type counts toward the final grade)."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Save. Exam types can be reused across terms and years."
+            }
+          ]
+        },
+        {
+          "id": "6.3",
+          "title": "Step 3: Create an Exam",
+          "slug": "step-3-create-an-exam",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Academics > Examinations > Exams"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Click 'Create Exam'."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Select: Academic Year, Term, Class, Exam Type."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Enter: Exam Name, Start Date, End Date."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "The exam status will be 'SCHEDULED' initially."
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "As the exam progresses, update status: SCHEDULED > IN_PROGRESS > MARKS_ENTRY > COMPLETED > PUBLISHED."
+            }
+          ]
+        },
+        {
+          "id": "6.4",
+          "title": "Step 4: Enter Marks",
+          "slug": "step-4-enter-marks",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Academics > Examinations > Marks Entry"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Select the Exam, Class, and Subject from the dropdowns."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "The system loads all students in that class."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Enter marks for each student. The max marks are validated automatically."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Save marks. You can return and edit marks until the exam is published."
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "Bulk import from Excel is also available for large classes."
+            }
+          ]
+        },
+        {
+          "id": "6.5",
+          "title": "Step 5: View & Publish Results",
+          "slug": "step-5-view-publish-results",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Academics > Examinations > Results"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Select the Exam and Class to view computed results."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Results show: Subject-wise marks, grades (auto-calculated from grade scale), GPA."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Review results for accuracy."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Click 'Generate AI Comments' to create personalized per-subject comments for all students."
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "Click on any student row to expand and view/edit their AI-generated comments."
+            },
+            {
+              "type": "step",
+              "number": 6,
+              "text": "Click 'Publish Results' to make them visible to students and parents."
+            }
+          ]
+        },
+        {
+          "id": "6.6",
+          "title": "Step 6: Generate Report Cards",
+          "slug": "step-6-generate-report-cards",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Academics > Examinations > Report Cards"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Select a Class from the dropdown to filter students."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Search or select the student from the filtered list (sorted by roll number)."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Optionally filter by Academic Year and Term."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Preview the report card with all exam results, grades, and GPA."
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "Click 'Download PDF' to generate a printable report card with the school logo, marks table, grade scale reference, and page footer."
+            }
+          ]
+        },
+        {
+          "id": "6.7",
+          "title": "Weighted Average Configuration",
+          "slug": "weighted-average-configuration",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Settings > School Profile > Examination Settings"
+            },
+            {
+              "type": "body_text",
+              "text": "Schools can choose between two calculation modes for report cards:"
+            },
+            {
+              "type": "bullet",
+              "text": "Simple Average (default) - All exam marks summed and divided by total possible marks."
+            },
+            {
+              "type": "bullet",
+              "text": "Weighted Average - Each exam type contributes based on its weight (e.g., Mid-Term 30%, Final 70%). Enable this toggle if your institution uses weighted grading."
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Go to Settings > School Profile and scroll to 'Examination Settings'."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Toggle 'Weighted Average' ON or OFF."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "When enabled, set appropriate weights on each Exam Type (Step 2 above)."
+            },
+            {
+              "type": "info_box",
+              "title": "Complete Exam Workflow",
+              "text": "Grade Scale > Exam Types > Create Exam > Enter Marks > View Results > Publish > Report Cards. Each step depends on the previous one."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Finance Module",
+      "slug": "finance-module",
+      "sections": [
+        {
+          "id": "7.0",
+          "title": "Introduction",
+          "slug": "introduction",
+          "content": [
+            {
+              "type": "body_text",
+              "text": "The Finance module manages all monetary aspects of the school including fee collection, expenses, account management, discounts, and financial reporting."
+            }
+          ]
+        },
+        {
+          "id": "7.1",
+          "title": "Setting Up Finance Accounts",
+          "slug": "setting-up-finance-accounts",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Settings > Accounts Tab"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Navigate to Settings and click the 'Accounts' tab."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Click 'Add Account' to create finance accounts."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Account types: CASH (physical cash), BANK (bank accounts), PERSON (individual accounts)."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Enter: Account Name, Type, Opening Balance."
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "Check 'Staff Visible' if staff members should see this account."
+            },
+            {
+              "type": "step",
+              "number": 6,
+              "text": "Create at least one CASH and one BANK account before collecting fees."
+            }
+          ]
+        },
+        {
+          "id": "7.2",
+          "title": "Finance Dashboard",
+          "slug": "finance-dashboard",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Finance > Dashboard"
+            },
+            {
+              "type": "body_text",
+              "text": "The Finance Dashboard is the central hub for all financial data. Use the period selector (This Month, Last Month, This Quarter, This Year, Custom) to filter data. Key metrics at a glance: Account Balance, Total Income, Total Expenses, Net Balance, and Fee Collection Rate."
+            },
+            {
+              "type": "body_text",
+              "text": "Dashboard cards include: Fee Collection Summary, Account Balances, Expense Breakdown (donut chart), Recent Transfers, Monthly Trend (6-month chart), Recent Entries, and Quick Actions."
+            },
+            {
+              "type": "info_box",
+              "title": "PDF Reports",
+              "text": "Click the 'PDF' button on the dashboard header to download a comprehensive finance report with summary, account balances, monthly trends, and expense breakdown."
+            }
+          ]
+        },
+        {
+          "id": "7.3",
+          "title": "Fee Setup Page",
+          "slug": "fee-setup-page",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Finance > Fee Setup"
+            },
+            {
+              "type": "body_text",
+              "text": "The Fee Setup page is a dedicated configuration page with three tabs: Fee Structures, Generate Records, and Student Discounts."
+            },
+            {
+              "type": "sub_section",
+              "title": "Tab 1: Fee Structures"
+            },
+            {
+              "type": "body_text",
+              "text": "Set base fee amounts by class or by individual student."
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Use the 'By Class' / 'By Student' toggle to switch modes."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Use the fee type tabs (Monthly, Annual, Admission, Books, Fine) to switch between fee types."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "By Class: Enter the fee amount for each class. Leave as 0 for classes that don't pay this fee."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "By Student: Select a class, then override individual student fees. Overrides are highlighted in blue. Students without an override use the class default."
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "Set the 'Effective From' date (when this fee amount takes effect)."
+            },
+            {
+              "type": "step",
+              "number": 6,
+              "text": "Click 'Review Changes' (by class) or 'Review & Save' (by student) to see a confirmation summary."
+            },
+            {
+              "type": "step",
+              "number": 7,
+              "text": "Confirm to save. Fee structures are used to auto-calculate amounts when generating fee records."
+            },
+            {
+              "type": "info_box",
+              "title": "Fee Priority",
+              "text": "Student-level fee overrides take precedence over class-level defaults. You can set a per-student override from the By Student mode."
+            },
+            {
+              "type": "sub_section",
+              "title": "Tab 2: Generate Records"
+            },
+            {
+              "type": "step",
+              "number": 8,
+              "text": "Use the fee type tabs to select which type of fee to generate."
+            },
+            {
+              "type": "step",
+              "number": 9,
+              "text": "For Monthly fees: select the month and year. The system shows a preview of how many records will be created, how many already exist (will be skipped), and the total amount."
+            },
+            {
+              "type": "step",
+              "number": 10,
+              "text": "For non-monthly fees (Annual, Admission, Books, Fine): select the class to preview. The system shows per-student amounts resolved from fee structures."
+            },
+            {
+              "type": "step",
+              "number": 11,
+              "text": "Review the preview, then click 'Generate' and confirm. Fee records are created for all eligible students. Students without a fee structure or with existing records are skipped."
+            },
+            {
+              "type": "warning_box",
+              "text": "Fee generation requires fee structures to be set first. Students without a matching fee structure will be listed as 'no fee structure' in the preview and will not receive a record."
+            },
+            {
+              "type": "sub_section",
+              "title": "Tab 3: Student Discounts"
+            },
+            {
+              "type": "body_text",
+              "text": "Assign discounts or scholarships to individual students directly from the Fee Setup page. This tab shows each student's base monthly fee, the applied discount/scholarship, and the calculated effective fee - all in one view."
+            },
+            {
+              "type": "step",
+              "number": 12,
+              "text": "Select a class from the dropdown. The student table loads with columns: Roll, Student Name, Base Fee, Discount/Scholarship, Effective Fee, and Action."
+            },
+            {
+              "type": "step",
+              "number": 13,
+              "text": "Students with an assigned discount show a colored badge (blue for discounts, purple for scholarships) and their row is highlighted green."
+            },
+            {
+              "type": "step",
+              "number": 14,
+              "text": "Click 'Assign' on a student row to open the assignment modal."
+            },
+            {
+              "type": "step",
+              "number": 15,
+              "text": "In the modal, toggle between 'Discount' and 'Scholarship', select from the dropdown (shows name, type, and value), add optional notes, then click 'Assign'."
+            },
+            {
+              "type": "step",
+              "number": 16,
+              "text": "To remove a discount, click 'Remove' on the student row and confirm."
+            },
+            {
+              "type": "step",
+              "number": 17,
+              "text": "Use the 'Bulk Assign' button to assign one discount or scholarship to all students in the selected class at once. The system shows how many were created and how many were skipped (already assigned)."
+            },
+            {
+              "type": "info_box",
+              "title": "Effective Fee Calculation",
+              "text": "Percentage discounts: Effective = Base Fee - (Base Fee x Percentage / 100). Fixed discounts: Effective = Base Fee - Fixed Amount. Full scholarships: Effective = 0. The effective fee column updates instantly when a discount is assigned or removed."
+            }
+          ]
+        },
+        {
+          "id": "7.4",
+          "title": "Creating Individual Fee Records",
+          "slug": "creating-individual-fee-records",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Finance > Fee Collection > Create Fee"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Click 'Create Fee' to open the single fee creation modal."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Select a class, then search for a student using the searchable dropdown."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "The fee amount auto-fills from the student's fee structure (class default or student override)."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "If the student has already paid, enter the paid amount. Payment fields (Account, Method, Date) appear automatically when a paid amount is entered."
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "The system warns if a duplicate fee record already exists for the same student/type/period."
+            },
+            {
+              "type": "step",
+              "number": 6,
+              "text": "Click 'Create' to save the fee record."
+            }
+          ]
+        },
+        {
+          "id": "7.5",
+          "title": "Fee Collection Page",
+          "slug": "fee-collection-page",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Finance > Fee Collection"
+            },
+            {
+              "type": "body_text",
+              "text": "The fee collection page loads all fee records for the selected month/year in a single request. Switching class or status filters is instant (no loading delay) because filtering happens on your browser."
+            },
+            {
+              "type": "sub_section",
+              "title": "Summary Cards"
+            },
+            {
+              "type": "body_text",
+              "text": "Four KPI cards show month-wide totals: Total Payable, Received, Balance, and Collection Rate."
+            },
+            {
+              "type": "sub_section",
+              "title": "Analytics"
+            },
+            {
+              "type": "body_text",
+              "text": "Click 'Show Analytics' to reveal class-wise bar charts, payment status donut, and pending student breakdown."
+            },
+            {
+              "type": "sub_section",
+              "title": "Filters"
+            },
+            {
+              "type": "body_text",
+              "text": "Use the Fee Type, Month, Year, Class, and Status dropdowns to narrow the table view. Class and Status filters apply instantly without re-fetching data."
+            }
+          ]
+        },
+        {
+          "id": "7.6",
+          "title": "Recording Payments",
+          "slug": "recording-payments",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Finance > Fee Collection"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "In the fee table, click the row's payment area or use the inline edit feature."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Enter: Amount Paid, select the receiving Account, Payment Method, and Date."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Click 'Save'. The student's status updates automatically (PAID, PARTIAL, UNPAID, ADVANCE)."
+            }
+          ]
+        },
+        {
+          "id": "7.7",
+          "title": "Bulk Operations",
+          "slug": "bulk-operations",
+          "content": [
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Select multiple students using the checkboxes in the fee table."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "The bulk action bar appears at the bottom with options to:"
+            },
+            {
+              "type": "bullet",
+              "text": "Set paid amount, account, and payment method for all selected records at once"
+            },
+            {
+              "type": "bullet",
+              "text": "Pay Full - One click to mark all selected students as fully paid (amount paid = total payable). Select an account, then click the green 'Pay Full' button. Each student's paid amount is set to their individual total (amount due + previous balance), saving time during month-end collection."
+            },
+            {
+              "type": "bullet",
+              "text": "Delete all selected records (with confirmation)"
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Confirm the bulk action. All selected records update simultaneously."
+            }
+          ]
+        },
+        {
+          "id": "7.8",
+          "title": "Managing Discounts & Scholarships",
+          "slug": "managing-discounts-scholarships",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Finance > Discounts"
+            },
+            {
+              "type": "body_text",
+              "text": "The Discounts page has three tabs for managing discount rules, scholarship programs, and viewing all student assignments across the school."
+            },
+            {
+              "type": "sub_section",
+              "title": "Creating Discount Rules"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Go to the 'Discounts' tab and click 'Add Discount'."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Define: Discount Name, Type (Percentage or Fixed Amount), Value."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Set 'Applies To': All Students, Grade Level, Specific Class, Individual Student, or Siblings."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Optionally set start/end dates, max uses, and whether the discount is stackable."
+            },
+            {
+              "type": "sub_section",
+              "title": "Creating Scholarships"
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "Go to the 'Scholarships' tab and click 'Add Scholarship'."
+            },
+            {
+              "type": "step",
+              "number": 6,
+              "text": "Define: Name, Type (Merit, Need, Sports, Staff Child, Other)."
+            },
+            {
+              "type": "step",
+              "number": 7,
+              "text": "Set coverage: Full Fee Waiver, Percentage Off, or Fixed Amount Off."
+            },
+            {
+              "type": "sub_section",
+              "title": "Assigning to Students"
+            },
+            {
+              "type": "body_text",
+              "text": "Student assignments can be managed from two places: the Discounts page (Student Assignments tab) or the Fee Setup page (Student Discounts tab). The Fee Setup page is recommended because it shows base fees and effective fees alongside the discount assignments."
+            },
+            {
+              "type": "info_box",
+              "title": "Tip",
+              "text": "Navigate to Finance > Fee Setup > Student Discounts tab for the most efficient workflow. Select a class to see all students with their base fee, assigned discount, and effective fee in one view."
+            }
+          ]
+        },
+        {
+          "id": "7.9",
+          "title": "Recording Expenses",
+          "slug": "recording-expenses",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Finance > Expenses"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Click 'Add Expense'."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Enter: Description, Category, Amount, Date, Account (which account pays)."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Save. The expense is recorded and the account balance is updated."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Use category filters to view expenses by type."
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "Edit or delete expenses as needed."
+            }
+          ]
+        },
+        {
+          "id": "7.10",
+          "title": "Online Payment Collection",
+          "slug": "online-payment-collection",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Finance > Payment Gateways"
+            },
+            {
+              "type": "body_text",
+              "text": "The system supports online fee payments through JazzCash, Easypaisa, and Manual bank transfers. Parents can pay fees directly from their portal once gateways are configured."
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Navigate to Finance > Payment Gateways."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Configure at least one gateway (JazzCash, Easypaisa, or Manual) with valid credentials."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Click 'Test Connection' to verify credentials are correct."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Toggle the gateway to 'Active' and set one as the default."
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "Parents will now see a 'Pay Now' button on unpaid fees in their portal."
+            },
+            {
+              "type": "step",
+              "number": 6,
+              "text": "When a parent pays online, the system automatically records the payment and updates the fee balance."
+            },
+            {
+              "type": "step",
+              "number": 7,
+              "text": "Payment status is tracked: Initiated, Pending, Successful, or Failed."
+            },
+            {
+              "type": "step",
+              "number": 8,
+              "text": "View all online payments in the Payment History tab on the Payment Gateways page."
+            },
+            {
+              "type": "info_box",
+              "title": "Payment Security",
+              "text": "All payment transactions use cryptographic signatures (HMAC-SHA256 for JazzCash, SHA-256 for Easypaisa) to prevent tampering. Callback URLs are verified before updating payment status."
+            },
+            {
+              "type": "info_box",
+              "title": "Financial Record Safety",
+              "text": "When a student is deleted, all their financial records (fee payments, online payments, fee structures, discounts) are preserved with 'Deleted Student' label. Best practice: mark students as inactive instead of deleting them."
+            }
+          ]
+        },
+        {
+          "id": "7.11",
+          "title": "Inter-Account Transfers",
+          "slug": "interaccount-transfers",
+          "content": [
+            {
+              "type": "step",
+              "number": 1,
+              "text": "On the Finance Dashboard, click 'Transfer'."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Select: Source Account, Destination Account, Amount, Description."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Click 'Transfer'. Both account balances update immediately."
+            }
+          ]
+        },
+        {
+          "id": "7.12",
+          "title": "Month Closing",
+          "slug": "month-closing",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Settings > Accounts Tab > Close Month"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "At the end of each month, click 'Close Month' in Settings > Accounts."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "This finalizes the month's transactions and carries forward balances."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Closed months cannot be edited (prevents accidental changes to past records)."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "HR & Staff Management Module",
+      "slug": "hr-staff-management-module",
+      "sections": [
+        {
+          "id": "8.0",
+          "title": "Introduction",
+          "slug": "introduction",
+          "content": [
+            {
+              "type": "body_text",
+              "text": "The HR module manages the complete employee lifecycle from hiring to payroll. It includes staff directory, departments, salary structures, payroll processing, leave management, attendance tracking, performance appraisals, and document management."
+            }
+          ]
+        },
+        {
+          "id": "8.1",
+          "title": "Setting Up Departments",
+          "slug": "setting-up-departments",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > HR & Staff > Departments"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Click 'Add Department'."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Enter: Department Name (e.g., 'Science', 'Administration', 'Sports')."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Add designations within each department (e.g., 'Head of Department', 'Senior Teacher')."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Save. Departments are used when adding staff members."
+            }
+          ]
+        },
+        {
+          "id": "8.2",
+          "title": "Adding Staff Members",
+          "slug": "adding-staff-members",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > HR & Staff > Staff Directory > Add Staff"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Click 'Add Staff Member'."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Fill in Personal Information: First Name, Last Name, Email, Phone, Gender, Date of Birth."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Fill in Employment Details: Department, Designation, Employee ID, Employment Type (Full-time/Part-time/Contract), Date of Joining."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Add Address and Emergency Contact information."
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "Save. The staff member appears in the directory."
+            }
+          ]
+        },
+        {
+          "id": "8.3",
+          "title": "Staff Directory",
+          "slug": "staff-directory",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > HR & Staff > Staff Directory"
+            },
+            {
+              "type": "body_text",
+              "text": "The Staff Directory is the central hub for managing all staff information:"
+            },
+            {
+              "type": "bullet",
+              "text": "Search by name, email, or employee ID"
+            },
+            {
+              "type": "bullet",
+              "text": "Filter by department or employment status (Active, On Leave, Terminated)"
+            },
+            {
+              "type": "bullet",
+              "text": "Click on a staff member to view/edit their complete profile"
+            },
+            {
+              "type": "bullet",
+              "text": "Export directory as Excel or PDF"
+            }
+          ]
+        },
+        {
+          "id": "8.4",
+          "title": "Salary Management",
+          "slug": "salary-management",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > HR & Staff > Salary Management"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Define salary structures per designation."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Set components: Basic Pay, HRA, DA, Allowances, Deductions."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Assign salary structures to staff members."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Salary structures feed directly into payroll generation."
+            }
+          ]
+        },
+        {
+          "id": "8.5",
+          "title": "Payroll Processing",
+          "slug": "payroll-processing",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > HR & Staff > Payroll"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Select the month and year for payroll."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Click 'Generate Payslips' to create payslips for all active staff."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Review generated payslips. Check amounts, deductions, and net pay."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Approve payslips individually or in bulk."
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "Mark approved payslips as 'Paid' once payment is disbursed."
+            }
+          ]
+        },
+        {
+          "id": "8.6",
+          "title": "Leave Management",
+          "slug": "leave-management",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > HR & Staff > Leave Management"
+            },
+            {
+              "type": "body_text",
+              "text": "The leave system handles leave applications, approvals, and balance tracking:"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Staff submit leave requests specifying: Leave Type, From Date, To Date, Reason."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "HR Manager or Admin reviews the request."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Approve or reject the leave application with optional remarks."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Leave balances update automatically upon approval."
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "View leave history and balances for any staff member."
+            }
+          ]
+        },
+        {
+          "id": "8.7",
+          "title": "Staff Attendance",
+          "slug": "staff-attendance",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > HR & Staff > Staff Attendance"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Select the date to mark attendance."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Mark each staff member as Present, Absent, or On Leave."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Save. Staff attendance records feed into payroll calculations."
+            }
+          ]
+        },
+        {
+          "id": "8.8",
+          "title": "Performance Appraisals",
+          "slug": "performance-appraisals",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > HR & Staff > Performance Appraisals"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Click 'Create Appraisal' and select the staff member."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Fill in performance criteria, ratings, and comments."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Submit the appraisal for review."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Appraisal history is maintained per staff member."
+            }
+          ]
+        },
+        {
+          "id": "8.9",
+          "title": "Staff Documents",
+          "slug": "staff-documents",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > HR & Staff > Documents"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Select a staff member."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Upload documents: ID proofs, certificates, contracts, etc."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Documents are stored securely and accessible from the staff profile."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Admissions CRM Module",
+      "slug": "admissions-crm-module",
+      "sections": [
+        {
+          "id": "9.0",
+          "title": "Introduction",
+          "slug": "introduction",
+          "content": [
+            {
+              "type": "body_text",
+              "text": "The Admissions CRM manages the complete student enrollment pipeline from initial enquiry to final enrollment. It tracks leads, followups, and conversion rates."
+            }
+          ]
+        },
+        {
+          "id": "9.1",
+          "title": "Admission Workflow Overview",
+          "slug": "admission-workflow-overview",
+          "content": [
+            {
+              "type": "body_text",
+              "text": "Admissions uses the school's academic years (set up in Academics > Sessions). When converting enquiries to students, you select the target academic year and class. The system creates the student record and enrolls them in that session."
+            }
+          ]
+        },
+        {
+          "id": "9.2",
+          "title": "Creating Enquiries",
+          "slug": "creating-enquiries",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Admissions > Enquiries"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Click 'New Enquiry'."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Fill in: Student Name, Parent Name, Phone, Email, Target Grade."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Set Source: Walk-in, Phone, Website, Referral, Social Media, Advertisement, Other."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Set Priority: High, Medium, Low."
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "Add initial notes and save."
+            }
+          ]
+        },
+        {
+          "id": "9.3",
+          "title": "Admission Pipeline Stages",
+          "slug": "admission-pipeline-stages",
+          "content": [
+            {
+              "type": "body_text",
+              "text": "Each enquiry progresses through these stages:"
+            },
+            {
+              "type": "table",
+              "headers": [
+                "Stage",
+                "Description"
+              ],
+              "rows": [
+                [
+                  "NEW",
+                  "Initial enquiry received - lead captured"
+                ],
+                [
+                  "CONFIRMED",
+                  "Admission confirmed - ready for conversion to student"
+                ],
+                [
+                  "CONVERTED",
+                  "Converted to a student record with enrollment"
+                ],
+                [
+                  "CANCELLED",
+                  "Enquiry cancelled or withdrawn"
+                ]
+              ]
+            }
+          ]
+        },
+        {
+          "id": "9.4",
+          "title": "Managing Enquiries",
+          "slug": "managing-enquiries",
+          "content": [
+            {
+              "type": "step",
+              "number": 1,
+              "text": "View all enquiries in a searchable, filterable table."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Filter by: Status, Grade, Source."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "The pipeline summary at the top shows counts for each stage (New, Confirmed, Converted, Cancelled)."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Use the 'Edit' action to update enquiry details or 'Cancel' to mark as cancelled."
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "Move enquiries from New to Confirmed when admission is approved."
+            }
+          ]
+        },
+        {
+          "id": "9.5",
+          "title": "Followup Management",
+          "slug": "followup-management",
+          "content": [
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Open an enquiry's detail page."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Add followup notes and schedule next followup dates."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "The dashboard shows today's and overdue followups for quick action."
+            }
+          ]
+        },
+        {
+          "id": "9.6",
+          "title": "Converting Enquiries to Students",
+          "slug": "converting-enquiries-to-students",
+          "content": [
+            {
+              "type": "body_text",
+              "text": "Confirmed enquiries can be batch-converted into student records. Each converted student gets a Student record and a StudentEnrollment record linking them to the chosen academic year."
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Select one or more enquiries with 'Confirmed' status using the checkboxes."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Click the 'Convert to Students' button that appears."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "In the modal, select the target Academic Year and Class."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Click 'Convert'. Roll numbers are auto-assigned sequentially within that session and class."
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "Converted enquiries change status to 'Converted' and link to the created student."
+            },
+            {
+              "type": "info_box",
+              "title": "Session-Scoped Admissions",
+              "text": "You can admit students into any academic year, including a future session. Roll numbers start from 1 for each session-class combination, independent of other sessions. This means admissions work even before running promotion for the current year."
+            }
+          ]
+        },
+        {
+          "id": "9.7",
+          "title": "Admission Analytics",
+          "slug": "admission-analytics",
+          "content": [
+            {
+              "type": "body_text",
+              "text": "The enquiries page provides at-a-glance analytics:"
+            },
+            {
+              "type": "bullet",
+              "text": "Pipeline Summary - Count of enquiries in each stage (New, Confirmed, Converted, Cancelled)"
+            },
+            {
+              "type": "bullet",
+              "text": "Conversion Rate - Percentage of enquiries that become students"
+            },
+            {
+              "type": "bullet",
+              "text": "Source Tracking - Which channels (Walk-in, Referral, etc.) bring the most enquiries"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "title": "Transport Module",
+      "slug": "transport-module",
+      "sections": [
+        {
+          "id": "10.0",
+          "title": "Introduction",
+          "slug": "introduction",
+          "content": [
+            {
+              "type": "body_text",
+              "text": "The Transport module manages school buses, routes, student-bus assignments, and daily transport attendance."
+            }
+          ]
+        },
+        {
+          "id": "10.1",
+          "title": "Setting Up Routes",
+          "slug": "setting-up-routes",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Transport > Routes"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Click 'Add Route'."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Enter: Route Name, Description, Start Location, End Location, Distance (km), Estimated Duration."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Save the route."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Click on the route to add Stops."
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "For each stop, enter: Stop Name, Address, Order, Pickup Time, Drop Time."
+            },
+            {
+              "type": "step",
+              "number": 6,
+              "text": "Save stops. They appear in the route's stop list in order."
+            }
+          ]
+        },
+        {
+          "id": "10.2",
+          "title": "Adding Vehicles",
+          "slug": "adding-vehicles",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Transport > Vehicles"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Click 'Add Vehicle'."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Enter: Registration Number, Vehicle Type (Bus/Van/Mini-Bus), Seating Capacity."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Enter Driver Details: Driver Name, Contact Number."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Assign the vehicle to a route."
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "Save. The vehicle is now linked to the route."
+            }
+          ]
+        },
+        {
+          "id": "10.3",
+          "title": "Assigning Students to Routes",
+          "slug": "assigning-students-to-routes",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Transport > Assignments"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Click 'Assign Student'."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Select the student from the dropdown."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Select the route and pickup/drop stop."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Save. The student is now assigned to that bus route."
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "View all assignments in the list. Edit or remove as needed."
+            }
+          ]
+        },
+        {
+          "id": "10.4",
+          "title": "Transport Attendance",
+          "slug": "transport-attendance",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Transport > Attendance"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Select the date and route."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Mark each student as: Picked Up, Not Picked Up, Absent."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Save attendance for the morning pickup."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Repeat for afternoon drop if needed."
+            }
+          ]
+        },
+        {
+          "id": "10.5",
+          "title": "Transport Dashboard",
+          "slug": "transport-dashboard",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Transport > Dashboard"
+            },
+            {
+              "type": "body_text",
+              "text": "The Transport Dashboard shows:"
+            },
+            {
+              "type": "bullet",
+              "text": "Total Routes - Number of active routes"
+            },
+            {
+              "type": "bullet",
+              "text": "Total Vehicles - Fleet size"
+            },
+            {
+              "type": "bullet",
+              "text": "Students Using Transport - Total students assigned to routes"
+            },
+            {
+              "type": "bullet",
+              "text": "Today's Attendance - Today's pickup/drop statistics"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "title": "Library Module",
+      "slug": "library-module",
+      "sections": [
+        {
+          "id": "11.0",
+          "title": "Introduction",
+          "slug": "introduction",
+          "content": [
+            {
+              "type": "body_text",
+              "text": "The Library module provides a complete book management system including cataloging, issuing/returning books, and tracking overdue items."
+            }
+          ]
+        },
+        {
+          "id": "11.1",
+          "title": "Setting Up Book Categories",
+          "slug": "setting-up-book-categories",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Library > Catalog"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "On the Book Catalog page, click 'Manage Categories'."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Add categories: Fiction, Non-Fiction, Science, Mathematics, History, Reference, etc."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Categories help organize and filter the book catalog."
+            }
+          ]
+        },
+        {
+          "id": "11.2",
+          "title": "Adding Books to the Catalog",
+          "slug": "adding-books-to-the-catalog",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Library > Catalog"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Click 'Add Book'."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Enter: Title, Author, ISBN, Publisher, Category, Total Copies, Shelf Location."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Save. The book appears in the catalog."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Use the search bar to find books by title, author, or ISBN."
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "Filter by category to browse specific sections."
+            }
+          ]
+        },
+        {
+          "id": "11.3",
+          "title": "Issuing Books",
+          "slug": "issuing-books",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Library > Issue / Return"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Click 'Issue Book'."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Select Borrower Type: Student or Staff."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Search and select the borrower (student name or staff name)."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Search and select the book to issue."
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "Set the Due Date (typically 14 days from today)."
+            },
+            {
+              "type": "step",
+              "number": 6,
+              "text": "Add optional notes and click 'Issue'."
+            },
+            {
+              "type": "step",
+              "number": 7,
+              "text": "The book's available copies count decreases by 1."
+            }
+          ]
+        },
+        {
+          "id": "11.4",
+          "title": "Returning Books",
+          "slug": "returning-books",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Library > Issue / Return"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Find the issued book in the list (search by student name or book title)."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Click 'Return' next to the entry."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Confirm the return. The book's available copies increase by 1."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "If the book is overdue, any applicable fine is recorded."
+            }
+          ]
+        },
+        {
+          "id": "11.5",
+          "title": "Tracking Overdue Books",
+          "slug": "tracking-overdue-books",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Library > Overdue Books"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "View all books that are past their due date."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "See borrower details and number of days overdue."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Send reminders to borrowers."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Update due dates if an extension is granted."
+            }
+          ]
+        },
+        {
+          "id": "11.6",
+          "title": "Library Dashboard",
+          "slug": "library-dashboard",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Library > Dashboard"
+            },
+            {
+              "type": "body_text",
+              "text": "The Library Dashboard displays:"
+            },
+            {
+              "type": "bullet",
+              "text": "Total Books - Total unique titles in the catalog"
+            },
+            {
+              "type": "bullet",
+              "text": "Total Copies - Sum of all book copies"
+            },
+            {
+              "type": "bullet",
+              "text": "Currently Issued - Books currently checked out"
+            },
+            {
+              "type": "bullet",
+              "text": "Overdue Count - Books past their due date"
+            },
+            {
+              "type": "bullet",
+              "text": "Categories - Number of book categories"
+            },
+            {
+              "type": "bullet",
+              "text": "Most Issued Books - Popular titles chart"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "title": "LMS - Learning Management System",
+      "slug": "lms-learning-management-system",
+      "sections": [
+        {
+          "id": "12.0",
+          "title": "Introduction",
+          "slug": "introduction",
+          "content": [
+            {
+              "type": "body_text",
+              "text": "The LMS module provides curriculum management (books, chapters, topics), lesson planning, assignments, and student submissions. It integrates with the Academics module and supports multiple languages including Urdu, Arabic, Sindhi, Pashto, and Punjabi with RTL text display."
+            }
+          ]
+        },
+        {
+          "id": "12.1",
+          "title": "Managing Curriculum (Books, Chapters, Topics)",
+          "slug": "managing-curriculum-books-chapters-topics",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Academics > Curriculum"
+            },
+            {
+              "type": "body_text",
+              "text": "The Curriculum page lets you organize textbooks into a Book > Chapter > Topic hierarchy for each class and subject. This structure powers syllabus progress tracking and lesson plan topic selection."
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Select a Class and Subject from the filter dropdowns."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Click 'Add Book' to create a textbook entry. Enter title, author, publisher, edition, and language."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Click the book to view its chapters and topics in the tree view."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Add chapters and topics manually, or use 'Import TOC' for bulk import."
+            },
+            {
+              "type": "sub_section",
+              "title": "Importing Table of Contents"
+            },
+            {
+              "type": "body_text",
+              "text": "The Import TOC feature supports two modes:"
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "Type / Paste: Manually type or paste the table of contents text with indentation for chapter/topic structure."
+            },
+            {
+              "type": "step",
+              "number": 6,
+              "text": "Upload Photo: Take or upload a photo of the book's printed TOC page. The system uses OCR (Google Vision) with language-aware text extraction."
+            },
+            {
+              "type": "step",
+              "number": 7,
+              "text": "After OCR extraction, review and edit the text before clicking 'Import' to create chapters and topics."
+            },
+            {
+              "type": "info_box",
+              "title": "Multi-Language Support",
+              "text": "The OCR feature supports all configured languages. For non-English books, the system uses the book's language setting to optimize text recognition. The editor displays RTL direction automatically for supported languages."
+            },
+            {
+              "type": "sub_section",
+              "title": "Syllabus Progress"
+            },
+            {
+              "type": "body_text",
+              "text": "A progress bar shows how many topics have been covered by published lesson plans. Topics are automatically marked as covered when a teacher publishes a lesson plan referencing them."
+            }
+          ]
+        },
+        {
+          "id": "12.2",
+          "title": "Creating Lesson Plans",
+          "slug": "creating-lesson-plans",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Academics > LMS > Lesson Plans"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Click 'Create Lesson Plan'."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Select: Class, Subject (from assigned subjects)."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Enter: Title, Description, Learning Objectives."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Set: Lesson Date, Duration (in minutes)."
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "Add: Materials Needed, Teaching Methods."
+            },
+            {
+              "type": "step",
+              "number": 6,
+              "text": "Save as 'Draft' or 'Publish' immediately."
+            },
+            {
+              "type": "step",
+              "number": 7,
+              "text": "Published lesson plans are visible to other teachers for reference."
+            }
+          ]
+        },
+        {
+          "id": "12.3",
+          "title": "Creating Assignments",
+          "slug": "creating-assignments",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Academics > LMS > Assignments"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Click 'Create Assignment'."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Select Class and Subject."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Enter: Title, Description, Instructions."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Set: Due Date, Maximum Marks."
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "Define submission criteria (file types, word count, etc.)."
+            },
+            {
+              "type": "step",
+              "number": 6,
+              "text": "Save. The assignment appears in student portals immediately."
+            }
+          ]
+        },
+        {
+          "id": "12.4",
+          "title": "Reviewing Submissions",
+          "slug": "reviewing-submissions",
+          "content": [
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Click on an assignment to see student submissions."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "For each submission, you can: View the submitted work, add comments, and assign a grade."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Use bulk grading to score multiple submissions quickly."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Grades feed into the student's academic performance record."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "title": "Notifications Module",
+      "slug": "notifications-module",
+      "sections": [
+        {
+          "id": "13.0",
+          "title": "Introduction",
+          "slug": "introduction",
+          "content": [
+            {
+              "type": "body_text",
+              "text": "The Notifications module enables school-wide communication with students, parents, and staff. Admins can create templates, send bulk notifications, and track delivery."
+            }
+          ]
+        },
+        {
+          "id": "13.1",
+          "title": "Viewing Notifications (All Users)",
+          "slug": "viewing-notifications-all-users",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Notifications"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Click the Notification Bell icon in the top bar for quick view."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Or navigate to 'Notifications' in the sidebar for the full Inbox."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Unread notifications are highlighted. Click to mark as read."
+            }
+          ]
+        },
+        {
+          "id": "13.2",
+          "title": "Creating Notification Templates (Admin)",
+          "slug": "creating-notification-templates-admin",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Notifications > Templates Tab"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Switch to the 'Templates' tab."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Click 'Create Template'."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Enter: Template Name, Subject, Body (supports variables like {student_name})."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Save. Templates can be reused when sending notifications."
+            }
+          ]
+        },
+        {
+          "id": "13.3",
+          "title": "Sending Notifications (Admin)",
+          "slug": "sending-notifications-admin",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Notifications > Send Tab"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Switch to the 'Send' tab."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Choose recipients: All Students, All Parents, All Staff, Specific Class, or Individual."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Select a template or compose a custom message."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Preview the notification."
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "Click 'Send'. Notifications are delivered to all selected recipients."
+            }
+          ]
+        },
+        {
+          "id": "13.4",
+          "title": "Notification Analytics (Admin)",
+          "slug": "notification-analytics-admin",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Notifications > Analytics Tab"
+            },
+            {
+              "type": "body_text",
+              "text": "Track notification effectiveness:"
+            },
+            {
+              "type": "bullet",
+              "text": "Delivery Rate - How many notifications were successfully delivered"
+            },
+            {
+              "type": "bullet",
+              "text": "Read Rate - Percentage of notifications opened/read"
+            },
+            {
+              "type": "bullet",
+              "text": "Breakdown by type and recipient group"
+            }
+          ]
+        },
+        {
+          "id": "13.5",
+          "title": "Automation Settings",
+          "slug": "automation-settings",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Notifications > Settings"
+            },
+            {
+              "type": "body_text",
+              "text": "Configure smart scheduling (AI-optimized send times for non-urgent messages) and automated notification controls from the Settings tab. Each automation type can be toggled ON/OFF per school."
+            },
+            {
+              "type": "table",
+              "headers": [
+                "Automation",
+                "Default",
+                "Trigger"
+              ],
+              "rows": [
+                [
+                  "Absence Alerts",
+                  "ON",
+                  "Sent when attendance is marked"
+                ],
+                [
+                  "Fee Reminders",
+                  "ON",
+                  "Monthly on configured day"
+                ],
+                [
+                  "Fee Overdue Alerts",
+                  "ON",
+                  "Weekly on Mondays"
+                ],
+                [
+                  "Exam Results Published",
+                  "ON",
+                  "When admin publishes results"
+                ],
+                [
+                  "Smart Scheduling",
+                  "OFF",
+                  "AI learns optimal send times over 2-4 weeks"
+                ]
+              ]
+            },
+            {
+              "type": "info_box",
+              "title": "Background Tasks",
+              "text": "Automated notifications, OCR retries, AI threshold tuning, drift detection, and anomaly detection all run automatically on schedule. No manual action required."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "title": "Messaging",
+      "slug": "messaging",
+      "sections": [
+        {
+          "id": "14.0",
+          "title": "Introduction",
+          "slug": "introduction",
+          "content": [
+            {
+              "type": "body_text",
+              "text": "The Messaging module provides a unified, threaded conversation system for all school roles. Admins, Teachers, Staff, Parents, and Students can exchange messages with role-based access controls determining who can contact whom."
+            }
+          ]
+        },
+        {
+          "id": "14.1",
+          "title": "Who Can Message Whom",
+          "slug": "who-can-message-whom",
+          "content": [
+            {
+              "type": "table",
+              "headers": [
+                "Sender Role",
+                "Can Message",
+                "Student Context"
+              ],
+              "rows": [
+                [
+                  "School Admin / Principal",
+                  "Any staff member in the school",
+                  "Not required"
+                ],
+                [
+                  "Teacher",
+                  "Parents of students in their classes",
+                  "Required (auto-set)"
+                ],
+                [
+                  "Teacher",
+                  "Students with accounts in their classes",
+                  "Required (auto-set)"
+                ],
+                [
+                  "Teacher",
+                  "Admins and Principal",
+                  "Not required"
+                ],
+                [
+                  "Other Staff",
+                  "Admins and Principal",
+                  "Not required"
+                ],
+                [
+                  "Parent",
+                  "Teachers of their children's classes",
+                  "Required (auto-set)"
+                ]
+              ]
+            }
+          ]
+        },
+        {
+          "id": "14.2",
+          "title": "Accessing Messages",
+          "slug": "accessing-messages",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Messages"
+            },
+            {
+              "type": "body_text",
+              "text": "All roles access the same Messages page from the sidebar. The page shows a split-panel layout: thread list on the left, conversation view on the right. On mobile devices, the view switches between list and conversation."
+            }
+          ]
+        },
+        {
+          "id": "14.3",
+          "title": "Starting a New Conversation",
+          "slug": "starting-a-new-conversation",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Messages > New Message button"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Click the 'New Message' button (top of the thread list)."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Select a recipient from the dropdown. Recipients are grouped by role (Teachers, Parents, Students, Staff)."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "For teacher-parent/student conversations, the student context is automatically set based on the recipient."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Optionally enter a subject line for the conversation."
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "Type your message and click 'Send'."
+            },
+            {
+              "type": "info_box",
+              "title": "Thread Reuse",
+              "text": "If you already have an active conversation with the same person (and same student context), your new message will be added to the existing thread instead of creating a duplicate."
+            }
+          ]
+        },
+        {
+          "id": "14.4",
+          "title": "Replying to Messages",
+          "slug": "replying-to-messages",
+          "content": [
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Click on any thread in the thread list to open the conversation."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "All messages in the thread are displayed chronologically (oldest first)."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Your messages appear on the right side, the other person's on the left."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Type your reply in the input box at the bottom and click 'Send' or press Enter."
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "The thread is automatically marked as read when you open it."
+            }
+          ]
+        },
+        {
+          "id": "14.5",
+          "title": "Unread Message Indicators",
+          "slug": "unread-message-indicators",
+          "content": [
+            {
+              "type": "body_text",
+              "text": "Unread threads are highlighted in the thread list with a blue badge showing the unread message count. The Messages navigation item in the sidebar also shows a total unread count badge. The badge updates automatically every 15 seconds."
+            }
+          ]
+        },
+        {
+          "id": "14.6",
+          "title": "Searching Conversations",
+          "slug": "searching-conversations",
+          "content": [
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Use the search box at the top of the thread list to filter conversations."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Search matches against participant names and the latest message preview."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "title": "Parent Portal",
+      "slug": "parent-portal",
+      "sections": [
+        {
+          "id": "15.0",
+          "title": "Introduction",
+          "slug": "introduction",
+          "content": [
+            {
+              "type": "body_text",
+              "text": "Parents have a dedicated portal to monitor their children's school activities. Parents can view attendance, fees, timetable, exam results, and communicate with the school."
+            }
+          ]
+        },
+        {
+          "id": "15.1",
+          "title": "Parent Dashboard",
+          "slug": "parent-dashboard",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Login as Parent > Dashboard"
+            },
+            {
+              "type": "body_text",
+              "text": "After logging in, parents see their dashboard with:"
+            },
+            {
+              "type": "bullet",
+              "text": "List of linked children (if multiple children attend the school)"
+            },
+            {
+              "type": "bullet",
+              "text": "Quick action cards for common tasks (Apply Leave, Messages)"
+            },
+            {
+              "type": "bullet",
+              "text": "Recent notifications from the school"
+            }
+          ]
+        },
+        {
+          "id": "15.2",
+          "title": "Viewing Child's Information",
+          "slug": "viewing-childs-information",
+          "content": [
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Click on a child's name to see their overview page."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "The overview shows: Profile photo, class, roll number, quick stats."
+            },
+            {
+              "type": "sub_section",
+              "title": "Attendance"
+            },
+            {
+              "type": "nav_path",
+              "path": "Parent Portal > Child > Attendance"
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Click 'Attendance' to view the child's attendance records."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "See monthly and daily breakdowns with Present/Absent/Late counts."
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "View attendance percentage and trends."
+            },
+            {
+              "type": "sub_section",
+              "title": "Fees & Online Payments"
+            },
+            {
+              "type": "nav_path",
+              "path": "Parent Portal > Child > Fees"
+            },
+            {
+              "type": "step",
+              "number": 6,
+              "text": "View fee balance, payment history, and outstanding amounts."
+            },
+            {
+              "type": "step",
+              "number": 7,
+              "text": "See due amounts and upcoming fee deadlines."
+            },
+            {
+              "type": "step",
+              "number": 8,
+              "text": "Download fee receipts for past payments."
+            },
+            {
+              "type": "sub_section",
+              "title": "Paying Fees Online"
+            },
+            {
+              "type": "nav_path",
+              "path": "Parent Portal > Child > Fees > Pay Now"
+            },
+            {
+              "type": "step",
+              "number": 9,
+              "text": "If the school has configured online payment gateways, a 'Pay Now' button appears next to each unpaid fee."
+            },
+            {
+              "type": "step",
+              "number": 10,
+              "text": "Click 'Pay Now' on the fee you wish to pay."
+            },
+            {
+              "type": "step",
+              "number": 11,
+              "text": "A modal appears showing available payment methods (e.g., JazzCash, Easypaisa, Manual Transfer)."
+            },
+            {
+              "type": "step",
+              "number": 12,
+              "text": "Select your preferred payment method and click 'Proceed to Pay'."
+            },
+            {
+              "type": "step",
+              "number": 13,
+              "text": "For JazzCash/Easypaisa: You will be redirected to the gateway's checkout page to complete payment."
+            },
+            {
+              "type": "step",
+              "number": 14,
+              "text": "For Manual Transfer: Bank account details are displayed. Make the transfer and inform the school office."
+            },
+            {
+              "type": "step",
+              "number": 15,
+              "text": "After payment, you are redirected to a Payment Result page showing the transaction status."
+            },
+            {
+              "type": "step",
+              "number": 16,
+              "text": "Payment statuses: Successful (green), Pending (yellow - being verified), Failed (red - try again)."
+            },
+            {
+              "type": "step",
+              "number": 17,
+              "text": "Pending payments are automatically verified within a few minutes. The page auto-refreshes."
+            },
+            {
+              "type": "info_box",
+              "title": "Online Payment Availability",
+              "text": "Online payments are only available if your school's administration has configured payment gateways. If you don't see the Pay Now button, contact the school office."
+            },
+            {
+              "type": "sub_section",
+              "title": "Timetable"
+            },
+            {
+              "type": "nav_path",
+              "path": "Parent Portal > Child > Timetable"
+            },
+            {
+              "type": "step",
+              "number": 18,
+              "text": "View the child's class timetable."
+            },
+            {
+              "type": "step",
+              "number": 19,
+              "text": "See subjects, teachers, and period timings for each day."
+            },
+            {
+              "type": "sub_section",
+              "title": "Exam Results"
+            },
+            {
+              "type": "nav_path",
+              "path": "Parent Portal > Child > Results"
+            },
+            {
+              "type": "step",
+              "number": 20,
+              "text": "View exam marks and grades (once published by the school)."
+            },
+            {
+              "type": "step",
+              "number": 21,
+              "text": "See subject-wise performance and GPA."
+            },
+            {
+              "type": "step",
+              "number": 22,
+              "text": "Download report cards as PDF."
+            }
+          ]
+        },
+        {
+          "id": "15.3",
+          "title": "Applying for Leave",
+          "slug": "applying-for-leave",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Parent Portal > Leave Application"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Click 'Apply for Leave' in the sidebar."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Select the child, enter: From Date, To Date, Reason."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Submit the application. Track its status (Pending, Approved, Rejected)."
+            }
+          ]
+        },
+        {
+          "id": "15.4",
+          "title": "Messages",
+          "slug": "messages",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Messages"
+            },
+            {
+              "type": "body_text",
+              "text": "Parents can send and receive threaded messages with their children's teachers. See the Messaging chapter for full details on how conversations work."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "title": "Student Portal",
+      "slug": "student-portal",
+      "sections": [
+        {
+          "id": "16.0",
+          "title": "Introduction",
+          "slug": "introduction",
+          "content": [
+            {
+              "type": "body_text",
+              "text": "Students have their own portal to view attendance, timetable, assignments, fees, exam results, and manage their profile."
+            }
+          ]
+        },
+        {
+          "id": "16.1",
+          "title": "Student Dashboard",
+          "slug": "student-dashboard",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Login as Student > Dashboard"
+            },
+            {
+              "type": "body_text",
+              "text": "The Student Dashboard displays:"
+            },
+            {
+              "type": "bullet",
+              "text": "Welcome card with student name and class"
+            },
+            {
+              "type": "bullet",
+              "text": "Attendance rate (percentage)"
+            },
+            {
+              "type": "bullet",
+              "text": "Assignment stats (pending, submitted, graded)"
+            },
+            {
+              "type": "bullet",
+              "text": "Fee balance summary"
+            },
+            {
+              "type": "bullet",
+              "text": "Today's timetable"
+            },
+            {
+              "type": "bullet",
+              "text": "Upcoming assignment deadlines"
+            }
+          ]
+        },
+        {
+          "id": "16.2",
+          "title": "My Attendance",
+          "slug": "my-attendance",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Student Portal > Attendance"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "View your attendance history with monthly/daily breakdown."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "See attendance percentage and trend over time."
+            }
+          ]
+        },
+        {
+          "id": "16.3",
+          "title": "My Timetable",
+          "slug": "my-timetable",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Student Portal > Timetable"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "View your class timetable for each day of the week."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "See subject names, teacher names, and period timings."
+            }
+          ]
+        },
+        {
+          "id": "16.4",
+          "title": "My Assignments",
+          "slug": "my-assignments",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Student Portal > Assignments"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "View all assignments from your teachers."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "See due dates and submission status."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Submit your work before the deadline."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "View grades and teacher feedback after review."
+            }
+          ]
+        },
+        {
+          "id": "16.5",
+          "title": "My Fees",
+          "slug": "my-fees",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Student Portal > Fees"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "View your fee balance and payment history."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "See upcoming due dates."
+            }
+          ]
+        },
+        {
+          "id": "16.6",
+          "title": "My Results",
+          "slug": "my-results",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Student Portal > Results"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "View your exam marks and grades."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "See subject-wise performance."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Download report cards as PDF."
+            }
+          ]
+        },
+        {
+          "id": "16.7",
+          "title": "My Profile",
+          "slug": "my-profile",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Student Portal > My Profile"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "View and update your profile information."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "See contact details and class information."
+            }
+          ]
+        },
+        {
+          "id": "16.8",
+          "title": "AI Study Helper",
+          "slug": "ai-study-helper",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Student Portal > AI Study Helper"
+            },
+            {
+              "type": "body_text",
+              "text": "The AI Study Helper is an intelligent chatbot that assists students with their studies. It is aware of the student's class, subjects, lesson plans, and assignments, allowing it to provide personalized, curriculum-aligned academic support."
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Navigate to 'AI Study Helper' in the student sidebar."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Type your study question in the message box at the bottom of the screen."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Click Send or press Enter to submit your question."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "The AI will respond with explanations, examples, and study tips tailored to your curriculum."
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "Your conversation history is saved and can be reviewed later."
+            },
+            {
+              "type": "step",
+              "number": 6,
+              "text": "Use the suggestion chips (e.g., 'Explain a concept', 'Help with homework') for quick prompts."
+            },
+            {
+              "type": "step",
+              "number": 7,
+              "text": "Click 'Clear History' to start a fresh conversation."
+            },
+            {
+              "type": "info_box",
+              "title": "Daily Limit",
+              "text": "Students can send up to 30 messages per day to the AI Study Helper. The counter resets every 24 hours. This ensures fair usage for all students."
+            },
+            {
+              "type": "warning_box",
+              "text": "The AI Study Helper is designed for academic topics only. Questions about personal information, violence, or other inappropriate content will be blocked by the safety system."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 17,
+      "title": "Hostel Management",
+      "slug": "hostel-management",
+      "sections": [
+        {
+          "id": "17.0",
+          "title": "Introduction",
+          "slug": "introduction",
+          "content": [
+            {
+              "type": "body_text",
+              "text": "The Hostel Management module helps schools manage their boarding facilities. It covers hostel buildings, rooms, student allocations, and gate passes for students leaving and returning to the hostel."
+            }
+          ]
+        },
+        {
+          "id": "17.1",
+          "title": "Hostel Dashboard",
+          "slug": "hostel-dashboard",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Hostel > Dashboard"
+            },
+            {
+              "type": "body_text",
+              "text": "The Hostel Dashboard provides a quick overview of all hostel operations:"
+            },
+            {
+              "type": "bullet",
+              "text": "Total hostels, rooms, and current occupancy"
+            },
+            {
+              "type": "bullet",
+              "text": "Occupancy rate (percentage of beds filled)"
+            },
+            {
+              "type": "bullet",
+              "text": "Active allocations count"
+            },
+            {
+              "type": "bullet",
+              "text": "Pending gate pass requests"
+            },
+            {
+              "type": "bullet",
+              "text": "Students currently out on gate passes"
+            },
+            {
+              "type": "bullet",
+              "text": "Available beds count"
+            },
+            {
+              "type": "bullet",
+              "text": "Quick action links to manage rooms, allocations, and gate passes"
+            }
+          ]
+        },
+        {
+          "id": "17.2",
+          "title": "Managing Hostels & Rooms",
+          "slug": "managing-hostels-rooms",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Hostel > Rooms"
+            },
+            {
+              "type": "sub_section",
+              "title": "Creating a Hostel"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Navigate to Hostel > Rooms in the sidebar."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Switch to the 'Hostels' tab."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Click 'Add Hostel'."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Enter: Name, Hostel Type (Boys / Girls / Mixed), Capacity."
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "Optionally assign a Warden (from staff members)."
+            },
+            {
+              "type": "step",
+              "number": 6,
+              "text": "Save. The hostel appears in the list."
+            },
+            {
+              "type": "sub_section",
+              "title": "Creating Rooms"
+            },
+            {
+              "type": "step",
+              "number": 7,
+              "text": "Switch to the 'Rooms' tab."
+            },
+            {
+              "type": "step",
+              "number": 8,
+              "text": "Click 'Add Room'."
+            },
+            {
+              "type": "step",
+              "number": 9,
+              "text": "Select the Hostel this room belongs to."
+            },
+            {
+              "type": "step",
+              "number": 10,
+              "text": "Enter: Room Number, Floor, Room Type (Single / Double / Dormitory), Capacity."
+            },
+            {
+              "type": "step",
+              "number": 11,
+              "text": "Save. The room shows current occupancy vs. capacity."
+            },
+            {
+              "type": "info_box",
+              "title": "Room Availability",
+              "text": "Rooms are automatically marked as unavailable when they reach full capacity. The system prevents over-allocation by checking capacity before each new allocation."
+            }
+          ]
+        },
+        {
+          "id": "17.3",
+          "title": "Student Allocations",
+          "slug": "student-allocations",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Hostel > Allocations"
+            },
+            {
+              "type": "body_text",
+              "text": "Allocations assign students to specific hostel rooms for an academic year."
+            },
+            {
+              "type": "sub_section",
+              "title": "Allocating a Student"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Navigate to Hostel > Allocations."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Click 'Add Allocation'."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Select: Student, Room (from available rooms), Academic Year."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "The system validates that the room has capacity and the student isn't already allocated."
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "Save. The student is now assigned to the room."
+            },
+            {
+              "type": "sub_section",
+              "title": "Vacating a Student"
+            },
+            {
+              "type": "step",
+              "number": 6,
+              "text": "Find the active allocation in the list."
+            },
+            {
+              "type": "step",
+              "number": 7,
+              "text": "Click the 'Vacate' button."
+            },
+            {
+              "type": "step",
+              "number": 8,
+              "text": "The allocation is marked as inactive, and the room's occupancy count decreases."
+            },
+            {
+              "type": "warning_box",
+              "text": "Each student can only have one active hostel allocation per academic year. Vacate the current allocation before assigning to a new room."
+            }
+          ]
+        },
+        {
+          "id": "17.4",
+          "title": "Gate Passes",
+          "slug": "gate-passes",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Hostel > Gate Passes"
+            },
+            {
+              "type": "body_text",
+              "text": "Gate passes track students leaving and returning to the hostel. They follow a workflow: Request > Approve/Reject > Checkout > Return."
+            },
+            {
+              "type": "sub_section",
+              "title": "Creating a Gate Pass"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Click 'New Gate Pass'."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Select: Student, Pass Type (Day Out / Weekend / Holiday / Emergency)."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Enter: Departure Date, Expected Return Date/Time, Destination, Reason."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Submit. The pass is created with 'Pending' status."
+            },
+            {
+              "type": "sub_section",
+              "title": "Approving / Rejecting Gate Passes"
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "Review pending gate passes in the list."
+            },
+            {
+              "type": "step",
+              "number": 6,
+              "text": "Click 'Approve' to authorize the student's departure."
+            },
+            {
+              "type": "step",
+              "number": 7,
+              "text": "Click 'Reject' with a reason to deny the request."
+            },
+            {
+              "type": "sub_section",
+              "title": "Checkout & Return"
+            },
+            {
+              "type": "step",
+              "number": 8,
+              "text": "When the student physically leaves, click 'Checkout' to record departure time."
+            },
+            {
+              "type": "step",
+              "number": 9,
+              "text": "When the student returns, click 'Return' to record the actual return time."
+            },
+            {
+              "type": "table",
+              "headers": [
+                "Status",
+                "Meaning",
+                "Next Action"
+              ],
+              "rows": [
+                [
+                  "Pending",
+                  "Pass requested, awaiting approval",
+                  "Approve or Reject"
+                ],
+                [
+                  "Approved",
+                  "Pass approved, student may leave",
+                  "Checkout when departing"
+                ],
+                [
+                  "Rejected",
+                  "Pass denied by admin",
+                  "No further action"
+                ],
+                [
+                  "Checked Out",
+                  "Student has left the hostel",
+                  "Return when student comes back"
+                ],
+                [
+                  "Returned",
+                  "Student has returned to hostel",
+                  "Complete - no action needed"
+                ],
+                [
+                  "Cancelled",
+                  "Pass was cancelled",
+                  "No further action"
+                ]
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 18,
+      "title": "Settings & Configuration",
+      "slug": "settings-configuration",
+      "sections": [
+        {
+          "id": "18.0",
+          "title": "Introduction",
+          "slug": "introduction",
+          "content": [
+            {
+              "type": "body_text",
+              "text": "The Settings page allows School Admins to configure system behavior. Settings are divided into multiple tabs."
+            }
+          ]
+        },
+        {
+          "id": "18.1",
+          "title": "Attendance Mark Mappings",
+          "slug": "attendance-mark-mappings",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Settings > Mappings Tab"
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "View the current mark-to-status mappings (e.g., P = Present, A = Absent)."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Click 'Add Mapping' to add a new custom symbol."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Enter the symbol and select the status it maps to."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Use 'AI Suggestions' to get recommendations for common symbols."
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "Set a Default Status for unrecognized marks captured by AI."
+            }
+          ]
+        },
+        {
+          "id": "18.2",
+          "title": "Register Configuration",
+          "slug": "register-configuration",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Settings > Register Config Tab"
+            },
+            {
+              "type": "body_text",
+              "text": "Configure how the AI reads attendance registers:"
+            },
+            {
+              "type": "bullet",
+              "text": "Date Header Row - Which row contains the dates"
+            },
+            {
+              "type": "bullet",
+              "text": "Student Name Column - Which column has student names"
+            },
+            {
+              "type": "bullet",
+              "text": "Roll Number Column - Which column has roll numbers"
+            },
+            {
+              "type": "bullet",
+              "text": "Data Start Row/Column - Where the attendance marks begin"
+            },
+            {
+              "type": "bullet",
+              "text": "Orientation - Whether students are in rows or columns"
+            }
+          ]
+        },
+        {
+          "id": "18.3",
+          "title": "Examination Settings",
+          "slug": "examination-settings",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Settings > School Profile > Examination Settings"
+            },
+            {
+              "type": "body_text",
+              "text": "Toggle between Simple Average and Weighted Average for report card calculations. When Weighted Average is enabled, each exam type's contribution is scaled by its weight (configured in Exam Types). See Chapter 5 (Examinations) for details."
+            }
+          ]
+        },
+        {
+          "id": "18.4",
+          "title": "Finance Accounts Management",
+          "slug": "finance-accounts-management",
+          "content": [
+            {
+              "type": "body_text",
+              "text": "See Chapter 6 (Finance Module) > Setting Up Finance Accounts for detailed instructions."
+            }
+          ]
+        },
+        {
+          "id": "18.5",
+          "title": "Payment Gateway Configuration",
+          "slug": "payment-gateway-configuration",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Finance > Payment Gateways"
+            },
+            {
+              "type": "body_text",
+              "text": "Configure online payment gateways to allow parents to pay fees directly from the Parent Portal. The system supports JazzCash, Easypaisa, and Manual (bank transfer) payment methods."
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Navigate to Finance > Payment Gateways in the sidebar."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "You will see gateway cards for each supported provider (JazzCash, Easypaisa, Stripe, Razorpay, Manual)."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Click on a gateway card to configure it. Enter the required credentials."
+            },
+            {
+              "type": "sub_section",
+              "title": "JazzCash Configuration"
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Enter: Merchant ID (provided by JazzCash, e.g., MC12345)."
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "Enter: Password (JazzCash merchant password)."
+            },
+            {
+              "type": "step",
+              "number": 6,
+              "text": "Enter: Integrity Salt (used for HMAC-SHA256 signing of payment requests)."
+            },
+            {
+              "type": "step",
+              "number": 7,
+              "text": "Select Environment: Sandbox (for testing) or Production (for live payments)."
+            },
+            {
+              "type": "step",
+              "number": 8,
+              "text": "Return URL is auto-filled by the system."
+            },
+            {
+              "type": "sub_section",
+              "title": "Easypaisa Configuration"
+            },
+            {
+              "type": "step",
+              "number": 9,
+              "text": "Enter: Store ID (provided by Easypaisa, e.g., 12345)."
+            },
+            {
+              "type": "step",
+              "number": 10,
+              "text": "Enter: Merchant Hash Key (used for hash verification)."
+            },
+            {
+              "type": "step",
+              "number": 11,
+              "text": "Select Environment: Sandbox or Production."
+            },
+            {
+              "type": "sub_section",
+              "title": "Manual/Bank Transfer Configuration"
+            },
+            {
+              "type": "step",
+              "number": 12,
+              "text": "Enter: Bank Name, Account Title, Account Number, IBAN (optional), Branch."
+            },
+            {
+              "type": "step",
+              "number": 13,
+              "text": "Add Payment Instructions for parents (e.g., 'Deposit at any HBL branch')."
+            },
+            {
+              "type": "step",
+              "number": 14,
+              "text": "Parents will see these bank details when choosing the Manual payment option."
+            },
+            {
+              "type": "sub_section",
+              "title": "Gateway Management"
+            },
+            {
+              "type": "step",
+              "number": 15,
+              "text": "Click 'Test Connection' on a gateway card to verify your credentials are valid."
+            },
+            {
+              "type": "step",
+              "number": 16,
+              "text": "Toggle a gateway on/off using the active/inactive toggle button."
+            },
+            {
+              "type": "step",
+              "number": 17,
+              "text": "Click 'Set as Default' to make a gateway the pre-selected option for parents."
+            },
+            {
+              "type": "step",
+              "number": 18,
+              "text": "Only active gateways are shown to parents on the fee payment page."
+            },
+            {
+              "type": "info_box",
+              "title": "Sensitive Data",
+              "text": "Gateway credentials (passwords, salts, hash keys) are stored securely and masked in the UI (only the first 4 characters are visible). They are never exposed in API responses."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 19,
+      "title": "User Management",
+      "slug": "user-management",
+      "sections": [
+        {
+          "id": "19.0",
+          "title": "Introduction",
+          "slug": "introduction",
+          "content": [
+            {
+              "type": "body_text",
+              "text": "KoderEduAI uses a hierarchical role system for user management. School Admins and Principals can create and manage users within their schools."
+            }
+          ]
+        },
+        {
+          "id": "19.1",
+          "title": "User Roles & Hierarchy",
+          "slug": "user-roles-hierarchy",
+          "content": [
+            {
+              "type": "body_text",
+              "text": "The system has the following roles, listed from highest to lowest privilege:"
+            },
+            {
+              "type": "table",
+              "headers": [
+                "Role",
+                "Can Create",
+                "Access Level"
+              ],
+              "rows": [
+                [
+                  "School Admin",
+                  "Principal, HR Manager, Accountant, Teacher, Staff",
+                  "Full school access"
+                ],
+                [
+                  "Principal",
+                  "HR Manager, Accountant, Teacher, Staff",
+                  "Full school access"
+                ],
+                [
+                  "HR Manager",
+                  "- (no user creation)",
+                  "HR module full access"
+                ],
+                [
+                  "Accountant",
+                  "- (no user creation)",
+                  "Finance module access"
+                ],
+                [
+                  "Teacher",
+                  "- (no user creation)",
+                  "Academics & LMS access"
+                ],
+                [
+                  "Staff",
+                  "- (no user creation)",
+                  "Basic read-only access"
+                ],
+                [
+                  "Parent",
+                  "- (self-registered via invite)",
+                  "Child data only"
+                ],
+                [
+                  "Student",
+                  "- (self-registered via invite)",
+                  "Own data only"
+                ]
+              ]
+            }
+          ]
+        },
+        {
+          "id": "19.2",
+          "title": "Managing Users (School Admin & Principal)",
+          "slug": "managing-users-school-admin-principal",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Settings > Users Tab"
+            },
+            {
+              "type": "body_text",
+              "text": "School Admins and Principals can create, edit, and deactivate user accounts for their school from the Users tab in Settings."
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Navigate to Settings and click the 'Users' tab."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Click 'Add User' to open the user creation form."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Fill in Username (required), Email, Password, and select a Role from the dropdown."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "The role dropdown only shows roles you are allowed to create based on your role."
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "Click 'Create User' to save. A school membership is automatically created."
+            },
+            {
+              "type": "step",
+              "number": 6,
+              "text": "To edit a user, click 'Edit' in the actions column. You can change name, email, role, and phone."
+            },
+            {
+              "type": "step",
+              "number": 7,
+              "text": "To deactivate a user, click 'Deactivate'. The user will no longer be able to log in."
+            },
+            {
+              "type": "step",
+              "number": 8,
+              "text": "To reactivate, click 'Activate' on an inactive user."
+            },
+            {
+              "type": "info_box",
+              "title": "Role Restrictions",
+              "text": "You can only edit or deactivate users whose role you are allowed to create. For example, a Principal cannot deactivate a School Admin."
+            }
+          ]
+        },
+        {
+          "id": "19.3",
+          "title": "Creating Student User Accounts",
+          "slug": "creating-student-user-accounts",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Students > Add Student"
+            },
+            {
+              "type": "body_text",
+              "text": "When adding a new student, you can optionally create a user account so the student can access the Student Portal."
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Open the Add Student modal and fill in the student details (Class, Name, Roll Number)."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Check the 'Create User Account (Student Portal)' checkbox at the bottom of the form."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Additional fields will appear: Username (auto-suggested from student name), Email, Password, and Confirm Password."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Fill in the login credentials. Password must be at least 8 characters."
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "Click 'Add Student'. Both the student record and user account will be created together."
+            },
+            {
+              "type": "step",
+              "number": 6,
+              "text": "The student can now log in to the Student Portal using these credentials."
+            }
+          ]
+        },
+        {
+          "id": "19.4",
+          "title": "Converting Existing Students to Users",
+          "slug": "converting-existing-students-to-users",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Students"
+            },
+            {
+              "type": "body_text",
+              "text": "Students without accounts show 'No Account' in the Account column. Individual: Click 'Create Account' next to any student, fill in credentials, and save. Bulk: Select multiple students using checkboxes, click 'Create Accounts' in the floating bar, set a default password, and confirm. Usernames are auto-generated (e.g., 'Ahmed Khan' becomes 'ahmed_khan')."
+            }
+          ]
+        },
+        {
+          "id": "19.5",
+          "title": "Creating Staff User Accounts",
+          "slug": "creating-staff-user-accounts",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > HR & Staff > Staff Directory"
+            },
+            {
+              "type": "body_text",
+              "text": "When adding a new staff member (full form or Quick Add), check 'Create User Account' to set up login credentials alongside the staff record. Select a User Role (Teacher, Staff, HR Manager, Accountant) to determine system access level."
+            }
+          ]
+        },
+        {
+          "id": "19.6",
+          "title": "Converting Existing Staff to Users",
+          "slug": "converting-existing-staff-to-users",
+          "content": [
+            {
+              "type": "body_text",
+              "text": "Staff without accounts show 'No Account' in the Account column. Individual: Click 'Create Account', set role and credentials. Bulk: Select multiple staff, click 'Create Accounts', choose default role and password. Usernames are auto-generated (e.g., 'Jane Doe' becomes 'jane_doe')."
+            },
+            {
+              "type": "warning_box",
+              "text": "Passwords cannot be recovered. If a user forgets their password, a School Admin must reset it from the Users tab."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 20,
+      "title": "AI Intelligence Features",
+      "slug": "ai-intelligence-features",
+      "sections": [
+        {
+          "id": "20.0",
+          "title": "Introduction",
+          "slug": "introduction",
+          "content": [
+            {
+              "type": "body_text",
+              "text": "KoderEduAI includes a suite of AI-powered intelligence features that operate across modules to improve accuracy, surface insights, and automate routine analysis. These features learn from your school's data patterns and become more effective over time."
+            }
+          ]
+        },
+        {
+          "id": "20.1",
+          "title": "Auto-Adaptive Thresholds",
+          "slug": "autoadaptive-thresholds",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Attendance > Capture & Review > Accuracy Dashboard"
+            },
+            {
+              "type": "body_text",
+              "text": "Each school can customize AI thresholds for name matching and confidence scoring. Toggle 'Auto-tune thresholds' to let the system adjust weekly based on correction patterns. Requires at least 50 processed uploads before auto-tuning becomes effective."
+            }
+          ]
+        },
+        {
+          "id": "20.2",
+          "title": "Pipeline Fallback & Voting",
+          "slug": "pipeline-fallback-voting",
+          "content": [
+            {
+              "type": "body_text",
+              "text": "If the primary OCR provider (Google Vision) fails, the system tries alternatives automatically. Enable 'Multi-pipeline voting' for critical uploads where multiple providers cross-validate results."
+            },
+            {
+              "type": "table",
+              "headers": [
+                "Provider",
+                "Speed",
+                "Best For"
+              ],
+              "rows": [
+                [
+                  "Google Vision",
+                  "Fast",
+                  "Most register types (recommended primary)"
+                ],
+                [
+                  "Groq Vision",
+                  "Fast",
+                  "Good alternative with LLM reasoning"
+                ],
+                [
+                  "Tesseract",
+                  "Medium",
+                  "Fallback when cloud services unavailable"
+                ]
+              ]
+            }
+          ]
+        },
+        {
+          "id": "20.3",
+          "title": "Accuracy Drift & Anomaly Detection",
+          "slug": "accuracy-drift-anomaly-detection",
+          "content": [
+            {
+              "type": "body_text",
+              "text": "The system monitors AI accuracy daily and alerts administrators when performance degrades (drift > 10 percentage points from 30-day baseline). It also detects unusual attendance patterns nightly: bulk class absences (>60%), student streaks (3+ consecutive days absent), and unusual school-wide absence (>30%)."
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "View drift alerts on the Accuracy Dashboard; review recent uploads for new register formats."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Navigate to Attendance > Anomalies to view, filter, and resolve detected anomalies."
+            }
+          ]
+        },
+        {
+          "id": "20.4",
+          "title": "AI Dashboard Insights",
+          "slug": "ai-dashboard-insights",
+          "content": [
+            {
+              "type": "body_text",
+              "text": "The admin dashboard surfaces AI-generated actionable insights across all modules: Alerts (red) for urgent issues, Warnings (amber) for important items, and Info (blue) for setup reminders. Each insight links directly to the relevant page. Insights are role-specific (teachers see attendance only, accountants see finance only)."
+            }
+          ]
+        },
+        {
+          "id": "20.5",
+          "title": "OR-Tools Timetable Optimization",
+          "slug": "ortools-timetable-optimization",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Academics > Timetable > Auto-Generate"
+            },
+            {
+              "type": "body_text",
+              "text": "Timetable auto-generation supports two algorithms: 'Quick (Greedy)' for near-instant drafts, and 'Optimal (OR-Tools)' for higher quality schedules (up to 30 seconds). OR-Tools enforces hard constraints (no double-booking) and optimizes subject distribution across days."
+            }
+          ]
+        },
+        {
+          "id": "20.6",
+          "title": "AI Report Card Comments",
+          "slug": "ai-report-card-comments",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Academics > Examinations > Results"
+            },
+            {
+              "type": "body_text",
+              "text": "Generate personalized comments for each student's exam performance based on marks, grades, and attendance. Click 'Generate AI Comments' on an exam's results page. Comments appear on report cards automatically. Teachers should review before sharing with parents."
+            },
+            {
+              "type": "info_box",
+              "title": "Fallback",
+              "text": "Without a Groq API key, the system generates rule-based comments automatically."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 21,
+      "title": "Tips, Best Practices & Operations Checklist",
+      "slug": "tips-best-practices-operations-checklist",
+      "sections": [
+        {
+          "id": "21.1",
+          "title": "General Tips",
+          "slug": "general-tips",
+          "content": [
+            {
+              "type": "bullet",
+              "text": "Use bulk import (Excel) for students when starting with a large number of records"
+            },
+            {
+              "type": "bullet",
+              "text": "Use search and filter features to quickly find records in any list"
+            },
+            {
+              "type": "bullet",
+              "text": "Export data regularly as backups (Excel, PDF)"
+            },
+            {
+              "type": "bullet",
+              "text": "Use strong, unique passwords; log out when leaving the computer unattended"
+            },
+            {
+              "type": "bullet",
+              "text": "Regularly review user access and deactivate unused accounts"
+            }
+          ]
+        },
+        {
+          "id": "21.2",
+          "title": "Attendance Tips",
+          "slug": "attendance-tips",
+          "content": [
+            {
+              "type": "bullet",
+              "text": "OCR: Take clear, well-lit photos of flat registers; use the crop tool; always review before approving"
+            },
+            {
+              "type": "bullet",
+              "text": "Face: Enroll all students first; use clear portraits (quality > 70%); good lighting for group photos"
+            },
+            {
+              "type": "bullet",
+              "text": "Face: Avoid backlighting; review yellow-flagged matches; re-enroll after major appearance changes"
+            }
+          ]
+        },
+        {
+          "id": "21.3",
+          "title": "Finance Tips",
+          "slug": "finance-tips",
+          "content": [
+            {
+              "type": "bullet",
+              "text": "Set up accounts before the academic year; close months regularly"
+            },
+            {
+              "type": "bullet",
+              "text": "Use discounts/scholarships feature instead of manual fee adjustments"
+            },
+            {
+              "type": "bullet",
+              "text": "Use 'Pay Full' bulk action for quick month-end collection"
+            },
+            {
+              "type": "bullet",
+              "text": "Download PDF reports monthly from the Finance Dashboard for record-keeping"
+            }
+          ]
+        },
+        {
+          "id": "21.4",
+          "title": "Operations Checklist",
+          "slug": "operations-checklist",
+          "content": [
+            {
+              "type": "body_text",
+              "text": "Recommended routine tasks by frequency:"
+            },
+            {
+              "type": "table",
+              "headers": [
+                "Frequency",
+                "Tasks"
+              ],
+              "rows": [
+                [
+                  "Daily",
+                  "Mark attendance (OCR/Face), review AI results, record fee payments, mark staff & transport attendance, issue/return books, check notifications"
+                ],
+                [
+                  "Weekly",
+                  "Review attendance analytics, check overdue books, process leave applications, update admission pipeline"
+                ],
+                [
+                  "Monthly",
+                  "Process payroll, close financial month, review Finance Dashboard, generate fee reminders"
+                ],
+                [
+                  "Term",
+                  "Create exams, enter marks, publish results, generate report cards, conduct promotions, set up new academic year"
+                ]
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

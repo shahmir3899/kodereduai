@@ -172,14 +172,32 @@ const ClockIcon = () => (
 // Collapsible sidebar group component
 function SidebarGroup({ group, onNavigate }) {
   const location = useLocation()
+
+  // Parse href into pathname and search parts
+  const parseHref = (href) => {
+    const qIdx = href.indexOf('?')
+    if (qIdx === -1) return { pathname: href, search: '' }
+    return { pathname: href.substring(0, qIdx), search: href.substring(qIdx) }
+  }
+
   // Sort children by href length descending so longer paths match first (skip dividers)
   const sortedChildren = group.children.filter(c => c.type !== 'divider').sort((a, b) => b.href.length - a.href.length)
 
   const isChildActive = (href) => {
-    // Check if this child is the best (longest) match
-    const matchingChild = sortedChildren.find(
-      c => location.pathname === c.href || location.pathname.startsWith(c.href + '/')
-    )
+    // Find the best matching child, considering query params
+    const matchingChild = sortedChildren.find(c => {
+      const { pathname: cPath, search: cSearch } = parseHref(c.href)
+      const pathMatches = location.pathname === cPath || location.pathname.startsWith(cPath + '/')
+      if (!pathMatches) return false
+      // If child has search params, require them to match too
+      if (cSearch) return location.search === cSearch
+      // If no search params, only match if no more-specific sibling matches
+      const hasMoreSpecificSibling = sortedChildren.some(s => {
+        const sp = parseHref(s.href)
+        return sp.pathname === cPath && sp.search && location.search === sp.search
+      })
+      return !hasMoreSpecificSibling
+    })
     return matchingChild?.href === href
   }
 
@@ -300,6 +318,7 @@ const parentNavGroups = [
   { type: 'item', name: 'Dashboard', href: '/parent/dashboard', icon: HomeIcon },
   { type: 'item', name: 'Leave Requests', href: '/parent/leave', icon: CalendarIcon },
   { type: 'item', name: 'Messages', href: '/parent/messages', icon: MailIcon },
+  { type: 'item', name: 'User Guide', href: '/guide', icon: BookOpenIcon },
 ]
 
 const studentNavGroups = [
@@ -311,6 +330,7 @@ const studentNavGroups = [
   { type: 'item', name: 'Assignments', href: '/student/assignments', icon: PencilIcon },
   { type: 'item', name: 'AI Study Helper', href: '/student/study-helper', icon: ChatBotIcon },
   { type: 'item', name: 'My Profile', href: '/student/profile', icon: UsersIcon },
+  { type: 'item', name: 'User Guide', href: '/guide', icon: BookOpenIcon },
 ]
 
 // Routes where the academic year switcher affects displayed data
@@ -354,8 +374,12 @@ export default function Layout() {
       name: 'Attendance',
       icon: ClipboardIcon,
       children: [
-        { name: 'Capture & Review', href: '/attendance', icon: UploadIcon },
-        { name: 'Face Attendance', href: '/face-attendance', icon: CameraIcon },
+        { type: 'divider', label: 'Take Attendance' },
+        { name: 'Register Image (OCR)', href: '/attendance', icon: UploadIcon },
+        { name: 'Manual Entry', href: '/attendance/register?tab=manual', icon: PencilIcon },
+        { name: 'Face Recognition', href: '/face-attendance', icon: CameraIcon },
+        { type: 'divider', label: 'Review & Reports' },
+        { name: 'Pending Review', href: '/attendance?tab=review', icon: ClipboardCheckIcon },
         { name: 'Register & Analytics', href: '/attendance/register', icon: TableIcon },
       ],
     }] : []),
@@ -391,11 +415,12 @@ export default function Layout() {
       name: 'Academics',
       icon: BookOpenIcon,
       children: [
+        { type: 'divider', label: 'Curriculum' },
         { name: 'Subjects', href: '/academics/subjects', icon: AcademicIcon },
         { name: 'Timetable', href: '/academics/timetable', icon: ClockIcon },
         { name: 'Sessions', href: '/academics/sessions', icon: CalendarIcon },
-        { name: 'Promotion', href: '/academics/promotion', icon: UsersIcon },
         ...(isModuleEnabled('examinations') ? [
+          { type: 'divider', label: 'Examinations' },
           { name: 'Exam Types', href: '/academics/exam-types', icon: FolderIcon },
           { name: 'Exams', href: '/academics/exams', icon: ClipboardIcon },
           { name: 'Marks Entry', href: '/academics/marks-entry', icon: DocumentIcon },
@@ -403,12 +428,15 @@ export default function Layout() {
           { name: 'Report Cards', href: '/academics/report-cards', icon: ReportIcon },
           { name: 'Grade Scale', href: '/academics/grade-scale', icon: SettingsIcon },
         ] : []),
-        { name: 'AI Analytics', href: '/academics/analytics', icon: ChartIcon },
         ...(isModuleEnabled('lms') ? [
+          { type: 'divider', label: 'Learning' },
           { name: 'Curriculum', href: '/academics/curriculum', icon: BookOpenIcon },
           { name: 'Lesson Plans', href: '/academics/lesson-plans', icon: BookOpenIcon },
           { name: 'Assignments', href: '/academics/assignments', icon: PencilIcon },
         ] : []),
+        { type: 'divider', label: 'Insights' },
+        { name: 'AI Analytics', href: '/academics/analytics', icon: ChartIcon },
+        { name: 'Promotion', href: '/academics/promotion', icon: UsersIcon },
       ],
     }] : []),
 
@@ -514,6 +542,9 @@ export default function Layout() {
 
     // Discounts moved into Finance group above
 
+    // User Guide - visible to all roles
+    { type: 'item', name: 'User Guide', href: '/guide', icon: BookOpenIcon },
+
     // Settings - admin only (SCHOOL_ADMIN, not staff-level roles)
     ...(!isStaffLevel
       ? [{ type: 'item', name: 'Settings', href: '/settings', icon: CogIcon }]
@@ -535,18 +566,18 @@ export default function Layout() {
 
       {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-30 w-64 bg-white shadow-lg transform transition-transform duration-200 ease-in-out lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-30 w-64 bg-white shadow-lg transform transition-transform duration-200 ease-in-out lg:translate-x-0 flex flex-col ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
         {/* Logo */}
-        <div className="flex items-center justify-center h-16 border-b border-gray-200 gap-2">
+        <div className="flex items-center justify-center h-16 border-b border-gray-200 gap-2 flex-shrink-0">
           <img src="/Logo.jpeg" alt="KoderEduAI" className="h-10 w-10 rounded-full object-cover" />
           <h1 className="text-xl font-bold text-primary-600">KoderEduAI</h1>
         </div>
 
         {/* Navigation */}
-        <nav className="mt-4 px-3 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 180px)' }}>
+        <nav className="mt-4 px-3 overflow-y-auto flex-1 min-h-0">
           {visibleNavGroups.map((item) =>
             item.type === 'group' ? (
               <SidebarGroup
@@ -571,25 +602,39 @@ export default function Layout() {
             )
           )}
 
-          {/* Admin Panel - conditional */}
+          {/* Super Admin links */}
           {isSuperAdmin && (
-            <Link
-              to="/admin"
-              className={`flex items-center px-4 py-2.5 mb-1 rounded-lg transition-colors text-sm ${
-                isActive('/admin')
-                  ? 'bg-primary-50 text-primary-700'
-                  : 'text-gray-600 hover:bg-gray-100'
-              }`}
-              onClick={() => setSidebarOpen(false)}
-            >
-              <CogIcon />
-              <span className="ml-3 font-medium">Admin Panel</span>
-            </Link>
+            <>
+              <Link
+                to="/admin"
+                className={`flex items-center px-4 py-2.5 mb-1 rounded-lg transition-colors text-sm ${
+                  isActive('/admin')
+                    ? 'bg-primary-50 text-primary-700'
+                    : 'text-gray-600 hover:bg-gray-100'
+                }`}
+                onClick={() => setSidebarOpen(false)}
+              >
+                <CogIcon />
+                <span className="ml-3 font-medium">Admin Panel</span>
+              </Link>
+              <Link
+                to="/guide"
+                className={`flex items-center px-4 py-2.5 mb-1 rounded-lg transition-colors text-sm ${
+                  isActive('/guide')
+                    ? 'bg-primary-50 text-primary-700'
+                    : 'text-gray-600 hover:bg-gray-100'
+                }`}
+                onClick={() => setSidebarOpen(false)}
+              >
+                <BookOpenIcon />
+                <span className="ml-3 font-medium">User Guide</span>
+              </Link>
+            </>
           )}
         </nav>
 
         {/* User info & logout */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200">
+        <div className="flex-shrink-0 p-4 border-t border-gray-200">
           <Link
             to="/profile"
             className="flex items-center mb-3 p-2 -m-2 rounded-lg hover:bg-gray-50 transition-colors"

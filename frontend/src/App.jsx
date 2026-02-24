@@ -118,6 +118,9 @@ const ItemAssignmentsPage = lazy(() => import('./pages/inventory/ItemAssignments
 // Messaging
 const MessagesPage = lazy(() => import('./pages/messaging/MessagesPage'))
 
+// User Guide
+const UserGuidePage = lazy(() => import('./pages/UserGuidePage'))
+
 // Face Attendance pages
 const FaceAttendancePage = lazy(() => import('./pages/face-attendance/FaceAttendancePage'))
 const FaceReviewPage = lazy(() => import('./pages/face-attendance/FaceReviewPage'))
@@ -308,6 +311,9 @@ function App() {
 
             {/* Messaging */}
             <Route path="messages" element={<MessagesPage />} />
+
+            {/* User Guide - available to all authenticated users */}
+            <Route path="guide" element={<UserGuidePage />} />
 
             {/* Finance routes */}
             <Route path="finance" element={<SchoolRoute><ModuleRoute module="finance"><FinanceDashboardPage /></ModuleRoute></SchoolRoute>} />

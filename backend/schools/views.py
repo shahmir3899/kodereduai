@@ -4,6 +4,7 @@ School views for tenant management.
 
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
+from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
@@ -304,6 +305,172 @@ class SchoolViewSet(TenantQuerySetMixin, viewsets.ReadOnlyModelViewSet):
             'success': True,
             'message': 'Register configuration updated successfully.',
             'register_config': school.register_config
+        })
+
+    @action(detail=False, methods=['get', 'put'])
+    def exam_config(self, request):
+        """Get or update examination configuration for the current school."""
+        school = getattr(request, 'tenant_school', None) or request.user.school
+        if not school:
+            return Response(
+                {'error': 'No school associated with this user.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        if request.method == 'GET':
+            return Response({
+                'exam_config': school.exam_config,
+                'school_name': school.name
+            })
+
+        # PUT - Update exam config
+        from core.permissions import get_effective_role, ADMIN_ROLES
+        role = get_effective_role(request)
+        if role not in ADMIN_ROLES:
+            return Response(
+                {'error': 'Only school admins can update exam configuration.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        exam_config = school.exam_config or {}
+        new_data = request.data
+        if 'weighted_average_enabled' in new_data:
+            exam_config['weighted_average_enabled'] = bool(new_data['weighted_average_enabled'])
+
+        school.exam_config = exam_config
+        school.save(update_fields=['exam_config', 'updated_at'])
+
+        return Response({
+            'success': True,
+            'message': 'Exam configuration updated successfully.',
+            'exam_config': school.exam_config
+        })
+
+    @action(detail=False, methods=['post'], parser_classes=[MultiPartParser, FormParser])
+    def upload_asset(self, request):
+        """
+        Upload a school logo or letterhead image.
+        POST /api/schools/upload_asset/
+        """
+        from core.storage import storage_service
+        from core.permissions import get_effective_role, ADMIN_ROLES
+
+        school = getattr(request, 'tenant_school', None) or request.user.school
+        if not school:
+            return Response(
+                {'error': 'No school associated with this user.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        role = get_effective_role(request)
+        if role not in ADMIN_ROLES:
+            return Response(
+                {'error': 'Only school admins can upload assets.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        asset_type = request.data.get('asset_type')
+        if asset_type not in ('logo', 'letterhead'):
+            return Response(
+                {'error': 'asset_type must be "logo" or "letterhead".'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if 'file' not in request.FILES:
+            return Response(
+                {'error': 'No file provided.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        file = request.FILES['file']
+
+        allowed_types = ['image/jpeg', 'image/png', 'image/webp', 'image/svg+xml']
+        if file.content_type not in allowed_types:
+            return Response(
+                {'error': f'Invalid file type. Allowed: {", ".join(allowed_types)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        max_size = 5 * 1024 * 1024
+        if file.size > max_size:
+            return Response(
+                {'error': 'File too large. Maximum size is 5MB.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            old_url = school.logo if asset_type == 'logo' else school.letterhead_url
+            if old_url:
+                old_path = storage_service._extract_storage_path(old_url)
+                if old_path:
+                    storage_service.delete_file(old_path)
+
+            url = storage_service.upload_school_asset(file, school.id, asset_type)
+
+            if asset_type == 'logo':
+                school.logo = url
+                school.save(update_fields=['logo', 'updated_at'])
+            else:
+                school.letterhead_url = url
+                school.save(update_fields=['letterhead_url', 'updated_at'])
+
+            return Response({
+                'url': url,
+                'asset_type': asset_type,
+                'message': f'{asset_type.capitalize()} uploaded successfully.'
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    @action(detail=False, methods=['delete'])
+    def delete_asset(self, request):
+        """
+        Delete a school logo or letterhead.
+        DELETE /api/schools/delete_asset/?asset_type=logo
+        """
+        from core.storage import storage_service
+        from core.permissions import get_effective_role, ADMIN_ROLES
+
+        school = getattr(request, 'tenant_school', None) or request.user.school
+        if not school:
+            return Response(
+                {'error': 'No school associated with this user.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        role = get_effective_role(request)
+        if role not in ADMIN_ROLES:
+            return Response(
+                {'error': 'Only school admins can delete assets.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        asset_type = request.query_params.get('asset_type')
+        if asset_type not in ('logo', 'letterhead'):
+            return Response(
+                {'error': 'asset_type must be "logo" or "letterhead".'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        old_url = school.logo if asset_type == 'logo' else school.letterhead_url
+        if old_url:
+            old_path = storage_service._extract_storage_path(old_url)
+            if old_path:
+                storage_service.delete_file(old_path)
+
+        if asset_type == 'logo':
+            school.logo = None
+            school.save(update_fields=['logo', 'updated_at'])
+        else:
+            school.letterhead_url = None
+            school.save(update_fields=['letterhead_url', 'updated_at'])
+
+        return Response({
+            'message': f'{asset_type.capitalize()} deleted successfully.'
         })
 
     # Module step definitions: (step_label, app_label, model_name, filter_kwargs, link)

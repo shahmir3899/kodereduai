@@ -45,6 +45,9 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | GET | /api/schools/current/ | Current school detail |
 | GET/PUT | /api/schools/mark_mappings/ | Mark mappings config |
 | GET/PUT | /api/schools/register_config/ | Register layout config |
+| GET/PUT | /api/schools/exam_config/ | Exam configuration (weighted average toggle). PUT body: `{weighted_average_enabled: bool}`. Admin only |
+| POST | /api/schools/upload_asset/ | Upload school logo or letterhead. FormData: `file` (image) + `asset_type` ('logo'\|'letterhead'). Max 5MB, JPG/PNG/WebP/SVG. Admin only |
+| DELETE | /api/schools/delete_asset/?asset_type=logo | Delete school logo or letterhead from storage. Admin only |
 | GET | /api/schools/completion/ | School setup completion timeline with per-module progress |
 
 ## Classes
@@ -239,7 +242,7 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | GET/POST | /api/examinations/exams/ | academic_year, exam_type | POST auto-creates ExamSubjects from class's assigned subjects |
 | POST | /api/examinations/exams/{id}/publish/ | |
 | POST | /api/examinations/exams/{id}/generate-comments/ | Generate AI report card comments. Body: {force: bool}. force=true regenerates all |
-| GET | /api/examinations/exams/{id}/results/ | Now includes ai_comment per mark |
+| GET | /api/examinations/exams/{id}/results/ | Includes ai_comment per mark |
 | GET | /api/examinations/exams/{id}/class_summary/ | |
 | GET/POST | /api/examinations/exam-subjects/ | exam, class_obj |
 | GET/POST | /api/examinations/marks/ | exam_subject, student |
@@ -247,7 +250,8 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | GET | /api/examinations/marks/by_student/ | student_id |
 | GET | /api/examinations/marks/download_template/ | exam_subject_id |
 | GET/POST | /api/examinations/grade-scales/ | |
-| GET | /api/examinations/report-card/ | student_id, academic_year_id. Now includes ai_comment per mark |
+| GET | /api/examinations/exams/{id}/results/ | Now includes `exam_type_weight` in response |
+| GET | /api/examinations/report-card/ | student_id, academic_year_id, term_id. Returns flat `subjects` array with per-subject grade/pass/fail, `grade_scales` array, `calculation_mode` (simple\|weighted). Supports per-school weighted average via `exam_config` |
 
 ## Notifications
 | Method | URL | Description |
@@ -317,9 +321,19 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 ## LMS
 | Method | URL | Description |
 |--------|-----|-------------|
-| GET/POST | /api/lms/lesson-plans/ | Lesson plans |
+| GET/POST | /api/lms/books/ | Books. Params: class_id, subject_id, language |
+| GET | /api/lms/books/{id}/tree/ | Full curriculum tree (book + chapters + topics) |
+| POST | /api/lms/books/{id}/bulk_toc/ | Bulk create chapters/topics from pasted TOC. Body: {toc_text} |
+| POST | /api/lms/books/{id}/ocr_toc/ | OCR a TOC page image → extracted text. FormData: image (JPEG/PNG/WebP). Returns {text, language} |
+| GET | /api/lms/books/for_class_subject/ | Books for class+subject. Params: class_id, subject_id |
+| GET | /api/lms/books/syllabus_progress/ | Topic coverage progress. Params: class_id, subject_id |
+| GET/POST | /api/lms/chapters/ | Chapters. Params: book_id |
+| GET/POST | /api/lms/topics/ | Topics. Params: chapter_id, book_id |
+| GET/POST | /api/lms/lesson-plans/ | Lesson plans. Params: class_id, subject_id, teacher_id, status, academic_year |
 | GET | /api/lms/lesson-plans/by_class/ | Params: class_id |
-| GET/POST | /api/lms/assignments/ | Assignments |
+| POST | /api/lms/lesson-plans/{id}/publish/ | Publish lesson plan |
+| POST | /api/lms/lesson-plans/generate/ | AI-generate lesson plan. Body: {topic_ids, lesson_date, duration_minutes} |
+| GET/POST | /api/lms/assignments/ | Assignments. Params: class_obj, subject, status, assignment_type |
 | POST | /api/lms/assignments/{id}/publish/ | Publish |
 | POST | /api/lms/assignments/{id}/close/ | Close |
 | GET | /api/lms/assignments/{id}/submissions/ | Submissions for assignment |

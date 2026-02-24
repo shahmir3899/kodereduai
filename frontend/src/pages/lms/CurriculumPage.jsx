@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { lmsApi, academicsApi } from '../../services/api'
-import api from '../../services/api'
+import { lmsApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import { useToast } from '../../components/Toast'
 import RTLWrapper, { isRTLLanguage } from '../../components/RTLWrapper'
+import ClassSelector from '../../components/ClassSelector'
+import SubjectSelector from '../../components/SubjectSelector'
 
 const LANGUAGES = [
   { value: 'en', label: 'English' },
@@ -69,21 +70,12 @@ export default function CurriculumPage() {
 
   const [showTocModal, setShowTocModal] = useState(false)
   const [tocText, setTocText] = useState('')
+  const [tocMode, setTocMode] = useState('paste')
+  const [tocImageFile, setTocImageFile] = useState(null)
+  const [tocImagePreview, setTocImagePreview] = useState(null)
+  const [ocrLoading, setOcrLoading] = useState(false)
 
   // ---- Queries ----
-
-  const { data: classesData } = useQuery({
-    queryKey: ['classes'],
-    queryFn: () => api.get('/api/classes/', { params: { page_size: 9999 } }),
-  })
-
-  const { data: subjectsData } = useQuery({
-    queryKey: ['subjects'],
-    queryFn: () => academicsApi.getSubjects({ page_size: 9999 }),
-  })
-
-  const classes = classesData?.data?.results || classesData?.data || []
-  const subjects = subjectsData?.data?.results || subjectsData?.data || []
 
   const { data: booksData, isLoading: booksLoading } = useQuery({
     queryKey: ['lmsBooks', selectedClass, selectedSubject],
@@ -322,12 +314,21 @@ export default function CurriculumPage() {
 
   const openTocModal = () => {
     setTocText('')
+    setTocMode('paste')
+    setTocImageFile(null)
+    setTocImagePreview(null)
+    setOcrLoading(false)
     setShowTocModal(true)
   }
 
   const closeTocModal = () => {
     setShowTocModal(false)
     setTocText('')
+    setTocMode('paste')
+    setTocImageFile(null)
+    if (tocImagePreview) URL.revokeObjectURL(tocImagePreview)
+    setTocImagePreview(null)
+    setOcrLoading(false)
   }
 
   // ---- Submit Handlers ----
@@ -391,6 +392,41 @@ export default function CurriculumPage() {
       return
     }
     bulkTocMutation.mutate({ id: selectedBookId, data: { toc_text: tocText } })
+  }
+
+  const handleTocImageSelect = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const allowed = ['image/jpeg', 'image/png', 'image/webp']
+    if (!allowed.includes(file.type)) {
+      showError('Please select a JPEG, PNG, or WebP image')
+      return
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      showError('Image too large. Maximum size is 10MB.')
+      return
+    }
+    setTocImageFile(file)
+    if (tocImagePreview) URL.revokeObjectURL(tocImagePreview)
+    setTocImagePreview(URL.createObjectURL(file))
+  }
+
+  const handleOcrExtract = async () => {
+    if (!tocImageFile) {
+      showError('Please select an image first')
+      return
+    }
+    setOcrLoading(true)
+    try {
+      const response = await lmsApi.ocrTOC(selectedBookId, tocImageFile)
+      setTocText(response.data.text)
+      setTocMode('paste')
+      showSuccess('Text extracted! Review and edit before importing.')
+    } catch (error) {
+      showError(error.response?.data?.error || 'Failed to extract text from image')
+    } finally {
+      setOcrLoading(false)
+    }
   }
 
   const handleDeleteBook = (book) => {
@@ -465,39 +501,25 @@ export default function CurriculumPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
           <div>
             <label className="label">Class</label>
-            <select
-              className="input"
+            <ClassSelector
               value={selectedClass}
               onChange={(e) => {
                 setSelectedClass(e.target.value)
                 setSelectedBookId(null)
               }}
-            >
-              <option value="">Select Class</option>
-              {classes.map((cls) => (
-                <option key={cls.id} value={cls.id}>
-                  {cls.name}
-                </option>
-              ))}
-            </select>
+              placeholder="Select Class"
+            />
           </div>
           <div>
             <label className="label">Subject</label>
-            <select
-              className="input"
+            <SubjectSelector
               value={selectedSubject}
               onChange={(e) => {
                 setSelectedSubject(e.target.value)
                 setSelectedBookId(null)
               }}
-            >
-              <option value="">Select Subject</option>
-              {subjects.map((sub) => (
-                <option key={sub.id} value={sub.id}>
-                  {sub.name}
-                </option>
-              ))}
-            </select>
+              placeholder="Select Subject"
+            />
           </div>
         </div>
       </div>
@@ -1011,31 +1033,122 @@ export default function CurriculumPage() {
           <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
             <h2 className="text-xl font-bold text-gray-900 mb-2">Import Table of Contents</h2>
             <p className="text-sm text-gray-500 mb-4">
-              Paste the table of contents below. Each line should represent a chapter or topic.
-              The system will parse the structure automatically.
+              Upload a photo of the book's TOC page, or type/paste the text manually.
             </p>
 
-            <div>
-              <textarea
-                className="input font-mono text-sm"
-                rows={12}
-                placeholder={"Chapter 1: Introduction\n  1.1 Overview\n  1.2 Background\nChapter 2: Fundamentals\n  2.1 Key Concepts\n  2.2 Applications"}
-                value={tocText}
-                onChange={(e) => setTocText(e.target.value)}
-              />
+            {/* Mode Toggle Tabs */}
+            <div className="flex border-b border-gray-200 mb-4">
+              <button
+                onClick={() => setTocMode('paste')}
+                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                  tocMode === 'paste'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Type / Paste
+              </button>
+              <button
+                onClick={() => setTocMode('upload')}
+                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                  tocMode === 'upload'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Upload Photo
+              </button>
             </div>
 
+            {/* Upload Photo Mode */}
+            {tocMode === 'upload' && (
+              <div>
+                {!tocImagePreview ? (
+                  <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors">
+                    <svg className="w-10 h-10 text-gray-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    <span className="text-sm text-gray-500">Click to select or take a photo of the TOC page</span>
+                    <span className="text-xs text-gray-400 mt-1">JPEG, PNG, or WebP (max 10MB)</span>
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      capture="environment"
+                      onChange={handleTocImageSelect}
+                      className="hidden"
+                    />
+                  </label>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="relative rounded-lg overflow-hidden border border-gray-200">
+                      <img
+                        src={tocImagePreview}
+                        alt="TOC page preview"
+                        className="w-full max-h-64 object-contain bg-gray-50"
+                      />
+                      <button
+                        onClick={() => {
+                          setTocImageFile(null)
+                          if (tocImagePreview) URL.revokeObjectURL(tocImagePreview)
+                          setTocImagePreview(null)
+                        }}
+                        className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
+                        title="Remove image"
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                    <button
+                      onClick={handleOcrExtract}
+                      disabled={ocrLoading}
+                      className="btn btn-primary w-full"
+                    >
+                      {ocrLoading ? (
+                        <span className="flex items-center justify-center gap-2">
+                          <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                          </svg>
+                          Extracting text...
+                        </span>
+                      ) : 'Extract Text from Image'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Type/Paste Mode */}
+            {tocMode === 'paste' && (
+              <div>
+                <textarea
+                  className="input font-mono text-sm"
+                  rows={12}
+                  dir={isRTLLanguage(bookTree?.language) ? 'rtl' : 'ltr'}
+                  placeholder={"Chapter 1: Introduction\n  1.1 Overview\n  1.2 Background\nChapter 2: Fundamentals\n  2.1 Key Concepts\n  2.2 Applications"}
+                  value={tocText}
+                  onChange={(e) => setTocText(e.target.value)}
+                />
+              </div>
+            )}
+
+            {/* Action Buttons */}
             <div className="flex justify-end space-x-3 mt-6">
               <button onClick={closeTocModal} className="btn btn-secondary">
                 Cancel
               </button>
-              <button
-                onClick={handleTocSubmit}
-                disabled={bulkTocMutation.isPending}
-                className="btn btn-primary"
-              >
-                {bulkTocMutation.isPending ? 'Importing...' : 'Import'}
-              </button>
+              {tocMode === 'paste' && (
+                <button
+                  onClick={handleTocSubmit}
+                  disabled={bulkTocMutation.isPending || !tocText.trim()}
+                  className="btn btn-primary"
+                >
+                  {bulkTocMutation.isPending ? 'Importing...' : 'Import'}
+                </button>
+              )}
             </div>
           </div>
         </div>

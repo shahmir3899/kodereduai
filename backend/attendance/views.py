@@ -918,7 +918,7 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
         else:
             classes = Class.objects.none()
 
-        data = [{'id': c.id, 'name': c.name} for c in classes.order_by('name')]
+        data = [{'id': c.id, 'name': c.name, 'section': c.section} for c in classes.order_by('grade_level', 'section', 'name')]
         return Response(data)
 
     @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated, CanManualAttendance])

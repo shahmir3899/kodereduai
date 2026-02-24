@@ -1,8 +1,9 @@
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { lmsApi, academicsApi, hrApi } from '../../services/api'
+import { lmsApi, hrApi } from '../../services/api'
 import { useClasses } from '../../hooks/useClasses'
 import ClassSelector from '../../components/ClassSelector'
+import SubjectSelector from '../../components/SubjectSelector'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useToast } from '../../components/Toast'
@@ -46,11 +47,6 @@ export default function LessonPlansPage() {
 
   const { classes } = useClasses()
 
-  const { data: subjectsData } = useQuery({
-    queryKey: ['subjects'],
-    queryFn: () => academicsApi.getSubjects({ page_size: 9999 }),
-  })
-
   const { data: staffData } = useQuery({
     queryKey: ['hrStaff'],
     queryFn: () => hrApi.getStaff({ status: 'ACTIVE', page_size: 9999 }),
@@ -67,7 +63,6 @@ export default function LessonPlansPage() {
       }),
   })
 
-  const subjects = subjectsData?.data?.results || subjectsData?.data || []
   const staff = staffData?.data?.results || staffData?.data || []
   const allPlans = plansData?.data?.results || plansData?.data || []
 
@@ -239,18 +234,12 @@ export default function LessonPlansPage() {
           </div>
           <div>
             <label className="label">Subject</label>
-            <select
-              className="input"
+            <SubjectSelector
               value={filterSubject}
               onChange={(e) => setFilterSubject(e.target.value)}
-            >
-              <option value="">All Subjects</option>
-              {subjects.map((sub) => (
-                <option key={sub.id} value={sub.id}>
-                  {sub.name}
-                </option>
-              ))}
-            </select>
+              showAllOption
+              allOptionLabel="All Subjects"
+            />
           </div>
           <div>
             <label className="label">Search</label>
@@ -489,18 +478,12 @@ export default function LessonPlansPage() {
                 </div>
                 <div>
                   <label className="label">Subject *</label>
-                  <select
-                    className="input"
+                  <SubjectSelector
                     value={form.subject}
                     onChange={(e) => setForm({ ...form, subject: e.target.value })}
-                  >
-                    <option value="">Select Subject</option>
-                    {subjects.map((sub) => (
-                      <option key={sub.id} value={sub.id}>
-                        {sub.name}
-                      </option>
-                    ))}
-                  </select>
+                    placeholder="Select Subject"
+                    required
+                  />
                 </div>
               </div>
 

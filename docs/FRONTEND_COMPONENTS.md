@@ -90,7 +90,14 @@ Complex page broken into:
 - **feeExport.js** — PDF/Excel export utilities
 
 ## Reusable Components (src/components/)
+- **ClassSelector.jsx** — Reusable class dropdown. Uses `useClasses()` hook for data fetching/caching. Props: value, onChange, placeholder, showAllOption, allOptionLabel, className, disabled, required, classes (external override), schoolId. Displays `name - section` format
+- **SubjectSelector.jsx** — Reusable subject dropdown. Uses `useSubjects()` hook for data fetching/caching. Same prop interface as ClassSelector. Displays subject name
+- **RTLWrapper.jsx** — Wraps content with `dir="rtl"` for RTL languages (ur, ar, sd, ps). Exports `isRTLLanguage()` helper
 - **SearchableSelect.jsx** — Zero-dependency searchable dropdown. Text-input filtering, keyboard navigation (Arrow keys, Enter, Escape), click-outside close, loading/disabled/clear states. Used in CreateSingleFeeModal for student selection
+
+## Custom Hooks (src/hooks/)
+- **useClasses.js** — Fetches and caches classes via `classesApi.getClasses()`. Returns `{ classes, isLoading, error }`
+- **useSubjects.js** — Fetches and caches subjects via `academicsApi.getSubjects()`. Returns `{ subjects, isLoading, error }`
 
 ## Utility Files
 - **studentExport.js** — PDF/PNG export for student lists

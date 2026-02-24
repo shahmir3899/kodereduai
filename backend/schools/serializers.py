@@ -18,10 +18,10 @@ class SchoolSerializer(serializers.ModelSerializer):
     class Meta:
         model = School
         fields = [
-            'id', 'name', 'subdomain', 'logo',
+            'id', 'name', 'subdomain', 'logo', 'letterhead_url',
             'address', 'contact_email', 'contact_phone',
             'whatsapp_sender_id', 'enabled_modules',
-            'mark_mappings', 'register_config',
+            'mark_mappings', 'register_config', 'exam_config',
             'organization', 'organization_name',
             'is_active', 'user_count', 'student_count',
             'created_at', 'updated_at'
@@ -106,7 +106,7 @@ class SchoolCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = School
         fields = [
-            'name', 'subdomain', 'logo',
+            'name', 'subdomain', 'logo', 'letterhead_url',
             'address', 'contact_email', 'contact_phone',
             'whatsapp_sender_id', 'enabled_modules', 'organization'
         ]

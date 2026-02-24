@@ -98,6 +98,63 @@ class SupabaseStorageService:
             logger.error(f"Failed to upload to Supabase: {error_msg}")
             raise Exception(f"Failed to upload image: {error_msg}")
 
+    def upload_school_asset(self, file, school_id: int, asset_type: str) -> str:
+        """
+        Upload a school asset (logo or letterhead) to Supabase Storage.
+
+        Args:
+            file: File object from request
+            school_id: School ID for organizing files
+            asset_type: One of 'logo' or 'letterhead'
+
+        Returns:
+            str: Public URL of uploaded file
+        """
+        if not self.is_configured():
+            raise Exception("Supabase storage not configured")
+
+        if asset_type not in ('logo', 'letterhead'):
+            raise ValueError(f"Invalid asset type: {asset_type}")
+
+        extension = file.name.split('.')[-1].lower() if '.' in file.name else 'png'
+        filename = f"school-assets/{school_id}/{asset_type}.{extension}"
+
+        try:
+            file_content = file.read()
+            content_type = getattr(file, 'content_type', 'image/png')
+
+            logger.info(f"Uploading school asset: {filename} ({len(file_content)} bytes)")
+
+            # Try to remove existing file first (may not exist, that's OK)
+            try:
+                self.client.storage.from_(self.bucket).remove([filename])
+            except Exception:
+                pass
+
+            self.client.storage.from_(self.bucket).upload(
+                path=filename,
+                file=file_content,
+                file_options={"content-type": content_type}
+            )
+
+            public_url = self.client.storage.from_(self.bucket).get_public_url(filename)
+            logger.info(f"Successfully uploaded school asset: {filename}")
+            return public_url
+
+        except Exception as e:
+            logger.error(f"Failed to upload school asset: {e}")
+            raise Exception(f"Failed to upload {asset_type}: {e}")
+
+    def _extract_storage_path(self, public_url: str):
+        """Extract the storage path from a Supabase public URL."""
+        if not public_url:
+            return None
+        marker = f"/object/public/{self.bucket}/"
+        idx = public_url.find(marker)
+        if idx == -1:
+            return None
+        return public_url[idx + len(marker):]
+
     def delete_file(self, file_path: str) -> bool:
         """
         Delete a file from Supabase Storage.

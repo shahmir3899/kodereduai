@@ -38,7 +38,7 @@ The `/dashboard` route uses **DashboardRouter.jsx** to render a role-specific da
 |-------|-----------|-------------|-----------|
 | /dashboard | DashboardRouter.jsx → role-specific | See above | Varies by role |
 | /profile | ProfilePage.jsx | User profile edit | GET/PATCH /api/auth/me/ |
-| /settings | SettingsPage.jsx | School settings | GET/PUT /api/schools/current/ |
+| /settings | SettingsPage.jsx | Tabs: School Profile (logo/letterhead upload, exam weighted average toggle), Finance Accounts, Users | GET /api/schools/current/, POST upload_asset/, DELETE delete_asset/, PUT /api/schools/exam_config/, GET/POST /api/finance/accounts/, GET/POST /api/users/ |
 | /notifications | NotificationsPage.jsx | Notification center. Settings tab includes: Notification Channels (WhatsApp/SMS/In-App toggles), Automated Notifications (per-trigger toggles with timing badges for absence, fee reminders, fee overdue, exam results, daily summary), Scheduling & Timing (smart scheduling, fee reminder day, quiet hours) | GET /api/notifications/my/, GET/PUT /api/notifications/config/ |
 | /admin | SuperAdminDashboard.jsx | Super admin only — all schools overview | GET /api/admin/schools/, platform_stats/ |
 
@@ -69,10 +69,11 @@ Redirects: /attendance/upload, /attendance/review, /attendance/records → remap
 | /academics/exams | ExamsPage.jsx | Exam management | GET/POST exams/ |
 | /academics/marks-entry | MarksEntryPage.jsx | Marks data entry | GET exams/, exam-subjects/, marks/, students/; POST marks/bulk_entry/ |
 | /academics/results | ResultsPage.jsx | Results view with expandable AI report card comments. Generate/Regenerate AI Comments button | GET exams/{id}/results/, POST exams/{id}/generate-comments/ |
-| /academics/report-cards | ReportCardPage.jsx | Report cards | GET report-card/ |
+| /academics/report-cards | ReportCardPage.jsx | Report cards with class filter (ClassSelector), student search, Download PDF button (school logo + marks table + grade scale). Uses reportCardExport.js | GET report-card/, GET /api/schools/current/, GET /api/classes/ |
 | /academics/grade-scale | GradeScalePage.jsx | Grade scale config | GET/POST grade-scales/ |
-| /academics/lesson-plans | LessonPlansPage.jsx | Lesson plans | GET/POST lesson-plans/ |
-| /academics/assignments | AssignmentsPage.jsx | Assignments | GET/POST assignments/ |
+| /academics/curriculum | CurriculumPage.jsx | Curriculum management (Book → Chapter → Topic). Class + Subject filters, book list, chapter accordion with topics, syllabus progress bar. Import TOC via paste or OCR photo upload. RTL language support (Urdu, Arabic, Sindhi, Pashto) | GET/POST books/, books/{id}/tree/, books/{id}/bulk_toc/, books/{id}/ocr_toc/, chapters/, topics/, books/syllabus_progress/ |
+| /academics/lesson-plans | LessonPlansPage.jsx | Lesson plans with SubjectSelector filter | GET/POST lesson-plans/ |
+| /academics/assignments | AssignmentsPage.jsx | Assignments with SubjectSelector filter | GET/POST assignments/ |
 | /academics/assignments/:id/submissions | SubmissionReviewPage.jsx | Review submissions | GET submissions/ |
 | /academics/sessions | AcademicYearsPage.jsx | Academic year/term management | GET/POST academic-years/, terms/ |
 | /academics/promotion | PromotionPage.jsx | Student promotion | GET promotion-advisor/, POST bulk_promote/ |

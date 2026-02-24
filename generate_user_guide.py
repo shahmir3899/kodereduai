@@ -4,11 +4,14 @@ Generates a professional PDF user guide covering all modules and workflows.
 
 Source: generate_user_guide.py (project root)
 Output: KoderEduAI_User_Guide.pdf (project root)
+        frontend/src/data/userGuide.json (for in-app guide)
 Run:    python generate_user_guide.py
 """
 
 from fpdf import FPDF
 import os
+import json
+from datetime import datetime, timezone
 
 class UserGuidePDF(FPDF):
     def __init__(self):
@@ -18,6 +21,12 @@ class UserGuidePDF(FPDF):
         self.section_num = 0
         self.step_counter = 0
         self.toc_entries = []
+        # JSON collection state (for in-app guide)
+        self.json_chapters = []
+        self.json_current_chapter = None
+        self.json_current_section = None
+        self.json_step_counter = 0
+        self.json_modules = []
 
     def header(self):
         if self.page_no() > 1:
@@ -34,6 +43,24 @@ class UserGuidePDF(FPDF):
         self.set_font("Helvetica", "I", 7)
         self.set_text_color(150, 150, 150)
         self.cell(0, 10, "Confidential - For Internal Use Only", align="C")
+
+    @staticmethod
+    def _make_slug(title):
+        slug = title.lower()
+        slug = ''.join(c if c.isalnum() or c == ' ' else '' for c in slug).strip()
+        slug = '-'.join(slug.split())
+        return slug
+
+    def _ensure_json_section(self):
+        """Create implicit intro section if content is added before any section_title."""
+        if self.json_current_section is None and self.json_current_chapter is not None:
+            self.json_current_section = {
+                "id": f"{self.chapter_num}.0",
+                "title": "Introduction",
+                "slug": "introduction",
+                "content": []
+            }
+            self.json_current_chapter["sections"].insert(0, self.json_current_section)
 
     def cover_page(self):
         self.add_page()
@@ -67,6 +94,7 @@ class UserGuidePDF(FPDF):
             "AI Intelligence: Adaptive Thresholds | Drift Detection | Anomaly Alerts",
             "Pipeline Fallback | OR-Tools Timetable | AI Report Comments | Smart Scheduling"
         ]
+        self.json_modules = modules  # store for JSON export
         self.set_font("Helvetica", "I", 9)
         for m in modules:
             self.cell(0, 6, m, align="C", new_x="LMARGIN", new_y="NEXT")
@@ -105,6 +133,16 @@ class UserGuidePDF(FPDF):
         self.set_draw_color(200, 200, 200)
         self.line(10, self.get_y(), 200, self.get_y())
         self.ln(8)
+        # JSON tracking
+        self.json_current_chapter = {
+            "id": self.chapter_num,
+            "title": title,
+            "slug": self._make_slug(title),
+            "sections": []
+        }
+        self.json_chapters.append(self.json_current_chapter)
+        self.json_current_section = None
+        self.json_step_counter = 0
 
     def section_title(self, title):
         self.section_num += 1
@@ -120,6 +158,16 @@ class UserGuidePDF(FPDF):
         self.set_draw_color(40, 90, 160)
         self.line(10, self.get_y(), 80, self.get_y())
         self.ln(5)
+        # JSON tracking
+        self.json_current_section = {
+            "id": f"{self.chapter_num}.{self.section_num}",
+            "title": title,
+            "slug": self._make_slug(title),
+            "content": []
+        }
+        if self.json_current_chapter:
+            self.json_current_chapter["sections"].append(self.json_current_section)
+        self.json_step_counter = 0
 
     def sub_section(self, title):
         if self.get_y() > 250:
@@ -129,12 +177,18 @@ class UserGuidePDF(FPDF):
         self.set_text_color(60, 60, 60)
         self.cell(0, 8, title, new_x="LMARGIN", new_y="NEXT")
         self.ln(2)
+        self._ensure_json_section()
+        if self.json_current_section:
+            self.json_current_section["content"].append({"type": "sub_section", "title": title})
 
     def body_text(self, text):
         self.set_font("Helvetica", "", 10)
         self.set_text_color(50, 50, 50)
         self.multi_cell(0, 6, text)
         self.ln(3)
+        self._ensure_json_section()
+        if self.json_current_section:
+            self.json_current_section["content"].append({"type": "body_text", "text": text})
 
     def step(self, text):
         self.step_counter += 1
@@ -155,6 +209,10 @@ class UserGuidePDF(FPDF):
         self.set_text_color(50, 50, 50)
         self.multi_cell(170, 6, text)
         self.ln(2)
+        self.json_step_counter += 1
+        self._ensure_json_section()
+        if self.json_current_section:
+            self.json_current_section["content"].append({"type": "step", "number": self.json_step_counter, "text": text})
 
     def bullet(self, text, indent=15):
         if self.get_y() > 265:
@@ -166,6 +224,9 @@ class UserGuidePDF(FPDF):
         self.cell(3, 5, "-")
         self.multi_cell(170 - indent, 5, f"  {text}")
         self.ln(1)
+        self._ensure_json_section()
+        if self.json_current_section:
+            self.json_current_section["content"].append({"type": "bullet", "text": text})
 
     def info_box(self, title, text):
         if self.get_y() > 240:
@@ -186,6 +247,9 @@ class UserGuidePDF(FPDF):
         self.set_draw_color(40, 90, 160)
         self.rect(15, y_start, 175, y_end - y_start)
         self.ln(5)
+        self._ensure_json_section()
+        if self.json_current_section:
+            self.json_current_section["content"].append({"type": "info_box", "title": title, "text": text})
 
     def warning_box(self, text):
         if self.get_y() > 240:
@@ -205,6 +269,9 @@ class UserGuidePDF(FPDF):
         self.set_draw_color(180, 120, 0)
         self.rect(15, y_start, 175, y_end - y_start)
         self.ln(5)
+        self._ensure_json_section()
+        if self.json_current_section:
+            self.json_current_section["content"].append({"type": "warning_box", "text": text})
 
     def nav_path(self, path):
         """Show navigation breadcrumb"""
@@ -214,6 +281,9 @@ class UserGuidePDF(FPDF):
         self.set_text_color(100, 100, 100)
         self.cell(0, 6, f"Navigate to:  {path}", new_x="LMARGIN", new_y="NEXT")
         self.ln(2)
+        self._ensure_json_section()
+        if self.json_current_section:
+            self.json_current_section["content"].append({"type": "nav_path", "path": path})
 
     def simple_table(self, headers, rows, col_widths=None):
         if self.get_y() > 230:
@@ -252,6 +322,13 @@ class UserGuidePDF(FPDF):
             self.ln()
             fill = not fill
         self.ln(5)
+        self._ensure_json_section()
+        if self.json_current_section:
+            self.json_current_section["content"].append({
+                "type": "table",
+                "headers": headers,
+                "rows": [[str(cell) for cell in row] for row in rows]
+            })
 
 
 def build_guide():
@@ -285,7 +362,6 @@ def build_guide():
     pdf.simple_table(
         ["Role", "Access Level", "Description"],
         [
-            ["Super Admin", "Platform-wide", "Creates schools & School Admin accounts"],
             ["School Admin", "Full School", "Full access; can create users within their school"],
             ["Principal", "School-wide", "School operations; can create staff-level users"],
             ["Teacher", "Assigned Classes", "Attendance, marks entry, lesson plans"],
@@ -308,7 +384,7 @@ def build_guide():
     pdf.step("Enter your username/email and password on the Login page.")
     pdf.step("Click 'Sign In' to access your dashboard.")
     pdf.step("If you manage multiple schools, use the School Switcher (top bar) to select the active school.")
-    pdf.info_box("First-Time Setup", "Your School Admin account is created by the Super Admin. "
+    pdf.info_box("First-Time Setup", "Your School Admin account is pre-configured for you. "
                  "Once you receive your credentials, log in and follow the Initial Setup steps in Chapter 2. "
                  "You can then create other users from Settings > Users tab.")
 
@@ -424,6 +500,26 @@ def build_guide():
         [15, 60, 55, 60]
     )
 
+    pdf.section_title("Module Dependency Reference")
+    pdf.body_text("Use this table to understand what must be set up before each feature works:")
+    pdf.simple_table(
+        ["Module / Feature", "Depends On"],
+        [
+            ["Attendance", "Classes, Students"],
+            ["Face Attendance", "Classes, Students, Enrolled Faces"],
+            ["Timetable", "Subjects assigned to classes"],
+            ["Exams & Marks", "Academic Year, Terms, Classes, Subjects"],
+            ["Report Cards", "Published exam results"],
+            ["Fee Collection", "Fee Structures, Finance Accounts"],
+            ["Payroll", "Staff, Salary Structures"],
+            ["Transport", "Routes, Vehicles, Students"],
+            ["Library Issues", "Books in Catalog, Students/Staff"],
+            ["Hostel", "Hostels, Rooms, Students"],
+            ["LMS", "Subjects assigned to classes"],
+        ],
+        [55, 135]
+    )
+
     # =========================================================================
     # CHAPTER 3: ATTENDANCE MODULE
     # =========================================================================
@@ -519,23 +615,11 @@ def build_guide():
     pdf.step("The enrolled student appears in the right panel with a quality score percentage.")
     pdf.step("Repeat for all students in the class.")
 
-    pdf.info_box("Photo Tips for Enrollment",
+    pdf.info_box("Photo Tips",
                  "Use a clear, well-lit portrait photo with the student facing the camera. "
-                 "Avoid group photos, sunglasses, or heavy shadows. The photo must contain exactly "
-                 "one face. Quality score above 70% is recommended for reliable matching.")
-
-    pdf.sub_section("Enrollment Summary")
-    pdf.body_text(
-        "The right panel shows all enrolled students for the selected class with their quality scores. "
-        "At the bottom, a summary shows how many students are enrolled vs. total, highlighting any "
-        "missing enrollments in orange. Students already enrolled show '[enrolled]' next to their name "
-        "in the student dropdown."
-    )
-
-    pdf.sub_section("Removing an Enrollment")
-    pdf.step("In the enrolled faces list (right panel), click 'Remove' next to the student.")
-    pdf.step("Confirm the removal in the dialog. The enrollment is deactivated (soft delete).")
-    pdf.step("You can re-enroll the student with a new photo if needed.")
+                 "Avoid group photos, sunglasses, or heavy shadows. Quality score above 70% is recommended. "
+                 "The right panel shows all enrolled students with quality scores. "
+                 "To remove an enrollment, click 'Remove' next to the student and confirm.")
 
     pdf.section_title("Step 2: Capture Class Photo")
     pdf.nav_path("Sidebar > Attendance > Face Attendance > Capture Tab")
@@ -550,69 +634,26 @@ def build_guide():
     pdf.step("Click 'Process Attendance'. The photo is uploaded and the AI begins processing.")
     pdf.step("You are automatically navigated to the Review page.")
 
-    pdf.warning_box(
-        "If you see a red banner saying 'Face recognition library is not installed', contact your "
-        "system administrator. The server needs the dlib and face_recognition Python libraries installed."
-    )
-
-    pdf.sub_section("Status Banners")
-    pdf.body_text("The main page shows helpful banners based on the current state:")
-    pdf.bullet("Red banner: Face recognition library not available on server")
-    pdf.bullet("Yellow banner: No students enrolled yet (with link to enrollment page)")
-    pdf.bullet("Blue banner: Sessions pending review (with 'Review Now' button)")
-
     pdf.section_title("Step 3: Review Detected Faces")
     pdf.nav_path("Sidebar > Attendance > Face Attendance > Review Page")
     pdf.body_text(
-        "After processing, the Review page shows the AI's results. The page auto-refreshes every "
-        "3 seconds while processing is in progress."
+        "After processing (10-30 seconds), the Review page shows three sections: the captured photo, "
+        "a grid of detected face thumbnails with match info, and the Class Roll with present/absent toggles. "
+        "The page auto-refreshes while processing."
     )
-
-    pdf.sub_section("Processing State")
-    pdf.body_text(
-        "While the AI is working, you see a spinner with 'Processing Faces...' and a message that "
-        "it usually takes 10-30 seconds. The page auto-refreshes until results are ready."
-    )
-
-    pdf.sub_section("Review Layout")
-    pdf.body_text("Once processing completes, the page shows three sections:")
-    pdf.bullet("Captured Image: The original group photo you uploaded")
-    pdf.bullet("Detected Faces: Grid of cropped face thumbnails with match information")
-    pdf.bullet("Class Roll: List of all students in the class with present/absent toggles")
-
-    pdf.sub_section("Detected Faces Grid")
-    pdf.body_text("Each detected face shows:")
-    pdf.bullet("Face crop thumbnail (auto-generated from the group photo)")
-    pdf.bullet("Matched student name (or 'Unknown' if not matched)")
-    pdf.bullet("Confidence percentage")
-    pdf.bullet("Color-coded status badge:")
-
     pdf.simple_table(
         ["Badge", "Color", "Meaning"],
         [
             ["Auto", "Green", "High-confidence match (auto-accepted)"],
-            ["Review", "Yellow", "Medium-confidence match (needs your review)"],
+            ["Review", "Yellow", "Medium-confidence (needs your review)"],
             ["Manual", "Blue", "Manually matched by you"],
-            ["Ignored", "Gray", "Low-confidence, no match found"],
-            ["Removed", "Red", "You removed this detection"],
+            ["Ignored", "Gray", "No match found"],
         ],
         [35, 35, 120]
     )
-
-    pdf.body_text(
-        "You can remove incorrect detections by clicking the red X button on each face card."
-    )
-
-    pdf.sub_section("Class Roll Call")
-    pdf.body_text(
-        "The Class Roll section lists all students in the class. Students matched by the AI are "
-        "automatically marked as Present (green 'P' badge). Unmatched students are marked Absent "
-        "(gray 'A' badge). The summary shows the count: e.g., '2 present / 2 absent'."
-    )
-    pdf.step("Review the auto-matched results in the Detected Faces grid.")
-    pdf.step("In the Class Roll, click on any student to toggle between Present and Absent.")
-    pdf.step("Students with 'matched' tag were detected in the photo.")
-    pdf.step("Students with 'no face' tag have not been enrolled yet (cannot be auto-matched).")
+    pdf.step("Review the detected faces grid. Remove incorrect detections with the red X button.")
+    pdf.step("In the Class Roll, click any student to toggle Present/Absent. "
+             "AI-matched students are auto-marked Present; unmatched are marked Absent.")
 
     pdf.section_title("Step 4: Confirm Attendance")
     pdf.step("After reviewing and adjusting the present/absent selections, click 'Confirm Attendance'.")
@@ -630,18 +671,6 @@ def build_guide():
     pdf.step("View all past sessions with class name, date, face count, and status badge.")
     pdf.step("Click any session to open the Review page (view confirmed results or review pending ones).")
     pdf.body_text("Session statuses: Processing (blue), Needs Review (yellow), Confirmed (green), Failed (red).")
-
-    pdf.section_title("Face Attendance Workflow Summary")
-    pdf.simple_table(
-        ["Step", "What to Do", "Where", "Frequency"],
-        [
-            ["1", "Enroll student faces", "Manage Enrollments", "One-time per student"],
-            ["2", "Capture class group photo", "Capture tab", "Daily"],
-            ["3", "Review AI-matched faces", "Review page", "Daily"],
-            ["4", "Confirm attendance", "Review page", "Daily"],
-        ],
-        [15, 50, 55, 70]
-    )
 
     pdf.section_title("Match Confidence Thresholds")
     pdf.body_text(
@@ -792,11 +821,24 @@ def build_guide():
 
     pdf.section_title("Step 6: Generate Report Cards")
     pdf.nav_path("Sidebar > Academics > Examinations > Report Cards")
-    pdf.step("Select the Academic Year, Term, and Class.")
-    pdf.step("Choose individual student or entire class.")
+    pdf.step("Select a Class from the dropdown to filter students.")
+    pdf.step("Search or select the student from the filtered list (sorted by roll number).")
+    pdf.step("Optionally filter by Academic Year and Term.")
     pdf.step("Preview the report card with all exam results, grades, and GPA.")
-    pdf.step("Click 'Download PDF' to generate a printable report card.")
-    pdf.step("Report cards can also be shared with parents through the Parent Portal.")
+    pdf.step("Click 'Download PDF' to generate a printable report card with the school logo, "
+             "marks table, grade scale reference, and page footer.")
+
+    pdf.section_title("Weighted Average Configuration")
+    pdf.nav_path("Sidebar > Settings > School Profile > Examination Settings")
+    pdf.body_text(
+        "Schools can choose between two calculation modes for report cards:"
+    )
+    pdf.bullet("Simple Average (default) - All exam marks summed and divided by total possible marks.")
+    pdf.bullet("Weighted Average - Each exam type contributes based on its weight "
+               "(e.g., Mid-Term 30%, Final 70%). Enable this toggle if your institution uses weighted grading.")
+    pdf.step("Go to Settings > School Profile and scroll to 'Examination Settings'.")
+    pdf.step("Toggle 'Weighted Average' ON or OFF.")
+    pdf.step("When enabled, set appropriate weights on each Exam Type (Step 2 above).")
 
     pdf.info_box("Complete Exam Workflow",
                  "Grade Scale > Exam Types > Create Exam > Enter Marks > View Results > Publish > Report Cards. "
@@ -824,42 +866,17 @@ def build_guide():
     pdf.section_title("Finance Dashboard")
     pdf.nav_path("Sidebar > Finance > Dashboard")
     pdf.body_text(
-        "The Finance Dashboard is the central hub for all financial data and reports. "
-        "It combines real-time account overview with period-based financial analysis in a single page."
+        "The Finance Dashboard is the central hub for all financial data. Use the period selector "
+        "(This Month, Last Month, This Quarter, This Year, Custom) to filter data. "
+        "Key metrics at a glance: Account Balance, Total Income, Total Expenses, Net Balance, "
+        "and Fee Collection Rate."
     )
-
-    pdf.sub_section("Period Selector")
     pdf.body_text(
-        "At the top of the page, use the period selector buttons (This Month, Last Month, This Quarter, "
-        "This Year, or Custom date range) to filter the financial summary and expense breakdown data."
+        "Dashboard cards include: Fee Collection Summary, Account Balances, Expense Breakdown (donut chart), "
+        "Recent Transfers, Monthly Trend (6-month chart), Recent Entries, and Quick Actions."
     )
-
-    pdf.sub_section("KPI Row")
-    pdf.body_text("Five key metrics are displayed at a glance:")
-    pdf.bullet("Account Balance - Total balance across all accounts")
-    pdf.bullet("Total Income - Revenue for the selected period")
-    pdf.bullet("Total Expenses - Expenses for the selected period")
-    pdf.bullet("Net Balance - Income minus Expenses")
-    pdf.bullet("Fee Collection Rate - Percentage of fees collected for the current month")
-
-    pdf.sub_section("Dashboard Cards")
-    pdf.bullet("Fee Collection Summary - Total collected this month, pending amounts, collection rate")
-    pdf.bullet("Account Balances - Current balance of each cash, bank, and person account")
-    pdf.bullet("Expense Breakdown - Donut chart and detailed table showing expense categories, amounts, and percentages for the selected period")
-    pdf.bullet("Recent Transfers - Latest inter-account transfers with a quick-add button")
-    pdf.bullet("Monthly Trend Chart - 6-month bar chart showing income vs. expenses over time")
-    pdf.bullet("Recent Entries Table (Admin only) - Last 15 transactions across all types")
-    pdf.bullet("Quick Actions - Shortcut buttons to record fees, expenses, and transfers")
-
-    pdf.sub_section("Downloading PDF Reports")
-    pdf.step("Select the desired period using the period selector buttons at the top of the dashboard.")
-    pdf.step("Click the 'PDF' button in the top-right area of the page header.")
-    pdf.step("A comprehensive PDF report is generated and downloaded automatically.")
-    pdf.body_text(
-        "The PDF report includes: Financial Summary (income, expenses, net balance, fee collection rate), "
-        "Account Balances table, Monthly Trend table (last 6 months), and Expense Breakdown by category. "
-        "Each page includes the school name, period, generation date, and page numbers."
-    )
+    pdf.info_box("PDF Reports", "Click the 'PDF' button on the dashboard header to download a comprehensive "
+                 "finance report with summary, account balances, monthly trends, and expense breakdown.")
 
     pdf.section_title("Fee Setup Page")
     pdf.nav_path("Sidebar > Finance > Fee Setup")
@@ -988,19 +1005,6 @@ def build_guide():
     pdf.step("Use category filters to view expenses by type.")
     pdf.step("Edit or delete expenses as needed.")
 
-    pdf.section_title("Financial Reports")
-    pdf.nav_path("Sidebar > Finance > Dashboard")
-    pdf.body_text(
-        "Financial reports are integrated directly into the Finance Dashboard. Use the period selector "
-        "at the top to view data for different time ranges, and click the PDF button to download a report."
-    )
-    pdf.bullet("Income vs. Expenses summary - View totals and net balance for any period")
-    pdf.bullet("Monthly Trend - 6-month bar chart comparing income and expenses")
-    pdf.bullet("Expense Breakdown - Donut chart and table with category-wise amounts and percentages")
-    pdf.bullet("Fee Collection Report - Available via the Fee Collection page's Export PDF button")
-    pdf.info_box("Downloadable PDF", "Click the PDF button on the dashboard header to generate a comprehensive "
-                 "finance report including summary, account balances, monthly trends, and expense breakdown.")
-
     pdf.section_title("Online Payment Collection")
     pdf.nav_path("Sidebar > Finance > Payment Gateways")
     pdf.body_text(
@@ -1020,22 +1024,10 @@ def build_guide():
                  "(HMAC-SHA256 for JazzCash, SHA-256 for Easypaisa) to prevent tampering. "
                  "Callback URLs are verified before updating payment status.")
 
-    pdf.section_title("Financial Record Safety (Student Deletion)")
-    pdf.body_text(
-        "When a student is deleted from the system, all their financial records are preserved. "
-        "Fee payments, online payments, fee structures, and discount records remain intact with "
-        "the student field showing 'Deleted Student' instead of being deleted along with the student."
-    )
-    pdf.info_box("Why This Matters",
-                 "Financial records represent actual money received and amounts due. Deleting a student "
-                 "should never cause payment history to vanish - that would make account totals impossible "
-                 "to reconcile. The system uses SET_NULL on student references so records survive deletion.")
-    pdf.bullet("Fee payments - Preserved, shows 'Deleted Student' in the student column")
-    pdf.bullet("Online payments - Preserved, transaction history intact")
-    pdf.bullet("Fee structures - Preserved, shows student-level overrides")
-    pdf.bullet("Discount records - Preserved, scholarship history maintained")
-    pdf.warning_box("Even though financial records survive student deletion, it is best practice to "
-                    "avoid deleting students who have financial history. Consider marking them as inactive instead.")
+    pdf.info_box("Financial Record Safety",
+                 "When a student is deleted, all their financial records (fee payments, online payments, "
+                 "fee structures, discounts) are preserved with 'Deleted Student' label. "
+                 "Best practice: mark students as inactive instead of deleting them.")
 
     pdf.section_title("Inter-Account Transfers")
     pdf.step("On the Finance Dashboard, click 'Transfer'.")
@@ -1313,8 +1305,39 @@ def build_guide():
     pdf.chapter_title("LMS - Learning Management System")
 
     pdf.body_text(
-        "The LMS module helps teachers create lesson plans, assign homework/projects, "
-        "and track student submissions. It integrates with the Academics module."
+        "The LMS module provides curriculum management (books, chapters, topics), lesson planning, "
+        "assignments, and student submissions. It integrates with the Academics module and supports "
+        "multiple languages including Urdu, Arabic, Sindhi, Pashto, and Punjabi with RTL text display."
+    )
+
+    pdf.section_title("Managing Curriculum (Books, Chapters, Topics)")
+    pdf.nav_path("Sidebar > Academics > Curriculum")
+    pdf.body_text(
+        "The Curriculum page lets you organize textbooks into a Book > Chapter > Topic hierarchy "
+        "for each class and subject. This structure powers syllabus progress tracking and lesson plan topic selection."
+    )
+    pdf.step("Select a Class and Subject from the filter dropdowns.")
+    pdf.step("Click 'Add Book' to create a textbook entry. Enter title, author, publisher, edition, and language.")
+    pdf.step("Click the book to view its chapters and topics in the tree view.")
+    pdf.step("Add chapters and topics manually, or use 'Import TOC' for bulk import.")
+
+    pdf.sub_section("Importing Table of Contents")
+    pdf.body_text("The Import TOC feature supports two modes:")
+    pdf.step("Type / Paste: Manually type or paste the table of contents text with indentation for chapter/topic structure.")
+    pdf.step(
+        "Upload Photo: Take or upload a photo of the book's printed TOC page. "
+        "The system uses OCR (Google Vision) with language-aware text extraction."
+    )
+    pdf.step("After OCR extraction, review and edit the text before clicking 'Import' to create chapters and topics.")
+    pdf.info_box("Multi-Language Support",
+        "The OCR feature supports all configured languages. For non-English books, the system uses the book's "
+        "language setting to optimize text recognition. The editor displays RTL direction automatically for supported languages."
+    )
+
+    pdf.sub_section("Syllabus Progress")
+    pdf.body_text(
+        "A progress bar shows how many topics have been covered by published lesson plans. "
+        "Topics are automatically marked as covered when a teacher publishes a lesson plan referencing them."
     )
 
     pdf.section_title("Creating Lesson Plans")
@@ -1380,71 +1403,27 @@ def build_guide():
     pdf.bullet("Read Rate - Percentage of notifications opened/read")
     pdf.bullet("Breakdown by type and recipient group")
 
-    pdf.section_title("Smart Notification Scheduling")
+    pdf.section_title("Automation Settings")
+    pdf.nav_path("Sidebar > Notifications > Settings")
     pdf.body_text(
-        "The system can intelligently schedule non-urgent notifications for optimal delivery times. "
-        "Instead of sending immediately, the AI analyzes when recipients are most likely to read "
-        "messages and schedules delivery accordingly. In-app notifications are always immediate."
-    )
-    pdf.nav_path("Sidebar > Notifications > Settings > Smart Scheduling Toggle")
-    pdf.step("Navigate to Notification Settings (config page).")
-    pdf.step("Toggle 'Enable AI-optimized send times' to ON.")
-    pdf.step("The system learns from read patterns over 2-4 weeks for best results.")
-    pdf.step("In-app notifications are always delivered immediately regardless of this setting.")
-    pdf.info_box("How It Works",
-                 "The AI analyzes historical notification read rates by channel (SMS, WhatsApp, Email) "
-                 "and recipient type (parent, teacher, staff). It identifies optimal hours and defers "
-                 "non-urgent messages to those windows. Scheduled notifications are dispatched every 5 minutes.")
-
-    pdf.section_title("Automated Notification Controls")
-    pdf.nav_path("Sidebar > Notifications > Settings > Automated Notifications")
-    pdf.body_text(
-        "Each automated notification type can be individually enabled or disabled per school. "
-        "Not every institution needs all automated messages. Use the toggle switches to control which "
-        "notifications are active. Each toggle shows a description and when the notification fires."
+        "Configure smart scheduling (AI-optimized send times for non-urgent messages) and "
+        "automated notification controls from the Settings tab. Each automation type can be "
+        "toggled ON/OFF per school."
     )
     pdf.simple_table(
-        ["Notification", "Default", "Trigger Timing"],
+        ["Automation", "Default", "Trigger"],
         [
-            ["Absence Alerts", "ON", "Sent within minutes of attendance being marked"],
-            ["Fee Reminders", "ON", "Sent monthly on the configured reminder day"],
-            ["Fee Overdue Alerts", "ON", "Sent weekly on Mondays for overdue fees"],
-            ["Exam Results Published", "ON", "Sent when admin publishes exam results"],
-            ["Daily Absence Summary", "OFF", "Sent daily at 5 PM to administrators"],
+            ["Absence Alerts", "ON", "Sent when attendance is marked"],
+            ["Fee Reminders", "ON", "Monthly on configured day"],
+            ["Fee Overdue Alerts", "ON", "Weekly on Mondays"],
+            ["Exam Results Published", "ON", "When admin publishes results"],
+            ["Smart Scheduling", "OFF", "AI learns optimal send times over 2-4 weeks"],
         ],
         [50, 25, 115]
     )
-    pdf.step("Navigate to Notifications > Settings tab.")
-    pdf.step("Scroll to the 'Automated Notifications' section.")
-    pdf.step("Toggle each notification type ON or OFF as needed.")
-    pdf.step("Changes save automatically when you click 'Save Settings'.")
-    pdf.info_box("Per-School Control", "These settings are per-school. Each school in a multi-school "
-                 "setup can have different automated notification preferences.")
-
-    pdf.section_title("Scheduled Background Tasks")
-    pdf.body_text(
-        "The system runs scheduled background tasks automatically using Celery Beat. "
-        "These include both the automated notifications above (when enabled) and system maintenance tasks."
-    )
-    pdf.simple_table(
-        ["Notification", "Schedule", "Recipients"],
-        [
-            ["Fee Reminders", "5th of every month at 9 AM", "Parents with pending fees"],
-            ["Overdue Fee Alerts", "Every Monday at 10 AM", "Parents with overdue fees"],
-            ["Daily Absence Summary", "Every day at 5 PM", "School administrators"],
-            ["Scheduled Notification Dispatch", "Every 5 minutes", "System (sends deferred notifications)"],
-            ["Failed Notification Retry", "Every 5 minutes", "System (auto-retries failed sends)"],
-            ["Old Upload Cleanup", "Every Sunday at 2 AM", "System (deletes uploads > 90 days)"],
-            ["Failed OCR Retry", "Every 6 hours", "System (retries failed OCR jobs)"],
-            ["Auto-Tune Thresholds", "Every Sunday at 3 AM", "System (adjusts AI thresholds)"],
-            ["Accuracy Drift Detection", "Daily at 10 PM", "System (checks for AI accuracy drops)"],
-            ["Anomaly Detection", "Daily at 9:30 PM", "System (detects attendance anomalies)"],
-        ],
-        [55, 60, 75]
-    )
-    pdf.info_box("No Action Required", "Automated notifications run on their own once the system is deployed. "
-                 "School administrators do not need to trigger them manually. They can be monitored in the "
-                 "Notification Analytics tab.")
+    pdf.info_box("Background Tasks", "Automated notifications, OCR retries, AI threshold tuning, "
+                 "drift detection, and anomaly detection all run automatically on schedule. "
+                 "No manual action required.")
 
     # =========================================================================
     # CHAPTER 13: MESSAGING
@@ -1769,6 +1748,14 @@ def build_guide():
     pdf.bullet("Data Start Row/Column - Where the attendance marks begin")
     pdf.bullet("Orientation - Whether students are in rows or columns")
 
+    pdf.section_title("Examination Settings")
+    pdf.nav_path("Sidebar > Settings > School Profile > Examination Settings")
+    pdf.body_text(
+        "Toggle between Simple Average and Weighted Average for report card calculations. "
+        "When Weighted Average is enabled, each exam type's contribution is scaled by its weight "
+        "(configured in Exam Types). See Chapter 5 (Examinations) for details."
+    )
+
     pdf.section_title("Finance Accounts Management")
     pdf.body_text("See Chapter 6 (Finance Module) > Setting Up Finance Accounts for detailed instructions.")
 
@@ -1815,8 +1802,7 @@ def build_guide():
 
     pdf.body_text(
         "KoderEduAI uses a hierarchical role system for user management. "
-        "Super Admins create School Admin accounts, while School Admins and Principals "
-        "can create and manage users within their own schools."
+        "School Admins and Principals can create and manage users within their schools."
     )
 
     pdf.section_title("User Roles & Hierarchy")
@@ -1824,7 +1810,6 @@ def build_guide():
     pdf.simple_table(
         ["Role", "Can Create", "Access Level"],
         [
-            ["Super Admin", "All roles", "Platform-wide"],
             ["School Admin", "Principal, HR Manager, Accountant, Teacher, Staff", "Full school access"],
             ["Principal", "HR Manager, Accountant, Teacher, Staff", "Full school access"],
             ["HR Manager", "- (no user creation)", "HR module full access"],
@@ -1872,207 +1857,31 @@ def build_guide():
     pdf.section_title("Converting Existing Students to Users")
     pdf.nav_path("Sidebar > Students")
     pdf.body_text(
-        "For students already in the system without user accounts, you can convert them "
-        "individually or in bulk directly from the Students page."
+        "Students without accounts show 'No Account' in the Account column. "
+        "Individual: Click 'Create Account' next to any student, fill in credentials, and save. "
+        "Bulk: Select multiple students using checkboxes, click 'Create Accounts' in the floating bar, "
+        "set a default password, and confirm. Usernames are auto-generated (e.g., 'Ahmed Khan' becomes 'ahmed_khan')."
     )
-
-    pdf.sub_section("Individual Conversion")
-    pdf.step("Open the Students page. Each student row shows an 'Account' column - "
-             "green badge for existing accounts, 'No Account' for students without one.")
-    pdf.step("Click the 'Create Account' button in the Actions column next to any student without an account.")
-    pdf.step("A modal will appear with Username (auto-suggested from the student's name), "
-             "Email (pre-filled from guardian email if available), Password, and Confirm Password.")
-    pdf.step("Fill in or adjust the credentials and click 'Create Account'.")
-    pdf.step("The student will now have a user account linked to their student record.")
-
-    pdf.sub_section("Bulk Conversion")
-    pdf.step("Use the checkboxes in the first column to select students without accounts. "
-             "The 'Select All' checkbox in the header only selects students without accounts.")
-    pdf.step("A purple floating bar will appear at the bottom showing the count of selected students.")
-    pdf.step("Click 'Create Accounts' on the floating bar.")
-    pdf.step("Enter a Default Password (minimum 8 characters) that will be used for all selected students.")
-    pdf.step("Click 'Create N Account(s)'. Usernames are auto-generated from student names.")
-    pdf.step("A results summary will show: accounts created, skipped (already have accounts), and any errors.")
-    pdf.step("Students can change their password after first login.")
-
-    pdf.info_box("Username Generation",
-                 "Usernames are generated automatically: student name in lowercase with spaces replaced by underscores. "
-                 "If a duplicate exists, the roll number is appended. Example: 'Ahmed Khan' becomes 'ahmed_khan'.")
 
     pdf.section_title("Creating Staff User Accounts")
-    pdf.nav_path("Sidebar > HR & Staff > Add Staff Member")
-    pdf.body_text(
-        "When adding a new staff member, you can optionally create a user account so "
-        "they can log in to the system."
-    )
-
-    pdf.sub_section("Full Staff Form")
-    pdf.step("Navigate to HR & Staff > Staff Directory > Add Staff Member (full form).")
-    pdf.step("Fill in the staff details (name, department, designation, etc.).")
-    pdf.step("At the bottom, check the 'Create User Account' checkbox.")
-    pdf.step("Enter Username, select User Role (Teacher, Staff, HR Manager, or Accountant), and set Password.")
-    pdf.step("Click 'Add Staff Member'. Both the staff record and user account are created and linked.")
-
-    pdf.sub_section("Quick Add")
-    pdf.step("From the Staff Directory, click 'Quick Add'.")
-    pdf.step("Fill in first name, last name, and optionally phone/department/designation.")
-    pdf.step("Check 'Create User Account' to expand the user credential fields.")
-    pdf.step("Fill in Username, Role, Password, and Confirm Password.")
-    pdf.step("Click 'Add Staff'. The staff member and user account are created together.")
-
-    pdf.info_box("User Role vs Staff Record",
-                 "The User Role determines what the staff member can access in the system. "
-                 "For example, a Teacher role gives access to lesson plans and mark entry, "
-                 "while an HR Manager role gives access to the full HR module.")
-
-    pdf.section_title("Converting Existing Staff to Users")
     pdf.nav_path("Sidebar > HR & Staff > Staff Directory")
     pdf.body_text(
-        "For staff members already in the system without user accounts, you can convert them "
-        "individually or in bulk directly from the Staff Directory page."
+        "When adding a new staff member (full form or Quick Add), check 'Create User Account' "
+        "to set up login credentials alongside the staff record. Select a User Role (Teacher, Staff, "
+        "HR Manager, Accountant) to determine system access level."
     )
 
-    pdf.sub_section("Individual Conversion")
-    pdf.step("Open the Staff Directory. Each row shows an 'Account' column - "
-             "green badge with username for existing accounts, 'No Account' otherwise.")
-    pdf.step("Click the 'Create Account' button next to any staff member without an account.")
-    pdf.step("A modal will appear with Username (auto-suggested), Role dropdown (based on your hierarchy), "
-             "Password, and Confirm Password.")
-    pdf.step("Select the appropriate role and set credentials, then click 'Create Account'.")
-
-    pdf.sub_section("Bulk Conversion")
-    pdf.step("Use the checkboxes to select staff members without accounts. "
-             "'Select All' only selects staff without accounts.")
-    pdf.step("A purple floating bar will appear. Click 'Create Accounts'.")
-    pdf.step("Choose a Default Role (e.g., Teacher) and Default Password for all selected staff.")
-    pdf.step("Click 'Create N Account(s)'. Usernames are auto-generated from staff names.")
-    pdf.step("Review the results summary showing created accounts, skipped, and errors.")
-
-    pdf.info_box("Staff Username Generation",
-                 "Usernames are generated as first_name_last_name in lowercase. If a duplicate exists, "
-                 "the employee ID is used instead. Example: 'Jane Doe' becomes 'jane_doe'.")
+    pdf.section_title("Converting Existing Staff to Users")
+    pdf.body_text(
+        "Staff without accounts show 'No Account' in the Account column. "
+        "Individual: Click 'Create Account', set role and credentials. "
+        "Bulk: Select multiple staff, click 'Create Accounts', choose default role and password. "
+        "Usernames are auto-generated (e.g., 'Jane Doe' becomes 'jane_doe')."
+    )
 
     pdf.warning_box("Passwords cannot be recovered. If a user forgets their password, "
-                    "a School Admin or Super Admin must reset it from the Users tab.")
+                    "a School Admin must reset it from the Users tab.")
 
-    # =========================================================================
-    # CHAPTER 18: MODULE DEPENDENCIES (QUICK REFERENCE)
-    # =========================================================================
-    pdf.chapter_title("Module Dependencies - Quick Reference")
-
-    pdf.body_text(
-        "This chapter provides a quick reference for how modules depend on each other. "
-        "Understanding these dependencies helps you set up and use the system efficiently."
-    )
-
-    pdf.section_title("Dependency Map")
-    pdf.simple_table(
-        ["Module / Feature", "Depends On", "Must Be Set Up First"],
-        [
-            ["Students", "Classes", "Create classes before adding students"],
-            ["Attendance", "Classes, Students", "Need classes with students enrolled"],
-            ["Face Attendance", "Classes, Students, Enrolled Faces", "Enroll student faces first"],
-            ["Subjects", "Classes (for assignment)", "Create classes first"],
-            ["Timetable", "Subjects assigned to classes", "Assign subjects to classes"],
-            ["Exam Types", "None", "Can be created independently"],
-            ["Exams", "Academic Year, Terms, Classes", "Set up sessions and classes"],
-            ["Marks Entry", "Exams, Subject Assignments", "Create exam and assign subjects"],
-            ["Results", "Marks entered", "Enter all marks for the exam"],
-            ["Report Cards", "Results published", "Publish exam results first"],
-            ["Grade Scale", "None", "Create before entering marks"],
-            ["Fee Structures", "Classes, Students", "Need students in classes"],
-            ["Fee Collection", "Fee Structures, Accounts", "Generate fees, set up accounts"],
-            ["Expenses", "Finance Accounts", "Create accounts first"],
-            ["Payroll", "Staff, Salary Structures", "Add staff and define salaries"],
-            ["Leave Mgmt", "Staff Members", "Add staff first"],
-            ["Admissions", "Academic Years, Classes", "Set up academic years and classes"],
-            ["Transport Assign.", "Routes, Vehicles, Students", "Set up routes and vehicles"],
-            ["Library Issues", "Books in Catalog, Students", "Add books and students"],
-            ["Hostel Allocation", "Hostels, Rooms, Students", "Create hostels and rooms first"],
-            ["Gate Passes", "Hostel Allocations", "Allocate students to rooms first"],
-            ["LMS Lessons", "Subjects assigned to classes", "Assign subjects first"],
-            ["Assignments", "Classes, Subjects", "Create classes and subjects"],
-            ["Notifications", "Users exist", "Create user accounts"],
-            ["Promotion", "Academic Years, Classes", "Need source and target setup"],
-        ],
-        [40, 55, 95]
-    )
-
-    pdf.section_title("Recommended Setup Order (Complete)")
-    pdf.body_text("Follow this complete order when setting up your school:")
-    pdf.step("Create Academic Year and Terms")
-    pdf.step("Create Classes (all grades and sections)")
-    pdf.step("Add Students (individual or bulk import)")
-    pdf.step("Create Subjects")
-    pdf.step("Assign Subjects to Classes with Teachers")
-    pdf.step("Create Timetable for each class")
-    pdf.step("Define Grade Scale")
-    pdf.step("Set up Finance Accounts (Cash, Bank)")
-    pdf.step("Generate Fee Structures")
-    pdf.step("Create HR Departments and Designations")
-    pdf.step("Add Staff Members")
-    pdf.step("Define Salary Structures")
-    pdf.step("Set up Transport Routes and Vehicles")
-    pdf.step("Set up Library Categories and Books")
-    pdf.step("Set up Hostels and Rooms (if using Hostel module)")
-    pdf.step("Enroll Student Faces for Face Attendance (if using camera-based attendance)")
-    pdf.step("Configure Attendance Settings (Mappings)")
-    pdf.step("Create Notification Templates")
-    pdf.step("Set up Admission Sessions (if using Admissions CRM)")
-    pdf.info_box("After Setup", "Once the initial setup is complete, daily operations include: "
-                 "capturing attendance, collecting fees, recording expenses, entering marks, "
-                 "managing transport attendance, issuing library books, and processing admissions.")
-
-    # =========================================================================
-    # CHAPTER 18: DAILY OPERATIONS WORKFLOW
-    # =========================================================================
-    pdf.chapter_title("Daily Operations Workflow")
-
-    pdf.body_text(
-        "Once the system is fully set up, here is a guide to the typical daily, weekly, "
-        "monthly, and term-based operations."
-    )
-
-    pdf.section_title("Daily Tasks")
-    pdf.simple_table(
-        ["Task", "Who", "Module", "Navigation"],
-        [
-            ["Mark student attendance", "Teacher", "Attendance", "Attendance > Upload"],
-            ["Take face attendance photo", "Teacher", "Face Attend.", "Face Attendance > Capture"],
-            ["Review AI-captured attendance", "Admin", "Attendance", "Attendance > Review"],
-            ["Review face attendance", "Admin", "Face Attend.", "Face Attendance > Sessions"],
-            ["Record fee payments", "Admin/Staff", "Finance", "Finance > Fees"],
-            ["Mark staff attendance", "HR", "HR", "HR > Attendance"],
-            ["Mark transport attendance", "Transport", "Transport", "Transport > Attendance"],
-            ["Issue/Return library books", "Librarian", "Library", "Library > Issues"],
-            ["Review gate pass requests", "Hostel Warden", "Hostel", "Hostel > Gate Passes"],
-            ["Check notifications", "All", "Notifications", "Bell icon / Inbox"],
-            ["Follow up on admissions", "Admin", "Admissions", "Admissions > Enquiries"],
-        ],
-        [45, 30, 35, 80]
-    )
-
-    pdf.section_title("Weekly Tasks")
-    pdf.bullet("Review attendance analytics and identify students with low attendance")
-    pdf.bullet("Check overdue library books and send reminders")
-    pdf.bullet("Review hostel occupancy and pending gate passes")
-    pdf.bullet("Review and update admission pipeline")
-    pdf.bullet("Process leave applications")
-
-    pdf.section_title("Monthly Tasks")
-    pdf.bullet("Generate and process staff payroll")
-    pdf.bullet("Close financial month in Settings")
-    pdf.bullet("Review Finance Dashboard with different period filters (monthly, quarterly, yearly)")
-    pdf.bullet("Generate fee reminders for unpaid balances")
-    pdf.bullet("Review staff performance (if applicable)")
-
-    pdf.section_title("Term / Semester Tasks")
-    pdf.bullet("Create exams for the term")
-    pdf.bullet("Enter marks after exams are conducted")
-    pdf.bullet("Publish results")
-    pdf.bullet("Generate and distribute report cards")
-    pdf.bullet("Conduct student promotions (end of year)")
-    pdf.bullet("Set up the new academic year and terms")
 
     # =========================================================================
     # CHAPTER: AI INTELLIGENCE FEATURES
@@ -2086,34 +1895,18 @@ def build_guide():
     )
 
     pdf.section_title("Auto-Adaptive Thresholds")
-    pdf.body_text(
-        "The AI attendance pipeline uses configurable thresholds for name matching, confidence "
-        "scoring, and table extraction. Instead of hard-coded values, each school can customize "
-        "these thresholds and optionally enable auto-tuning based on correction patterns."
-    )
     pdf.nav_path("Sidebar > Attendance > Capture & Review > Accuracy Dashboard")
-    pdf.step("Navigate to the Accuracy Dashboard section of the Capture & Review page.")
-    pdf.step("Find the 'AI Threshold Configuration' card.")
-    pdf.step("View current threshold values: Fuzzy Name Match, Rule Confidence, High Confidence, etc.")
-    pdf.step("Toggle 'Auto-tune thresholds' to let the system adjust weekly based on your corrections.")
-    pdf.step("The system needs at least 50 processed uploads before auto-tuning produces meaningful adjustments.")
-    pdf.info_box("How Auto-Tuning Works",
-                 "Every Sunday at 3 AM, the system analyzes the last 14 days of correction data. "
-                 "If name mismatches exceed 5%, fuzzy match threshold increases. If false positives "
-                 "are high, confidence thresholds increase. Changes are small (0.02-0.05) and capped "
-                 "at safe limits. Tune history is preserved for review.")
+    pdf.body_text(
+        "Each school can customize AI thresholds for name matching and confidence scoring. "
+        "Toggle 'Auto-tune thresholds' to let the system adjust weekly based on correction patterns. "
+        "Requires at least 50 processed uploads before auto-tuning becomes effective."
+    )
 
     pdf.section_title("Pipeline Fallback & Voting")
     pdf.body_text(
-        "If the primary OCR provider (Google Vision) fails, the system automatically tries "
-        "alternative providers instead of failing completely. You can also enable multi-pipeline "
-        "voting for maximum accuracy."
+        "If the primary OCR provider (Google Vision) fails, the system tries alternatives automatically. "
+        "Enable 'Multi-pipeline voting' for critical uploads where multiple providers cross-validate results."
     )
-    pdf.step("In the 'Pipeline Configuration' card, select your primary provider.")
-    pdf.step("Arrange the fallback chain (other providers to try if primary fails).")
-    pdf.step("Optionally enable 'Multi-pipeline voting' for critical uploads.")
-    pdf.step("When voting is enabled, multiple providers process the same image and results are "
-             "cross-validated using majority agreement.")
     pdf.simple_table(
         ["Provider", "Speed", "Best For"],
         [
@@ -2123,156 +1916,81 @@ def build_guide():
         ],
         [50, 30, 110]
     )
-    pdf.info_box("Pipeline Badge",
-                 "After processing, each upload shows which pipeline was used: "
-                 "'Google Vision' (green), 'Groq Vision (fallback)' (amber), or "
-                 "'Multi-pipeline vote' (blue).")
 
-    pdf.section_title("Accuracy Drift Detection")
+    pdf.section_title("Accuracy Drift & Anomaly Detection")
     pdf.body_text(
-        "The system monitors AI accuracy daily and alerts administrators when performance "
-        "degrades. Drift often indicates register format changes or new handwriting styles."
+        "The system monitors AI accuracy daily and alerts administrators when performance degrades "
+        "(drift > 10 percentage points from 30-day baseline). It also detects unusual attendance "
+        "patterns nightly: bulk class absences (>60%), student streaks (3+ consecutive days absent), "
+        "and unusual school-wide absence (>30%)."
     )
-    pdf.step("The 'Accuracy Drift Monitor' card shows a line chart of daily accuracy percentages.")
-    pdf.step("Red dots on the chart indicate dates where significant drift was detected.")
-    pdf.step("Drift is flagged when accuracy drops more than 10 percentage points from the 30-day baseline.")
-    pdf.step("When drift is detected, an alert banner appears with recommended actions.")
-    pdf.warning_box("Accuracy drift alerts are generated automatically every night at 10 PM. "
-                    "If you see a drift alert, review recent uploads for new register formats "
-                    "and consider adjusting thresholds or mark mappings.")
-
-    pdf.section_title("Attendance Anomaly Detection")
-    pdf.nav_path("Sidebar > Attendance > Anomalies")
-    pdf.body_text(
-        "The system automatically detects unusual attendance patterns every night and creates "
-        "anomaly records for administrator review. Three types of anomalies are detected:"
-    )
-    pdf.simple_table(
-        ["Type", "Trigger", "Severity"],
-        [
-            ["Bulk Class Absence", ">60% of class absent on a day", "HIGH"],
-            ["Student Streak", "Student absent 3+ consecutive days", "MEDIUM"],
-            ["Unusual School Day", "School-wide absence >30%", "HIGH"],
-        ],
-        [50, 80, 60]
-    )
-    pdf.step("Navigate to Attendance > Anomalies to view detected anomalies.")
-    pdf.step("Filter by type, severity, or resolved status.")
-    pdf.step("Review each anomaly's details (affected class, date, absence counts).")
-    pdf.step("Click 'Resolve' and add notes (e.g., 'School sports day', 'Weather event').")
-    pdf.step("Resolved anomalies are archived but remain visible for historical reference.")
-    pdf.info_box("Automated Alerts",
-                 "When anomalies are detected, administrators receive an in-app notification "
-                 "with details. The anomaly detection runs daily at 9:30 PM.")
+    pdf.step("View drift alerts on the Accuracy Dashboard; review recent uploads for new register formats.")
+    pdf.step("Navigate to Attendance > Anomalies to view, filter, and resolve detected anomalies.")
 
     pdf.section_title("AI Dashboard Insights")
-    pdf.nav_path("Dashboard (Admin view)")
     pdf.body_text(
-        "The admin dashboard features an AI Insights card that surfaces actionable items "
-        "across all modules. The AI analyzes attendance, finance, academics, and HR data "
-        "to highlight what needs your attention today."
+        "The admin dashboard surfaces AI-generated actionable insights across all modules: "
+        "Alerts (red) for urgent issues, Warnings (amber) for important items, and Info (blue) "
+        "for setup reminders. Each insight links directly to the relevant page. "
+        "Insights are role-specific (teachers see attendance only, accountants see finance only)."
     )
-    pdf.sub_section("Types of Insights")
-    pdf.bullet("Alert (red) - Urgent issues: accuracy drift, bulk absences, pipeline failures")
-    pdf.bullet("Warning (amber) - Important: low fee collection, pending reviews, leave backlogs")
-    pdf.bullet("Info (blue) - Informational: unassigned classes, timetable gaps, setup reminders")
-    pdf.body_text(
-        "Each insight includes a title, explanation, recommended action, and a direct link "
-        "to the relevant page. Insights are sorted by priority and refresh automatically."
-    )
-    pdf.info_box("Role-Specific Insights",
-                 "Teachers see attendance-only insights for their classes. Accountants see "
-                 "finance-only insights. HR Managers see HR-only insights. Admin and Principal "
-                 "roles see insights from all modules.")
 
     pdf.section_title("OR-Tools Timetable Optimization")
     pdf.nav_path("Sidebar > Academics > Timetable > Auto-Generate")
     pdf.body_text(
-        "The timetable auto-generation now supports two algorithms. The original greedy "
-        "heuristic is fast but may not find the optimal arrangement. The new OR-Tools "
-        "constraint programming solver produces higher quality schedules."
+        "Timetable auto-generation supports two algorithms: 'Quick (Greedy)' for near-instant drafts, "
+        "and 'Optimal (OR-Tools)' for higher quality schedules (up to 30 seconds). OR-Tools enforces "
+        "hard constraints (no double-booking) and optimizes subject distribution across days."
     )
-    pdf.step("Navigate to Academics > Timetable and select a class.")
-    pdf.step("Click 'Auto-Generate' to open the generation dialog.")
-    pdf.step("Choose the algorithm: 'Quick (Greedy)' for fast results or 'Optimal (OR-Tools)' for better quality.")
-    pdf.step("Click 'Generate'. OR-Tools takes up to 30 seconds; Greedy is near-instant.")
-    pdf.step("After generation, review the score badge showing algorithm used and quality score.")
-    pdf.simple_table(
-        ["Algorithm", "Speed", "Quality", "Best For"],
-        [
-            ["Quick (Greedy)", "< 1 second", "Good", "Initial drafts, simple schedules"],
-            ["Optimal (OR-Tools)", "Up to 30 seconds", "Excellent", "Final schedules, complex constraints"],
-        ],
-        [40, 35, 35, 80]
-    )
-    pdf.info_box("Constraint Programming",
-                 "OR-Tools enforces hard constraints (no teacher double-booking, exact periods "
-                 "per week) and optimizes soft objectives (spread subjects across days, morning "
-                 "slots for core subjects). If no optimal solution exists, it falls back to greedy.")
 
     pdf.section_title("AI Report Card Comments")
     pdf.nav_path("Sidebar > Academics > Examinations > Results")
     pdf.body_text(
-        "The system can generate personalized, professional comments for each student's "
-        "exam performance. Comments are based on marks, grade, pass/fail status, and "
-        "attendance record. Teachers can review and edit comments before printing report cards."
+        "Generate personalized comments for each student's exam performance based on marks, grades, "
+        "and attendance. Click 'Generate AI Comments' on an exam's results page. Comments appear "
+        "on report cards automatically. Teachers should review before sharing with parents."
     )
-    pdf.step("Navigate to Results and select an exam.")
-    pdf.step("Click 'Generate AI Comments' to generate comments for all students in the exam.")
-    pdf.step("The system generates 2-3 sentence comments per subject per student.")
-    pdf.step("Click on any student row to expand and view their per-subject AI comments.")
-    pdf.step("Use 'Regenerate All' to force-regenerate comments (overwrites existing ones).")
-    pdf.step("Comments appear on report cards automatically after generation.")
-    pdf.info_box("Comment Examples",
-                 "Strong performance: 'Outstanding performance in Mathematics with 92%. "
-                 "Demonstrates excellent understanding of the subject. Keep up the great work.' "
-                 "Weak with low attendance: 'Needs improvement in Science with 48%. Would benefit "
-                 "from additional practice. Attendance (65%) is a concern affecting learning outcomes.'")
-    pdf.warning_box("AI comments require either a Groq API key (for LLM-generated comments) or "
-                    "fall back to rule-based comments. Rule-based comments are generated even without "
-                    "an API key. Teachers should always review AI-generated text before sharing with parents.")
+    pdf.info_box("Fallback", "Without a Groq API key, the system generates rule-based comments automatically.")
 
     # =========================================================================
-    # APPENDIX: KEYBOARD SHORTCUTS & TIPS
+    # APPENDIX: TIPS, BEST PRACTICES & OPERATIONS CHECKLIST
     # =========================================================================
-    pdf.chapter_title("Tips & Best Practices")
+    pdf.chapter_title("Tips, Best Practices & Operations Checklist")
 
-    pdf.section_title("Data Entry Tips")
+    pdf.section_title("General Tips")
     pdf.bullet("Use bulk import (Excel) for students when starting with a large number of records")
-    pdf.bullet("Use the search and filter features to quickly find records in any list")
+    pdf.bullet("Use search and filter features to quickly find records in any list")
     pdf.bullet("Export data regularly as backups (Excel, PDF)")
+    pdf.bullet("Use strong, unique passwords; log out when leaving the computer unattended")
+    pdf.bullet("Regularly review user access and deactivate unused accounts")
 
-    pdf.section_title("Attendance Tips (OCR)")
-    pdf.bullet("Take clear, well-lit photos of attendance registers for best AI OCR results")
-    pdf.bullet("Ensure the register is flat and not crumpled when photographing")
-    pdf.bullet("Use the crop tool to focus on the data area only")
-    pdf.bullet("Always review AI-extracted data before approving")
-
-    pdf.section_title("Face Attendance Tips")
-    pdf.bullet("Enroll all students in a class before taking face attendance for that class")
-    pdf.bullet("Use clear, well-lit portrait photos for enrollment (one face per photo)")
-    pdf.bullet("Aim for enrollment quality scores above 70% for reliable matching")
-    pdf.bullet("When taking group photos, ensure good lighting and all students facing the camera")
-    pdf.bullet("Avoid backlighting (windows behind students) as it creates shadows on faces")
-    pdf.bullet("Students wearing sunglasses or face coverings will not be matched automatically")
-    pdf.bullet("Re-enroll students if their appearance changes significantly (new glasses, major haircut)")
-    pdf.bullet("Always review flagged (yellow) matches before confirming attendance")
-    pdf.bullet("Use 'Reprocess' if the photo quality was poor; retake and reprocess if needed")
+    pdf.section_title("Attendance Tips")
+    pdf.bullet("OCR: Take clear, well-lit photos of flat registers; use the crop tool; always review before approving")
+    pdf.bullet("Face: Enroll all students first; use clear portraits (quality > 70%); good lighting for group photos")
+    pdf.bullet("Face: Avoid backlighting; review yellow-flagged matches; re-enroll after major appearance changes")
 
     pdf.section_title("Finance Tips")
-    pdf.bullet("Set up accounts before the start of the academic year")
-    pdf.bullet("Close months regularly to maintain accurate records")
+    pdf.bullet("Set up accounts before the academic year; close months regularly")
     pdf.bullet("Use discounts/scholarships feature instead of manual fee adjustments")
+    pdf.bullet("Use 'Pay Full' bulk action for quick month-end collection")
     pdf.bullet("Download PDF reports monthly from the Finance Dashboard for record-keeping")
-    pdf.bullet("Use the period selector to compare This Month vs Last Month or view yearly trends")
-    pdf.bullet("Use 'Pay Full' bulk action for quick month-end collection when most students pay in full")
-    pdf.bullet("Financial records are preserved when students are deleted - no need to worry about losing payment history")
 
-    pdf.section_title("Security Tips")
-    pdf.bullet("Use strong, unique passwords for each user account")
-    pdf.bullet("Log out when leaving the computer unattended")
-    pdf.bullet("Only School Admins should manage modules and user permissions")
-    pdf.bullet("Regularly review user access and deactivate unused accounts")
+    pdf.section_title("Operations Checklist")
+    pdf.body_text("Recommended routine tasks by frequency:")
+    pdf.simple_table(
+        ["Frequency", "Tasks"],
+        [
+            ["Daily", "Mark attendance (OCR/Face), review AI results, record fee payments, "
+                      "mark staff & transport attendance, issue/return books, check notifications"],
+            ["Weekly", "Review attendance analytics, check overdue books, process leave applications, "
+                       "update admission pipeline"],
+            ["Monthly", "Process payroll, close financial month, review Finance Dashboard, "
+                        "generate fee reminders"],
+            ["Term", "Create exams, enter marks, publish results, generate report cards, "
+                     "conduct promotions, set up new academic year"],
+        ],
+        [30, 160]
+    )
 
     # =========================================================================
     # NOW BUILD THE TOC
@@ -2292,6 +2010,33 @@ def build_guide():
     print(f"Table of Contents entries: {len(toc_data)}")
     for entry_type, title, page in toc_data:
         print(f"  {'  ' if entry_type == 'section' else ''}{title} ... page {page}")
+
+    # =========================================================================
+    # EXPORT JSON for in-app User Guide
+    # =========================================================================
+    json_data = {
+        "meta": {
+            "title": "KoderEduAI",
+            "subtitle": "School Administration Guide",
+            "version": "3.0 - AI Intelligence Edition",
+            "generatedAt": datetime.now(timezone.utc).isoformat(),
+            "totalChapters": len(pdf.json_chapters),
+            "modules": pdf.json_modules
+        },
+        "chapters": pdf.json_chapters
+    }
+
+    json_output_path = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "frontend", "src", "data", "userGuide.json"
+    )
+    os.makedirs(os.path.dirname(json_output_path), exist_ok=True)
+    with open(json_output_path, 'w', encoding='utf-8') as f:
+        json.dump(json_data, f, indent=2, ensure_ascii=False)
+    print(f"\nJSON guide generated at: {json_output_path}")
+    print(f"Total chapters: {len(pdf.json_chapters)}")
+    total_sections = sum(len(ch['sections']) for ch in pdf.json_chapters)
+    print(f"Total sections: {total_sections}")
 
 
 if __name__ == "__main__":

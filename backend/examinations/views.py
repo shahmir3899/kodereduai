@@ -607,6 +607,7 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
 
         return Response({
             'exam': ExamSerializer(exam).data,
+            'exam_type_weight': float(exam.exam_type.weight),
             'subjects': ExamSubjectSerializer(exam_subjects, many=True).data,
             'results': results,
         })
@@ -1064,23 +1065,106 @@ class ReportCardView(ModuleAccessMixin, APIView):
                 'marks': exam_marks,
             })
 
-        # Calculate overall totals using prefetched data
+        # Determine weighted vs simple calculation
+        from schools.models import School
+        school = School.objects.get(pk=school_id)
+        use_weighted = (school.exam_config or {}).get('weighted_average_enabled', False)
+
+        # Calculate overall totals
         grand_total_obtained = Decimal('0')
         grand_total_possible = Decimal('0')
-        for es in all_exam_subjects:
-            mark = marks_lookup.get(es.id)
-            if mark and mark.marks_obtained is not None and not mark.is_absent:
-                grand_total_obtained += mark.marks_obtained
-            grand_total_possible += es.total_marks
 
-        overall_pct = float(grand_total_obtained / grand_total_possible * 100) if grand_total_possible > 0 else 0
+        if use_weighted and exams.count() > 1:
+            # Weighted: group by exam_type, compute per-type percentage, apply weights
+            exam_type_data = {}
+            for exam in exams:
+                et_id = exam.exam_type_id
+                if et_id not in exam_type_data:
+                    exam_type_data[et_id] = {
+                        'weight': exam.exam_type.weight,
+                        'obtained': Decimal('0'),
+                        'possible': Decimal('0'),
+                    }
+                for es_item in es_by_exam.get(exam.id, []):
+                    mark = marks_lookup.get(es_item.id)
+                    if mark and mark.marks_obtained is not None and not mark.is_absent:
+                        exam_type_data[et_id]['obtained'] += mark.marks_obtained
+                    exam_type_data[et_id]['possible'] += es_item.total_marks
+
+            total_weight = sum(d['weight'] for d in exam_type_data.values() if d['possible'] > 0)
+            if total_weight > 0:
+                weighted_sum = Decimal('0')
+                for data in exam_type_data.values():
+                    if data['possible'] > 0:
+                        type_pct = data['obtained'] / data['possible'] * 100
+                        weighted_sum += type_pct * (data['weight'] / total_weight)
+                overall_pct = float(weighted_sum)
+            else:
+                overall_pct = 0
+
+            grand_total_obtained = sum((d['obtained'] for d in exam_type_data.values()), Decimal('0'))
+            grand_total_possible = sum((d['possible'] for d in exam_type_data.values()), Decimal('0'))
+        else:
+            # Simple average
+            for es_item in all_exam_subjects:
+                mark = marks_lookup.get(es_item.id)
+                if mark and mark.marks_obtained is not None and not mark.is_absent:
+                    grand_total_obtained += mark.marks_obtained
+                grand_total_possible += es_item.total_marks
+            overall_pct = float(grand_total_obtained / grand_total_possible * 100) if grand_total_possible > 0 else 0
+
         overall_grade = '-'
         for gs in grade_scales:
             if float(gs.min_percentage) <= overall_pct <= float(gs.max_percentage):
                 overall_grade = gs.grade_label
                 break
 
+        # Build flattened subject-level summary for the frontend
+        subject_summaries = []
+        for subj_id, subj_name in all_subjects.items():
+            subj_total = Decimal('0')
+            subj_obtained = Decimal('0')
+            subj_absent = False
+            subj_pass = True
+
+            for exam in exams:
+                for es_item in es_by_exam.get(exam.id, []):
+                    if es_item.subject_id == subj_id:
+                        mark = marks_lookup.get(es_item.id)
+                        subj_total += es_item.total_marks
+                        if mark and mark.marks_obtained is not None and not mark.is_absent:
+                            subj_obtained += mark.marks_obtained
+                            if mark.marks_obtained < es_item.passing_marks:
+                                subj_pass = False
+                        else:
+                            subj_pass = False
+                            if mark and mark.is_absent:
+                                subj_absent = True
+
+            subj_pct = float(subj_obtained / subj_total * 100) if subj_total > 0 else 0
+            subj_grade = '-'
+            for gs in grade_scales:
+                if float(gs.min_percentage) <= subj_pct <= float(gs.max_percentage):
+                    subj_grade = gs.grade_label
+                    break
+
+            subject_summaries.append({
+                'subject_name': subj_name,
+                'total_marks': float(subj_total),
+                'marks_obtained': float(subj_obtained),
+                'percentage': round(subj_pct, 2),
+                'grade': subj_grade,
+                'is_pass': subj_pass,
+                'is_absent': subj_absent,
+            })
+
         return Response({
+            'student_name': student.name,
+            'roll_number': student.roll_number,
+            'class_name': student.class_obj.name,
+            'school_name': student.school.name,
+            'academic_year_name': exams[0].academic_year.name if exams else None,
+            'term_name': exams[0].term.name if exams and exams[0].term else None,
             'student': {
                 'id': student.id,
                 'name': student.name,
@@ -1088,12 +1172,25 @@ class ReportCardView(ModuleAccessMixin, APIView):
                 'class_name': student.class_obj.name,
                 'school_name': student.school.name,
             },
-            'subjects': all_subjects,
+            'subjects': subject_summaries,
             'exams': exam_data,
             'summary': {
+                'total_marks': float(grand_total_possible),
+                'obtained_marks': float(grand_total_obtained),
                 'total_obtained': float(grand_total_obtained),
                 'total_possible': float(grand_total_possible),
                 'percentage': round(overall_pct, 2),
                 'grade': overall_grade,
+                'overall_pass': all(s['is_pass'] for s in subject_summaries) if subject_summaries else False,
+                'calculation_mode': 'weighted' if use_weighted and exams.count() > 1 else 'simple',
             },
+            'grade_scales': [
+                {
+                    'grade_label': gs.grade_label,
+                    'min_percentage': float(gs.min_percentage),
+                    'max_percentage': float(gs.max_percentage),
+                    'gpa_points': float(gs.gpa_points),
+                }
+                for gs in grade_scales
+            ],
         })

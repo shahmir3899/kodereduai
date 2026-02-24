@@ -7,6 +7,7 @@ from django.utils import timezone
 from django.db.models import Count
 from rest_framework import viewsets, status
 from rest_framework.decorators import action, api_view, permission_classes as perm_classes
+from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 
@@ -98,6 +99,55 @@ class BookViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
         from .toc_parser import parse_toc_text
         results = parse_toc_text(toc_text, book)
         return Response(results, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'], url_path='ocr_toc',
+            parser_classes=[MultiPartParser, FormParser])
+    def ocr_toc(self, request, pk=None):
+        """
+        OCR a Table of Contents image and return extracted text for review.
+        POST /api/lms/books/{id}/ocr_toc/
+        Body (multipart/form-data): image file in 'image' field
+        Returns: { "text": "...", "language": "ur" }
+        """
+        book = self.get_object()
+
+        if 'image' not in request.FILES:
+            return Response(
+                {'error': 'No image file provided. Send an image in the "image" field.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        image = request.FILES['image']
+
+        allowed_types = ['image/jpeg', 'image/png', 'image/webp']
+        if image.content_type not in allowed_types:
+            return Response(
+                {'error': f'Invalid file type "{image.content_type}". Allowed: JPEG, PNG, WebP.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        max_size = 10 * 1024 * 1024  # 10MB
+        if image.size > max_size:
+            return Response(
+                {'error': 'Image too large. Maximum size is 10MB.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        image_bytes = image.read()
+
+        from .toc_ocr import extract_toc_text
+        extracted_text, error = extract_toc_text(image_bytes, language=book.language)
+
+        if error:
+            return Response(
+                {'error': error},
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            )
+
+        return Response({
+            'text': extracted_text,
+            'language': book.language,
+        })
 
     @action(detail=False, methods=['get'])
     def for_class_subject(self, request):

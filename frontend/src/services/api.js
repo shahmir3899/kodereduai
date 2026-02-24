@@ -189,8 +189,25 @@ export const schoolsApi = {
   getRegisterConfig: () => api.get('/api/schools/register_config/'),
   updateRegisterConfig: (data) => api.put('/api/schools/register_config/', data),
 
+  // Exam configuration
+  getExamConfig: () => api.get('/api/schools/exam_config/'),
+  updateExamConfig: (data) => api.put('/api/schools/exam_config/', data),
+
   // School completion timeline
   getCompletion: () => api.get('/api/schools/completion/'),
+
+  // School asset upload (logo / letterhead)
+  uploadAsset: (file, assetType) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('asset_type', assetType)
+    return api.post('/api/schools/upload_asset/', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+  deleteAsset: (assetType) => api.delete('/api/schools/delete_asset/', {
+    params: { asset_type: assetType },
+  }),
 }
 
 // Students API
@@ -825,6 +842,13 @@ export const lmsApi = {
   deleteBook: (id) => api.delete(`/api/lms/books/${id}/`),
   getBookTree: (id) => api.get(`/api/lms/books/${id}/tree/`),
   bulkTOC: (id, data) => api.post(`/api/lms/books/${id}/bulk_toc/`, data),
+  ocrTOC: (bookId, imageFile) => {
+    const formData = new FormData()
+    formData.append('image', imageFile)
+    return api.post(`/api/lms/books/${bookId}/ocr_toc/`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
   getBooksForClassSubject: (params) => api.get('/api/lms/books/for_class_subject/', { params }),
   getSyllabusProgress: (params) => api.get('/api/lms/books/syllabus_progress/', { params }),
 

@@ -100,12 +100,15 @@ id, name, created_at
 | id | AutoField | |
 | name | CharField | |
 | subdomain | SlugField | Unique |
-| logo | URLField | Nullable |
+| logo | URLField | Nullable — uploaded via `/api/schools/upload_asset/` |
+| letterhead_url | URLField | Nullable — uploaded via `/api/schools/upload_asset/` |
 | address, contact_email, contact_phone | Various | |
 | whatsapp_sender_id | CharField | |
 | enabled_modules | JSONField | `{attendance: true, finance: true, ...}` — controls feature gating |
 | mark_mappings | JSONField | `{PRESENT: ["P","✓"], ABSENT: ["A","X"], ...}` |
 | register_config | JSONField | `{orientation, data_start_col, roll_number_col, ...}` |
+| ai_config | JSONField | AI pipeline config: thresholds, providers, auto-tune settings |
+| exam_config | JSONField | `{weighted_average_enabled: false}` — per-school exam calculation toggle |
 | organization | FK → Organization | Nullable |
 | is_active | BooleanField | |
 
@@ -385,14 +388,27 @@ school(FK), thread_id(UUID), sender(FK), recipient(FK), content, is_read, read_a
 
 ## lms — Learning Management
 
+### Book
+school(FK), class_obj(FK), subject(FK), title, author, publisher, edition, language (en/ur/ar/sd/ps/pa/other), description, is_active, created_at, updated_at
+
+### Chapter
+book(FK), title, chapter_number, description, is_active, created_at, updated_at
+Unique: (book, chapter_number)
+
+### Topic
+chapter(FK), title, topic_number, description, estimated_periods (default 1), is_active, created_at, updated_at
+Unique: (chapter, topic_number)
+Property: is_covered (has published lesson plan covering this topic)
+
 ### LessonPlan
-school(FK), class_subject(FK), teacher(FK), title, content, date, status (DRAFT/PUBLISHED), academic_year(FK)
+school(FK), academic_year(FK), class_obj(FK), subject(FK), teacher(FK), title, description, objectives, lesson_date, duration_minutes (default 40), materials_needed, teaching_methods, planned_topics (M2M → Topic), display_text (computed), content_mode (TOPICS/FREEFORM), ai_generated (bool), status (DRAFT/PUBLISHED), is_active
 
 ### Assignment
-school(FK), class_obj(FK), subject(FK), teacher(FK), title, description, due_date, max_marks, status (DRAFT/PUBLISHED/CLOSED), academic_year(FK)
+school(FK), academic_year(FK), class_obj(FK), subject(FK), teacher(FK), title, description, instructions, assignment_type (HOMEWORK/PROJECT/CLASSWORK/LAB), due_date, total_marks, attachments_allowed, status (DRAFT/PUBLISHED/CLOSED), is_active
 
 ### AssignmentSubmission
-assignment(FK), student(FK), content, file_url, submitted_at, marks, feedback, graded_by(FK), graded_at
+assignment(FK), student(FK), school(FK), submission_text, file_url, file_name, submitted_at, status (PENDING/SUBMITTED/LATE/GRADED/RETURNED), marks_obtained, feedback, graded_by(FK), graded_at
+Unique: (assignment, student)
 
 ---
 

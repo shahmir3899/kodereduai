@@ -240,6 +240,10 @@ class StaffMemberViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
         if is_active is not None:
             queryset = queryset.filter(is_active=is_active.lower() == 'true')
 
+        role = self.request.query_params.get('role')
+        if role:
+            queryset = queryset.filter(user__role=role.upper())
+
         # Name search
         search = self.request.query_params.get('search')
         if search:
