@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { examinationsApi } from '../../services/api'
+import { useConfirmModal } from '../../components/ConfirmModal'
 
 const EMPTY_FORM = { grade_label: '', min_percentage: '', max_percentage: '', gpa_points: '', order: '' }
 
 export default function GradeScalePage() {
   const queryClient = useQueryClient()
+  const { confirm, ConfirmModalRoot } = useConfirmModal()
   const [showModal, setShowModal] = useState(false)
   const [editId, setEditId] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
@@ -120,7 +122,7 @@ export default function GradeScalePage() {
                     <td className="px-4 py-2 text-right">
                       <button onClick={() => openEdit(item)} className="text-xs text-primary-600 hover:underline mr-2">Edit</button>
                       <button
-                        onClick={() => { if (confirm(`Delete grade "${item.grade_label}"?`)) deleteMut.mutate(item.id) }}
+                        onClick={async () => { const ok = await confirm({ title: 'Delete Grade', message: `Delete grade "${item.grade_label}"?` }); if (ok) deleteMut.mutate(item.id) }}
                         className="text-xs text-red-600 hover:underline"
                       >Delete</button>
                     </td>
@@ -143,13 +145,15 @@ export default function GradeScalePage() {
                 <p className="text-sm text-gray-600">Range: {item.min_percentage}% — {item.max_percentage}%</p>
                 <div className="flex gap-2 mt-2">
                   <button onClick={() => openEdit(item)} className="text-xs text-primary-600 hover:underline">Edit</button>
-                  <button onClick={() => { if (confirm('Delete?')) deleteMut.mutate(item.id) }} className="text-xs text-red-600 hover:underline">Delete</button>
+                  <button onClick={async () => { const ok = await confirm({ title: 'Delete Grade', message: `Delete grade "${item.grade_label}"?` }); if (ok) deleteMut.mutate(item.id) }} className="text-xs text-red-600 hover:underline">Delete</button>
                 </div>
               </div>
             ))}
           </div>
         </>
       )}
+
+      <ConfirmModalRoot />
 
       {/* Modal */}
       {showModal && (

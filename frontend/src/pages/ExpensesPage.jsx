@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../contexts/AuthContext'
 import { financeApi } from '../services/api'
 import TransferModal from '../components/TransferModal'
+import { useConfirmModal } from '../components/ConfirmModal'
 
 const COLOR_PALETTE = [
   'bg-blue-100 text-blue-800',
@@ -22,6 +23,7 @@ export default function ExpensesPage() {
   const { user, isStaffMember } = useAuth()
   const canWrite = !isStaffMember
   const queryClient = useQueryClient()
+  const { confirm, ConfirmModalRoot } = useConfirmModal()
   const [searchParams, setSearchParams] = useSearchParams()
 
   const initialTab = searchParams.get('tab') === 'transfers' ? 'transfers' : 'expenses'
@@ -315,7 +317,7 @@ export default function ExpensesPage() {
                       {canWrite && (
                         <div className="flex gap-2 mt-2">
                           <button onClick={() => openEdit(expense)} className="text-xs text-primary-600 hover:underline">Edit</button>
-                          <button onClick={() => { if (confirm('Delete this expense?')) deleteMutation.mutate(expense.id) }} className="text-xs text-red-600 hover:underline">Delete</button>
+                          <button onClick={async () => { const ok = await confirm({ title: 'Delete Expense', message: 'Delete this expense? This cannot be undone.' }); if (ok) deleteMutation.mutate(expense.id) }} className="text-xs text-red-600 hover:underline">Delete</button>
                         </div>
                       )}
                     </div>
@@ -348,7 +350,7 @@ export default function ExpensesPage() {
                           {canWrite && (
                             <td className="px-4 py-3 text-center">
                               <button onClick={() => openEdit(expense)} className="text-sm text-primary-600 hover:underline mr-3">Edit</button>
-                              <button onClick={() => { if (confirm('Delete this expense?')) deleteMutation.mutate(expense.id) }} className="text-sm text-red-600 hover:underline">Delete</button>
+                              <button onClick={async () => { const ok = await confirm({ title: 'Delete Expense', message: 'Delete this expense? This cannot be undone.' }); if (ok) deleteMutation.mutate(expense.id) }} className="text-sm text-red-600 hover:underline">Delete</button>
                             </td>
                           )}
                         </tr>
@@ -399,7 +401,7 @@ export default function ExpensesPage() {
                       <p className="text-xs text-gray-500">{tfr.date} {tfr.description && `— ${tfr.description}`}</p>
                       {canWrite && (
                         <button
-                          onClick={() => { if (confirm('Delete this transfer?')) deleteTransferMutation.mutate(tfr.id) }}
+                          onClick={async () => { const ok = await confirm({ title: 'Delete Transfer', message: 'Delete this transfer? This cannot be undone.' }); if (ok) deleteTransferMutation.mutate(tfr.id) }}
                           className="mt-2 text-xs text-red-600 hover:text-red-800"
                         >
                           Delete
@@ -432,7 +434,7 @@ export default function ExpensesPage() {
                           <td className="px-4 py-3 text-sm text-gray-600 max-w-xs truncate">{tfr.description || '—'}</td>
                           {canWrite && (
                             <td className="px-4 py-3 text-center">
-                              <button onClick={() => { if (confirm('Delete this transfer?')) deleteTransferMutation.mutate(tfr.id) }} className="text-sm text-red-600 hover:underline">Delete</button>
+                              <button onClick={async () => { const ok = await confirm({ title: 'Delete Transfer', message: 'Delete this transfer? This cannot be undone.' }); if (ok) deleteTransferMutation.mutate(tfr.id) }} className="text-sm text-red-600 hover:underline">Delete</button>
                             </td>
                           )}
                         </tr>
@@ -527,6 +529,8 @@ export default function ExpensesPage() {
         onClose={() => setShowTransferModal(false)}
         onSuccess={() => queryClient.invalidateQueries({ queryKey: ['transfers'] })}
       />
+
+      <ConfirmModalRoot />
     </div>
   )
 }

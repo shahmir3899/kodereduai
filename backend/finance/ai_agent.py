@@ -26,7 +26,11 @@ class DecimalEncoder(json.JSONEncoder):
 SYSTEM_PROMPT = """You are a helpful financial assistant for a school management platform.
 You answer questions about school fees, expenses, and financial data.
 
-You have access to these tools. Call exactly ONE tool per question by responding with JSON:
+You have access to these tools. When you need data, respond with a JSON tool call.
+You may call multiple tools across turns to gather all the information needed.
+When you have enough information, respond directly with a clear, concise answer.
+
+Tools:
 
 1. get_pending_fees - Get pending/unpaid fee amounts
    Parameters: class_name (optional), month (optional, 1-12), year (optional)
@@ -52,21 +56,43 @@ You have access to these tools. Call exactly ONE tool per question by responding
 8. get_account_balances - Get balance summary for all accounts (BBF + receipts - payments + transfers in - transfers out)
    Parameters: date_from (optional, YYYY-MM-DD), date_to (optional, YYYY-MM-DD)
 
+9. get_fee_structure - Get configured fee amounts per class and type
+   Parameters: class_name (optional), fee_type (optional: MONTHLY/ANNUAL/ADMISSION/BOOKS/FINE)
+
+10. get_payment_method_analysis - Fee collection breakdown by payment method
+    Parameters: month (optional, 1-12), year (optional)
+
+11. get_scholarships_summary - Active scholarships with recipient counts and waived amounts
+    Parameters: none
+
+12. get_discounts_impact - Total discounts applied, grouped by type
+    Parameters: none
+
+13. get_online_payment_status - Online payment success/failure rates
+    Parameters: date_from (optional, YYYY-MM-DD), date_to (optional, YYYY-MM-DD)
+
+14. get_monthly_closing_status - Which months are closed/open
+    Parameters: none
+
+15. get_fee_defaulters - Students with consecutive unpaid months (chronic defaulters)
+    Parameters: min_months (optional, default 2)
+
+16. get_collection_trend - Month-over-month fee collection rate comparison
+    Parameters: months (optional, default 6)
+
+17. get_transfer_history - Inter-account transfers
+    Parameters: date_from (optional, YYYY-MM-DD), date_to (optional, YYYY-MM-DD)
+
+18. get_top_expenses - Largest expenses by amount
+    Parameters: limit (optional, default 10), date_from (optional, YYYY-MM-DD), date_to (optional, YYYY-MM-DD)
+
 Current date: {current_date}
 School: {school_name}
 
-Respond with ONLY a JSON object like:
+To call a tool, respond with ONLY a JSON object like:
 {{"tool": "get_pending_fees", "params": {{"month": 2, "year": 2026}}}}
 
-If the question is not about finances, respond with:
-{{"tool": "none", "answer": "Your friendly response here"}}"""
-
-FORMAT_PROMPT = """Given this financial data from a school, provide a clear, concise answer to the user's question.
-
-User question: {question}
-Data: {data}
-
-Respond in a helpful, conversational tone. Format numbers clearly. Keep it brief (2-4 sentences max)."""
+If the question is not about finances, respond with a helpful answer directly (no JSON)."""
 
 
 class FinanceAIAgent:
@@ -83,8 +109,13 @@ class FinanceAIAgent:
             self._school = School.objects.get(id=self.school_id)
         return self._school
 
-    def process_query(self, user_message):
-        """Process a user's natural language query and return a response."""
+    def process_query(self, user_message, user=None):
+        """Process a user's natural language query and return a response.
+
+        Args:
+            user_message: The user's question.
+            user: Optional Django User instance for loading conversation history.
+        """
         if not settings.GROQ_API_KEY:
             return self._fallback_response(user_message)
 
@@ -92,61 +123,78 @@ class FinanceAIAgent:
             from groq import Groq
             client = Groq(api_key=settings.GROQ_API_KEY)
 
-            # Step 1: Get tool call from LLM
             system = SYSTEM_PROMPT.format(
                 current_date=date.today().isoformat(),
                 school_name=self.school.name,
             )
 
+            messages = [{"role": "system", "content": system}]
+
+            # Load last 10 messages from DB for context continuity
+            if user:
+                from .models import FinanceAIChatMessage
+                history = FinanceAIChatMessage.objects.filter(
+                    school_id=self.school_id, user=user
+                ).order_by('-created_at')[:10]
+                for msg in reversed(list(history)):
+                    messages.append({"role": msg.role, "content": msg.content})
+
+            messages.append({"role": "user", "content": user_message})
+
+            # Multi-round tool-calling loop (up to 3 rounds)
             response = client.chat.completions.create(
                 model=settings.GROQ_MODEL,
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user_message},
-                ],
-                temperature=0.1,
-                max_tokens=500,
-            )
-
-            result_text = response.choices[0].message.content.strip()
-
-            # Parse the tool call
-            if "```json" in result_text:
-                result_text = result_text.split("```json")[1].split("```")[0]
-            elif "```" in result_text:
-                result_text = result_text.split("```")[1].split("```")[0]
-
-            tool_call = json.loads(result_text.strip())
-
-            if tool_call.get('tool') == 'none':
-                return tool_call.get('answer', "I can help with questions about fees, expenses, and school finances.")
-
-            # Step 2: Execute the tool
-            tool_name = tool_call.get('tool', '')
-            params = tool_call.get('params', {})
-            data = self._execute_tool(tool_name, params)
-
-            # Step 3: Format the response using LLM
-            format_response = client.chat.completions.create(
-                model=settings.GROQ_MODEL,
-                messages=[
-                    {"role": "user", "content": FORMAT_PROMPT.format(
-                        question=user_message,
-                        data=json.dumps(data, cls=DecimalEncoder),
-                    )},
-                ],
+                messages=messages,
                 temperature=0.3,
-                max_tokens=500,
+                max_tokens=1000,
             )
+            content = response.choices[0].message.content.strip()
 
-            return format_response.choices[0].message.content.strip()
+            max_tool_rounds = 3
+            for _ in range(max_tool_rounds):
+                try:
+                    # Try to parse as JSON tool call
+                    if '```json' in content:
+                        json_str = content.split('```json')[1].split('```')[0]
+                    elif '```' in content:
+                        json_str = content.split('```')[1].split('```')[0]
+                    elif content.strip().startswith('{'):
+                        json_str = content.strip()
+                    else:
+                        break  # Not a tool call — final answer
 
-        except json.JSONDecodeError:
-            logger.warning(f"Failed to parse LLM tool call for query: {user_message}")
-            return self._fallback_response(user_message)
+                    tool_call = json.loads(json_str)
+                    if 'tool' not in tool_call:
+                        break
+
+                    if tool_call.get('tool') == 'none':
+                        return tool_call.get('answer', "I can help with questions about fees, expenses, and school finances.")
+
+                    # Execute tool
+                    tool_name = tool_call.get('tool', '')
+                    params = tool_call.get('params', {})
+                    data = self._execute_tool(tool_name, params)
+
+                    # Append tool result and call LLM again
+                    messages.append({"role": "assistant", "content": content})
+                    messages.append({"role": "user", "content": f"Tool result: {json.dumps(data, cls=DecimalEncoder)}"})
+
+                    response = client.chat.completions.create(
+                        model=settings.GROQ_MODEL,
+                        messages=messages,
+                        temperature=0.3,
+                        max_tokens=1000,
+                    )
+                    content = response.choices[0].message.content.strip()
+
+                except (json.JSONDecodeError, IndexError, KeyError):
+                    break
+
+            return content
+
         except Exception as e:
             logger.error(f"Finance AI agent error: {e}")
-            return "I'm sorry, I couldn't process that question right now. Please try rephrasing or try again later."
+            return self._fallback_response(user_message)
 
     def _execute_tool(self, tool_name, params):
         """Execute a tool call and return the data."""
@@ -159,11 +207,22 @@ class FinanceAIAgent:
             'get_expense_breakdown': self._get_expense_breakdown,
             'get_other_income': self._get_other_income,
             'get_account_balances': self._get_account_balances,
+            'get_fee_structure': self._get_fee_structure,
+            'get_payment_method_analysis': self._get_payment_method_analysis,
+            'get_scholarships_summary': self._get_scholarships_summary,
+            'get_discounts_impact': self._get_discounts_impact,
+            'get_online_payment_status': self._get_online_payment_status,
+            'get_monthly_closing_status': self._get_monthly_closing_status,
+            'get_fee_defaulters': self._get_fee_defaulters,
+            'get_collection_trend': self._get_collection_trend,
+            'get_transfer_history': self._get_transfer_history,
+            'get_top_expenses': self._get_top_expenses,
         }
 
         handler = tools.get(tool_name)
         if not handler:
-            return {"error": f"Unknown tool: {tool_name}"}
+            available = ', '.join(tools.keys())
+            return {"error": f"Unknown tool: {tool_name}. Available tools: {available}"}
 
         return handler(**params)
 
@@ -465,6 +524,273 @@ class FinanceAIAgent:
             "date_from": date_from,
             "date_to": date_to,
         }
+
+    # ── New Tools (9-18) ────────────────────────────────────────────────
+
+    def _get_fee_structure(self, class_name=None, fee_type=None):
+        from .models import FeeStructure
+
+        qs = FeeStructure.objects.filter(school_id=self.school_id, is_active=True)
+        if class_name:
+            qs = qs.filter(class_obj__name__icontains=class_name)
+        if fee_type:
+            qs = qs.filter(fee_type=fee_type.upper())
+
+        qs = qs.select_related('class_obj')
+        structures = [
+            {
+                "class": fs.class_obj.name if fs.class_obj else "All Classes",
+                "fee_type": fs.fee_type,
+                "amount": float(fs.amount),
+                "effective_from": str(fs.effective_from) if fs.effective_from else None,
+                "effective_to": str(fs.effective_to) if fs.effective_to else None,
+            }
+            for fs in qs[:30]
+        ]
+        return {"structures": structures, "total": len(structures)}
+
+    def _get_payment_method_analysis(self, month=None, year=None):
+        from .models import FeePayment
+
+        today = date.today()
+        month = month or today.month
+        year = year or today.year
+
+        qs = FeePayment.objects.filter(
+            school_id=self.school_id, status='PAID', month=month, year=year,
+        )
+
+        breakdown = qs.values('payment_method').annotate(
+            total=Sum('amount_paid'), count=Count('id'),
+        ).order_by('-total')
+
+        return {
+            "month": month,
+            "year": year,
+            "methods": [
+                {
+                    "method": item['payment_method'] or 'UNKNOWN',
+                    "total_collected": float(item['total'] or 0),
+                    "count": item['count'],
+                }
+                for item in breakdown
+            ],
+            "grand_total": float(qs.aggregate(total=Sum('amount_paid'))['total'] or 0),
+        }
+
+    def _get_scholarships_summary(self):
+        from .models import Scholarship, StudentDiscount
+
+        scholarships = Scholarship.objects.filter(
+            school_id=self.school_id, is_active=True,
+        )
+
+        result = []
+        for s in scholarships:
+            recipients = StudentDiscount.objects.filter(
+                scholarship=s, is_active=True,
+            ).count()
+            result.append({
+                "name": s.name,
+                "type": s.scholarship_type,
+                "coverage": s.coverage,
+                "max_recipients": s.max_recipients,
+                "current_recipients": recipients,
+            })
+
+        return {"scholarships": result, "total_active": len(result)}
+
+    def _get_discounts_impact(self):
+        from .models import Discount, StudentDiscount
+
+        discounts = Discount.objects.filter(
+            school_id=self.school_id, is_active=True,
+        )
+
+        result = []
+        for d in discounts:
+            applied_count = StudentDiscount.objects.filter(
+                discount=d, is_active=True,
+            ).count()
+            result.append({
+                "name": d.name,
+                "discount_type": d.discount_type,
+                "value": float(d.value),
+                "applies_to": d.applies_to,
+                "recipients": applied_count,
+                "stackable": d.stackable,
+            })
+
+        return {"discounts": result, "total_active": len(result)}
+
+    def _get_online_payment_status(self, date_from=None, date_to=None):
+        from .models import OnlinePayment
+
+        qs = OnlinePayment.objects.filter(school_id=self.school_id)
+        if date_from:
+            qs = qs.filter(initiated_at__date__gte=date_from)
+        if date_to:
+            qs = qs.filter(initiated_at__date__lte=date_to)
+
+        breakdown = qs.values('status').annotate(
+            count=Count('id'), total=Sum('amount'),
+        )
+
+        status_map = {item['status']: item for item in breakdown}
+        total = sum(item['count'] for item in breakdown)
+        success_count = status_map.get('SUCCESS', {}).get('count', 0)
+
+        return {
+            "statuses": [
+                {
+                    "status": item['status'],
+                    "count": item['count'],
+                    "total": float(item['total'] or 0),
+                }
+                for item in breakdown
+            ],
+            "total_transactions": total,
+            "success_rate": f"{round(success_count / total * 100, 1)}%" if total else "N/A",
+            "date_from": date_from,
+            "date_to": date_to,
+        }
+
+    def _get_monthly_closing_status(self):
+        from .models import MonthlyClosing
+
+        closings = MonthlyClosing.objects.filter(
+            school_id=self.school_id,
+        ).order_by('-year', '-month')[:12]
+
+        today = date.today()
+        closed_periods = [(c.year, c.month) for c in closings]
+
+        # Check last 6 months
+        open_months = []
+        for i in range(6):
+            m = today.month - i
+            y = today.year
+            if m <= 0:
+                m += 12
+                y -= 1
+            if (y, m) not in closed_periods:
+                open_months.append({"year": y, "month": m})
+
+        return {
+            "closed_months": [
+                {"year": c.year, "month": c.month, "closed_at": str(c.closed_at)}
+                for c in closings
+            ],
+            "open_months": open_months,
+        }
+
+    def _get_fee_defaulters(self, min_months=2):
+        from .models import FeePayment
+
+        qs = FeePayment.objects.filter(
+            school_id=self.school_id, status='UNPAID',
+        ).values(
+            'student_id', 'student__name', 'student__class_obj__name',
+        ).annotate(
+            unpaid_months=Count('id'),
+            total_due=Sum('amount_due'),
+        ).filter(
+            unpaid_months__gte=int(min_months),
+        ).order_by('-unpaid_months')[:30]
+
+        return {
+            "defaulters": [
+                {
+                    "student": item['student__name'],
+                    "class": item['student__class_obj__name'],
+                    "unpaid_months": item['unpaid_months'],
+                    "total_due": float(item['total_due'] or 0),
+                }
+                for item in qs
+            ],
+            "min_months_filter": min_months,
+        }
+
+    def _get_collection_trend(self, months=6):
+        from .models import FeePayment
+
+        today = date.today()
+        trend = []
+        for i in range(int(months)):
+            m = today.month - i
+            y = today.year
+            if m <= 0:
+                m += 12
+                y -= 1
+
+            qs = FeePayment.objects.filter(
+                school_id=self.school_id, month=m, year=y,
+            )
+            totals = qs.aggregate(
+                total_due=Sum('amount_due'),
+                total_paid=Sum('amount_paid'),
+            )
+            total_due = float(totals['total_due'] or 0)
+            total_paid = float(totals['total_paid'] or 0)
+
+            trend.append({
+                "month": m,
+                "year": y,
+                "total_due": total_due,
+                "total_collected": total_paid,
+                "collection_rate": round(total_paid / total_due * 100, 1) if total_due else 0,
+            })
+
+        return {"trend": list(reversed(trend))}
+
+    def _get_transfer_history(self, date_from=None, date_to=None):
+        from .models import Transfer
+
+        qs = Transfer.objects.filter(
+            school_id=self.school_id,
+        ).select_related('from_account', 'to_account').order_by('-date')
+
+        if date_from:
+            qs = qs.filter(date__gte=date_from)
+        if date_to:
+            qs = qs.filter(date__lte=date_to)
+
+        transfers = [
+            {
+                "date": str(t.date),
+                "from_account": t.from_account.name,
+                "to_account": t.to_account.name,
+                "amount": float(t.amount),
+                "description": t.description or '',
+            }
+            for t in qs[:20]
+        ]
+
+        return {"transfers": transfers, "total": len(transfers)}
+
+    def _get_top_expenses(self, limit=10, date_from=None, date_to=None):
+        from .models import Expense
+
+        qs = Expense.objects.filter(
+            school_id=self.school_id,
+        ).select_related('category').order_by('-amount')
+
+        if date_from:
+            qs = qs.filter(date__gte=date_from)
+        if date_to:
+            qs = qs.filter(date__lte=date_to)
+
+        expenses = [
+            {
+                "date": str(e.date),
+                "category": e.category.name if e.category else 'Uncategorized',
+                "amount": float(e.amount),
+                "description": e.description or '',
+            }
+            for e in qs[:int(limit)]
+        ]
+
+        return {"expenses": expenses, "total_shown": len(expenses)}
 
     def _fallback_response(self, user_message):
         """Simple keyword-based fallback when LLM is not available."""

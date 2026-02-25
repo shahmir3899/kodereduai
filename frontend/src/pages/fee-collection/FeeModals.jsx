@@ -944,24 +944,6 @@ export function StudentFeeModal({ student, amount, setAmount, onSubmit, onClose,
   )
 }
 
-export function DeleteConfirmModal({ show, message, onConfirm, onCancel, isPending }) {
-  if (!show) return null
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-sm p-6">
-        <h3 className="text-lg font-semibold mb-2 text-red-700">Confirm Delete</h3>
-        <p className="text-sm text-gray-600 mb-4">{message}</p>
-        <div className="flex gap-3">
-          <button onClick={onCancel} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">Cancel</button>
-          <button onClick={onConfirm} disabled={isPending} className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-50 text-sm disabled:opacity-50">
-            {isPending ? 'Deleting...' : 'Delete'}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 export function CreateSingleFeeModal({ show, onClose, onSubmit, isPending, error, isSuccess, classList, activeSchoolId, academicYearId, accountsList = [] }) {
   const now = new Date()
   const initialForm = {

@@ -39,6 +39,7 @@ const LeaveManagementPage = lazy(() => import('./pages/hr/LeaveManagementPage'))
 const StaffAttendancePage = lazy(() => import('./pages/hr/StaffAttendancePage'))
 const PerformanceAppraisalPage = lazy(() => import('./pages/hr/PerformanceAppraisalPage'))
 const StaffDocumentsPage = lazy(() => import('./pages/hr/StaffDocumentsPage'))
+const LetterComposerPage = lazy(() => import('./pages/hr/LetterComposerPage'))
 
 // Academics pages
 const SubjectsPage = lazy(() => import('./pages/academics/SubjectsPage'))
@@ -289,6 +290,7 @@ function App() {
             <Route path="hr/attendance" element={<SchoolRoute><ModuleRoute module="hr"><StaffAttendancePage /></ModuleRoute></SchoolRoute>} />
             <Route path="hr/appraisals" element={<SchoolRoute><ModuleRoute module="hr"><PerformanceAppraisalPage /></ModuleRoute></SchoolRoute>} />
             <Route path="hr/documents" element={<SchoolRoute><ModuleRoute module="hr"><StaffDocumentsPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="hr/letters" element={<SchoolRoute><ModuleRoute module="hr"><LetterComposerPage /></ModuleRoute></SchoolRoute>} />
 
             {/* Academics routes */}
             <Route path="academics/subjects" element={<SchoolRoute><ModuleRoute module="academics"><SubjectsPage /></ModuleRoute></SchoolRoute>} />

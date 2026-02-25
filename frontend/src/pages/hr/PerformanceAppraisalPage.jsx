@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { hrApi } from '../../services/api'
+import { useConfirmModal } from '../../components/ConfirmModal'
 
 const EMPTY_FORM = {
   staff_member: '',
@@ -45,6 +46,7 @@ const ratingLabels = { 1: 'Poor', 2: 'Below Average', 3: 'Average', 4: 'Good', 5
 
 export default function PerformanceAppraisalPage() {
   const queryClient = useQueryClient()
+  const { confirm, ConfirmModalRoot } = useConfirmModal()
   const [search, setSearch] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [editId, setEditId] = useState(null)
@@ -198,7 +200,7 @@ export default function PerformanceAppraisalPage() {
                       <button onClick={() => setDetailAppraisal(a)} className="text-xs text-primary-600 hover:underline mr-2">View</button>
                       <button onClick={() => openEdit(a)} className="text-xs text-primary-600 hover:underline mr-2">Edit</button>
                       <button
-                        onClick={() => { if (confirm('Delete this appraisal?')) deleteMutation.mutate(a.id) }}
+                        onClick={async () => { const ok = await confirm({ title: 'Delete Appraisal', message: 'Delete this appraisal? This cannot be undone.' }); if (ok) deleteMutation.mutate(a.id) }}
                         className="text-xs text-red-600 hover:underline"
                       >
                         Delete
@@ -229,7 +231,7 @@ export default function PerformanceAppraisalPage() {
                   <button onClick={() => setDetailAppraisal(a)} className="text-xs text-primary-600 hover:underline">View</button>
                   <button onClick={() => openEdit(a)} className="text-xs text-primary-600 hover:underline">Edit</button>
                   <button
-                    onClick={() => { if (confirm('Delete this appraisal?')) deleteMutation.mutate(a.id) }}
+                    onClick={async () => { const ok = await confirm({ title: 'Delete Appraisal', message: 'Delete this appraisal? This cannot be undone.' }); if (ok) deleteMutation.mutate(a.id) }}
                     className="text-xs text-red-600 hover:underline"
                   >
                     Delete
@@ -421,6 +423,8 @@ export default function PerformanceAppraisalPage() {
           </div>
         </div>
       )}
+
+      <ConfirmModalRoot />
     </div>
   )
 }

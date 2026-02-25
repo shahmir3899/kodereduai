@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useOtherIncome } from './useOtherIncome'
-import { IncomeModal, DeleteConfirmModal } from './FeeModals'
+import { IncomeModal } from './FeeModals'
 import { MONTHS } from './FeeFilters'
 import { useToast } from '../../components/Toast'
+import { useConfirmModal } from '../../components/ConfirmModal'
 
 export default function OtherIncomePage() {
   const { isStaffMember } = useAuth()
@@ -14,7 +15,7 @@ export default function OtherIncomePage() {
   const [month, setMonth] = useState(now.getMonth() + 1)
   const [year, setYear] = useState(now.getFullYear())
   const [showIncomeModal, setShowIncomeModal] = useState(false)
-  const [deleteTarget, setDeleteTarget] = useState(null)
+  const { confirm, ConfirmModalRoot } = useConfirmModal()
 
   const [incomeForm, setIncomeForm] = useState({
     category: '', amount: '', date: new Date().toISOString().split('T')[0], description: '', account: ''
@@ -41,10 +42,9 @@ export default function OtherIncomePage() {
     })
   }
 
-  const handleDeleteConfirm = () => {
-    data.deleteIncomeMutation.mutate(deleteTarget, {
-      onSuccess: () => setDeleteTarget(null),
-    })
+  const handleDeleteIncome = async (id) => {
+    const ok = await confirm({ title: 'Delete Income', message: 'Delete this income record? This cannot be undone.' })
+    if (ok) data.deleteIncomeMutation.mutate(id)
   }
 
   const totalIncome = data.incomeList.reduce((sum, i) => sum + Number(i.amount), 0)
@@ -114,7 +114,7 @@ export default function OtherIncomePage() {
                   </div>
                   <p className="text-xs text-gray-500">{item.date} {item.description && `\u2014 ${item.description}`}</p>
                   {item.account_name && <p className="text-xs text-gray-400 mt-1">Account: {item.account_name}</p>}
-                  {canWrite && <button onClick={() => setDeleteTarget(item.id)} className="mt-2 text-xs text-red-600 hover:text-red-800">Delete</button>}
+                  {canWrite && <button onClick={() => handleDeleteIncome(item.id)} className="mt-2 text-xs text-red-600 hover:text-red-800">Delete</button>}
                 </div>
               ))}
             </div>
@@ -142,7 +142,7 @@ export default function OtherIncomePage() {
                       <td className="px-4 py-3 text-sm font-medium text-green-700 text-right">{Number(item.amount).toLocaleString()}</td>
                       {canWrite && (
                         <td className="px-4 py-3 text-center">
-                          <button onClick={() => setDeleteTarget(item.id)} className="text-sm text-red-600 hover:text-red-800">Delete</button>
+                          <button onClick={() => handleDeleteIncome(item.id)} className="text-sm text-red-600 hover:text-red-800">Delete</button>
                         </td>
                       )}
                     </tr>
@@ -166,13 +166,7 @@ export default function OtherIncomePage() {
         incomeCategories={data.incomeCategories}
       />
 
-      <DeleteConfirmModal
-        show={deleteTarget !== null}
-        message="Delete this income record? This cannot be undone."
-        onConfirm={handleDeleteConfirm}
-        onCancel={() => setDeleteTarget(null)}
-        isPending={data.deleteIncomeMutation.isPending}
-      />
+      <ConfirmModalRoot />
     </div>
   )
 }

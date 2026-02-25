@@ -17,7 +17,6 @@ export default function SessionSetupWizard({ onClose }) {
     new_year_name: '',
     new_start_date: '',
     new_end_date: '',
-    fee_increase_percent: 0,
   })
   const [preview, setPreview] = useState(null)
 
@@ -42,7 +41,12 @@ export default function SessionSetupWizard({ onClose }) {
     mutationFn: (data) => sessionsApi.setupApply(data),
     onSuccess: (res) => {
       if (res.data.success) {
-        addToast('New academic year created successfully!', 'success')
+        addToast(
+          res.data.sync_mode
+            ? 'Academic year synced successfully!'
+            : 'New academic year created successfully!',
+          'success'
+        )
         queryClient.invalidateQueries({ queryKey: ['academicYears'] })
         refreshYears()
         setStep(3)
@@ -73,21 +77,32 @@ export default function SessionSetupWizard({ onClose }) {
     setFormData(prev => ({ ...prev, source_year_id: sourceId }))
     const source = academicYears.find(y => String(y.id) === String(sourceId))
     if (source) {
-      // Auto-suggest next year name: "2025-2026" -> "2026-2027"
-      const match = source.name.match(/(\d{4})-(\d{4})/)
-      if (match) {
-        const nextStart = parseInt(match[2])
-        const nextEnd = nextStart + 1
+      // Auto-suggest next year: handles "2025-2026", "2025-26", "Academic Year 2025-26", etc.
+      const match4 = source.name.match(/(\d{4})-(\d{4})/)
+      const match2 = source.name.match(/(\d{4})-(\d{2})/)
+      if (match4 || match2) {
+        const startYear = parseInt((match4 || match2)[1])
+        const endYear = match4 ? parseInt(match4[2]) : 2000 + parseInt(match2[2])
+        const nextStart = endYear
+        const nextEnd = nextStart + (endYear - startYear)
+        // Preserve the source naming convention (prefix + format)
+        const prefix = source.name.replace(/\d{4}-\d{2,4}.*/, '').trim()
+        const usesShortYear = !match4 && match2
+        const nextName = prefix
+          ? `${prefix} ${nextStart}-${usesShortYear ? String(nextEnd).slice(-2) : nextEnd}`
+          : `${nextStart}-${usesShortYear ? String(nextEnd).slice(-2) : nextEnd}`
         setFormData(prev => ({
           ...prev,
           source_year_id: sourceId,
-          new_year_name: `${nextStart}-${nextEnd}`,
+          new_year_name: nextName,
           new_start_date: `${nextStart}-04-01`,
           new_end_date: `${nextEnd}-03-31`,
         }))
       }
     }
   }
+
+  const isSync = preview?.sync_mode
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
@@ -98,7 +113,7 @@ export default function SessionSetupWizard({ onClose }) {
             <h2 className="text-lg font-bold text-gray-900">AI Session Setup Wizard</h2>
             <p className="text-sm text-gray-500 mt-0.5">
               {step === 1 && 'Configure new academic year based on a previous year'}
-              {step === 2 && 'Review what will be created'}
+              {step === 2 && (isSync ? 'Review what will be created or updated' : 'Review what will be created')}
               {step === 3 && 'Setup complete!'}
             </p>
           </div>
@@ -180,20 +195,6 @@ export default function SessionSetupWizard({ onClose }) {
                 </div>
               </div>
 
-              <div>
-                <label className="label">Fee Increase (%)</label>
-                <input
-                  type="number"
-                  className="input"
-                  min="0"
-                  max="100"
-                  step="0.5"
-                  value={formData.fee_increase_percent}
-                  onChange={e => setFormData(prev => ({ ...prev, fee_increase_percent: parseFloat(e.target.value) || 0 }))}
-                />
-                <p className="text-xs text-gray-500 mt-1">Applied to all carried-forward fee structures</p>
-              </div>
-
               <button type="submit" className="btn-primary w-full" disabled={previewMutation.isPending}>
                 {previewMutation.isPending ? 'Generating Preview...' : 'Generate Preview'}
               </button>
@@ -203,6 +204,22 @@ export default function SessionSetupWizard({ onClose }) {
           {/* Step 2: Preview */}
           {step === 2 && preview && (
             <div className="space-y-5">
+              {/* Sync mode banner */}
+              {isSync && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-start gap-2">
+                  <svg className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  <div>
+                    <p className="text-sm font-semibold text-blue-800">Sync Mode</p>
+                    <p className="text-xs text-blue-700 mt-0.5">
+                      An academic year named &ldquo;{preview.new_year?.name}&rdquo; already exists.
+                      The wizard will update existing records and create only what&apos;s missing.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* AI Suggestions */}
               {preview.ai_suggestions?.length > 0 && (
                 <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
@@ -214,11 +231,20 @@ export default function SessionSetupWizard({ onClose }) {
               )}
 
               {/* Summary cards */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <SummaryCard label="Terms" value={preview.statistics?.terms_count || 0} color="sky" />
-                <SummaryCard label="Subject Assignments" value={preview.statistics?.subjects_assigned || 0} color="purple" />
-                <SummaryCard label="Fee Structures" value={preview.statistics?.fee_structures_count || 0} color="green" />
-                <SummaryCard label="Timetable Entries" value={preview.statistics?.timetable_entries || 0} color="orange" />
+              <div className="grid grid-cols-3 gap-3">
+                {isSync && preview.sync_statistics ? (
+                  <>
+                    <SyncSummaryCard label="Terms" stats={preview.sync_statistics.terms} color="sky" />
+                    <SyncSummaryCard label="Subject Assignments" stats={preview.sync_statistics.class_subjects} color="purple" />
+                    <SyncSummaryCard label="Timetable" stats={preview.sync_statistics.timetable} color="orange" />
+                  </>
+                ) : (
+                  <>
+                    <SummaryCard label="Terms" value={preview.statistics?.terms_count || 0} color="sky" />
+                    <SummaryCard label="Subject Assignments" value={preview.statistics?.subjects_assigned || 0} color="purple" />
+                    <SummaryCard label="Timetable Entries" value={preview.statistics?.timetable_entries || 0} color="orange" />
+                  </>
+                )}
               </div>
 
               {/* Terms preview */}
@@ -228,40 +254,21 @@ export default function SessionSetupWizard({ onClose }) {
                   <div className="space-y-1">
                     {preview.terms.map((t, i) => (
                       <div key={i} className="flex items-center justify-between py-1.5 px-3 bg-gray-50 rounded text-sm">
-                        <span className="font-medium">{t.name}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{t.name}</span>
+                          {isSync && t.action && (
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                              t.action === 'create' ? 'bg-green-100 text-green-700' :
+                              t.action === 'update' ? 'bg-amber-100 text-amber-700' :
+                              'bg-gray-100 text-gray-500'
+                            }`}>
+                              {t.action === 'create' ? 'NEW' : t.action === 'update' ? 'UPDATE' : 'NO CHANGE'}
+                            </span>
+                          )}
+                        </div>
                         <span className="text-gray-500 text-xs">{t.start_date} to {t.end_date}</span>
                       </div>
                     ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Fee preview */}
-              {preview.fee_structures?.length > 0 && (
-                <div>
-                  <h3 className="text-sm font-semibold text-gray-700 mb-2">Fee Structures</h3>
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full text-sm">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="text-left px-3 py-2 text-xs text-gray-500">Class/Student</th>
-                          <th className="text-right px-3 py-2 text-xs text-gray-500">Old Amount</th>
-                          <th className="text-right px-3 py-2 text-xs text-gray-500">New Amount</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100">
-                        {preview.fee_structures.slice(0, 10).map((f, i) => (
-                          <tr key={i}>
-                            <td className="px-3 py-1.5">{f.student_name || f.class_name || '-'}</td>
-                            <td className="px-3 py-1.5 text-right text-gray-500">{f.original_amount}</td>
-                            <td className="px-3 py-1.5 text-right font-medium">{f.new_amount}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    {preview.fee_structures.length > 10 && (
-                      <p className="text-xs text-gray-500 mt-1 px-3">...and {preview.fee_structures.length - 10} more</p>
-                    )}
                   </div>
                 </div>
               )}
@@ -272,7 +279,9 @@ export default function SessionSetupWizard({ onClose }) {
                   Back to Configure
                 </button>
                 <button onClick={handleApply} className="btn-primary flex-1" disabled={applyMutation.isPending}>
-                  {applyMutation.isPending ? 'Creating...' : 'Create New Session'}
+                  {applyMutation.isPending
+                    ? (isSync ? 'Syncing...' : 'Creating...')
+                    : (isSync ? 'Sync Session' : 'Create New Session')}
                 </button>
               </div>
             </div>
@@ -286,10 +295,13 @@ export default function SessionSetupWizard({ onClose }) {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
               </div>
-              <h3 className="text-lg font-bold text-gray-900 mb-2">Session Created Successfully!</h3>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">
+                {isSync ? 'Session Synced Successfully!' : 'Session Created Successfully!'}
+              </h3>
               <p className="text-sm text-gray-500 mb-6">
-                Your new academic year has been set up with all carried-forward data.
-                You can now set it as the current year from the Sessions page.
+                {isSync
+                  ? 'Your academic year has been updated with the latest data from the source year.'
+                  : 'Your new academic year has been set up with all carried-forward data. You can now set it as the current year from the Sessions page.'}
               </p>
               <button onClick={onClose} className="btn-primary">
                 Close
@@ -306,13 +318,32 @@ function SummaryCard({ label, value, color }) {
   const colors = {
     sky: 'bg-sky-50 text-sky-800',
     purple: 'bg-purple-50 text-purple-800',
-    green: 'bg-green-50 text-green-800',
     orange: 'bg-orange-50 text-orange-800',
   }
   return (
     <div className={`rounded-lg p-3 ${colors[color] || colors.sky}`}>
       <p className="text-xs opacity-70">{label}</p>
       <p className="text-2xl font-bold mt-0.5">{value}</p>
+    </div>
+  )
+}
+
+function SyncSummaryCard({ label, stats, color }) {
+  const colors = {
+    sky: 'bg-sky-50 text-sky-800',
+    purple: 'bg-purple-50 text-purple-800',
+    orange: 'bg-orange-50 text-orange-800',
+  }
+  const total = (stats?.create || 0) + (stats?.update || 0) + (stats?.skip || 0)
+  return (
+    <div className={`rounded-lg p-3 ${colors[color] || colors.sky}`}>
+      <p className="text-xs opacity-70">{label}</p>
+      <p className="text-2xl font-bold mt-0.5">{total}</p>
+      <div className="flex gap-2 mt-1 text-xs opacity-80 flex-wrap">
+        {(stats?.create || 0) > 0 && <span>+{stats.create} new</span>}
+        {(stats?.update || 0) > 0 && <span>{stats.update} update</span>}
+        {(stats?.skip || 0) > 0 && <span>{stats.skip} unchanged</span>}
+      </div>
     </div>
   )
 }

@@ -33,7 +33,7 @@ KoderEduAI is a **complete, AI-powered School ERP** that replaces 10+ disconnect
 | Need biometric machines, RFID cards, or QR scanners for digital attendance | **Just photograph your existing register** — AI does the rest |
 | Buy a monolithic suite, pay for 50 modules, use 5 | **Enable only the modules you need** — pay for what you use |
 | Separate apps for attendance, fees, HR, LMS, transport | **One platform, every function** — no integrations to break |
-| "AI-powered" means a chatbot that answers FAQs | **Real AI**: OCR + LLM reasoning + face recognition + AI study helper + AI financial queries |
+| "AI-powered" means a chatbot that answers FAQs | **Real AI**: OCR + LLM reasoning + face recognition + 4 AI chatbot agents (54 tools) for finance, academics, parent communication & student study help |
 | Built on legacy PHP/jQuery from 2012 | **Modern stack**: React + Django REST + Celery async — fast, secure, scalable |
 | Each school branch = separate login, separate database | **True multi-tenancy**: switch between branches in one click |
 | Parent portal = one-way notification dump | **Two-way engagement**: messaging, leave requests, live fee status, exam results |
@@ -63,6 +63,7 @@ KoderEduAI is a **complete, AI-powered School ERP** that replaces 10+ disconnect
 | **200+ API Endpoints** | Deep functionality, not shallow dashboards |
 | **88+ Frontend Pages** | A dedicated interface for every workflow |
 | **9 Role Levels** | From Super Admin to Student — everyone sees exactly what they need |
+| **4 AI Chat Agents** | 54 tools across Finance, Academics, Parent Communication & Study Helper |
 | **5 Notification Channels** | In-App, SMS, Email, WhatsApp, Push — reach anyone, anywhere |
 | **0 Hardware Required** | For attendance — just a smartphone camera |
 

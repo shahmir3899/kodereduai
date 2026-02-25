@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { schoolsApi, usersApi, organizationsApi, membershipsApi } from '../services/api'
+import { useConfirmModal } from '../components/ConfirmModal'
 
 export default function SuperAdminDashboard() {
   const queryClient = useQueryClient()
+  const { confirm, ConfirmModalRoot } = useConfirmModal()
   const [activeTab, setActiveTab] = useState('overview')
 
   // ── School state ──────────────────────────────────────────────────────────
@@ -755,7 +757,7 @@ export default function SuperAdminDashboard() {
                         Edit
                       </button>
                       <button
-                        onClick={() => { if (confirm(`Delete "${org.name}"?`)) deleteOrgMutation.mutate(org.id) }}
+                        onClick={async () => { const ok = await confirm({ title: 'Delete Organization', message: `Delete "${org.name}"?` }); if (ok) deleteOrgMutation.mutate(org.id) }}
                         disabled={deleteOrgMutation.isPending}
                         className="text-xs text-red-600 font-medium disabled:opacity-50"
                       >
@@ -796,7 +798,7 @@ export default function SuperAdminDashboard() {
                             Edit
                           </button>
                           <button
-                            onClick={() => { if (confirm(`Delete "${org.name}"?`)) deleteOrgMutation.mutate(org.id) }}
+                            onClick={async () => { const ok = await confirm({ title: 'Delete Organization', message: `Delete "${org.name}"?` }); if (ok) deleteOrgMutation.mutate(org.id) }}
                             disabled={deleteOrgMutation.isPending}
                             className="text-sm text-red-600 hover:text-red-700 font-medium disabled:opacity-50"
                           >
@@ -853,7 +855,7 @@ export default function SuperAdminDashboard() {
                         Edit
                       </button>
                       <button
-                        onClick={() => { if (confirm('Remove this membership?')) deleteMemMutation.mutate(mem.id) }}
+                        onClick={async () => { const ok = await confirm({ title: 'Remove Membership', message: 'Remove this membership?', confirmLabel: 'Remove' }); if (ok) deleteMemMutation.mutate(mem.id) }}
                         disabled={deleteMemMutation.isPending}
                         className="text-xs text-red-600 font-medium disabled:opacity-50"
                       >
@@ -899,7 +901,7 @@ export default function SuperAdminDashboard() {
                             Edit
                           </button>
                           <button
-                            onClick={() => { if (confirm('Remove this membership?')) deleteMemMutation.mutate(mem.id) }}
+                            onClick={async () => { const ok = await confirm({ title: 'Remove Membership', message: 'Remove this membership?', confirmLabel: 'Remove' }); if (ok) deleteMemMutation.mutate(mem.id) }}
                             disabled={deleteMemMutation.isPending}
                             className="text-sm text-red-600 hover:text-red-700 font-medium disabled:opacity-50"
                           >
@@ -1310,6 +1312,8 @@ export default function SuperAdminDashboard() {
           />
         </Modal>
       )}
+
+      <ConfirmModalRoot />
     </div>
   )
 }

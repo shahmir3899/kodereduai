@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../../contexts/AuthContext'
 import { useToast } from '../../components/Toast'
+import { useConfirmModal } from '../../components/ConfirmModal'
 import { faceAttendanceApi, studentsApi } from '../../services/api'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import ClassSelector from '../../components/ClassSelector'
@@ -10,6 +11,7 @@ import ClassSelector from '../../components/ClassSelector'
 export default function FaceEnrollmentPage() {
   const { activeSchool } = useAuth()
   const { showError, showSuccess } = useToast()
+  const { confirm, ConfirmModalRoot } = useConfirmModal()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const fileInputRef = useRef(null)
@@ -213,10 +215,9 @@ export default function FaceEnrollmentPage() {
                     </div>
                   </div>
                   <button
-                    onClick={() => {
-                      if (confirm('Remove this face enrollment?')) {
-                        deleteMutation.mutate(enrollment.id)
-                      }
+                    onClick={async () => {
+                      const ok = await confirm({ title: 'Remove Enrollment', message: 'Remove this face enrollment?', confirmLabel: 'Remove' })
+                      if (ok) deleteMutation.mutate(enrollment.id)
                     }}
                     className="text-red-500 hover:text-red-700 text-xs"
                   >
@@ -240,6 +241,8 @@ export default function FaceEnrollmentPage() {
           )}
         </div>
       </div>
+
+      <ConfirmModalRoot />
     </div>
   )
 }

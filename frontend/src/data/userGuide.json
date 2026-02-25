@@ -3,7 +3,7 @@
     "title": "KoderEduAI",
     "subtitle": "School Administration Guide",
     "version": "3.0 - AI Intelligence Edition",
-    "generatedAt": "2026-02-24T12:59:58.815433+00:00",
+    "generatedAt": "2026-02-25T08:08:17.291343+00:00",
     "totalChapters": 21,
     "modules": [
       "Dashboard | Classes & Students | Attendance (AI-Powered)",
@@ -2337,6 +2337,16 @@
               "type": "step",
               "number": 5,
               "text": "Mark approved payslips as 'Paid' once payment is disbursed."
+            },
+            {
+              "type": "step",
+              "number": 6,
+              "text": "Click the 'Download PDF' button on any payslip to download a printable payslip document. The PDF includes the school logo (if configured in school settings), school name, address, contact details, employee information, earnings breakdown, deductions breakdown, net salary, and signature lines."
+            },
+            {
+              "type": "info_box",
+              "title": "School Logo on Payslips",
+              "text": "The payslip PDF automatically includes your school's logo at the top if one is configured. To set or update the logo, go to Settings > School Profile and enter the logo URL. If no logo is set, the payslip generates without it."
             }
           ]
         },
@@ -2460,6 +2470,60 @@
               "type": "step",
               "number": 3,
               "text": "Documents are stored securely and accessible from the staff profile."
+            }
+          ]
+        },
+        {
+          "title": "Letter Composer",
+          "slug": "letter-composer",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > HR & Staff > Letter Composer"
+            },
+            {
+              "type": "body_text",
+              "text": "The Letter Composer allows you to create official letters on your school's letterhead. It supports 7 built-in templates (Experience Certificate, Termination, Warning, Appreciation, Leave Approval, Salary Increment, Transfer) and fully custom letters."
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Select a Quick Draft Template to start with a pre-built letter structure, or choose 'Custom Letter'."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "Pick a recipient: select from School, Employee, or type a custom address. Selecting an employee auto-fills placeholders like name, department, and designation."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Edit the Subject and Body. Use the formatting toolbar: *bold*, _italic_, ~strikethrough~, bullet lists, and numbered lists."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Preview your letter in the right panel (live preview updates as you type)."
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "Click 'Generate PDF' to download the letter as a PDF with your school's letterhead as background."
+            },
+            {
+              "type": "step",
+              "number": 6,
+              "text": "Letters are automatically saved to history. Load, edit, or delete past letters from the history table."
+            },
+            {
+              "type": "info_box",
+              "title": "AI Letter Drafting",
+              "text": "Click 'Draft with AI' to open the AI assistant panel. Describe the letter you need in plain language (e.g., 'Write a warning letter for late attendance') and the AI will generate a complete subject and body. Quick suggestion chips are provided for common letter types. If an employee is selected, their details are automatically included for context. Review and edit the AI-generated content before generating the PDF."
+            },
+            {
+              "type": "info_box",
+              "title": "School Letterhead",
+              "text": "Letters are generated with your school's letterhead as the PDF background. To configure the letterhead, go to Settings > School Profile and set the Letterhead URL (uploaded to Supabase Storage). If no letterhead is set, letters generate on a white background."
             }
           ]
         }
@@ -3335,17 +3399,27 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Click the Notification Bell icon in the top bar for quick view."
+              "text": "Click the Notification Bell icon in the top bar for a quick dropdown (shows 8 most recent). The bell bounces when new notifications arrive."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Or navigate to 'Notifications' in the sidebar for the full Inbox."
+              "text": "Or navigate to 'Notifications' in the sidebar for the full Inbox tab with pagination."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Unread notifications are highlighted. Click to mark as read."
+              "text": "Unread notifications are highlighted with a blue dot. Click to mark as read."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Use 'Mark all read' (with confirmation) to clear all unread notifications at once."
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "Filter by event type (Absence, Fee Due, Exam, Transport Update, etc.) using the dropdown."
             }
           ]
         },
@@ -3397,22 +3471,27 @@
             {
               "type": "step",
               "number": 2,
-              "text": "Choose recipients: All Students, All Parents, All Staff, Specific Class, or Individual."
+              "text": "Choose mode: 'Broadcast' to send to all users of a role, or 'Single' for one recipient."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Select a template or compose a custom message."
+              "text": "In Broadcast mode, select a role group: All Parents, All Teachers, All Staff, Principals, HR Managers, Accountants, or All Students."
             },
             {
               "type": "step",
               "number": 4,
-              "text": "Preview the notification."
+              "text": "Optionally pick an existing template to pre-fill the message, or compose a custom message."
             },
             {
               "type": "step",
               "number": 5,
-              "text": "Click 'Send'. Notifications are delivered to all selected recipients."
+              "text": "For SMS/WhatsApp channels, a character counter helps keep messages within limits (160/1600 chars)."
+            },
+            {
+              "type": "step",
+              "number": 6,
+              "text": "Click 'Send'. The system shows how many notifications were sent, failed, or skipped."
             }
           ]
         },
@@ -3427,7 +3506,7 @@
             },
             {
               "type": "body_text",
-              "text": "Track notification effectiveness:"
+              "text": "Track notification effectiveness with configurable date ranges (7 days, 30 days, 90 days, or all time):"
             },
             {
               "type": "bullet",
@@ -3439,7 +3518,7 @@
             },
             {
               "type": "bullet",
-              "text": "Breakdown by type and recipient group"
+              "text": "Breakdown by channel (WhatsApp, SMS, In-App, Email, Push) and event type"
             }
           ]
         },
@@ -3454,7 +3533,7 @@
             },
             {
               "type": "body_text",
-              "text": "Configure smart scheduling (AI-optimized send times for non-urgent messages) and automated notification controls from the Settings tab. Each automation type can be toggled ON/OFF per school."
+              "text": "Configure notification channels, smart scheduling (AI-optimized send times), and automated notification controls from the Settings tab. Each automation type can be toggled ON/OFF per school. Toggles are module-aware: if a module (e.g., Transport, Finance) is disabled for the school, its related toggles are automatically hidden."
             },
             {
               "type": "table",
@@ -3485,11 +3564,25 @@
                   "When admin publishes results"
                 ],
                 [
+                  "Daily Absence Summary",
+                  "OFF",
+                  "Sent daily at configured time"
+                ],
+                [
+                  "Transport Notifications",
+                  "ON",
+                  "Bus departed, arriving at stop, journey completed"
+                ],
+                [
                   "Smart Scheduling",
                   "OFF",
                   "AI learns optimal send times over 2-4 weeks"
                 ]
               ]
+            },
+            {
+              "type": "body_text",
+              "text": "The Settings tab also warns you about unsaved changes before navigating away. Channel toggles include WhatsApp, SMS, In-App, Email, and Push notifications."
             },
             {
               "type": "info_box",
@@ -5106,6 +5199,25 @@
               "type": "info_box",
               "title": "Fallback",
               "text": "Without a Groq API key, the system generates rule-based comments automatically."
+            }
+          ]
+        },
+        {
+          "title": "AI Letter Drafting",
+          "slug": "ai-letter-drafting",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > HR & Staff > Letter Composer > Draft with AI"
+            },
+            {
+              "type": "body_text",
+              "text": "The Letter Composer includes an AI assistant that drafts professional letters from natural language descriptions. Enter a prompt like 'Write a warning letter for late attendance' or 'Draft an experience certificate for Rajesh who joined 3 years ago as a Math teacher' and the AI generates a complete subject and body. The AI uses template context (if a template type is selected) and employee details (if an employee is selected) for more accurate drafts. Quick suggestion chips are provided for common letter types."
+            },
+            {
+              "type": "info_box",
+              "title": "Fallback",
+              "text": "Without a Groq API key, the system matches keywords in your prompt to built-in templates and returns the closest matching template. You can always edit the content manually."
             }
           ]
         }

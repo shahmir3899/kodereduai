@@ -348,7 +348,7 @@ school(FK), name, event_type (FEE_DUE/ABSENCE/EXAM/GENERAL), channel (IN_APP/SMS
 school(FK), template(FK nullable), channel, event_type, recipient_type, recipient_identifier, title, body, status (PENDING/SENT/DELIVERED/FAILED/READ), metadata(JSON), sent_at
 
 ### SchoolNotificationConfig
-school(OneToOne), whatsapp_enabled, sms_enabled, in_app_enabled, email_enabled, push_enabled, quiet_hours_start/end, fee_reminder_day, daily_absence_summary_time, smart_scheduling_enabled, absence_notification_enabled, fee_reminder_enabled, fee_overdue_enabled, exam_result_enabled, daily_absence_summary_enabled
+school(OneToOne), whatsapp_enabled, sms_enabled, in_app_enabled, email_enabled, push_enabled, quiet_hours_start/end, fee_reminder_day, daily_absence_summary_time, smart_scheduling_enabled, absence_notification_enabled, fee_reminder_enabled, fee_overdue_enabled, exam_result_enabled, daily_absence_summary_enabled, transport_notification_enabled
 
 ### NotificationPreference
 school(FK), user(FK nullable), student(FK nullable), channel, event_type, is_enabled
@@ -482,6 +482,20 @@ school(FK), item(FK), transaction_type (PURCHASE/ISSUE/RETURN/ADJUSTMENT), quant
 
 ---
 
+## reports — Report Generation & Letter Composer
+
+### GeneratedReport
+school(FK), report_type (ATTENDANCE_DAILY/ATTENDANCE_MONTHLY/ATTENDANCE_TERM/FEE_COLLECTION/FEE_DEFAULTERS/FEE_RECEIPT/STUDENT_PROGRESS/CLASS_RESULT/STUDENT_COMPREHENSIVE), title, parameters(JSON), file_url, file_content(Binary nullable), format (PDF/XLSX), generated_by(FK nullable), created_at
+
+**Key:** PDF reports generated async via Celery (BackgroundTask). XLSX reports generated synchronously. Report generators in `reports/generators/` — attendance, fee, academic, student modules.
+
+### CustomLetter
+school(FK), recipient(TextField max 500), subject(CharField max 200), body_text(TextField), line_spacing (single/1.5/double), template_type (custom/experience/termination/warning/appreciation/leave_approval/salary_increment/transfer), created_by(FK nullable), created_at, updated_at
+
+**Key:** Letter Composer feature for HR. 7 built-in templates with `{placeholder}` support (employee_name, employee_id, department, designation, date_of_joining, school_name). PDF generation uses school `letterhead_url` as full-page background via reportlab canvas. AI draft endpoint uses Groq LLM to generate letter content from natural language prompts.
+
+---
+
 ## face_attendance — Camera-Based Face Attendance
 
 Uses `face_recognition` (dlib) for face detection, embedding generation, and class-scoped matching. Runs parallel to the existing OCR attendance pipeline. See `docs/FACE_ATTENDANCE.md` for full architecture.
@@ -494,3 +508,126 @@ student(FK), school(FK), embedding(Binary — 128-d numpy float64), embedding_ve
 
 ### FaceDetectionResult
 session(FK), face_index, bounding_box(JSON), face_crop_url, quality_score, embedding(Binary nullable), matched_student(FK nullable), confidence, match_status (AUTO_MATCHED/FLAGGED/IGNORED/MANUALLY_MATCHED/REMOVED), match_distance(nullable), alternative_matches(JSON), created_at
+
+---
+
+## AI Chatbot Agents
+
+Four LLM-powered chatbot agents provide natural language interfaces across the platform. All use **Groq LLM (llama-3.3-70b-versatile)** with multi-round tool calling (up to 3 rounds per query) and conversation history (last 10 messages).
+
+### Architecture: Multi-Round Tool Calling
+```
+User message → Build [system prompt + last 10 history messages + user message]
+  → LLM responds
+    → JSON tool call? → Execute tool → Append result → LLM again (up to 3 rounds)
+    → Plain text? → Return as final answer
+```
+All agents use dict-based dispatch for tool execution. When an entity is not found, agents suggest similar names ("Did you mean: ...?").
+
+---
+
+### 1. Finance AI Chat
+**File:** `backend/finance/ai_agent.py` — **Class:** `FinanceAIAgent`
+**Endpoint:** `POST /api/finance/ai-chat/`
+**History model:** `FinanceAIChatMessage`
+
+**18 Tools:**
+| # | Tool | Purpose |
+|---|------|---------|
+| 1 | `get_fee_collection_summary` | Collection stats for a month/year |
+| 2 | `get_pending_fees` | Students with unpaid fees (by class) |
+| 3 | `get_expense_summary` | Expenses grouped by category |
+| 4 | `get_account_balances` | All account balances |
+| 5 | `get_class_fee_comparison` | Fee collection compared across classes |
+| 6 | `get_student_fee_history` | Individual student fee records |
+| 7 | `get_daily_transactions` | Payments + expenses for a date |
+| 8 | `get_income_vs_expense` | Revenue vs expense breakdown for a period |
+| 9 | `get_fee_structure` | Fee amounts per class/type |
+| 10 | `get_payment_method_analysis` | CASH vs BANK vs ONLINE breakdown |
+| 11 | `get_scholarships_summary` | Active scholarships + recipient counts |
+| 12 | `get_discounts_impact` | Total discounts by type + beneficiaries |
+| 13 | `get_online_payment_status` | Online payment success/failure rates |
+| 14 | `get_monthly_closing_status` | Which months are closed/open |
+| 15 | `get_fee_defaulters` | Chronic defaulters (2+ months unpaid) |
+| 16 | `get_collection_trend` | Month-over-month collection trend |
+| 17 | `get_transfer_history` | Inter-account transfers |
+| 18 | `get_top_expenses` | Largest expenses by amount |
+
+---
+
+### 2. Parent Communication AI Chat
+**File:** `backend/notifications/ai_agent.py` — **Class:** `ParentCommunicationAgent`
+**Endpoint:** `POST /api/notifications/ai-chat/`
+**History model:** `NotificationAIChatMessage`
+
+**15 Tools:**
+| # | Tool | Purpose |
+|---|------|---------|
+| 1 | `get_student_info` | Basic student details |
+| 2 | `get_attendance_summary` | Attendance % and absent days |
+| 3 | `get_fee_status` | Pending/paid fees |
+| 4 | `draft_message` | Draft a parent notification |
+| 5 | `get_class_list` | All classes in school |
+| 6 | `get_exam_performance` | Marks, grades, pass/fail per exam |
+| 7 | `get_assignment_status` | Pending/submitted/graded assignments |
+| 8 | `get_detailed_attendance` | Day-by-day attendance with absence dates |
+| 9 | `get_transport_status` | Route, stop, boarding history |
+| 10 | `get_class_teacher_info` | Teacher names per subject for a class |
+| 11 | `get_communication_preferences` | Channel opt-in/opt-out for a student |
+| 12 | `get_leave_requests` | Parent leave requests for a student |
+| 13 | `get_financial_aid_status` | Scholarships/discounts applied |
+| 14 | `get_notification_history` | Past notifications sent to a student |
+| 15 | `get_curriculum_progress` | Recent/upcoming lessons for a class |
+
+**Cross-app imports:** examinations, lms, transport, academics, hr, parents, finance
+
+---
+
+### 3. Academics AI Chat
+**File:** `backend/academics/ai_engine.py` — **Class:** `AcademicsAIAgent`
+**Endpoint:** `POST /api/academics/ai-chat/`
+**History model:** `AcademicsAIChatMessage`
+
+**13 Tools:**
+| # | Tool | Purpose |
+|---|------|---------|
+| 1 | `get_class_schedule` | Full timetable for a class |
+| 2 | `get_teacher_schedule` | Teacher's weekly timetable |
+| 3 | `get_subject_distribution` | Subjects and teachers per class |
+| 4 | `get_free_periods` | Available slots for a class or teacher |
+| 5 | `get_teacher_workload` | Periods per week per teacher |
+| 6 | `get_class_overview` | All classes with student counts |
+| 7 | `get_quality_score` | Timetable quality score (5 metrics) — wraps `TimetableQualityScorer` |
+| 8 | `find_substitute` | Find cover for absent teacher — wraps `SubstituteTeacherFinder` |
+| 9 | `get_curriculum_gaps` | Missing subjects/periods/teachers — wraps `CurriculumGapAnalyzer` |
+| 10 | `resolve_conflict` | Alternative slots/teachers/swaps — wraps `ConflictResolver` |
+| 11 | `get_workload_analysis` | Overloaded/underloaded teachers — wraps `WorkloadAnalyzer` |
+| 12 | `get_room_usage` | Room occupancy + empty rooms |
+| 13 | `compare_schedules` | Side-by-side class or teacher comparison |
+
+Tools 7-11 wrap existing algorithm classes defined in the same file (`TimetableQualityScorer`, `SubstituteTeacherFinder`, `CurriculumGapAnalyzer`, `ConflictResolver`, `WorkloadAnalyzer`).
+
+---
+
+### 4. Study Helper AI Chat
+**File:** `backend/students/study_helper_service.py` — **Class:** `StudyHelperService`
+**Endpoint:** `POST /api/students/portal/study-helper/`
+**History model:** `StudyHelperMessage`
+
+**Hybrid architecture:** Combines free-form study help (explanations, quizzes, study tips) with data lookup tools. Content safety filters on input and output.
+
+**8 Tools:**
+| # | Tool | Purpose |
+|---|------|---------|
+| 1 | `get_my_marks` | Student's exam results (filterable by exam/subject) |
+| 2 | `get_my_assignments` | Pending/submitted/graded assignments |
+| 3 | `get_topic_details` | Book chapters and topics for a subject |
+| 4 | `get_my_attendance` | Attendance record for last N days |
+| 5 | `get_exam_schedule` | Upcoming exam dates and subjects |
+| 6 | `get_lesson_materials` | Lesson plan attachments for a subject |
+| 7 | `get_grade_targets` | Marks needed for each grade |
+| 8 | `get_teacher_feedback` | Feedback from graded submissions |
+
+**Context enrichment:** System prompt includes student's weak subjects (lowest marks), upcoming exams (next 14 days), and class/section info.
+
+**Safety features:** Input regex filtering for unsafe content, output safety check, rate limiting (20 msgs/hour), max 500 char input.

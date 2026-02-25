@@ -1089,6 +1089,19 @@ def build_guide():
     pdf.step("Review generated payslips. Check amounts, deductions, and net pay.")
     pdf.step("Approve payslips individually or in bulk.")
     pdf.step("Mark approved payslips as 'Paid' once payment is disbursed.")
+    pdf.step(
+        "Click the 'Download PDF' button on any payslip to download a printable payslip document. "
+        "The PDF includes the school logo (if configured in school settings), school name, address, "
+        "contact details, employee information, earnings breakdown, deductions breakdown, net salary, "
+        "and signature lines."
+    )
+
+    pdf.info_box(
+        "School Logo on Payslips",
+        "The payslip PDF automatically includes your school's logo at the top if one is configured. "
+        "To set or update the logo, go to Settings > School Profile and enter the logo URL. "
+        "If no logo is set, the payslip generates without it."
+    )
 
     pdf.section_title("Leave Management")
     pdf.nav_path("Sidebar > HR & Staff > Leave Management")
@@ -1117,6 +1130,38 @@ def build_guide():
     pdf.step("Select a staff member.")
     pdf.step("Upload documents: ID proofs, certificates, contracts, etc.")
     pdf.step("Documents are stored securely and accessible from the staff profile.")
+
+    pdf.section_title("Letter Composer")
+    pdf.nav_path("Sidebar > HR & Staff > Letter Composer")
+    pdf.body_text(
+        "The Letter Composer allows you to create official letters on your school's letterhead. "
+        "It supports 7 built-in templates (Experience Certificate, Termination, Warning, "
+        "Appreciation, Leave Approval, Salary Increment, Transfer) and fully custom letters."
+    )
+    pdf.step("Select a Quick Draft Template to start with a pre-built letter structure, or choose 'Custom Letter'.")
+    pdf.step("Pick a recipient: select from School, Employee, or type a custom address. "
+             "Selecting an employee auto-fills placeholders like name, department, and designation.")
+    pdf.step("Edit the Subject and Body. Use the formatting toolbar: *bold*, _italic_, ~strikethrough~, "
+             "bullet lists, and numbered lists.")
+    pdf.step("Preview your letter in the right panel (live preview updates as you type).")
+    pdf.step("Click 'Generate PDF' to download the letter as a PDF with your school's letterhead as background.")
+    pdf.step("Letters are automatically saved to history. Load, edit, or delete past letters from the history table.")
+
+    pdf.info_box(
+        "AI Letter Drafting",
+        "Click 'Draft with AI' to open the AI assistant panel. Describe the letter you need "
+        "in plain language (e.g., 'Write a warning letter for late attendance') and the AI will "
+        "generate a complete subject and body. Quick suggestion chips are provided for common letter types. "
+        "If an employee is selected, their details are automatically included for context. "
+        "Review and edit the AI-generated content before generating the PDF."
+    )
+
+    pdf.info_box(
+        "School Letterhead",
+        "Letters are generated with your school's letterhead as the PDF background. "
+        "To configure the letterhead, go to Settings > School Profile and set the Letterhead URL "
+        "(uploaded to Supabase Storage). If no letterhead is set, letters generate on a white background."
+    )
 
     # =========================================================================
     # CHAPTER 8: ADMISSIONS CRM
@@ -1377,9 +1422,11 @@ def build_guide():
 
     pdf.section_title("Viewing Notifications (All Users)")
     pdf.nav_path("Sidebar > Notifications")
-    pdf.step("Click the Notification Bell icon in the top bar for quick view.")
-    pdf.step("Or navigate to 'Notifications' in the sidebar for the full Inbox.")
-    pdf.step("Unread notifications are highlighted. Click to mark as read.")
+    pdf.step("Click the Notification Bell icon in the top bar for a quick dropdown (shows 8 most recent). The bell bounces when new notifications arrive.")
+    pdf.step("Or navigate to 'Notifications' in the sidebar for the full Inbox tab with pagination.")
+    pdf.step("Unread notifications are highlighted with a blue dot. Click to mark as read.")
+    pdf.step("Use 'Mark all read' (with confirmation) to clear all unread notifications at once.")
+    pdf.step("Filter by event type (Absence, Fee Due, Exam, Transport Update, etc.) using the dropdown.")
 
     pdf.section_title("Creating Notification Templates (Admin)")
     pdf.nav_path("Sidebar > Notifications > Templates Tab")
@@ -1391,24 +1438,26 @@ def build_guide():
     pdf.section_title("Sending Notifications (Admin)")
     pdf.nav_path("Sidebar > Notifications > Send Tab")
     pdf.step("Switch to the 'Send' tab.")
-    pdf.step("Choose recipients: All Students, All Parents, All Staff, Specific Class, or Individual.")
-    pdf.step("Select a template or compose a custom message.")
-    pdf.step("Preview the notification.")
-    pdf.step("Click 'Send'. Notifications are delivered to all selected recipients.")
+    pdf.step("Choose mode: 'Broadcast' to send to all users of a role, or 'Single' for one recipient.")
+    pdf.step("In Broadcast mode, select a role group: All Parents, All Teachers, All Staff, Principals, HR Managers, Accountants, or All Students.")
+    pdf.step("Optionally pick an existing template to pre-fill the message, or compose a custom message.")
+    pdf.step("For SMS/WhatsApp channels, a character counter helps keep messages within limits (160/1600 chars).")
+    pdf.step("Click 'Send'. The system shows how many notifications were sent, failed, or skipped.")
 
     pdf.section_title("Notification Analytics (Admin)")
     pdf.nav_path("Sidebar > Notifications > Analytics Tab")
-    pdf.body_text("Track notification effectiveness:")
+    pdf.body_text("Track notification effectiveness with configurable date ranges (7 days, 30 days, 90 days, or all time):")
     pdf.bullet("Delivery Rate - How many notifications were successfully delivered")
     pdf.bullet("Read Rate - Percentage of notifications opened/read")
-    pdf.bullet("Breakdown by type and recipient group")
+    pdf.bullet("Breakdown by channel (WhatsApp, SMS, In-App, Email, Push) and event type")
 
     pdf.section_title("Automation Settings")
     pdf.nav_path("Sidebar > Notifications > Settings")
     pdf.body_text(
-        "Configure smart scheduling (AI-optimized send times for non-urgent messages) and "
+        "Configure notification channels, smart scheduling (AI-optimized send times), and "
         "automated notification controls from the Settings tab. Each automation type can be "
-        "toggled ON/OFF per school."
+        "toggled ON/OFF per school. Toggles are module-aware: if a module (e.g., Transport, "
+        "Finance) is disabled for the school, its related toggles are automatically hidden."
     )
     pdf.simple_table(
         ["Automation", "Default", "Trigger"],
@@ -1417,9 +1466,15 @@ def build_guide():
             ["Fee Reminders", "ON", "Monthly on configured day"],
             ["Fee Overdue Alerts", "ON", "Weekly on Mondays"],
             ["Exam Results Published", "ON", "When admin publishes results"],
+            ["Daily Absence Summary", "OFF", "Sent daily at configured time"],
+            ["Transport Notifications", "ON", "Bus departed, arriving at stop, journey completed"],
             ["Smart Scheduling", "OFF", "AI learns optimal send times over 2-4 weeks"],
         ],
         [50, 25, 115]
+    )
+    pdf.body_text(
+        "The Settings tab also warns you about unsaved changes before navigating away. "
+        "Channel toggles include WhatsApp, SMS, In-App, Email, and Push notifications."
     )
     pdf.info_box("Background Tasks", "Automated notifications, OCR retries, AI threshold tuning, "
                  "drift detection, and anomaly detection all run automatically on schedule. "
@@ -1951,6 +2006,22 @@ def build_guide():
         "on report cards automatically. Teachers should review before sharing with parents."
     )
     pdf.info_box("Fallback", "Without a Groq API key, the system generates rule-based comments automatically.")
+
+    pdf.section_title("AI Letter Drafting")
+    pdf.nav_path("Sidebar > HR & Staff > Letter Composer > Draft with AI")
+    pdf.body_text(
+        "The Letter Composer includes an AI assistant that drafts professional letters from natural "
+        "language descriptions. Enter a prompt like 'Write a warning letter for late attendance' or "
+        "'Draft an experience certificate for Rajesh who joined 3 years ago as a Math teacher' and "
+        "the AI generates a complete subject and body. The AI uses template context (if a template "
+        "type is selected) and employee details (if an employee is selected) for more accurate drafts. "
+        "Quick suggestion chips are provided for common letter types."
+    )
+    pdf.info_box(
+        "Fallback",
+        "Without a Groq API key, the system matches keywords in your prompt to built-in templates "
+        "and returns the closest matching template. You can always edit the content manually."
+    )
 
     # =========================================================================
     # APPENDIX: TIPS, BEST PRACTICES & OPERATIONS CHECKLIST

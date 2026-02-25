@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { examinationsApi } from '../../services/api'
+import { useConfirmModal } from '../../components/ConfirmModal'
 
 const EMPTY_FORM = { name: '', weight: '100.00' }
 
 export default function ExamTypesPage() {
   const queryClient = useQueryClient()
+  const { confirm, ConfirmModalRoot } = useConfirmModal()
   const [showModal, setShowModal] = useState(false)
   const [editId, setEditId] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
@@ -78,7 +80,7 @@ export default function ExamTypesPage() {
               <div className="flex gap-2 mt-3 pt-2 border-t border-gray-100">
                 <button onClick={() => openEdit(item)} className="text-xs text-primary-600 hover:underline">Edit</button>
                 <button
-                  onClick={() => { if (confirm(`Delete "${item.name}"?`)) deleteMut.mutate(item.id) }}
+                  onClick={async () => { const ok = await confirm({ title: 'Delete Exam Type', message: `Delete "${item.name}"?` }); if (ok) deleteMut.mutate(item.id) }}
                   className="text-xs text-red-600 hover:underline"
                 >Delete</button>
               </div>
@@ -130,6 +132,8 @@ export default function ExamTypesPage() {
           </div>
         </div>
       )}
+
+      <ConfirmModalRoot />
     </div>
   )
 }

@@ -39,7 +39,7 @@ The `/dashboard` route uses **DashboardRouter.jsx** to render a role-specific da
 | /dashboard | DashboardRouter.jsx → role-specific | See above | Varies by role |
 | /profile | ProfilePage.jsx | User profile edit | GET/PATCH /api/auth/me/ |
 | /settings | SettingsPage.jsx | Tabs: School Profile (logo/letterhead upload, exam weighted average toggle), Finance Accounts, Users | GET /api/schools/current/, POST upload_asset/, DELETE delete_asset/, PUT /api/schools/exam_config/, GET/POST /api/finance/accounts/, GET/POST /api/users/ |
-| /notifications | NotificationsPage.jsx | Notification center. Settings tab includes: Notification Channels (WhatsApp/SMS/In-App toggles), Automated Notifications (per-trigger toggles with timing badges for absence, fee reminders, fee overdue, exam results, daily summary), Scheduling & Timing (smart scheduling, fee reminder day, quiet hours) | GET /api/notifications/my/, GET/PUT /api/notifications/config/ |
+| /notifications | NotificationsPage.jsx | Notification center with 5 tabs (URL-persisted via `?tab=`): **Inbox** (paginated, mark-read, mark-all-read with confirmation, event_type filter, relative timestamps), **Templates** (CRUD with search, pagination, delete confirmation, all 9 event types + 5 channels including PUSH), **Send** (dual-mode: Broadcast to role group via `/broadcast/` or Single recipient via `/send/`, template picker, SMS/WhatsApp character counter), **Analytics** (date range filter: 7d/30d/90d/all, human-readable channel labels), **Settings** (module-gated toggles — hides toggles for disabled modules via `isModuleEnabled()`, 6 trigger toggles: absence, fee reminder, fee overdue, exam results, daily summary, transport notifications, unsaved changes warning with beforeunload) | GET /api/notifications/my/, POST /api/notifications/broadcast/, POST /api/notifications/send/, GET /api/notifications/analytics/, GET/PUT /api/notifications/config/ |
 | /admin | SuperAdminDashboard.jsx | Super admin only — all schools overview | GET /api/admin/schools/, platform_stats/ |
 
 ## Attendance
@@ -106,6 +106,7 @@ Redirects: /attendance/upload, /attendance/review, /attendance/records → remap
 | /hr/attendance | StaffAttendancePage.jsx | Staff attendance | GET/POST attendance/ |
 | /hr/appraisals | PerformanceAppraisalPage.jsx | Performance reviews | GET/POST appraisals/ |
 | /hr/documents | StaffDocumentsPage.jsx | Staff documents | GET/POST documents/ |
+| /hr/letters | LetterComposerPage.jsx | Letter Composer with AI drafting | GET/POST custom-letters/, templates/, prefill/, generate-pdf/, ai-draft/ |
 
 ## Sessions
 | Route | Component | Description | API Calls |

@@ -4,6 +4,7 @@ Notification views and ViewSets.
 
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
+from rest_framework.generics import ListAPIView
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
@@ -23,6 +24,7 @@ from .serializers import (
     NotificationPreferenceSerializer,
     SchoolNotificationConfigSerializer,
     SendNotificationSerializer,
+    BroadcastNotificationSerializer,
 )
 from .engine import NotificationEngine
 
@@ -107,17 +109,22 @@ class SchoolNotificationConfigView(ModuleAccessMixin, APIView):
         return Response(serializer.data)
 
 
-class MyNotificationsView(APIView):
+class MyNotificationsView(ListAPIView):
     """Get notifications for the current user (in-app notifications)."""
     permission_classes = [IsAuthenticated]
+    serializer_class = NotificationLogSerializer
 
-    def get(self, request):
+    def get_queryset(self):
         qs = NotificationLog.objects.filter(
-            recipient_user=request.user,
+            recipient_user=self.request.user,
             channel='IN_APP',
-        ).select_related('student').order_by('-created_at')[:50]
+        ).select_related('student').order_by('-created_at')
 
-        return Response(NotificationLogSerializer(qs, many=True).data)
+        event_type = self.request.query_params.get('event_type')
+        if event_type:
+            qs = qs.filter(event_type=event_type)
+
+        return qs
 
 
 class UnreadCountView(APIView):
@@ -206,6 +213,90 @@ class SendNotificationView(ModuleAccessMixin, APIView):
         if log:
             return Response(NotificationLogSerializer(log).data, status=201)
         return Response({'detail': 'Notification skipped (disabled or opted out)'}, status=200)
+
+
+class BroadcastNotificationView(ModuleAccessMixin, APIView):
+    """Broadcast a notification to all users of a specific role in the school."""
+    required_module = 'notifications'
+    permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
+
+    # Map membership roles to NotificationLog recipient_type
+    LOG_RECIPIENT_MAP = {
+        'PARENT': 'PARENT',
+        'TEACHER': 'STAFF',
+        'STAFF': 'STAFF',
+        'SCHOOL_ADMIN': 'ADMIN',
+        'PRINCIPAL': 'ADMIN',
+        'HR_MANAGER': 'STAFF',
+        'ACCOUNTANT': 'STAFF',
+        'STUDENT': 'STAFF',
+    }
+
+    def post(self, request):
+        serializer = BroadcastNotificationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        school_id = ensure_tenant_school_id(request)
+        if not school_id:
+            return Response({'error': 'school_id required'}, status=400)
+
+        from schools.models import School, UserSchoolMembership
+        school = School.objects.get(id=school_id)
+
+        role = data['recipient_type']
+        memberships = UserSchoolMembership.objects.filter(
+            school_id=school_id,
+            role=role,
+            is_active=True,
+        ).select_related('user')
+
+        if not memberships.exists():
+            return Response(
+                {'detail': f'No users found with role {role} in this school.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        log_recipient_type = self.LOG_RECIPIENT_MAP.get(role, 'STAFF')
+        engine = NotificationEngine(school)
+
+        sent = 0
+        failed = 0
+        skipped = 0
+        for m in memberships:
+            user = m.user
+            if data['channel'] == 'IN_APP':
+                identifier = str(user.id)
+            elif data['channel'] in ('WHATSAPP', 'SMS'):
+                identifier = getattr(user, 'phone', None) or str(user.id)
+            elif data['channel'] == 'EMAIL':
+                identifier = user.email or str(user.id)
+            else:
+                identifier = str(user.id)
+
+            log = engine.send(
+                event_type=data['event_type'],
+                channel=data['channel'],
+                context=data.get('context', {}),
+                recipient_identifier=identifier,
+                recipient_type=log_recipient_type,
+                recipient_user=user,
+                title=data['title'],
+                body=data['body'],
+            )
+            if log is None:
+                skipped += 1
+            elif log.status in ('SENT', 'SCHEDULED'):
+                sent += 1
+            else:
+                failed += 1
+
+        return Response({
+            'sent': sent,
+            'failed': failed,
+            'skipped': skipped,
+            'total_recipients': memberships.count(),
+        }, status=status.HTTP_201_CREATED)
 
 
 class NotificationAnalyticsView(ModuleAccessMixin, APIView):

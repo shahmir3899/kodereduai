@@ -910,6 +910,11 @@ class PayslipViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         from fpdf import FPDF
         from django.http import HttpResponse
         from datetime import datetime
+        import io
+        import httpx
+        import logging
+
+        logger = logging.getLogger(__name__)
 
         MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
                   'July', 'August', 'September', 'October', 'November', 'December']
@@ -918,7 +923,19 @@ class PayslipViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         pdf.add_page()
         pdf.set_auto_page_break(auto=True, margin=15)
 
-        # School header
+        # School logo + header
+        logo_height = 0
+        if school.logo:
+            try:
+                resp = httpx.get(school.logo, timeout=10, follow_redirects=True)
+                resp.raise_for_status()
+                logo_path = io.BytesIO(resp.content)
+                logo_height = 18
+                pdf.image(logo_path, x=(210 - logo_height) / 2, y=pdf.get_y(), h=logo_height)
+                pdf.ln(logo_height + 2)
+            except Exception as e:
+                logger.warning("Failed to fetch school logo for payslip: %s", e)
+
         pdf.set_font('Helvetica', 'B', 16)
         pdf.cell(0, 10, school.name, ln=True, align='C')
         if school.address:
@@ -1025,7 +1042,7 @@ class PayslipViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
 
         staff_name = staff.full_name.replace(' ', '_')
         filename = f"payslip_{staff_name}_{payslip.month}_{payslip.year}.pdf"
-        response = HttpResponse(pdf.output(), content_type='application/pdf')
+        response = HttpResponse(bytes(pdf.output()), content_type='application/pdf')
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
         return response
 

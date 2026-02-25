@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { lmsApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import { useToast } from '../../components/Toast'
+import { useConfirmModal } from '../../components/ConfirmModal'
 import RTLWrapper, { isRTLLanguage } from '../../components/RTLWrapper'
 import ClassSelector from '../../components/ClassSelector'
 import SubjectSelector from '../../components/SubjectSelector'
@@ -43,6 +44,7 @@ export default function CurriculumPage() {
   const { activeSchool } = useAuth()
   const queryClient = useQueryClient()
   const { showError, showSuccess } = useToast()
+  const { confirm, ConfirmModalRoot } = useConfirmModal()
 
   // Filters
   const [selectedClass, setSelectedClass] = useState('')
@@ -429,22 +431,19 @@ export default function CurriculumPage() {
     }
   }
 
-  const handleDeleteBook = (book) => {
-    if (window.confirm(`Delete "${book.title}"? This action cannot be undone.`)) {
-      deleteBookMutation.mutate(book.id)
-    }
+  const handleDeleteBook = async (book) => {
+    const ok = await confirm({ title: 'Delete Book', message: `Delete "${book.title}"? This action cannot be undone.` })
+    if (ok) deleteBookMutation.mutate(book.id)
   }
 
-  const handleDeleteChapter = (chapter) => {
-    if (window.confirm(`Delete "Ch ${chapter.chapter_number}: ${chapter.title}"? This will also delete all topics in this chapter.`)) {
-      deleteChapterMutation.mutate(chapter.id)
-    }
+  const handleDeleteChapter = async (chapter) => {
+    const ok = await confirm({ title: 'Delete Chapter', message: `Delete "Ch ${chapter.chapter_number}: ${chapter.title}"? This will also delete all topics in this chapter.` })
+    if (ok) deleteChapterMutation.mutate(chapter.id)
   }
 
-  const handleDeleteTopic = (topic) => {
-    if (window.confirm(`Delete topic "${topic.title}"? This action cannot be undone.`)) {
-      deleteTopicMutation.mutate(topic.id)
-    }
+  const handleDeleteTopic = async (topic) => {
+    const ok = await confirm({ title: 'Delete Topic', message: `Delete topic "${topic.title}"? This action cannot be undone.` })
+    if (ok) deleteTopicMutation.mutate(topic.id)
   }
 
   // ---- Accordion ----
@@ -1153,6 +1152,8 @@ export default function CurriculumPage() {
           </div>
         </div>
       )}
+
+      <ConfirmModalRoot />
     </div>
   )
 }

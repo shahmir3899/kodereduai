@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { inventoryApi } from '../../services/api'
+import { useConfirmModal } from '../../components/ConfirmModal'
 
 function formatCurrency(val) {
   return `Rs ${Number(val || 0).toLocaleString()}`
@@ -29,6 +30,7 @@ const emptyVendorForm = { name: '', contact_person: '', phone: '', email: '', ad
 
 export default function InventoryItemsPage() {
   const queryClient = useQueryClient()
+  const { confirm, ConfirmModalRoot } = useConfirmModal()
 
   // Filters
   const [search, setSearch] = useState('')
@@ -357,7 +359,7 @@ export default function InventoryItemsPage() {
                       <div className="flex gap-2">
                         <button onClick={() => openCategoryModal(cat)} className="text-xs text-blue-600 hover:text-blue-800">Edit</button>
                         <button
-                          onClick={() => { if (confirm('Delete this category?')) deleteCategoryMutation.mutate(cat.id) }}
+                          onClick={async () => { const ok = await confirm({ title: 'Delete Category', message: 'Delete this category? This cannot be undone.' }); if (ok) deleteCategoryMutation.mutate(cat.id) }}
                           className="text-xs text-red-600 hover:text-red-800"
                         >Delete</button>
                       </div>
@@ -380,7 +382,7 @@ export default function InventoryItemsPage() {
                       <div className="flex gap-2">
                         <button onClick={() => openVendorModal(v)} className="text-xs text-blue-600 hover:text-blue-800">Edit</button>
                         <button
-                          onClick={() => { if (confirm('Delete this vendor?')) deleteVendorMutation.mutate(v.id) }}
+                          onClick={async () => { const ok = await confirm({ title: 'Delete Vendor', message: 'Delete this vendor? This cannot be undone.' }); if (ok) deleteVendorMutation.mutate(v.id) }}
                           className="text-xs text-red-600 hover:text-red-800"
                         >Delete</button>
                       </div>
@@ -475,7 +477,7 @@ export default function InventoryItemsPage() {
                     <div className="mt-2 pt-2 border-t border-gray-100 flex gap-3">
                       <button onClick={() => openItemModal(item)} className="text-xs text-blue-600 font-medium">Edit</button>
                       <button
-                        onClick={() => { if (confirm(`Delete "${item.name}"?`)) deleteItemMutation.mutate(item.id) }}
+                        onClick={async () => { const ok = await confirm({ title: 'Delete Item', message: `Delete "${item.name}"? This cannot be undone.` }); if (ok) deleteItemMutation.mutate(item.id) }}
                         className="text-xs text-red-600 font-medium"
                       >Delete</button>
                     </div>
@@ -524,7 +526,7 @@ export default function InventoryItemsPage() {
                         <td className="px-4 py-3 text-right">
                           <button onClick={() => openItemModal(item)} className="text-sm text-blue-600 hover:text-blue-800 font-medium mr-3">Edit</button>
                           <button
-                            onClick={() => { if (confirm(`Delete "${item.name}"?`)) deleteItemMutation.mutate(item.id) }}
+                            onClick={async () => { const ok = await confirm({ title: 'Delete Item', message: `Delete "${item.name}"? This cannot be undone.` }); if (ok) deleteItemMutation.mutate(item.id) }}
                             className="text-sm text-red-600 hover:text-red-800 font-medium"
                           >Delete</button>
                         </td>
@@ -893,6 +895,8 @@ export default function InventoryItemsPage() {
           </div>
         </div>
       )}
+
+      <ConfirmModalRoot />
     </div>
   )
 }

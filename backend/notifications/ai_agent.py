@@ -1,12 +1,16 @@
 """
 AI Parent Communication Assistant.
 Chat-based AI that helps admins draft parent communications.
-Follows the tool-calling pattern from finance/ai_agent.py.
+Uses tool-calling pattern with multi-round support.
 """
 
 import json
 import logging
+from datetime import timedelta
+
 from django.conf import settings
+from django.db.models import Sum, Count
+from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +63,56 @@ TOOLS = [
             "context": "additional details"
         }
     },
+    {
+        "name": "get_exam_performance",
+        "description": "Get student's exam marks, grades, and pass/fail status",
+        "parameters": {"student_id": "int"}
+    },
+    {
+        "name": "get_assignment_status",
+        "description": "Get student's assignment submissions: pending, submitted, graded with feedback",
+        "parameters": {"student_id": "int"}
+    },
+    {
+        "name": "get_detailed_attendance",
+        "description": "Get day-by-day attendance for last N days with absence dates",
+        "parameters": {"student_id": "int", "days": "int (optional, default 30)"}
+    },
+    {
+        "name": "get_transport_status",
+        "description": "Get student's transport route, stop, and recent boarding records",
+        "parameters": {"student_id": "int"}
+    },
+    {
+        "name": "get_class_teacher_info",
+        "description": "Get subject teachers assigned to a class",
+        "parameters": {"class_id": "int"}
+    },
+    {
+        "name": "get_communication_preferences",
+        "description": "Get parent's notification channel preferences (opt-in/out)",
+        "parameters": {"student_id": "int"}
+    },
+    {
+        "name": "get_leave_requests",
+        "description": "Get pending/approved leave requests for a student",
+        "parameters": {"student_id": "int"}
+    },
+    {
+        "name": "get_financial_aid_status",
+        "description": "Get scholarships and discounts applied to a student",
+        "parameters": {"student_id": "int"}
+    },
+    {
+        "name": "get_notification_history",
+        "description": "Get past notifications sent for a student",
+        "parameters": {"student_id": "int"}
+    },
+    {
+        "name": "get_curriculum_progress",
+        "description": "Get recent and upcoming lessons for a class",
+        "parameters": {"class_id": "int", "subject_id": "int (optional)"}
+    },
 ]
 
 
@@ -78,27 +132,42 @@ class ParentCommunicationAgent:
 
     def _execute_tool(self, tool_name, params):
         """Execute a tool call and return the result."""
+        tools = {
+            'get_student_info': lambda p: self._get_student_info(p.get('student_id')),
+            'get_class_info': lambda p: self._get_class_info(p.get('class_id')),
+            'get_attendance_summary': lambda p: self._get_attendance_summary(
+                p.get('student_id'), p.get('class_id')
+            ),
+            'get_fee_status': lambda p: self._get_fee_status(p.get('student_id')),
+            'draft_message': lambda p: self._draft_message(p),
+            'get_exam_performance': lambda p: self._get_exam_performance(p.get('student_id')),
+            'get_assignment_status': lambda p: self._get_assignment_status(p.get('student_id')),
+            'get_detailed_attendance': lambda p: self._get_detailed_attendance(
+                p.get('student_id'), p.get('days', 30)
+            ),
+            'get_transport_status': lambda p: self._get_transport_status(p.get('student_id')),
+            'get_class_teacher_info': lambda p: self._get_class_teacher_info(p.get('class_id')),
+            'get_communication_preferences': lambda p: self._get_communication_preferences(p.get('student_id')),
+            'get_leave_requests': lambda p: self._get_leave_requests(p.get('student_id')),
+            'get_financial_aid_status': lambda p: self._get_financial_aid_status(p.get('student_id')),
+            'get_notification_history': lambda p: self._get_notification_history(p.get('student_id')),
+            'get_curriculum_progress': lambda p: self._get_curriculum_progress(
+                p.get('class_id'), p.get('subject_id')
+            ),
+        }
         try:
-            if tool_name == 'get_student_info':
-                return self._get_student_info(params.get('student_id'))
-            elif tool_name == 'get_class_info':
-                return self._get_class_info(params.get('class_id'))
-            elif tool_name == 'get_attendance_summary':
-                return self._get_attendance_summary(
-                    params.get('student_id'), params.get('class_id')
-                )
-            elif tool_name == 'get_fee_status':
-                return self._get_fee_status(params.get('student_id'))
-            elif tool_name == 'draft_message':
-                return self._draft_message(params)
-            else:
-                return f"Unknown tool: {tool_name}"
+            handler = tools.get(tool_name)
+            if not handler:
+                available = ', '.join(tools.keys())
+                return f"Unknown tool: {tool_name}. Available tools: {available}"
+            return handler(params)
         except Exception as e:
             return f"Error: {str(e)}"
 
+    # ── Original Tools (1-5) ─────────────────────────────────────────────
+
     def _get_student_info(self, student_id):
         from students.models import Student
-        from django.db.models import Count, Q
 
         student = Student.objects.select_related('class_obj').get(
             id=student_id, school=self.school
@@ -132,7 +201,6 @@ class ParentCommunicationAgent:
 
     def _get_attendance_summary(self, student_id=None, class_id=None):
         from attendance.models import AttendanceRecord
-        from django.db.models import Count, Q
 
         filters = {'school': self.school}
         if student_id:
@@ -153,7 +221,6 @@ class ParentCommunicationAgent:
 
     def _get_fee_status(self, student_id):
         from finance.models import FeePayment
-        from django.db.models import Sum
 
         payments = FeePayment.objects.filter(
             student_id=student_id, school=self.school
@@ -177,6 +244,223 @@ class ParentCommunicationAgent:
             'type': params.get('type', 'general'),
             'recipient': params.get('recipient', 'parent'),
         })
+
+    # ── New Tools (6-15) ─────────────────────────────────────────────────
+
+    def _get_exam_performance(self, student_id):
+        from examinations.models import StudentMark
+
+        marks = StudentMark.objects.filter(
+            school=self.school, student_id=student_id,
+        ).select_related(
+            'exam_subject__exam', 'exam_subject__subject',
+        ).order_by('-exam_subject__exam__start_date')[:20]
+
+        result = []
+        for m in marks:
+            result.append({
+                'exam': m.exam_subject.exam.name,
+                'subject': m.exam_subject.subject.name,
+                'marks_obtained': float(m.marks_obtained) if m.marks_obtained else 0,
+                'total_marks': float(m.exam_subject.total_marks),
+                'percentage': float(m.percentage) if m.percentage else 0,
+                'is_pass': m.is_pass,
+                'is_absent': m.is_absent,
+            })
+        return json.dumps({'marks': result, 'total': len(result)})
+
+    def _get_assignment_status(self, student_id):
+        from students.models import Student
+        from lms.models import Assignment, AssignmentSubmission
+
+        student = Student.objects.get(id=student_id, school=self.school)
+        assignments = Assignment.objects.filter(
+            school=self.school,
+            class_obj=student.class_obj,
+            status='PUBLISHED',
+        ).select_related('subject').order_by('due_date')[:20]
+
+        result = []
+        for a in assignments:
+            sub = AssignmentSubmission.objects.filter(
+                assignment=a, student=student,
+            ).first()
+            result.append({
+                'title': a.title,
+                'subject': a.subject.name,
+                'due_date': str(a.due_date),
+                'status': sub.status if sub else 'NOT_SUBMITTED',
+                'marks': float(sub.marks_obtained) if sub and sub.marks_obtained else None,
+            })
+        return json.dumps({'assignments': result, 'total': len(result)})
+
+    def _get_detailed_attendance(self, student_id, days=30):
+        from attendance.models import AttendanceRecord
+
+        cutoff = timezone.now().date() - timedelta(days=int(days))
+        records = AttendanceRecord.objects.filter(
+            student_id=student_id, school=self.school, date__gte=cutoff,
+        ).order_by('-date')
+
+        total = records.count()
+        present = records.filter(status='PRESENT').count()
+        absent = records.filter(status='ABSENT').count()
+        absent_dates = list(records.filter(status='ABSENT').values_list('date', flat=True)[:10])
+
+        return json.dumps({
+            'days_checked': total,
+            'present': present,
+            'absent': absent,
+            'rate': f"{round(present / total * 100, 1)}%" if total else 'N/A',
+            'recent_absences': [str(d) for d in absent_dates],
+        })
+
+    def _get_transport_status(self, student_id):
+        from transport.models import TransportAssignment, TransportAttendance
+
+        assignment = TransportAssignment.objects.filter(
+            student_id=student_id, school=self.school, is_active=True,
+        ).select_related('route', 'stop', 'vehicle').first()
+
+        if not assignment:
+            return json.dumps({'status': 'No active transport assignment'})
+
+        recent = TransportAttendance.objects.filter(
+            student_id=student_id, school=self.school,
+        ).order_by('-date')[:5]
+
+        return json.dumps({
+            'route': assignment.route.name if assignment.route else '-',
+            'stop': assignment.stop.name if assignment.stop else '-',
+            'vehicle': assignment.vehicle.registration_number if assignment.vehicle else '-',
+            'recent_boarding': [
+                {'date': str(r.date), 'status': r.boarding_status}
+                for r in recent
+            ],
+        })
+
+    def _get_class_teacher_info(self, class_id):
+        from academics.models import ClassSubject
+
+        assignments = ClassSubject.objects.filter(
+            school=self.school, class_obj_id=class_id, is_active=True,
+        ).select_related('subject', 'teacher')
+
+        return json.dumps({
+            'teachers': [
+                {
+                    'subject': cs.subject.name,
+                    'teacher': cs.teacher.full_name if cs.teacher else '-',
+                }
+                for cs in assignments
+            ],
+        })
+
+    def _get_communication_preferences(self, student_id):
+        from .models import NotificationPreference
+
+        prefs = NotificationPreference.objects.filter(
+            school=self.school, student_id=student_id,
+        )
+
+        return json.dumps({
+            'preferences': [
+                {
+                    'channel': p.channel,
+                    'event_type': p.event_type,
+                    'is_enabled': p.is_enabled,
+                }
+                for p in prefs
+            ],
+        })
+
+    def _get_leave_requests(self, student_id):
+        from parents.models import ParentLeaveRequest
+
+        requests = ParentLeaveRequest.objects.filter(
+            school=self.school, student_id=student_id,
+        ).order_by('-created_at')[:10]
+
+        return json.dumps({
+            'leave_requests': [
+                {
+                    'start_date': str(r.start_date),
+                    'end_date': str(r.end_date),
+                    'reason': r.reason,
+                    'status': r.status,
+                }
+                for r in requests
+            ],
+        })
+
+    def _get_financial_aid_status(self, student_id):
+        from finance.models import StudentDiscount
+
+        discounts = StudentDiscount.objects.filter(
+            student_id=student_id, is_active=True,
+        ).select_related('discount', 'scholarship')
+
+        result = []
+        for sd in discounts:
+            if sd.discount:
+                result.append({
+                    'type': 'Discount',
+                    'name': sd.discount.name,
+                    'discount_type': sd.discount.discount_type,
+                    'value': float(sd.discount.value),
+                })
+            if sd.scholarship:
+                result.append({
+                    'type': 'Scholarship',
+                    'name': sd.scholarship.name,
+                    'coverage': sd.scholarship.coverage,
+                })
+        return json.dumps({'financial_aid': result})
+
+    def _get_notification_history(self, student_id):
+        from .models import NotificationLog
+
+        logs = NotificationLog.objects.filter(
+            school=self.school, student_id=student_id,
+        ).order_by('-created_at')[:10]
+
+        return json.dumps({
+            'notifications': [
+                {
+                    'channel': n.channel,
+                    'event_type': n.event_type,
+                    'title': n.title,
+                    'status': n.status,
+                    'sent_at': str(n.sent_at) if n.sent_at else None,
+                }
+                for n in logs
+            ],
+        })
+
+    def _get_curriculum_progress(self, class_id, subject_id=None):
+        from lms.models import LessonPlan
+
+        qs = LessonPlan.objects.filter(
+            school=self.school, class_obj_id=class_id, status='PUBLISHED',
+        ).select_related('subject').order_by('-lesson_date')
+
+        if subject_id:
+            qs = qs.filter(subject_id=subject_id)
+
+        lessons = qs[:10]
+        return json.dumps({
+            'recent_lessons': [
+                {
+                    'title': lp.title,
+                    'subject': lp.subject.name,
+                    'date': str(lp.lesson_date),
+                    'objectives': lp.objectives or '',
+                }
+                for lp in lessons
+            ],
+        })
+
+    # ── Chat ─────────────────────────────────────────────────────────────
 
     def chat(self, user_message, history=None):
         """

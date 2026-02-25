@@ -7,10 +7,11 @@ import FeeFilters from './FeeFilters'
 import FeeTable from './FeeTable'
 import BulkActionsBar from './BulkActionsBar'
 import {
-  PaymentModal, GenerateModal, DeleteConfirmModal, CreateSingleFeeModal,
+  PaymentModal, GenerateModal, CreateSingleFeeModal,
 } from './FeeModals'
 import { exportFeePDF } from './feeExport'
 import { useToast } from '../../components/Toast'
+import { useConfirmModal } from '../../components/ConfirmModal'
 
 export default function FeeCollectPage() {
   const { user, activeSchool, isStaffMember } = useAuth()
@@ -51,8 +52,8 @@ export default function FeeCollectPage() {
   const [editingCell, setEditingCell] = useState(null)
   const [editValue, setEditValue] = useState('')
 
-  // Delete confirmation state
-  const [deleteTarget, setDeleteTarget] = useState(null)
+  // Confirm modal hook
+  const { confirm, ConfirmModalRoot } = useConfirmModal()
 
   // Data hook
   const data = useFeeCollection({
@@ -155,18 +156,16 @@ export default function FeeCollectPage() {
     )
   }
 
-  const handleBulkDelete = () => setDeleteTarget('bulk')
+  const handleBulkDelete = async () => {
+    const ok = await confirm({ title: 'Delete Fees', message: `Delete ${selectedIds.size} selected fee records? This cannot be undone.` })
+    if (ok) data.bulkDeleteMutation.mutate({ ids: [...selectedIds] }, {
+      onSuccess: () => setSelectedIds(new Set()),
+    })
+  }
 
-  const handleDeleteConfirm = () => {
-    if (deleteTarget === 'bulk') {
-      data.bulkDeleteMutation.mutate({ ids: [...selectedIds] }, {
-        onSuccess: () => { setSelectedIds(new Set()); setDeleteTarget(null) },
-      })
-    } else {
-      data.deleteFeePaymentMutation.mutate(deleteTarget, {
-        onSuccess: () => setDeleteTarget(null),
-      })
-    }
+  const handleDeleteSingle = async (id) => {
+    const ok = await confirm({ title: 'Delete Fee', message: 'Delete this fee record? This cannot be undone.' })
+    if (ok) data.deleteFeePaymentMutation.mutate(id)
   }
 
   const handleExportPDF = () => {
@@ -242,7 +241,7 @@ export default function FeeCollectPage() {
         editValue={editValue} setEditValue={setEditValue}
         onInlineUpdate={canWrite ? handleInlineUpdate : undefined}
         onRecordPayment={canWrite ? handleOpenPayment : undefined}
-        onDelete={canWrite ? (id) => setDeleteTarget(id) : undefined}
+        onDelete={canWrite ? handleDeleteSingle : undefined}
         canWrite={canWrite}
       />
 
@@ -280,18 +279,6 @@ export default function FeeCollectPage() {
         academicYearId={activeAcademicYear?.id}
       />
 
-      <DeleteConfirmModal
-        show={deleteTarget !== null}
-        message={
-          deleteTarget === 'bulk'
-            ? `Delete ${selectedIds.size} selected fee records? This cannot be undone.`
-            : 'Delete this fee record? This cannot be undone.'
-        }
-        onConfirm={handleDeleteConfirm}
-        onCancel={() => setDeleteTarget(null)}
-        isPending={data.deleteFeePaymentMutation.isPending || data.bulkDeleteMutation.isPending}
-      />
-
       <CreateSingleFeeModal
         show={showCreateFeeModal}
         onClose={() => setShowCreateFeeModal(false)}
@@ -308,6 +295,8 @@ export default function FeeCollectPage() {
         academicYearId={activeAcademicYear?.id}
         accountsList={data.accountsList}
       />
+
+      <ConfirmModalRoot />
     </div>
   )
 }

@@ -1294,6 +1294,7 @@ Query params: `status`, `source`, `applying_for_grade_level`, `search`, `page_si
   "fee_overdue_enabled": true,
   "exam_result_enabled": true,
   "daily_absence_summary_enabled": false,
+  "transport_notification_enabled": true,
   "created_at": "2026-02-13T13:01:53.878412+05:00",
   "updated_at": "2026-02-13T13:01:53.878432+05:00"
 }
@@ -1334,6 +1335,39 @@ _(No data — expected fields from serializer)_
       "scheduled_for": null,
       "metadata": {}, "sent_at": null,
       "created_at": "", "updated_at": ""
+    }
+  ]
+}
+```
+
+### POST /api/notifications/broadcast/
+```json
+{
+  "sent": 1,
+  "failed": 0,
+  "skipped": 0,
+  "total_recipients": 1
+}
+```
+
+### GET /api/notifications/my/
+```json
+{
+  "count": 5,
+  "next": null,
+  "previous": null,
+  "results": [
+    {
+      "id": 1, "school": 37, "template": null,
+      "channel": "IN_APP", "channel_display": "In-App",
+      "event_type": "GENERAL", "event_type_display": "General",
+      "recipient_type": "ADMIN", "recipient_identifier": "42",
+      "recipient_user": 42, "student": null, "student_name": null,
+      "title": "Test Broadcast", "body": "Hello all principals",
+      "status": "SENT", "status_display": "Sent",
+      "metadata": {}, "sent_at": "2026-02-25T10:00:00+05:00",
+      "delivered_at": null, "read_at": null,
+      "created_at": "2026-02-25T10:00:00+05:00"
     }
   ]
 }
@@ -1807,6 +1841,56 @@ _(Expected fields from serializers)_
     }
   ],
   "generated_at": "2026-02-21T10:00:00Z"
+}
+```
+
+---
+
+## AI Chatbot Agents
+
+All 4 AI chat endpoints accept `POST {message: "..."}` and return `{response: "..."}`. The backend uses multi-round tool calling (up to 3 rounds) with Groq LLM.
+
+### POST /api/finance/ai-chat/
+```json
+// Request
+{ "message": "What's the fee collection for January 2026?" }
+
+// Response
+{
+  "response": "Here's the fee collection summary for January 2026:\n\n- **Total Expected:** ₨450,000\n- **Total Collected:** ₨312,500 (69.4%)\n- **Total Pending:** ₨137,500\n- **Students Paid:** 125/180\n\nThe collection rate is below 70%. You may want to send fee reminders to parents with pending balances."
+}
+```
+
+### POST /api/academics/ai-chat/
+```json
+// Request
+{ "message": "Show me the quality score for Class 5A" }
+
+// Response
+{
+  "response": "Timetable quality score for **Class 5A**: **78/100**\n\n| Metric | Score |\n|--------|-------|\n| Subject coverage | 90% |\n| Teacher conflicts | 0 |\n| Gap distribution | 75% |\n| Back-to-back subjects | 2 (minor) |\n| Break placement | Good |\n\nSuggestion: Consider redistributing gaps more evenly across the week."
+}
+```
+
+### POST /api/notifications/ai-chat/
+```json
+// Request
+{ "message": "Show me Rahul's attendance and pending assignments" }
+
+// Response
+{
+  "response": "Here's an overview for **Rahul Kumar** (Class 5A):\n\n**Attendance (Last 30 days):**\n- Present: 22 days (88%)\n- Absent: 3 days (Feb 5, Feb 12, Feb 19)\n\n**Pending Assignments:**\n1. Math - Chapter 5 Worksheet (due Feb 27)\n2. Science - Lab Report (due Mar 1)\n\nRahul has 2 pending assignments. Would you like me to draft a message to his parents?"
+}
+```
+
+### POST /api/students/portal/study-helper/
+```json
+// Request
+{ "message": "How did I do in my last Math exam?" }
+
+// Response
+{
+  "response": "Here are your Math results from the **Mid-Term Exam**:\n\n- **Marks:** 72/100\n- **Grade:** B+\n- **Class Average:** 65/100\n\nYou scored above the class average! To reach an A grade, you'd need 80+ marks. Focus on the topics where you lost marks. Would you like me to help you study any specific chapter?"
 }
 ```
 

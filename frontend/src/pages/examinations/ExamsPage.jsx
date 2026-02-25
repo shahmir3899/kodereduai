@@ -4,6 +4,7 @@ import { examinationsApi, sessionsApi, academicsApi } from '../../services/api'
 import ClassSelector from '../../components/ClassSelector'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import ExamWizard from './ExamWizard'
+import { useConfirmModal } from '../../components/ConfirmModal'
 
 const EMPTY_FORM = {
   academic_year: '', term: '', exam_type: '', class_obj: '',
@@ -20,6 +21,7 @@ const STATUS_STYLES = {
 
 export default function ExamsPage() {
   const queryClient = useQueryClient()
+  const { confirm, ConfirmModalRoot } = useConfirmModal()
   const { activeAcademicYear } = useAcademicYear()
 
   // UI state
@@ -420,14 +422,14 @@ export default function ExamsPage() {
                             Date Sheet
                           </button>
                           <button
-                            onClick={() => { if (confirm('Publish all exams in this group? Results will become visible.')) publishAllMut.mutate(group.id) }}
+                            onClick={async () => { const ok = await confirm({ title: 'Publish All Exams', message: 'Publish all exams in this group? Results will become visible.', variant: 'warning', confirmLabel: 'Publish All' }); if (ok) publishAllMut.mutate(group.id) }}
                             className="text-xs px-2 py-1 text-green-600 hover:bg-green-50 rounded"
                             disabled={publishAllMut.isPending}
                           >
                             Publish All
                           </button>
                           <button
-                            onClick={() => { if (confirm(`Delete "${group.name}" and all its class exams?`)) deleteGroupMut.mutate(group.id) }}
+                            onClick={async () => { const ok = await confirm({ title: 'Delete Exam Group', message: `Delete "${group.name}" and all its class exams?` }); if (ok) deleteGroupMut.mutate(group.id) }}
                             className="text-xs px-2 py-1 text-red-600 hover:bg-red-50 rounded"
                             disabled={deleteGroupMut.isPending}
                           >
@@ -472,12 +474,12 @@ export default function ExamsPage() {
                                           <button onClick={() => openEdit(exam)} className="text-xs text-primary-600 hover:underline mr-2">Edit</button>
                                           {exam.status !== 'PUBLISHED' && (
                                             <button
-                                              onClick={() => { if (confirm('Publish this exam?')) publishMut.mutate(exam.id) }}
+                                              onClick={async () => { const ok = await confirm({ title: 'Publish Exam', message: 'Publish this exam? Results will become visible.', variant: 'warning', confirmLabel: 'Publish' }); if (ok) publishMut.mutate(exam.id) }}
                                               className="text-xs text-green-600 hover:underline mr-2"
                                             >Publish</button>
                                           )}
                                           <button
-                                            onClick={() => { if (confirm(`Delete "${exam.name}"?`)) deleteMut.mutate(exam.id) }}
+                                            onClick={async () => { const ok = await confirm({ title: 'Delete Exam', message: `Delete "${exam.name}"?` }); if (ok) deleteMut.mutate(exam.id) }}
                                             className="text-xs text-red-600 hover:underline"
                                           >Delete</button>
                                         </td>
@@ -501,7 +503,7 @@ export default function ExamsPage() {
                                     </div>
                                     <div className="flex gap-2">
                                       <button onClick={() => openEdit(exam)} className="text-xs text-primary-600 hover:underline">Edit</button>
-                                      <button onClick={() => { if (confirm('Delete?')) deleteMut.mutate(exam.id) }} className="text-xs text-red-600 hover:underline">Delete</button>
+                                      <button onClick={async () => { const ok = await confirm({ title: 'Delete Exam', message: `Delete "${exam.name}"?` }); if (ok) deleteMut.mutate(exam.id) }} className="text-xs text-red-600 hover:underline">Delete</button>
                                     </div>
                                   </div>
                                 ))}
@@ -577,12 +579,12 @@ export default function ExamsPage() {
                           <button onClick={() => openEdit(exam)} className="text-xs text-primary-600 hover:underline mr-2">Edit</button>
                           {exam.status !== 'PUBLISHED' && (
                             <button
-                              onClick={() => { if (confirm('Publish this exam? Results will become visible.')) publishMut.mutate(exam.id) }}
+                              onClick={async () => { const ok = await confirm({ title: 'Publish Exam', message: 'Publish this exam? Results will become visible.', variant: 'warning', confirmLabel: 'Publish' }); if (ok) publishMut.mutate(exam.id) }}
                               className="text-xs text-green-600 hover:underline mr-2"
                             >Publish</button>
                           )}
                           <button
-                            onClick={() => { if (confirm(`Delete "${exam.name}"?`)) deleteMut.mutate(exam.id) }}
+                            onClick={async () => { const ok = await confirm({ title: 'Delete Exam', message: `Delete "${exam.name}"?` }); if (ok) deleteMut.mutate(exam.id) }}
                             className="text-xs text-red-600 hover:underline"
                           >Delete</button>
                         </td>
@@ -615,9 +617,9 @@ export default function ExamsPage() {
                     <div className="flex gap-2">
                       <button onClick={() => openEdit(exam)} className="text-xs text-primary-600 hover:underline">Edit</button>
                       {exam.status !== 'PUBLISHED' && (
-                        <button onClick={() => { if (confirm('Publish?')) publishMut.mutate(exam.id) }} className="text-xs text-green-600 hover:underline">Publish</button>
+                        <button onClick={async () => { const ok = await confirm({ title: 'Publish Exam', message: 'Publish this exam? Results will become visible.', variant: 'warning', confirmLabel: 'Publish' }); if (ok) publishMut.mutate(exam.id) }} className="text-xs text-green-600 hover:underline">Publish</button>
                       )}
-                      <button onClick={() => { if (confirm('Delete?')) deleteMut.mutate(exam.id) }} className="text-xs text-red-600 hover:underline">Delete</button>
+                      <button onClick={async () => { const ok = await confirm({ title: 'Delete Exam', message: `Delete "${exam.name}"?` }); if (ok) deleteMut.mutate(exam.id) }} className="text-xs text-red-600 hover:underline">Delete</button>
                     </div>
                   </div>
                 ))}
@@ -651,6 +653,8 @@ export default function ExamsPage() {
       {dateSheetGroupId && (
         <DateSheetModal groupId={dateSheetGroupId} onClose={() => setDateSheetGroupId(null)} />
       )}
+
+      <ConfirmModalRoot />
 
       {/* ── Quick Create / Edit Modal ── */}
       {showModal && (

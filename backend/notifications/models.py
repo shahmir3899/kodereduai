@@ -275,6 +275,10 @@ class SchoolNotificationConfig(models.Model):
         default=False,
         help_text='Send daily absence summary to admins',
     )
+    transport_notification_enabled = models.BooleanField(
+        default=True,
+        help_text='Send transport update notifications (bus departed, arriving, completed)',
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

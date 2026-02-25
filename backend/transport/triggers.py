@@ -57,6 +57,16 @@ def _get_parent_users_for_stop(route, stop):
     return results
 
 
+def _is_transport_notification_enabled(school):
+    """Check if transport notifications are enabled for this school."""
+    from notifications.models import SchoolNotificationConfig
+    try:
+        config = school.notification_config
+        return config.transport_notification_enabled
+    except SchoolNotificationConfig.DoesNotExist:
+        return True  # Default enabled if no config exists
+
+
 def trigger_bus_departed(route_journey):
     """
     Send notification when a bus departs on a route.
@@ -68,6 +78,8 @@ def trigger_bus_departed(route_journey):
     from notifications.engine import NotificationEngine
 
     school = route_journey.school
+    if not _is_transport_notification_enabled(school):
+        return 0
     route = route_journey.route
 
     engine = NotificationEngine(school)
@@ -122,6 +134,8 @@ def trigger_bus_arriving_stop(route_journey, stop):
     from notifications.engine import NotificationEngine
 
     school = route_journey.school
+    if not _is_transport_notification_enabled(school):
+        return 0
     route = route_journey.route
 
     engine = NotificationEngine(school)
@@ -168,6 +182,8 @@ def trigger_journey_completed(route_journey):
     from notifications.engine import NotificationEngine
 
     school = route_journey.school
+    if not _is_transport_notification_enabled(school):
+        return 0
     route = route_journey.route
 
     engine = NotificationEngine(school)

@@ -881,7 +881,7 @@ class AcademicsAIChatView(ModuleAccessMixin, APIView):
         try:
             from .ai_engine import AcademicsAIAgent
             agent = AcademicsAIAgent(school_id=school_id)
-            response_text = agent.process_query(user_message)
+            response_text = agent.process_query(user_message, user=request.user)
         except Exception as e:
             logger.error(f"Academics AI agent error: {e}")
             response_text = "I'm sorry, I encountered an error processing your question. Please try again."

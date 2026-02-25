@@ -6,6 +6,7 @@ import ClassSelector from '../../components/ClassSelector'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useDebounce } from '../../hooks/useDebounce'
 import { useToast } from '../../components/Toast'
+import { useConfirmModal } from '../../components/ConfirmModal'
 
 const SEVERITY_STYLES = {
   red: { bg: 'bg-red-50', border: 'border-red-200', badge: 'bg-red-100 text-red-700', icon: 'text-red-500' },
@@ -75,6 +76,8 @@ export default function SubjectsPage() {
   const [editAssignId, setEditAssignId] = useState(null)
   const [assignForm, setAssignForm] = useState(EMPTY_ASSIGNMENT)
   const [assignErrors, setAssignErrors] = useState({})
+  const [expandedClasses, setExpandedClasses] = useState(new Set())
+  const { confirm, ConfirmModalRoot } = useConfirmModal()
 
   // Queries
   const { data: subjectRes, isLoading: subjectLoading, isError: subjectError, error: subjectFetchError, isFetching: subjectFetching } = useQuery({
@@ -144,6 +147,22 @@ export default function SubjectsPage() {
     const subjectCols = [...subjectMap.values()].sort((a, b) => a.code.localeCompare(b.code))
     return { classRows, subjectCols, lookup }
   }, [assignments])
+
+  // Grouped assignments for mobile accordion
+  const groupedAssignments = useMemo(() => {
+    const map = new Map()
+    for (const a of assignments) {
+      if (!map.has(a.class_obj)) map.set(a.class_obj, { id: a.class_obj, name: a.class_name, items: [] })
+      map.get(a.class_obj).items.push(a)
+    }
+    return [...map.values()].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
+  }, [assignments])
+
+  const toggleClass = (classId) => setExpandedClasses(prev => {
+    const next = new Set(prev)
+    next.has(classId) ? next.delete(classId) : next.add(classId)
+    return next
+  })
 
   // Collapsible sections for gap analysis
   const [expandedGap, setExpandedGap] = useState({ red: true, orange: true, yellow: true, blue: true })
@@ -509,7 +528,10 @@ export default function SubjectsPage() {
                   <div className="flex gap-2 mt-3 pt-2 border-t border-gray-100">
                     <button onClick={() => openEditSubject(s)} className="text-xs text-primary-600 hover:underline">Edit</button>
                     <button
-                      onClick={() => { if (confirm(`Delete subject "${s.name}"?`)) deleteSubjectMut.mutate(s.id) }}
+                      onClick={async () => {
+                        const ok = await confirm({ title: 'Delete Subject', message: `Delete "${s.name}"? This will remove it from all class assignments.` })
+                        if (ok) deleteSubjectMut.mutate(s.id)
+                      }}
                       className="text-xs text-red-600 hover:underline"
                     >Delete</button>
                   </div>
@@ -673,26 +695,51 @@ export default function SubjectsPage() {
                 </table>
               </div>
 
-              {/* Mobile Cards */}
+              {/* Mobile Accordion (grouped by class) */}
               <div className="md:hidden space-y-3">
-                {assignments.map(a => (
-                  <div key={a.id} className="card">
-                    <div className="flex items-start justify-between mb-1">
-                      <div>
-                        <p className="font-medium text-gray-900 text-sm">{a.class_name}</p>
-                        <p className="text-xs text-gray-600">
-                          <span className="font-mono text-primary-700">{a.subject_code}</span> {a.subject_name}
-                        </p>
-                      </div>
-                      <span className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded">{a.periods_per_week}x/wk</span>
+                {groupedAssignments.map(group => {
+                  const isExpanded = expandedClasses.has(group.id)
+                  return (
+                    <div key={group.id} className="card p-0 overflow-hidden">
+                      <button
+                        onClick={() => toggleClass(group.id)}
+                        className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          <svg className={`w-4 h-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                          <span className="font-semibold text-sm text-gray-900">{group.name}</span>
+                        </div>
+                        <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+                          {group.items.length} subject{group.items.length !== 1 ? 's' : ''}
+                        </span>
+                      </button>
+                      {isExpanded && (
+                        <div className="border-t border-gray-100">
+                          {group.items.map(a => (
+                            <div key={a.id} className="flex items-center gap-2 px-4 py-2.5 border-b border-gray-50 last:border-b-0">
+                              <span className="font-mono text-xs text-primary-700 font-bold w-12 shrink-0">{a.subject_code}</span>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm text-gray-900 truncate">{a.subject_name}</p>
+                                <p className="text-xs text-gray-500 truncate">
+                                  {a.teacher_name || <span className="italic text-yellow-600">No teacher</span>}
+                                  <span className="text-gray-400 ml-1">· {a.periods_per_week}/wk</span>
+                                </p>
+                              </div>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); openEditAssign(a) }}
+                                className="text-xs text-primary-600 hover:underline shrink-0 px-2 py-1"
+                              >
+                                Edit
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                    <p className="text-xs text-gray-500 mb-2">Teacher: {a.teacher_name || 'Unassigned'}</p>
-                    <div className="flex gap-2">
-                      <button onClick={() => openEditAssign(a)} className="text-xs text-primary-600 hover:underline">Edit</button>
-                      <button onClick={() => { if (confirm('Remove?')) deleteAssignMut.mutate(a.id) }} className="text-xs text-red-600 hover:underline">Remove</button>
-                    </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             </>
           )}
@@ -833,11 +880,26 @@ export default function SubjectsPage() {
                       {staffList.map(s => <option key={s.id} value={s.id}>{s.full_name} ({s.employee_id})</option>)}
                     </select>
                   </div>
-                  <div className="flex justify-end gap-3 pt-2">
-                    <button type="button" onClick={closeAssignModal} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>
-                    <button type="submit" disabled={createAssignMut.isPending || updateAssignMut.isPending} className="btn-primary px-4 py-2 text-sm disabled:opacity-50">
-                      {createAssignMut.isPending || updateAssignMut.isPending ? 'Saving...' : editAssignId ? 'Update' : `Assign${assignForm.subjects.length > 1 ? ` (${assignForm.subjects.length})` : ''}`}
-                    </button>
+                  <div className="flex items-center pt-2">
+                    {editAssignId && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const ok = await confirm({ title: 'Remove Assignment', message: 'Are you sure you want to remove this subject assignment from the class?', confirmLabel: 'Remove', pendingLabel: 'Removing...' })
+                          if (ok) deleteAssignMut.mutate(editAssignId, { onSuccess: closeAssignModal })
+                        }}
+                        disabled={deleteAssignMut.isPending}
+                        className="text-sm text-red-600 hover:text-red-800 hover:underline disabled:opacity-50"
+                      >
+                        {deleteAssignMut.isPending ? 'Removing...' : 'Remove'}
+                      </button>
+                    )}
+                    <div className="flex gap-3 ml-auto">
+                      <button type="button" onClick={closeAssignModal} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>
+                      <button type="submit" disabled={createAssignMut.isPending || updateAssignMut.isPending} className="btn-primary px-4 py-2 text-sm disabled:opacity-50">
+                        {createAssignMut.isPending || updateAssignMut.isPending ? 'Saving...' : editAssignId ? 'Update' : `Assign${assignForm.subjects.length > 1 ? ` (${assignForm.subjects.length})` : ''}`}
+                      </button>
+                    </div>
                   </div>
                 </form>
               </div>
@@ -845,6 +907,8 @@ export default function SubjectsPage() {
           )}
         </>
       )}
+
+      <ConfirmModalRoot />
 
       {/* ─── AI Insights Tab ─── */}
       {tab === 'insights' && (

@@ -1188,7 +1188,11 @@ class SubstituteTeacherFinder:
 ACADEMICS_SYSTEM_PROMPT = """You are a helpful academic scheduling assistant for a school management platform.
 You answer questions about timetables, subjects, teachers, and class schedules.
 
-You have access to these tools. Call exactly ONE tool per question by responding with JSON:
+You have access to these tools. When you need data, respond with a JSON tool call.
+You may call multiple tools across turns to gather all the information needed.
+When you have enough information, respond directly with a clear, concise answer.
+
+Tools:
 
 1. get_class_schedule - Get timetable for a class
    Parameters: class_name (required)
@@ -1208,21 +1212,34 @@ You have access to these tools. Call exactly ONE tool per question by responding
 6. get_class_info - Get subjects and teachers assigned to a class
    Parameters: class_name (required)
 
+7. get_quality_score - Score a class timetable on 5 quality metrics (idle gaps, distribution, breaks, workload, constraints)
+   Parameters: class_name (required)
+
+8. find_substitute - Find available substitute teachers for an absent teacher on a specific date
+   Parameters: teacher_name (required), date (required, YYYY-MM-DD)
+
+9. get_curriculum_gaps - Identify missing subjects, unmet period requirements, and unassigned teachers
+   Parameters: class_name (optional, omit for school-wide)
+
+10. resolve_conflict - Get alternative teachers, slots, and swap suggestions for a scheduling conflict
+    Parameters: teacher_name (required), day (required, MON-SAT), period (required), class_name (required)
+
+11. get_workload_analysis - Detailed teacher workload analysis with overloaded/underloaded identification
+    Parameters: none (school-wide)
+
+12. get_room_usage - Room occupancy and availability per day
+    Parameters: room_name (optional), day (optional, MON-SAT)
+
+13. compare_schedules - Side-by-side comparison of two classes or two teachers
+    Parameters: class_name_1 (optional), class_name_2 (optional), teacher_name_1 (optional), teacher_name_2 (optional)
+
 Current date: {current_date}
 School: {school_name}
 
-Respond with ONLY a JSON object like:
+To call a tool, respond with ONLY a JSON object like:
 {{"tool": "get_class_schedule", "params": {{"class_name": "5A"}}}}
 
-If the question is not about academics/scheduling, respond with:
-{{"tool": "none", "answer": "Your friendly response here"}}"""
-
-ACADEMICS_FORMAT_PROMPT = """Given this academic/scheduling data from a school, provide a clear, concise answer to the user's question.
-
-User question: {question}
-Data: {data}
-
-Respond in a helpful, conversational tone. Format schedules clearly. Keep it brief (2-4 sentences max). Use simple formatting."""
+If the question is not about academics/scheduling, respond with a helpful answer directly (no JSON)."""
 
 
 class AcademicsAIAgent:
@@ -1239,7 +1256,13 @@ class AcademicsAIAgent:
             self._school = School.objects.get(id=self.school_id)
         return self._school
 
-    def process_query(self, user_message: str) -> str:
+    def process_query(self, user_message: str, user=None) -> str:
+        """Process a user's natural language query and return a response.
+
+        Args:
+            user_message: The user's question.
+            user: Optional Django User instance for loading conversation history.
+        """
         if not settings.GROQ_API_KEY:
             return self._fallback_response(user_message)
 
@@ -1252,56 +1275,72 @@ class AcademicsAIAgent:
                 school_name=self.school.name,
             )
 
+            messages = [{"role": "system", "content": system}]
+
+            # Load last 10 messages from DB for context continuity
+            if user:
+                from .models import AcademicsAIChatMessage
+                history = AcademicsAIChatMessage.objects.filter(
+                    school_id=self.school_id, user=user
+                ).order_by('-created_at')[:10]
+                for msg in reversed(list(history)):
+                    messages.append({"role": msg.role, "content": msg.content})
+
+            messages.append({"role": "user", "content": user_message})
+
+            # Multi-round tool-calling loop (up to 3 rounds)
             response = client.chat.completions.create(
                 model=settings.GROQ_MODEL,
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user_message},
-                ],
-                temperature=0.1,
-                max_tokens=500,
-                timeout=15,
-            )
-
-            result_text = response.choices[0].message.content.strip()
-
-            # Parse JSON from potential markdown code blocks
-            if "```json" in result_text:
-                result_text = result_text.split("```json")[1].split("```")[0]
-            elif "```" in result_text:
-                result_text = result_text.split("```")[1].split("```")[0]
-
-            tool_call = json.loads(result_text.strip())
-
-            if tool_call.get('tool') == 'none':
-                return tool_call.get('answer', "I can help with questions about schedules, subjects, and teachers.")
-
-            tool_name = tool_call.get('tool', '')
-            params = tool_call.get('params', {})
-            data = self._execute_tool(tool_name, params)
-
-            # Format response with LLM
-            format_response = client.chat.completions.create(
-                model=settings.GROQ_MODEL,
-                messages=[
-                    {"role": "user", "content": ACADEMICS_FORMAT_PROMPT.format(
-                        question=user_message,
-                        data=json.dumps(data, default=str),
-                    )},
-                ],
+                messages=messages,
                 temperature=0.3,
-                max_tokens=500,
+                max_tokens=1000,
                 timeout=15,
             )
+            content = response.choices[0].message.content.strip()
 
-            return format_response.choices[0].message.content.strip()
+            max_tool_rounds = 3
+            for _ in range(max_tool_rounds):
+                try:
+                    if '```json' in content:
+                        json_str = content.split('```json')[1].split('```')[0]
+                    elif '```' in content:
+                        json_str = content.split('```')[1].split('```')[0]
+                    elif content.strip().startswith('{'):
+                        json_str = content.strip()
+                    else:
+                        break  # Not a tool call — final answer
 
-        except json.JSONDecodeError:
-            logger.warning(f"Failed to parse LLM tool call for query: {user_message}")
-            return self._fallback_response(user_message)
+                    tool_call = json.loads(json_str)
+                    if 'tool' not in tool_call:
+                        break
+
+                    if tool_call.get('tool') == 'none':
+                        return tool_call.get('answer', "I can help with questions about schedules, subjects, and teachers.")
+
+                    tool_name = tool_call.get('tool', '')
+                    params = tool_call.get('params', {})
+                    data = self._execute_tool(tool_name, params)
+
+                    messages.append({"role": "assistant", "content": content})
+                    messages.append({"role": "user", "content": f"Tool result: {json.dumps(data, default=str)}"})
+
+                    response = client.chat.completions.create(
+                        model=settings.GROQ_MODEL,
+                        messages=messages,
+                        temperature=0.3,
+                        max_tokens=1000,
+                        timeout=15,
+                    )
+                    content = response.choices[0].message.content.strip()
+
+                except (json.JSONDecodeError, IndexError, KeyError):
+                    break
+
+            return content
+
         except Exception as e:
             logger.error(f"Academics AI agent error: {e}")
-            return "I'm sorry, I couldn't process that question right now. Please try rephrasing or try again later."
+            return self._fallback_response(user_message)
 
     def _execute_tool(self, tool_name: str, params: dict) -> dict:
         tools = {
@@ -1311,11 +1350,37 @@ class AcademicsAIAgent:
             'get_subject_schedule': self._get_subject_schedule,
             'get_workload_summary': self._get_workload_summary,
             'get_class_info': self._get_class_info,
+            'get_quality_score': self._get_quality_score,
+            'find_substitute': self._find_substitute,
+            'get_curriculum_gaps': self._get_curriculum_gaps,
+            'resolve_conflict': self._resolve_conflict,
+            'get_workload_analysis': self._get_workload_analysis,
+            'get_room_usage': self._get_room_usage,
+            'compare_schedules': self._compare_schedules,
         }
         handler = tools.get(tool_name)
         if not handler:
-            return {"error": f"Unknown tool: {tool_name}"}
+            available = ', '.join(tools.keys())
+            return {"error": f"Unknown tool: {tool_name}. Available tools: {available}"}
         return handler(**params)
+
+    def _suggest_classes(self, class_name: str) -> str:
+        """Return suggestion string for similar class names."""
+        from students.models import Class
+        similar = list(Class.objects.filter(
+            school_id=self.school_id, name__icontains=class_name[:2]
+        ).values_list('name', flat=True)[:5])
+        return f" Did you mean: {', '.join(similar)}?" if similar else ""
+
+    def _suggest_teachers(self, teacher_name: str) -> str:
+        """Return suggestion string for similar teacher names."""
+        from hr.models import StaffMember
+        similar = list(StaffMember.objects.filter(
+            school_id=self.school_id, is_active=True,
+        ).filter(
+            Q(first_name__icontains=teacher_name[:3]) | Q(last_name__icontains=teacher_name[:3])
+        ).values_list('first_name', flat=True)[:5])
+        return f" Did you mean: {', '.join(similar)}?" if similar else ""
 
     def _get_class_schedule(self, class_name: str) -> dict:
         from students.models import Class
@@ -1325,7 +1390,7 @@ class AcademicsAIAgent:
             school_id=self.school_id, name__icontains=class_name
         ).first()
         if not cls:
-            return {"error": f"Class '{class_name}' not found."}
+            return {"error": f"Class '{class_name}' not found.{self._suggest_classes(class_name)}"}
 
         entries = TimetableEntry.objects.filter(
             school_id=self.school_id, class_obj=cls
@@ -1353,7 +1418,7 @@ class AcademicsAIAgent:
             Q(first_name__icontains=teacher_name) | Q(last_name__icontains=teacher_name)
         ).first()
         if not teacher:
-            return {"error": f"Teacher '{teacher_name}' not found."}
+            return {"error": f"Teacher '{teacher_name}' not found.{self._suggest_teachers(teacher_name)}"}
 
         entries = TimetableEntry.objects.filter(
             school_id=self.school_id, teacher=teacher
@@ -1414,7 +1479,12 @@ class AcademicsAIAgent:
             school_id=self.school_id, name__icontains=subject_name
         ).first()
         if not subject:
-            return {"error": f"Subject '{subject_name}' not found."}
+            from .models import Subject as SubjectModel
+            similar = list(SubjectModel.objects.filter(
+                school_id=self.school_id, name__icontains=subject_name[:3]
+            ).values_list('name', flat=True)[:5])
+            suggestion = f" Did you mean: {', '.join(similar)}?" if similar else ""
+            return {"error": f"Subject '{subject_name}' not found.{suggestion}"}
 
         entry_qs = TimetableEntry.objects.filter(
             school_id=self.school_id, subject=subject
@@ -1460,7 +1530,7 @@ class AcademicsAIAgent:
             school_id=self.school_id, name__icontains=class_name
         ).first()
         if not cls:
-            return {"error": f"Class '{class_name}' not found."}
+            return {"error": f"Class '{class_name}' not found.{self._suggest_classes(class_name)}"}
 
         assignments = ClassSubject.objects.filter(
             school_id=self.school_id, class_obj=cls, is_active=True
@@ -1478,6 +1548,165 @@ class AcademicsAIAgent:
                 for a in assignments
             ],
         }
+
+    # ── New Tools (7-13) ────────────────────────────────────────────────
+
+    def _get_quality_score(self, class_name: str) -> dict:
+        from students.models import Class
+
+        cls = Class.objects.filter(
+            school_id=self.school_id, name__icontains=class_name
+        ).first()
+        if not cls:
+            return {"error": f"Class '{class_name}' not found.{self._suggest_classes(class_name)}"}
+
+        scorer = TimetableQualityScorer(self.school_id, cls.id)
+        result = scorer.score()
+        return {
+            "class": cls.name,
+            "overall_score": result.overall_score,
+            "teacher_idle_gaps": result.teacher_idle_gaps,
+            "subject_distribution": result.subject_distribution,
+            "break_placement": result.break_placement,
+            "workload_balance": result.workload_balance,
+            "constraint_satisfaction": result.constraint_satisfaction,
+            "details": result.details,
+        }
+
+    def _find_substitute(self, teacher_name: str, date: str) -> dict:
+        from hr.models import StaffMember
+        from datetime import date as date_cls
+
+        teacher = StaffMember.objects.filter(
+            school_id=self.school_id,
+        ).filter(
+            Q(first_name__icontains=teacher_name) | Q(last_name__icontains=teacher_name)
+        ).first()
+        if not teacher:
+            return {"error": f"Teacher '{teacher_name}' not found.{self._suggest_teachers(teacher_name)}"}
+
+        try:
+            target_date = date_cls.fromisoformat(date)
+        except (ValueError, TypeError):
+            return {"error": f"Invalid date format: '{date}'. Use YYYY-MM-DD."}
+
+        finder = SubstituteTeacherFinder(self.school_id)
+        suggestions = finder.suggest(teacher.id, target_date)
+        return {
+            "teacher": teacher.full_name,
+            "date": str(target_date),
+            "substitutes": suggestions,
+        }
+
+    def _get_curriculum_gaps(self, class_name: str = None) -> dict:
+        analyzer = CurriculumGapAnalyzer(self.school_id)
+        gaps = analyzer.analyze()
+
+        # Filter results to a specific class if requested
+        if class_name:
+            from students.models import Class
+            cls = Class.objects.filter(
+                school_id=self.school_id, name__icontains=class_name
+            ).first()
+            if not cls:
+                return {"error": f"Class '{class_name}' not found.{self._suggest_classes(class_name)}"}
+            # Filter gap lists to only include entries for the requested class
+            for key in ['missing_subjects', 'unmet_periods', 'unassigned_teachers']:
+                if key in gaps and isinstance(gaps[key], list):
+                    gaps[key] = [g for g in gaps[key] if g.get('class') == cls.name or g.get('class_name') == cls.name]
+
+        return gaps
+
+    def _resolve_conflict(self, teacher_name: str, day: str, period: str, class_name: str) -> dict:
+        from hr.models import StaffMember
+        from students.models import Class
+        from .models import TimetableSlot
+
+        teacher = StaffMember.objects.filter(
+            school_id=self.school_id,
+        ).filter(
+            Q(first_name__icontains=teacher_name) | Q(last_name__icontains=teacher_name)
+        ).first()
+        if not teacher:
+            return {"error": f"Teacher '{teacher_name}' not found.{self._suggest_teachers(teacher_name)}"}
+
+        cls = Class.objects.filter(
+            school_id=self.school_id, name__icontains=class_name
+        ).first()
+        if not cls:
+            return {"error": f"Class '{class_name}' not found.{self._suggest_classes(class_name)}"}
+
+        day_upper = day.upper()[:3]
+        slot = TimetableSlot.objects.filter(
+            school_id=self.school_id, name__icontains=period
+        ).first()
+        if not slot:
+            return {"error": f"Period '{period}' not found."}
+
+        resolver = ConflictResolver(self.school_id)
+        result = resolver.suggest_resolution(teacher.id, day_upper, slot.id, cls.id)
+        return {
+            "teacher": teacher.full_name,
+            "class": cls.name,
+            "day": day_upper,
+            "period": slot.name,
+            "alternative_teachers": result.alternative_teachers[:5],
+            "alternative_slots": result.alternative_slots[:5],
+            "swap_suggestions": result.swap_suggestions[:5],
+        }
+
+    def _get_workload_analysis(self) -> dict:
+        analyzer = WorkloadAnalyzer(self.school_id)
+        return analyzer.analyze()
+
+    def _get_room_usage(self, room_name: str = None, day: str = None) -> dict:
+        from .models import TimetableEntry
+
+        qs = TimetableEntry.objects.filter(
+            school_id=self.school_id,
+        ).exclude(room='').exclude(room__isnull=True)
+
+        if day:
+            qs = qs.filter(day=day.upper()[:3])
+        if room_name:
+            qs = qs.filter(room__icontains=room_name)
+
+        room_stats = qs.values('room').annotate(
+            total_periods=Count('id'),
+        ).order_by('-total_periods')
+
+        # Also find empty rooms (rooms used but free on a specific day)
+        all_rooms = list(
+            TimetableEntry.objects.filter(
+                school_id=self.school_id,
+            ).exclude(room='').exclude(room__isnull=True)
+            .values_list('room', flat=True).distinct()
+        )
+
+        return {
+            "room_usage": [
+                {"room": r['room'], "total_periods": r['total_periods']}
+                for r in room_stats[:20]
+            ],
+            "total_rooms": len(all_rooms),
+            "day_filter": day,
+            "room_filter": room_name,
+        }
+
+    def _compare_schedules(self, class_name_1: str = None, class_name_2: str = None,
+                           teacher_name_1: str = None, teacher_name_2: str = None) -> dict:
+        result = {}
+        if class_name_1 and class_name_2:
+            result['schedule_1'] = self._get_class_schedule(class_name_1)
+            result['schedule_2'] = self._get_class_schedule(class_name_2)
+            result['comparison_type'] = 'class_vs_class'
+        elif teacher_name_1 and teacher_name_2:
+            result['schedule_1'] = self._get_teacher_schedule(teacher_name_1)
+            result['schedule_2'] = self._get_teacher_schedule(teacher_name_2)
+            result['comparison_type'] = 'teacher_vs_teacher'
+        else:
+            return {"error": "Provide either two class names or two teacher names to compare."}
+        return result
 
     def _fallback_response(self, user_message: str) -> str:
         """Keyword-based fallback when LLM is not available."""

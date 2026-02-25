@@ -66,7 +66,7 @@ class SchoolNotificationConfigSerializer(serializers.ModelSerializer):
             'smart_scheduling_enabled',
             'absence_notification_enabled', 'fee_reminder_enabled',
             'fee_overdue_enabled', 'exam_result_enabled',
-            'daily_absence_summary_enabled',
+            'daily_absence_summary_enabled', 'transport_notification_enabled',
             'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
@@ -85,3 +85,24 @@ class SendNotificationSerializer(serializers.Serializer):
     body = serializers.CharField(required=False, default='')
     context = serializers.DictField(required=False, default=dict)
     student_id = serializers.IntegerField(required=False, allow_null=True)
+
+
+class BroadcastNotificationSerializer(serializers.Serializer):
+    """Serializer for broadcasting a notification to all users of a role group."""
+    ROLE_CHOICES = [
+        ('PARENT', 'All Parents'),
+        ('TEACHER', 'All Teachers'),
+        ('STAFF', 'All Staff'),
+        ('SCHOOL_ADMIN', 'All Admins'),
+        ('PRINCIPAL', 'Principals'),
+        ('HR_MANAGER', 'HR Managers'),
+        ('ACCOUNTANT', 'Accountants'),
+        ('STUDENT', 'All Students'),
+    ]
+
+    event_type = serializers.ChoiceField(choices=NotificationTemplate.EVENT_TYPE_CHOICES)
+    channel = serializers.ChoiceField(choices=NotificationTemplate.CHANNEL_CHOICES)
+    recipient_type = serializers.ChoiceField(choices=ROLE_CHOICES)
+    title = serializers.CharField(max_length=200)
+    body = serializers.CharField()
+    context = serializers.DictField(required=False, default=dict)

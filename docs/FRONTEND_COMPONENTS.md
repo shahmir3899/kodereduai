@@ -23,7 +23,7 @@ Dropdown for switching active school. Reads from `useAuth().schools`. Calls `POS
 Dropdown for switching active academic year. Reads from `useAcademicYear()` context. Stored per-school in localStorage (`active_academic_year_{schoolId}`).
 
 ### NotificationBell.jsx
-Bell icon with unread count badge. Calls `GET /api/notifications/unread-count/`. Links to /notifications.
+Bell icon with unread count badge. Polls `GET /api/notifications/unread-count/` every 30s. Dropdown shows 8 most recent notifications with mark-read on click, mark-all-read button. Bounce animation (3s) when new notifications arrive. Links to /notifications.
 
 ### Toast.jsx
 Toast notification system with context provider.
@@ -38,9 +38,12 @@ Sliding drawer showing background task progress. Uses BackgroundTaskContext. Sho
 Reusable spinner component used as Suspense fallback.
 
 ### AI Chat Widgets
-- **FinanceChatWidget.jsx** — Collapsible AI chat for finance. Calls `POST /api/finance/ai-chat/`
-- **AcademicsChatWidget.jsx** — AI chat for academics. Calls `POST /api/academics/ai-chat/`
-- **CommunicationChatWidget.jsx** — AI chat for notifications. Calls `POST /api/notifications/ai-chat/`
+All AI chat widgets support multi-round tool calling (LLM calls multiple tools per query) and conversation history on the backend. Send `{message}` via POST, receive `{response}`.
+
+- **FinanceChatWidget.jsx** — Collapsible AI chat for finance queries. 18 tools: fee collection, expenses, scholarships, discounts, defaulters, payment methods, trends, etc. Calls `POST /api/finance/ai-chat/`
+- **AcademicsChatWidget.jsx** — AI chat for timetable & academics. 13 tools: schedules, workload, quality scores, substitutes, curriculum gaps, conflict resolution, room usage, etc. Calls `POST /api/academics/ai-chat/`
+- **CommunicationChatWidget.jsx** — AI chat for parent communication. 15 tools: student info, attendance, fees, exam results, assignments, transport, leave requests, etc. Calls `POST /api/notifications/ai-chat/`
+- **StudentStudyHelper.jsx** — AI study assistant (student portal). Hybrid: free-form study help + 8 data tools (marks, assignments, topics, attendance, exams, materials, grade targets, feedback). Calls `POST /api/students/portal/study-helper/`
 
 ### Dashboard Widgets
 - **SessionHealthWidget.jsx** — Session health metrics. Calls `GET /api/sessions/health/`

@@ -112,7 +112,7 @@ export default function BulkActionsBar({ selectedCount, onBulkUpdate, onPayFull,
 
       <div className="w-px h-8 bg-gray-200 hidden sm:block" />
 
-      {/* Bulk delete — goes straight to DeleteConfirmModal */}
+      {/* Bulk delete — parent handles confirmation via useConfirmModal */}
       <button
         onClick={onBulkDelete}
         disabled={isPending}

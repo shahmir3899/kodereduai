@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { schoolsApi, financeApi, usersApi } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 import { getErrorMessage } from '../utils/errorUtils'
+import { useConfirmModal } from '../components/ConfirmModal'
 
 const ACCOUNT_TYPES = [
   { value: 'CASH', label: 'Cash' },
@@ -20,6 +21,7 @@ const typeColors = {
 export default function SettingsPage() {
   const queryClient = useQueryClient()
   const { isPrincipal, isStaffMember, isSchoolAdmin, isSuperAdmin, getAllowableRoles } = useAuth()
+  const { confirm, ConfirmModalRoot } = useConfirmModal()
   const isFinanceAdmin = !isPrincipal && !isStaffMember
   const canManageUsers = isSchoolAdmin && !isSuperAdmin
   const [searchParams, setSearchParams] = useSearchParams()
@@ -423,7 +425,7 @@ export default function SettingsPage() {
                     </label>
                     {school.logo && !uploadingLogo && (
                       <button
-                        onClick={() => { if (window.confirm('Remove the school logo?')) deleteAssetMutation.mutate('logo') }}
+                        onClick={async () => { const ok = await confirm({ title: 'Remove Logo', message: 'Remove the school logo?' }); if (ok) deleteAssetMutation.mutate('logo') }}
                         disabled={deleteAssetMutation.isPending}
                         className="px-4 py-2 border border-red-300 text-red-600 rounded-lg hover:bg-red-50 text-sm"
                       >
@@ -465,7 +467,7 @@ export default function SettingsPage() {
                     </label>
                     {school.letterhead_url && !uploadingLetterhead && (
                       <button
-                        onClick={() => { if (window.confirm('Remove the letterhead?')) deleteAssetMutation.mutate('letterhead') }}
+                        onClick={async () => { const ok = await confirm({ title: 'Remove Letterhead', message: 'Remove the letterhead?' }); if (ok) deleteAssetMutation.mutate('letterhead') }}
                         disabled={deleteAssetMutation.isPending}
                         className="px-4 py-2 border border-red-300 text-red-600 rounded-lg hover:bg-red-50 text-sm"
                       >
@@ -564,7 +566,7 @@ export default function SettingsPage() {
                       <p className="text-xs text-gray-500">{account.is_active ? 'Active' : 'Inactive'}</p>
                       <div className="flex gap-2 mt-2">
                         <button onClick={() => openEditAccount(account)} className="text-xs text-primary-600 hover:underline">Edit</button>
-                        <button onClick={() => { if (confirm('Delete this account?')) deleteAccountMutation.mutate(account.id) }} className="text-xs text-red-600 hover:underline">Delete</button>
+                        <button onClick={async () => { const ok = await confirm({ title: 'Delete Account', message: 'Delete this account? This cannot be undone.' }); if (ok) deleteAccountMutation.mutate(account.id) }} className="text-xs text-red-600 hover:underline">Delete</button>
                       </div>
                     </div>
                   ))}
@@ -603,7 +605,7 @@ export default function SettingsPage() {
                           </td>
                           <td className="px-4 py-3 text-center">
                             <button onClick={() => openEditAccount(account)} className="text-sm text-primary-600 hover:underline mr-3">Edit</button>
-                            <button onClick={() => { if (confirm('Delete this account?')) deleteAccountMutation.mutate(account.id) }} className="text-sm text-red-600 hover:underline">Delete</button>
+                            <button onClick={async () => { const ok = await confirm({ title: 'Delete Account', message: 'Delete this account? This cannot be undone.' }); if (ok) deleteAccountMutation.mutate(account.id) }} className="text-sm text-red-600 hover:underline">Delete</button>
                           </td>
                         </tr>
                       ))}
@@ -904,6 +906,8 @@ export default function SettingsPage() {
           </div>
         </div>
       )}
+
+      <ConfirmModalRoot />
     </div>
   )
 }

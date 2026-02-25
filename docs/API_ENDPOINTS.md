@@ -84,7 +84,7 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | GET | /api/students/portal/timetable/ | View timetable |
 | GET | /api/students/portal/results/ | View results |
 | GET | /api/students/portal/assignments/ | View assignments |
-| POST | /api/students/portal/study-helper/ | AI study helper |
+| POST | /api/students/portal/study-helper/ | AI Study Helper chat. Body: `{message}`. Hybrid: free-form study help + 8 data lookup tools, conversation history. See BACKEND_APPS.md → AI Chatbot Agents |
 | POST | /api/students/admin/generate-invite/ | Generate invite link |
 
 ## Attendance
@@ -155,7 +155,7 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | POST | /api/finance/online-payments/initiate/ | |
 | POST | /api/finance/online-payments/reconcile/ | |
 | GET | /api/finance/reports/ | |
-| POST | /api/finance/ai-chat/ | Finance AI assistant |
+| POST | /api/finance/ai-chat/ | Finance AI chat. Body: `{message}`. Multi-round tool calling (18 tools), conversation history. See BACKEND_APPS.md → AI Chatbot Agents |
 | POST | /api/finance/fee-predictor/ | Fee prediction |
 | GET | /api/finance/fee-breakdown/{student_id}/ | |
 | GET | /api/finance/siblings/{student_id}/ | Sibling detection |
@@ -215,7 +215,7 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | GET | /api/academics/timetable-entries/quality_score/ | |
 | GET | /api/academics/timetable-entries/teacher_conflicts/ | |
 | GET | /api/academics/timetable-entries/my_timetable/ | Teacher's own entries. Params: day (MON/TUE/etc), academic_year |
-| POST | /api/academics/ai-chat/ | Academics AI chat |
+| POST | /api/academics/ai-chat/ | Academics AI chat. Body: `{message}`. Multi-round tool calling (13 tools), conversation history. See BACKEND_APPS.md → AI Chatbot Agents |
 | GET | /api/academics/analytics/ | |
 
 ## Academic Sessions
@@ -259,14 +259,15 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | GET/POST | /api/notifications/templates/ | Notification templates |
 | GET | /api/notifications/logs/ | Logs. Params: channel, status, event_type |
 | GET/POST | /api/notifications/preferences/ | User preferences |
-| GET/PUT | /api/notifications/config/ | School config (single object, NOT paginated). Includes smart_scheduling_enabled, absence_notification_enabled, fee_reminder_enabled, fee_overdue_enabled, exam_result_enabled, daily_absence_summary_enabled fields |
-| GET | /api/notifications/my/ | My in-app notifications |
+| GET/PUT | /api/notifications/config/ | School config (single object, NOT paginated). Includes smart_scheduling_enabled, absence_notification_enabled, fee_reminder_enabled, fee_overdue_enabled, exam_result_enabled, daily_absence_summary_enabled, transport_notification_enabled fields |
+| GET | /api/notifications/my/ | My in-app notifications (paginated). Params: event_type, page_size |
 | GET | /api/notifications/unread-count/ | Unread count |
 | POST | /api/notifications/{id}/mark-read/ | Mark as read |
 | POST | /api/notifications/mark-all-read/ | Mark all read |
-| POST | /api/notifications/send/ | Send notification |
-| GET | /api/notifications/analytics/ | Analytics |
-| POST | /api/notifications/ai-chat/ | Communication AI |
+| POST | /api/notifications/send/ | Send notification to single recipient |
+| POST | /api/notifications/broadcast/ | Broadcast notification to all users of a role. Body: {event_type, channel, recipient_type, title, body, context?}. recipient_type: PARENT\|TEACHER\|STAFF\|SCHOOL_ADMIN\|PRINCIPAL\|HR_MANAGER\|ACCOUNTANT\|STUDENT. Returns {sent, failed, skipped, total_recipients} |
+| GET | /api/notifications/analytics/ | Analytics. Params: days (7\|30\|90, default=all time) |
+| POST | /api/notifications/ai-chat/ | Parent Communication AI chat. Body: `{message}`. Multi-round tool calling (15 tools), conversation history. See BACKEND_APPS.md → AI Chatbot Agents |
 
 ## Messaging
 | Method | URL | Description |
@@ -402,11 +403,26 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 ## Reports
 | Method | URL | Description |
 |--------|-----|-------------|
-| POST | /api/reports/generate/ | Generate report |
-| GET | /api/reports/list/ | Report list |
-| GET | /api/reports/{report_id}/download/ | Download report |
+| POST | /api/reports/generate/ | Generate report (PDF async, XLSX sync) |
+| GET | /api/reports/list/ | Report list (last 50) |
+| GET | /api/reports/{report_id}/download/ | Download report file |
 
 **NOTE:** Reports endpoint is `/api/reports/list/` and `/api/reports/generate/`, NOT `/api/reports/`.
+
+### Custom Letters (Letter Composer)
+| Method | URL | Description |
+|--------|-----|-------------|
+| GET | /api/reports/custom-letters/ | List saved letters. Params: template_type, limit |
+| POST | /api/reports/custom-letters/ | Create/save a letter |
+| GET | /api/reports/custom-letters/{id}/ | Retrieve single letter |
+| PUT | /api/reports/custom-letters/{id}/ | Update letter |
+| DELETE | /api/reports/custom-letters/{id}/ | Delete letter |
+| GET | /api/reports/custom-letters/templates/ | Get available letter templates (7 types) |
+| POST | /api/reports/custom-letters/prefill/ | Prefill template placeholders with employee data. Body: {template_body, employee_id} |
+| POST | /api/reports/custom-letters/generate-pdf/ | Generate letter PDF (sync). Body: {letter_id} OR {recipient, subject, body_text, line_spacing} |
+| POST | /api/reports/custom-letters/ai-draft/ | AI-draft letter content. Body: {prompt, template_type?, employee_context?}. Returns {subject, body_text} |
+
+**NOTE:** Letter Composer is under the HR module in the frontend. Permission: ADMIN_ROLES + HR_MANAGER. PDF uses school letterhead from `school.letterhead_url` as background. AI draft uses Groq LLM with fallback to template matching.
 
 ## Tasks
 | Method | URL | Description |

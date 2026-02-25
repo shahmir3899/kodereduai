@@ -635,9 +635,10 @@ export const notificationsApi = {
 
   // Send
   send: (data) => api.post('/api/notifications/send/', data),
+  broadcast: (data) => api.post('/api/notifications/broadcast/', data),
 
   // Analytics
-  getAnalytics: () => api.get('/api/notifications/analytics/'),
+  getAnalytics: (params) => api.get('/api/notifications/analytics/', { params }),
 
   // AI Communication Assistant
   sendChatMessage: (data) => api.post('/api/notifications/ai-chat/', data),
@@ -648,6 +649,19 @@ export const reportsApi = {
   generate: (data) => api.post('/api/reports/generate/', data),
   getList: (params) => api.get('/api/reports/list/', { params }),
   download: (reportId) => api.get(`/api/reports/${reportId}/download/`, { responseType: 'blob' }),
+}
+
+// Letter Composer API
+export const letterComposerApi = {
+  getLetters: (params) => api.get('/api/reports/custom-letters/', { params }),
+  getLetter: (id) => api.get(`/api/reports/custom-letters/${id}/`),
+  createLetter: (data) => api.post('/api/reports/custom-letters/', data),
+  updateLetter: (id, data) => api.put(`/api/reports/custom-letters/${id}/`, data),
+  deleteLetter: (id) => api.delete(`/api/reports/custom-letters/${id}/`),
+  getTemplates: () => api.get('/api/reports/custom-letters/templates/'),
+  prefillTemplate: (data) => api.post('/api/reports/custom-letters/prefill/', data),
+  generatePDF: (data) => api.post('/api/reports/custom-letters/generate-pdf/', data, { responseType: 'blob' }),
+  aiDraft: (data) => api.post('/api/reports/custom-letters/ai-draft/', data),
 }
 
 // Parent Portal API

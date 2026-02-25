@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router-dom'
 import { admissionsApi } from '../../services/api'
 import { useToast } from '../../components/Toast'
+import { useConfirmModal } from '../../components/ConfirmModal'
 import { GRADE_PRESETS, GRADE_LEVEL_LABELS } from '../../constants/gradePresets'
 import BatchConvertModal from '../../components/BatchConvertModal'
 
@@ -21,6 +22,7 @@ export default function EnquiriesPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { showError, showSuccess } = useToast()
+  const { confirm, ConfirmModalRoot } = useConfirmModal()
 
   // Selection state for batch convert
   const [selected, setSelected] = useState(new Set())
@@ -513,8 +515,9 @@ export default function EnquiriesPage() {
                         )}
                         {enquiry.status !== 'CONVERTED' && enquiry.status !== 'CANCELLED' && (
                           <button
-                            onClick={() => {
-                              if (confirm('Delete this enquiry?')) deleteMut.mutate(enquiry.id)
+                            onClick={async () => {
+                              const ok = await confirm({ title: 'Delete Enquiry', message: 'Delete this enquiry?' })
+                              if (ok) deleteMut.mutate(enquiry.id)
                             }}
                             className="text-xs text-gray-400 hover:text-red-600 font-medium ml-2"
                           >
@@ -570,6 +573,8 @@ export default function EnquiriesPage() {
           }}
         />
       )}
+
+      <ConfirmModalRoot />
     </div>
   )
 }

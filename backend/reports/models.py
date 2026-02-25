@@ -48,3 +48,51 @@ class GeneratedReport(models.Model):
 
     def __str__(self):
         return f"{self.title} ({self.get_format_display()}) - {self.created_at.strftime('%Y-%m-%d')}"
+
+
+class CustomLetter(models.Model):
+    """Stores custom letters/documents composed by admins."""
+
+    TEMPLATE_TYPE_CHOICES = [
+        ('custom', 'Custom'),
+        ('experience', 'Experience Certificate'),
+        ('termination', 'Termination Letter'),
+        ('warning', 'Warning Letter'),
+        ('appreciation', 'Appreciation Letter'),
+        ('leave_approval', 'Leave Approval'),
+        ('salary_increment', 'Salary Increment'),
+        ('transfer', 'Transfer Letter'),
+    ]
+
+    LINE_SPACING_CHOICES = [
+        ('single', 'Single'),
+        ('1.5', '1.5'),
+        ('double', 'Double'),
+    ]
+
+    school = models.ForeignKey(
+        'schools.School',
+        on_delete=models.CASCADE,
+        related_name='custom_letters',
+    )
+    recipient = models.TextField(max_length=500)
+    subject = models.CharField(max_length=200)
+    body_text = models.TextField()
+    line_spacing = models.CharField(max_length=10, choices=LINE_SPACING_CHOICES, default='single')
+    template_type = models.CharField(max_length=30, choices=TEMPLATE_TYPE_CHOICES, default='custom')
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Custom Letter'
+        verbose_name_plural = 'Custom Letters'
+
+    def __str__(self):
+        return f"{self.subject} - {self.created_at.strftime('%Y-%m-%d')}"

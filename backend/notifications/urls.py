@@ -14,6 +14,7 @@ from .views import (
     MarkReadView,
     MarkAllReadView,
     SendNotificationView,
+    BroadcastNotificationView,
     NotificationAnalyticsView,
     CommunicationAgentView,
 )
@@ -31,6 +32,7 @@ urlpatterns = [
     path('<int:pk>/mark-read/', MarkReadView.as_view(), name='mark-read'),
     path('mark-all-read/', MarkAllReadView.as_view(), name='mark-all-read'),
     path('send/', SendNotificationView.as_view(), name='send-notification'),
+    path('broadcast/', BroadcastNotificationView.as_view(), name='broadcast-notification'),
     path('analytics/', NotificationAnalyticsView.as_view(), name='notification-analytics'),
     path('ai-chat/', CommunicationAgentView.as_view(), name='communication-agent'),
 ]

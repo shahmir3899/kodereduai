@@ -456,6 +456,7 @@ export default function Layout() {
             { name: 'Attendance', href: '/hr/attendance', icon: ClipboardCheckIcon },
             { name: 'Performance', href: '/hr/appraisals', icon: StarIcon },
             { name: 'Documents', href: '/hr/documents', icon: DocumentIcon },
+            { name: 'Letter Composer', href: '/hr/letters', icon: DocumentIcon },
           ],
         }]
       : []),

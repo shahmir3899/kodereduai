@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { hrApi } from '../../services/api'
+import { useConfirmModal } from '../../components/ConfirmModal'
 
 const QUAL_TYPES = [
   { value: 'DEGREE', label: 'Degree', cls: 'bg-blue-100 text-blue-800' },
@@ -26,6 +27,7 @@ const EMPTY_DOC = { staff_member: '', document_type: '', title: '', file_url: ''
 
 export default function StaffDocumentsPage() {
   const queryClient = useQueryClient()
+  const { confirm, ConfirmModalRoot } = useConfirmModal()
   const [tab, setTab] = useState('qualifications')
 
   // Qualification state
@@ -216,7 +218,7 @@ export default function StaffDocumentsPage() {
                         <td className="px-4 py-2 text-right">
                           <button onClick={() => openQualEdit(q)} className="text-xs text-primary-600 hover:underline mr-2">Edit</button>
                           <button
-                            onClick={() => { if (confirm('Delete this qualification?')) deleteQualMutation.mutate(q.id) }}
+                            onClick={async () => { const ok = await confirm({ title: 'Delete Qualification', message: 'Delete this qualification? This cannot be undone.' }); if (ok) deleteQualMutation.mutate(q.id) }}
                             className="text-xs text-red-600 hover:underline"
                           >Delete</button>
                         </td>
@@ -247,7 +249,7 @@ export default function StaffDocumentsPage() {
                     <div className="flex gap-2">
                       <button onClick={() => openQualEdit(q)} className="text-xs text-primary-600 hover:underline">Edit</button>
                       <button
-                        onClick={() => { if (confirm('Delete?')) deleteQualMutation.mutate(q.id) }}
+                        onClick={async () => { const ok = await confirm({ title: 'Delete Qualification', message: 'Delete this qualification? This cannot be undone.' }); if (ok) deleteQualMutation.mutate(q.id) }}
                         className="text-xs text-red-600 hover:underline"
                       >Delete</button>
                     </div>
@@ -381,7 +383,7 @@ export default function StaffDocumentsPage() {
                         <td className="px-4 py-2 text-sm text-gray-500 max-w-[200px] truncate">{d.notes || '-'}</td>
                         <td className="px-4 py-2 text-right">
                           <button
-                            onClick={() => { if (confirm('Delete this document?')) deleteDocMutation.mutate(d.id) }}
+                            onClick={async () => { const ok = await confirm({ title: 'Delete Document', message: 'Delete this document? This cannot be undone.' }); if (ok) deleteDocMutation.mutate(d.id) }}
                             className="text-xs text-red-600 hover:underline"
                           >Delete</button>
                         </td>
@@ -413,7 +415,7 @@ export default function StaffDocumentsPage() {
                         <a href={d.file_url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary-600 hover:underline">View File</a>
                       )}
                       <button
-                        onClick={() => { if (confirm('Delete?')) deleteDocMutation.mutate(d.id) }}
+                        onClick={async () => { const ok = await confirm({ title: 'Delete Document', message: 'Delete this document? This cannot be undone.' }); if (ok) deleteDocMutation.mutate(d.id) }}
                         className="text-xs text-red-600 hover:underline"
                       >Delete</button>
                     </div>
@@ -475,6 +477,8 @@ export default function StaffDocumentsPage() {
           )}
         </>
       )}
+
+      <ConfirmModalRoot />
     </div>
   )
 }

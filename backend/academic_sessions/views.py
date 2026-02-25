@@ -53,8 +53,8 @@ class AcademicYearViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = super().get_queryset().select_related('school').annotate(
-            terms_count=Count('terms', filter=Q(terms__is_active=True)),
-            enrollment_count=Count('enrollments', filter=Q(enrollments__is_active=True)),
+            terms_count=Count('terms', filter=Q(terms__is_active=True), distinct=True),
+            enrollment_count=Count('enrollments', filter=Q(enrollments__is_active=True), distinct=True),
         ).order_by('-start_date')
         is_active = self.request.query_params.get('is_active')
         if is_active is not None:
@@ -390,7 +390,6 @@ class SessionSetupView(APIView):
             new_year_name = request.data.get('new_year_name')
             new_start_date = request.data.get('new_start_date')
             new_end_date = request.data.get('new_end_date')
-            fee_increase_percent = request.data.get('fee_increase_percent', 0)
 
             if not all([source_year_id, new_year_name, new_start_date, new_end_date]):
                 return Response(
@@ -398,7 +397,6 @@ class SessionSetupView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            from decimal import Decimal
             from datetime import date as parse_date
 
             preview = service.generate_setup_preview(
@@ -406,7 +404,6 @@ class SessionSetupView(APIView):
                 new_year_name=new_year_name,
                 new_start_date=parse_date.fromisoformat(new_start_date),
                 new_end_date=parse_date.fromisoformat(new_end_date),
-                fee_increase_percent=Decimal(str(fee_increase_percent)),
             )
             return Response(preview)
 
@@ -419,7 +416,13 @@ class SessionSetupView(APIView):
                 )
 
             result = service.apply_setup(preview_data, created_by=request.user)
-            return Response(result, status=status.HTTP_201_CREATED if result['success'] else status.HTTP_400_BAD_REQUEST)
+            if not result['success']:
+                http_status = status.HTTP_400_BAD_REQUEST
+            elif result.get('sync_mode'):
+                http_status = status.HTTP_200_OK
+            else:
+                http_status = status.HTTP_201_CREATED
+            return Response(result, status=http_status)
 
         return Response(
             {'detail': f'Unknown action: {action}. Use "preview" or "apply".'},

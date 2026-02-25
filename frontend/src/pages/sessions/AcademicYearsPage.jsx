@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { sessionsApi } from '../../services/api'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useToast } from '../../components/Toast'
+import { useConfirmModal } from '../../components/ConfirmModal'
 import SessionSetupWizard from './SessionSetupWizard'
 
 const EMPTY_YEAR = { name: '', start_date: '', end_date: '' }
@@ -12,6 +13,7 @@ export default function AcademicYearsPage() {
   const queryClient = useQueryClient()
   const { refresh: refreshAcademicYear, activeAcademicYear } = useAcademicYear()
   const { showSuccess, showError } = useToast()
+  const { confirm, ConfirmModalRoot } = useConfirmModal()
   const [tab, setTab] = useState('years')
 
   // Year state
@@ -238,16 +240,19 @@ export default function AcademicYearsPage() {
                   {/* Summary toggle */}
                   {expandedYearId === y.id && summary && (
                     <div className="mt-3 pt-3 border-t border-gray-200 text-xs text-gray-600 space-y-1">
-                      <p>Students enrolled: {summary.total_students || 0}</p>
-                      <p>Classes: {summary.total_classes || 0}</p>
-                      <p>Terms: {summary.terms?.length || 0}</p>
+                      <p>Students enrolled: {summary.enrollment_count || 0}</p>
+                      <p>Classes: {summary.classes_count || 0}</p>
+                      <p>Terms: {summary.terms_count || 0}</p>
                     </div>
                   )}
 
                   <div className="flex flex-wrap gap-2 mt-3 pt-2 border-t border-gray-100">
                     {!y.is_current && (
                       <button
-                        onClick={() => { if (confirm(`Set "${y.name}" as current academic year?`)) setCurrentMut.mutate(y.id) }}
+                        onClick={async () => {
+                          const ok = await confirm({ title: 'Set as Current', message: `Set "${y.name}" as current academic year?`, variant: 'warning', confirmLabel: 'Set as Current' })
+                          if (ok) setCurrentMut.mutate(y.id)
+                        }}
                         className="text-xs text-green-600 hover:underline"
                       >Set Current</button>
                     )}
@@ -257,7 +262,10 @@ export default function AcademicYearsPage() {
                     >{expandedYearId === y.id ? 'Hide Summary' : 'Summary'}</button>
                     <button onClick={() => openEditYear(y)} className="text-xs text-primary-600 hover:underline">Edit</button>
                     <button
-                      onClick={() => { if (confirm(`Delete "${y.name}"?`)) deleteYearMut.mutate(y.id) }}
+                      onClick={async () => {
+                        const ok = await confirm({ title: 'Delete Year', message: `Delete "${y.name}"? This cannot be undone.` })
+                        if (ok) deleteYearMut.mutate(y.id)
+                      }}
                       className="text-xs text-red-600 hover:underline"
                     >Delete</button>
                   </div>
@@ -386,7 +394,10 @@ export default function AcademicYearsPage() {
                         <td className="px-4 py-2 text-right">
                           <button onClick={() => openEditTerm(t)} className="text-xs text-primary-600 hover:underline mr-2">Edit</button>
                           <button
-                            onClick={() => { if (confirm(`Delete term "${t.name}"?`)) deleteTermMut.mutate(t.id) }}
+                            onClick={async () => {
+                              const ok = await confirm({ title: 'Delete Term', message: `Delete term "${t.name}"? This cannot be undone.` })
+                              if (ok) deleteTermMut.mutate(t.id)
+                            }}
                             className="text-xs text-red-600 hover:underline"
                           >Delete</button>
                         </td>
@@ -413,7 +424,10 @@ export default function AcademicYearsPage() {
                     <p className="text-xs text-gray-500">{t.start_date} — {t.end_date} (Order: {t.order})</p>
                     <div className="flex gap-2 mt-2">
                       <button onClick={() => openEditTerm(t)} className="text-xs text-primary-600 hover:underline">Edit</button>
-                      <button onClick={() => { if (confirm('Delete?')) deleteTermMut.mutate(t.id) }} className="text-xs text-red-600 hover:underline">Delete</button>
+                      <button onClick={async () => {
+                        const ok = await confirm({ title: 'Delete Term', message: `Delete term "${t.name}"? This cannot be undone.` })
+                        if (ok) deleteTermMut.mutate(t.id)
+                      }} className="text-xs text-red-600 hover:underline">Delete</button>
                     </div>
                   </div>
                 ))}
@@ -513,6 +527,7 @@ export default function AcademicYearsPage() {
       {showSetupWizard && (
         <SessionSetupWizard onClose={() => setShowSetupWizard(false)} />
       )}
+      <ConfirmModalRoot />
     </div>
   )
 }
