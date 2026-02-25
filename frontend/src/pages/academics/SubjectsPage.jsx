@@ -5,6 +5,7 @@ import { useClasses } from '../../hooks/useClasses'
 import ClassSelector from '../../components/ClassSelector'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useDebounce } from '../../hooks/useDebounce'
+import { useToast } from '../../components/Toast'
 
 const SEVERITY_STYLES = {
   red: { bg: 'bg-red-50', border: 'border-red-200', badge: 'bg-red-100 text-red-700', icon: 'text-red-500' },
@@ -54,6 +55,7 @@ const EMPTY_ASSIGNMENT = { class_obj: '', subjects: [], teacher: '', subjectPeri
 export default function SubjectsPage() {
   const queryClient = useQueryClient()
   const { activeAcademicYear } = useAcademicYear()
+  const { showSuccess, showError } = useToast()
   const [tab, setTab] = useState('subjects')
 
   // Subject state
@@ -243,7 +245,17 @@ export default function SubjectsPage() {
     setQuickAddingCode(preset.code)
     createSubjectMut.mutate(
       { name: preset.name, code: preset.code, description: '', is_elective: false },
-      { onSettled: () => setQuickAddingCode(null) },
+      {
+        onSuccess: async () => {
+          await refetchSubjects()
+          showSuccess(`${preset.name} added successfully`)
+        },
+        onError: (err) => {
+          const msg = err.response?.data?.code?.[0] || err.response?.data?.detail || 'Failed to add subject'
+          showError(msg)
+        },
+        onSettled: () => setQuickAddingCode(null),
+      },
     )
   }
 

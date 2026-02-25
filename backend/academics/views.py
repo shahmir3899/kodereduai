@@ -114,12 +114,29 @@ class SubjectViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             )
         return queryset
 
-    def perform_create(self, serializer):
-        school_id = _resolve_school_id(self.request)
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        school_id = _resolve_school_id(request)
         if not school_id:
             from rest_framework.exceptions import ValidationError
             raise ValidationError({'detail': 'No school associated with your account.'})
+
+        # Reactivate soft-deleted subject if one exists with the same code
+        code = serializer.validated_data.get('code', '').upper()
+        existing = Subject.objects.filter(school_id=school_id, code=code, is_active=False).first()
+        if existing:
+            existing.name = serializer.validated_data.get('name', existing.name)
+            existing.description = serializer.validated_data.get('description', '')
+            existing.is_elective = serializer.validated_data.get('is_elective', False)
+            existing.is_active = True
+            existing.save()
+            return Response(SubjectSerializer(existing).data, status=status.HTTP_201_CREATED)
+
         serializer.save(school_id=school_id)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
     def perform_destroy(self, instance):
         instance.is_active = False

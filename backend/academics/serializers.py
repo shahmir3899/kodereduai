@@ -23,7 +23,7 @@ class SubjectCreateSerializer(serializers.ModelSerializer):
         value = value.upper()
         school_id = self.context.get('school_id')
         if school_id:
-            qs = Subject.objects.filter(school_id=school_id, code=value)
+            qs = Subject.objects.filter(school_id=school_id, code=value, is_active=True)
             if self.instance:
                 qs = qs.exclude(pk=self.instance.pk)
             if qs.exists():
