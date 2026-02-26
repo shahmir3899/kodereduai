@@ -423,6 +423,7 @@ class ChildTimetableView(APIView):
                 'slot_name': entry.slot.name,
                 'start_time': str(entry.slot.start_time),
                 'end_time': str(entry.slot.end_time),
+                'slot_applicable_days': entry.slot.applicable_days,
                 'subject': entry.subject.name if entry.subject else None,
                 'teacher': entry.teacher.full_name if entry.teacher else None,
                 'room': entry.room,

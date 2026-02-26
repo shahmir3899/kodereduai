@@ -395,6 +395,7 @@ class TimetableSlotViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mode
                 'start_time': current.strftime('%H:%M'),
                 'end_time': period_end.strftime('%H:%M'),
                 'order': order,
+                'applicable_days': ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'],
             })
             order += 1
             current = period_end
@@ -408,6 +409,7 @@ class TimetableSlotViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mode
                     'start_time': current.strftime('%H:%M'),
                     'end_time': break_end.strftime('%H:%M'),
                     'order': order,
+                    'applicable_days': ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'],
                 })
                 order += 1
                 current = break_end
@@ -437,6 +439,7 @@ class TimetableSlotViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mode
                 start_time=item['start_time'],
                 end_time=item['end_time'],
                 order=item['order'],
+                applicable_days=item.get('applicable_days', ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']),
             )
             created += 1
 
@@ -611,13 +614,22 @@ class TimetableEntryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
             day=day.upper(),
         ).delete()
 
+        # Build slot lookup for applicability check
+        slot_ids = [e.get('slot') for e in entries_data if e.get('slot')]
+        slot_map = {s.id: s for s in TimetableSlot.objects.filter(id__in=slot_ids, school_id=school_id)}
+
         created = 0
+        skipped = 0
         for entry in entries_data:
             slot_id = entry.get('slot')
             subject_id = entry.get('subject') or None
             teacher_id = entry.get('teacher') or None
             room = entry.get('room', '')
             if slot_id:
+                slot_obj = slot_map.get(slot_id)
+                if slot_obj and not slot_obj.is_applicable_for_day(day.upper()):
+                    skipped += 1
+                    continue
                 TimetableEntry.objects.create(
                     school_id=school_id,
                     class_obj_id=class_id,
@@ -630,9 +642,13 @@ class TimetableEntryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
                 )
                 created += 1
 
+        msg = f'{created} timetable entries saved for {day}.'
+        if skipped:
+            msg += f' {skipped} skipped (slot not applicable on {day}).'
         return Response({
             'created': created,
-            'message': f'{created} timetable entries saved for {day}.',
+            'skipped': skipped,
+            'message': msg,
         })
 
     @action(detail=False, methods=['get'])

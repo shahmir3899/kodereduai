@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { lmsApi } from '../../services/api'
+import { lmsApi, academicsApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import { useToast } from '../../components/Toast'
 import { useConfirmModal } from '../../components/ConfirmModal'
@@ -78,6 +78,16 @@ export default function CurriculumPage() {
   const [ocrLoading, setOcrLoading] = useState(false)
 
   // ---- Queries ----
+
+  // Fetch subjects assigned to selected class
+  const { data: classSubjectsData } = useQuery({
+    queryKey: ['classSubjects', selectedClass],
+    queryFn: () => academicsApi.getClassSubjectsByClass(selectedClass),
+    enabled: !!selectedClass,
+  })
+
+  const classSubjects = (classSubjectsData?.data?.results || classSubjectsData?.data || [])
+    .map((cs) => ({ id: cs.subject, name: cs.subject_name }))
 
   const { data: booksData, isLoading: booksLoading } = useQuery({
     queryKey: ['lmsBooks', selectedClass, selectedSubject],
@@ -517,20 +527,73 @@ export default function CurriculumPage() {
                 setSelectedSubject(e.target.value)
                 setSelectedBookId(null)
               }}
-              placeholder="Select Subject"
+              placeholder={!selectedClass ? 'Select a class first' : 'Select Subject'}
+              disabled={!selectedClass}
+              subjects={selectedClass ? classSubjects : []}
             />
           </div>
         </div>
       </div>
 
-      {/* Main content */}
-      {!filtersSelected ? (
-        <div className="card">
-          <div className="text-center py-12 text-gray-500">
-            Select a class and subject to view curriculum books
+      {/* Guide Steps */}
+      {!filtersSelected && (
+        <div className="card p-4 sm:p-6 mb-6">
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* Step 1 */}
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${
+              selectedClass
+                ? 'bg-green-100 text-green-700'
+                : 'bg-blue-100 text-blue-700 ring-2 ring-blue-300'
+            }`}>
+              <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${
+                selectedClass ? 'bg-green-500 text-white' : 'bg-blue-500 text-white'
+              }`}>
+                {selectedClass ? '\u2713' : '1'}
+              </span>
+              Select a Class
+            </div>
+            <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+            {/* Step 2 */}
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${
+              selectedSubject
+                ? 'bg-green-100 text-green-700'
+                : selectedClass
+                  ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-300'
+                  : 'bg-gray-100 text-gray-400'
+            }`}>
+              <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${
+                selectedSubject ? 'bg-green-500 text-white' : selectedClass ? 'bg-blue-500 text-white' : 'bg-gray-300 text-white'
+              }`}>
+                {selectedSubject ? '\u2713' : '2'}
+              </span>
+              Pick a Subject
+            </div>
+            <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+            {/* Step 3 */}
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-gray-100 text-gray-400">
+              <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-gray-300 text-white">3</span>
+              Manage Books
+            </div>
+          </div>
+
+          {/* Contextual hint */}
+          <p className="text-sm text-gray-500 mt-3">
+            {!selectedClass
+              ? 'Start by selecting a class above to see its assigned subjects.'
+              : 'Now pick a subject to view and manage curriculum books.'}
+          </p>
+
+          {/* TOC tip */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-3">
+            <p className="text-xs text-blue-700">
+              <span className="font-semibold">Tip:</span> After adding a book, use "Import TOC" to photograph the book's table of contents — the AI extracts chapters and topics automatically.
+            </p>
           </div>
         </div>
-      ) : booksLoading ? (
+      )}
+
+      {/* Main content */}
+      {!filtersSelected ? null : booksLoading ? (
         <div className="card">
           <div className="text-center py-8">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>

@@ -518,9 +518,30 @@ export default function ExamsPage() {
               </div>
             </div>
             ) : (
-            <div className="card text-center py-8">
-              <p className="text-gray-500 mb-3">No exams found. Create an exam using the wizard.</p>
-              <button onClick={() => setShowWizard(true)} className="btn-primary text-sm px-4 py-2">
+            <div className="card p-4 sm:p-6">
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-blue-100 text-blue-700 ring-2 ring-blue-300">
+                  <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-blue-500 text-white">1</span>
+                  Set Up Exam Types
+                </div>
+                <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-gray-100 text-gray-400">
+                  <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-gray-300 text-white">2</span>
+                  Create Exam
+                </div>
+                <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-gray-100 text-gray-400">
+                  <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-gray-300 text-white">3</span>
+                  Add Subjects &amp; Schedule
+                </div>
+              </div>
+              <p className="text-sm text-gray-500 mt-3">No exams yet. Click "+ Create Exam" to get started.</p>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-3">
+                <p className="text-xs text-blue-700">
+                  <span className="font-semibold">Tip:</span> Use the Exam Wizard for guided setup with date sheets.
+                </p>
+              </div>
+              <button onClick={() => setShowWizard(true)} className="btn-primary text-sm px-4 py-2 mt-3">
                 + Create Exam
               </button>
             </div>
@@ -626,9 +647,25 @@ export default function ExamsPage() {
               </div>
             </div>
             ) : (
-            <div className="card text-center py-8">
-              <p className="text-gray-500 mb-3">No tests found. Create a test to get started.</p>
-              <button onClick={openCreate} className="btn-primary text-sm px-4 py-2">
+            <div className="card p-4 sm:p-6">
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-blue-100 text-blue-700 ring-2 ring-blue-300">
+                  <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-blue-500 text-white">1</span>
+                  Create Test
+                </div>
+                <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-gray-100 text-gray-400">
+                  <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-gray-300 text-white">2</span>
+                  Assign Class &amp; Subject
+                </div>
+                <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-gray-100 text-gray-400">
+                  <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-gray-300 text-white">3</span>
+                  Enter Marks
+                </div>
+              </div>
+              <p className="text-sm text-gray-500 mt-3">No tests yet. Tests are quick assessments — no wizard needed.</p>
+              <button onClick={openCreate} className="btn-primary text-sm px-4 py-2 mt-3">
                 + Create Test
               </button>
             </div>

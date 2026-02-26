@@ -851,7 +851,7 @@ class StudentTimetableView(APIView):
         ).select_related('slot', 'subject', 'teacher')
 
         slot_data = [
-            {'id': s.id, 'name': s.name, 'start_time': str(s.start_time), 'end_time': str(s.end_time), 'slot_type': s.slot_type, 'order': s.order}
+            {'id': s.id, 'name': s.name, 'start_time': str(s.start_time), 'end_time': str(s.end_time), 'slot_type': s.slot_type, 'order': s.order, 'applicable_days': s.applicable_days}
             for s in slots
         ]
         entry_data = [

@@ -111,11 +111,17 @@ class StudentCreateSerializer(serializers.ModelSerializer):
                 'class_obj': "The selected class does not belong to this school."
             })
 
-        # Check roll uniqueness against enrollment for current year
+        # Require a current academic year before allowing student creation
         from academic_sessions.models import AcademicYear, StudentEnrollment
         current_year = AcademicYear.objects.filter(
             school=school, is_current=True,
         ).first()
+
+        if not current_year:
+            raise serializers.ValidationError(
+                "Cannot add students: No current academic year is set up for this school. "
+                "Please create an academic year first."
+            )
 
         if current_year:
             if StudentEnrollment.objects.filter(
@@ -160,6 +166,15 @@ class StudentBulkCreateSerializer(serializers.Serializer):
             raise serializers.ValidationError({
                 'class_id': "The selected class does not belong to this school."
             })
+
+        # Require a current academic year before allowing bulk student creation
+        from academic_sessions.models import AcademicYear
+        if not AcademicYear.objects.filter(school_id=school_id, is_current=True).exists():
+            raise serializers.ValidationError(
+                "Cannot add students: No current academic year is set up for this school. "
+                "Please create an academic year first."
+            )
+
         return attrs
 
     def validate_students(self, value):

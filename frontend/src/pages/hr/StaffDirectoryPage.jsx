@@ -5,6 +5,7 @@ import { hrApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import { useToast } from '../../components/Toast'
 import { useDebounce } from '../../hooks/useDebounce'
+import WhatsAppTick from '../../components/WhatsAppTick'
 
 const statusBadge = {
   ACTIVE: 'bg-green-100 text-green-800',
@@ -468,11 +469,36 @@ export default function StaffDirectoryPage() {
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
         </div>
       ) : filteredStaff.length === 0 ? (
-        <div className="card text-center py-8 text-gray-500">
-          {allStaff.length === 0
-            ? 'No staff members found. Add your first staff member to get started.'
-            : 'No staff members match your filters.'}
-        </div>
+        allStaff.length === 0 ? (
+          <div className="card p-4 sm:p-6">
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-blue-100 text-blue-700 ring-2 ring-blue-300">
+                <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-blue-500 text-white">1</span>
+                Add Staff Members
+              </div>
+              <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-gray-100 text-gray-400">
+                <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-gray-300 text-white">2</span>
+                Assign Departments
+              </div>
+              <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-gray-100 text-gray-400">
+                <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-gray-300 text-white">3</span>
+                Set Roles
+              </div>
+            </div>
+            <p className="text-sm text-gray-500 mt-3">No staff members yet. Click "+ Add Staff" to add your first one.</p>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-3">
+              <p className="text-xs text-blue-700">
+                <span className="font-semibold">Tip:</span> Use "Quick Add" for fast entry with just name, phone, and department.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="card text-center py-8 text-gray-500">
+            No staff members match your filters.
+          </div>
+        )
       ) : (
         <>
           {/* Mobile Cards */}
@@ -513,7 +539,7 @@ export default function StaffDirectoryPage() {
                   {member.department_name && <p>Dept: {member.department_name}</p>}
                   {member.designation_name && <p>Role: {member.designation_name}</p>}
                   {member.email && <p>{member.email}</p>}
-                  {member.phone && <p>{member.phone}</p>}
+                  {member.phone && <p>{member.phone}<WhatsAppTick phone={member.phone} /></p>}
                 </div>
                 <div className="flex justify-end gap-3 mt-3 pt-3 border-t border-gray-100">
                   <button
@@ -622,7 +648,7 @@ export default function StaffDirectoryPage() {
                     <td className="py-3 pr-4">
                       <div className="text-sm">
                         {member.email && <p className="text-gray-600 truncate max-w-[180px]">{member.email}</p>}
-                        {member.phone && <p className="text-gray-400 text-xs">{member.phone}</p>}
+                        {member.phone && <p className="text-gray-400 text-xs">{member.phone}<WhatsAppTick phone={member.phone} /></p>}
                       </div>
                     </td>
                     <td className="py-3 text-right whitespace-nowrap">
@@ -733,7 +759,7 @@ export default function StaffDirectoryPage() {
                   </div>
                   <div>
                     <p className="text-gray-500">Phone</p>
-                    <p className="font-medium text-gray-900">{viewMember.phone || '—'}</p>
+                    <p className="font-medium text-gray-900">{viewMember.phone || '—'}{viewMember.phone && <WhatsAppTick phone={viewMember.phone} />}</p>
                   </div>
                   <div>
                     <p className="text-gray-500">Gender</p>
@@ -763,7 +789,7 @@ export default function StaffDirectoryPage() {
                     </div>
                     <div>
                       <p className="text-gray-500">Phone</p>
-                      <p className="font-medium text-gray-900">{viewMember.emergency_contact_phone || '—'}</p>
+                      <p className="font-medium text-gray-900">{viewMember.emergency_contact_phone || '—'}{viewMember.emergency_contact_phone && <WhatsAppTick phone={viewMember.emergency_contact_phone} />}</p>
                     </div>
                   </div>
                 </div>
@@ -890,13 +916,17 @@ export default function StaffDirectoryPage() {
 
               <div>
                 <label className="label">Phone</label>
-                <input
-                  type="text"
-                  className="input"
-                  placeholder="e.g., 0300-1234567"
-                  value={quickForm.phone}
-                  onChange={e => setQuickForm(p => ({ ...p, phone: e.target.value }))}
-                />
+                <div className="flex items-center gap-1">
+                  <input
+                    type="text"
+                    className="input"
+                    placeholder="e.g., +923001234567"
+                    value={quickForm.phone}
+                    onChange={e => setQuickForm(p => ({ ...p, phone: e.target.value }))}
+                  />
+                  <WhatsAppTick phone={quickForm.phone} />
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Use +92 format for WhatsApp notifications</p>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -1200,6 +1230,7 @@ export default function StaffDirectoryPage() {
               <p className="font-mono bg-white px-2 py-1 rounded border text-[11px] break-all">first_name,last_name,phone,email,department,designation,gender</p>
               <p className="mt-1 text-gray-500">Required: <strong>first_name, last_name</strong>. All other columns are optional.</p>
               <p className="text-gray-500">Department/Designation must match existing names. Gender: MALE, FEMALE, or OTHER.</p>
+              <p className="text-gray-500">Phone: use +92 format (e.g. +923001234567) for WhatsApp notifications.</p>
             </div>
 
             {/* File Input */}
@@ -1238,7 +1269,7 @@ export default function StaffDirectoryPage() {
                       {bulkParsed.rows.slice(0, 10).map((row, i) => (
                         <tr key={i}>
                           <td className="px-3 py-1.5 font-medium">{row.first_name} {row.last_name}</td>
-                          <td className="px-3 py-1.5 text-gray-600">{row.phone || '—'}</td>
+                          <td className="px-3 py-1.5 text-gray-600">{row.phone || '—'}{row.phone && <WhatsAppTick phone={row.phone} />}</td>
                           <td className="px-3 py-1.5 text-gray-600">{row.department_name || '—'}</td>
                           <td className="px-3 py-1.5 text-gray-600">{row.designation_name || '—'}</td>
                         </tr>

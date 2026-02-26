@@ -177,13 +177,38 @@ export default function FeeOverviewPage() {
 
           {/* Empty state */}
           {!summaryData && (
-            <div className="card text-center py-12">
-              <p className="text-gray-500 mb-2">No fee records for {MONTHS[month - 1]} {year}</p>
-              <p className="text-sm text-gray-400 mb-4">Fee records need to be generated first</p>
+            <div className="card p-4 sm:p-6">
+              <div className="flex items-center gap-3 flex-wrap">
+                {/* Step 1 */}
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-green-100 text-green-700">
+                  <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-green-500 text-white">{'\u2713'}</span>
+                  Select Month/Year
+                </div>
+                <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                {/* Step 2 */}
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-blue-100 text-blue-700 ring-2 ring-blue-300">
+                  <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-blue-500 text-white">2</span>
+                  Generate Fee Records
+                </div>
+                <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                {/* Step 3 */}
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-gray-100 text-gray-400">
+                  <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-gray-300 text-white">3</span>
+                  View Summary &amp; Collect
+                </div>
+              </div>
+              <p className="text-sm text-gray-500 mt-3">
+                No fee records for <strong>{MONTHS[month - 1]} {year}</strong>. Fee records need to be generated first.
+              </p>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-3">
+                <p className="text-xs text-blue-700">
+                  <span className="font-semibold">Tip:</span> Fee records must be generated in Fee Setup before they appear here.
+                </p>
+              </div>
               {canWrite && (
                 <Link
                   to="/finance/fees/setup"
-                  className="inline-block px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm"
+                  className="inline-block mt-3 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm"
                 >
                   Go to Fee Setup
                 </Link>

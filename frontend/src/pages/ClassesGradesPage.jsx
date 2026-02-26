@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../contexts/AuthContext'
+import { useAcademicYear } from '../contexts/AcademicYearContext'
 import { classesApi, schoolsApi } from '../services/api'
 import { useToast } from '../components/Toast'
 import SectionAllocator from './sessions/SectionAllocator'
@@ -16,6 +17,7 @@ export default function ClassesGradesPage() {
   const { addToast } = useToast()
   const showError = (msg) => addToast(msg, 'error')
   const showSuccess = (msg) => addToast(msg, 'success')
+  const { activeAcademicYear } = useAcademicYear()
   const isSuperAdmin = user?.is_super_admin
 
   // School selection (super admin can switch; regular users always use activeSchool)
@@ -301,8 +303,52 @@ export default function ClassesGradesPage() {
       )}
 
       {!selectedSchoolId && (
-        <div className="card text-center py-8 text-gray-500">
-          {isSuperAdmin ? 'Please select a school to manage classes.' : 'No school assigned to your account.'}
+        isSuperAdmin ? (
+          <div className="card p-4 sm:p-6">
+            <div className="flex items-center gap-3 flex-wrap">
+              {/* Step 1 */}
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-blue-100 text-blue-700 ring-2 ring-blue-300">
+                <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-blue-500 text-white">1</span>
+                Select School
+              </div>
+              <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+              {/* Step 2 */}
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-gray-100 text-gray-400">
+                <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-gray-300 text-white">2</span>
+                View Classes
+              </div>
+              <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+              {/* Step 3 */}
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-gray-100 text-gray-400">
+                <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-gray-300 text-white">3</span>
+                Add / Manage Classes
+              </div>
+            </div>
+            <p className="text-sm text-gray-500 mt-3">
+              Select a school above to view and manage its classes.
+            </p>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-3">
+              <p className="text-xs text-blue-700">
+                <span className="font-semibold">Tip:</span> Use "Add Standard Classes" to quickly create classes for all grade levels.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="card text-center py-8 text-gray-500">
+            No school assigned to your account.
+          </div>
+        )
+      )}
+
+      {/* Guideline: No academic year */}
+      {selectedSchoolId && classes.length > 0 && !activeAcademicYear && (
+        <div className="flex items-center gap-2 p-3 mb-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <svg className="w-5 h-5 text-blue-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span className="text-sm text-blue-800">
+            Classes are set up. Next step: create an <strong>Academic Year</strong> in <strong>Settings &gt; Academic Years</strong> before adding students.
+          </span>
         </div>
       )}
 
@@ -312,8 +358,26 @@ export default function ClassesGradesPage() {
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto" />
         </div>
       ) : classes.length === 0 ? (
-        <div className="card text-center py-8 text-gray-500">
-          No classes found. Use "Add Standard Classes" to get started or add classes manually.
+        <div className="card p-4 sm:p-6">
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-green-100 text-green-700">
+              <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-green-500 text-white">{'\u2713'}</span>
+              School Selected
+            </div>
+            <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-blue-100 text-blue-700 ring-2 ring-blue-300">
+              <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-blue-500 text-white">2</span>
+              Create Classes
+            </div>
+            <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-gray-100 text-gray-400">
+              <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-gray-300 text-white">3</span>
+              Manage Sections
+            </div>
+          </div>
+          <p className="text-sm text-gray-500 mt-3">
+            No classes found. Use "Add Standard Classes" to quickly create them, or add classes manually.
+          </p>
         </div>
       ) : viewMode === 'grouped' ? (
         /* ───── By Grade Level View ───── */

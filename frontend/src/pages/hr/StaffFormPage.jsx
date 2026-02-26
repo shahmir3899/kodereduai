@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { hrApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import { useToast } from '../../components/Toast'
+import WhatsAppTick from '../../components/WhatsAppTick'
 
 const EMPTY_FORM = {
   first_name: '',
@@ -267,12 +268,17 @@ export default function StaffFormPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="label">Phone</label>
-                  <input
-                    type="text"
-                    className="input"
-                    value={form.phone}
-                    onChange={(e) => handleChange('phone', e.target.value)}
-                  />
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="text"
+                      className="input"
+                      placeholder="+923001234567"
+                      value={form.phone}
+                      onChange={(e) => handleChange('phone', e.target.value)}
+                    />
+                    <WhatsAppTick phone={form.phone} />
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">Use +92 format for WhatsApp</p>
                 </div>
                 <div>
                   <label className="label">Gender</label>
@@ -415,12 +421,15 @@ export default function StaffFormPage() {
                 </div>
                 <div>
                   <label className="label">Contact Phone</label>
-                  <input
-                    type="text"
-                    className="input"
-                    value={form.emergency_contact_phone}
-                    onChange={(e) => handleChange('emergency_contact_phone', e.target.value)}
-                  />
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="text"
+                      className="input"
+                      value={form.emergency_contact_phone}
+                      onChange={(e) => handleChange('emergency_contact_phone', e.target.value)}
+                    />
+                    <WhatsAppTick phone={form.emergency_contact_phone} />
+                  </div>
                 </div>
               </div>
             </div>

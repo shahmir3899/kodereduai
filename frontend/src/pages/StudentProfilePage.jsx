@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { studentsApi, reportsApi } from '../services/api'
 import { useToast } from '../components/Toast'
 import { useBackgroundTask } from '../hooks/useBackgroundTask'
+import WhatsAppTick from '../components/WhatsAppTick'
 
 const TABS = ['Overview', 'Attendance', 'Fees', 'Academics', 'History', 'Documents']
 
@@ -135,8 +136,8 @@ export default function StudentProfilePage() {
               {student.gender && <span>{student.gender === 'M' ? 'Male' : student.gender === 'F' ? 'Female' : 'Other'}</span>}
             </div>
             <div className="flex flex-wrap gap-x-6 gap-y-1 mt-1 text-sm text-gray-500">
-              {student.parent_phone && <span>Parent: {student.parent_phone}</span>}
-              {student.guardian_phone && <span>Guardian: {student.guardian_phone}</span>}
+              {student.parent_phone && <span>Parent: {student.parent_phone}<WhatsAppTick phone={student.parent_phone} /></span>}
+              {student.guardian_phone && <span>Guardian: {student.guardian_phone}<WhatsAppTick phone={student.guardian_phone} /></span>}
               {student.parent_name && <span>{student.parent_name}</span>}
             </div>
           </div>

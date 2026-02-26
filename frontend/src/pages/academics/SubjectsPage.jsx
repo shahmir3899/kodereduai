@@ -494,9 +494,30 @@ export default function SubjectsPage() {
               <button onClick={() => queryClient.refetchQueries({ queryKey: ['subjects'] })} className="text-xs text-primary-600 hover:underline">Retry</button>
             </div>
           ) : subjects.length === 0 ? (
-            <div className="card text-center py-8 text-gray-500">
-              No subjects found. Create one to get started.
-              {subjectFetching && <span className="ml-2 text-xs text-primary-500">Refreshing...</span>}
+            <div className="card p-4 sm:p-6">
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-blue-100 text-blue-700 ring-2 ring-blue-300">
+                  <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-blue-500 text-white">1</span>
+                  Add Subjects
+                </div>
+                <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-gray-100 text-gray-400">
+                  <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-gray-300 text-white">2</span>
+                  Assign to Classes
+                </div>
+                <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-gray-100 text-gray-400">
+                  <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-gray-300 text-white">3</span>
+                  Set Teachers
+                </div>
+              </div>
+              <p className="text-sm text-gray-500 mt-3">No subjects yet. Click "+ Add Subject" to create your first one.</p>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-3">
+                <p className="text-xs text-blue-700">
+                  <span className="font-semibold">Tip:</span> Use "Bulk Add" to create multiple subjects at once.
+                </p>
+              </div>
+              {subjectFetching && <span className="text-xs text-primary-500 mt-2 block">Refreshing...</span>}
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

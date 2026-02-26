@@ -66,7 +66,15 @@ function ModuleBar({ module, onClick }) {
       : 'bg-amber-500'
 
   const tooltip = module.steps
-    .map(s => `${s.completed ? '\u2713' : '\u2717'} ${s.name}${s.completed ? ` (${s.count})` : ''}`)
+    .map(s => {
+      const icon = s.completed ? '\u2713' : '\u2717'
+      const progress = s.completed
+        ? ` (${s.count})`
+        : s.target > 1
+          ? ` (${s.count}/${s.target})`
+          : ''
+      return `${icon} ${s.name}${progress}`
+    })
     .join('\n')
 
   return (

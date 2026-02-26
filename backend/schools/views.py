@@ -475,67 +475,93 @@ class SchoolViewSet(TenantQuerySetMixin, viewsets.ReadOnlyModelViewSet):
 
     # Module step definitions: (step_label, app_label, model_name, filter_kwargs, link)
     # filter_kwargs uses 'school_id' by default; override with full lookup for indirect FKs
+    # Each step: (label, app_label, model_name, extra_filters, link, min_count)
+    # min_count = minimum records needed to mark step complete (default 1)
     MODULE_STEPS = {
         'students': [
-            ('Classes created', 'students', 'Class', {}, '/classes'),
-            ('Students added', 'students', 'Student', {'is_active': True}, '/students'),
+            ('Academic year set up', 'academic_sessions', 'AcademicYear', {'is_current': True}, '/academic-years', 1),
+            ('Classes created', 'students', 'Class', {}, '/classes', 3),
+            ('Students added', 'students', 'Student', {'is_active': True}, '/students', 10),
+            ('Students enrolled in classes', 'academic_sessions', 'StudentEnrollment', {'status': 'ACTIVE'}, '/academic-years', 10),
+            ('Student documents uploaded', 'students', 'StudentDocument', {}, '/students', 5),
         ],
         'hr': [
-            ('Departments created', 'hr', 'StaffDepartment', {'is_active': True}, '/hr/departments'),
-            ('Staff members added', 'hr', 'StaffMember', {}, '/hr/staff'),
-            ('Salary structures defined', 'hr', 'SalaryStructure', {}, '/hr/salary'),
+            ('Departments created', 'hr', 'StaffDepartment', {'is_active': True}, '/hr/departments', 2),
+            ('Designations defined', 'hr', 'StaffDesignation', {}, '/hr/departments', 3),
+            ('Staff members added', 'hr', 'StaffMember', {}, '/hr/staff', 3),
+            ('Salary structures defined', 'hr', 'SalaryStructure', {}, '/hr/salary', 1),
+            ('Leave policies configured', 'hr', 'LeavePolicy', {}, '/hr/leave', 1),
         ],
         'finance': [
-            ('Accounts created', 'finance', 'Account', {'is_active': True}, '/finance/fees'),
-            ('Fee structures defined', 'finance', 'FeeStructure', {}, '/finance/fees'),
+            ('Accounts created', 'finance', 'Account', {'is_active': True}, '/finance/accounts', 2),
+            ('Expense categories defined', 'finance', 'ExpenseCategory', {'is_active': True}, '/finance/expenses', 3),
+            ('Fee structures defined', 'finance', 'FeeStructure', {}, '/finance/fees', 1),
+            ('Payment gateway configured', 'finance', 'PaymentGatewayConfig', {}, '/finance/settings', 1),
         ],
         'academics': [
-            ('Subjects created', 'academics', 'Subject', {'is_active': True}, '/academics/subjects'),
-            ('Class-subject assignments', 'academics', 'ClassSubject', {'is_active': True}, '/academics/subjects'),
-            ('Timetable configured', 'academics', 'TimetableEntry', {}, '/academics/timetable'),
+            ('Subjects created', 'academics', 'Subject', {'is_active': True}, '/academics/subjects', 3),
+            ('Subjects assigned to classes', 'academics', 'ClassSubject', {'is_active': True}, '/academics/subjects', 5),
+            ('Teachers assigned to subjects', 'academics', 'ClassSubject', {'is_active': True, 'teacher__isnull': False}, '/academics/subjects', 3),
+            ('Timetable slots defined', 'academics', 'TimetableSlot', {}, '/academics/timetable', 5),
+            ('Timetable entries configured', 'academics', 'TimetableEntry', {}, '/academics/timetable', 10),
         ],
         'examinations': [
-            ('Exam types defined', 'examinations', 'ExamType', {'is_active': True}, '/academics/exam-types'),
-            ('Grade scales defined', 'examinations', 'GradeScale', {'is_active': True}, '/academics/grade-scale'),
-            ('Exams created', 'examinations', 'Exam', {'is_active': True}, '/academics/exams'),
+            ('Exam types defined', 'examinations', 'ExamType', {'is_active': True}, '/academics/exam-types', 2),
+            ('Grade scales defined', 'examinations', 'GradeScale', {'is_active': True}, '/academics/grade-scale', 5),
+            ('Exams created', 'examinations', 'Exam', {'is_active': True}, '/academics/exams', 1),
+            ('Exam subjects configured', 'examinations', 'ExamSubject', {}, '/academics/exams', 5),
+            ('Marks entry started', 'examinations', 'StudentMark', {}, '/academics/exams', 10),
         ],
         'attendance': [
-            ('Attendance uploads made', 'attendance', 'AttendanceUpload', {}, '/attendance'),
+            ('Attendance uploads made', 'attendance', 'AttendanceUpload', {}, '/attendance', 3),
+            ('Attendance records confirmed', 'attendance', 'AttendanceRecord', {}, '/attendance', 10),
         ],
         'admissions': [
-            ('Enquiries recorded', 'admissions', 'AdmissionEnquiry', {}, '/admissions'),
+            ('Enquiries recorded', 'admissions', 'AdmissionEnquiry', {}, '/admissions', 3),
+            ('Follow-up notes added', 'admissions', 'AdmissionNote', {}, '/admissions', 3),
         ],
         'transport': [
-            ('Routes created', 'transport', 'TransportRoute', {'is_active': True}, '/transport/routes'),
-            ('Vehicles added', 'transport', 'TransportVehicle', {'is_active': True}, '/transport/vehicles'),
-            ('Student assignments made', 'transport', 'TransportAssignment', {}, '/transport/assignments'),
+            ('Routes created', 'transport', 'TransportRoute', {'is_active': True}, '/transport/routes', 1),
+            ('Stops added to routes', 'transport', 'TransportStop', {}, '/transport/routes', 3),
+            ('Vehicles added', 'transport', 'TransportVehicle', {'is_active': True}, '/transport/vehicles', 1),
+            ('Students assigned to routes', 'transport', 'TransportAssignment', {}, '/transport/assignments', 5),
         ],
         'library': [
-            ('Categories created', 'library', 'BookCategory', {}, '/library/catalog'),
-            ('Books added', 'library', 'Book', {'is_active': True}, '/library/catalog'),
+            ('Book categories created', 'library', 'BookCategory', {}, '/library/catalog', 3),
+            ('Books added', 'library', 'Book', {'is_active': True}, '/library/catalog', 10),
+            ('Library policy configured', 'library', 'LibraryConfiguration', {}, '/library/settings', 1),
+            ('Books issued to readers', 'library', 'BookIssue', {}, '/library/circulation', 1),
         ],
         'hostel': [
-            ('Hostels created', 'hostel', 'Hostel', {'is_active': True}, '/hostel'),
-            ('Rooms defined', 'hostel', 'Room', {}, '/hostel/rooms'),
-            ('Student allocations made', 'hostel', 'HostelAllocation', {'is_active': True}, '/hostel/allocations'),
+            ('Hostels created', 'hostel', 'Hostel', {'is_active': True}, '/hostel', 1),
+            ('Rooms defined', 'hostel', 'Room', {}, '/hostel/rooms', 5),
+            ('Student allocations made', 'hostel', 'HostelAllocation', {'is_active': True}, '/hostel/allocations', 5),
         ],
         'inventory': [
-            ('Categories created', 'inventory', 'InventoryCategory', {'is_active': True}, '/inventory'),
-            ('Items added', 'inventory', 'InventoryItem', {'is_active': True}, '/inventory/items'),
+            ('Categories created', 'inventory', 'InventoryCategory', {'is_active': True}, '/inventory', 3),
+            ('Vendors registered', 'inventory', 'Vendor', {'is_active': True}, '/inventory/vendors', 2),
+            ('Items added', 'inventory', 'InventoryItem', {'is_active': True}, '/inventory/items', 5),
+            ('Stock transactions recorded', 'inventory', 'StockTransaction', {}, '/inventory/items', 5),
         ],
         'lms': [
-            ('Lesson plans created', 'lms', 'LessonPlan', {'is_active': True}, '/academics/lesson-plans'),
-            ('Assignments created', 'lms', 'Assignment', {}, '/academics/assignments'),
+            ('Textbooks added', 'lms', 'Book', {}, '/academics/books', 3),
+            ('Chapters defined', 'lms', 'Chapter', {}, '/academics/books', 5),
+            ('Lesson plans created', 'lms', 'LessonPlan', {'is_active': True}, '/academics/lesson-plans', 3),
+            ('Assignments created', 'lms', 'Assignment', {}, '/academics/assignments', 3),
         ],
         'notifications': [
-            ('Templates created', 'notifications', 'NotificationTemplate', {'is_active': True}, '/notifications'),
-            ('Notification config set up', 'notifications', 'SchoolNotificationConfig', {}, '/notifications'),
+            ('Templates created', 'notifications', 'NotificationTemplate', {'is_active': True}, '/notifications', 2),
+            ('Notification config set up', 'notifications', 'SchoolNotificationConfig', {}, '/notifications', 1),
+            ('Notification preferences set', 'notifications', 'NotificationPreference', {}, '/notifications', 5),
         ],
     }
 
     # Models where school FK is indirect (not school_id directly)
     INDIRECT_SCHOOL_FK = {
         ('hostel', 'Room'): 'hostel__school_id',
+        ('transport', 'TransportStop'): 'route__school_id',
+        ('admissions', 'AdmissionNote'): 'enquiry__school_id',
+        ('lms', 'Chapter'): 'book__school_id',
     }
 
     @action(detail=False, methods=['get'])
@@ -562,7 +588,7 @@ class SchoolViewSet(TenantQuerySetMixin, viewsets.ReadOnlyModelViewSet):
             module_meta = MODULE_REGISTRY.get(module_key, {})
             steps_result = []
 
-            for step_label, app_label, model_name, extra_filters, link in steps_config:
+            for step_label, app_label, model_name, extra_filters, link, min_count in steps_config:
                 Model = apps.get_model(app_label, model_name)
 
                 # Use indirect FK lookup if defined, otherwise default to school_id
@@ -576,12 +602,13 @@ class SchoolViewSet(TenantQuerySetMixin, viewsets.ReadOnlyModelViewSet):
 
                 steps_result.append({
                     'name': step_label,
-                    'completed': count > 0,
+                    'completed': count >= min_count,
                     'count': count,
+                    'target': min_count,
                     'link': link,
                 })
                 total_steps += 1
-                if count > 0:
+                if count >= min_count:
                     total_completed += 1
 
             completed_count = sum(1 for s in steps_result if s['completed'])

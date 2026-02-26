@@ -336,11 +336,56 @@ export default function MarksEntryPage() {
 
       {/* Marks Grid */}
       {!selectedSubjectId ? (
-        <div className="card text-center py-12 text-gray-400">
-          <svg className="w-12 h-12 mx-auto mb-3 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-          Select an exam and subject above to start entering marks
+        <div className="card p-4 sm:p-6">
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* Step 1: Class */}
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${
+              classFilter ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700 ring-2 ring-blue-300'
+            }`}>
+              <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${
+                classFilter ? 'bg-green-500 text-white' : 'bg-blue-500 text-white'
+              }`}>{classFilter ? '\u2713' : '1'}</span>
+              Select Class
+            </div>
+            <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+            {/* Step 2: Exam */}
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${
+              selectedExamId ? 'bg-green-100 text-green-700' : classFilter ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-300' : 'bg-gray-100 text-gray-400'
+            }`}>
+              <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${
+                selectedExamId ? 'bg-green-500 text-white' : classFilter ? 'bg-blue-500 text-white' : 'bg-gray-300 text-white'
+              }`}>{selectedExamId ? '\u2713' : '2'}</span>
+              Select Exam
+            </div>
+            <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+            {/* Step 3: Subject */}
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${
+              selectedExamId ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-300' : 'bg-gray-100 text-gray-400'
+            }`}>
+              <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${
+                selectedExamId ? 'bg-blue-500 text-white' : 'bg-gray-300 text-white'
+              }`}>3</span>
+              Select Subject
+            </div>
+            <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+            {/* Step 4: Enter */}
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-gray-100 text-gray-400">
+              <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-gray-300 text-white">4</span>
+              Enter Marks
+            </div>
+          </div>
+          <p className="text-sm text-gray-500 mt-3">
+            {!classFilter
+              ? 'Start by selecting a class to see available exams.'
+              : !selectedExamId
+                ? 'Now pick an exam to see its subjects.'
+                : 'Select a subject to start entering marks.'}
+          </p>
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-3">
+            <p className="text-xs text-blue-700">
+              <span className="font-semibold">Tip:</span> Use the Excel import button to bulk-upload marks from a spreadsheet.
+            </p>
+          </div>
         </div>
       ) : (marksLoading || studentsLoading) ? (
         <div className="text-center py-12">

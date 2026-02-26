@@ -8,8 +8,9 @@ import { useToast } from '../components/Toast'
 import ClassSelector from '../components/ClassSelector'
 import { exportStudentsPDF, exportStudentsPNG } from './studentExport'
 import { useDebounce } from '../hooks/useDebounce'
+import WhatsAppTick from '../components/WhatsAppTick'
 
-// Phone format note: Use dashes (0300-1234567) to prevent Excel scientific notation
+// Phone format: +92XXXXXXXXXX (E.164) — Excel export forces text format to preserve + prefix
 
 export default function StudentsPage() {
   const { user, activeSchool } = useAuth()
@@ -357,7 +358,7 @@ export default function StudentsPage() {
     const sheetData = [
       [`School: ${selectedSchool?.name || 'Unknown'}`],
       [`Classes: ${dlClasses.map(c => c.name).join(' | ')}`],
-      ['Phone (optional): Use dashes like 0300-1234567 - can be added later'],
+      ['Phone (optional): Use +92 format like +923001234567 for WhatsApp - can be added later'],
       [], // Empty row separator
       ['class_name', 'roll_number', 'student_name', 'parent_phone', 'parent_name'],
     ]
@@ -383,7 +384,7 @@ export default function StudentsPage() {
       // No students yet — generate blank template with sample rows
       const sampleClasses = dlClasses.slice(0, 2)
       sampleClasses.forEach(cls => {
-        sheetData.push([cls.name, '1', 'Student Name', '0300-1234567', 'Parent Name'])
+        sheetData.push([cls.name, '1', 'Student Name', '+923001234567', 'Parent Name'])
       })
       for (let i = 0; i < 10; i++) {
         sheetData.push(['', '', '', '', ''])
@@ -391,6 +392,17 @@ export default function StudentsPage() {
     }
 
     const ws = XLSX.utils.aoa_to_sheet(sheetData)
+
+    // Force phone column cells to text format so Excel preserves the + prefix
+    const range = XLSX.utils.decode_range(ws['!ref'] || 'A1')
+    const phoneCol = 3 // D column (0-indexed: class_name=0, roll=1, name=2, phone=3)
+    for (let r = range.s.r; r <= range.e.r; r++) {
+      const addr = XLSX.utils.encode_cell({ r, c: phoneCol })
+      if (ws[addr] && ws[addr].v) {
+        ws[addr].t = 's' // force string type
+        ws[addr].z = '@' // text number format
+      }
+    }
 
     ws['!cols'] = [
       { wch: 15 },  // class_name
@@ -795,7 +807,7 @@ export default function StudentsPage() {
               >
                 Download Excel
               </button>
-              <label className="btn btn-secondary cursor-pointer">
+              <label className={`btn btn-secondary cursor-pointer ${!activeAcademicYear ? 'opacity-50 pointer-events-none' : ''}`}>
                 Upload Excel
                 <input
                   ref={fileInputRef}
@@ -803,6 +815,7 @@ export default function StudentsPage() {
                   accept=".xlsx,.xls,.csv"
                   onChange={handleFileUpload}
                   className="hidden"
+                  disabled={!activeAcademicYear}
                 />
               </label>
             </>
@@ -810,11 +823,25 @@ export default function StudentsPage() {
           <button
             onClick={openAddModal}
             className="btn btn-primary"
+            disabled={!activeAcademicYear}
           >
             Add Student
           </button>
         </div>
       </div>
+
+      {/* Warning: No academic year */}
+      {!activeAcademicYear && selectedSchoolId && (
+        <div className="flex items-center gap-2 p-3 mb-4 bg-amber-50 border border-amber-200 rounded-lg">
+          <svg className="w-5 h-5 text-amber-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span className="text-sm text-amber-800">
+            No academic year is active. Students cannot be added until an academic year is created and set as current.
+            Go to <strong>Settings &gt; Academic Years</strong> to set one up.
+          </span>
+        </div>
+      )}
 
       {/* Stats Cards */}
       {selectedSchoolId && !isLoading && allStudents.length > 0 && (
@@ -952,7 +979,7 @@ export default function StudentsPage() {
                   </div>
                 </div>
                 {student.parent_phone && (
-                  <p className="text-xs text-gray-500 mt-1">{student.parent_phone}</p>
+                  <p className="text-xs text-gray-500 mt-1">{student.parent_phone}<WhatsAppTick phone={student.parent_phone} /></p>
                 )}
                 <div className="flex gap-3 mt-2 pt-2 border-t border-gray-100">
                   <button onClick={() => openEditModal(student)} className="text-xs text-blue-600 font-medium">Edit</button>
@@ -1004,7 +1031,7 @@ export default function StudentsPage() {
                     <td className="px-4 py-3 text-sm font-medium text-gray-900">{student.name}</td>
                     <td className="px-4 py-3 text-sm text-gray-500">{student.class_name}</td>
                     <td className="px-4 py-3 text-sm text-gray-500">
-                      {student.parent_phone || <span className="text-gray-400 italic">Not set</span>}
+                      {student.parent_phone ? <>{student.parent_phone}<WhatsAppTick phone={student.parent_phone} /></> : <span className="text-gray-400 italic">Not set</span>}
                     </td>
                     <td className="px-4 py-3">
                       {student.has_user_account ? (
@@ -1117,14 +1144,17 @@ export default function StudentsPage() {
 
               <div>
                 <label className="label">Parent Phone (Optional)</label>
-                <input
-                  type="text"
-                  className="input"
-                  placeholder="0300-1234567"
-                  value={studentForm.parent_phone}
-                  onChange={(e) => setStudentForm({ ...studentForm, parent_phone: e.target.value })}
-                />
-                <p className="text-xs text-gray-500 mt-1">Format: 0300-1234567 or +92-300-1234567</p>
+                <div className="flex items-center gap-1">
+                  <input
+                    type="text"
+                    className="input"
+                    placeholder="+923001234567"
+                    value={studentForm.parent_phone}
+                    onChange={(e) => setStudentForm({ ...studentForm, parent_phone: e.target.value })}
+                  />
+                  <WhatsAppTick phone={studentForm.parent_phone} />
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Use +92 format (e.g. +923001234567) for WhatsApp notifications</p>
               </div>
 
               <div>

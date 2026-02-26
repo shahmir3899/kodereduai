@@ -122,7 +122,7 @@ class SessionSetupService:
             for t in preview['terms']:
                 t['action'] = 'create'
             preview['ai_suggestions'].append(
-                'No terms found in source year. Suggested a default 3-term structure.'
+                'Source year has no terms to clone. A default 3-term structure has been created below — you can adjust dates after setup.'
             )
 
         # 2. Clone class-subject mappings
@@ -240,7 +240,7 @@ class SessionSetupService:
         # 6. AI Suggestions
         if timetable_count == 0:
             preview['ai_suggestions'].append(
-                'No timetable found to clone. You can use the AI timetable generator after setup.'
+                'Timetable will not be cloned (none found in source year). You can generate one using AI after setup.'
             )
 
         if sync_mode:

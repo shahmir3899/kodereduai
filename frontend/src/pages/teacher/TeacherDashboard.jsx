@@ -55,7 +55,7 @@ export default function TeacherDashboard() {
       label: 'Attendance to Mark',
       value: myClasses.length,
       color: 'bg-orange-100 text-orange-800',
-      link: '/attendance/register?tab=manual',
+      link: '/attendance/manual-entry',
     },
     {
       label: 'Pending Grading',
@@ -72,7 +72,7 @@ export default function TeacherDashboard() {
   ]
 
   const quickActions = [
-    { to: '/attendance/register?tab=manual', label: 'Mark Attendance', desc: 'Take class attendance', bg: 'bg-orange-50 hover:bg-orange-100', icon: 'text-orange-600' },
+    { to: '/attendance/manual-entry', label: 'Mark Attendance', desc: 'Take class attendance', bg: 'bg-orange-50 hover:bg-orange-100', icon: 'text-orange-600' },
     { to: '/academics/timetable', label: 'My Timetable', desc: 'View full timetable', bg: 'bg-blue-50 hover:bg-blue-100', icon: 'text-blue-600' },
     { to: '/academics/lesson-plans', label: 'Lesson Plans', desc: 'Create & manage plans', bg: 'bg-purple-50 hover:bg-purple-100', icon: 'text-purple-600' },
     { to: '/academics/assignments', label: 'Assignments', desc: 'Manage assignments', bg: 'bg-green-50 hover:bg-green-100', icon: 'text-green-600' },

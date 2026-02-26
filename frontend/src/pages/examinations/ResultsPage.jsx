@@ -130,11 +130,44 @@ export default function ResultsPage() {
       )}
 
       {!selectedExamId ? (
-        <div className="card text-center py-12 text-gray-400">
-          <svg className="w-12 h-12 mx-auto mb-3 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-          Select an exam above to view results
+        <div className="card p-4 sm:p-6">
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* Step 1: Class */}
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${
+              classFilter ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700 ring-2 ring-blue-300'
+            }`}>
+              <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${
+                classFilter ? 'bg-green-500 text-white' : 'bg-blue-500 text-white'
+              }`}>{classFilter ? '\u2713' : '1'}</span>
+              Select Class
+            </div>
+            <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+            {/* Step 2: Exam */}
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${
+              classFilter ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-300' : 'bg-gray-100 text-gray-400'
+            }`}>
+              <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${
+                classFilter ? 'bg-blue-500 text-white' : 'bg-gray-300 text-white'
+              }`}>2</span>
+              Select Exam
+            </div>
+            <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+            {/* Step 3: View */}
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-gray-100 text-gray-400">
+              <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-gray-300 text-white">3</span>
+              View Results
+            </div>
+          </div>
+          <p className="text-sm text-gray-500 mt-3">
+            {!classFilter
+              ? 'Start by selecting a class to filter available exams.'
+              : 'Now pick an exam to view ranked results.'}
+          </p>
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-3">
+            <p className="text-xs text-blue-700">
+              <span className="font-semibold">Tip:</span> Expand a student row to generate AI report card comments.
+            </p>
+          </div>
         </div>
       ) : resultsLoading ? (
         <div className="text-center py-12">

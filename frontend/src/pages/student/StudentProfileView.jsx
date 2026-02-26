@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { studentPortalApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
+import WhatsAppTick from '../../components/WhatsAppTick'
 
 export default function StudentProfileView() {
   const { user } = useAuth()
@@ -126,9 +127,10 @@ export default function StudentProfileView() {
             <InfoRow label="Name" value={
               guardian.name || guardian.full_name || guardian.father_name || student.father_name || student.guardian_name
             } />
-            <InfoRow label="Phone" value={
-              guardian.phone || guardian.phone_number || guardian.contact_number || student.guardian_phone || student.parent_phone
-            } />
+            <InfoRow label="Phone" value={(() => {
+              const ph = guardian.phone || guardian.phone_number || guardian.contact_number || student.guardian_phone || student.parent_phone
+              return ph ? <>{ph}<WhatsAppTick phone={ph} /></> : null
+            })()} />
             <InfoRow label="Email" value={
               guardian.email || student.guardian_email || student.parent_email
             } />

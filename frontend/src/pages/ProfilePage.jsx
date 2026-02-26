@@ -3,6 +3,7 @@ import { useMutation } from '@tanstack/react-query'
 import { useAuth } from '../contexts/AuthContext'
 import { authApi } from '../services/api'
 import { useToast } from '../components/Toast'
+import WhatsAppTick from '../components/WhatsAppTick'
 
 // ---- Profile Tab ----
 function ProfileTab() {
@@ -83,13 +84,17 @@ function ProfileTab() {
         </div>
         <div>
           <label className="label" htmlFor="phone">Phone</label>
-          <input
-            id="phone"
-            className="input"
-            value={form.phone}
-            onChange={handleChange('phone')}
-            placeholder="Phone number"
-          />
+          <div className="flex items-center gap-1">
+            <input
+              id="phone"
+              className="input"
+              value={form.phone}
+              onChange={handleChange('phone')}
+              placeholder="+923001234567"
+            />
+            <WhatsAppTick phone={form.phone} />
+          </div>
+          <p className="text-xs text-gray-500 mt-1">Use +92 format for WhatsApp</p>
         </div>
         <div className="flex justify-end pt-2">
           <button

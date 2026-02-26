@@ -16,7 +16,12 @@ const SLOT_TYPES = [
   { value: 'ASSEMBLY', label: 'Assembly' },
 ]
 
-const EMPTY_SLOT = { name: '', slot_type: 'PERIOD', start_time: '', end_time: '', order: '' }
+const EMPTY_SLOT = { name: '', slot_type: 'PERIOD', start_time: '', end_time: '', order: '', applicable_days: ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'] }
+
+const isSlotApplicable = (slot, day) => {
+  if (!slot.applicable_days || slot.applicable_days.length === 0) return true
+  return slot.applicable_days.includes(day)
+}
 
 export default function TimetablePage() {
   const queryClient = useQueryClient()
@@ -62,6 +67,8 @@ export default function TimetablePage() {
     break_duration_minutes: 15,
   })
   const [suggestedSlots, setSuggestedSlots] = useState(null)
+  const [shortDays, setShortDays] = useState([])        // e.g. ['FRI', 'SAT']
+  const [shortDayCutoff, setShortDayCutoff] = useState('') // order number: slots >= this are excluded
   const [dragIdx, setDragIdx] = useState(null)
   const [dragOverIdx, setDragOverIdx] = useState(null)
   const [loadingSuggest, setLoadingSuggest] = useState(false)
@@ -301,7 +308,7 @@ export default function TimetablePage() {
     let savedDays = 0
 
     for (const day of DAYS) {
-      const periodSlots = slots.filter(s => s.slot_type === 'PERIOD')
+      const periodSlots = slots.filter(s => s.slot_type === 'PERIOD' && isSlotApplicable(s, day))
       const entries = periodSlots.map(s => ({
         slot: s.id,
         subject: localGrid[`${day}-${s.id}`]?.subject || null,
@@ -406,10 +413,21 @@ export default function TimetablePage() {
     if (!suggestedSlots?.length) return
     setApplyingSlots(true)
     try {
-      await academicsApi.bulkCreateSlots({ slots: suggestedSlots })
+      // Apply short-day config to applicable_days
+      const cutoff = shortDayCutoff ? parseInt(shortDayCutoff) : null
+      const slotsToApply = suggestedSlots.map(s => {
+        if (cutoff && shortDays.length > 0 && s.order >= cutoff) {
+          return { ...s, applicable_days: DAYS.filter(d => !shortDays.includes(d)) }
+        }
+        return { ...s, applicable_days: s.applicable_days || [...DAYS] }
+      })
+      await academicsApi.bulkCreateSlots({ slots: slotsToApply })
       await queryClient.refetchQueries({ queryKey: ['timetableSlots'] })
       setSuggestedSlots(null)
+      setShortDays([])
+      setShortDayCutoff('')
       setShowAISuggest(false)
+      setShowSlotsModal(false)
     } catch (err) {
       setSuggestError(err.response?.data?.detail || 'Failed to apply slots')
     }
@@ -508,8 +526,34 @@ export default function TimetablePage() {
       )}
 
       {!selectedClassId ? (
-        <div className="card text-center py-12 text-gray-500">
-          Select a class to view or build its timetable.
+        <div className="card p-4 sm:p-6">
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* Step 1: Class */}
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-blue-100 text-blue-700 ring-2 ring-blue-300">
+              <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-blue-500 text-white">1</span>
+              Select Class
+            </div>
+            <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+            {/* Step 2: Slots */}
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-gray-100 text-gray-400">
+              <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-gray-300 text-white">2</span>
+              Configure Slots
+            </div>
+            <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+            {/* Step 3: Assign */}
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-gray-100 text-gray-400">
+              <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-gray-300 text-white">3</span>
+              Assign Subjects
+            </div>
+          </div>
+          <p className="text-sm text-gray-500 mt-3">
+            Select a class above to view or build its weekly timetable.
+          </p>
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-3">
+            <p className="text-xs text-blue-700">
+              <span className="font-semibold">Tip:</span> Use "Auto Generate" to let AI create an optimized timetable based on your subjects and teachers.
+            </p>
+          </div>
         </div>
       ) : slots.length === 0 ? (
         <div className="card text-center py-12 text-gray-500">
@@ -524,6 +568,30 @@ export default function TimetablePage() {
           {classSubjects.length === 0 && (
             <div className="mb-4 p-3 bg-yellow-50 text-yellow-700 rounded-lg text-sm">
               No subjects assigned to this class yet. Go to Subjects &rarr; Class Assignments to set them up.
+            </div>
+          )}
+
+          {slots.some(s => s.applicable_days && s.applicable_days.length < 6) && (
+            <div className="mb-4 p-2.5 bg-orange-50 border border-orange-200 rounded-lg flex items-start gap-2">
+              <svg className="w-4 h-4 text-orange-500 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 100 20 10 10 0 000-20z" />
+              </svg>
+              <p className="text-xs text-orange-700">
+                <span className="font-semibold">Short days:</span>{' '}
+                {(() => {
+                  const restricted = slots.filter(s => s.applicable_days && s.applicable_days.length < 6)
+                  const grouped = {}
+                  restricted.forEach(s => {
+                    const excludedKey = DAYS.filter(d => !s.applicable_days.includes(d)).map(d => DAY_LABELS[d]).join(', ')
+                    if (!grouped[excludedKey]) grouped[excludedKey] = []
+                    grouped[excludedKey].push(s.name)
+                  })
+                  return Object.entries(grouped).map(([excluded, names]) =>
+                    `${names.join(', ')} — no ${excluded}`
+                  ).join(' | ')
+                })()}
+                . Greyed-out cells are skipped by AI.
+              </p>
             </div>
           )}
 
@@ -555,17 +623,22 @@ export default function TimetablePage() {
                       const key = `${day}-${slot.id}`
                       const cell = localGrid[key]
                       const isBreak = isBreakSlot(slot)
+                      const notApplicable = !isSlotApplicable(slot, day)
                       return (
                         <td
                           key={key}
                           className={`border border-gray-200 px-2 py-2 text-center transition-colors ${
-                            isBreak
+                            notApplicable
+                              ? 'bg-gray-50'
+                              : isBreak
                               ? 'bg-gray-100 text-gray-400'
                               : 'cursor-pointer hover:bg-primary-50'
                           }`}
-                          onClick={() => !isBreak && openCellEditor(day, slot)}
+                          onClick={() => !isBreak && !notApplicable && openCellEditor(day, slot)}
                         >
-                          {isBreak ? (
+                          {notApplicable ? (
+                            <span className="text-gray-200 text-xs">&mdash;</span>
+                          ) : isBreak ? (
                             <span className="text-xs italic">{slot.name}</span>
                           ) : cell?.subject_name ? (
                             <div>
@@ -604,19 +677,22 @@ export default function TimetablePage() {
                       const key = `${day}-${slot.id}`
                       const cell = localGrid[key]
                       const isBreak = isBreakSlot(slot)
+                      const notApplicable = !isSlotApplicable(slot, day)
                       return (
                         <div
                           key={slot.id}
                           className={`flex items-center justify-between p-2 rounded-lg ${
-                            isBreak ? 'bg-gray-100' : 'bg-gray-50 cursor-pointer hover:bg-primary-50'
+                            notApplicable ? 'bg-gray-50 opacity-40' : isBreak ? 'bg-gray-100' : 'bg-gray-50 cursor-pointer hover:bg-primary-50'
                           }`}
-                          onClick={() => !isBreak && openCellEditor(day, slot)}
+                          onClick={() => !isBreak && !notApplicable && openCellEditor(day, slot)}
                         >
                           <div>
                             <div className="text-xs font-medium text-gray-700">{slot.name}</div>
                             <div className="text-xs text-gray-400">{slot.start_time?.slice(0, 5)} - {slot.end_time?.slice(0, 5)}</div>
                           </div>
-                          {isBreak ? (
+                          {notApplicable ? (
+                            <span className="text-xs text-gray-300 italic">N/A</span>
+                          ) : isBreak ? (
                             <span className="text-xs text-gray-400 italic">{slot.slot_type_display}</span>
                           ) : cell?.subject_name ? (
                             <div className="text-right">
@@ -918,6 +994,12 @@ export default function TimetablePage() {
               <button onClick={() => setShowSlotsModal(false)} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
             </div>
 
+            <div className="mb-4 p-2.5 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-xs text-blue-700">
+                <span className="font-semibold">Short days?</span> Use the <span className="font-medium">Applicable Days</span> toggles when adding/editing a slot to exclude it from specific days (e.g. deselect Fri on afternoon slots). Or use <span className="font-medium">Intelligent Suggest</span> below with the Short Days option.
+              </p>
+            </div>
+
             {slots.length > 0 && (
               <div className="mb-4 space-y-2">
                 {slots.map(s => (
@@ -960,6 +1042,11 @@ export default function TimetablePage() {
                           </span>
                           <span className="text-sm text-gray-700">{s.name}</span>
                           <span className="text-xs text-gray-400">{s.start_time?.slice(0, 5)}-{s.end_time?.slice(0, 5)}</span>
+                          {s.applicable_days && s.applicable_days.length < 6 && (
+                            <span className="text-xs text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded">
+                              No {DAYS.filter(d => !s.applicable_days.includes(d)).map(d => DAY_LABELS[d]).join(', ')}
+                            </span>
+                          )}
                         </div>
                         <div className="flex gap-1">
                           <button
@@ -968,6 +1055,7 @@ export default function TimetablePage() {
                                 name: s.name, slot_type: s.slot_type,
                                 start_time: s.start_time?.slice(0, 5), end_time: s.end_time?.slice(0, 5),
                                 order: s.order,
+                                applicable_days: s.applicable_days || [...DAYS],
                               })
                               setEditSlotId(s.id)
                             }}
@@ -988,7 +1076,7 @@ export default function TimetablePage() {
             {/* Intelligent Suggest Slots Section */}
             <div className="border-t border-gray-200 pt-4 mb-4">
               <button
-                onClick={() => { setShowAISuggest(p => !p); setSuggestedSlots(null); setSuggestError('') }}
+                onClick={() => { setShowAISuggest(p => !p); setSuggestedSlots(null); setSuggestError(''); setShortDays([]); setShortDayCutoff('') }}
                 className="flex items-center gap-2 text-sm font-medium text-indigo-600 hover:text-indigo-700 mb-3"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1083,17 +1171,21 @@ export default function TimetablePage() {
                     <div className="mt-3">
                       <p className="text-xs font-medium text-indigo-700 mb-2">Suggested Schedule: <span className="font-normal text-indigo-500">(drag to reorder)</span></p>
                       <div className="space-y-1 mb-3">
-                        {suggestedSlots.map((s, i) => (
+                        {suggestedSlots.map((s, i) => {
+                          const cutoff = shortDayCutoff ? parseInt(shortDayCutoff) : null
+                          const isExcluded = cutoff && shortDays.length > 0 && s.order >= cutoff
+                          return (
                           <div
                             key={`${s.order}-${s.name}`}
                             draggable
                             onDragStart={() => setDragIdx(i)}
                             onDragOver={e => { e.preventDefault(); setDragOverIdx(i) }}
                             onDragEnd={() => { if (dragIdx !== null && dragOverIdx !== null) handleSlotDragEnd(dragIdx, dragOverIdx); setDragIdx(null); setDragOverIdx(null) }}
-                            className={`flex items-center gap-2 text-xs px-2 py-1.5 bg-white rounded border cursor-grab active:cursor-grabbing select-none transition-all ${
-                              dragIdx === i ? 'opacity-40 border-indigo-400 scale-95' :
-                              dragOverIdx === i && dragIdx !== null ? 'border-indigo-400 shadow-sm ring-1 ring-indigo-200' :
-                              'border-indigo-100'
+                            className={`flex items-center gap-2 text-xs px-2 py-1.5 rounded border cursor-grab active:cursor-grabbing select-none transition-all ${
+                              isExcluded ? 'bg-orange-50 border-orange-200' :
+                              dragIdx === i ? 'opacity-40 border-indigo-400 scale-95 bg-white' :
+                              dragOverIdx === i && dragIdx !== null ? 'border-indigo-400 shadow-sm ring-1 ring-indigo-200 bg-white' :
+                              'border-indigo-100 bg-white'
                             }`}
                           >
                             <svg className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
@@ -1109,9 +1201,56 @@ export default function TimetablePage() {
                             </span>
                             <span className="text-gray-700 flex-1">{s.name}</span>
                             <span className="text-gray-400">{s.start_time}-{s.end_time}</span>
+                            {isExcluded && (
+                              <span className="text-[10px] text-orange-600 font-medium">
+                                skip {shortDays.map(d => DAY_LABELS[d]).join(',')}
+                              </span>
+                            )}
                           </div>
-                        ))}
+                        )})}
                       </div>
+
+                      {/* Short Days Config */}
+                      <div className="mb-3 p-2.5 bg-orange-50 border border-orange-200 rounded-lg">
+                        <p className="text-xs font-medium text-orange-700 mb-2">Short Days (optional)</p>
+                        <p className="text-[10px] text-orange-600 mb-2">Select days with fewer periods and from which slot to cut off. Slots from cutoff onwards will not apply on selected days.</p>
+                        <div className="flex flex-wrap gap-1.5 mb-2">
+                          {DAYS.map(day => (
+                            <button
+                              key={day}
+                              type="button"
+                              onClick={() => setShortDays(prev =>
+                                prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]
+                              )}
+                              className={`px-2 py-1 rounded text-xs font-medium border transition-colors ${
+                                shortDays.includes(day)
+                                  ? 'bg-orange-200 text-orange-800 border-orange-300'
+                                  : 'bg-white text-gray-400 border-gray-200'
+                              }`}
+                            >
+                              {DAY_LABELS[day]}
+                            </button>
+                          ))}
+                        </div>
+                        {shortDays.length > 0 && (
+                          <div>
+                            <label className="block text-[10px] text-orange-600 mb-1">Skip from slot #</label>
+                            <select
+                              value={shortDayCutoff}
+                              onChange={e => setShortDayCutoff(e.target.value)}
+                              className="input text-xs w-full"
+                            >
+                              <option value="">-- Select cutoff slot --</option>
+                              {suggestedSlots.map(s => (
+                                <option key={s.order} value={s.order}>
+                                  #{s.order} - {s.name} ({s.start_time})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+                      </div>
+
                       <div className="flex gap-2">
                         <button
                           onClick={handleApplySuggestedSlots}
@@ -1121,7 +1260,7 @@ export default function TimetablePage() {
                           {applyingSlots ? 'Applying...' : 'Apply All Slots'}
                         </button>
                         <button
-                          onClick={() => setSuggestedSlots(null)}
+                          onClick={() => { setSuggestedSlots(null); setShortDays([]); setShortDayCutoff('') }}
                           className="px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-100 rounded-lg"
                         >
                           Discard
@@ -1203,6 +1342,32 @@ export default function TimetablePage() {
                       required
                     />
                     {slotErrors.order && <p className="text-xs text-red-600">{slotErrors.order}</p>}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Applicable Days</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {DAYS.map(day => (
+                      <button
+                        key={day}
+                        type="button"
+                        onClick={() => {
+                          setSlotForm(prev => {
+                            const days = prev.applicable_days || [...DAYS]
+                            const updated = days.includes(day) ? days.filter(d => d !== day) : [...days, day]
+                            if (updated.length === 0) return prev
+                            return { ...prev, applicable_days: updated }
+                          })
+                        }}
+                        className={`px-2 py-1 rounded text-xs font-medium border transition-colors ${
+                          (slotForm.applicable_days || DAYS).includes(day)
+                            ? 'bg-blue-100 text-blue-700 border-blue-300'
+                            : 'bg-gray-100 text-gray-400 border-gray-200'
+                        }`}
+                      >
+                        {DAY_LABELS[day]}
+                      </button>
+                    ))}
                   </div>
                 </div>
                 <div className="flex gap-2">

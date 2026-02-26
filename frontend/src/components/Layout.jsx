@@ -376,7 +376,7 @@ export default function Layout() {
       children: [
         { type: 'divider', label: 'Take Attendance' },
         { name: 'Register Image (OCR)', href: '/attendance', icon: UploadIcon },
-        { name: 'Manual Entry', href: '/attendance/register?tab=manual', icon: PencilIcon },
+        { name: 'Manual Entry', href: '/attendance/manual-entry', icon: PencilIcon },
         { name: 'Face Recognition', href: '/face-attendance', icon: CameraIcon },
         { type: 'divider', label: 'Review & Reports' },
         { name: 'Pending Review', href: '/attendance?tab=review', icon: ClipboardCheckIcon },

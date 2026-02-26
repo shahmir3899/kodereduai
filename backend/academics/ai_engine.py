@@ -131,7 +131,10 @@ class TimetableGenerator:
             })
             total_required += cs.periods_per_week
 
-        total_available = len(self.slots) * len(DAYS)
+        total_available = sum(
+            1 for slot in self.slots for day in DAYS
+            if slot.is_applicable_for_day(day)
+        )
         if total_required > total_available:
             warnings.append(
                 f'Required periods ({total_required}) exceed available slots '
@@ -144,11 +147,12 @@ class TimetableGenerator:
         # Track what's been assigned per day for distribution checks
         day_subjects: Dict[str, List[int]] = {day: [] for day in DAYS}
 
-        # Sort slots list for iteration
-        slot_ids = [s.id for s in self.slots]
-
         # Create shuffled (day, slot) pairs for balanced distribution
-        cells = [(day, slot_id) for day in DAYS for slot_id in slot_ids]
+        # Only include cells where the slot is applicable for that day
+        cells = [
+            (day, slot.id) for slot in self.slots for day in DAYS
+            if slot.is_applicable_for_day(day)
+        ]
         random.shuffle(cells)
 
         # Greedy assignment
@@ -233,6 +237,8 @@ class TimetableGenerator:
         for day in DAYS:
             entries = []
             for slot in self.slots:
+                if not slot.is_applicable_for_day(day):
+                    continue
                 entry = grid[day].get(slot.id)
                 if entry:
                     entries.append(entry)
@@ -335,7 +341,13 @@ class ORToolsTimetableGenerator:
         num_subjects = len(self.class_subjects)
 
         total_required = sum(cs.periods_per_week for cs in self.class_subjects)
-        total_available = num_slots * num_days
+        # Build applicability map: (day_index, slot_index) -> applicable
+        applicable_cells = set()
+        for si, slot in enumerate(self.slots):
+            for di, day in enumerate(DAYS):
+                if slot.is_applicable_for_day(day):
+                    applicable_cells.add((di, si))
+        total_available = len(applicable_cells)
         if total_required > total_available:
             warnings.append(
                 f'Required periods ({total_required}) exceed available slots '
@@ -394,6 +406,13 @@ class ORToolsTimetableGenerator:
                     if day_str in day_indices and slot_id in slot_indices:
                         d = day_indices[day_str]
                         p = slot_indices[slot_id]
+                        model.add(x[s, d, p] == 0)
+
+        # 5. Non-applicable day-slot cells must be empty
+        for d in range(num_days):
+            for p in range(num_slots):
+                if (d, p) not in applicable_cells:
+                    for s in range(num_subjects):
                         model.add(x[s, d, p] == 0)
 
         # ── Soft objectives ──
@@ -474,6 +493,8 @@ class ORToolsTimetableGenerator:
         for day in DAYS:
             entries = []
             for slot in self.slots:
+                if not slot.is_applicable_for_day(day):
+                    continue
                 entry = grid[day].get(slot.id)
                 if entry:
                     entries.append(entry)
@@ -572,6 +593,8 @@ class ConflictResolver:
 
         for slot in period_slots:
             for d in DAYS:
+                if not slot.is_applicable_for_day(d):
+                    continue
                 if (d, slot.id) not in teacher_entries and (d, slot.id) not in class_entries:
                     resolution.alternative_slots.append({
                         'day': d,
@@ -691,6 +714,13 @@ class TimetableQualityScorer:
     def _score_teacher_idle_gaps(self, entries, slots) -> float:
         """Score based on teacher idle gaps between periods in a day."""
         slot_order = {s.id: s.order for s in slots}
+        # Build applicable orders per day so non-applicable slots don't count as gaps
+        applicable_orders_per_day: Dict[str, Set[int]] = {}
+        for day in DAYS:
+            applicable_orders_per_day[day] = {
+                s.order for s in slots if s.is_applicable_for_day(day)
+            }
+
         teacher_day_slots: Dict[Tuple[int, str], List[int]] = {}
 
         for entry in entries:
@@ -705,12 +735,16 @@ class TimetableQualityScorer:
 
         total_gaps = 0
         total_spans = 0
-        for orders in teacher_day_slots.values():
+        for (teacher_id, day), orders in teacher_day_slots.items():
             if len(orders) < 2:
                 continue
             orders.sort()
-            span = orders[-1] - orders[0]
-            gaps = span - (len(orders) - 1)
+            applicable = applicable_orders_per_day.get(day, set())
+            # Only count gap positions that are actually applicable
+            gaps = sum(
+                1 for o in range(orders[0] + 1, orders[-1])
+                if o in applicable and o not in set(orders)
+            )
             total_gaps += gaps
             total_spans += 1
 

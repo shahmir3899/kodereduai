@@ -520,7 +520,30 @@ export default function SuperAdminDashboard() {
           {schoolsLoading ? (
             <Spinner />
           ) : schools.length === 0 ? (
-            <Empty text="No schools yet. Add your first school to get started." />
+            <div className="card p-4 sm:p-6">
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-blue-100 text-blue-700 ring-2 ring-blue-300">
+                  <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-blue-500 text-white">1</span>
+                  Add School
+                </div>
+                <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-gray-100 text-gray-400">
+                  <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-gray-300 text-white">2</span>
+                  Create Admin User
+                </div>
+                <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-gray-100 text-gray-400">
+                  <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-gray-300 text-white">3</span>
+                  Configure Modules
+                </div>
+              </div>
+              <p className="text-sm text-gray-500 mt-3">No schools yet. Click "Add School" to create your first one.</p>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-3">
+                <p className="text-xs text-blue-700">
+                  <span className="font-semibold">Tip:</span> Each school gets its own isolated data, users, and module settings.
+                </p>
+              </div>
+            </div>
           ) : (
             <>
               {/* Mobile card view */}

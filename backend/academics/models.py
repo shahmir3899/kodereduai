@@ -1,6 +1,10 @@
 from django.db import models
 
 
+def default_applicable_days():
+    return ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
+
+
 class Subject(models.Model):
     """Global subject definitions per school."""
     school = models.ForeignKey(
@@ -101,6 +105,10 @@ class TimetableSlot(models.Model):
     end_time = models.TimeField()
     order = models.PositiveIntegerField(help_text='Sort order within the day')
     is_active = models.BooleanField(default=True)
+    applicable_days = models.JSONField(
+        default=default_applicable_days,
+        help_text='Days this slot applies to, e.g. ["MON","TUE","WED","THU","FRI","SAT"]',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -110,6 +118,11 @@ class TimetableSlot(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.start_time:%H:%M}-{self.end_time:%H:%M})"
+
+    def is_applicable_for_day(self, day: str) -> bool:
+        if not self.applicable_days:
+            return True
+        return day in self.applicable_days
 
 
 class TimetableEntry(models.Model):

@@ -111,15 +111,32 @@ class TimetableSlotSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'school', 'name', 'slot_type', 'slot_type_display',
             'start_time', 'end_time', 'order', 'is_active',
-            'created_at', 'updated_at',
+            'applicable_days', 'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'school', 'created_at', 'updated_at']
 
 
 class TimetableSlotCreateSerializer(serializers.ModelSerializer):
+    VALID_DAYS = {'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'}
+
     class Meta:
         model = TimetableSlot
-        fields = ['name', 'slot_type', 'start_time', 'end_time', 'order']
+        fields = ['name', 'slot_type', 'start_time', 'end_time', 'order', 'applicable_days']
+
+    def validate_applicable_days(self, value):
+        if value is not None:
+            if not isinstance(value, list):
+                raise serializers.ValidationError('applicable_days must be a list.')
+            invalid = set(value) - self.VALID_DAYS
+            if invalid:
+                raise serializers.ValidationError(
+                    f'Invalid day codes: {invalid}. Valid: {self.VALID_DAYS}'
+                )
+            if len(value) == 0:
+                raise serializers.ValidationError(
+                    'applicable_days must contain at least one day.'
+                )
+        return value
 
     def validate_order(self, value):
         school_id = self.context.get('school_id')
@@ -151,6 +168,7 @@ class TimetableEntrySerializer(serializers.ModelSerializer):
     slot_type = serializers.CharField(source='slot.slot_type', read_only=True)
     slot_start_time = serializers.TimeField(source='slot.start_time', read_only=True)
     slot_end_time = serializers.TimeField(source='slot.end_time', read_only=True)
+    slot_applicable_days = serializers.JSONField(source='slot.applicable_days', read_only=True)
     subject_name = serializers.CharField(
         source='subject.name', read_only=True, default=None
     )
@@ -169,7 +187,7 @@ class TimetableEntrySerializer(serializers.ModelSerializer):
             'id', 'school', 'class_obj', 'class_name',
             'day', 'day_display',
             'slot', 'slot_name', 'slot_order', 'slot_type',
-            'slot_start_time', 'slot_end_time',
+            'slot_start_time', 'slot_end_time', 'slot_applicable_days',
             'subject', 'subject_name', 'subject_code',
             'teacher', 'teacher_name',
             'academic_year', 'academic_year_name',
@@ -188,6 +206,15 @@ class TimetableEntryCreateSerializer(serializers.ModelSerializer):
 
     def validate(self, data):
         school_id = self.context.get('school_id')
+
+        # Check slot applicability for the given day
+        slot = data.get('slot')
+        day = data.get('day')
+        if slot and day and not slot.is_applicable_for_day(day):
+            raise serializers.ValidationError(
+                f'Slot "{slot.name}" is not applicable on {day}. '
+                f'Applicable days: {slot.applicable_days}'
+            )
 
         # Check unique_together
         if school_id:

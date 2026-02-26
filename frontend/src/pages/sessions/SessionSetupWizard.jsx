@@ -222,10 +222,10 @@ export default function SessionSetupWizard({ onClose }) {
 
               {/* AI Suggestions */}
               {preview.ai_suggestions?.length > 0 && (
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-                  <p className="text-xs font-semibold text-amber-800 mb-1">AI Suggestions</p>
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <p className="text-xs font-semibold text-blue-800 mb-1">Setup Notes</p>
                   {preview.ai_suggestions.map((s, i) => (
-                    <p key={i} className="text-xs text-amber-700 mt-0.5">- {s}</p>
+                    <p key={i} className="text-xs text-blue-700 mt-0.5">- {s}</p>
                   ))}
                 </div>
               )}

@@ -291,15 +291,37 @@ export default function BookCatalogPage() {
             <p className="text-gray-500 mt-3">Loading books...</p>
           </div>
         ) : books.length === 0 ? (
-          <div className="text-center py-16">
-            <svg className="w-12 h-12 text-gray-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-            </svg>
-            <p className="text-gray-500 font-medium">No books found</p>
-            <p className="text-gray-400 text-sm mt-1">
-              {search || categoryFilter ? 'Try adjusting your filters.' : 'Add your first book to get started.'}
-            </p>
-          </div>
+          search || categoryFilter ? (
+            <div className="text-center py-16">
+              <p className="text-gray-500 font-medium">No books found</p>
+              <p className="text-gray-400 text-sm mt-1">Try adjusting your filters.</p>
+            </div>
+          ) : (
+            <div className="p-4 sm:p-6">
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-blue-100 text-blue-700 ring-2 ring-blue-300">
+                  <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-blue-500 text-white">1</span>
+                  Set Up Categories
+                </div>
+                <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-gray-100 text-gray-400">
+                  <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-gray-300 text-white">2</span>
+                  Add Books
+                </div>
+                <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-gray-100 text-gray-400">
+                  <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-gray-300 text-white">3</span>
+                  Issue to Borrowers
+                </div>
+              </div>
+              <p className="text-sm text-gray-500 mt-3">No books in the catalog yet. Click "Add Book" to add your first one.</p>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-3">
+                <p className="text-xs text-blue-700">
+                  <span className="font-semibold">Tip:</span> Organize your library with categories before adding books for easier browsing.
+                </p>
+              </div>
+            </div>
+          )
         ) : (
           <>
             {/* Mobile card view */}

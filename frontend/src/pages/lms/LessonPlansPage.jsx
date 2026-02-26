@@ -262,11 +262,45 @@ export default function LessonPlansPage() {
             <p className="text-gray-500 mt-2">Loading lesson plans...</p>
           </div>
         ) : plans.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">
-            {allPlans.length === 0
-              ? 'No lesson plans found. Create your first lesson plan.'
-              : 'No lesson plans match your search.'}
-          </div>
+          allPlans.length === 0 ? (
+            <div className="p-4 sm:p-6">
+              <div className="flex items-center gap-3 flex-wrap">
+                {/* Step 1 */}
+                <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${
+                  filterClass ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700 ring-2 ring-blue-300'
+                }`}>
+                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${
+                    filterClass ? 'bg-green-500 text-white' : 'bg-blue-500 text-white'
+                  }`}>{filterClass ? '\u2713' : '1'}</span>
+                  Filter Class / Subject
+                </div>
+                <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                {/* Step 2 */}
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-gray-100 text-gray-400">
+                  <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-gray-300 text-white">2</span>
+                  Create Lesson Plan
+                </div>
+                <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                {/* Step 3 */}
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-gray-100 text-gray-400">
+                  <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-gray-300 text-white">3</span>
+                  Publish &amp; Track
+                </div>
+              </div>
+              <p className="text-sm text-gray-500 mt-3">
+                No lesson plans yet. Use the filters above or click "Create" to get started.
+              </p>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-3">
+                <p className="text-xs text-blue-700">
+                  <span className="font-semibold">Tip:</span> Use the AI Wizard to auto-generate lesson plans from your curriculum topics.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-8 text-gray-500">
+              No lesson plans match your search.
+            </div>
+          )
         ) : (
           <>
             {/* Mobile card view */}

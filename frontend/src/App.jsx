@@ -13,6 +13,7 @@ import LoginPage from './pages/LoginPage'
 const DashboardRouter = lazy(() => import('./pages/DashboardRouter'))
 const CaptureReviewPage = lazy(() => import('./pages/CaptureReviewPage'))
 const RegisterPage = lazy(() => import('./pages/RegisterPage'))
+const ManualEntryPage = lazy(() => import('./pages/ManualEntryPage'))
 const AnomaliesPage = lazy(() => import('./pages/attendance/AnomaliesPage'))
 const StudentsPage = lazy(() => import('./pages/StudentsPage'))
 const ClassesGradesPage = lazy(() => import('./pages/ClassesGradesPage'))
@@ -260,6 +261,7 @@ function App() {
             <Route path="attendance" element={<SchoolRoute><ModuleRoute module="attendance"><CaptureReviewPage /></ModuleRoute></SchoolRoute>} />
             <Route path="attendance/review/:id" element={<SchoolRoute><ModuleRoute module="attendance"><CaptureReviewPage /></ModuleRoute></SchoolRoute>} />
             <Route path="attendance/register" element={<SchoolRoute><ModuleRoute module="attendance"><RegisterPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="attendance/manual-entry" element={<SchoolRoute><ModuleRoute module="attendance"><ManualEntryPage /></ModuleRoute></SchoolRoute>} />
             <Route path="attendance/anomalies" element={<SchoolRoute><ModuleRoute module="attendance"><AnomaliesPage /></ModuleRoute></SchoolRoute>} />
 
             {/* Face Attendance (camera-based) */}
