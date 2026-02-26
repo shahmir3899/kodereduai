@@ -59,17 +59,7 @@ class ExamTypeViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelView
         return ctx
 
     def get_queryset(self):
-        qs = super().get_queryset()
-        is_active = self.request.query_params.get('is_active')
-        if is_active is not None:
-            qs = qs.filter(is_active=is_active.lower() == 'true')
-        else:
-            qs = qs.filter(is_active=True)
-        return qs
-
-    def perform_destroy(self, instance):
-        instance.is_active = False
-        instance.save()
+        return super().get_queryset()
 
 
 class ExamGroupViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
@@ -91,7 +81,7 @@ class ExamGroupViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
         qs = super().get_queryset().select_related(
             'school', 'academic_year', 'term', 'exam_type',
         ).annotate(
-            classes_count=Count('exams', filter=Q(exams__is_active=True)),
+            classes_count=Count('exams'),
         )
         academic_year = self.request.query_params.get('academic_year')
         if academic_year:
@@ -99,11 +89,6 @@ class ExamGroupViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
         term = self.request.query_params.get('term')
         if term:
             qs = qs.filter(term_id=term)
-        is_active = self.request.query_params.get('is_active')
-        if is_active is not None:
-            qs = qs.filter(is_active=is_active.lower() == 'true')
-        else:
-            qs = qs.filter(is_active=True)
         return qs
 
     def perform_destroy(self, instance):

@@ -53,19 +53,10 @@ class AcademicYearViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = super().get_queryset().select_related('school').annotate(
-            terms_count=Count('terms', filter=Q(terms__is_active=True), distinct=True),
-            enrollment_count=Count('enrollments', filter=Q(enrollments__is_active=True), distinct=True),
+            terms_count=Count('terms', distinct=True),
+            enrollment_count=Count('enrollments', distinct=True),
         ).order_by('-start_date')
-        is_active = self.request.query_params.get('is_active')
-        if is_active is not None:
-            qs = qs.filter(is_active=is_active.lower() == 'true')
-        else:
-            qs = qs.filter(is_active=True)
         return qs
-
-    def perform_destroy(self, instance):
-        instance.is_active = False
-        instance.save()
 
     @action(detail=True, methods=['post'])
     def set_current(self, request, pk=None):
@@ -88,7 +79,7 @@ class AcademicYearViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         year = AcademicYear.objects.filter(
-            school_id=school_id, is_current=True, is_active=True,
+            school_id=school_id, is_current=True,
         ).select_related('school').first()
         if not year:
             return Response(
@@ -98,7 +89,7 @@ class AcademicYearViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         data = AcademicYearSerializer(year).data
         # Include terms for the current year
         terms = Term.objects.filter(
-            academic_year=year, is_active=True,
+            academic_year=year,
         ).order_by('order')
         from .serializers import TermSerializer
         data['terms'] = TermSerializer(terms, many=True).data
@@ -117,11 +108,9 @@ class AcademicYearViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         return Response({
             'id': year.id,
             'name': year.name,
-            'terms_count': year.terms.filter(is_active=True).count(),
-            'enrollment_count': year.enrollments.filter(is_active=True).count(),
-            'classes_count': year.enrollments.filter(
-                is_active=True,
-            ).values('class_obj').distinct().count(),
+            'terms_count': year.terms.count(),
+            'enrollment_count': year.enrollments.count(),
+            'classes_count': year.enrollments.values('class_obj').distinct().count(),
         })
 
 
@@ -145,16 +134,7 @@ class TermViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         academic_year = self.request.query_params.get('academic_year')
         if academic_year:
             qs = qs.filter(academic_year_id=academic_year)
-        is_active = self.request.query_params.get('is_active')
-        if is_active is not None:
-            qs = qs.filter(is_active=is_active.lower() == 'true')
-        else:
-            qs = qs.filter(is_active=True)
         return qs
-
-    def perform_destroy(self, instance):
-        instance.is_active = False
-        instance.save()
 
 
 class StudentEnrollmentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
@@ -185,11 +165,6 @@ class StudentEnrollmentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         status_filter = self.request.query_params.get('status')
         if status_filter:
             qs = qs.filter(status=status_filter)
-        is_active = self.request.query_params.get('is_active')
-        if is_active is not None:
-            qs = qs.filter(is_active=is_active.lower() == 'true')
-        else:
-            qs = qs.filter(is_active=True)
         return qs
 
     @action(detail=False, methods=['get'])

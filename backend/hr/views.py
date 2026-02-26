@@ -118,7 +118,7 @@ class StaffDepartmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mo
             else:
                 return queryset.none()
 
-        return queryset.filter(is_active=True)
+        return queryset
 
     def perform_create(self, serializer):
         school_id = _resolve_school_id(self.request)
@@ -126,10 +126,6 @@ class StaffDepartmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mo
             from rest_framework.exceptions import ValidationError
             raise ValidationError({'detail': 'No school associated with your account.'})
         serializer.save(school_id=school_id)
-
-    def perform_destroy(self, instance):
-        instance.is_active = False
-        instance.save()
 
 
 # ── Designation ViewSet ───────────────────────────────────────────────────────
@@ -171,7 +167,7 @@ class StaffDesignationViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
         if department:
             queryset = queryset.filter(department_id=department)
 
-        return queryset.filter(is_active=True)
+        return queryset
 
     def perform_create(self, serializer):
         school_id = _resolve_school_id(self.request)
@@ -179,10 +175,6 @@ class StaffDesignationViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
             from rest_framework.exceptions import ValidationError
             raise ValidationError({'detail': 'No school associated with your account.'})
         serializer.save(school_id=school_id)
-
-    def perform_destroy(self, instance):
-        instance.is_active = False
-        instance.save()
 
 
 # ── Staff Member ViewSet ──────────────────────────────────────────────────────
