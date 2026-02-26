@@ -1,8 +1,9 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
-import { attendanceApi, studentsApi, schoolsApi } from '../services/api'
+import { attendanceApi, studentsApi, schoolsApi, sessionsApi } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
+import { useAcademicYear } from '../contexts/AcademicYearContext'
 import ClassSelector from '../components/ClassSelector'
 
 // ─── Utility helpers ───
@@ -730,6 +731,7 @@ function ConfigurationTab() {
 // ═══════════════════════════════════════════
 function ManualEntryTab() {
   const queryClient = useQueryClient()
+  const { activeAcademicYear } = useAcademicYear()
   const [classId, setClassId] = useState('')
   const [date, setDate] = useState(new Date().toISOString().split('T')[0])
   const [attendanceData, setAttendanceData] = useState([])
@@ -742,13 +744,17 @@ function ManualEntryTab() {
   })
   const classes = classesRes?.data || []
 
-  // Fetch students for selected class
+  // Fetch enrolled students for selected class + academic year
   const { data: studentsRes, isLoading: studentsLoading } = useQuery({
-    queryKey: ['studentsForAttendance', classId],
-    queryFn: () => studentsApi.getStudents({ class_id: classId, is_active: true, page_size: 500 }),
-    enabled: !!classId,
+    queryKey: ['studentsForAttendance', classId, activeAcademicYear?.id],
+    queryFn: () => sessionsApi.getEnrollments({ class_id: classId, academic_year: activeAcademicYear?.id, page_size: 500 }),
+    enabled: !!classId && !!activeAcademicYear?.id,
   })
-  const students = studentsRes?.data?.results || studentsRes?.data || []
+  const students = (studentsRes?.data?.results || studentsRes?.data || []).map(e => ({
+    id: e.student,
+    name: e.student_name,
+    roll_number: e.roll_number || '',
+  }))
 
   // Fetch existing records for this class+date
   const { data: existingRes, isLoading: existingLoading } = useQuery({
@@ -775,7 +781,7 @@ function ManualEntryTab() {
           student_id: s.id,
           student_name: s.name,
           student_roll: s.roll_number || '',
-          status: existingMap[s.id] || 'PRESENT',
+          status: existingMap[s.id] || 'NOT_SET',
         }))
     )
   }, [classId, date, students.length, existingRecords.length, studentsLoading, existingLoading])
@@ -796,9 +802,11 @@ function ManualEntryTab() {
   })
 
   const toggleStatus = (idx) => {
-    setAttendanceData(prev => prev.map((item, i) =>
-      i === idx ? { ...item, status: item.status === 'PRESENT' ? 'ABSENT' : 'PRESENT' } : item
-    ))
+    setAttendanceData(prev => prev.map((item, i) => {
+      if (i !== idx) return item
+      const next = item.status === 'NOT_SET' ? 'PRESENT' : item.status === 'PRESENT' ? 'ABSENT' : 'NOT_SET'
+      return { ...item, status: next }
+    }))
   }
 
   const markAll = (status) => {
@@ -806,15 +814,20 @@ function ManualEntryTab() {
   }
 
   const handleSave = () => {
-    bulkSaveMut.mutate({
-      class_id: parseInt(classId),
-      date,
-      entries: attendanceData.map(a => ({ student_id: a.student_id, status: a.status })),
-    })
+    const entries = attendanceData
+      .filter(a => a.status !== 'NOT_SET')
+      .map(a => ({ student_id: a.student_id, status: a.status }))
+    if (entries.length === 0) {
+      setSaveMsg('No attendance marked. Set status for at least one student.')
+      setTimeout(() => setSaveMsg(''), 4000)
+      return
+    }
+    bulkSaveMut.mutate({ class_id: parseInt(classId), date, entries })
   }
 
   const presentCount = attendanceData.filter(a => a.status === 'PRESENT').length
   const absentCount = attendanceData.filter(a => a.status === 'ABSENT').length
+  const notSetCount = attendanceData.filter(a => a.status === 'NOT_SET').length
   const hasExisting = existingRecords.length > 0
 
   const isDataLoading = studentsLoading || existingLoading
@@ -879,13 +892,15 @@ function ManualEntryTab() {
           {/* Quick actions + summary */}
           <div className="card">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 <button onClick={() => markAll('PRESENT')} className="px-3 py-1.5 text-xs font-medium rounded-lg bg-green-100 text-green-700 hover:bg-green-200">Mark All Present</button>
                 <button onClick={() => markAll('ABSENT')} className="px-3 py-1.5 text-xs font-medium rounded-lg bg-red-100 text-red-700 hover:bg-red-200">Mark All Absent</button>
+                <button onClick={() => markAll('NOT_SET')} className="px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200">Reset All</button>
               </div>
               <div className="flex gap-4 text-sm">
                 <span className="text-green-600 font-semibold">{presentCount} Present</span>
                 <span className="text-red-600 font-semibold">{absentCount} Absent</span>
+                {notSetCount > 0 && <span className="text-gray-400">{notSetCount} Not Set</span>}
                 <span className="text-gray-500">{attendanceData.length} Total</span>
               </div>
             </div>
@@ -914,10 +929,12 @@ function ManualEntryTab() {
                         className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors min-w-[80px] ${
                           item.status === 'PRESENT'
                             ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                            : 'bg-red-100 text-red-700 hover:bg-red-200'
+                            : item.status === 'ABSENT'
+                              ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                              : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                         }`}
                       >
-                        {item.status === 'PRESENT' ? 'Present' : 'Absent'}
+                        {item.status === 'PRESENT' ? 'Present' : item.status === 'ABSENT' ? 'Absent' : 'Not Set'}
                       </button>
                     </td>
                   </tr>
@@ -939,10 +956,12 @@ function ManualEntryTab() {
                   className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
                     item.status === 'PRESENT'
                       ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                      : 'bg-red-100 text-red-700 hover:bg-red-200'
+                      : item.status === 'ABSENT'
+                        ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                        : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                   }`}
                 >
-                  {item.status === 'PRESENT' ? 'P' : 'A'}
+                  {item.status === 'PRESENT' ? 'P' : item.status === 'ABSENT' ? 'A' : '—'}
                 </button>
               </div>
             ))}
@@ -957,10 +976,10 @@ function ManualEntryTab() {
             </div>
             <button
               onClick={handleSave}
-              disabled={bulkSaveMut.isPending || attendanceData.length === 0}
+              disabled={bulkSaveMut.isPending || (presentCount + absentCount) === 0}
               className="btn btn-primary min-w-[180px]"
             >
-              {bulkSaveMut.isPending ? 'Saving...' : `Save Attendance (${attendanceData.length})`}
+              {bulkSaveMut.isPending ? 'Saving...' : `Save Attendance (${presentCount + absentCount})`}
             </button>
           </div>
         </>
