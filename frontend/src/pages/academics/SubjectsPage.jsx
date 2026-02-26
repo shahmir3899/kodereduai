@@ -139,11 +139,11 @@ export default function SubjectsPage() {
     const subjectMap = new Map()
     const lookup = new Map()
     for (const a of assignments) {
-      if (!classMap.has(a.class_obj)) classMap.set(a.class_obj, { id: a.class_obj, name: a.class_name })
+      if (!classMap.has(a.class_obj)) classMap.set(a.class_obj, { id: a.class_obj, name: a.class_name, section: a.class_section || '', gradeLevel: a.class_grade_level ?? 0 })
       if (!subjectMap.has(a.subject)) subjectMap.set(a.subject, { id: a.subject, code: a.subject_code, name: a.subject_name })
       lookup.set(`${a.class_obj}-${a.subject}`, a)
     }
-    const classRows = [...classMap.values()].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
+    const classRows = [...classMap.values()].sort((a, b) => (a.gradeLevel - b.gradeLevel) || (a.section || '').localeCompare(b.section || ''))
     const subjectCols = [...subjectMap.values()].sort((a, b) => a.code.localeCompare(b.code))
     return { classRows, subjectCols, lookup }
   }, [assignments])
@@ -152,10 +152,10 @@ export default function SubjectsPage() {
   const groupedAssignments = useMemo(() => {
     const map = new Map()
     for (const a of assignments) {
-      if (!map.has(a.class_obj)) map.set(a.class_obj, { id: a.class_obj, name: a.class_name, items: [] })
+      if (!map.has(a.class_obj)) map.set(a.class_obj, { id: a.class_obj, name: a.class_name, section: a.class_section || '', gradeLevel: a.class_grade_level ?? 0, items: [] })
       map.get(a.class_obj).items.push(a)
     }
-    return [...map.values()].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
+    return [...map.values()].sort((a, b) => (a.gradeLevel - b.gradeLevel) || (a.section || '').localeCompare(b.section || ''))
   }, [assignments])
 
   const toggleClass = (classId) => setExpandedClasses(prev => {
@@ -665,7 +665,7 @@ export default function SubjectsPage() {
                     {matrixData.classRows.map(cls => (
                       <tr key={cls.id} className="border-b border-gray-100">
                         <td className="sticky left-0 z-10 bg-white px-3 py-2 text-sm font-medium text-gray-900 border-r border-gray-200 whitespace-nowrap">
-                          {cls.name}
+                          {cls.name}{cls.section ? ` - ${cls.section}` : ''}
                         </td>
                         {matrixData.subjectCols.map(subj => {
                           const a = matrixData.lookup.get(`${cls.id}-${subj.id}`)
@@ -709,7 +709,7 @@ export default function SubjectsPage() {
                           <svg className={`w-4 h-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                           </svg>
-                          <span className="font-semibold text-sm text-gray-900">{group.name}</span>
+                          <span className="font-semibold text-sm text-gray-900">{group.name}{group.section ? ` - ${group.section}` : ''}</span>
                         </div>
                         <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
                           {group.items.length} subject{group.items.length !== 1 ? 's' : ''}

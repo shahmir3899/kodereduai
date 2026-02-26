@@ -96,13 +96,6 @@ class SubjectViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             else:
                 return queryset.none()
 
-        # Default to active only
-        is_active = self.request.query_params.get('is_active')
-        if is_active is not None:
-            queryset = queryset.filter(is_active=is_active.lower() == 'true')
-        else:
-            queryset = queryset.filter(is_active=True)
-
         is_elective = self.request.query_params.get('is_elective')
         if is_elective is not None:
             queryset = queryset.filter(is_elective=is_elective.lower() == 'true')
@@ -123,24 +116,9 @@ class SubjectViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             from rest_framework.exceptions import ValidationError
             raise ValidationError({'detail': 'No school associated with your account.'})
 
-        # Reactivate soft-deleted subject if one exists with the same code
-        code = serializer.validated_data.get('code', '').upper()
-        existing = Subject.objects.filter(school_id=school_id, code=code, is_active=False).first()
-        if existing:
-            existing.name = serializer.validated_data.get('name', existing.name)
-            existing.description = serializer.validated_data.get('description', '')
-            existing.is_elective = serializer.validated_data.get('is_elective', False)
-            existing.is_active = True
-            existing.save()
-            return Response(SubjectSerializer(existing).data, status=status.HTTP_201_CREATED)
-
         serializer.save(school_id=school_id)
         headers = self.get_success_headers(serializer.data)
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
-
-    def perform_destroy(self, instance):
-        instance.is_active = False
-        instance.save()
 
     @action(detail=False, methods=['post'])
     def bulk_create(self, request):
@@ -224,13 +202,6 @@ class ClassSubjectViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Model
             else:
                 return queryset.none()
 
-        # Default to active only
-        is_active = self.request.query_params.get('is_active')
-        if is_active is not None:
-            queryset = queryset.filter(is_active=is_active.lower() == 'true')
-        else:
-            queryset = queryset.filter(is_active=True)
-
         class_obj = self.request.query_params.get('class_obj')
         if class_obj:
             queryset = queryset.filter(class_obj_id=class_obj)
@@ -265,10 +236,6 @@ class ClassSubjectViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Model
             ).first()
 
         serializer.save(school_id=school_id, academic_year=academic_year)
-
-    def perform_destroy(self, instance):
-        instance.is_active = False
-        instance.save()
 
     @action(detail=False, methods=['post'], url_path='bulk-assign')
     def bulk_assign(self, request):
@@ -368,12 +335,6 @@ class TimetableSlotViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mode
             else:
                 return queryset.none()
 
-        is_active = self.request.query_params.get('is_active')
-        if is_active is not None:
-            queryset = queryset.filter(is_active=is_active.lower() == 'true')
-        else:
-            queryset = queryset.filter(is_active=True)
-
         return queryset
 
     def perform_create(self, serializer):
@@ -382,10 +343,6 @@ class TimetableSlotViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mode
             from rest_framework.exceptions import ValidationError
             raise ValidationError({'detail': 'No school associated with your account.'})
         serializer.save(school_id=school_id)
-
-    def perform_destroy(self, instance):
-        instance.is_active = False
-        instance.save()
 
     @action(detail=False, methods=['post'])
     def suggest_slots(self, request):
@@ -729,7 +686,7 @@ class TimetableEntryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
         title = f"Auto-generating timetable ({algorithm})"
 
         subject_count = ClassSubject.objects.filter(
-            school_id=school_id, class_obj_id=class_id, is_active=True,
+            school_id=school_id, class_obj_id=class_id,
         ).count()
 
         if subject_count < 15:

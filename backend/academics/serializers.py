@@ -23,7 +23,7 @@ class SubjectCreateSerializer(serializers.ModelSerializer):
         value = value.upper()
         school_id = self.context.get('school_id')
         if school_id:
-            qs = Subject.objects.filter(school_id=school_id, code=value, is_active=True)
+            qs = Subject.objects.filter(school_id=school_id, code=value)
             if self.instance:
                 qs = qs.exclude(pk=self.instance.pk)
             if qs.exists():
@@ -44,6 +44,8 @@ class SubjectBulkCreateSerializer(serializers.Serializer):
 
 class ClassSubjectSerializer(serializers.ModelSerializer):
     class_name = serializers.CharField(source='class_obj.name', read_only=True)
+    class_section = serializers.CharField(source='class_obj.section', read_only=True, default='')
+    class_grade_level = serializers.IntegerField(source='class_obj.grade_level', read_only=True, default=0)
     subject_name = serializers.CharField(source='subject.name', read_only=True)
     subject_code = serializers.CharField(source='subject.code', read_only=True)
     teacher_name = serializers.SerializerMethodField()
@@ -55,6 +57,7 @@ class ClassSubjectSerializer(serializers.ModelSerializer):
         model = ClassSubject
         fields = [
             'id', 'school', 'class_obj', 'class_name',
+            'class_section', 'class_grade_level',
             'subject', 'subject_name', 'subject_code',
             'teacher', 'teacher_name',
             'academic_year', 'academic_year_name',
