@@ -120,6 +120,9 @@ export const attendanceApi = {
   // Get attendance records
   getRecords: (params) => api.get('/api/attendance/records/', { params }),
 
+  // Lightweight register data (only student_id, date, status — no pagination overhead)
+  getRegisterData: (params) => api.get('/api/attendance/records/register_data/', { params }),
+
   // Get daily report
   getDailyReport: (date, schoolId, academicYearId) =>
     api.get('/api/attendance/records/daily_report/', {

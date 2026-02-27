@@ -572,7 +572,7 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
 
     def get_queryset(self):
         queryset = AttendanceRecord.objects.select_related(
-            'school', 'student', 'student__class_obj', 'upload'
+            'school', 'student', 'student__class_obj', 'upload', 'academic_year'
         )
 
         # Filter by active school (works for all users including super admin)
@@ -620,6 +620,39 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
             queryset = queryset.filter(status=record_status)
 
         return queryset.order_by('-date', 'student__class_obj', 'student__roll_number')
+
+    @action(detail=False, methods=['get'])
+    def register_data(self, request):
+        """
+        Lightweight endpoint for the register page.
+        Returns only (student, date, status) using .values() — no serializer overhead,
+        no unnecessary JOINs, no pagination COUNT(*) query.
+        """
+        class_id = request.query_params.get('class_id')
+        date_from = request.query_params.get('date_from')
+        date_to = request.query_params.get('date_to')
+
+        if not class_id or not date_from or not date_to:
+            return Response(
+                {'detail': 'class_id, date_from, and date_to are required.'},
+                status=400,
+            )
+
+        active_school_id = ensure_tenant_school_id(request)
+        if not active_school_id:
+            return Response({'detail': 'School context required.'}, status=400)
+
+        records = (
+            AttendanceRecord.objects
+            .filter(
+                school_id=active_school_id,
+                student__class_obj_id=class_id,
+                date__gte=date_from,
+                date__lte=date_to,
+            )
+            .values('student_id', 'date', 'status')
+        )
+        return Response(list(records))
 
     @action(detail=False, methods=['get'])
     def daily_report(self, request):

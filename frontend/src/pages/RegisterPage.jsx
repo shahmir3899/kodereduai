@@ -77,21 +77,19 @@ function RegisterTab() {
 
   const { data: recordsData, isLoading, error } = useQuery({
     queryKey: ['attendanceRecords', dateFrom, dateTo, classId],
-    queryFn: () => {
-      const params = { date_from: dateFrom, date_to: dateTo, page_size: 2000 }
-      if (classId) params.class_id = classId
-      return attendanceApi.getRecords(params)
-    },
+    queryFn: () => attendanceApi.getRegisterData({
+      class_id: classId, date_from: dateFrom, date_to: dateTo,
+    }),
     enabled: !!classId,
   })
-  const records = recordsData?.data?.results || recordsData?.data || []
+  const records = recordsData?.data || []
 
   const { students, datesWithData, summary } = useMemo(() => {
     const attendanceMap = {}
     const datesSet = new Set()
     let totalPresent = 0, totalAbsent = 0
     for (const r of records) {
-      const sid = r.student || r.student_id
+      const sid = r.student_id || r.student
       if (!attendanceMap[sid]) attendanceMap[sid] = {}
       const dayNum = parseInt(r.date.split('-')[2], 10)
       attendanceMap[sid][dayNum] = r.status
