@@ -246,7 +246,7 @@ class ExamGroupSerializer(serializers.ModelSerializer):
     academic_year_name = serializers.CharField(source='academic_year.name', read_only=True)
     term_name = serializers.CharField(source='term.name', read_only=True, default=None)
     classes_count = serializers.IntegerField(read_only=True, default=0)
-    exams = ExamSerializer(many=True, read_only=True, source='active_exams')
+    exams = ExamSerializer(many=True, read_only=True, source='_prefetched_active_exams')
 
     class Meta:
         model = ExamGroup

@@ -103,6 +103,16 @@ export default function FeeCollectPage() {
       return
     }
     const payment = data.paymentList.find(p => p.id === id)
+
+    // monthly_fee edit: recalculate amount_due = previous_balance + new monthly fee
+    if (field === 'monthly_fee') {
+      const prevBal = Number(payment?.previous_balance || 0)
+      const newAmountDue = prevBal + parsedValue
+      data.paymentMutation.mutate({ id, data: { amount_due: newAmountDue } })
+      setEditingCell(null)
+      return
+    }
+
     if (parsedValue > 0 && (!payment || !payment.account)) {
       setEditingCell(null)
       showWarning('Account required — opening payment form')

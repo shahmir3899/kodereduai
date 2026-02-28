@@ -499,9 +499,9 @@ export const sessionsApi = {
   getEnrollmentsByClass: (params) => api.get('/api/sessions/enrollments/by_class/', { params }),
   bulkPromote: (data) => api.post('/api/sessions/enrollments/bulk_promote/', data),
 
-  // Setup Wizard
-  setupPreview: (data) => api.post('/api/sessions/setup-wizard/', { action: 'preview', ...data }),
-  setupApply: (previewData) => api.post('/api/sessions/setup-wizard/', { action: 'apply', preview_data: previewData }),
+  // Setup Wizard (longer timeout for heavy DB operations)
+  setupPreview: (data) => api.post('/api/sessions/setup-wizard/', { action: 'preview', ...data }, { timeout: 60000 }),
+  setupApply: (previewData) => api.post('/api/sessions/setup-wizard/', { action: 'apply', preview_data: previewData }, { timeout: 60000 }),
 
   // AI Promotion Advisor
   getPromotionAdvice: (data) => api.post('/api/sessions/promotion-advisor/', data),

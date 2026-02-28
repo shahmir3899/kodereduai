@@ -319,7 +319,7 @@ class TransportVehicleViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
         return TransportVehicleReadSerializer
 
     def get_queryset(self):
-        queryset = TransportVehicle.objects.select_related('school', 'assigned_route')
+        queryset = TransportVehicle.objects.select_related('school', 'assigned_route', 'driver_user')
 
         school_id = _resolve_school_id(self.request)
         if school_id:

@@ -121,6 +121,16 @@ class FaceAttendanceSessionViewSet(ModuleAccessMixin, TenantQuerySetMixin, views
         if date_filter:
             qs = qs.filter(date=date_filter)
 
+        # Prefetch detections with matched_student for detail view
+        if self.action == 'retrieve':
+            from django.db.models import Prefetch
+            qs = qs.prefetch_related(
+                Prefetch(
+                    'detections',
+                    queryset=FaceDetectionResult.objects.select_related('matched_student'),
+                ),
+            )
+
         return qs
 
     def get_serializer_class(self):

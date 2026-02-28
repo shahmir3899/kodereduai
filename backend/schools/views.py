@@ -49,7 +49,7 @@ class SuperAdminSchoolViewSet(viewsets.ModelViewSet):
         return SchoolSerializer
 
     def get_queryset(self):
-        queryset = School.objects.annotate(
+        queryset = School.objects.select_related('organization').annotate(
             user_count=Count('users'),
             student_count=Count('students', filter=Q(students__is_active=True))
         )
@@ -224,14 +224,15 @@ class SchoolViewSet(TenantQuerySetMixin, viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self):
         """Filter to only show schools the user has access to."""
+        base_qs = School.objects.select_related('organization')
         if self.request.user.is_super_admin:
-            return School.objects.all()
+            return base_qs.all()
 
         school_ids = self.request.user.get_accessible_school_ids()
         if school_ids:
-            return School.objects.filter(id__in=school_ids)
+            return base_qs.filter(id__in=school_ids)
 
-        return School.objects.none()
+        return base_qs.none()
 
     @action(detail=False, methods=['get'])
     def current(self, request):

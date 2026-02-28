@@ -78,8 +78,19 @@ class ExamGroupViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
         return ctx
 
     def get_queryset(self):
+        from django.db.models import Prefetch
         qs = super().get_queryset().select_related(
             'school', 'academic_year', 'term', 'exam_type',
+        ).prefetch_related(
+            Prefetch(
+                'exams',
+                queryset=Exam.objects.filter(is_active=True).select_related(
+                    'class_obj', 'exam_type', 'academic_year', 'term',
+                ).annotate(
+                    subjects_count=Count('exam_subjects', filter=Q(exam_subjects__is_active=True)),
+                ),
+                to_attr='_prefetched_active_exams',
+            ),
         ).annotate(
             classes_count=Count('exams'),
         )

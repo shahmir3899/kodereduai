@@ -20,6 +20,11 @@ export default function SessionSetupWizard({ onClose }) {
   })
   const [preview, setPreview] = useState(null)
 
+  const getErrorMsg = (err, fallback) => {
+    if (!err?.response) return 'Server unreachable — please check your connection and try again.'
+    return err.response?.data?.detail || err.response?.data?.error || fallback
+  }
+
   // Generate preview
   const previewMutation = useMutation({
     mutationFn: (data) => sessionsApi.setupPreview(data),
@@ -32,13 +37,14 @@ export default function SessionSetupWizard({ onClose }) {
       setStep(2)
     },
     onError: (err) => {
-      addToast(err.response?.data?.detail || 'Failed to generate preview', 'error')
+      addToast(getErrorMsg(err, 'Failed to generate preview'), 'error')
     },
   })
 
   // Apply setup
   const applyMutation = useMutation({
     mutationFn: (data) => sessionsApi.setupApply(data),
+    retry: 1,
     onSuccess: (res) => {
       if (res.data.success) {
         addToast(
@@ -55,7 +61,7 @@ export default function SessionSetupWizard({ onClose }) {
       }
     },
     onError: (err) => {
-      addToast(err.response?.data?.detail || 'Setup failed', 'error')
+      addToast(getErrorMsg(err, 'Setup failed'), 'error')
     },
   })
 

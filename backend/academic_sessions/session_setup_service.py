@@ -79,6 +79,16 @@ class SessionSetupService:
 
         if source_terms.exists():
             year_shift = new_start_date.year - source_year.start_date.year
+
+            # Pre-fetch existing terms for sync mode (single query instead of N+1)
+            existing_terms_map = {}
+            if sync_mode:
+                existing_terms_map = {
+                    t.name: t for t in Term.objects.filter(
+                        school_id=self.school_id, academic_year=existing_year,
+                    )
+                }
+
             for term in source_terms:
                 new_term_start = self._shift_date(term.start_date, year_shift)
                 new_term_end = self._shift_date(term.end_date, year_shift)
@@ -98,11 +108,7 @@ class SessionSetupService:
 
                 # Sync annotation
                 if sync_mode:
-                    existing_term = Term.objects.filter(
-                        school_id=self.school_id,
-                        academic_year=existing_year,
-                        name=term.name,
-                    ).first()
+                    existing_term = existing_terms_map.get(term.name)
                     if existing_term:
                         changes = {}
                         if str(existing_term.start_date) != str(new_term_start):
@@ -134,6 +140,16 @@ class SessionSetupService:
             ).exists() else {})
         ).select_related('class_obj', 'subject', 'teacher')
 
+        # Pre-fetch existing class-subjects for sync mode (single query instead of N+1)
+        existing_cs_map = {}
+        if sync_mode:
+            existing_cs_map = {
+                (cs.class_obj_id, cs.subject_id): cs
+                for cs in ClassSubject.objects.filter(
+                    school_id=self.school_id,
+                ).select_related('teacher')
+            }
+
         for cs in source_assignments:
             cs_dict = {
                 'class_id': cs.class_obj_id,
@@ -148,11 +164,7 @@ class SessionSetupService:
 
             # Sync annotation — unique key is (school, class_obj, subject)
             if sync_mode:
-                existing_cs = ClassSubject.objects.filter(
-                    school_id=self.school_id,
-                    class_obj_id=cs.class_obj_id,
-                    subject_id=cs.subject_id,
-                ).select_related('teacher').first()
+                existing_cs = existing_cs_map.get((cs.class_obj_id, cs.subject_id))
                 if existing_cs:
                     changes = {}
                     if existing_cs.teacher_id != cs.teacher_id:
@@ -195,21 +207,18 @@ class SessionSetupService:
             'will_clone': timetable_count > 0,
         }
 
-        # Timetable sync annotation
+        # Timetable sync annotation (single query instead of N+1)
         if sync_mode and timetable_count > 0:
-            overlap = 0
-            new_count = 0
-            for entry in source_entries.only('class_obj_id', 'day', 'slot_id'):
-                exists = TimetableEntry.objects.filter(
+            existing_keys = set(
+                TimetableEntry.objects.filter(
                     school_id=self.school_id,
-                    class_obj_id=entry.class_obj_id,
-                    day=entry.day,
-                    slot_id=entry.slot_id,
-                ).exists()
-                if exists:
-                    overlap += 1
-                else:
-                    new_count += 1
+                ).values_list('class_obj_id', 'day', 'slot_id')
+            )
+            source_keys = set(
+                source_entries.values_list('class_obj_id', 'day', 'slot_id')
+            )
+            overlap = len(source_keys & existing_keys)
+            new_count = len(source_keys - existing_keys)
             preview['timetable_summary']['updates'] = overlap
             preview['timetable_summary']['new'] = new_count
 

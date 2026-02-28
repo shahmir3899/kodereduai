@@ -125,8 +125,8 @@ class AttendanceUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
 
     def get_queryset(self):
         queryset = AttendanceUpload.objects.select_related(
-            'school', 'class_obj', 'created_by', 'confirmed_by'
-        )
+            'school', 'class_obj', 'created_by', 'confirmed_by', 'academic_year'
+        ).prefetch_related('images')
 
         # Filter by active school (works for all users including super admin)
         active_school_id = ensure_tenant_school_id(self.request)

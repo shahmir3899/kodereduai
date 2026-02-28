@@ -155,7 +155,8 @@
       "Bash(printf \"\\\\n18. InventoryItemsPage.jsx\\\\n\")",
       "Bash(printf \"\\\\n19. ExamsPage.jsx\\\\n\")",
       "Bash(printf \"\\\\n20. FaceAttendancePage.jsx\\\\n\")",
-      "Bash(printf \"\\\\n21. TransportDashboard.jsx\\\\n\")"
+      "Bash(printf \"\\\\n21. TransportDashboard.jsx\\\\n\")",
+      "Bash(/dev/null:*)"
     ]
   }
 }

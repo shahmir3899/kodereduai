@@ -358,7 +358,7 @@ class LessonPlanViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
     def get_queryset(self):
         queryset = super().get_queryset().select_related(
             'school', 'academic_year', 'class_obj', 'subject', 'teacher',
-        ).prefetch_related('attachments')
+        ).prefetch_related('attachments', 'planned_topics')
 
         # Filter by class
         class_id = self.request.query_params.get('class_id')
