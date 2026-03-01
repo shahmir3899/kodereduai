@@ -4,7 +4,7 @@
 
 # Start Celery worker in background
 echo "==> Starting Celery worker..."
-celery -A config worker -l info --concurrency=2 &
+celery -A config worker -l info --concurrency=1 &
 CELERY_PID=$!
 
 # Start Gunicorn in foreground

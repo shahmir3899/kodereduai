@@ -1034,6 +1034,7 @@ export const messagingApi = {
 export const tasksApi = {
   getMyTasks: () => api.get('/api/tasks/tasks/'),
   getTask: (taskId) => api.get(`/api/tasks/tasks/${taskId}/`),
+  cancelTask: (taskId) => api.post(`/api/tasks/tasks/${taskId}/cancel/`),
   getAIInsights: (params) => api.get('/api/tasks/ai-insights/', { params }),
 }
 

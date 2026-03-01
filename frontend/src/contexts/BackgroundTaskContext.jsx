@@ -105,6 +105,16 @@ export function BackgroundTaskProvider({ children }) {
     setDismissedTaskIds(prev => [...prev, ...completedIds])
   }, [visibleTasks])
 
+  const cancelTask = useCallback(async (taskId) => {
+    try {
+      await tasksApi.cancelTask(taskId)
+      queryClient.invalidateQueries({ queryKey: ['backgroundTasks'] })
+      showSuccess('Task cancelled')
+    } catch {
+      showError('Failed to cancel task')
+    }
+  }, [queryClient, showSuccess, showError])
+
   return (
     <BackgroundTaskContext.Provider value={{
       tasks: visibleTasks,
@@ -112,6 +122,7 @@ export function BackgroundTaskProvider({ children }) {
       addTask,
       dismissTask,
       dismissAll,
+      cancelTask,
       activeCount: activeTasks.length,
       totalCount: visibleTasks.length,
     }}>

@@ -43,7 +43,7 @@ export function TaskDrawerButton() {
 }
 
 function TaskDrawerPanel({ onClose }) {
-  const { tasks, dismissTask, dismissAll } = useBackgroundTasks()
+  const { tasks, dismissTask, dismissAll, cancelTask } = useBackgroundTasks()
 
   return (
     <>
@@ -76,7 +76,7 @@ function TaskDrawerPanel({ onClose }) {
             <p className="text-sm text-gray-500 text-center py-8">No tasks</p>
           ) : (
             tasks.map(task => (
-              <TaskItem key={task.celery_task_id} task={task} onDismiss={dismissTask} />
+              <TaskItem key={task.celery_task_id} task={task} onDismiss={dismissTask} onCancel={cancelTask} />
             ))
           )}
         </div>
@@ -85,10 +85,11 @@ function TaskDrawerPanel({ onClose }) {
   )
 }
 
-function TaskItem({ task, onDismiss }) {
+function TaskItem({ task, onDismiss, onCancel }) {
   const config = STATUS_CONFIG[task.status] || STATUS_CONFIG.PENDING
   const showProgress = (task.status === 'IN_PROGRESS' || task.status === 'PENDING') && task.progress_total > 0
   const percent = task.progress_percent
+  const isActive = task.status === 'PENDING' || task.status === 'IN_PROGRESS'
 
   return (
     <div className={`${config.bg} rounded-lg p-3 border border-gray-200`}>
@@ -100,6 +101,14 @@ function TaskItem({ task, onDismiss }) {
             <p className={`text-xs ${config.color}`}>{config.label}</p>
           </div>
         </div>
+        {isActive && (
+          <button
+            onClick={() => onCancel(task.celery_task_id)}
+            className="text-xs text-red-500 hover:text-red-700 ml-2 whitespace-nowrap"
+          >
+            Cancel
+          </button>
+        )}
         {(task.status === 'SUCCESS' || task.status === 'FAILED') && (
           <button
             onClick={() => onDismiss(task.celery_task_id)}

@@ -306,10 +306,14 @@ def resolve_fee_amount(student, fee_type='MONTHLY'):
     from datetime import date
     today = date.today()
 
+    # Use _id fields to avoid triggering FK lookups (N+1 queries)
+    school_id = student.school_id
+    class_obj_id = student.class_obj_id
+
     # Try student-level first
     student_fee = FeeStructure.objects.filter(
-        school=student.school,
-        student=student,
+        school_id=school_id,
+        student_id=student.pk,
         fee_type=fee_type,
         is_active=True,
         effective_from__lte=today,
@@ -322,8 +326,8 @@ def resolve_fee_amount(student, fee_type='MONTHLY'):
 
     # Fall back to class-level
     class_fee = FeeStructure.objects.filter(
-        school=student.school,
-        class_obj=student.class_obj,
+        school_id=school_id,
+        class_obj_id=class_obj_id,
         student__isnull=True,
         fee_type=fee_type,
         is_active=True,

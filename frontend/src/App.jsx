@@ -26,6 +26,7 @@ const OtherIncomePage = lazy(() => import('./pages/fee-collection/OtherIncomePag
 const ExpensesPage = lazy(() => import('./pages/ExpensesPage'))
 const FinanceDashboardPage = lazy(() => import('./pages/FinanceDashboardPage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
+const SchoolSetupPage = lazy(() => import('./pages/SchoolSetupPage'))
 const StudentProfilePage = lazy(() => import('./pages/StudentProfilePage'))
 const NotificationsPage = lazy(() => import('./pages/NotificationsPage'))
 
@@ -274,6 +275,7 @@ function App() {
             <Route path="attendance/review" element={<Navigate to="/attendance?tab=review" replace />} />
             <Route path="attendance/records" element={<Navigate to="/attendance/register" replace />} />
             <Route path="settings" element={<SchoolRoute><SettingsPage /></SchoolRoute>} />
+            <Route path="school-setup" element={<SchoolRoute><SchoolSetupPage /></SchoolRoute>} />
             <Route path="accuracy" element={<Navigate to="/attendance/register?tab=analytics" replace />} />
 
             <Route path="students" element={<SchoolRoute><ModuleRoute module="students"><StudentsPage /></ModuleRoute></SchoolRoute>} />

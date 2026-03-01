@@ -3,7 +3,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useAcademicYear } from '../contexts/AcademicYearContext'
 import { attendanceApi, financeApi, tasksApi } from '../services/api'
 import { Link } from 'react-router-dom'
-import SchoolCompletionWidget from '../components/SchoolCompletionWidget'
+
 import SessionHealthWidget from '../components/SessionHealthWidget'
 import AttendanceRiskWidget from '../components/AttendanceRiskWidget'
 
@@ -103,9 +103,6 @@ export default function DashboardPage({ variant }) {
           </Link>
         </div>
       )}
-
-      {/* School Setup Progress */}
-      <SchoolCompletionWidget />
 
       {/* Session Health Widget */}
       <SessionHealthWidget />

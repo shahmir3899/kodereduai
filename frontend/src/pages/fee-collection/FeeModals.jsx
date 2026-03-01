@@ -96,13 +96,13 @@ export function GenerateModal({ show, onClose, month, year, classList, mutation,
 
   const isMonthly = generateFeeType === 'MONTHLY'
 
-  // Auto-close modal when task completes (monthly = background task, onetime = regular mutation)
+  // Auto-close modal when task is submitted (monthly = background task) or completes (onetime = regular mutation)
   useEffect(() => {
-    if (show && (mutation.isComplete || onetimeMutation?.isSuccess)) {
-      const timer = setTimeout(() => handleClose(), 1500)
+    if (show && (mutation.submittedTaskId || onetimeMutation?.isSuccess)) {
+      const timer = setTimeout(() => handleClose(), mutation.submittedTaskId ? 300 : 1500)
       return () => clearTimeout(timer)
     }
-  }, [show, mutation.isComplete, onetimeMutation?.isSuccess])
+  }, [show, mutation.submittedTaskId, onetimeMutation?.isSuccess])
 
   // Reset state when modal opens
   useEffect(() => {
