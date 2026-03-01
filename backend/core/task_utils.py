@@ -3,6 +3,7 @@ Utilities for dispatching and tracking background Celery tasks.
 """
 
 import logging
+import time
 import uuid
 
 from django.db import models
@@ -11,6 +12,60 @@ from django.utils import timezone
 from .models import BackgroundTask
 
 logger = logging.getLogger(__name__)
+
+# Cache worker availability to avoid pinging Redis on every request.
+# Format: (timestamp, is_available)
+_worker_cache = {'checked_at': 0.0, 'available': False}
+_WORKER_CACHE_TTL = 30  # seconds
+
+
+def _celery_worker_available():
+    """
+    Quick check whether at least one Celery worker is connected.
+
+    Result is cached for _WORKER_CACHE_TTL seconds to avoid overhead.
+    Returns False if Redis is unreachable or no workers respond.
+    """
+    now = time.monotonic()
+    if now - _worker_cache['checked_at'] < _WORKER_CACHE_TTL:
+        return _worker_cache['available']
+
+    try:
+        from config.celery import app as celery_app
+        # ping() returns a list of dicts, one per worker: [{'worker1': {'ok': 'pong'}}]
+        result = celery_app.control.ping(timeout=2.0)
+        available = bool(result)
+    except Exception:
+        available = False
+
+    _worker_cache['checked_at'] = now
+    _worker_cache['available'] = available
+    if not available:
+        logger.warning("Celery worker ping failed — no active workers detected")
+    return available
+
+
+def _run_sync_fallback(celery_task_func, task_type, title, school_id, user,
+                       task_args, task_kwargs, progress_total):
+    """Create a BackgroundTask and run the Celery task synchronously."""
+    celery_task_id = f"sync-{uuid.uuid4()}"
+    bg_task = BackgroundTask.objects.create(
+        school_id=school_id,
+        celery_task_id=celery_task_id,
+        task_type=task_type,
+        title=title,
+        status=BackgroundTask.Status.IN_PROGRESS,
+        progress_total=progress_total,
+        triggered_by=user,
+    )
+    try:
+        celery_task_func.apply(
+            args=task_args, kwargs=task_kwargs, task_id=celery_task_id,
+        )
+    except Exception as task_exc:
+        logger.exception(f"Sync fallback failed for '{title}'")
+        mark_task_failed(celery_task_id, str(task_exc)[:500])
+    return bg_task
 
 
 def dispatch_background_task(
@@ -26,8 +81,8 @@ def dispatch_background_task(
     """
     Create a BackgroundTask record and dispatch the Celery task.
 
-    If Celery/Redis is unavailable, falls back to running the task
-    synchronously so the operation still completes.
+    If Celery/Redis is unavailable or no worker is running, falls back to
+    running the task synchronously so the operation still completes.
 
     Returns the BackgroundTask instance (with celery_task_id set).
     """
@@ -60,30 +115,27 @@ def dispatch_background_task(
         logger.info(f"Dispatched background task {celery_task_id}: {title}")
         return bg_task
 
+    # Production: verify a worker is alive before dispatching to Celery.
+    # .delay() succeeds as long as Redis is reachable, even if no worker
+    # is running — the task would sit in the queue forever as PENDING.
+    if not _celery_worker_available():
+        logger.warning(f"No Celery worker available, running '{title}' synchronously")
+        return _run_sync_fallback(
+            celery_task_func, task_type, title, school_id, user,
+            task_args, task_kwargs, progress_total,
+        )
+
     try:
         result = celery_task_func.delay(*task_args, **task_kwargs)
         celery_task_id = result.id
     except Exception as e:
         logger.warning(f"Celery unavailable, running '{title}' synchronously: {e}")
-        celery_task_id = f"sync-{uuid.uuid4()}"
-        # Run synchronously — create the record first, then execute
-        bg_task = BackgroundTask.objects.create(
-            school_id=school_id,
-            celery_task_id=celery_task_id,
-            task_type=task_type,
-            title=title,
-            status=BackgroundTask.Status.IN_PROGRESS,
-            progress_total=progress_total,
-            triggered_by=user,
+        # Invalidate the worker cache so next dispatch re-checks
+        _worker_cache['checked_at'] = 0.0
+        return _run_sync_fallback(
+            celery_task_func, task_type, title, school_id, user,
+            task_args, task_kwargs, progress_total,
         )
-        try:
-            celery_task_func.apply(
-                args=task_args, kwargs=task_kwargs, task_id=celery_task_id,
-            )
-        except Exception as task_exc:
-            logger.exception(f"Sync fallback failed for '{title}'")
-            mark_task_failed(celery_task_id, str(task_exc)[:500])
-        return bg_task
 
     bg_task = BackgroundTask.objects.create(
         school_id=school_id,

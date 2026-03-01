@@ -51,6 +51,14 @@ All AI chat widgets support multi-round tool calling (LLM calls multiple tools p
 - **SchoolCompletionWidget.jsx** — School setup completion timeline with per-module progress. Calls `GET /api/schools/completion/` via `schoolsApi.getCompletion()`
 - **AIInsightsCard.jsx** — Cross-module AI insights card on admin dashboard. Shows top 10 actionable insights (alerts, warnings, info) from attendance, finance, academics, HR. Color-coded by type with action links. Calls `GET /api/tasks/ai-insights/` via `tasksApi.getAIInsights()`
 
+### Shared Dashboard Components (src/components/dashboard/)
+Reusable components created during the dashboard redesign. Used across all role-specific dashboards.
+
+- **StatCard.jsx** — Reusable KPI card with icon, large value, subtitle, color theming (sky, green, red, amber, blue, purple, orange, gray), loading skeleton, optional Link wrapper. Props: `{ label, value, subtitle, icon, color, href, loading }`
+- **QuickActionGrid.jsx** — Grid of icon action buttons with optional badge counts. 2-col on mobile, 3-col on sm+. Props: `{ actions: [{label, href, icon, color, badge}] }`
+- **NotificationsFeed.jsx** — Self-contained notification list component. Fetches `notificationsApi.getMyNotifications({limit})` via React Query. Shows time-ago formatting, unread indicators (blue dot), "View All Notifications" link. Props: `{ limit }`
+- **ModuleHealthCard.jsx** — Compact module status card with metric, status dot (green/yellow/red/gray), optional Link wrapper, loading skeleton. Used in admin dashboard Module Health Grid. Props: `{ icon, label, metric, metricLabel, status, href, loading }`
+
 ### AI Accuracy Dashboard Cards (in CaptureReviewPage.jsx)
 - **Threshold Configuration Card** — Displays current per-school AI thresholds (fuzzy match, confidence, etc.), auto-tune toggle, last tuned date, history. Calls `GET/POST threshold_status/`, `tune_thresholds/`
 - **Pipeline Configuration Card** — Primary provider selector (Google Vision / Groq Vision / Tesseract), fallback chain, multi-pipeline voting toggle. Pipeline badge on reviewed uploads.
@@ -63,11 +71,13 @@ All AI chat widgets support multi-round tool calling (LLM calls multiple tools p
 The `/dashboard` route renders **DashboardRouter.jsx** which switches on `effectiveRole`:
 
 - **DashboardRouter.jsx** — Switcher component. Lazy-loads role-specific dashboards, eagerly imports DashboardPage (most common).
-- **DashboardPage.jsx** — SCHOOL_ADMIN / PRINCIPAL dashboard. Accepts `variant` prop; `variant="principal"` shows academic quick actions (Lesson Plans, Examinations, Class Management) instead of admin actions (Upload/Review Attendance, Manage Students).
-- **TeacherDashboard.jsx** (src/pages/teacher/) — Today's timetable (`academicsApi.getMyTimetable`), stats (attendance to mark, pending grading, active assignments), submissions needing grading, 6 quick actions, notifications.
-- **HRManagerDashboard.jsx** — 4 KPI cards from `hrApi.getDashboardStats()`, 6 quick actions linking to /hr sub-pages, notifications.
-- **AccountantDashboard.jsx** — 4 KPI cards from `financeApi.getAccountBalances()`, `getMonthlySummary()`, `getFinanceSummary()`, 5 quick actions linking to /finance, notifications.
-- **StaffDashboard.jsx** (src/pages/staff/) — Notifications list, conditional quick links (Profile, Notifications, Library if module enabled, Inventory if module enabled).
+- **DashboardPage.jsx** — SCHOOL_ADMIN / PRINCIPAL dashboard. Module-aware command center with: 4 KPI StatCards (Students, Attendance Rate, Fee Collection, Staff Present — all module-gated), collapsible AI Insights with module badges, two-column layout with Module Health Grid (10 modules with status dots), Attendance bar, Finance snapshot, Session Health, Attendance Risk (left column); Quick Actions (8 module-gated buttons), NotificationsFeed (right column). Principal variant shows academic-focused quick actions. All sections use `isModuleEnabled()` gating.
+- **TeacherDashboard.jsx** (src/pages/teacher/) — 4 StatCards (Classes Today with "Now: Subject" subtitle, Attendance to Mark, Pending Grading, Upcoming Exams), enhanced timetable with current period highlighting (sky-blue bg + "Now" badge), Exams & Marks Entry section with "Enter Marks" links, Lesson Plans This Week with progress bar (completed/published/draft counts), QuickActionGrid, NotificationsFeed. All sections module-gated.
+- **HRManagerDashboard.jsx** — 6 KPI StatCards (2 rows of 3: Total Staff, On Leave, Pending Leave, Staff Present %, Payroll This Month, Payslip Status), department breakdown with horizontal bar chart, pending leave requests with inline Approve/Reject buttons (useMutation), top absentees table, payroll overview (basic + allowances + deductions = net), QuickActionGrid, NotificationsFeed.
+- **AccountantDashboard.jsx** — 4 enhanced StatCards, fee collection by class table (color-coded rates: green ≥80%, yellow ≥50%, red <50%), recent transactions list (credit/debit formatting), overdue fees list, income vs expense visual bars with net balance, per-account balances with type badges, QuickActionGrid, NotificationsFeed.
+- **StaffDashboard.jsx** (src/pages/staff/) — Resolves myStaffId via `hrApi.getStaff({user: userId})`. 4 StatCards (Attendance This Month, Leave Balance, Last Salary, Notifications), mini attendance calendar grid with color-coded days (present=green, absent=red, leave=amber, today=ring), leave balance breakdown per type, recent payslips with status badges, assigned inventory items, NotificationsFeed.
+- **StudentDashboard.jsx** (src/pages/student/) — Welcome card with gradient, 4 stat cards (Attendance, Fee Due, Assignments, Last Exam Score from `studentPortalApi.getExamResults`), two-column layout: timetable with current period highlighting, assignments with urgency indicators, recent exam results with percentage badges (left); quick links (6 items), NotificationsFeed (right).
+- **ParentDashboard.jsx** (src/pages/parent/) — Per-child cards with `getChildOverview()` data: attendance rate, fees due (PKR amount), last exam %, today's status (Present/Absent/Late). Per-child action buttons (Attendance, Fees, Results, Timetable, Apply Leave). Shared QuickActionGrid + NotificationsFeed. Loading skeletons per child card.
 
 ### Attendance Components
 - **ManualEntryTab** (in RegisterPage.jsx) — Manual attendance entry with class/date selectors and P/A toggle grid. Tab within RegisterPage at `/attendance/register?tab=manual`. Calls `attendanceApi.getMyAttendanceClasses()`, `studentsApi.getStudents()`, `attendanceApi.getRecords()`, `attendanceApi.bulkEntryAttendance()`. Visible to Admin, Principal, Teacher only. Follows MarksEntryPage.jsx spreadsheet-style entry pattern.

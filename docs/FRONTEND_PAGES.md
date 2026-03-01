@@ -27,12 +27,12 @@ The `/dashboard` route uses **DashboardRouter.jsx** to render a role-specific da
 
 | Role | Component | Description |
 |------|-----------|-------------|
-| SCHOOL_ADMIN | DashboardPage.jsx | Admin dashboard with attendance stats, finance overview, SchoolCompletionWidget, AIInsightsCard |
+| SCHOOL_ADMIN | DashboardPage.jsx | Module-aware command center: 4 KPI cards (Students, Attendance, Fees, Staff), AI Insights with module badges, Module Health Grid (10 modules), Attendance bar, Finance snapshot, Session Health, Attendance Risk, Quick Actions, NotificationsFeed. All sections module-gated |
 | PRINCIPAL | DashboardPage.jsx (variant="principal") | Same as admin but quick actions show Lesson Plans, Examinations, Class Management |
-| TEACHER | TeacherDashboard.jsx | Daily command center: today's timetable, grading queue, assignments, quick actions |
-| HR_MANAGER | HRManagerDashboard.jsx | HR KPIs (staff count, leave, attendance), quick links to /hr |
-| ACCOUNTANT | AccountantDashboard.jsx | Finance KPIs (balances, fees, collection rate), quick links to /finance |
-| STAFF | StaffDashboard.jsx | Minimal: notifications + conditional quick links (profile, library, inventory) |
+| TEACHER | TeacherDashboard.jsx | 4 KPIs (Classes Today with "Now" indicator, Attendance to Mark, Pending Grading, Upcoming Exams), timetable with current period highlighting, Exams & Marks Entry, Lesson Plans progress bar, Quick Actions, NotificationsFeed |
+| HR_MANAGER | HRManagerDashboard.jsx | 6 KPIs (2 rows), department breakdown bars, pending leave with inline approve/reject, top absentees, payroll overview, Quick Actions, NotificationsFeed |
+| ACCOUNTANT | AccountantDashboard.jsx | 4 KPIs, fee collection by class (color-coded), recent transactions, overdue fees, income vs expense bars, per-account balances, Quick Actions, NotificationsFeed |
+| STAFF | StaffDashboard.jsx | 4 KPIs (Attendance, Leave, Salary, Notifications), mini attendance calendar, leave balance breakdown, recent payslips, assigned inventory, NotificationsFeed |
 
 | Route | Component | Description | API Calls |
 |-------|-----------|-------------|-----------|
@@ -164,7 +164,7 @@ Redirects: /attendance/upload, /attendance/review, /attendance/records → remap
 ## Parent Portal
 | Route | Component | Description | API Calls |
 |-------|-----------|-------------|-----------|
-| /parent/dashboard | ParentDashboard.jsx | Parent home | GET my-children/ |
+| /parent/dashboard | ParentDashboard.jsx | Parent home with rich per-child cards (overview data: attendance, fees, exams, today's status), per-child action buttons, QuickActionGrid, NotificationsFeed | GET my-children/, GET children/{id}/overview/ per child |
 | /parent/children/:studentId | ChildOverview.jsx | Child detail | GET children/{id}/overview/ |
 | /parent/children/:studentId/attendance | ChildAttendance.jsx | | GET children/{id}/attendance/ |
 | /parent/children/:studentId/fees | ChildFees.jsx | | GET children/{id}/fees/ |
@@ -177,7 +177,7 @@ Redirects: /attendance/upload, /attendance/review, /attendance/records → remap
 ## Student Portal
 | Route | Component | Description | API Calls |
 |-------|-----------|-------------|-----------|
-| /student/dashboard | StudentDashboard.jsx | Student home | GET portal/dashboard/ |
+| /student/dashboard | StudentDashboard.jsx | Student home: 4 stat cards (Attendance, Fees, Assignments, Last Exam), two-column layout with timetable (current period highlight), assignments (urgency indicators), recent exam results, quick links (6), NotificationsFeed | GET portal/dashboard/, GET portal/exam-results/ |
 | /student/attendance | StudentAttendance.jsx | View attendance | GET portal/attendance/ |
 | /student/fees | StudentFees.jsx | View fees | GET portal/fees/ |
 | /student/timetable | StudentTimetable.jsx | View timetable | GET portal/timetable/ |

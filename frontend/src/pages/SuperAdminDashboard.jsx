@@ -944,118 +944,203 @@ export default function SuperAdminDashboard() {
       {/* ════════════════════ Modules Tab ════════════════════ */}
       {activeTab === 'modules' && (
         <div className="space-y-6">
-          {/* Error banner (only shown on failure — optimistic UI handles success) */}
+          {/* Error banner */}
           {moduleMsg?.type === 'error' && (
-            <div className="px-4 py-3 rounded-lg text-sm font-medium bg-red-50 text-red-700 border border-red-200">
-              {moduleMsg.text}
-              <button onClick={() => setModuleMsg(null)} className="float-right font-bold hover:opacity-70">&times;</button>
+            <div className="flex items-center gap-2 px-4 py-3 rounded-lg text-sm bg-red-50 text-red-700 border border-red-200">
+              <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span className="flex-1 font-medium">{moduleMsg.text}</span>
+              <button onClick={() => setModuleMsg(null)} className="text-red-400 hover:text-red-600 p-0.5">&times;</button>
             </div>
           )}
 
-          {/* Organization Module Ceiling */}
-          <div className="card">
-            <h2 className="text-lg font-semibold text-gray-900 mb-1">Organization Module Control</h2>
-            <p className="text-sm text-gray-500 mb-4">Set which modules are available to all schools in each organization. Disabling a module here removes it from all schools in the org.</p>
+          {/* Module Matrix — Org Ceiling */}
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-100 bg-purple-50/50">
+              <div className="flex items-center gap-2">
+                <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                </svg>
+                <div>
+                  <h2 className="text-base font-semibold text-gray-900">Organization Module Ceiling</h2>
+                  <p className="text-xs text-gray-500">Disabling a module here removes it from all schools in the organization</p>
+                </div>
+              </div>
+            </div>
 
             {orgsLoading ? (
-              <Spinner />
+              <div className="p-6"><Spinner /></div>
             ) : orgs.length === 0 ? (
-              <Empty text="No organizations yet. Create one in the Organizations tab." />
+              <div className="p-6"><Empty text="No organizations yet. Create one in the Organizations tab." /></div>
             ) : (
-              <div className="space-y-4">
-                {orgs.map((org) => (
-                  <div key={org.id} className="border border-gray-200 rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <div>
-                        <p className="font-medium text-gray-900">{org.name}</p>
-                        <p className="text-xs text-gray-500">{org.school_count || 0} school(s)</p>
-                      </div>
-                      <StatusBadge active={org.is_active} />
-                    </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                      {moduleRegistry.map((mod) => {
-                        const isOn = org.allowed_modules?.[mod.key] ?? true
-                        return (
-                          <label key={mod.key} className="flex items-center gap-2 text-sm cursor-pointer p-1.5 rounded hover:bg-gray-50">
-                            <input
-                              type="checkbox"
-                              checked={isOn}
-                              onChange={() => handleOrgModuleToggle(org, mod.key)}
-                              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                            />
-                            <span className={isOn ? 'text-gray-700' : 'text-gray-400'}>{mod.label}</span>
-                          </label>
-                        )
-                      })}
-                    </div>
-                  </div>
-                ))}
+              <div className="overflow-x-auto">
+                <table className="min-w-full">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-200">
+                      <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-5 py-3 sticky left-0 bg-gray-50 z-10 min-w-[180px]">Organization</th>
+                      {moduleRegistry.map((mod) => (
+                        <th key={mod.key} className="text-center text-xs font-medium text-gray-500 px-2 py-3 min-w-[80px]">
+                          <span className="block truncate" title={mod.description || mod.label}>{mod.label}</span>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {orgs.map((org) => {
+                      const enabledCount = moduleRegistry.filter(m => org.allowed_modules?.[m.key] ?? true).length
+                      return (
+                        <tr key={org.id} className="hover:bg-gray-50/50">
+                          <td className="px-5 py-3 sticky left-0 bg-white z-10">
+                            <div className="flex items-center gap-2">
+                              <div>
+                                <p className="text-sm font-medium text-gray-900">{org.name}</p>
+                                <p className="text-xs text-gray-400">{enabledCount}/{moduleRegistry.length} modules · {org.school_count || 0} schools</p>
+                              </div>
+                              <StatusBadge active={org.is_active} />
+                            </div>
+                          </td>
+                          {moduleRegistry.map((mod) => {
+                            const isOn = org.allowed_modules?.[mod.key] ?? true
+                            return (
+                              <td key={mod.key} className="text-center px-2 py-3">
+                                <button
+                                  onClick={() => handleOrgModuleToggle(org, mod.key)}
+                                  className={`w-7 h-7 rounded-md inline-flex items-center justify-center transition-all ${
+                                    isOn
+                                      ? 'bg-green-100 text-green-600 hover:bg-green-200'
+                                      : 'bg-gray-100 text-gray-300 hover:bg-gray-200 hover:text-gray-500'
+                                  }`}
+                                  title={`${isOn ? 'Disable' : 'Enable'} ${mod.label} for ${org.name}`}
+                                >
+                                  {isOn ? (
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                  ) : (
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                  )}
+                                </button>
+                              </td>
+                            )
+                          })}
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>
 
-          {/* Per-School Module Toggles */}
-          <div className="card">
-            <h2 className="text-lg font-semibold text-gray-900 mb-1">Per-School Module Control</h2>
-            <p className="text-sm text-gray-500 mb-4">Enable or disable modules for individual schools. Greyed-out modules are blocked by the organization ceiling above.</p>
+          {/* Module Matrix — Per School */}
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-100 bg-sky-50/50">
+              <div className="flex items-center gap-2">
+                <svg className="w-5 h-5 text-sky-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z" />
+                </svg>
+                <div>
+                  <h2 className="text-base font-semibold text-gray-900">Per-School Modules</h2>
+                  <p className="text-xs text-gray-500">
+                    Enable or disable modules per school.
+                    <span className="inline-flex items-center gap-1 ml-2 text-amber-600">
+                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" /></svg>
+                      = blocked by org ceiling
+                    </span>
+                  </p>
+                </div>
+              </div>
+            </div>
 
             {schoolsLoading ? (
-              <Spinner />
+              <div className="p-6"><Spinner /></div>
             ) : schools.length === 0 ? (
-              <Empty text="No schools yet." />
+              <div className="p-6"><Empty text="No schools yet." /></div>
             ) : (
-              <div className="space-y-4">
-                {schools.map((school) => {
-                  const org = orgs.find(o => o.id === school.organization)
-                  return (
-                    <div key={school.id} className="border border-gray-200 rounded-lg p-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <div>
-                          <p className="font-medium text-gray-900">{school.name}</p>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            {school.organization_name && (
-                              <span className="text-xs text-purple-600">{school.organization_name}</span>
-                            )}
-                            {!school.organization && (
-                              <span className="text-xs text-gray-400">Standalone (no org)</span>
-                            )}
-                          </div>
-                        </div>
-                        <StatusBadge active={school.is_active} />
-                      </div>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                        {moduleRegistry.map((mod) => {
-                          const orgBlocked = org && !(org.allowed_modules?.[mod.key] ?? true)
-                          const isOn = school.enabled_modules?.[mod.key] ?? false
-                          const effectiveOn = isOn && !orgBlocked
-                          return (
-                            <label
-                              key={mod.key}
-                              className={`flex items-center gap-2 text-sm p-1.5 rounded ${
-                                orgBlocked ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:bg-gray-50'
-                              }`}
-                              title={orgBlocked ? `Blocked by ${org?.name} organization` : mod.description}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={effectiveOn}
-                                onChange={() => !orgBlocked && handleSchoolModuleToggle(school, mod.key)}
-                                disabled={orgBlocked}
-                                className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                              />
-                              <span className={effectiveOn ? 'text-gray-700' : 'text-gray-400'}>
-                                {mod.label}
-                              </span>
-                              {orgBlocked && (
-                                <span className="text-xs text-red-400 ml-auto">org</span>
-                              )}
-                            </label>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  )
-                })}
+              <div className="overflow-x-auto">
+                <table className="min-w-full">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-200">
+                      <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-5 py-3 sticky left-0 bg-gray-50 z-10 min-w-[200px]">School</th>
+                      {moduleRegistry.map((mod) => (
+                        <th key={mod.key} className="text-center text-xs font-medium text-gray-500 px-2 py-3 min-w-[80px]">
+                          <span className="block truncate" title={mod.description || mod.label}>{mod.label}</span>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {schools.map((school) => {
+                      const org = orgs.find(o => o.id === school.organization)
+                      const enabledCount = moduleRegistry.filter(m => {
+                        const orgBlocked = org && !(org.allowed_modules?.[m.key] ?? true)
+                        return !orgBlocked && (school.enabled_modules?.[m.key] ?? false)
+                      }).length
+                      return (
+                        <tr key={school.id} className="hover:bg-gray-50/50">
+                          <td className="px-5 py-3 sticky left-0 bg-white z-10">
+                            <div className="flex items-center gap-2">
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium text-gray-900 truncate">{school.name}</p>
+                                <div className="flex items-center gap-2 text-xs text-gray-400">
+                                  <span>{enabledCount}/{moduleRegistry.length} active</span>
+                                  {school.organization_name ? (
+                                    <span className="text-purple-500">{school.organization_name}</span>
+                                  ) : (
+                                    <span>Standalone</span>
+                                  )}
+                                </div>
+                              </div>
+                              <StatusBadge active={school.is_active} />
+                            </div>
+                          </td>
+                          {moduleRegistry.map((mod) => {
+                            const orgBlocked = org && !(org.allowed_modules?.[mod.key] ?? true)
+                            const isOn = school.enabled_modules?.[mod.key] ?? false
+                            const effectiveOn = isOn && !orgBlocked
+                            return (
+                              <td key={mod.key} className="text-center px-2 py-3">
+                                {orgBlocked ? (
+                                  <span
+                                    className="w-7 h-7 rounded-md inline-flex items-center justify-center bg-amber-50 text-amber-400 cursor-not-allowed"
+                                    title={`Blocked by ${org?.name} organization`}
+                                  >
+                                    <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                                      <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                                    </svg>
+                                  </span>
+                                ) : (
+                                  <button
+                                    onClick={() => handleSchoolModuleToggle(school, mod.key)}
+                                    className={`w-7 h-7 rounded-md inline-flex items-center justify-center transition-all ${
+                                      effectiveOn
+                                        ? 'bg-green-100 text-green-600 hover:bg-green-200'
+                                        : 'bg-gray-100 text-gray-300 hover:bg-gray-200 hover:text-gray-500'
+                                    }`}
+                                    title={`${effectiveOn ? 'Disable' : 'Enable'} ${mod.label} for ${school.name}`}
+                                  >
+                                    {effectiveOn ? (
+                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                                      </svg>
+                                    ) : (
+                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                      </svg>
+                                    )}
+                                  </button>
+                                )}
+                              </td>
+                            )
+                          })}
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>
