@@ -88,12 +88,32 @@ export default function StaffAttendancePage() {
   }, [staffList, existingMap])
 
   const updateField = (staffId, field, value) => {
-    setAttendanceData(prev => ({
-      ...prev,
-      [staffId]: { ...prev[staffId], [field]: value },
-    }))
+    setAttendanceData(prev => {
+      const current = prev[staffId] || {}
+      let updated = { ...current, [field]: value }
+
+      // Auto-clear times when marked ABSENT or ON_LEAVE
+      if (field === 'status' && (value === 'ABSENT' || value === 'ON_LEAVE')) {
+        updated.check_in = ''
+        updated.check_out = ''
+      }
+
+      // Auto-mark LATE if check-in is after standard time
+      if (field === 'check_in' && value && standardTime) {
+        const canAutoLate = !updated.status || updated.status === 'PRESENT'
+        if (canAutoLate && value > standardTime) {
+          updated.status = 'LATE'
+        }
+      }
+
+      return { ...prev, [staffId]: updated }
+    })
     setHasChanges(true)
   }
+
+  const [bulkCheckIn, setBulkCheckIn] = useState('')
+  const [bulkCheckOut, setBulkCheckOut] = useState('')
+  const [standardTime, setStandardTime] = useState('08:00')
 
   // Quick mark all unmarked as present
   const markAllPresent = () => {
@@ -102,6 +122,42 @@ export default function StaffAttendancePage() {
       Object.keys(updated).forEach(id => {
         if (!updated[id].status) {
           updated[id] = { ...updated[id], status: 'PRESENT' }
+        }
+      })
+      return updated
+    })
+    setHasChanges(true)
+  }
+
+  const applyBulkCheckIn = () => {
+    if (!bulkCheckIn) return
+    const isLate = standardTime && bulkCheckIn > standardTime
+    setAttendanceData(prev => {
+      const updated = { ...prev }
+      Object.keys(updated).forEach(id => {
+        const row = updated[id]
+        if (row.status === 'ABSENT' || row.status === 'ON_LEAVE') return
+        if (!row.check_in) {
+          const canAutoLate = !row.status || row.status === 'PRESENT'
+          updated[id] = {
+            ...row,
+            check_in: bulkCheckIn,
+            ...(isLate && canAutoLate ? { status: 'LATE' } : {}),
+          }
+        }
+      })
+      return updated
+    })
+    setHasChanges(true)
+  }
+
+  const applyBulkCheckOut = () => {
+    if (!bulkCheckOut) return
+    setAttendanceData(prev => {
+      const updated = { ...prev }
+      Object.keys(updated).forEach(id => {
+        if (!updated[id].check_out) {
+          updated[id] = { ...updated[id], check_out: bulkCheckOut }
         }
       })
       return updated
@@ -228,6 +284,51 @@ export default function StaffAttendancePage() {
             <button onClick={markAllPresent} className="px-3 py-1.5 text-sm bg-green-100 text-green-700 rounded-lg hover:bg-green-200">
               Mark All Present
             </button>
+
+            <div className="flex items-center gap-1.5 bg-amber-50 rounded-lg px-2 py-1">
+              <label className="text-xs text-amber-700 whitespace-nowrap">Office Start:</label>
+              <input
+                type="time"
+                value={standardTime}
+                onChange={e => setStandardTime(e.target.value)}
+                className="input text-sm py-0.5 w-28"
+              />
+            </div>
+
+            <div className="flex items-center gap-1.5 bg-blue-50 rounded-lg px-2 py-1">
+              <label className="text-xs text-blue-700 whitespace-nowrap">Check In:</label>
+              <input
+                type="time"
+                value={bulkCheckIn}
+                onChange={e => setBulkCheckIn(e.target.value)}
+                className="input text-sm py-0.5 w-28"
+              />
+              <button
+                onClick={applyBulkCheckIn}
+                disabled={!bulkCheckIn}
+                className="px-2 py-0.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 whitespace-nowrap"
+              >
+                Apply All
+              </button>
+            </div>
+
+            <div className="flex items-center gap-1.5 bg-purple-50 rounded-lg px-2 py-1">
+              <label className="text-xs text-purple-700 whitespace-nowrap">Check Out:</label>
+              <input
+                type="time"
+                value={bulkCheckOut}
+                onChange={e => setBulkCheckOut(e.target.value)}
+                className="input text-sm py-0.5 w-28"
+              />
+              <button
+                onClick={applyBulkCheckOut}
+                disabled={!bulkCheckOut}
+                className="px-2 py-0.5 text-xs bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 whitespace-nowrap"
+              >
+                Apply All
+              </button>
+            </div>
+
             <button
               onClick={bulkSave}
               disabled={saving || !hasChanges}
@@ -288,7 +389,8 @@ export default function StaffAttendancePage() {
                               type="time"
                               value={data.check_in || ''}
                               onChange={e => updateField(staff.id, 'check_in', e.target.value)}
-                              className="input text-sm py-1 w-28"
+                              disabled={data.status === 'ABSENT' || data.status === 'ON_LEAVE'}
+                              className={`input text-sm py-1 w-28 ${data.status === 'ABSENT' || data.status === 'ON_LEAVE' ? 'opacity-40 cursor-not-allowed bg-gray-100' : ''}`}
                             />
                           </td>
                           <td className="px-3 py-2">
@@ -296,7 +398,8 @@ export default function StaffAttendancePage() {
                               type="time"
                               value={data.check_out || ''}
                               onChange={e => updateField(staff.id, 'check_out', e.target.value)}
-                              className="input text-sm py-1 w-28"
+                              disabled={data.status === 'ABSENT' || data.status === 'ON_LEAVE'}
+                              className={`input text-sm py-1 w-28 ${data.status === 'ABSENT' || data.status === 'ON_LEAVE' ? 'opacity-40 cursor-not-allowed bg-gray-100' : ''}`}
                             />
                           </td>
                           <td className="px-3 py-2">
@@ -361,7 +464,8 @@ export default function StaffAttendancePage() {
                             type="time"
                             value={data.check_in || ''}
                             onChange={e => updateField(staff.id, 'check_in', e.target.value)}
-                            className="input text-sm py-1 w-full"
+                            disabled={data.status === 'ABSENT' || data.status === 'ON_LEAVE'}
+                            className={`input text-sm py-1 w-full ${data.status === 'ABSENT' || data.status === 'ON_LEAVE' ? 'opacity-40 cursor-not-allowed bg-gray-100' : ''}`}
                           />
                         </div>
                         <div>
@@ -370,7 +474,8 @@ export default function StaffAttendancePage() {
                             type="time"
                             value={data.check_out || ''}
                             onChange={e => updateField(staff.id, 'check_out', e.target.value)}
-                            className="input text-sm py-1 w-full"
+                            disabled={data.status === 'ABSENT' || data.status === 'ON_LEAVE'}
+                            className={`input text-sm py-1 w-full ${data.status === 'ABSENT' || data.status === 'ON_LEAVE' ? 'opacity-40 cursor-not-allowed bg-gray-100' : ''}`}
                           />
                         </div>
                       </div>
