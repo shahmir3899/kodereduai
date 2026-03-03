@@ -186,6 +186,15 @@ export default function SettingsPage() {
     },
   })
 
+  const reopenMonthMutation = useMutation({
+    mutationFn: (id) => financeApi.reopenMonth(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['monthlyClosings'] })
+      queryClient.invalidateQueries({ queryKey: ['accountBalances'] })
+      queryClient.invalidateQueries({ queryKey: ['accountBalancesAll'] })
+    },
+  })
+
   const closeAccountModal = () => {
     setShowAccountModal(false)
     setEditingAccount(null)
@@ -534,9 +543,22 @@ export default function SettingsPage() {
           </div>
 
           {lastClosed && (
-            <p className="text-xs text-gray-400">
-              Last closed: {['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][lastClosed.month]} {lastClosed.year}
-            </p>
+            <div className="flex items-center justify-between text-xs text-gray-600 bg-gray-50 p-3 rounded-lg border border-gray-200">
+              <span>
+                Last closed: <span className="font-medium">{['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][lastClosed.month]} {lastClosed.year}</span>
+              </span>
+              <button
+                onClick={() => {
+                  if (confirm(`Reopen ${['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][lastClosed.month]} ${lastClosed.year}? This will delete the snapshots and allow editing transactions from that month.`)) {
+                    reopenMonthMutation.mutate(lastClosed.id)
+                  }
+                }}
+                disabled={reopenMonthMutation.isPending}
+                className="px-3 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200 text-xs font-medium disabled:opacity-50"
+              >
+                {reopenMonthMutation.isPending ? 'Reopening...' : 'Reopen'}
+              </button>
+            </div>
           )}
 
           {/* Account List */}
@@ -614,6 +636,40 @@ export default function SettingsPage() {
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Closed Months History */}
+      {activeTab === 'accounts' && isFinanceAdmin && closingsList.length > 0 && (
+        <div className="space-y-6 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <div className="card">
+            <h3 className="font-medium text-gray-900 mb-4">Closed Months History</h3>
+            <div className="space-y-2">
+              {closingsList.map((closing) => (
+                <div key={closing.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
+                  <div>
+                    <span className="font-medium text-gray-900">
+                      {['','January','February','March','April','May','June','July','August','September','October','November','December'][closing.month]} {closing.year}
+                    </span>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Closed by {closing.closed_by_name || 'N/A'} on {new Date(closing.closed_at).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (confirm(`Reopen ${['','Jan','Feb','Mar','Apr','May','June','July','August','September','October','November','December'][closing.month]} ${closing.year}? This will delete the snapshots and allow editing transactions from that month.`)) {
+                        reopenMonthMutation.mutate(closing.id)
+                      }
+                    }}
+                    disabled={reopenMonthMutation.isPending}
+                    className="px-3 py-1.5 bg-red-100 text-red-700 rounded hover:bg-red-200 text-sm font-medium disabled:opacity-50 transition-colors"
+                  >
+                    {reopenMonthMutation.isPending ? 'Reopening...' : 'Reopen'}
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}

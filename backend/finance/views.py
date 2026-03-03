@@ -6,6 +6,10 @@ import calendar
 import logging
 from datetime import date, timedelta
 from decimal import Decimal
+from io import BytesIO
+
+import openpyxl
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
 from django.db import transaction
 from django.db.models import Sum, Count, Q
@@ -14,6 +18,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
+from django.http import FileResponse
 
 from core.permissions import IsSchoolAdmin, IsSchoolAdminOrStaffReadOnly, HasSchoolAccess, get_effective_role, ModuleAccessMixin
 from core.mixins import TenantQuerySetMixin, ensure_tenant_schools, ensure_tenant_school_id
@@ -1051,6 +1056,15 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         serializer.save(school_id=school_id)
 
     @staticmethod
+    def _parse_iso_date(value, field_name):
+        if not value:
+            return None, None
+        try:
+            return date.fromisoformat(str(value)), None
+        except ValueError:
+            return None, f'{field_name} must be YYYY-MM-DD.'
+
+    @staticmethod
     def _find_prior_snapshot(account_id, school_id, before_year, before_month):
         """Find the latest AccountSnapshot whose closing month is strictly
         before the given (year, month). Returns snapshot or None."""
@@ -1252,6 +1266,329 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             'date_to': date_to,
         })
 
+    @action(detail=False, methods=['get'], url_path='ledger')
+    def ledger(self, request):
+        """Detailed running ledger for a single account with optional date range."""
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response({'detail': 'No school associated with your account.'}, status=400)
+
+        account_id = request.query_params.get('account_id')
+        if not account_id:
+            return Response({'detail': 'account_id is required.'}, status=400)
+
+        try:
+            account_id = int(account_id)
+        except (TypeError, ValueError):
+            return Response({'detail': 'account_id must be an integer.'}, status=400)
+
+        account = self.get_queryset().filter(id=account_id).first()
+        if not account:
+            return Response({'detail': 'Account not found or not accessible.'}, status=404)
+
+        date_from_raw = request.query_params.get('date_from')
+        date_to_raw = request.query_params.get('date_to')
+
+        date_from, err = self._parse_iso_date(date_from_raw, 'date_from')
+        if err:
+            return Response({'detail': err}, status=400)
+
+        date_to, err = self._parse_iso_date(date_to_raw, 'date_to')
+        if err:
+            return Response({'detail': err}, status=400)
+
+        if date_from and date_to and date_from > date_to:
+            return Response({'detail': 'date_from cannot be after date_to.'}, status=400)
+
+        from schools.models import School
+        if account.school_id is None and account.organization_id:
+            scope_ids = list(
+                School.objects.filter(organization_id=account.organization_id, is_active=True)
+                .values_list('id', flat=True)
+            )
+            if not scope_ids:
+                scope_ids = [school_id]
+        else:
+            scope_ids = [account.school_id]
+
+        is_staff = _is_staff_user(request)
+
+        opening_balance = account.opening_balance or Decimal('0')
+        if date_from:
+            prev_day = date_from - timedelta(days=1)
+            prev_balance = self._compute_account_balance(
+                account,
+                scope_ids,
+                date_from=None,
+                date_to=prev_day,
+                is_staff=is_staff,
+                snapshot_school_id=school_id,
+            )
+            opening_balance = prev_balance['net_balance']
+
+        fee_qs = FeePayment.objects.filter(school_id__in=scope_ids, account=account, amount_paid__gt=0).select_related('student', 'school')
+        income_qs = OtherIncome.objects.filter(school_id__in=scope_ids, account=account).select_related('school', 'category')
+        expense_qs = Expense.objects.filter(school_id__in=scope_ids, account=account).select_related('school', 'category')
+        tfr_in_qs = Transfer.objects.filter(school_id__in=scope_ids, to_account=account).select_related('school', 'from_account')
+        tfr_out_qs = Transfer.objects.filter(school_id__in=scope_ids, from_account=account).select_related('school', 'to_account')
+
+        if is_staff:
+            income_qs = income_qs.filter(is_sensitive=False)
+            expense_qs = expense_qs.filter(is_sensitive=False)
+            tfr_in_qs = tfr_in_qs.filter(is_sensitive=False)
+            tfr_out_qs = tfr_out_qs.filter(is_sensitive=False)
+
+        if date_from:
+            fee_qs = fee_qs.filter(Q(payment_date__gte=date_from) | Q(payment_date__isnull=True))
+            income_qs = income_qs.filter(date__gte=date_from)
+            expense_qs = expense_qs.filter(date__gte=date_from)
+            tfr_in_qs = tfr_in_qs.filter(date__gte=date_from)
+            tfr_out_qs = tfr_out_qs.filter(date__gte=date_from)
+
+        if date_to:
+            fee_qs = fee_qs.filter(Q(payment_date__lte=date_to) | Q(payment_date__isnull=True))
+            income_qs = income_qs.filter(date__lte=date_to)
+            expense_qs = expense_qs.filter(date__lte=date_to)
+            tfr_in_qs = tfr_in_qs.filter(date__lte=date_to)
+            tfr_out_qs = tfr_out_qs.filter(date__lte=date_to)
+
+        entries = []
+
+        for fp in fee_qs.order_by('payment_date', 'updated_at', 'id'):
+            fee_type_display = fp.get_fee_type_display()
+            entries.append({
+                'id': fp.id,
+                'type': 'fee_payment',
+                'date': fp.payment_date,
+                'timestamp': fp.updated_at,
+                'school_id': fp.school_id,
+                'school_name': fp.school.name if fp.school else None,
+                'description': f"{fp.student.name if fp.student else 'Unknown'} ({fee_type_display} - {fp.fee_type})",
+                'reference': fp.receipt_number,
+                'credit': fp.amount_paid,
+                'debit': Decimal('0'),
+                'amount_delta': fp.amount_paid,
+            })
+
+        for oi in income_qs.order_by('date', 'created_at', 'id'):
+            entries.append({
+                'id': oi.id,
+                'type': 'other_income',
+                'date': oi.date,
+                'timestamp': oi.created_at,
+                'school_id': oi.school_id,
+                'school_name': oi.school.name if oi.school else None,
+                'description': f"{oi.category.name if oi.category else 'Other Income'}{(' — ' + oi.description) if oi.description else ''}",
+                'reference': None,
+                'credit': oi.amount,
+                'debit': Decimal('0'),
+                'amount_delta': oi.amount,
+            })
+
+        for exp in expense_qs.order_by('date', 'created_at', 'id'):
+            entries.append({
+                'id': exp.id,
+                'type': 'expense',
+                'date': exp.date,
+                'timestamp': exp.created_at,
+                'school_id': exp.school_id,
+                'school_name': exp.school.name if exp.school else None,
+                'description': f"{exp.category.name if exp.category else 'Expense'}{(' — ' + exp.description) if exp.description else ''}",
+                'reference': None,
+                'credit': Decimal('0'),
+                'debit': exp.amount,
+                'amount_delta': -exp.amount,
+            })
+
+        for tfr in tfr_in_qs.order_by('date', 'created_at', 'id'):
+            entries.append({
+                'id': tfr.id,
+                'type': 'transfer_in',
+                'date': tfr.date,
+                'timestamp': tfr.created_at,
+                'school_id': tfr.school_id,
+                'school_name': tfr.school.name if tfr.school else None,
+                'description': f"Transfer from {tfr.from_account.name if tfr.from_account else 'Unknown'}{(' — ' + tfr.description) if tfr.description else ''}",
+                'reference': None,
+                'credit': tfr.amount,
+                'debit': Decimal('0'),
+                'amount_delta': tfr.amount,
+            })
+
+        for tfr in tfr_out_qs.order_by('date', 'created_at', 'id'):
+            entries.append({
+                'id': tfr.id,
+                'type': 'transfer_out',
+                'date': tfr.date,
+                'timestamp': tfr.created_at,
+                'school_id': tfr.school_id,
+                'school_name': tfr.school.name if tfr.school else None,
+                'description': f"Transfer to {tfr.to_account.name if tfr.to_account else 'Unknown'}{(' — ' + tfr.description) if tfr.description else ''}",
+                'reference': None,
+                'credit': Decimal('0'),
+                'debit': tfr.amount,
+                'amount_delta': -tfr.amount,
+            })
+
+        entries.sort(key=lambda item: (
+            item['date'] or date.min,
+            item['timestamp'] or timezone.now(),
+            item['type'],
+            item['id'],
+        ))
+
+        running = opening_balance
+        total_credits = Decimal('0')
+        total_debits = Decimal('0')
+
+        for item in entries:
+            total_credits += item['credit']
+            total_debits += item['debit']
+            running += item['amount_delta']
+            item['running_balance'] = running
+
+        return Response({
+            'account': {
+                'id': account.id,
+                'name': account.name,
+                'account_type': account.account_type,
+                'is_shared': account.school_id is None,
+            },
+            'scope_school_ids': scope_ids,
+            'date_from': date_from,
+            'date_to': date_to,
+            'opening_balance': opening_balance,
+            'total_credits': total_credits,
+            'total_debits': total_debits,
+            'closing_balance': running,
+            'entries': entries,
+        })
+
+    @action(detail=False, methods=['get'], url_path='export-ledger')
+    def export_ledger(self, request):
+        """Export account ledger as Excel file."""
+        try:
+            account_id = request.query_params.get('account_id')
+            if not account_id:
+                return Response({'error': 'account_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+            account = Account.objects.get(id=account_id)
+
+            # Get data from ledger endpoint
+            ledger_response = self.ledger(request)
+            ledger_data = ledger_response.data
+
+            # Create workbook
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = 'Ledger'
+
+            # Define styles
+            header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+            header_font = Font(bold=True, color='FFFFFF')
+            summary_fill = PatternFill(start_color='D9E1F2', end_color='D9E1F2', fill_type='solid')
+            summary_font = Font(bold=True)
+            border = Border(
+                left=Side(style='thin'),
+                right=Side(style='thin'),
+                top=Side(style='thin'),
+                bottom=Side(style='thin')
+            )
+            center_align = Alignment(horizontal='center', vertical='center')
+            right_align = Alignment(horizontal='right', vertical='center')
+
+            # Title
+            ws.merge_cells('A1:H1')
+            title_cell = ws['A1']
+            title_cell.value = f"Account Ledger - {account.name}"
+            title_cell.font = Font(bold=True, size=14)
+            title_cell.alignment = center_align
+
+            # Summary section
+            row = 3
+            ws[f'A{row}'].value = 'Opening Balance:'
+            ws[f'B{row}'].value = float(ledger_data['opening_balance'])
+            ws[f'B{row}'].number_format = '0.00'
+
+            row += 1
+            ws[f'A{row}'].value = 'Total Credits:'
+            ws[f'B{row}'].value = float(ledger_data['total_credits'])
+            ws[f'B{row}'].number_format = '0.00'
+
+            row += 1
+            ws[f'A{row}'].value = 'Total Debits:'
+            ws[f'B{row}'].value = float(ledger_data['total_debits'])
+            ws[f'B{row}'].number_format = '0.00'
+
+            row += 1
+            ws[f'A{row}'].value = 'Closing Balance:'
+            ws[f'B{row}'].value = float(ledger_data['closing_balance'])
+            ws[f'B{row}'].number_format = '0.00'
+            for cell in [ws[f'A{row}'], ws[f'B{row}']]:
+                cell.fill = summary_fill
+                cell.font = summary_font
+                cell.border = border
+
+            # Headers for transactions
+            row = 7
+            headers = ['Date', 'Type', 'Description', 'School', 'Reference', 'Credit', 'Debit', 'Running Balance']
+            for col, header in enumerate(headers, 1):
+                cell = ws.cell(row=row, column=col)
+                cell.value = header
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = center_align
+                cell.border = border
+
+            # Data rows
+            row = 8
+            for entry in ledger_data['entries']:
+                ws.cell(row=row, column=1).value = entry['date']
+                ws.cell(row=row, column=2).value = entry['type']
+                ws.cell(row=row, column=3).value = entry['description']
+                ws.cell(row=row, column=4).value = entry['school_name']
+                ws.cell(row=row, column=5).value = entry['reference']
+                ws.cell(row=row, column=6).value = float(entry['credit'])
+                ws.cell(row=row, column=7).value = float(entry['debit'])
+                ws.cell(row=row, column=8).value = float(entry['running_balance'])
+
+                for col in range(1, 9):
+                    cell = ws.cell(row=row, column=col)
+                    cell.border = border
+                    if col in [6, 7, 8]:  # Credit, Debit, Running Balance columns
+                        cell.number_format = '0.00'
+                        cell.alignment = right_align
+                    else:
+                        cell.alignment = Alignment(horizontal='left', vertical='center')
+
+                row += 1
+
+            # Column widths
+            ws.column_dimensions['A'].width = 12
+            ws.column_dimensions['B'].width = 15
+            ws.column_dimensions['C'].width = 30
+            ws.column_dimensions['D'].width = 15
+            ws.column_dimensions['E'].width = 15
+            ws.column_dimensions['F'].width = 12
+            ws.column_dimensions['G'].width = 12
+            ws.column_dimensions['H'].width = 15
+
+            # Create file response
+            output = BytesIO()
+            wb.save(output)
+            output.seek(0)
+
+            filename = f"Ledger_{account.name}_{date.today().strftime('%Y%m%d')}.xlsx"
+            response = FileResponse(output, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+            response['Content-Disposition'] = f'attachment; filename="{filename}"'
+            return response
+
+        except Account.DoesNotExist:
+            return Response({'error': 'Account not found'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Error exporting ledger: {str(e)}")
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
     @action(detail=False, methods=['get'], url_path='balances_all')
     def balances_all(self, request):
         """Get account balances across ALL accessible schools, grouped by school.
@@ -1341,35 +1678,56 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             return Response({'detail': 'No school associated.'}, status=400)
 
         # --- Safeguard 3: pre-close validation ---
+        # Compute date range first
+        last_day = calendar.monthrange(year, month)[1]
+        month_start = date(year, month, 1)
+        month_end_date = date(year, month, last_day)
+        
         # Reject close if any fee payments in the target month have dirty data
+        # Use payment_date (not month/year fields) to match balance calculation logic
         dirty_fees = FeePayment.objects.filter(
-            school_id=school_id, month=month, year=year,
+            school_id=school_id,
             amount_paid__gt=0,
+            payment_date__gte=month_start,
+            payment_date__lte=month_end_date,
         ).filter(
-            Q(payment_date__isnull=True) | Q(account__isnull=True)
+            Q(account__isnull=True)
         )
-        dirty_count = dirty_fees.count()
+        
+        # Also check for fees with NULL payment_date but amount_paid > 0
+        fees_without_date = FeePayment.objects.filter(
+            school_id=school_id,
+            amount_paid__gt=0,
+            payment_date__isnull=True,
+        )
+        
+        dirty_count = dirty_fees.count() + fees_without_date.count()
         if dirty_count > 0:
             samples = list(
                 dirty_fees.select_related('student')
-                .values_list('student__name', flat=True)[:5]
+                .values_list('student__name', flat=True)[:3]
+            )
+            samples += list(
+                fees_without_date.select_related('student')
+                .values_list('student__name', flat=True)[:2]
             )
             return Response({
                 'detail': (
                     f"Cannot close {year}/{month:02d}: {dirty_count} fee payment(s) "
                     f"have amount_paid > 0 but are missing payment_date or account. "
-                    f"Fix them first."
+                    f"Fix them first before closing."
                 ),
                 'dirty_count': dirty_count,
-                'sample_students': samples,
+                'sample_students': samples[:5],
             }, status=400)
 
         # Reject close if there are no transactions at all for this month
-        last_day = calendar.monthrange(year, month)[1]
-        month_start = date(year, month, 1)
-        month_end_date = date(year, month, last_day)
+        # (month_start, month_end_date already calculated above)
         has_fees = FeePayment.objects.filter(
-            school_id=school_id, month=month, year=year,
+            school_id=school_id, 
+            payment_date__gte=month_start, 
+            payment_date__lte=month_end_date,
+            amount_paid__gt=0,
         ).exists()
         has_expenses = Expense.objects.filter(
             school_id=school_id, date__gte=month_start, date__lte=month_end_date,
@@ -1498,9 +1856,24 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             .order_by('-updated_at')[:limit]
         )
         for fp in fee_payments:
+            # Map fee_type to readable label
+            fee_type_label = {
+                'MONTHLY': 'Monthly Fee',
+                'ADMISSION': 'Admission Fee',
+                'ANNUAL': 'Annual Fee',
+                'BOOKS': 'Books Fee',
+                'FINE': 'Fine',
+                'TRANSPORT': 'Transport Fee',
+                'UNIFORM': 'Uniform Fee',
+                'ACTIVITY': 'Activity Fee',
+                'EXAM': 'Exam Fee',
+            }.get(fp.fee_type, fp.fee_type)
+            
             entries.append({
                 'type': 'fee_payment',
                 'id': fp.id,
+                'fee_type': fp.fee_type,
+                'fee_type_label': fee_type_label,
                 'description': f"{fp.student.name} ({fp.student.class_obj.name if fp.student.class_obj else 'N/A'})",
                 'amount': float(fp.amount_paid),
                 'date': str(fp.payment_date) if fp.payment_date else None,

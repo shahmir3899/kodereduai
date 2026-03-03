@@ -296,6 +296,8 @@ export const financeApi = {
   deleteAccount: (id) => api.delete(`/api/finance/accounts/${id}/`),
   getAccountBalances: (params) => api.get('/api/finance/accounts/balances/', { params }),
   getAccountBalancesAll: (params) => api.get('/api/finance/accounts/balances_all/', { params }),
+  getAccountLedger: (params) => api.get('/api/finance/accounts/ledger/', { params }),
+  exportLedger: (params) => api.get('/api/finance/accounts/export-ledger/', { params, responseType: 'blob' }),
   getRecentEntries: (params) => api.get('/api/finance/accounts/recent_entries/', { params }),
 
   // Monthly Closings

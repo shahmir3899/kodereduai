@@ -339,7 +339,7 @@ export default function FinanceDashboardPage() {
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-semibold text-gray-700">Account Balances</h2>
             {isAdmin && (
-              <Link to="/settings?tab=accounts" className="text-xs text-primary-600 hover:underline">
+              <Link to="/finance/accounts" className="text-xs text-primary-600 hover:underline">
                 Manage
               </Link>
             )}
@@ -573,7 +573,7 @@ export default function FinanceDashboardPage() {
               <tbody className="bg-white divide-y divide-gray-100">
                 {recentEntries.map((entry) => {
                   const typeBadge = {
-                    fee_payment: { label: 'Fee', cls: 'bg-green-100 text-green-800' },
+                    fee_payment: { label: entry.fee_type_label || 'Fee', cls: 'bg-green-100 text-green-800' },
                     other_income: { label: 'Income', cls: 'bg-blue-100 text-blue-800' },
                     expense: { label: 'Expense', cls: 'bg-red-100 text-red-800' },
                     transfer: { label: 'Transfer', cls: 'bg-purple-100 text-purple-800' },
@@ -628,8 +628,8 @@ export default function FinanceDashboardPage() {
       {/* --- Admin Quick Links --- */}
       {isAdmin && (
         <div className="flex flex-wrap gap-3">
-          <Link to="/settings?tab=accounts" className="text-sm text-primary-600 hover:underline">
-            Finance Settings &rarr;
+          <Link to="/finance/accounts" className="text-sm text-primary-600 hover:underline">
+            Accounts & Ledger &rarr;
           </Link>
         </div>
       )}

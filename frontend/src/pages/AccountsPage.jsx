@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { financeApi } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
+import { useToast } from '../components/Toast'
 import { getErrorMessage } from '../utils/errorUtils'
 import { useConfirmModal } from '../components/ConfirmModal'
 
@@ -20,6 +21,7 @@ const typeColors = {
 export default function AccountsPage() {
   const queryClient = useQueryClient()
   const { user, isStaffMember, isPrincipal } = useAuth()
+  const toast = useToast()
   const { confirm, ConfirmModalRoot } = useConfirmModal()
   const canManageAccounts = !isStaffMember
   const canRecordTransactions = true // Staff can record transfers (backend limits to staff_visible accounts)
@@ -47,6 +49,11 @@ export default function AccountsPage() {
   // Transfer filters
   const [tfrDateFrom, setTfrDateFrom] = useState('')
   const [tfrDateTo, setTfrDateTo] = useState('')
+
+  // Ledger filters
+  const [ledgerAccountId, setLedgerAccountId] = useState('')
+  const [ledgerDateFrom, setLedgerDateFrom] = useState('')
+  const [ledgerDateTo, setLedgerDateTo] = useState('')
 
   // Close month modal
   const [showCloseMonthModal, setShowCloseMonthModal] = useState(false)
@@ -87,6 +94,16 @@ export default function AccountsPage() {
       ...(tfrDateFrom && { date_from: tfrDateFrom }),
       ...(tfrDateTo && { date_to: tfrDateTo }),
     }),
+  })
+
+  const { data: ledgerData, isLoading: ledgerLoading, isError: ledgerError, error: ledgerErrorObj } = useQuery({
+    queryKey: ['accountLedger', ledgerAccountId, ledgerDateFrom, ledgerDateTo],
+    queryFn: () => financeApi.getAccountLedger({
+      account_id: ledgerAccountId,
+      ...(ledgerDateFrom && { date_from: ledgerDateFrom }),
+      ...(ledgerDateTo && { date_to: ledgerDateTo }),
+    }),
+    enabled: !!ledgerAccountId,
   })
 
   // Mutations
@@ -199,6 +216,36 @@ export default function AccountsPage() {
     })
   }
 
+  const handleDownloadLedger = async () => {
+    if (!ledgerAccountId) {
+      toast.showWarning('Please select an account first')
+      return
+    }
+    try {
+      const response = await financeApi.exportLedger({
+        account_id: ledgerAccountId,
+        ...(ledgerDateFrom && { date_from: ledgerDateFrom }),
+        ...(ledgerDateTo && { date_to: ledgerDateTo }),
+      })
+      // Create blob and trigger download
+      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const link = document.createElement('a')
+      link.href = url
+      const filename = response.headers['content-disposition']
+        ?.split('filename=')[1]
+        ?.replace(/"/g, '') || 'ledger.xlsx'
+      link.setAttribute('download', filename)
+      document.body.appendChild(link)
+      link.click()
+      link.parentNode.removeChild(link)
+      window.URL.revokeObjectURL(url)
+      toast.showSuccess('Ledger downloaded successfully')
+    } catch (error) {
+      console.error('Error downloading ledger:', error)
+      toast.showError('Failed to download ledger')
+    }
+  }
+
   const balances = balancesData?.data?.accounts || []
   const grandTotal = balancesData?.data?.grand_total || 0
   const balanceGroups = balancesAllData?.data?.groups || []
@@ -209,13 +256,21 @@ export default function AccountsPage() {
   const accountList = isPrincipal ? accountListAll.filter(a => a.school !== null) : accountListAll
   const fromAccountList = isPrincipal ? accountListAll.filter(a => a.school !== null) : accountListAll
   const transferList = transfersData?.data?.results || transfersData?.data || []
+  const ledgerPayload = ledgerData?.data
+
+  useEffect(() => {
+    if (!ledgerAccountId && accountListAll.length > 0) {
+      setLedgerAccountId(String(accountListAll[0].id))
+    }
+  }, [ledgerAccountId, accountListAll])
 
   const tabs = isPrincipal
-    ? [{ key: 'accounts', label: 'Accounts' }, { key: 'transfers', label: 'Transfers' }]
+    ? [{ key: 'accounts', label: 'Accounts' }, { key: 'transfers', label: 'Transfers' }, { key: 'ledger', label: 'Ledger' }]
     : [
         ...(!isStaffMember ? [{ key: 'balances', label: 'Balance Summary' }] : []),
         { key: 'manage', label: 'Manage Accounts' },
         { key: 'transfers', label: 'Transfers' },
+        { key: 'ledger', label: 'Ledger' },
       ]
 
   return (
@@ -532,6 +587,64 @@ export default function AccountsPage() {
               </>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Tab: Ledger */}
+      {activeTab === 'ledger' && (
+        <div>
+          <div className="card mb-6">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Account</label>
+                <select
+                  value={ledgerAccountId}
+                  onChange={(e) => setLedgerAccountId(e.target.value)}
+                  className="input-field text-sm"
+                >
+                  <option value="">-- Select Account --</option>
+                  {accountListAll.filter(a => a.is_active).map(a => (
+                    <option key={a.id} value={a.id}>{a.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">From Date</label>
+                <input
+                  type="date"
+                  value={ledgerDateFrom}
+                  onChange={(e) => setLedgerDateFrom(e.target.value)}
+                  className="input-field text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">To Date</label>
+                <input
+                  type="date"
+                  value={ledgerDateTo}
+                  onChange={(e) => setLedgerDateTo(e.target.value)}
+                  className="input-field text-sm"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <button
+                onClick={handleDownloadLedger}
+                disabled={!ledgerAccountId}
+                className="btn btn-sm btn-outline-primary"
+              >
+                📥 Download Excel
+              </button>
+            </div>
+          </div>
+
+          <LedgerView
+            payload={ledgerPayload}
+            isLoading={ledgerLoading}
+            isError={ledgerError}
+            error={ledgerErrorObj}
+            accountSelected={!!ledgerAccountId}
+          />
         </div>
       )}
 
@@ -1066,6 +1179,116 @@ function MultiSchoolBalances({ groups, shared, grandTotal, isLoading }) {
           <span className="text-lg font-semibold text-gray-700">Grand Total (All Schools)</span>
           <span className="text-2xl font-bold text-gray-900">{Number(grandTotal).toLocaleString()}</span>
         </div>
+      </div>
+    </div>
+  )
+}
+
+function getLedgerTypeLabel(type) {
+  if (type === 'fee_payment') return 'Fee Payment'
+  if (type === 'other_income') return 'Other Income'
+  if (type === 'expense') return 'Expense'
+  if (type === 'transfer_in') return 'Transfer In'
+  if (type === 'transfer_out') return 'Transfer Out'
+  return type
+}
+
+function LedgerView({ payload, isLoading, isError, error, accountSelected }) {
+  if (!accountSelected) {
+    return (
+      <div className="card text-center py-8 text-gray-500">
+        Select an account to view ledger.
+      </div>
+    )
+  }
+
+  if (isLoading) return <div className="card text-center py-8 text-gray-500">Loading...</div>
+
+  if (isError) {
+    return (
+      <div className="card text-center py-8 text-red-600">
+        {getErrorMessage(error, 'Failed to load ledger')}
+      </div>
+    )
+  }
+
+  const entries = payload?.entries || []
+
+  return (
+    <div className="space-y-4">
+      <div className="card">
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-sm">
+          <div>
+            <p className="text-gray-500">Opening Balance</p>
+            <p className="font-semibold text-gray-900">{Number(payload?.opening_balance || 0).toLocaleString()}</p>
+          </div>
+          <div>
+            <p className="text-gray-500">Total Credits</p>
+            <p className="font-semibold text-green-700">{Number(payload?.total_credits || 0).toLocaleString()}</p>
+          </div>
+          <div>
+            <p className="text-gray-500">Total Debits</p>
+            <p className="font-semibold text-red-700">{Number(payload?.total_debits || 0).toLocaleString()}</p>
+          </div>
+          <div>
+            <p className="text-gray-500">Closing Balance</p>
+            <p className="font-semibold text-gray-900">{Number(payload?.closing_balance || 0).toLocaleString()}</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="card">
+        {entries.length === 0 ? (
+          <div className="text-center py-8 text-gray-500">No transactions in selected range.</div>
+        ) : (
+          <>
+            <div className="sm:hidden space-y-3">
+              {entries.map((entry) => (
+                <div key={`${entry.type}-${entry.id}`} className="border rounded-lg p-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm font-medium text-gray-900">{getLedgerTypeLabel(entry.type)}</span>
+                    <span className="text-sm font-bold text-gray-900">{Number(entry.running_balance).toLocaleString()}</span>
+                  </div>
+                  <p className="text-xs text-gray-500 mb-1">{entry.date || 'Undated'} {entry.school_name ? `• ${entry.school_name}` : ''}</p>
+                  <p className="text-sm text-gray-700 mb-2">{entry.description}</p>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <p className="text-green-700">Cr: {Number(entry.credit).toLocaleString()}</p>
+                    <p className="text-red-700">Dr: {Number(entry.debit).toLocaleString()}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">School</th>
+                    <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">Credit</th>
+                    <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">Debit</th>
+                    <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">Running Balance</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {entries.map((entry) => (
+                    <tr key={`${entry.type}-${entry.id}`}>
+                      <td className="px-3 py-2 text-sm text-gray-600">{entry.date || '—'}</td>
+                      <td className="px-3 py-2 text-sm text-gray-900">{getLedgerTypeLabel(entry.type)}</td>
+                      <td className="px-3 py-2 text-sm text-gray-700 max-w-xs truncate">{entry.description}</td>
+                      <td className="px-3 py-2 text-sm text-gray-600">{entry.school_name || '—'}</td>
+                      <td className="px-3 py-2 text-sm text-green-700 text-right">{Number(entry.credit).toLocaleString()}</td>
+                      <td className="px-3 py-2 text-sm text-red-700 text-right">{Number(entry.debit).toLocaleString()}</td>
+                      <td className="px-3 py-2 text-sm font-semibold text-gray-900 text-right">{Number(entry.running_balance).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
       </div>
     </div>
   )

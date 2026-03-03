@@ -25,6 +25,7 @@ const FeeSetupPage = lazy(() => import('./pages/fee-collection/FeeSetupPage'))
 const OtherIncomePage = lazy(() => import('./pages/fee-collection/OtherIncomePage'))
 const ExpensesPage = lazy(() => import('./pages/ExpensesPage'))
 const FinanceDashboardPage = lazy(() => import('./pages/FinanceDashboardPage'))
+const AccountsPage = lazy(() => import('./pages/AccountsPage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
 const SchoolSetupPage = lazy(() => import('./pages/SchoolSetupPage'))
 const StudentProfilePage = lazy(() => import('./pages/StudentProfilePage'))
@@ -327,7 +328,7 @@ function App() {
             <Route path="finance/fees/collect" element={<SchoolRoute><ModuleRoute module="finance"><FeeCollectPage /></ModuleRoute></SchoolRoute>} />
             <Route path="finance/fees/setup" element={<SchoolRoute><ModuleRoute module="finance"><FeeSetupPage /></ModuleRoute></SchoolRoute>} />
             <Route path="finance/income" element={<SchoolRoute><ModuleRoute module="finance"><OtherIncomePage /></ModuleRoute></SchoolRoute>} />
-            <Route path="finance/accounts" element={<Navigate to="/settings?tab=accounts" replace />} />
+            <Route path="finance/accounts" element={<SchoolRoute><ModuleRoute module="finance"><AccountsPage /></ModuleRoute></SchoolRoute>} />
             <Route path="finance/expenses" element={<SchoolRoute><ModuleRoute module="finance"><ExpensesPage /></ModuleRoute></SchoolRoute>} />
             <Route path="finance/reports" element={<Navigate to="/finance" replace />} />
             <Route path="finance/discounts" element={<SchoolRoute><ModuleRoute module="finance"><DiscountsPage /></ModuleRoute></SchoolRoute>} />
