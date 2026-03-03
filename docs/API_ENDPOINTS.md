@@ -90,12 +90,12 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 ## Attendance
 | Method | URL | Params |
 |--------|-----|--------|
-| POST | /api/attendance/upload-image/ | Multipart: image, class_id |
+| POST | /api/attendance/upload-image/ | Multipart: image, class_id. Roles: ADMIN + TEACHER (assigned classes) |
 | GET | /api/attendance/ai-status/ | |
-| GET/POST | /api/attendance/uploads/ | class_obj, status, date |
+| GET/POST | /api/attendance/uploads/ | class_obj, status, date. Roles: ADMIN (all) + TEACHER (assigned classes only) |
 | GET | /api/attendance/uploads/{id}/ | |
 | GET | /api/attendance/uploads/pending_review/ | |
-| POST | /api/attendance/uploads/{id}/confirm/ | Body: {matched_students, date} |
+| POST | /api/attendance/uploads/{id}/confirm/ | Body: {matched_students, date}. Roles: ADMIN + TEACHER (own class uploads) |
 | POST | /api/attendance/uploads/{id}/reprocess/ | |
 | GET | /api/attendance/uploads/{id}/test_image/ | |
 | GET | /api/attendance/records/ | class_obj, student, date, status, academic_year |
@@ -107,7 +107,7 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | POST | /api/attendance/records/tune_thresholds/ | Toggle auto_tune, manually update thresholds. Body: {auto_tune_enabled, thresholds} |
 | GET | /api/attendance/records/drift_history/ | Params: days (default 30). Returns accuracy snapshots + current drift status |
 | GET | /api/attendance/records/mapping_suggestions/ | |
-| GET | /api/attendance/records/my_classes/ | Returns classes available for manual attendance (role-aware) |
+| GET | /api/attendance/records/my_classes/ | Returns classes available for attendance (role-aware: admin=all, teacher=assigned via ClassSubject) |
 | POST | /api/attendance/records/bulk_entry/ | Body: {class_id, date, entries: [{student_id, status}]} |
 
 ### Attendance Anomalies
@@ -171,7 +171,9 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | GET | /api/hr/staff/dashboard_stats/ | |
 | GET | /api/hr/staff/next-employee-id/ | |
 | POST | /api/hr/staff/bulk-create-accounts/ | |
-| POST | /api/hr/staff/{id}/create-user-account/ | |
+| POST | /api/hr/staff/{id}/create-user-account/ | Body: {username, password, confirm_password, user_role} |
+| POST | /api/hr/staff/{id}/link-user-account/ | Body: {user_id}. Link existing user to staff member |
+| POST | /api/hr/staff/{id}/unlink-user-account/ | Unlink user from staff (does not delete user) |
 | GET/POST | /api/hr/salary-structures/ | |
 | GET | /api/hr/salary-structures/current/ | |
 | GET/POST | /api/hr/payslips/ | month, year, status |

@@ -341,6 +341,8 @@ export const hrApi = {
   updateStaff: (id, data) => api.patch(`/api/hr/staff/${id}/`, data),
   deleteStaff: (id) => api.delete(`/api/hr/staff/${id}/`),
   createStaffUserAccount: (id, data) => api.post(`/api/hr/staff/${id}/create-user-account/`, data),
+  linkStaffUserAccount: (id, data) => api.post(`/api/hr/staff/${id}/link-user-account/`, data),
+  unlinkStaffUserAccount: (id) => api.post(`/api/hr/staff/${id}/unlink-user-account/`),
   bulkCreateStaffAccounts: (data) => api.post('/api/hr/staff/bulk-create-accounts/', data),
 
   // Departments

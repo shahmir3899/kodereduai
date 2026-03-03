@@ -8,7 +8,6 @@ import { useDropzone } from 'react-dropzone'
 import { useAuth } from '../contexts/AuthContext'
 import { useAcademicYear } from '../contexts/AcademicYearContext'
 import { attendanceApi, studentsApi } from '../services/api'
-import ClassSelector from '../components/ClassSelector'
 
 // Compress image before upload - keeps quality high enough for OCR
 const compressImage = (file) => {
@@ -116,6 +115,13 @@ function UploadTab({ onUploadSuccess }) {
   const [crop, setCrop] = useState({ x: 0, y: 0 })
   const [zoom, setZoom] = useState(1)
   const [croppedAreaPixels, setCroppedAreaPixels] = useState(null)
+
+  // Role-aware class list (teachers see only assigned classes)
+  const { data: myClassesRes, isLoading: classesLoading } = useQuery({
+    queryKey: ['myAttendanceClasses'],
+    queryFn: () => attendanceApi.getMyAttendanceClasses(),
+  })
+  const myClasses = myClassesRes?.data || []
 
   const { data: aiStatusData } = useQuery({
     queryKey: ['aiStatus'],
@@ -264,12 +270,17 @@ function UploadTab({ onUploadSuccess }) {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
           <div>
             <label className="label">Class</label>
-            <ClassSelector
+            <select
               className="input"
               value={selectedClass}
               onChange={e => setSelectedClass(e.target.value)}
-              placeholder="Select a class"
-            />
+              disabled={classesLoading}
+            >
+              <option value="">{classesLoading ? 'Loading classes...' : 'Select a class'}</option>
+              {myClasses.map(c => (
+                <option key={c.id} value={c.id}>{c.name}{c.section ? ` (${c.section})` : ''}</option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="label">Date</label>

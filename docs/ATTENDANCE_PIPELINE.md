@@ -59,9 +59,11 @@ The system processes photos of handwritten attendance registers to automatically
 ### Step 6: Review & Confirmation
 - Upload status set to `REVIEW_REQUIRED`
 - Frontend shows matched students with status indicators
-- Admin can: confirm all, edit individual matches, reassign unmatched entries
+- Admin or assigned Teacher can: confirm all, edit individual matches, reassign unmatched entries
 - `POST /api/attendance/uploads/{id}/confirm/` creates AttendanceRecords
-- Only SCHOOL_ADMIN/PRINCIPAL can confirm (`CanConfirmAttendance` permission)
+- SCHOOL_ADMIN/PRINCIPAL can confirm any upload; TEACHER can confirm uploads for their assigned classes
+- Permission: `CanConfirmAttendance` (ADMIN_ROLES + TEACHER); class-assignment enforced in view
+- Upload & image upload: `CanUploadAttendance` (ADMIN_ROLES + TEACHER); teachers filtered to assigned classes via `ClassSubject`
 
 ### Step 7: Learning Loop (Feedback)
 - When admin corrects AI matches, `AttendanceFeedback` records are created

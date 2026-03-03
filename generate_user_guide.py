@@ -527,15 +527,22 @@ def build_guide():
 
     pdf.body_text(
         "The Attendance module uses AI-powered OCR to capture attendance from handwritten registers. "
-        "Teachers upload photos of attendance registers, and the AI extracts student names and marks. "
+        "Admins and teachers upload photos of attendance registers, and the AI extracts student names and marks. "
         "The system supports review and approval workflows."
+    )
+
+    pdf.info_box(
+        "Teacher Access",
+        "Teachers can upload and review attendance for classes they are assigned to via the "
+        "Subjects management page (Academics > Subjects). When a teacher logs in, they only see "
+        "their assigned classes in the class dropdown. Admins and Principals see all classes."
     )
 
     pdf.section_title("Capturing Attendance")
     pdf.nav_path("Sidebar > Attendance > Capture & Review > Upload Tab")
     pdf.step("Navigate to the Attendance section and click 'Capture & Review'.")
     pdf.step("You will see three tabs: Upload, Review, and Approve. Select the 'Upload' tab.")
-    pdf.step("Select the Class from the dropdown and pick the Date.")
+    pdf.step("Select the Class from the dropdown (teachers see only their assigned classes) and pick the Date.")
     pdf.step("Upload an image of the handwritten attendance register (photo or scan).")
     pdf.step("Use the crop/zoom tool to frame the register area correctly.")
     pdf.step("Click 'Process' - the AI will extract student names and attendance marks (P, A, L, etc.).")
@@ -1130,6 +1137,25 @@ def build_guide():
     pdf.step("Select a staff member.")
     pdf.step("Upload documents: ID proofs, certificates, contracts, etc.")
     pdf.step("Documents are stored securely and accessible from the staff profile.")
+
+    pdf.section_title("Linking & Unlinking User Accounts")
+    pdf.nav_path("Sidebar > HR & Staff > Staff Directory")
+    pdf.body_text(
+        "Staff members can be linked to existing user accounts so the same person's HR record "
+        "and login credentials are connected. This is useful when a user account was created "
+        "separately from the staff record."
+    )
+    pdf.step("Find the staff member in the directory. If they have no linked account, "
+             "you will see a 'Link Account' button.")
+    pdf.step("Click 'Link Account' to open the search modal.")
+    pdf.step("Search for the user by name or username. Click on the correct user to link them.")
+    pdf.step("Once linked, the staff member's account column shows the linked username and role.")
+    pdf.step("To unlink, click the 'Unlink' button next to the linked username. "
+             "This removes the association but does not delete either the staff record or the user account.")
+    pdf.warning_box(
+        "A user can only be linked to one staff member at a time. "
+        "If the user is already linked to another staff record, you must unlink them first."
+    )
 
     pdf.section_title("Letter Composer")
     pdf.nav_path("Sidebar > HR & Staff > Letter Composer")
@@ -1932,6 +1958,14 @@ def build_guide():
         "Individual: Click 'Create Account', set role and credentials. "
         "Bulk: Select multiple staff, click 'Create Accounts', choose default role and password. "
         "Usernames are auto-generated (e.g., 'Jane Doe' becomes 'jane_doe')."
+    )
+
+    pdf.section_title("Linking Existing User Accounts to Staff")
+    pdf.body_text(
+        "If a user account already exists separately (e.g., created before the staff record), "
+        "you can link them from the Staff Directory. Click 'Link Account' on the staff row, "
+        "search for the user, and select them. To unlink, click the 'Unlink' button. "
+        "See Chapter 7 (HR & Staff > Linking & Unlinking User Accounts) for full details."
     )
 
     pdf.warning_box("Passwords cannot be recovered. If a user forgets their password, "

@@ -1060,6 +1060,51 @@ Returns a PDF file (`Content-Type: application/pdf`).
 ### GET /api/hr/dashboard_stats/
 Returns empty body when no substantial HR data exists.
 
+### POST /api/hr/staff/{id}/create-user-account/
+```json
+{
+  "message": "User account created successfully.",
+  "user_id": 42,
+  "username": "jane_doe"
+}
+```
+
+### POST /api/hr/staff/{id}/link-user-account/
+```json
+{
+  "message": "User account linked successfully.",
+  "user_id": 42,
+  "username": "jane_doe"
+}
+```
+
+### POST /api/hr/staff/{id}/unlink-user-account/
+```json
+{
+  "message": "User account \"jane_doe\" has been unlinked from this staff member.",
+  "unlinked_user_id": 42,
+  "unlinked_username": "jane_doe"
+}
+```
+
+### POST /api/hr/staff/bulk-create-accounts/
+```json
+{
+  "created_count": 3,
+  "skipped_count": 1,
+  "error_count": 0,
+  "created": [
+    {"staff_id": 1, "username": "ahmed_khan", "name": "Ahmed Khan"},
+    {"staff_id": 2, "username": "sara_ali", "name": "Sara Ali"},
+    {"staff_id": 5, "username": "emp_003", "name": "Usman Raza"}
+  ],
+  "skipped": [
+    {"staff_id": 3, "name": "Fatima Noor", "reason": "Already has account"}
+  ],
+  "errors": []
+}
+```
+
 ---
 
 ## Examinations

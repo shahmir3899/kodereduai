@@ -403,6 +403,79 @@ class StaffMemberViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
             'username': user.username,
         }, status=status.HTTP_201_CREATED)
 
+    @action(detail=True, methods=['post'], url_path='link-user-account')
+    def link_user_account(self, request, pk=None):
+        """Link an existing User account to a staff member."""
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+
+        staff = self.get_object()
+        if staff.user is not None:
+            return Response(
+                {'error': 'This staff member already has a linked user account.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user_id = request.data.get('user_id')
+        if not user_id:
+            return Response(
+                {'error': 'user_id is required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return Response(
+                {'error': 'User not found.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Check that the user isn't already linked to another staff member
+        existing_link = StaffMember.objects.filter(user=user).exclude(pk=staff.pk).first()
+        if existing_link:
+            return Response(
+                {'error': f'This user is already linked to staff member: {existing_link.first_name} {existing_link.last_name} ({existing_link.employee_id}).'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Ensure same school
+        if user.school_id and user.school_id != staff.school_id:
+            return Response(
+                {'error': 'User belongs to a different school.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        staff.user = user
+        staff.save(update_fields=['user'])
+
+        return Response({
+            'message': 'User account linked successfully.',
+            'user_id': user.id,
+            'username': user.username,
+        }, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'], url_path='unlink-user-account')
+    def unlink_user_account(self, request, pk=None):
+        """Unlink a User account from a staff member (does not delete the user)."""
+        staff = self.get_object()
+        if staff.user is None:
+            return Response(
+                {'error': 'This staff member has no linked user account.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        old_username = staff.user.username
+        old_user_id = staff.user.id
+        staff.user = None
+        staff.save(update_fields=['user'])
+
+        return Response({
+            'message': f'User account "{old_username}" has been unlinked from this staff member.',
+            'unlinked_user_id': old_user_id,
+            'unlinked_username': old_username,
+        }, status=status.HTTP_200_OK)
+
     @action(detail=False, methods=['post'], url_path='bulk-create-accounts')
     def bulk_create_accounts(self, request):
         """Bulk create user accounts for multiple staff members."""

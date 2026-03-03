@@ -184,17 +184,32 @@ class CanManageAttendance(permissions.BasePermission):
 
 class CanConfirmAttendance(permissions.BasePermission):
     """
-    Only Admins/Principals can confirm attendance uploads.
-    This is a critical action that creates permanent records.
+    Admins/Principals and Teachers can confirm attendance uploads.
+    Teachers can only confirm uploads for their assigned classes (enforced in view).
     """
-    message = "Only School Admins can confirm attendance."
+    message = "You don't have permission to confirm attendance."
 
     def has_permission(self, request, view):
         if not request.user.is_authenticated:
             return False
 
         role = get_effective_role(request)
-        return role in ADMIN_ROLES
+        return role in ADMIN_ROLES or role == 'TEACHER'
+
+
+class CanUploadAttendance(permissions.BasePermission):
+    """
+    Permission for uploading attendance images and managing uploads.
+    - SUPER_ADMIN, SCHOOL_ADMIN, PRINCIPAL: full access to all classes
+    - TEACHER: can upload for assigned classes only (enforced in view)
+    """
+    message = "You don't have permission to upload attendance."
+
+    def has_permission(self, request, view):
+        if not request.user.is_authenticated:
+            return False
+        role = get_effective_role(request)
+        return role in ADMIN_ROLES or role == 'TEACHER'
 
 
 class CanManualAttendance(permissions.BasePermission):

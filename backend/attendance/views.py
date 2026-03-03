@@ -12,7 +12,7 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from django.utils import timezone
 from django.db.models import Count, Q
 
-from core.permissions import IsSchoolAdmin, HasSchoolAccess, CanConfirmAttendance, CanManualAttendance, ModuleAccessMixin, get_effective_role, ADMIN_ROLES
+from core.permissions import IsSchoolAdmin, HasSchoolAccess, CanConfirmAttendance, CanUploadAttendance, CanManualAttendance, ModuleAccessMixin, get_effective_role, ADMIN_ROLES
 from core.mixins import TenantQuerySetMixin, ensure_tenant_schools, ensure_tenant_school_id
 from .models import AttendanceUpload, AttendanceRecord
 from .serializers import (
@@ -32,7 +32,7 @@ class ImageUploadView(ModuleAccessMixin, APIView):
     Upload attendance images to Supabase storage.
     """
     required_module = 'attendance'
-    permission_classes = [IsAuthenticated, IsSchoolAdmin]
+    permission_classes = [IsAuthenticated, CanUploadAttendance]
     parser_classes = [MultiPartParser, FormParser]
 
     def post(self, request):
@@ -95,7 +95,7 @@ class AttendanceUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
     3. POST /uploads/{id}/confirm/ - Confirm attendance
     """
     queryset = AttendanceUpload.objects.all()
-    permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, CanUploadAttendance, HasSchoolAccess]
 
     def get_serializer_class(self):
         if self.action == 'create':
@@ -167,10 +167,46 @@ class AttendanceUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
         if date_to:
             queryset = queryset.filter(date__lte=date_to)
 
+        # Teacher: only see uploads for their assigned classes
+        role = get_effective_role(self.request)
+        if role == 'TEACHER':
+            teacher_class_ids = self._get_teacher_class_ids()
+            queryset = queryset.filter(class_obj_id__in=teacher_class_ids)
+
         return queryset.order_by('-created_at')
+
+    def _get_teacher_class_ids(self):
+        """Return class IDs assigned to the current teacher via ClassSubject."""
+        from academics.models import ClassSubject
+        school_id = ensure_tenant_school_id(self.request) or self.request.user.school_id
+        return set(
+            ClassSubject.objects.filter(
+                school_id=school_id,
+                teacher__user=self.request.user,
+                is_active=True,
+            ).values_list('class_obj_id', flat=True).distinct()
+        )
 
     def perform_create(self, serializer):
         """Create upload and trigger processing task."""
+        # Teacher: verify class assignment via ClassSubject
+        role = get_effective_role(self.request)
+        if role == 'TEACHER':
+            from academics.models import ClassSubject
+            school_id = ensure_tenant_school_id(self.request) or self.request.user.school_id
+            class_obj_id = serializer.validated_data.get('class_obj') and serializer.validated_data['class_obj'].id
+            if not class_obj_id:
+                class_obj_id = self.request.data.get('class_obj')
+            has_assignment = ClassSubject.objects.filter(
+                school_id=school_id,
+                class_obj_id=class_obj_id,
+                teacher__user=self.request.user,
+                is_active=True,
+            ).exists()
+            if not has_assignment:
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied('You are not assigned to this class.')
+
         # Auto-resolve academic year if not provided
         academic_year = serializer.validated_data.get('academic_year')
         if not academic_year:
@@ -275,6 +311,16 @@ class AttendanceUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
         3. Triggers WhatsApp notifications (if enabled)
         """
         upload = self.get_object()
+
+        # Teacher: verify class assignment for this upload's class
+        role = get_effective_role(request)
+        if role == 'TEACHER':
+            teacher_class_ids = self._get_teacher_class_ids()
+            if upload.class_obj_id not in teacher_class_ids:
+                return Response(
+                    {'error': 'You are not assigned to this class.'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
 
         # Validate upload can be confirmed
         if upload.status == AttendanceUpload.Status.CONFIRMED:

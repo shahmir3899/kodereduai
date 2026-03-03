@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { hrApi } from '../../services/api'
+import { hrApi, usersApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import { useToast } from '../../components/Toast'
 import { useDebounce } from '../../hooks/useDebounce'
@@ -67,6 +67,15 @@ export default function StaffDirectoryPage() {
   const [convertResults, setConvertResults] = useState(null)
   const [isConverting, setIsConverting] = useState(false)
   const convertRoleOptions = getAllowableRoles().filter(r => !['SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL'].includes(r))
+
+  // Link existing user state
+  const [showLinkModal, setShowLinkModal] = useState(false)
+  const [linkMember, setLinkMember] = useState(null)
+  const [linkSearch, setLinkSearch] = useState('')
+  const [linkSearchResults, setLinkSearchResults] = useState([])
+  const [linkSearching, setLinkSearching] = useState(false)
+  const [linkError, setLinkError] = useState('')
+  const [isLinking, setIsLinking] = useState(false)
 
   // Fetch staff
   const { data: staffData, isLoading } = useQuery({
@@ -345,6 +354,63 @@ export default function StaffDirectoryPage() {
     setShowConvertModal(true)
   }
 
+  // Link existing user handlers
+  const openLinkModal = (member) => {
+    setLinkMember(member)
+    setLinkSearch('')
+    setLinkSearchResults([])
+    setLinkError('')
+    setShowLinkModal(true)
+  }
+
+  const handleLinkSearch = async (query) => {
+    setLinkSearch(query)
+    if (!query || query.length < 2) {
+      setLinkSearchResults([])
+      return
+    }
+    setLinkSearching(true)
+    try {
+      const res = await usersApi.getUsers({ search: query, page_size: 20 })
+      const users = res.data?.results || res.data || []
+      // Filter out users that are already linked to a staff member
+      const staffList = staffData?.data?.results || staffData?.data || []
+      const linkedUserIds = new Set(staffList.filter(s => s.user).map(s => s.user))
+      setLinkSearchResults(users.filter(u => !linkedUserIds.has(u.id)))
+    } catch {
+      setLinkSearchResults([])
+    } finally {
+      setLinkSearching(false)
+    }
+  }
+
+  const handleLinkUser = async (userId) => {
+    setLinkError('')
+    setIsLinking(true)
+    try {
+      await hrApi.linkStaffUserAccount(linkMember.id, { user_id: userId })
+      queryClient.invalidateQueries({ queryKey: ['hrStaff'] })
+      setShowLinkModal(false)
+      setLinkMember(null)
+      showSuccess('User account linked successfully!')
+    } catch (err) {
+      setLinkError(err?.response?.data?.error || err?.response?.data?.detail || 'Failed to link user account')
+    } finally {
+      setIsLinking(false)
+    }
+  }
+
+  const handleUnlinkUser = async (member) => {
+    if (!window.confirm(`Unlink user "${member.user_username}" from ${member.first_name} ${member.last_name}? The user account will NOT be deleted.`)) return
+    try {
+      await hrApi.unlinkStaffUserAccount(member.id)
+      queryClient.invalidateQueries({ queryKey: ['hrStaff'] })
+      showSuccess('User account unlinked successfully!')
+    } catch (err) {
+      showError(err?.response?.data?.error || 'Failed to unlink user account')
+    }
+  }
+
   const toggleStaffSelection = useCallback((id) => {
     setSelectedStaff(prev => {
       const next = new Set(prev)
@@ -562,6 +628,22 @@ export default function StaffDirectoryPage() {
                       Create Account
                     </button>
                   )}
+                  {!member.user && (
+                    <button
+                      onClick={() => openLinkModal(member)}
+                      className="text-sm text-indigo-600 hover:text-indigo-800 font-medium"
+                    >
+                      Link Account
+                    </button>
+                  )}
+                  {member.user && (
+                    <button
+                      onClick={() => handleUnlinkUser(member)}
+                      className="text-sm text-orange-600 hover:text-orange-800 font-medium"
+                    >
+                      Unlink
+                    </button>
+                  )}
                   <button
                     onClick={() => setDeleteConfirm(member)}
                     className="text-sm text-red-600 hover:text-red-800 font-medium"
@@ -671,6 +753,22 @@ export default function StaffDirectoryPage() {
                             className="text-sm text-purple-600 hover:text-purple-800 font-medium"
                           >
                             Create Account
+                          </button>
+                        )}
+                        {!member.user && (
+                          <button
+                            onClick={() => openLinkModal(member)}
+                            className="text-sm text-indigo-600 hover:text-indigo-800 font-medium"
+                          >
+                            Link Account
+                          </button>
+                        )}
+                        {member.user && (
+                          <button
+                            onClick={() => handleUnlinkUser(member)}
+                            className="text-sm text-orange-600 hover:text-orange-800 font-medium"
+                          >
+                            Unlink
                           </button>
                         )}
                         <button
@@ -1098,6 +1196,70 @@ export default function StaffDirectoryPage() {
                 disabled={isConverting}
               >
                 {isConverting ? 'Creating...' : 'Create Account'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Link Existing User Modal */}
+      {showLinkModal && linkMember && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-md mx-4">
+            <h2 className="text-lg font-bold text-gray-900 mb-1">Link Existing User Account</h2>
+            <p className="text-sm text-gray-500 mb-4">
+              For: <strong>{linkMember.first_name} {linkMember.last_name}</strong> ({linkMember.employee_id})
+            </p>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Search Users</label>
+                <input
+                  type="text"
+                  className="input"
+                  placeholder="Type username, name, or email..."
+                  value={linkSearch}
+                  onChange={(e) => handleLinkSearch(e.target.value)}
+                />
+              </div>
+
+              {linkSearching && (
+                <p className="text-sm text-gray-400">Searching...</p>
+              )}
+
+              {linkSearchResults.length > 0 && (
+                <div className="max-h-48 overflow-y-auto border rounded-lg divide-y">
+                  {linkSearchResults.map(user => (
+                    <button
+                      key={user.id}
+                      onClick={() => handleLinkUser(user.id)}
+                      disabled={isLinking}
+                      className="w-full text-left px-3 py-2 hover:bg-indigo-50 transition-colors flex justify-between items-center"
+                    >
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">{user.first_name} {user.last_name}</p>
+                        <p className="text-xs text-gray-500">@{user.username} · {user.role} {user.email ? `· ${user.email}` : ''}</p>
+                      </div>
+                      <span className="text-xs text-indigo-600 font-medium">Link</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {linkSearch.length >= 2 && !linkSearching && linkSearchResults.length === 0 && (
+                <p className="text-sm text-gray-400">No unlinked users found matching &quot;{linkSearch}&quot;</p>
+              )}
+
+              {linkError && <p className="text-sm text-red-600">{linkError}</p>}
+            </div>
+
+            <div className="flex justify-end mt-6">
+              <button
+                onClick={() => { setShowLinkModal(false); setLinkMember(null) }}
+                className="btn btn-secondary"
+                disabled={isLinking}
+              >
+                Cancel
               </button>
             </div>
           </div>

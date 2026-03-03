@@ -177,12 +177,12 @@ Centralized axios instance with interceptors. Organized into named API modules:
 
 | Module | Prefix | Key Methods |
 |--------|--------|-------------|
-| attendanceApi | /api/attendance/ | uploadImageToStorage, createUpload, confirmAttendance, getRecords, getThresholdStatus, tuneThresholds, getDriftHistory, getAnomalies, resolveAnomaly |
+| attendanceApi | /api/attendance/ | uploadImageToStorage, createUpload, confirmAttendance, getRecords, getMyAttendanceClasses, getThresholdStatus, tuneThresholds, getDriftHistory, getAnomalies, resolveAnomaly |
 | schoolsApi | /api/schools/ | getMySchool, getAllSchools, getMarkMappings, getCompletion |
 | studentsApi | /api/students/ | getStudents, createStudent, bulkCreate, getProfileSummary |
 | classesApi | /api/classes/ | getClasses, createClass |
 | financeApi | /api/finance/ | getFeePayments, generateMonthly, resolveFeeAmount, previewGeneration, getAccounts, createExpense, bulkUpdatePayments, bulkDeletePayments, createPayment |
-| hrApi | /api/hr/ | getStaff, getDashboardStats, generatePayslips |
+| hrApi | /api/hr/ | getStaff, getDashboardStats, generatePayslips, createStaffUserAccount, linkStaffUserAccount, unlinkStaffUserAccount, bulkCreateStaffAccounts |
 | academicsApi | /api/academics/ | getSubjects, getTimetableEntries, autoGenerate |
 | sessionsApi | /api/sessions/ | getAcademicYears, getEnrollments, bulkPromote, getHealth |
 | examinationsApi | /api/examinations/ | getExams, getMarks, bulkEntry, getReportCard, generateComments |
