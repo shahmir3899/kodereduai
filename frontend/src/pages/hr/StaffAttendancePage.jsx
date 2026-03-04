@@ -188,7 +188,7 @@ export default function StaffAttendancePage() {
         setSaving(false)
         return
       }
-      await hrApi.bulkMarkAttendance({ records })
+      await hrApi.bulkMarkAttendance({ records, date: selectedDate })
       queryClient.invalidateQueries({ queryKey: ['hrAttendance', selectedDate] })
       queryClient.invalidateQueries({ queryKey: ['hrDashboardStats'] })
       setSaveMsg(`Saved attendance for ${records.length} staff member(s).`)
