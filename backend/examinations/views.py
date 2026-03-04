@@ -11,7 +11,10 @@ from rest_framework.views import APIView
 from core.mixins import TenantQuerySetMixin, ensure_tenant_school_id
 from core.permissions import IsSchoolAdmin, IsSchoolAdminOrReadOnly, HasSchoolAccess, ModuleAccessMixin
 
-from .models import ExamType, ExamGroup, Exam, ExamSubject, StudentMark, GradeScale
+from .models import (
+    ExamType, ExamGroup, Exam, ExamSubject, StudentMark, GradeScale,
+    Question, ExamPaper, PaperQuestion, PaperUpload, PaperFeedback
+)
 from .serializers import (
     ExamTypeSerializer, ExamTypeCreateSerializer,
     ExamSerializer, ExamCreateSerializer,
@@ -21,7 +24,12 @@ from .serializers import (
     GradeScaleSerializer, GradeScaleCreateSerializer,
     ExamGroupSerializer, ExamGroupCreateSerializer,
     ExamGroupWizardCreateSerializer, DateSheetUpdateSerializer,
+    QuestionSerializer, QuestionCreateUpdateSerializer,
+    ExamPaperSerializer, ExamPaperCreateUpdateSerializer,
+    PaperUploadSerializer, PaperUploadCreateSerializer,
+    PaperFeedbackSerializer, QuestionReviewSerializer,
 )
+
 
 
 def _resolve_school_id(request):
@@ -1190,3 +1198,356 @@ class ReportCardView(ModuleAccessMixin, APIView):
                 for gs in grade_scales
             ],
         })
+
+
+# ===========================================
+# Question Paper Builder ViewSets
+# ===========================================
+
+
+class QuestionViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
+    """ViewSet for Question management."""
+    required_module = 'examinations'
+    queryset = Question.objects.all()
+    permission_classes = [IsAuthenticated, HasSchoolAccess]
+
+    def get_serializer_class(self):
+        if self.action in ('create', 'update', 'partial_update'):
+            return QuestionCreateUpdateSerializer
+        return QuestionSerializer
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        
+        # Filter by subject
+        subject_id = self.request.query_params.get('subject')
+        if subject_id:
+            qs = qs.filter(subject_id=subject_id)
+        
+        # Filter by exam type
+        exam_type_id = self.request.query_params.get('exam_type')
+        if exam_type_id:
+            qs = qs.filter(exam_type_id=exam_type_id)
+        
+        # Filter by question type
+        question_type = self.request.query_params.get('question_type')
+        if question_type:
+            qs = qs.filter(question_type=question_type)
+        
+        # Filter by difficulty
+        difficulty = self.request.query_params.get('difficulty')
+        if difficulty:
+            qs = qs.filter(difficulty_level=difficulty)
+        
+        # Filter by active status
+        is_active = self.request.query_params.get('is_active')
+        if is_active is not None:
+            qs = qs.filter(is_active=is_active.lower() == 'true')
+        else:
+            qs = qs.filter(is_active=True)
+        
+        # Search by question text
+        search = self.request.query_params.get('search')
+        if search:
+            qs = qs.filter(question_text__icontains=search)
+        
+        return qs.select_related('subject', 'exam_type', 'created_by')
+
+    def perform_create(self, serializer):
+        school_id = _resolve_school_id(self.request)
+        serializer.save(school_id=school_id, created_by=self.request.user)
+
+    def perform_destroy(self, instance):
+        instance.is_active = False
+        instance.save()
+
+
+class ExamPaperViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
+    """ViewSet for ExamPaper management."""
+    required_module = 'examinations'
+    queryset = ExamPaper.objects.all()
+    permission_classes = [IsAuthenticated, HasSchoolAccess]
+
+    def get_serializer_class(self):
+        if self.action in ('create', 'update', 'partial_update'):
+            return ExamPaperCreateUpdateSerializer
+        return ExamPaperSerializer
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        
+        # Filter by class
+        class_id = self.request.query_params.get('class_obj')
+        if class_id:
+            qs = qs.filter(class_obj_id=class_id)
+        
+        # Filter by subject
+        subject_id = self.request.query_params.get('subject')
+        if subject_id:
+            qs = qs.filter(subject_id=subject_id)
+        
+        # Filter by exam
+        exam_id = self.request.query_params.get('exam')
+        if exam_id:
+            qs = qs.filter(exam_id=exam_id)
+        
+        # Filter by status
+        paper_status = self.request.query_params.get('status')
+        if paper_status:
+            qs = qs.filter(status=paper_status)
+        
+        # Filter by active status
+        is_active = self.request.query_params.get('is_active')
+        if is_active is not None:
+            qs = qs.filter(is_active=is_active.lower() == 'true')
+        else:
+            qs = qs.filter(is_active=True)
+        
+        # Search by title
+        search = self.request.query_params.get('search')
+        if search:
+            qs = qs.filter(paper_title__icontains=search)
+        
+        return qs.select_related(
+            'class_obj', 'subject', 'exam', 'exam_subject', 'generated_by'
+        ).prefetch_related('paper_questions__question')
+
+    def perform_create(self, serializer):
+        school_id = _resolve_school_id(self.request)
+        serializer.save(school_id=school_id, generated_by=self.request.user)
+
+    def perform_destroy(self, instance):
+        instance.is_active = False
+        instance.save()
+
+    @action(detail=True, methods=['get'], url_path='generate-pdf')
+    def generate_pdf(self, request, pk=None):
+        """Generate and download PDF for this exam paper."""
+        from .pdf_generator import ExamPaperPDFGenerator
+        
+        exam_paper = self.get_object()
+        
+        try:
+            generator = ExamPaperPDFGenerator(exam_paper)
+            pdf_bytes = generator.generate()
+            
+            # Create filename
+            filename = f"{exam_paper.paper_title.replace(' ', '_')}.pdf"
+            
+            response = HttpResponse(pdf_bytes, content_type='application/pdf')
+            response['Content-Disposition'] = f'attachment; filename="{filename}"'
+            
+            return response
+        
+        except Exception as e:
+            return Response(
+                {'detail': f'Error generating PDF: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    @action(detail=False, methods=['post'], url_path='review-questions')
+    def review_questions(self, request):
+        """AI-powered grammar and spelling review for questions."""
+        from .paper_ocr_processor import QuestionReviewAI
+        
+        serializer = QuestionReviewSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        question_texts = serializer.validated_data['questions']
+        
+        try:
+            reviewer = QuestionReviewAI()
+            results = reviewer.review_questions(question_texts)
+            
+            return Response({'results': results}, status=status.HTTP_200_OK)
+        
+        except Exception as e:
+            return Response(
+                {'detail': f'Error reviewing questions: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class PaperUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
+    """ViewSet for PaperUpload management (image uploads for OCR)."""
+    required_module = 'examinations'
+    queryset = PaperUpload.objects.all()
+    permission_classes = [IsAuthenticated, HasSchoolAccess]
+    serializer_class = PaperUploadSerializer
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        
+        # Filter by status
+        upload_status = self.request.query_params.get('status')
+        if upload_status:
+            qs = qs.filter(status=upload_status)
+        
+        # Filter by uploaded user
+        if self.request.query_params.get('my_uploads') == 'true':
+            qs = qs.filter(uploaded_by=self.request.user)
+        
+        return qs.select_related('school', 'exam_paper', 'uploaded_by').order_by('-created_at')
+
+    @action(detail=False, methods=['post'], url_path='upload-image')
+    def upload_image(self, request):
+        """Upload paper image and trigger OCR processing."""
+        from core.storage import SupabaseStorageService
+        from .tasks import process_paper_upload_ocr
+        
+        serializer = PaperUploadCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        image_file = serializer.validated_data['image']
+        school_id = _resolve_school_id(request)
+        
+        if not school_id:
+            return Response(
+                {'detail': 'School ID is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            # Upload to Supabase storage
+            storage_service = SupabaseStorageService()
+            
+            # Use a folder structure: papers/{school_id}/{timestamp}
+            from datetime import datetime
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            folder_path = f"papers/{school_id}"
+            
+            image_url = storage_service.upload_file(
+                file=image_file,
+                folder= folder_path,
+                filename=f"paper_{timestamp}_{image_file.name}"
+            )
+            
+            # Create PaperUpload record
+            upload = PaperUpload.objects.create(
+                school_id=school_id,
+                uploaded_by=request.user,
+                image_url=image_url,
+                status=PaperUpload.Status.PENDING
+            )
+            
+            # Trigger async OCR processing
+            process_paper_upload_ocr.delay(upload.id)
+            
+            return Response(
+                PaperUploadSerializer(upload).data,
+                status=status.HTTP_201_CREATED
+            )
+        
+        except Exception as e:
+            return Response(
+                {'detail': f'Error uploading image: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    @action(detail=True, methods=['post'], url_path='confirm')
+    def confirm_extraction(self, request, pk=None):
+        """Confirm extracted questions and create ExamPaper."""
+        upload = self.get_object()
+        
+        if upload.status != PaperUpload.Status.EXTRACTED:
+            return Response(
+                {'detail': 'Upload must be in EXTRACTED status'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Get confirmed data from request
+        confirmed_json = request.data.get('confirmed_data')
+        paper_metadata = request.data.get('paper_metadata', {})
+        
+        if not confirmed_json:
+            return Response(
+                {'detail': 'confirmed_data is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            school_id = _resolve_school_id(request)
+            
+            # Create ExamPaper
+            exam_paper = ExamPaper.objects.create(
+                school_id=school_id,
+                class_obj_id=paper_metadata.get('class_obj'),
+                subject_id=paper_metadata.get('subject'),
+                exam_id=paper_metadata.get('exam'),
+                exam_subject_id=paper_metadata.get('exam_subject'),
+                paper_title=paper_metadata.get('paper_title', 'Untitled Paper'),
+                instructions=paper_metadata.get('instructions', ''),
+                total_marks=paper_metadata.get('total_marks', 100),
+                duration_minutes=paper_metadata.get('duration_minutes', 60),
+                status=ExamPaper.Status.DRAFT,
+                generated_by=request.user
+            )
+            
+            # Create Questions from confirmed data
+            questions = confirmed_json.get('questions', [])
+            for idx, q_data in enumerate(questions, start=1):
+                question = Question.objects.create(
+                    school_id=school_id,
+                    subject_id=paper_metadata.get('subject'),
+                    question_text=q_data.get('question_text', ''),
+                    question_type=q_data.get('question_type', 'SHORT'),
+                    difficulty_level=q_data.get('difficulty_level', 'MEDIUM'),
+                    marks=q_data.get('marks', 1),
+                    option_a=q_data.get('options', {}).get('A', ''),
+                    option_b=q_data.get('options', {}).get('B', ''),
+                    option_c=q_data.get('options', {}).get('C', ''),
+                    option_d=q_data.get('options', {}).get('D', ''),
+                    created_by=request.user,
+                )
+                
+                # Link question to paper
+                PaperQuestion.objects.create(
+                    exam_paper=exam_paper,
+                    question=question,
+                    question_order=idx,
+                    marks_override=q_data.get('marks')
+                )
+            
+            # Create feedback record for learning loop
+            PaperFeedback.objects.create(
+                paper_upload=upload,
+                ai_extracted_json=upload.ai_extracted_json,
+                user_confirmed_json=confirmed_json,
+                accuracy_metrics={
+                    'total_questions': len(questions),
+                    'extraction_confidence': upload.extraction_confidence
+                },
+                confirmed_by=request.user
+            )
+            
+            # Update upload status
+            upload.status = PaperUpload.Status.CONFIRMED
+            upload.exam_paper = exam_paper
+            upload.save()
+            
+            return Response(
+                {
+                    'detail': 'Paper successfully confirmed',
+                    'exam_paper_id': exam_paper.id,
+                    'questions_created': len(questions)
+                },
+                status=status.HTTP_200_OK
+            )
+        
+        except Exception as e:
+            return Response(
+                {'detail': f'Error confirming extraction: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class PaperFeedbackViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ReadOnlyModelViewSet):
+    """ViewSet for PaperFeedback (read-only for analytics)."""
+    required_module = 'examinations'
+    queryset = PaperFeedback.objects.all()
+    permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
+    serializer_class = PaperFeedbackSerializer
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        return qs.select_related('paper_upload', 'confirmed_by').order_by('-created_at')

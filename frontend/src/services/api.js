@@ -1085,3 +1085,40 @@ export const faceAttendanceApi = {
   // Check face recognition status
   getStatus: () => api.get('/api/face-attendance/status/'),
 }
+
+// ─── Question Paper Builder (Examinations) ──────────────────────────────────
+export const questionPaperApi = {
+  // Questions
+  getQuestions: (params) => api.get('/api/examinations/questions/', { params }),
+  getQuestion: (id) => api.get(`/api/examinations/questions/${id}/`),
+  createQuestion: (data) => api.post('/api/examinations/questions/', data),
+  updateQuestion: (id, data) => api.patch(`/api/examinations/questions/${id}/`, data),
+  deleteQuestion: (id) => api.delete(`/api/examinations/questions/${id}/`),
+  search: (params) => api.get('/api/examinations/questions/', { params }),
+
+  // Exam Papers
+  getExamPapers: (params) => api.get('/api/examinations/exam-papers/', { params }),
+  getExamPaper: (id) => api.get(`/api/examinations/exam-papers/${id}/`),
+  createExamPaper: (data) => api.post('/api/examinations/exam-papers/', data),
+  updateExamPaper: (id, data) => api.patch(`/api/examinations/exam-papers/${id}/`, data),
+  deleteExamPaper: (id) => api.delete(`/api/examinations/exam-papers/${id}/`),
+  generatePDF: (id) => api.get(`/api/examinations/exam-papers/${id}/generate-pdf/`, { responseType: 'blob' }),
+  reviewQuestions: (questions) => api.post('/api/examinations/exam-papers/review-questions/', { questions }),
+
+  // Paper Uploads (image capture for OCR)
+  getPaperUploads: (params) => api.get('/api/examinations/paper-uploads/', { params }),
+  getPaperUpload: (id) => api.get(`/api/examinations/paper-uploads/${id}/`),
+  uploadPaperImage: (file, classObj, subject) => {
+    const formData = new FormData()
+    formData.append('image', file)
+    if (classObj) formData.append('class_obj', classObj)
+    if (subject) formData.append('subject', subject)
+    return api.post('/api/examinations/paper-uploads/upload-image/', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+  confirmPaperUpload: (id, data) => api.post(`/api/examinations/paper-uploads/${id}/confirm/`, data),
+
+  // Paper Feedback (for learning loop)
+  getPaperFeedback: (params) => api.get('/api/examinations/paper-feedback/', { params }),
+}

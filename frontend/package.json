@@ -18,6 +18,8 @@
   },
   "dependencies": {
     "@tanstack/react-query": "^5.60.0",
+    "@tiptap/react": "^2.1.13",
+    "@tiptap/starter-kit": "^2.1.13",
     "axios": "^1.7.9",
     "compressorjs": "^1.2.1",
     "date-fns": "^4.1.0",

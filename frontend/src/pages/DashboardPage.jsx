@@ -206,7 +206,7 @@ export default function DashboardPage({ variant }) {
   const collectionRate = fin?.total_due > 0
     ? Math.round((Number(fin.total_collected) / Number(fin.total_due)) * 100) : null
   const staffPresentPct = hr?.active_staff > 0
-    ? Math.round((hr.present_today / hr.active_staff) * 100) : null
+    ? Math.round(((hr.attendance_present_today || 0) / hr.active_staff) * 100) : null
 
   // ─── Quick Actions ──────────────────────────────────────────────────────────
 
@@ -378,7 +378,7 @@ export default function DashboardPage({ variant }) {
         <StatCard
           label="Staff Present"
           value={staffPresentPct != null ? `${staffPresentPct}%` : hr ? `${hr.total_staff}` : '—'}
-          subtitle={hr ? (staffPresentPct != null ? `${hr.on_leave_count} on leave` : 'total staff') : undefined}
+          subtitle={hr ? (staffPresentPct != null ? `${hr.staff_on_leave_today || 0} on leave` : 'total staff') : undefined}
           icon={icons.staff}
           color="purple"
           href="/hr"

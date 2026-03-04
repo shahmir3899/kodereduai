@@ -7,6 +7,7 @@ from datetime import date, timedelta
 
 from decimal import Decimal
 
+from django.db import transaction
 from django.db.models import Count, Q, Sum
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
@@ -1385,30 +1386,67 @@ class StaffAttendanceViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mo
         if not records or not att_date:
             return Response({'detail': 'date and records are required.'}, status=400)
 
-        created = 0
-        updated = 0
+        normalized_records = {}
         for record in records:
             staff_id = record.get('staff_member')
             att_status = record.get('status')
             if not staff_id or not att_status:
                 continue
 
-            obj, was_created = StaffAttendance.objects.update_or_create(
-                school_id=school_id,
-                staff_member_id=staff_id,
-                date=att_date,
-                defaults={
-                    'status': att_status,
-                    'check_in': record.get('check_in') or None,
-                    'check_out': record.get('check_out') or None,
-                    'notes': record.get('notes', ''),
-                    'marked_by': request.user,
-                },
-            )
-            if was_created:
-                created += 1
+            normalized_records[int(staff_id)] = {
+                'status': att_status,
+                'check_in': record.get('check_in') or None,
+                'check_out': record.get('check_out') or None,
+                'notes': record.get('notes', ''),
+            }
+
+        if not normalized_records:
+            return Response({'detail': 'No valid attendance records provided.'}, status=400)
+
+        staff_ids = list(normalized_records.keys())
+        existing_records = StaffAttendance.objects.filter(
+            school_id=school_id,
+            date=att_date,
+            staff_member_id__in=staff_ids,
+        )
+        existing_by_staff = {rec.staff_member_id: rec for rec in existing_records}
+
+        to_create = []
+        to_update = []
+
+        for staff_id, payload in normalized_records.items():
+            existing = existing_by_staff.get(staff_id)
+            if existing:
+                existing.status = payload['status']
+                existing.check_in = payload['check_in']
+                existing.check_out = payload['check_out']
+                existing.notes = payload['notes']
+                existing.marked_by = request.user
+                to_update.append(existing)
             else:
-                updated += 1
+                to_create.append(StaffAttendance(
+                    school_id=school_id,
+                    staff_member_id=staff_id,
+                    date=att_date,
+                    status=payload['status'],
+                    check_in=payload['check_in'],
+                    check_out=payload['check_out'],
+                    notes=payload['notes'],
+                    marked_by=request.user,
+                ))
+
+        with transaction.atomic():
+            if to_create:
+                StaffAttendance.objects.bulk_create(to_create, batch_size=500)
+            if to_update:
+                StaffAttendance.objects.bulk_update(
+                    to_update,
+                    ['status', 'check_in', 'check_out', 'notes', 'marked_by'],
+                    batch_size=500,
+                )
+
+        created = len(to_create)
+        updated = len(to_update)
 
         return Response({
             'created': created,

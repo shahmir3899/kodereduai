@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { hrApi } from '../../services/api'
+import { useToast } from '../../components/Toast'
 
 const STATUS_OPTIONS = [
   { value: '', label: '-- Select --' },
@@ -25,6 +26,7 @@ function formatDate(date) {
 
 export default function StaffAttendancePage() {
   const queryClient = useQueryClient()
+  const { showSuccess, showError, showWarning } = useToast()
   const today = formatDate(new Date())
   const [selectedDate, setSelectedDate] = useState(today)
   const [attendanceData, setAttendanceData] = useState({})
@@ -185,6 +187,7 @@ export default function StaffAttendancePage() {
       })
       if (records.length === 0) {
         setSaveMsg('No attendance marked to save.')
+        showWarning('No attendance marked to save.')
         setSaving(false)
         return
       }
@@ -192,9 +195,12 @@ export default function StaffAttendancePage() {
       queryClient.invalidateQueries({ queryKey: ['hrAttendance', selectedDate] })
       queryClient.invalidateQueries({ queryKey: ['hrDashboardStats'] })
       setSaveMsg(`Saved attendance for ${records.length} staff member(s).`)
+      showSuccess(`Saved attendance for ${records.length} staff member(s).`)
       setHasChanges(false)
     } catch (err) {
-      setSaveMsg(err.response?.data?.detail || err.response?.data?.error || 'Failed to save attendance.')
+      const errorMessage = err.response?.data?.detail || err.response?.data?.error || 'Failed to save attendance.'
+      setSaveMsg(errorMessage)
+      showError(errorMessage)
     }
     setSaving(false)
   }
@@ -217,6 +223,15 @@ export default function StaffAttendancePage() {
   }, [attendanceData])
 
   const isLoading = staffLoading || attLoading
+
+  const getSummaryName = (row) => {
+    const fullName = `${row.staff_member__first_name || ''} ${row.staff_member__last_name || ''}`.trim()
+    return fullName || row.staff_member__full_name || row.staff_name || `Staff #${row.staff_member}`
+  }
+
+  const getSummaryCount = (row, key) => {
+    return row[key] ?? row[key.toLowerCase()] ?? 0
+  }
 
   return (
     <div>
@@ -530,15 +545,21 @@ export default function StaffAttendancePage() {
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {summaryData.map((row, i) => {
-                      const total = (row.PRESENT || 0) + (row.ABSENT || 0) + (row.LATE || 0) + (row.HALF_DAY || 0) + (row.ON_LEAVE || 0)
+                      const total = row.total ?? (
+                        getSummaryCount(row, 'PRESENT') +
+                        getSummaryCount(row, 'ABSENT') +
+                        getSummaryCount(row, 'LATE') +
+                        getSummaryCount(row, 'HALF_DAY') +
+                        getSummaryCount(row, 'ON_LEAVE')
+                      )
                       return (
                         <tr key={i} className="hover:bg-gray-50">
-                          <td className="px-4 py-2 text-sm font-medium text-gray-900">{row.staff_member__full_name || row.staff_name}</td>
-                          <td className="px-4 py-2 text-sm text-center text-green-700 font-semibold">{row.PRESENT || 0}</td>
-                          <td className="px-4 py-2 text-sm text-center text-red-700 font-semibold">{row.ABSENT || 0}</td>
-                          <td className="px-4 py-2 text-sm text-center text-yellow-700 font-semibold">{row.LATE || 0}</td>
-                          <td className="px-4 py-2 text-sm text-center text-orange-700 font-semibold">{row.HALF_DAY || 0}</td>
-                          <td className="px-4 py-2 text-sm text-center text-blue-700 font-semibold">{row.ON_LEAVE || 0}</td>
+                          <td className="px-4 py-2 text-sm font-medium text-gray-900">{getSummaryName(row)}</td>
+                          <td className="px-4 py-2 text-sm text-center text-green-700 font-semibold">{getSummaryCount(row, 'PRESENT')}</td>
+                          <td className="px-4 py-2 text-sm text-center text-red-700 font-semibold">{getSummaryCount(row, 'ABSENT')}</td>
+                          <td className="px-4 py-2 text-sm text-center text-yellow-700 font-semibold">{getSummaryCount(row, 'LATE')}</td>
+                          <td className="px-4 py-2 text-sm text-center text-orange-700 font-semibold">{getSummaryCount(row, 'HALF_DAY')}</td>
+                          <td className="px-4 py-2 text-sm text-center text-blue-700 font-semibold">{getSummaryCount(row, 'ON_LEAVE')}</td>
                           <td className="px-4 py-2 text-sm text-center font-bold text-gray-900">{total}</td>
                         </tr>
                       )
@@ -550,16 +571,22 @@ export default function StaffAttendancePage() {
               {/* Mobile Cards */}
               <div className="md:hidden space-y-3">
                 {summaryData.map((row, i) => {
-                  const total = (row.PRESENT || 0) + (row.ABSENT || 0) + (row.LATE || 0) + (row.HALF_DAY || 0) + (row.ON_LEAVE || 0)
+                  const total = row.total ?? (
+                    getSummaryCount(row, 'PRESENT') +
+                    getSummaryCount(row, 'ABSENT') +
+                    getSummaryCount(row, 'LATE') +
+                    getSummaryCount(row, 'HALF_DAY') +
+                    getSummaryCount(row, 'ON_LEAVE')
+                  )
                   return (
                     <div key={i} className="card">
-                      <p className="font-medium text-gray-900 text-sm mb-2">{row.staff_member__full_name || row.staff_name}</p>
+                      <p className="font-medium text-gray-900 text-sm mb-2">{getSummaryName(row)}</p>
                       <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                        <div className="bg-green-50 rounded p-1"><span className="font-bold text-green-700">{row.PRESENT || 0}</span><br />Present</div>
-                        <div className="bg-red-50 rounded p-1"><span className="font-bold text-red-700">{row.ABSENT || 0}</span><br />Absent</div>
-                        <div className="bg-yellow-50 rounded p-1"><span className="font-bold text-yellow-700">{row.LATE || 0}</span><br />Late</div>
-                        <div className="bg-orange-50 rounded p-1"><span className="font-bold text-orange-700">{row.HALF_DAY || 0}</span><br />Half Day</div>
-                        <div className="bg-blue-50 rounded p-1"><span className="font-bold text-blue-700">{row.ON_LEAVE || 0}</span><br />On Leave</div>
+                        <div className="bg-green-50 rounded p-1"><span className="font-bold text-green-700">{getSummaryCount(row, 'PRESENT')}</span><br />Present</div>
+                        <div className="bg-red-50 rounded p-1"><span className="font-bold text-red-700">{getSummaryCount(row, 'ABSENT')}</span><br />Absent</div>
+                        <div className="bg-yellow-50 rounded p-1"><span className="font-bold text-yellow-700">{getSummaryCount(row, 'LATE')}</span><br />Late</div>
+                        <div className="bg-orange-50 rounded p-1"><span className="font-bold text-orange-700">{getSummaryCount(row, 'HALF_DAY')}</span><br />Half Day</div>
+                        <div className="bg-blue-50 rounded p-1"><span className="font-bold text-blue-700">{getSummaryCount(row, 'ON_LEAVE')}</span><br />On Leave</div>
                         <div className="bg-gray-50 rounded p-1"><span className="font-bold text-gray-900">{total}</span><br />Total</div>
                       </div>
                     </div>

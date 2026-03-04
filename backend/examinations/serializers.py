@@ -1,5 +1,8 @@
 from rest_framework import serializers
-from .models import ExamType, ExamGroup, Exam, ExamSubject, StudentMark, GradeScale
+from .models import (
+    ExamType, ExamGroup, Exam, ExamSubject, StudentMark, GradeScale,
+    Question, ExamPaper, PaperQuestion, PaperUpload, PaperFeedback
+)
 
 
 # ── ExamType ──────────────────────────────────────────────────
@@ -323,3 +326,223 @@ class DateSheetUpdateSerializer(serializers.Serializer):
         child=serializers.DictField(),
         help_text="List of {exam_subject_id, exam_date} entries",
     )
+
+
+# ===========================================
+# Question Paper Builder Serializers
+# ===========================================
+
+
+class QuestionSerializer(serializers.ModelSerializer):
+    """Serializer for Question model."""
+    subject_name = serializers.CharField(source='subject.name', read_only=True)
+    exam_type_name = serializers.CharField(source='exam_type.name', read_only=True, allow_null=True)
+    created_by_name = serializers.CharField(source='created_by.username', read_only=True, allow_null=True)
+
+    class Meta:
+        model = Question
+        fields = [
+            'id', 'school', 'subject', 'subject_name', 'exam_type', 'exam_type_name',
+            'question_text', 'question_image_url', 'question_type', 'difficulty_level',
+            'marks', 'option_a', 'option_b', 'option_c', 'option_d', 'correct_answer',
+            'created_by', 'created_by_name', 'is_active', 'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'school', 'created_by', 'created_at', 'updated_at']
+
+
+class QuestionCreateUpdateSerializer(serializers.ModelSerializer):
+    """Serializer for creating/updating questions."""
+
+    class Meta:
+        model = Question
+        fields = [
+            'subject', 'exam_type', 'question_text', 'question_image_url',
+            'question_type', 'difficulty_level', 'marks',
+            'option_a', 'option_b', 'option_c', 'option_d', 'correct_answer',
+        ]
+
+    def validate(self, data):
+        # If MCQ, ensure options are provided
+        if data.get('question_type') == 'MCQ':
+            if not all([data.get('option_a'), data.get('option_b')]):
+                raise serializers.ValidationError(
+                    'MCQ questions must have at least options A and B.'
+                )
+        return data
+
+
+class PaperQuestionSerializer(serializers.ModelSerializer):
+    """Serializer for PaperQuestion through model."""
+    question_text = serializers.CharField(source='question.question_text', read_only=True)
+    question_type = serializers.CharField(source='question.question_type', read_only=True)
+    option_a = serializers.CharField(source='question.option_a', read_only=True)
+    option_b = serializers.CharField(source='question.option_b', read_only=True)
+    option_c = serializers.CharField(source='question.option_c', read_only=True)
+    option_d = serializers.CharField(source='question.option_d', read_only=True)
+    question_image_url = serializers.URLField(source='question.question_image_url', read_only=True, allow_null=True)
+    marks = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PaperQuestion
+        fields = [
+            'id', 'question', 'question_order', 'marks_override', 'marks',
+            'question_text', 'question_type', 'option_a', 'option_b',
+            'option_c', 'option_d', 'question_image_url', 'created_at',
+        ]
+
+    def get_marks(self, obj):
+        """Return override marks or default question marks."""
+        return obj.get_marks()
+
+
+class ExamPaperSerializer(serializers.ModelSerializer):
+    """Serializer for ExamPaper with nested questions."""
+    class_name = serializers.CharField(source='class_obj.name', read_only=True)
+    subject_name = serializers.CharField(source='subject.name', read_only=True)
+    exam_name = serializers.CharField(source='exam.name', read_only=True, allow_null=True)
+    generated_by_name = serializers.CharField(source='generated_by.username', read_only=True, allow_null=True)
+    paper_questions = PaperQuestionSerializer(many=True, read_only=True)
+    question_count = serializers.IntegerField(read_only=True)
+    calculated_total_marks = serializers.DecimalField(max_digits=6, decimal_places=2, read_only=True)
+
+    class Meta:
+        model = ExamPaper
+        fields = [
+            'id', 'school', 'exam', 'exam_name', 'exam_subject',
+            'class_obj', 'class_name', 'subject', 'subject_name',
+            'paper_title', 'instructions', 'total_marks', 'duration_minutes',
+            'paper_questions', 'question_count', 'calculated_total_marks',
+            'status', 'generated_by', 'generated_by_name',
+            'is_active', 'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'school', 'generated_by', 'created_at', 'updated_at']
+
+
+class ExamPaperCreateUpdateSerializer(serializers.ModelSerializer):
+    """Serializer for creating/updating exam papers."""
+    questions_data = serializers.ListField(
+        child=serializers.DictField(),
+        write_only=True,
+        required=False,
+        help_text="List of {question_id, question_order, marks_override}"
+    )
+
+    class Meta:
+        model = ExamPaper
+        fields = [
+            'exam', 'exam_subject', 'class_obj', 'subject',
+            'paper_title', 'instructions', 'total_marks',
+            'duration_minutes', 'status', 'questions_data',
+        ]
+
+    def validate(self, data):
+        # Ensure class and subject are consistent
+        class_obj = data.get('class_obj')
+        subject = data.get('subject')
+        
+        # If exam_subject is provided, validate it matches exam
+        exam_subject = data.get('exam_subject')
+        exam = data.get('exam')
+        if exam_subject and exam:
+            if exam_subject.exam != exam:
+                raise serializers.ValidationError(
+                    'ExamSubject must belong to the specified Exam.'
+                )
+        
+        return data
+
+    def create(self, validated_data):
+        questions_data = validated_data.pop('questions_data', [])
+        exam_paper = ExamPaper.objects.create(**validated_data)
+        
+        # Create PaperQuestion entries
+        for q_data in questions_data:
+            PaperQuestion.objects.create(
+                exam_paper=exam_paper,
+                question_id=q_data['question_id'],
+                question_order=q_data.get('question_order', 1),
+                marks_override=q_data.get('marks_override'),
+            )
+        
+        return exam_paper
+
+    def update(self, instance, validated_data):
+        questions_data = validated_data.pop('questions_data', None)
+        
+        # Update basic fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        
+        # Update questions if provided
+        if questions_data is not None:
+            # Clear existing questions
+            instance.paper_questions.all().delete()
+            # Create new ones
+            for q_data in questions_data:
+                PaperQuestion.objects.create(
+                    exam_paper=instance,
+                    question_id=q_data['question_id'],
+                    question_order=q_data.get('question_order', 1),
+                    marks_override=q_data.get('marks_override'),
+                )
+        
+        return instance
+
+
+class PaperUploadSerializer(serializers.ModelSerializer):
+    """Serializer for PaperUpload."""
+    uploaded_by_name = serializers.CharField(source='uploaded_by.username', read_only=True, allow_null=True)
+    exam_paper_title = serializers.CharField(source='exam_paper.paper_title', read_only=True, allow_null=True)
+
+    class Meta:
+        model = PaperUpload
+        fields = [
+            'id', 'school', 'exam_paper', 'exam_paper_title',
+            'uploaded_by', 'uploaded_by_name', 'image_url',
+            'ai_extracted_json', 'extraction_confidence', 'extraction_notes',
+            'status', 'error_message', 'created_at', 'processed_at',
+        ]
+        read_only_fields = [
+            'id', 'school', 'uploaded_by', 'ai_extracted_json',
+            'extraction_confidence', 'extraction_notes', 'status',
+            'error_message', 'created_at', 'processed_at',
+        ]
+
+
+class PaperUploadCreateSerializer(serializers.Serializer):
+    """Serializer for uploading paper image."""
+    image = serializers.ImageField(required=True)
+    class_obj = serializers.IntegerField(required=False, help_text="Class ID for context")
+    subject = serializers.IntegerField(required=False, help_text="Subject ID for context")
+
+
+class PaperFeedbackSerializer(serializers.ModelSerializer):
+    """Serializer for PaperFeedback."""
+    confirmed_by_name = serializers.CharField(source='confirmed_by.username', read_only=True, allow_null=True)
+
+    class Meta:
+        model = PaperFeedback
+        fields = [
+            'id', 'paper_upload', 'ai_extracted_json', 'user_confirmed_json',
+            'accuracy_metrics', 'correction_notes', 'confirmed_by',
+            'confirmed_by_name', 'created_at',
+        ]
+        read_only_fields = ['id', 'confirmed_by', 'created_at']
+
+
+class QuestionReviewSerializer(serializers.Serializer):
+    """Serializer for AI grammar/spelling review."""
+    questions = serializers.ListField(
+        child=serializers.CharField(),
+        help_text="List of question texts to review"
+    )
+
+
+class QuestionReviewResponseSerializer(serializers.Serializer):
+    """Response serializer for question review."""
+    question_text = serializers.CharField()
+    has_errors = serializers.BooleanField()
+    suggestions = serializers.ListField(child=serializers.CharField())
+    corrected_text = serializers.CharField()
+    clarity_score = serializers.IntegerField()
