@@ -44,6 +44,12 @@ export default function Portal() {
 
   // Logged in but not super admin → access denied
   if (!user.is_super_admin) {
+    const handleLogout = () => {
+      localStorage.removeItem('token')
+      localStorage.removeItem('refresh_token')
+      window.location.href = '/login'
+    }
+
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
         <div className="bg-white p-8 rounded shadow-md text-center max-w-md">
@@ -54,12 +60,12 @@ export default function Portal() {
           <p className="text-sm text-gray-600 mb-6">
             Your role: <span className="font-medium">{user.role}</span>
           </p>
-          <a
-            href="https://www.kodereduai.pk"
-            className="inline-block bg-gray-600 text-white px-6 py-2 rounded hover:bg-gray-700"
+          <button
+            onClick={handleLogout}
+            className="inline-block bg-gray-600 text-white px-6 py-2 rounded hover:bg-gray-700 cursor-pointer"
           >
-            Return to home
-          </a>
+            Back to Login
+          </button>
         </div>
       </div>
     )
