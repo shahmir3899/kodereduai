@@ -236,35 +236,9 @@ function ModuleRoute({ module, children }) {
 
 function App() {
   const { loading } = useAuth()
-  const isPortalMode = localStorage.getItem('isPortalMode') === 'true'
 
   if (loading) {
     return <LoadingSpinner />
-  }
-
-  // Portal mode: show super admin dashboard only
-  if (isPortalMode) {
-    return (
-      <ErrorBoundary>
-        <Suspense fallback={<LoadingSpinner />}>
-          <Routes>
-            <Route path="/login" element={<LoginPage />} />
-            <Route
-              path="/*"
-              element={
-                <ProtectedRoute requireSuperAdmin={true}>
-                  <Layout>
-                    <Suspense fallback={<LoadingSpinner />}>
-                      <SuperAdminDashboard />
-                    </Suspense>
-                  </Layout>
-                </ProtectedRoute>
-              }
-            />
-          </Routes>
-        </Suspense>
-      </ErrorBoundary>
-    )
   }
 
   return (

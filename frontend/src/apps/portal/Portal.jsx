@@ -3,9 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { useToast } from '../../components/Toast'
 import LoginPage from '../../pages/LoginPage'
-import SuperAdminDashboard from '../../pages/SuperAdminDashboard'
+import App from '../../App'
 import LoadingSpinner from '../../components/LoadingSpinner'
-import Layout from '../../components/Layout'
 
 /**
  * Super Admin Portal
@@ -72,10 +71,6 @@ export default function Portal() {
     )
   }
 
-  // Super admin → show dashboard with layout (sidebar + header)
-  return (
-    <Layout>
-      <SuperAdminDashboard />
-    </Layout>
-  )
+  // Super admin → show full app with routing
+  return <App />
 }
