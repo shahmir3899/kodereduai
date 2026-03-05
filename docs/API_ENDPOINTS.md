@@ -238,22 +238,37 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | GET | /api/sessions/attendance-risk/ | |
 
 ## Examinations
-| Method | URL | Params |
-|--------|-----|--------|
-| GET/POST | /api/examinations/exam-types/ | |
+| Method | URL | Params | Description |
+|--------|-----|--------|-------------|
+| GET/POST | /api/examinations/exam-types/ | | |
 | GET/POST | /api/examinations/exams/ | academic_year, exam_type | POST auto-creates ExamSubjects from class's assigned subjects |
-| POST | /api/examinations/exams/{id}/publish/ | |
-| POST | /api/examinations/exams/{id}/generate-comments/ | Generate AI report card comments. Body: {force: bool}. force=true regenerates all |
-| GET | /api/examinations/exams/{id}/results/ | Includes ai_comment per mark |
-| GET | /api/examinations/exams/{id}/class_summary/ | |
-| GET/POST | /api/examinations/exam-subjects/ | exam, class_obj |
-| GET/POST | /api/examinations/marks/ | exam_subject, student |
-| POST | /api/examinations/marks/bulk_entry/ | |
-| GET | /api/examinations/marks/by_student/ | student_id |
-| GET | /api/examinations/marks/download_template/ | exam_subject_id |
-| GET/POST | /api/examinations/grade-scales/ | |
-| GET | /api/examinations/exams/{id}/results/ | Now includes `exam_type_weight` in response |
-| GET | /api/examinations/report-card/ | student_id, academic_year_id, term_id. Returns flat `subjects` array with per-subject grade/pass/fail, `grade_scales` array, `calculation_mode` (simple\|weighted). Supports per-school weighted average via `exam_config` |
+| POST | /api/examinations/exams/{id}/publish/ | | |
+| POST | /api/examinations/exams/{id}/generate-comments/ | | Generate AI report card comments. Body: {force: bool}. force=true regenerates all |
+| GET | /api/examinations/exams/{id}/results/ | | Includes ai_comment per mark |
+| GET | /api/examinations/exams/{id}/class_summary/ | | |
+| GET/POST | /api/examinations/exam-subjects/ | exam, class_obj | |
+| GET/POST | /api/examinations/marks/ | exam_subject, student | |
+| POST | /api/examinations/marks/bulk_entry/ | | |
+| GET | /api/examinations/marks/by_student/ | student_id | |
+| GET | /api/examinations/marks/download_template/ | exam_subject_id | |
+| GET/POST | /api/examinations/grade-scales/ | | |
+| GET | /api/examinations/exams/{id}/results/ | | Now includes `exam_type_weight` in response |
+| GET | /api/examinations/report-card/ | student_id, academic_year_id, term_id | Returns flat `subjects` array with per-subject grade/pass/fail, `grade_scales` array, `calculation_mode` (simple\|weighted). Supports per-school weighted average via `exam_config` |
+| **NEW CURRICULUM INTEGRATION** | | | |
+| GET/POST | /api/examinations/questions/ | subject, exam_type, question_type, difficulty, topics, lesson_plan, search, is_active | Includes `tested_topics` and `tested_topics_details` fields |
+| POST | /api/examinations/questions/generate_from_lesson/ | | Generate AI questions from lesson plan. Body: {lesson_plan_id, question_count (5-20), question_type, difficulty_level}. Returns: {questions: [...], message} |
+| GET | /api/examinations/questions/by_lesson_plan/ | lesson_plan_id | Get all questions covering lesson plan's topics |
+| GET/POST | /api/examinations/exam-papers/ | class_obj, subject, exam, status, search, is_active | Includes `lesson_plans`, `lesson_plans_details`, `covered_topics`, `question_topics_summary` fields |
+| POST | /api/examinations/exam-papers/{id}/link_lesson_plans/ | | Link lesson plans to paper. Body: {lesson_plan_ids: [1,2,3]} |
+| GET | /api/examinations/exam-papers/{id}/coverage_stats/ | | Get coverage stats: topics tested, questions per topic, linked lessons |
+| POST | /api/examinations/exam-papers/create_from_lessons/ | | Create paper from lesson plans. Body: {lesson_plan_ids, class_id, subject_id, paper_title, instructions, total_marks, duration_minutes} |
+| GET | /api/examinations/exam-papers/{id}/generate-pdf/ | | Generate PDF of exam paper |
+| POST | /api/examinations/exam-papers/review-questions/ | | Grammar/spelling review. Body: {questions: [text1, text2]} |
+
+## LMS Topics (Curriculum Coverage)
+| Method | URL | Params | Description |
+|--------|-----|--------|-------------|
+| GET/POST | /api/lms/topics/ | chapter_id, book_id, class_id, subject_id, **coverage (taught_only\|tested_only\|both\|uncovered)** | **NEW:** Detailed serializer with is_covered, is_tested, test_question_count, lesson_plan_count, linked resources |
 
 ## Notifications
 | Method | URL | Description |

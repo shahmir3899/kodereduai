@@ -30,7 +30,23 @@ if IS_PRODUCTION and not SECRET_KEY:
 # DEBUG is derived from ENVIRONMENT — no separate toggle needed
 DEBUG = not IS_PRODUCTION
 
-ALLOWED_HOSTS = [h.strip() for h in os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')]
+# ALLOWED_HOSTS includes:
+#   - localhost for dev
+#   - .kodereduai.pk for wildcard subdomains
+#   - kodereduai-api.onrender.com for production backend
+#   - Any additional hosts from environment variable
+ALLOWED_HOSTS = [
+    'localhost',
+    '127.0.0.1',
+    'kodereduai.pk',
+    'www.kodereduai.pk',
+    'portal.kodereduai.pk',
+    '.kodereduai.pk',  # Wildcard for all subdomains (*.kodereduai.pk)
+    'kodereduai-api.onrender.com',
+]
+# Add any additional hosts from environment
+if env_hosts := os.getenv('ALLOWED_HOSTS'):
+    ALLOWED_HOSTS.extend([h.strip() for h in env_hosts.split(',') if h.strip()])
 
 # Application definition
 INSTALLED_APPS = [
@@ -204,7 +220,23 @@ SIMPLE_JWT = {
 # =============================================================================
 # CORS Settings
 # =============================================================================
-CORS_ALLOWED_ORIGINS = [o.strip() for o in os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:3000').split(',') if o.strip()]
+
+# Allow exact origins
+CORS_ALLOWED_ORIGINS = [
+    'http://localhost:3000',   # Dev frontend
+    'http://localhost:8000',   # Dev backend
+    'http://127.0.0.1:3000',
+    'http://127.0.0.1:8000',
+]
+
+# Allow regex patterns for subdomains and production URLs
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r'^https?://.*\.kodereduai\.pk$',      # Any subdomain (*.kodereduai.pk)
+    r'^https?://kodereduai\.pk$',           # Root domain
+    r'^https?://www\.kodereduai\.pk$',     # www subdomain
+    r'^https?://portal\.kodereduai\.pk$',  # Portal subdomain
+]
+
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_HEADERS = [
     'accept',

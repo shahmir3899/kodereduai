@@ -430,6 +430,7 @@ export default function Layout() {
           { name: 'Exam Types', href: '/academics/exam-types', icon: FolderIcon },
           { name: 'Exams', href: '/academics/exams', icon: ClipboardIcon },
           { name: 'Paper Builder', href: '/academics/paper-builder', icon: PencilIcon },
+          { name: 'Curriculum Coverage', href: '/academics/curriculum-coverage', icon: ChartIcon },
           { name: 'Marks Entry', href: '/academics/marks-entry', icon: DocumentIcon },
           { name: 'Results', href: '/academics/results', icon: ChartIcon },
           { name: 'Report Cards', href: '/academics/report-cards', icon: ReportIcon },

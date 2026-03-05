@@ -308,6 +308,32 @@ class SchoolViewSet(TenantQuerySetMixin, viewsets.ReadOnlyModelViewSet):
             'register_config': school.register_config
         })
 
+    @action(detail=False, methods=['get'], permission_classes=[], url_path='by-subdomain')
+    def by_subdomain(self, request):
+        """
+        Public endpoint to fetch school by subdomain.
+        GET /api/schools/by-subdomain/?subdomain=focus
+        
+        No authentication required - used by frontend to detect school on load.
+        Returns basic school info: id, name, logo, subdomain.
+        """
+        subdomain = request.query_params.get('subdomain')
+        if not subdomain:
+            return Response(
+                {'detail': 'Missing subdomain query parameter.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            school = School.objects.get(subdomain=subdomain, is_active=True)
+            serializer = self.get_serializer(school)
+            return Response(serializer.data)
+        except School.DoesNotExist:
+            return Response(
+                {'detail': f'School with subdomain "{subdomain}" not found.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
     @action(detail=False, methods=['get', 'put'])
     def exam_config(self, request):
         """Get or update examination configuration for the current school."""

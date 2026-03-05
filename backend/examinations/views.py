@@ -1260,6 +1260,229 @@ class QuestionViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelView
     def perform_destroy(self, instance):
         instance.is_active = False
         instance.save()
+    
+    @action(detail=False, methods=['post'])
+    def generate_from_lesson(self, request):
+        """
+        Generate AI questions from a lesson plan.
+        
+        Body: {
+            lesson_plan_id: int,
+            question_count: int (5-20),
+            question_type: str (MCQ/SHORT/ESSAY/TRUE_FALSE),
+            difficulty_level: str (EASY/MEDIUM/HARD)
+        }
+        
+        Returns: {questions: [...], message: "..."}
+        """
+        from django.conf import settings
+        from rest_framework import status
+        from lms.models import LessonPlan
+        import requests
+        import json
+        import re
+        
+        lesson_plan_id = request.data.get('lesson_plan_id')
+        question_count = request.data.get('question_count', 5)
+        question_type = request.data.get('question_type', 'MCQ')
+        difficulty_level = request.data.get('difficulty_level', 'MEDIUM')
+        
+        # Validate inputs
+        if not lesson_plan_id:
+            return Response(
+                {'error': 'lesson_plan_id is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if not (5 <= question_count <= 20):
+            return Response(
+                {'error': 'question_count must be between 5 and 20'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Fetch lesson plan
+        try:
+            lesson = LessonPlan.objects.get(
+                id=lesson_plan_id,
+                school=request.tenant_school
+            )
+        except LessonPlan.DoesNotExist:
+            return Response(
+                {'error': 'Lesson plan not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Get topics
+        topics = lesson.planned_topics.select_related(
+            'chapter', 'chapter__book'
+        ).all()
+        
+        if not topics:
+            return Response(
+                {'error': 'Lesson plan has no topics selected'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Build AI prompt
+        topics_text = '\n'.join([
+            f"- Chapter {t.chapter.chapter_number}: {t.chapter.title}\n"
+            f"  Topic {t.topic_number}: {t.title}\n"
+            f"  Description: {t.description or 'N/A'}"
+            for t in topics
+        ])
+        
+        prompt = f"""You are an expert educator creating {question_type} questions for {lesson.subject.name} exam at {lesson.class_obj.name} level, {difficulty_level.lower()} difficulty.
+
+Generate exactly {question_count} questions based on these topics:
+
+{topics_text}
+
+For each question:
+1. Write clear, concise question text
+2. For MCQ: provide 4 options (A, B, C, D) with one correct answer
+3. Specify which topic (e.g., "3.2") it tests
+4. Assign marks
+
+Respond with ONLY a JSON array, no extra text:
+[
+  {{
+    "question_text": "...",
+    "question_type": "{question_type}",
+    "options": {{"A": "...", "B": "...", "C": "...", "D": "..."}},
+    "correct_answer": "A",
+    "tested_topic_number": "3.2",
+    "marks": 2
+  }}
+]
+"""
+        
+        # Call Groq API
+        try:
+            groq_response = requests.post(
+                'https://api.groq.com/openai/v1/chat/completions',
+                headers={
+                    'Authorization': f'Bearer {settings.GROQ_API_KEY}',
+                    'Content-Type': 'application/json',
+                },
+                json={
+                    'model': settings.GROQ_MODEL,
+                    'messages': [{'role': 'user', 'content': prompt}],
+                    'temperature': 0.7,
+                    'max_tokens': 2048,
+                },
+                timeout=30,
+            )
+            groq_response.raise_for_status()
+            
+            # Parse response
+            ai_text = groq_response.json()['choices'][0]['message']['content'].strip()
+            
+            # Extract JSON from response
+            json_match = re.search(r'\[.*\]', ai_text, re.DOTALL)
+            if json_match:
+                questions_data = json.loads(json_match.group())
+            else:
+                questions_data = json.loads(ai_text)
+            
+            # Create Question objects
+            created_questions = []
+            for q_data in questions_data:
+                # Parse topic number "3.2"
+                topic_num_str = q_data.get('tested_topic_number', '')
+                parts = topic_num_str.split('.')
+                tested_topic = None
+                
+                if len(parts) == 2:
+                    try:
+                        ch_num, t_num = int(parts[0]), int(parts[1])
+                        for t in topics:
+                            if (t.chapter.chapter_number == ch_num and 
+                                t.topic_number == t_num):
+                                tested_topic = t
+                                break
+                    except ValueError:
+                        pass
+                
+                # Create question
+                question = Question.objects.create(
+                    school=request.tenant_school,
+                    subject=lesson.subject,
+                    question_text=q_data.get('question_text', ''),
+                    question_type=question_type,
+                    difficulty_level=difficulty_level,
+                    marks=q_data.get('marks', 1),
+                    option_a=q_data.get('options', {}).get('A', ''),
+                    option_b=q_data.get('options', {}).get('B', ''),
+                    option_c=q_data.get('options', {}).get('C', ''),
+                    option_d=q_data.get('options', {}).get('D', ''),
+                    correct_answer=q_data.get('correct_answer', ''),
+                    created_by=request.user,
+                )
+                
+                # Link to topic
+                if tested_topic:
+                    question.tested_topics.add(tested_topic)
+                
+                created_questions.append(question)
+            
+            serializer = QuestionSerializer(created_questions, many=True)
+            return Response({
+                'message': f'Generated {len(created_questions)} questions',
+                'questions': serializer.data,
+            }, status=status.HTTP_201_CREATED)
+            
+        except requests.RequestException as e:
+            return Response(
+                {'error': f'API error: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        except json.JSONDecodeError as e:
+            return Response(
+                {'error': f'Invalid JSON from AI: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        except Exception as e:
+            return Response(
+                {'error': f'Generation failed: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    @action(detail=False, methods=['get'])
+    def by_lesson_plan(self, request):
+        """
+        Get all questions for a lesson plan's topics.
+        Query params: lesson_plan_id (required)
+        """
+        from lms.models import LessonPlan
+        
+        lesson_plan_id = request.query_params.get('lesson_plan_id')
+        if not lesson_plan_id:
+            return Response(
+                {'error': 'lesson_plan_id required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            lesson = LessonPlan.objects.get(
+                id=lesson_plan_id,
+                school=request.tenant_school
+            )
+        except LessonPlan.DoesNotExist:
+            return Response(
+                {'error': 'Lesson plan not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        topic_ids = lesson.planned_topics.values_list('id', flat=True)
+        qs = self.get_queryset().filter(tested_topics__id__in=topic_ids).distinct()
+        
+        page = self.paginate_queryset(qs)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        
+        serializer = self.get_serializer(qs, many=True)
+        return Response(serializer.data)
 
 
 class ExamPaperViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
@@ -1344,6 +1567,168 @@ class ExamPaperViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
                 {'detail': f'Error generating PDF: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+    @action(detail=True, methods=['post'])
+    def link_lesson_plans(self, request, pk=None):
+        """
+        Link lesson plans to this exam paper.
+        Body: {lesson_plan_ids: [1, 2, 3]}
+        """
+        from lms.models import LessonPlan
+        
+        exam_paper = self.get_object()
+        lesson_plan_ids = request.data.get('lesson_plan_ids', [])
+        
+        lesson_plans = LessonPlan.objects.filter(
+            id__in=lesson_plan_ids,
+            school=request.tenant_school
+        )
+        
+        exam_paper.lesson_plans.set(lesson_plans)
+        
+        serializer = self.get_serializer(exam_paper)
+        return Response({
+            'message': f'Linked {lesson_plans.count()} lesson plans',
+            'exam_paper': serializer.data
+        })
+    
+    @action(detail=True, methods=['get'])
+    def coverage_stats(self, request, pk=None):
+        """
+        Get coverage statistics for this exam paper.
+        Returns: topics count, covered topics, lesson plans, etc.
+        """
+        exam_paper = self.get_object()
+        
+        return Response({
+            'exam_paper_id': exam_paper.id,
+            'paper_title': exam_paper.paper_title,
+            'total_questions': exam_paper.question_count,
+            'total_marks': exam_paper.total_marks,
+            'covered_topics': [
+                {
+                    'id': t.id,
+                    'chapter': f"{t.chapter.chapter_number}: {t.chapter.title}",
+                    'topic': f"{t.topic_number}: {t.title}",
+                    'questions_count': t.test_questions.filter(
+                        paper_questions__exam_paper=exam_paper
+                    ).count(),
+                }
+                for t in exam_paper.covered_topics
+            ],
+            'linked_lesson_plans': [
+                {
+                    'id': lp.id,
+                    'title': lp.title,
+                    'lesson_date': lp.lesson_date,
+                }
+                for lp in exam_paper.lesson_plans.all()
+            ],
+            'topic_count': exam_paper.covered_topics.count(),
+        })
+    
+    @action(detail=False, methods=['post'])
+    def create_from_lessons(self, request):
+        """
+        Create exam paper from lesson plans.
+        
+        Body: {
+            lesson_plan_ids: [1, 2, 3],
+            class_id: 5,
+            subject_id: 10,
+            paper_title: "Mid-Term Exam",
+            instructions: "...",
+            total_marks: 100,
+            duration_minutes: 60,
+            question_type: "MCQ",
+            difficulty_balance: {"EASY": 0.3, "MEDIUM": 0.5, "HARD": 0.2}
+        }
+        """
+        from lms.models import LessonPlan
+        
+        lesson_plan_ids = request.data.get('lesson_plan_ids', [])
+        class_id = request.data.get('class_id')
+        subject_id = request.data.get('subject_id')
+        paper_title = request.data.get('paper_title')
+        instructions = request.data.get('instructions', '')
+        total_marks = request.data.get('total_marks', 100)
+        duration_minutes = request.data.get('duration_minutes', 60)
+        
+        if not (lesson_plan_ids and class_id and subject_id and paper_title):
+            return Response(
+                {'error': 'Missing required fields'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Fetch lesson plans
+        lesson_plans = LessonPlan.objects.filter(
+            id__in=lesson_plan_ids,
+            school=request.tenant_school
+        )
+        
+        if not lesson_plans.exists():
+            return Response(
+                {'error': 'No lesson plans found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Get topics from lesson plans
+        topic_ids = set()
+        for lp in lesson_plans:
+            topic_ids.update(lp.planned_topics.values_list('id', flat=True))
+        
+        if not topic_ids:
+            return Response(
+                {'error': 'Selected lesson plans have no topics'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Get questions for those topics
+        questions_qs = Question.objects.filter(
+            school=request.tenant_school,
+            subject_id=subject_id,
+            tested_topics__id__in=topic_ids,
+            is_active=True
+        ).distinct()
+        
+        if not questions_qs.exists():
+            return Response(
+                {'error': 'No questions available for selected topics'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Create exam paper
+        exam_paper = ExamPaper.objects.create(
+            school=request.tenant_school,
+            class_obj_id=class_id,
+            subject_id=subject_id,
+            paper_title=paper_title,
+            instructions=instructions,
+            total_marks=total_marks,
+            duration_minutes=duration_minutes,
+            status='DRAFT',
+            generated_by=request.user,
+        )
+        
+        # Link lesson plans
+        exam_paper.lesson_plans.set(lesson_plans)
+        
+        # Add questions (balance by difficulty if needed)
+        selected_questions = list(questions_qs[:15])  # Default: up to 15 questions
+        
+        for idx, q in enumerate(selected_questions):
+            PaperQuestion.objects.create(
+                exam_paper=exam_paper,
+                question=q,
+                question_order=idx + 1,
+                marks_override=q.marks,
+            )
+        
+        serializer = ExamPaperSerializer(exam_paper)
+        return Response({
+            'message': f'Created paper with {len(selected_questions)} questions',
+            'exam_paper': serializer.data,
+        }, status=status.HTTP_201_CREATED)
 
     @action(detail=False, methods=['post'], url_path='review-questions')
     def review_questions(self, request):

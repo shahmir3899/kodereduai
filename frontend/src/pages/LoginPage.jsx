@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -7,9 +7,29 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [subdomainSchool, setSubdomainSchool] = useState(null)
+  const [isPortalMode, setIsPortalMode] = useState(false)
 
   const { login } = useAuth()
   const navigate = useNavigate()
+
+  useEffect(() => {
+    // Check if this is portal mode
+    const portalMode = localStorage.getItem('isPortalMode') === 'true'
+    setIsPortalMode(portalMode)
+    
+    // Load subdomain school context (not used in portal mode)
+    if (!portalMode) {
+      const schoolId = localStorage.getItem('currentSchoolId')
+      const schoolName = localStorage.getItem('currentSchoolName')
+      const subdomain = localStorage.getItem('currentSchoolSubdomain')
+      const logo = localStorage.getItem('currentSchoolLogo')
+      
+      if (schoolId && schoolName && subdomain) {
+        setSubdomainSchool({ id: parseInt(schoolId), name: schoolName, subdomain, logo })
+      }
+    }
+  }, [])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -18,6 +38,29 @@ export default function LoginPage() {
 
     try {
       const userData = await login(username, password)
+      
+      // Portal mode: require SUPER_ADMIN role
+      if (isPortalMode) {
+        if (!userData.is_super_admin) {
+          setError('Only super administrators can access the portal')
+          setLoading(false)
+          return
+        }
+      } else {
+        // Regular school mode: validate user belongs to this school
+        if (subdomainSchool) {
+          const userSchools = userData.user?.schools || []
+          const hasAccess = userSchools.some(s => s.id === subdomainSchool.id)
+          
+          if (!hasAccess) {
+            // User doesn't belong to this school
+            setError(`You don't have access to ${subdomainSchool.name}`)
+            setLoading(false)
+            return
+          }
+        }
+      }
+      
       navigate(userData.is_super_admin ? '/admin' : '/dashboard', { replace: true })
     } catch (err) {
       console.error('Login failed:', err)
@@ -36,9 +79,31 @@ export default function LoginPage() {
       <div className="max-w-md w-full">
         {/* Logo/Title */}
         <div className="text-center mb-6 sm:mb-8">
-          <img src="/Logo.jpeg" alt="KoderEduAI" className="h-16 w-16 rounded-full object-cover mx-auto mb-3" />
-          <h1 className="text-2xl sm:text-3xl font-bold text-primary-700">KoderEduAI</h1>
-          <p className="mt-2 text-gray-600">AI-Powered Education Platform</p>
+          {isPortalMode ? (
+            <>
+              <img src="/Logo.jpeg" alt="KoderEduAI" className="h-16 w-16 rounded-full object-cover mx-auto mb-3" />
+              <h1 className="text-2xl sm:text-3xl font-bold text-primary-700">KoderEduAI Admin Portal</h1>
+              <p className="mt-2 text-gray-600">Super Administrator Access</p>
+            </>
+          ) : subdomainSchool ? (
+            <>
+              {subdomainSchool.logo && (
+                <img 
+                  src={subdomainSchool.logo} 
+                  alt={subdomainSchool.name} 
+                  className="h-20 w-20 rounded-full object-cover mx-auto mb-4 border-2 border-blue-200" 
+                />
+              )}
+              <h1 className="text-2xl sm:text-3xl font-bold text-primary-700">{subdomainSchool.name}</h1>
+              <p className="mt-2 text-gray-600">Sign in to access your school</p>
+            </>
+          ) : (
+            <>
+              <img src="/Logo.jpeg" alt="KoderEduAI" className="h-16 w-16 rounded-full object-cover mx-auto mb-3" />
+              <h1 className="text-2xl sm:text-3xl font-bold text-primary-700">KoderEduAI</h1>
+              <p className="mt-2 text-gray-600">AI-Powered Education Platform</p>
+            </>
+          )}
         </div>
 
         {/* Login Card */}

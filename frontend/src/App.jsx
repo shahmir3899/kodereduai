@@ -59,6 +59,7 @@ const ResultsPage = lazy(() => import('./pages/examinations/ResultsPage'))
 const ReportCardPage = lazy(() => import('./pages/examinations/ReportCardPage'))
 const GradeScalePage = lazy(() => import('./pages/examinations/GradeScalePage'))
 const QuestionPaperBuilderPage = lazy(() => import('./pages/examinations/QuestionPaperBuilderPage'))
+const CurriculumCoveragePage = lazy(() => import('./pages/examinations/CurriculumCoveragePage'))
 
 // Parent Portal pages
 const ParentDashboard = lazy(() => import('./pages/parent/ParentDashboard'))
@@ -235,9 +236,35 @@ function ModuleRoute({ module, children }) {
 
 function App() {
   const { loading } = useAuth()
+  const isPortalMode = localStorage.getItem('isPortalMode') === 'true'
 
   if (loading) {
     return <LoadingSpinner />
+  }
+
+  // Portal mode: show super admin dashboard only
+  if (isPortalMode) {
+    return (
+      <ErrorBoundary>
+        <Suspense fallback={<LoadingSpinner />}>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route
+              path="/*"
+              element={
+                <ProtectedRoute requireSuperAdmin={true}>
+                  <Layout>
+                    <Suspense fallback={<LoadingSpinner />}>
+                      <SuperAdminDashboard />
+                    </Suspense>
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+          </Routes>
+        </Suspense>
+      </ErrorBoundary>
+    )
   }
 
   return (
@@ -311,6 +338,7 @@ function App() {
             <Route path="academics/report-cards" element={<SchoolRoute><ModuleRoute module="examinations"><ReportCardPage /></ModuleRoute></SchoolRoute>} />
             <Route path="academics/grade-scale" element={<SchoolRoute><ModuleRoute module="examinations"><GradeScalePage /></ModuleRoute></SchoolRoute>} />
             <Route path="academics/paper-builder" element={<SchoolRoute><ModuleRoute module="examinations"><QuestionPaperBuilderPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="academics/curriculum-coverage" element={<SchoolRoute><ModuleRoute module="examinations"><CurriculumCoveragePage /></ModuleRoute></SchoolRoute>} />
 
             {/* Classes (legacy /grades redirects) */}
             <Route path="grades" element={<Navigate to="/classes" replace />} />

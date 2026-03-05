@@ -1264,6 +1264,225 @@ Each mark in the results response now includes `ai_comment`:
 }
 ```
 
+### GET /api/examinations/questions/ (NEW - Curriculum Integration)
+```json
+{
+  "count": 1,
+  "results": [
+    {
+      "id": 5,
+      "school": 37,
+      "subject": 15,
+      "subject_name": "Mathematics",
+      "exam_type": 3,
+      "exam_type_name": "Mid-Term",
+      "question_text": "If 2x + 3 = 7, find the value of x",
+      "question_image_url": null,
+      "question_type": "MCQ",
+      "difficulty_level": "EASY",
+      "marks": "2.00",
+      "option_a": "2",
+      "option_b": "2.5",
+      "option_c": "3",
+      "option_d": "1.5",
+      "correct_answer": "A",
+      "tested_topics": [42, 43],
+      "tested_topics_details": [
+        {
+          "id": 42,
+          "title": "Linear Equations",
+          "chapter_number": 2,
+          "topic_number": 3,
+          "chapter_title": "Algebra Basics",
+          "book_title": "Mathematics Fundamentals"
+        }
+      ],
+      "created_by": 10,
+      "created_by_name": "admin_user",
+      "is_active": true,
+      "created_at": "2026-03-04T10:30:00Z",
+      "updated_at": "2026-03-04T10:30:00Z"
+    }
+  ]
+}
+```
+
+### POST /api/examinations/questions/generate_from_lesson/ (NEW)
+```json
+{
+  "message": "Generated 5 questions",
+  "questions": [
+    {
+      "id": 234,
+      "school": 37,
+      "subject": 15,
+      "subject_name": "Mathematics",
+      "question_text": "What is the formula for calculating area of a circle?",
+      "question_type": "MCQ",
+      "difficulty_level": "MEDIUM",
+      "marks": "2.00",
+      "option_a": "πr²",
+      "option_b": "2πr",
+      "option_c": "πr²h",
+      "option_d": "πd²",
+      "correct_answer": "A",
+      "tested_topics": [45],
+      "tested_topics_details": [
+        {
+          "id": 45,
+          "title": "Circle Geometry",
+          "chapter_number": 3,
+          "topic_number": 2,
+          "chapter_title": "Geometry",
+          "book_title": "Mathematics Fundamentals"
+        }
+      ],
+      "created_by": 10,
+      "created_by_name": "admin_user",
+      "is_active": true,
+      "created_at": "2026-03-04T11:00:00Z",
+      "updated_at": "2026-03-04T11:00:00Z"
+    }
+  ]
+}
+```
+
+### GET /api/examinations/exam-papers/ (NEW - with Curriculum Integration)
+```json
+{
+  "count": 1,
+  "results": [
+    {
+      "id": 1,
+      "school": 37,
+      "exam": 5,
+      "exam_name": "Mid-Term 2026",
+      "exam_subject": 12,
+      "class_obj": 8,
+      "class_name": "Class 9-A",
+      "subject": 15,
+      "subject_name": "Mathematics",
+      "paper_title": "Mathematics Mid-Term Exam",
+      "instructions": "Attempt all questions. Show working for calculations.",
+      "total_marks": "50.00",
+      "duration_minutes": 60,
+      "paper_questions": [
+        {
+          "id": 1,
+          "question": 234,
+          "question_order": 1,
+          "marks_override": "2.00",
+          "marks": "2.00",
+          "question_text": "What is the formula for area of circle?",
+          "question_type": "MCQ",
+          "option_a": "πr²",
+          "option_b": "2πr",
+          "option_c": "πr²h",
+          "option_d": "πd²",
+          "question_image_url": null,
+          "created_at": "2026-03-04T11:05:00Z"
+        }
+      ],
+      "question_count": 25,
+      "calculated_total_marks": "50.00",
+      "lesson_plans": [102, 105],
+      "lesson_plans_details": [
+        {
+          "id": 102,
+          "title": "Introduction to Circles",
+          "lesson_date": "2026-02-28",
+          "class": "Class 9-A",
+          "subject": "Mathematics"
+        }
+      ],
+      "covered_topics": [
+        {
+          "id": 42,
+          "chapter_number": 2,
+          "topic_number": 3,
+          "title": "Linear Equations"
+        },
+        {
+          "id": 45,
+          "chapter_number": 3,
+          "topic_number": 2,
+          "title": "Circle Geometry"
+        }
+      ],
+      "question_topics_summary": {
+        "42": {
+          "title": "2.3: Linear Equations",
+          "question_count": 8
+        },
+        "45": {
+          "title": "3.2: Circle Geometry",
+          "question_count": 12
+        }
+      },
+      "status": "PUBLISHED",
+      "generated_by": 10,
+      "generated_by_name": "admin_user",
+      "is_active": true,
+      "created_at": "2026-03-04T10:00:00Z",
+      "updated_at": "2026-03-04T12:00:00Z"
+    }
+  ]
+}
+```
+
+### POST /api/examinations/exam-papers/{id}/link_lesson_plans/ (NEW)
+```json
+{
+  "message": "Linked 2 lesson plans",
+  "exam_paper": {
+    "id": 1,
+    "paper_title": "Mathematics Mid-Term Exam",
+    "lesson_plans": [102, 105],
+    "lesson_plans_details": [
+      {
+        "id": 102,
+        "title": "Introduction to Circles",
+        "lesson_date": "2026-02-28",
+        "class": "Class 9-A",
+        "subject": "Mathematics"
+      }
+    ]
+  }
+}
+```
+
+### GET /api/examinations/exam-papers/{id}/coverage_stats/ (NEW)
+```json
+{
+  "exam_paper_id": 1,
+  "paper_title": "Mathematics Mid-Term Exam",
+  "total_questions": 25,
+  "total_marks": "50.00",
+  "covered_topics": [
+    {
+      "id": 42,
+      "chapter": "2: Algebra Basics",
+      "topic": "3: Linear Equations",
+      "questions_count": 8
+    },
+    {
+      "id": 45,
+      "chapter": "3: Geometry",
+      "topic": "2: Circle Geometry",
+      "questions_count": 12
+    }
+  ],
+  "linked_lesson_plans": [
+    {
+      "id": 102,
+      "title": "Introduction to Circles",
+      "lesson_date": "2026-02-28"
+    }
+  ],
+  "topic_count": 2
+}
+```
+
 ---
 
 ## Admissions

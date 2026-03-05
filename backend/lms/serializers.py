@@ -32,6 +32,57 @@ class TopicSerializer(serializers.ModelSerializer):
         return obj.lesson_plans.filter(status='PUBLISHED').exists()
 
 
+class TopicDetailedSerializer(serializers.ModelSerializer):
+    """Topic with teaching and testing coverage status."""
+    
+    is_covered = serializers.BooleanField(read_only=True)
+    is_tested = serializers.BooleanField(read_only=True)
+    test_question_count = serializers.IntegerField(read_only=True)
+    lesson_plan_count = serializers.IntegerField(read_only=True)
+    
+    # Linked resources
+    lesson_plans = serializers.SerializerMethodField()
+    test_questions = serializers.SerializerMethodField()
+    
+    def get_lesson_plans(self, obj):
+        """Simplified lesson plan list."""
+        return [
+            {'id': lp.id, 'title': lp.title, 'lesson_date': lp.lesson_date}
+            for lp in obj.lesson_plans.filter(is_active=True)
+        ]
+    
+    def get_test_questions(self, obj):
+        """Simplified question list."""
+        return [
+            {
+                'id': q.id,
+                'question_type': q.question_type,
+                'difficulty_level': q.difficulty_level,
+                'marks': q.marks,
+            }
+            for q in obj.test_questions.filter(is_active=True)[:5]  # Limit to 5
+        ]
+    
+    class Meta:
+        model = Topic
+        fields = [
+            'id', 'title', 'topic_number', 'description',
+            'estimated_periods', 'is_active',
+            'is_covered',          # NEW
+            'is_tested',           # NEW
+            'test_question_count', # NEW
+            'lesson_plan_count',   # NEW
+            'lesson_plans',        # NEW
+            'test_questions',      # NEW
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = [
+            'id', 'is_covered', 'is_tested', 'test_question_count',
+            'lesson_plan_count', 'lesson_plans', 'test_questions',
+            'created_at', 'updated_at'
+        ]
+
+
 class ChapterReadSerializer(serializers.ModelSerializer):
     topics = TopicSerializer(many=True, read_only=True)
     topic_count = serializers.SerializerMethodField()

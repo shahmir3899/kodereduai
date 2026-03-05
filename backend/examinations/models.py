@@ -362,6 +362,14 @@ class Question(models.Model):
         blank=True,
         help_text="For MCQ: A/B/C/D. For others: answer key text"
     )
+    # Curriculum links
+    tested_topics = models.ManyToManyField(
+        'lms.Topic',
+        blank=True,
+        related_name='test_questions',
+        help_text='Curriculum topics this question tests'
+    )
+    
     # Metadata
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -449,6 +457,13 @@ class ExamPaper(models.Model):
         through='PaperQuestion',
         related_name='exam_papers',
     )
+    # Curriculum alignment
+    lesson_plans = models.ManyToManyField(
+        'lms.LessonPlan',
+        blank=True,
+        related_name='exam_papers',
+        help_text='Lesson plans whose content is tested in this paper'
+    )
     status = models.CharField(
         max_length=20,
         choices=Status.choices,
@@ -489,6 +504,33 @@ class ExamPaper(models.Model):
             total=Sum('marks_override')
         )
         return result['total'] or 0
+
+    @property
+    def covered_topics(self):
+        """Get all unique topics tested via questions in this paper."""
+        from lms.models import Topic
+        question_ids = self.paper_questions.values_list('question_id', flat=True)
+        return Topic.objects.filter(
+            test_questions__id__in=question_ids
+        ).select_related('chapter', 'chapter__book').distinct()
+    
+    @property
+    def question_topics_summary(self):
+        """Summary: {topic_id: question_count} for this paper."""
+        from django.db.models import Count, Q
+        from lms.models import Topic, models as lms_models
+        topics_qs = self.covered_topics.annotate(
+            question_count=Count('test_questions', filter=Q(
+                test_questions__paper_questions__exam_paper=self
+            ))
+        )
+        return {
+            t.id: {
+                'title': f"{t.chapter.chapter_number}.{t.topic_number}: {t.title}",
+                'question_count': t.question_count
+            }
+            for t in topics_qs
+        }
 
 
 class PaperQuestion(models.Model):

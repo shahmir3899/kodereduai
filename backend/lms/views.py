@@ -253,10 +253,16 @@ class TopicViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet
     tenant_field = 'chapter__book__school_id'
 
     def get_serializer_class(self):
+        # Use detailed serializer for list and retrieve actions
+        if self.action in ('list', 'retrieve'):
+            from .serializers import TopicDetailedSerializer
+            return TopicDetailedSerializer
         return TopicSerializer
 
     def get_queryset(self):
-        queryset = super().get_queryset().select_related('chapter', 'chapter__book')
+        queryset = super().get_queryset().select_related(
+            'chapter', 'chapter__book'
+        ).prefetch_related('lesson_plans', 'test_questions')
 
         chapter_id = self.request.query_params.get('chapter_id')
         if chapter_id:
@@ -265,6 +271,37 @@ class TopicViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet
         book_id = self.request.query_params.get('book_id')
         if book_id:
             queryset = queryset.filter(chapter__book_id=book_id)
+        
+        # Filter by class
+        class_id = self.request.query_params.get('class_id')
+        if class_id:
+            queryset = queryset.filter(chapter__book__class_obj_id=class_id)
+        
+        # Filter by subject
+        subject_id = self.request.query_params.get('subject_id')
+        if subject_id:
+            queryset = queryset.filter(chapter__book__subject_id=subject_id)
+        
+        # Filter by coverage status
+        coverage = self.request.query_params.get('coverage')
+        if coverage == 'taught_only':
+            # Topics with lesson plans
+            queryset = queryset.filter(lesson_plans__is_active=True).distinct()
+        elif coverage == 'tested_only':
+            # Topics with questions
+            queryset = queryset.filter(test_questions__is_active=True).distinct()
+        elif coverage == 'both':
+            # Topics with both lesson plans and questions
+            queryset = queryset.filter(
+                lesson_plans__is_active=True,
+                test_questions__is_active=True
+            ).distinct()
+        elif coverage == 'uncovered':
+            # Topics with neither lesson plans nor questions
+            from django.db.models import Q
+            queryset = queryset.exclude(
+                Q(lesson_plans__is_active=True) | Q(test_questions__is_active=True)
+            ).distinct()
 
         return queryset
 

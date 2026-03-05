@@ -251,6 +251,23 @@ school(FK), exam_subject(FK), student(FK), marks_obtained, is_absent, remarks
 ### GradeScale
 school(FK), name, min_percentage, max_percentage, grade_point
 
+### Question (NEW M2M: tested_topics)
+school(FK), subject(FK), exam_type(FK nullable), question_text, question_image_url(nullable), question_type (MCQ/SHORT/ESSAY/TRUE_FALSE), difficulty_level (EASY/MEDIUM/HARD), marks, option_a, option_b, option_c, option_d, correct_answer, **tested_topics(M2M → lms.Topic)**, created_by(FK), is_active, created_at, updated_at
+
+**NEW:** `tested_topics` links each question to the curriculum topics it tests. Supports AI question generation by lesson plan topics.
+
+### ExamPaper (NEW M2M: lesson_plans)
+school(FK), exam(FK nullable), exam_subject(FK nullable), class_obj(FK), subject(FK), paper_title, instructions, total_marks, duration_minutes, questions(M2M through PaperQuestion), **lesson_plans(M2M → lms.LessonPlan)**, status (DRAFT/READY/PUBLISHED), generated_by(FK), is_active, created_at, updated_at
+
+**NEW:** `lesson_plans` links papers to lesson plans they assess. Computed properties:
+- `covered_topics` — Topics tested via questions in this paper
+- `question_topics_summary` — Question count per topic
+
+### PaperQuestion
+exam_paper(FK), question(FK), question_order, marks_override(nullable), created_at
+
+**Unique constraint:** (exam_paper, question)
+
 ---
 
 ## finance — Fee Management & Accounting
@@ -398,10 +415,22 @@ Unique: (book, chapter_number)
 ### Topic
 chapter(FK), title, topic_number, description, estimated_periods (default 1), is_active, created_at, updated_at
 Unique: (chapter, topic_number)
-Property: is_covered (has published lesson plan covering this topic)
+
+**NEW Properties:**
+- `is_covered` — Has active lesson plans teaching this topic
+- `is_tested` — Has active questions testing this topic
+- `test_question_count` — Count of active test questions
+- `lesson_plan_count` — Count of active lesson plans
+
+**NEW Reverse Relations:**
+- `test_questions` (from examinations.Question.tested_topics)
+- `exam_papers` (via test_questions → PaperQuestion → ExamPaper)
 
 ### LessonPlan
 school(FK), academic_year(FK), class_obj(FK), subject(FK), teacher(FK), title, description, objectives, lesson_date, duration_minutes (default 40), materials_needed, teaching_methods, planned_topics (M2M → Topic), display_text (computed), content_mode (TOPICS/FREEFORM), ai_generated (bool), status (DRAFT/PUBLISHED), is_active
+
+**NEW (Phase 1.4 - Curriculum Integration):**
+- **Reverse relation:** `exam_papers` (from examinations.ExamPaper.lesson_plans) — Papers that assess this lesson
 
 ### Assignment
 school(FK), academic_year(FK), class_obj(FK), subject(FK), teacher(FK), title, description, instructions, assignment_type (HOMEWORK/PROJECT/CLASSWORK/LAB), due_date, total_marks, attachments_allowed, status (DRAFT/PUBLISHED/CLOSED), is_active

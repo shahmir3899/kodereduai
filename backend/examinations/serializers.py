@@ -338,6 +338,23 @@ class QuestionSerializer(serializers.ModelSerializer):
     subject_name = serializers.CharField(source='subject.name', read_only=True)
     exam_type_name = serializers.CharField(source='exam_type.name', read_only=True, allow_null=True)
     created_by_name = serializers.CharField(source='created_by.username', read_only=True, allow_null=True)
+    
+    # NEW: Curriculum topics - read-only expanded details + write support via list of IDs
+    tested_topics_details = serializers.SerializerMethodField()
+    
+    def get_tested_topics_details(self, obj):
+        """Return full topic details."""
+        return [
+            {
+                'id': t.id,
+                'title': t.title,
+                'chapter_number': t.chapter.chapter_number,
+                'topic_number': t.topic_number,
+                'chapter_title': t.chapter.title,
+                'book_title': t.chapter.book.title,
+            }
+            for t in obj.tested_topics.select_related('chapter', 'chapter__book').all()
+        ]
 
     class Meta:
         model = Question
@@ -345,9 +362,10 @@ class QuestionSerializer(serializers.ModelSerializer):
             'id', 'school', 'subject', 'subject_name', 'exam_type', 'exam_type_name',
             'question_text', 'question_image_url', 'question_type', 'difficulty_level',
             'marks', 'option_a', 'option_b', 'option_c', 'option_d', 'correct_answer',
+            'tested_topics_details',
             'created_by', 'created_by_name', 'is_active', 'created_at', 'updated_at',
         ]
-        read_only_fields = ['id', 'school', 'created_by', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'school', 'created_by', 'created_by_name', 'created_at', 'updated_at', 'tested_topics_details']
 
 
 class QuestionCreateUpdateSerializer(serializers.ModelSerializer):
@@ -404,6 +422,40 @@ class ExamPaperSerializer(serializers.ModelSerializer):
     paper_questions = PaperQuestionSerializer(many=True, read_only=True)
     question_count = serializers.IntegerField(read_only=True)
     calculated_total_marks = serializers.DecimalField(max_digits=6, decimal_places=2, read_only=True)
+    
+    # NEW: Curriculum alignment - read-only expanded details
+    lesson_plans_details = serializers.SerializerMethodField()
+    covered_topics = serializers.SerializerMethodField()
+    question_topics_summary = serializers.SerializerMethodField()
+    
+    def get_lesson_plans_details(self, obj):
+        """Return lesson plan details."""
+        return [
+            {
+                'id': lp.id,
+                'title': lp.title,
+                'lesson_date': lp.lesson_date,
+                'class': lp.class_obj.name,
+                'subject': lp.subject.name,
+            }
+            for lp in obj.lesson_plans.select_related('class_obj', 'subject').all()
+        ]
+    
+    def get_covered_topics(self, obj):
+        """Topics tested via questions."""
+        return [
+            {
+                'id': t.id,
+                'chapter_number': t.chapter.chapter_number,
+                'topic_number': t.topic_number,
+                'title': t.title,
+            }
+            for t in obj.covered_topics
+        ]
+    
+    def get_question_topics_summary(self, obj):
+        """Question count per topic."""
+        return obj.question_topics_summary
 
     class Meta:
         model = ExamPaper
@@ -412,10 +464,12 @@ class ExamPaperSerializer(serializers.ModelSerializer):
             'class_obj', 'class_name', 'subject', 'subject_name',
             'paper_title', 'instructions', 'total_marks', 'duration_minutes',
             'paper_questions', 'question_count', 'calculated_total_marks',
+            'lesson_plans_details', 'covered_topics', 'question_topics_summary',
             'status', 'generated_by', 'generated_by_name',
             'is_active', 'created_at', 'updated_at',
         ]
-        read_only_fields = ['id', 'school', 'generated_by', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'school', 'generated_by', 'generated_by_name', 'created_at', 'updated_at', 
+                           'lesson_plans_details', 'covered_topics', 'question_topics_summary']
 
 
 class ExamPaperCreateUpdateSerializer(serializers.ModelSerializer):

@@ -76,7 +76,6 @@ D:\Personal\smart-attendance\
 │   │   ├── tasks.py             # Celery tasks
 │   │   └── urls.py
 │   ├── notifications/           # WhatsApp (placeholder)
-│   ├── venv/                    # Python virtual environment
 │   ├── db.sqlite3               # SQLite database
 │   ├── manage.py
 │   ├── requirements.txt
@@ -381,8 +380,8 @@ class TenantQuerySetMixin:
 ```bash
 cd D:\Personal\smart-attendance\backend
 
-# Activate virtual environment
-venv\Scripts\activate
+# Install dependencies (if not already installed)
+pip install -r requirements.txt
 
 # Run migrations (already done)
 python manage.py migrate
@@ -393,6 +392,8 @@ python manage.py createsuperuser
 # Run development server
 python manage.py runserver
 ```
+
+Note: Using system Python or manage your own virtual environment if preferred.
 
 ### Frontend
 ```bash
@@ -408,7 +409,6 @@ npm run dev
 ### Celery (for AI processing)
 ```bash
 cd D:\Personal\smart-attendance\backend
-venv\Scripts\activate
 
 # Start Celery worker
 celery -A config worker --loglevel=info

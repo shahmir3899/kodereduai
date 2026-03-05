@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { lmsApi, hrApi } from '../../services/api'
 import { useClasses } from '../../hooks/useClasses'
@@ -29,6 +30,7 @@ const EMPTY_FORM = {
 }
 
 export default function LessonPlansPage() {
+  const navigate = useNavigate()
   const { user, isSchoolAdmin, isTeacher } = useAuth()
   const { activeAcademicYear } = useAcademicYear()
   const queryClient = useQueryClient()
@@ -349,6 +351,12 @@ export default function LessonPlansPage() {
                     >
                       Edit
                     </button>
+                    <button
+                      onClick={() => navigate('/academics/paper-builder', { state: { lessonPlanId: plan.id } })}
+                      className="text-xs text-indigo-600 font-medium"
+                    >
+                      Create Paper
+                    </button>
                     {plan.status === 'DRAFT' && (
                       <button
                         onClick={() => publishMutation.mutate(plan.id)}
@@ -452,6 +460,12 @@ export default function LessonPlansPage() {
                           className="text-sm text-blue-600 hover:text-blue-800 font-medium mr-3"
                         >
                           Edit
+                        </button>
+                        <button
+                          onClick={() => navigate('/academics/paper-builder', { state: { lessonPlanId: plan.id } })}
+                          className="text-sm text-indigo-600 hover:text-indigo-800 font-medium mr-3"
+                        >
+                          Create Paper
                         </button>
                         {plan.status === 'DRAFT' && (
                           <button

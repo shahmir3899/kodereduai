@@ -815,6 +815,21 @@ export default function CurriculumPage() {
                                         <span className={`text-sm truncate ${topic.is_covered ? 'text-gray-500' : 'text-gray-900'}`}>
                                           {topic.topic_number}. {topic.title}
                                         </span>
+                                        {topic.is_tested && (
+                                          <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700 flex-shrink-0">
+                                            Tested
+                                          </span>
+                                        )}
+                                        {!topic.is_tested && topic.is_covered && (
+                                          <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700 flex-shrink-0">
+                                            Not tested
+                                          </span>
+                                        )}
+                                        {typeof topic.test_question_count === 'number' && topic.test_question_count > 0 && (
+                                          <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700 flex-shrink-0">
+                                            {topic.test_question_count}Q
+                                          </span>
+                                        )}
                                         {topic.estimated_periods && (
                                           <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700 flex-shrink-0">
                                             {topic.estimated_periods} {topic.estimated_periods === 1 ? 'period' : 'periods'}

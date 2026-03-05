@@ -125,6 +125,26 @@ class Topic(models.Model):
     def __str__(self):
         return f"{self.chapter.chapter_number}.{self.topic_number}: {self.title}"
 
+    @property
+    def is_covered(self):
+        """Check if this topic has any lesson plans linked."""
+        return self.lesson_plans.filter(is_active=True).exists()
+    
+    @property
+    def is_tested(self):
+        """Check if this topic has any test questions."""
+        return self.test_questions.filter(is_active=True).exists()
+    
+    @property
+    def test_question_count(self):
+        """Count of active test questions for this topic."""
+        return self.test_questions.filter(is_active=True).count()
+    
+    @property
+    def lesson_plan_count(self):
+        """Count of lesson plans covering this topic."""
+        return self.lesson_plans.filter(is_active=True).count()
+
 
 # ---------------------------------------------------------------------------
 # Lesson Plans & Assignments

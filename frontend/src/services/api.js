@@ -184,6 +184,9 @@ export const schoolsApi = {
   // Regular endpoints
   getMySchool: () => api.get('/api/schools/current/'),
 
+  // Public endpoint: Get school by subdomain (no auth required)
+  getSchoolBySubdomain: (subdomain) => api.get(`/api/schools/by-subdomain/?subdomain=${subdomain}`),
+
   // Mark mappings configuration
   getMarkMappings: () => api.get('/api/schools/mark_mappings/'),
   updateMarkMappings: (data) => api.put('/api/schools/mark_mappings/', data),
@@ -1090,6 +1093,17 @@ export const faceAttendanceApi = {
 export const questionPaperApi = {
   // Questions
   getQuestions: (params) => api.get('/api/examinations/questions/', { params }),
+  getQuestionsByTopics: (topicIds = []) => {
+    const ids = Array.isArray(topicIds) ? topicIds : String(topicIds || '').split(',').filter(Boolean)
+    const query = ids.map((id) => `topics=${encodeURIComponent(id)}`).join('&')
+    return api.get(`/api/examinations/questions/${query ? `?${query}` : ''}`)
+  },
+  getQuestionsByLessonPlan: (lessonPlanId) =>
+    api.get('/api/examinations/questions/by_lesson_plan/', {
+      params: { lesson_plan_id: lessonPlanId },
+    }),
+  generateFromLesson: (data) =>
+    api.post('/api/examinations/questions/generate_from_lesson/', data),
   getQuestion: (id) => api.get(`/api/examinations/questions/${id}/`),
   createQuestion: (data) => api.post('/api/examinations/questions/', data),
   updateQuestion: (id, data) => api.patch(`/api/examinations/questions/${id}/`, data),
@@ -1102,6 +1116,11 @@ export const questionPaperApi = {
   createExamPaper: (data) => api.post('/api/examinations/exam-papers/', data),
   updateExamPaper: (id, data) => api.patch(`/api/examinations/exam-papers/${id}/`, data),
   deleteExamPaper: (id) => api.delete(`/api/examinations/exam-papers/${id}/`),
+  createFromLessons: (data) => api.post('/api/examinations/exam-papers/create_from_lessons/', data),
+  linkLessonPlans: (paperId, data) =>
+    api.post(`/api/examinations/exam-papers/${paperId}/link_lesson_plans/`, data),
+  getCoverageStats: (paperId) =>
+    api.get(`/api/examinations/exam-papers/${paperId}/coverage_stats/`),
   generatePDF: (id) => api.get(`/api/examinations/exam-papers/${id}/generate-pdf/`, { responseType: 'blob' }),
   reviewQuestions: (questions) => api.post('/api/examinations/exam-papers/review-questions/', { questions }),
 

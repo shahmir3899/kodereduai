@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { questionPaperApi, examinationsApi } from '../../services/api'
 import Toast from '../../components/Toast'
@@ -7,6 +7,7 @@ import ClassSelector from '../../components/ClassSelector'
 import SubjectSelector from '../../components/SubjectSelector'
 import ImageCapturePaperTab from './ImageCapturePaperTab'
 import ManualEntryPaperTab from './ManualEntryPaperTab'
+import LessonPlanPaperTab from './LessonPlanPaperTab'
 
 /**
  * QuestionPaperBuilderPage - Main Question Paper Builder
@@ -16,7 +17,8 @@ import ManualEntryPaperTab from './ManualEntryPaperTab'
  */
 export default function QuestionPaperBuilderPage() {
   const navigate = useNavigate()
-  const [activeTab, setActiveTab] = useState('manual') // 'manual' or 'image'
+  const location = useLocation()
+  const [activeTab, setActiveTab] = useState(location.state?.lessonPlanId ? 'lesson' : 'manual') // 'manual' | 'image' | 'lesson'
   const [toast, setToast] = useState(null)
   const [paperMetadata, setPaperMetadata] = useState({
     class_obj: '',
@@ -64,6 +66,17 @@ export default function QuestionPaperBuilderPage() {
     }
 
     createPaperMutation.mutate(finalData)
+  }
+
+  const handlePaperCreated = (paper) => {
+    if (!paper?.id) {
+      setToast({ type: 'error', message: 'Paper created but no ID returned' })
+      return
+    }
+    setToast({ type: 'success', message: 'Exam paper created successfully!' })
+    setTimeout(() => {
+      navigate(`/examinations/papers/${paper.id}`)
+    }, 1200)
   }
 
   return (
@@ -170,6 +183,17 @@ export default function QuestionPaperBuilderPage() {
               <span className="text-xl mr-2">📸</span>
               Capture from Image
             </button>
+            <button
+              onClick={() => setActiveTab('lesson')}
+              className={`flex-1 px-6 py-4 font-medium text-center transition ${
+                activeTab === 'lesson'
+                  ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600'
+                  : 'text-gray-600 hover:text-gray-800'
+              }`}
+            >
+              <span className="text-xl mr-2">📚</span>
+              From Lesson Plans
+            </button>
           </div>
 
           {/* Tab content */}
@@ -185,6 +209,15 @@ export default function QuestionPaperBuilderPage() {
               <ImageCapturePaperTab
                 onPaperCreate={handlePaperCreate}
                 isLoading={createPaperMutation.isPending}
+              />
+            )}
+
+            {activeTab === 'lesson' && (
+              <LessonPlanPaperTab
+                metadata={paperMetadata}
+                onPaperCreated={handlePaperCreated}
+                isLoading={createPaperMutation.isPending}
+                initialLessonPlanId={location.state?.lessonPlanId}
               />
             )}
           </div>
