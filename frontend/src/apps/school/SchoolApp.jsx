@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../../contexts/AuthContext'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Routes, Route } from 'react-router-dom'
 import { useSubdomainSchool } from '../../hooks/useSubdomainSchool'
 import api from '../../services/api'
-import DashboardPage from '../../pages/DashboardPage'
+import App from '../../App'
 import SchoolLoginPage from './pages/SchoolLoginPage'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import { useToast } from '../../components/Toast'
@@ -149,28 +149,6 @@ export default function SchoolApp() {
     return <SchoolLoginPage school={schoolData} />
   }
 
-  // Logged in and authorized → show dashboard
-  return (
-    <div>
-      {/* School brand header (optional) */}
-      {schoolData?.logo && (
-        <div className="bg-gradient-to-r from-blue-600 to-blue-800 text-white p-4 shadow-md">
-          <div className="max-w-7xl mx-auto flex items-center gap-4">
-            <img
-              src={schoolData.logo}
-              alt={schoolData.name}
-              className="h-10 w-auto"
-            />
-            <div>
-              <h1 className="text-xl font-bold">{schoolData.name}</h1>
-              {schoolData.address && (
-                <p className="text-blue-100 text-sm">{schoolData.address}</p>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-      <DashboardPage />
-    </div>
-  )
+  // Logged in and authorized → show full app with routing
+  return <App />
 }

@@ -5,6 +5,7 @@ import { useToast } from '../../components/Toast'
 import LoginPage from '../../pages/LoginPage'
 import SuperAdminDashboard from '../../pages/SuperAdminDashboard'
 import LoadingSpinner from '../../components/LoadingSpinner'
+import Layout from '../../components/Layout'
 
 /**
  * Super Admin Portal
@@ -71,6 +72,10 @@ export default function Portal() {
     )
   }
 
-  // Super admin → show dashboard
-  return <SuperAdminDashboard />
+  // Super admin → show dashboard with layout (sidebar + header)
+  return (
+    <Layout>
+      <SuperAdminDashboard />
+    </Layout>
+  )
 }
