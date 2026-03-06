@@ -57,36 +57,24 @@ export default function SchoolApp() {
     }
   }, [school, subdomain])
 
-  // Validate user has access to this school after login
+  // After login, set active school if user has access
   useEffect(() => {
     if (user && schoolData && !authLoading) {
-      // Check if user belongs to this school
-      const hasAccess = user.schools?.some(s => s.id === schoolData.id)
+      // Check if user belongs to this specific subdomain's school
+      const hasDirectAccess = user.schools?.some(s => s.id === schoolData.id)
 
-      if (!hasAccess) {
-        // User doesn't belong to this school
-        const userSchool = user.schools?.[0]
-        const errorMsg = `Your account is not registered for ${schoolData.name}.`
-
-        setValidationError({
-          message: errorMsg,
-          userSchool,
-        })
-
-        // Auto-redirect after 3 seconds
-        if (userSchool) {
-          showError(errorMsg)
-          setTimeout(() => {
-            window.location.href = `https://${userSchool.subdomain}.kodereduai.pk`
-          }, 3000)
-        }
-        return
+      if (hasDirectAccess) {
+        // User belongs to this subdomain's school - set it as active
+        localStorage.setItem('active_school_id', schoolData.id)
       }
+      // If user doesn't belong to this school but has OTHER schools,
+      // let them in anyway - SchoolSwitcher will let them switch.
+      // Their active_school_id from AuthContext will be used for API requests.
 
-      // User has access - clear any validation errors
+      // Clear any previous validation errors
       setValidationError(null)
     }
-  }, [user, schoolData, authLoading, showError])
+  }, [user, schoolData, authLoading])
 
   // Loading states
   if (!isSubdomain) {
@@ -121,35 +109,6 @@ export default function SchoolApp() {
           >
             Return to home
           </a>
-        </div>
-      </div>
-    )
-  }
-
-  // Show validation error if user not authorized for this school
-  if (validationError && user) {
-    return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-        <div className="bg-white p-8 rounded shadow-md max-w-md">
-          <h2 className="text-xl font-bold text-red-600 mb-4">Access Denied</h2>
-          <p className="text-gray-700 mb-4">{validationError.message}</p>
-          {validationError.userSchool && (
-            <p className="text-sm text-gray-600 mb-6">
-              You have access to:{' '}
-              <strong>{validationError.userSchool.name}</strong>
-            </p>
-          )}
-          <p className="text-sm text-gray-600">
-            Redirecting to your school in 3 seconds...
-          </p>
-          {validationError.userSchool && (
-            <a
-              href={`https://${validationError.userSchool.subdomain}.kodereduai.pk`}
-              className="mt-4 block text-center bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
-            >
-              Go to my school
-            </a>
-          )}
         </div>
       </div>
     )

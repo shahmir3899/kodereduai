@@ -3,8 +3,8 @@ import { useAuth } from '../contexts/AuthContext'
 import { useToast } from './Toast'
 
 export default function SchoolSwitcher() {
-  const { user, activeSchool } = useAuth()
-  const { showSuccess, showError } = useToast()
+  const { user, activeSchool, switchSchool } = useAuth()
+  const { showSuccess } = useToast()
   const [open, setOpen] = useState(false)
   const [switching, setSwitching] = useState(false)
   const ref = useRef(null)
@@ -20,30 +20,21 @@ export default function SchoolSwitcher() {
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
 
-  const handleSwitchSchool = (school) => {
+  const handleSwitchSchool = async (school) => {
     if (school.id === activeSchool?.id) {
       setOpen(false)
       return
     }
 
     setSwitching(true)
+    showSuccess(`Switching to ${school.name}...`)
 
-    // Update localStorage for new school
-    localStorage.setItem('active_school_id', school.id.toString())
-    localStorage.setItem('currentSchoolId', school.id.toString())
-    localStorage.setItem('currentSchoolName', school.name)
-    
-    // If school has subdomain, redirect to it
-    if (school.subdomain) {
-      localStorage.setItem('currentSchoolSubdomain', school.subdomain)
-      showSuccess(`Switching to ${school.name}...`)
-      
-      // Redirect to new school's subdomain
-      setTimeout(() => {
-        window.location.href = `https://${school.subdomain}.kodereduai.pk`
-      }, 500)
-    } else {
-      showError('School subdomain not found')
+    try {
+      // Call backend switch-school API, then reload page
+      // switchSchool updates activeSchool, localStorage, and reloads
+      await switchSchool(school.id)
+    } catch (err) {
+      console.error('School switch failed:', err)
       setSwitching(false)
     }
   }

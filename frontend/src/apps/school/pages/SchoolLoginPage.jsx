@@ -26,37 +26,20 @@ export default function SchoolLoginPage({ school }) {
     try {
       const user = await login(username, password)
 
-      // VALIDATE: Does user belong to this school?
-      if (school) {
-        const hasAccessToSchool = user.schools?.some(s => s.id === school.id)
-
-        if (!hasAccessToSchool) {
-          // User doesn't belong to this school
-          const userSchool = user.schools?.[0] || null
-          const msg =
-            `Your account is not registered for ${school.name}. ` +
-            (userSchool
-              ? `You have access to: ${user.schools
-                  ?.map(s => s.name)
-                  .join(', ')}`
-              : 'Contact your school administrator.')
-
-          setError(msg)
-          showError('Access denied for this school')
-
-          // Auto-redirect to user's primary school after 3 seconds
-          if (userSchool) {
-            setTimeout(() => {
-              window.location.href = `https://${userSchool.subdomain}.kodereduai.pk`
-            }, 3000)
-          }
-          return
-        }
+      // Check if user has ANY school access
+      if (!user.schools || user.schools.length === 0) {
+        setError('Your account has no school assigned. Contact your administrator.')
+        showError('No school access')
+        return
       }
 
-      // Login successful
-      localStorage.setItem('active_school_id', school.id)
-      localStorage.setItem('active_school_name', school.name)
+      // If user belongs to this subdomain's school, set it as active
+      // Otherwise, set their default/first school as active
+      const hasAccessToThisSchool = school && user.schools?.some(s => s.id === school.id)
+      const activeSchool = hasAccessToThisSchool ? school : user.schools.find(s => s.is_default) || user.schools[0]
+
+      localStorage.setItem('active_school_id', activeSchool.id)
+      localStorage.setItem('active_school_name', activeSchool.name || school?.name)
 
       // Toast notification
       showSuccess(`Welcome back, ${user.first_name || user.username}!`)
