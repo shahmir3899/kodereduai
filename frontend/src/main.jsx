@@ -56,15 +56,20 @@ function AppWithSubdomain() {
           localStorage.setItem('currentSchoolId', schoolData.id.toString())
           localStorage.setItem('currentSchoolName', schoolData.name)
           localStorage.setItem('currentSchoolSubdomain', subdomain)
+          // Clear portal mode - this is a school subdomain
+          localStorage.removeItem('isPortalMode')
           if (schoolData.logo) {
             localStorage.setItem('currentSchoolLogo', schoolData.logo)
           }
           
           console.log(`✅ School auto-detected: ${schoolData.name} (subdomain: ${subdomain})`)
-        } else if (subdomain === 'portal') {
-          // Portal subdomain - super admin interface
+        } else if (subdomain === 'portal' && hostname.endsWith('.kodereduai.pk')) {
+          // ONLY set portal mode if the domain is actually portal.kodereduai.pk
           localStorage.setItem('isPortalMode', 'true')
           console.log('✅ Portal mode detected')
+        } else {
+          // Not a kodereduai.pk subdomain - clear portal mode
+          localStorage.removeItem('isPortalMode')
         }
       } catch (err) {
         console.error('Subdomain detection failed:', err)
