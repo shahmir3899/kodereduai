@@ -59,22 +59,12 @@ export default function SchoolApp() {
     }
   }, [school, subdomain])
 
-  // After login, set active school if user has access
+  // After login, clear validation errors if user has access to any school in this org
   useEffect(() => {
     if (user && schoolData && !authLoading) {
-      // Check if user belongs to this specific subdomain's school
-      const hasDirectAccess = user.schools?.some(s => s.id === schoolData.id)
-
-      if (hasDirectAccess) {
-        // User belongs to this subdomain's school - set it as active
-        localStorage.setItem('active_school_id', schoolData.id)
-      }
-      // If user doesn't belong to this school but has OTHER schools,
-      // let them in anyway - SchoolSwitcher will let them switch.
-      // Their active_school_id from AuthContext will be used for API requests.
-
-      // Clear any previous validation errors
       setValidationError(null)
+      // Note: Do NOT set active_school_id here — AuthContext.resolveActiveSchool()
+      // already handles it from localStorage, which preserves explicit switches.
     }
   }, [user, schoolData, authLoading])
 
