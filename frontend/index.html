@@ -1,13 +1,98 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>KoderEduAI - AI-Powered Education Platform</title>
+    <title>KoderEduAI</title>
+    <style>
+      /* Loading screen while detecting subdomain */
+      #subdomain-loader {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      }
+      .loader-content {
+        text-align: center;
+      }
+      .spinner {
+        border: 4px solid rgba(255, 255, 255, 0.3);
+        border-top: 4px solid white;
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 20px;
+      }
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+    </style>
   </head>
   <body>
+    <div id="subdomain-loader">
+      <div class="loader-content">
+        <div class="spinner"></div>
+        <p>Loading KoderEduAI...</p>
+      </div>
+    </div>
     <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
+    
+    <script type="module">
+      // Detect subdomain and load appropriate app
+      (function() {
+        const hostname = window.location.hostname;
+        const parts = hostname.split('.');
+        
+        let appToLoad = 'portal'; // default to portal for simplicity
+        
+        // Determine which app to load based on subdomain
+        if (hostname === 'portal.kodereduai.pk') {
+          // Portal subdomain -> Admin Portal
+          appToLoad = 'portal';
+        } else if (hostname.endsWith('.kodereduai.pk') && parts.length === 3 && parts[0] !== 'www') {
+          // School subdomain (e.g., focus.kodereduai.pk, focus2.kodereduai.pk)
+          appToLoad = 'school';
+        } else if (hostname === 'localhost' || hostname.startsWith('127.0.0.1')) {
+          // Development mode - check URL params
+          const params = new URLSearchParams(window.location.search);
+          const subdomain = params.get('subdomain');
+          if (subdomain === 'portal') {
+            appToLoad = 'portal';
+          } else if (subdomain) {
+            appToLoad = 'school';
+          } else {
+            appToLoad = 'portal'; // Default to portal for local dev
+          }
+        }
+        
+        console.log('🎯 Detected app to load:', appToLoad, 'for hostname:', hostname);
+        
+        // Remove loader and load the appropriate app entry point
+        const loader = document.getElementById('subdomain-loader');
+        
+        // Dynamically import the correct app
+        if (appToLoad === 'portal') {
+          import('/src/apps/portal/main.jsx').then(() => {
+            if (loader) loader.style.display = 'none';
+          }).catch(err => {
+            console.error('Failed to load portal app:', err);
+            loader.innerHTML = '<div class="loader-content"><p>⚠️ Failed to load portal</p></div>';
+          });
+        } else if (appToLoad === 'school') {
+          import('/src/apps/school/main.jsx').then(() => {
+            if (loader) loader.style.display = 'none';
+          }).catch(err => {
+            console.error('Failed to load school app:', err);
+            loader.innerHTML = '<div class="loader-content"><p>⚠️ Failed to load school portal</p></div>';
+          });
+        }
+      })();
+    </script>
   </body>
 </html>

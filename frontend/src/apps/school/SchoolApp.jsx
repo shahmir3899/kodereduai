@@ -40,11 +40,22 @@ export default function SchoolApp() {
     if (school?.data) {
       const schoolInfo = school.data
       setSchoolData(schoolInfo)
-      // Auto-set active school in localStorage
+      // Store school context in localStorage (same keys as LoginPage expects)
+      localStorage.setItem('currentSchoolId', schoolInfo.id.toString())
+      localStorage.setItem('currentSchoolName', schoolInfo.name)
+      localStorage.setItem('currentSchoolSubdomain', subdomain)
+      if (schoolInfo.logo) {
+        localStorage.setItem('currentSchoolLogo', schoolInfo.logo)
+      }
+      // Also set active_school_id for API requests
       localStorage.setItem('active_school_id', schoolInfo.id)
       localStorage.setItem('active_school_name', schoolInfo.name)
+      // Clear portal mode
+      localStorage.removeItem('isPortalMode')
+      
+      console.log(`✅ School loaded: ${schoolInfo.name} (ID: ${schoolInfo.id}, subdomain: ${subdomain})`)
     }
-  }, [school])
+  }, [school, subdomain])
 
   // Validate user has access to this school after login
   useEffect(() => {

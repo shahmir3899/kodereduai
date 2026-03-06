@@ -20,6 +20,15 @@ const queryClient = new QueryClient({
   },
 })
 
+// Set portal mode in localStorage when portal app loads
+localStorage.setItem('isPortalMode', 'true')
+// Clear school context
+localStorage.removeItem('currentSchoolId')
+localStorage.removeItem('currentSchoolName')
+localStorage.removeItem('currentSchoolSubdomain')
+localStorage.removeItem('currentSchoolLogo')
+console.log('✅ Portal mode activated')
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
