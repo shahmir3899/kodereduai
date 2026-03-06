@@ -235,6 +235,7 @@ CORS_ALLOWED_ORIGIN_REGEXES = [
     r'^https?://kodereduai\.pk$',           # Root domain
     r'^https?://www\.kodereduai\.pk$',     # www subdomain
     r'^https?://portal\.kodereduai\.pk$',  # Portal subdomain
+    r'^https?://.*\.onrender\.com$',       # Any Render app URL (migration support)
 ]
 
 CORS_ALLOW_CREDENTIALS = True
