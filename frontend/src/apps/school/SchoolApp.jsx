@@ -47,9 +47,11 @@ export default function SchoolApp() {
       if (schoolInfo.logo) {
         localStorage.setItem('currentSchoolLogo', schoolInfo.logo)
       }
-      // Also set active_school_id for API requests
-      localStorage.setItem('active_school_id', schoolInfo.id)
-      localStorage.setItem('active_school_name', schoolInfo.name)
+      // Only set active_school_id if not already set (preserve explicit switch)
+      if (!localStorage.getItem('active_school_id')) {
+        localStorage.setItem('active_school_id', schoolInfo.id)
+        localStorage.setItem('active_school_name', schoolInfo.name)
+      }
       // Clear portal mode
       localStorage.removeItem('isPortalMode')
       

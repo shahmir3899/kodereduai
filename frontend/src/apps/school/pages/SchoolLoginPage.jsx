@@ -33,13 +33,19 @@ export default function SchoolLoginPage({ school }) {
         return
       }
 
-      // If user belongs to this subdomain's school, set it as active
-      // Otherwise, set their default/first school as active
+      // Validate: user must belong to this subdomain's school
       const hasAccessToThisSchool = school && user.schools?.some(s => s.id === school.id)
-      const activeSchool = hasAccessToThisSchool ? school : user.schools.find(s => s.is_default) || user.schools[0]
+      if (!hasAccessToThisSchool) {
+        setError(`You don't have access to ${school?.name || 'this school'}. Please login from your school's portal.`)
+        showError('Access denied for this school')
+        // Clear tokens since the user logged in but shouldn't be here
+        localStorage.removeItem('access_token')
+        localStorage.removeItem('refresh_token')
+        return
+      }
 
-      localStorage.setItem('active_school_id', activeSchool.id)
-      localStorage.setItem('active_school_name', activeSchool.name || school?.name)
+      localStorage.setItem('active_school_id', school.id)
+      localStorage.setItem('active_school_name', school.name)
 
       // Toast notification
       showSuccess(`Welcome back, ${user.first_name || user.username}!`)
