@@ -44,6 +44,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
                     'name': school.name,
                     'role': 'SUPER_ADMIN',
                     'is_default': school.id == (user.school_id or 0),
+                    'subdomain': school.subdomain,
                     'enabled_modules': school.get_effective_modules(),
                 })
             # Ensure at least one default
@@ -56,6 +57,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
                     'name': mem.school.name,
                     'role': mem.role,
                     'is_default': mem.is_default,
+                    'subdomain': mem.school.subdomain,
                     'enabled_modules': mem.school.get_effective_modules(),
                 })
             # Legacy fallback: include user.school if not already in memberships
@@ -67,6 +69,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
                         'name': legacy_school.name,
                         'role': user.role or 'STAFF',
                         'is_default': not any(s['is_default'] for s in schools),
+                        'subdomain': legacy_school.subdomain,
                         'enabled_modules': legacy_school.get_effective_modules(),
                     })
                 except School.DoesNotExist:
@@ -229,7 +232,7 @@ class CurrentUserSerializer(serializers.ModelSerializer):
                     'is_default': school.id == (obj.school_id or 0),
                     'subdomain': school.subdomain,
                     'address': school.address or '',
-                    'logo': school.logo.url if school.logo else None,
+                    'logo': school.logo or None,
                     'enabled_modules': school.get_effective_modules(),
                 })
             if schools and not any(s['is_default'] for s in schools):
@@ -243,7 +246,7 @@ class CurrentUserSerializer(serializers.ModelSerializer):
                 'is_default': mem.is_default,
                 'subdomain': mem.school.subdomain,
                 'address': mem.school.address or '',
-                'logo': mem.school.logo.url if mem.school.logo else None,
+                'logo': mem.school.logo or None,
                 'enabled_modules': mem.school.get_effective_modules(),
             }
             for mem in obj.school_memberships.filter(
@@ -263,7 +266,7 @@ class CurrentUserSerializer(serializers.ModelSerializer):
                     'is_default': not any(s['is_default'] for s in schools),
                     'subdomain': legacy_school.subdomain,
                     'address': legacy_school.address or '',
-                    'logo': legacy_school.logo.url if legacy_school.logo else None,
+                    'logo': legacy_school.logo or None,
                     'enabled_modules': legacy_school.get_effective_modules(),
                 })
             except School.DoesNotExist:
