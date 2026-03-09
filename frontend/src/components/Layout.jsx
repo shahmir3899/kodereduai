@@ -359,7 +359,7 @@ const SESSION_AWARE_PREFIXES = [
 ]
 
 export default function Layout() {
-  const { user, logout, isSuperAdmin, isStaffMember, isPrincipal, isHRManager, isStaffLevel, isParent, isStudent, isModuleEnabled } = useAuth()
+  const { user, logout, activeSchool, effectiveRole, isSuperAdmin, isStaffMember, isPrincipal, isHRManager, isStaffLevel, isParent, isStudent, isModuleEnabled } = useAuth()
   const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
@@ -584,10 +584,34 @@ export default function Layout() {
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        {/* Logo */}
-        <div className="flex items-center justify-center h-16 border-b border-gray-200 gap-2 flex-shrink-0">
-          <img src="/Logo.jpeg" alt="KoderEduAI" className="h-10 w-10 rounded-full object-cover" />
-          <h1 className="text-xl font-bold text-primary-600">KoderEduAI</h1>
+        {/* Logo - School branded for non-super-admin, Platform branded for super-admin */}
+        <div className="flex items-center justify-center h-16 border-b border-gray-200 gap-2 flex-shrink-0 ps-3 pe-3">
+          {isSuperAdmin ? (
+            // Super admin sees platform branding
+            <>
+              <img src="/Logo.jpeg" alt="KoderEduAI" className="h-10 w-10 rounded-full object-cover flex-shrink-0" />
+              <h1 className="text-lg font-bold text-primary-600 whitespace-nowrap overflow-hidden text-ellipsis">KoderEduAI</h1>
+            </>
+          ) : (
+            // School admin / staff / teacher sees their school branding
+            <>
+              <img
+                src={activeSchool?.logo || localStorage.getItem('currentSchoolLogo') || '/Logo.jpeg'}
+                alt={activeSchool?.name || 'School'}
+                className="h-10 w-10 rounded-full object-cover flex-shrink-0"
+                onError={(e) => {
+                  e.currentTarget.onerror = null
+                  e.currentTarget.src = '/Logo.jpeg'
+                }}
+              />
+              <div className="flex flex-col min-w-0 flex-1">
+                <h1 className="text-sm font-bold text-gray-800 whitespace-nowrap overflow-hidden text-ellipsis">
+                  {activeSchool?.name || 'School'}
+                </h1>
+                <p className="text-xs text-gray-500 whitespace-nowrap">{effectiveRole}</p>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Navigation */}

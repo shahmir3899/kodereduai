@@ -198,6 +198,10 @@ export default function ExpensesPage() {
   const accountsList = accountsData?.data?.results || accountsData?.data || []
   const transferList = transfersData?.data?.results || transfersData?.data || []
 
+  const isAdmin = ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL'].includes(user?.role)
+  const canEditExpense = (expense) => isAdmin || Number(expense?.recorded_by) === Number(user?.id)
+  const canEditTransfer = (transfer) => isAdmin || Number(transfer?.recorded_by) === Number(user?.id)
+
   return (
     <div>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
@@ -314,7 +318,11 @@ export default function ExpensesPage() {
                       </div>
                       <p className="text-lg font-bold text-gray-900">{Number(expense.amount).toLocaleString()}</p>
                       {expense.description && <p className="text-sm text-gray-600 mt-1">{expense.description}</p>}
-                      {canWrite && (
+                      <div className="mt-2 pt-2 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
+                        <span>By: {expense.recorded_by_name || '-'}</span>
+                        <span>{expense.created_at ? new Date(expense.created_at).toLocaleDateString() : '-'}</span>
+                      </div>
+                      {canWrite && canEditExpense(expense) && (
                         <div className="flex gap-2 mt-2">
                           <button onClick={() => openEdit(expense)} className="text-xs text-primary-600 hover:underline">Edit</button>
                           <button onClick={async () => { const ok = await confirm({ title: 'Delete Expense', message: 'Delete this expense? This cannot be undone.' }); if (ok) deleteMutation.mutate(expense.id) }} className="text-xs text-red-600 hover:underline">Delete</button>
@@ -334,6 +342,7 @@ export default function ExpensesPage() {
                         <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Amount</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Recorded By</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created At</th>
                         {canWrite && <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>}
                       </tr>
                     </thead>
@@ -347,10 +356,21 @@ export default function ExpensesPage() {
                           <td className="px-4 py-3 text-sm font-medium text-gray-900 text-right">{Number(expense.amount).toLocaleString()}</td>
                           <td className="px-4 py-3 text-sm text-gray-600 max-w-xs truncate">{expense.description || '-'}</td>
                           <td className="px-4 py-3 text-sm text-gray-500">{expense.recorded_by_name || '-'}</td>
+                          <td className="px-4 py-3 text-xs text-gray-400">
+                            {expense.created_at ? new Date(expense.created_at).toLocaleString('en-US', {
+                              month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                            }) : '-'}
+                          </td>
                           {canWrite && (
                             <td className="px-4 py-3 text-center">
-                              <button onClick={() => openEdit(expense)} className="text-sm text-primary-600 hover:underline mr-3">Edit</button>
-                              <button onClick={async () => { const ok = await confirm({ title: 'Delete Expense', message: 'Delete this expense? This cannot be undone.' }); if (ok) deleteMutation.mutate(expense.id) }} className="text-sm text-red-600 hover:underline">Delete</button>
+                              {canEditExpense(expense) ? (
+                                <>
+                                  <button onClick={() => openEdit(expense)} className="text-sm text-primary-600 hover:underline mr-3">Edit</button>
+                                  <button onClick={async () => { const ok = await confirm({ title: 'Delete Expense', message: 'Delete this expense? This cannot be undone.' }); if (ok) deleteMutation.mutate(expense.id) }} className="text-sm text-red-600 hover:underline">Delete</button>
+                                </>
+                              ) : (
+                                <span className="text-xs text-gray-400">No access</span>
+                              )}
                             </td>
                           )}
                         </tr>
@@ -399,7 +419,11 @@ export default function ExpensesPage() {
                         <span className="font-bold text-gray-900">{Number(tfr.amount).toLocaleString()}</span>
                       </div>
                       <p className="text-xs text-gray-500">{tfr.date} {tfr.description && `— ${tfr.description}`}</p>
-                      {canWrite && (
+                      <div className="mt-2 pt-2 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
+                        <span>By: {tfr.recorded_by_name || '-'}</span>
+                        <span>{tfr.created_at ? new Date(tfr.created_at).toLocaleDateString() : '-'}</span>
+                      </div>
+                      {canWrite && canEditTransfer(tfr) && (
                         <button
                           onClick={async () => { const ok = await confirm({ title: 'Delete Transfer', message: 'Delete this transfer? This cannot be undone.' }); if (ok) deleteTransferMutation.mutate(tfr.id) }}
                           className="mt-2 text-xs text-red-600 hover:text-red-800"
@@ -421,6 +445,8 @@ export default function ExpensesPage() {
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">To</th>
                         <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Amount</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Recorded By</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created At</th>
                         {canWrite && <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>}
                       </tr>
                     </thead>
@@ -432,9 +458,19 @@ export default function ExpensesPage() {
                           <td className="px-4 py-3 text-sm text-gray-900">{tfr.to_account_name}</td>
                           <td className="px-4 py-3 text-sm font-medium text-gray-900 text-right">{Number(tfr.amount).toLocaleString()}</td>
                           <td className="px-4 py-3 text-sm text-gray-600 max-w-xs truncate">{tfr.description || '—'}</td>
+                          <td className="px-4 py-3 text-sm text-gray-500">{tfr.recorded_by_name || '-'}</td>
+                          <td className="px-4 py-3 text-xs text-gray-400">
+                            {tfr.created_at ? new Date(tfr.created_at).toLocaleString('en-US', {
+                              month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                            }) : '-'}
+                          </td>
                           {canWrite && (
                             <td className="px-4 py-3 text-center">
-                              <button onClick={async () => { const ok = await confirm({ title: 'Delete Transfer', message: 'Delete this transfer? This cannot be undone.' }); if (ok) deleteTransferMutation.mutate(tfr.id) }} className="text-sm text-red-600 hover:underline">Delete</button>
+                              {canEditTransfer(tfr) ? (
+                                <button onClick={async () => { const ok = await confirm({ title: 'Delete Transfer', message: 'Delete this transfer? This cannot be undone.' }); if (ok) deleteTransferMutation.mutate(tfr.id) }} className="text-sm text-red-600 hover:underline">Delete</button>
+                              ) : (
+                                <span className="text-xs text-gray-400">No access</span>
+                              )}
                             </td>
                           )}
                         </tr>

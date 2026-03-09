@@ -4,6 +4,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useFeeCollection } from './useFeeCollection'
 import FeeFilters from './FeeFilters'
+import FeeSummaryCards from './FeeSummaryCards'
 import FeeTable from './FeeTable'
 import BulkActionsBar from './BulkActionsBar'
 import {
@@ -182,7 +183,7 @@ export default function FeeCollectPage() {
     exportFeePDF({
       paymentList: data.paymentList,
       month, year,
-      summaryData: data.summaryData,
+      summaryData: data.filteredSummaryData,
       schoolName: activeSchool?.name || user?.school_name,
     })
   }
@@ -237,6 +238,12 @@ export default function FeeCollectPage() {
           )}
         </div>
       </div>
+
+      <FeeSummaryCards 
+        summaryData={data.filteredSummaryData} 
+        onFilterUnpaid={() => setStatusFilter(statusFilter === 'UNPAID' ? '' : 'UNPAID')}
+        onFilterPaid={() => setStatusFilter(statusFilter === 'PAID' ? '' : 'PAID')}
+      />
 
       {/* Fee Table */}
       <FeeTable

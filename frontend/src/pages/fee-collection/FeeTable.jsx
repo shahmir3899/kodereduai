@@ -49,14 +49,8 @@ export default function FeeTable({
     headerCheckboxRef.current.indeterminate = someSelected
   }
 
-  // Sort by class name then numeric roll number (must be before early returns to satisfy hooks rules)
-  const sortedList = useMemo(() => {
-    return [...paymentList].sort((a, b) => {
-      const classCompare = (a.class_name || '').localeCompare(b.class_name || '')
-      if (classCompare !== 0) return classCompare
-      return (parseInt(a.student_roll) || 0) - (parseInt(b.student_roll) || 0)
-    })
-  }, [paymentList])
+  // Use paymentList directly - sorting is handled by useFeeCollection hook
+  const sortedList = paymentList
 
   if (isLoading) {
     return <div className="card"><div className="text-center py-8 text-gray-500">Loading...</div></div>
@@ -162,6 +156,13 @@ export default function FeeTable({
                   Advance credit: {Math.abs(prevBal).toLocaleString()}
                 </p>
               )}
+              <div className="mt-2 pt-2 border-t border-gray-100 space-y-1">
+                <p className="text-xs text-gray-600">Account: {payment.account_name || '-'}</p>
+                <div className="flex items-center justify-between text-xs text-gray-500">
+                  <span>Collected by: {payment.collected_by_name || '-'}</span>
+                  <span>{payment.created_at ? new Date(payment.created_at).toLocaleDateString() : '-'}</span>
+                </div>
+              </div>
               {canWrite && payment.status !== 'ADVANCE' && (
                 <div className="flex gap-2">
                   {payment.status !== 'PAID' && onRecordPayment && (
@@ -212,6 +213,9 @@ export default function FeeTable({
               <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">Received</th>
               <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">Balance</th>
               <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase">Status</th>
+              <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Account</th>
+              <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Collected By</th>
+              <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Collected At</th>
               {canWrite && <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase">Action</th>}
             </tr>
           </thead>
@@ -299,6 +303,13 @@ export default function FeeTable({
                     {balance.toLocaleString()}
                   </td>
                   <td className="px-3 py-3 text-center">{statusBadge(payment.status)}</td>
+                  <td className="px-3 py-3 text-xs text-gray-600">{payment.account_name || '-'}</td>
+                  <td className="px-3 py-3 text-xs text-gray-600">{payment.collected_by_name || '-'}</td>
+                  <td className="px-3 py-3 text-xs text-gray-400">
+                    {payment.created_at ? new Date(payment.created_at).toLocaleString('en-US', {
+                      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                    }) : '-'}
+                  </td>
                   {canWrite && (
                     <td className="px-3 py-3 text-center">
                       <div className="flex items-center justify-center gap-1">

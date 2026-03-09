@@ -20,7 +20,7 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from django.http import FileResponse
 
-from core.permissions import IsSchoolAdmin, IsSchoolAdminOrStaffReadOnly, HasSchoolAccess, get_effective_role, ModuleAccessMixin
+from core.permissions import IsSchoolAdmin, IsSchoolAdminOrStaffReadOnly, HasSchoolAccess, get_effective_role, ModuleAccessMixin, ADMIN_ROLES
 from core.mixins import TenantQuerySetMixin, ensure_tenant_schools, ensure_tenant_school_id
 from students.models import Student, Class
 from django.utils import timezone
@@ -54,6 +54,14 @@ from .serializers import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def can_edit_finance_entry(request, entry):
+    """Allow edits only for admins or the original recorder."""
+    role = get_effective_role(request)
+    if role in ADMIN_ROLES:
+        return True
+    return getattr(entry, 'recorded_by_id', None) == request.user.id
 
 
 def _resolve_school_id(request):
@@ -904,6 +912,25 @@ class ExpenseViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         else:
             serializer.save(recorded_by=self.request.user)
 
+    def perform_update(self, serializer):
+        from rest_framework.exceptions import PermissionDenied
+
+        instance = serializer.instance
+        if not can_edit_finance_entry(self.request, instance):
+            raise PermissionDenied(
+                'You can only edit expenses you recorded. Contact an admin to modify this entry.'
+            )
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        from rest_framework.exceptions import PermissionDenied
+
+        if not can_edit_finance_entry(self.request, instance):
+            raise PermissionDenied(
+                'You can only delete expenses you recorded. Contact an admin to remove this entry.'
+            )
+        instance.delete()
+
     @action(detail=False, methods=['get'])
     def category_summary(self, request):
         """Get expenses grouped by category for a date range."""
@@ -1002,6 +1029,25 @@ class OtherIncomeViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
     def perform_create(self, serializer):
         school_id = _resolve_school_id(self.request)
         serializer.save(school_id=school_id, recorded_by=self.request.user)
+
+    def perform_update(self, serializer):
+        from rest_framework.exceptions import PermissionDenied
+
+        instance = serializer.instance
+        if not can_edit_finance_entry(self.request, instance):
+            raise PermissionDenied(
+                'You can only edit income entries you recorded. Contact an admin to modify this entry.'
+            )
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        from rest_framework.exceptions import PermissionDenied
+
+        if not can_edit_finance_entry(self.request, instance):
+            raise PermissionDenied(
+                'You can only delete income entries you recorded. Contact an admin to remove this entry.'
+            )
+        instance.delete()
 
 class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     """CRUD for accounts + balance computation."""
@@ -2023,6 +2069,25 @@ class TransferViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelView
             raise ValidationError({'to_account': 'This account is not accessible for your school.'})
 
         serializer.save(school_id=school_id, recorded_by=self.request.user)
+
+    def perform_update(self, serializer):
+        from rest_framework.exceptions import PermissionDenied
+
+        instance = serializer.instance
+        if not can_edit_finance_entry(self.request, instance):
+            raise PermissionDenied(
+                'You can only edit transfers you recorded. Contact an admin to modify this entry.'
+            )
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        from rest_framework.exceptions import PermissionDenied
+
+        if not can_edit_finance_entry(self.request, instance):
+            raise PermissionDenied(
+                'You can only delete transfers you recorded. Contact an admin to remove this entry.'
+            )
+        instance.delete()
 
 
 class FinanceReportsView(ModuleAccessMixin, APIView):

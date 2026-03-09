@@ -1,7 +1,7 @@
 import { Fragment, useState } from 'react'
 import { Link } from 'react-router-dom'
 
-export default function FeeSummaryCards({ summaryData }) {
+export default function FeeSummaryCards({ summaryData, onFilterUnpaid, onFilterPaid }) {
   if (!summaryData) return null
 
   const collectionRate = summaryData.total_due > 0
@@ -9,16 +9,28 @@ export default function FeeSummaryCards({ summaryData }) {
     : 0
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+    <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
+      <div className="card">
+        <p className="text-sm text-gray-500">Total Students</p>
+        <p className="text-xl font-bold text-gray-900">{Number(summaryData.total_students || 0).toLocaleString()}</p>
+      </div>
       <div className="card">
         <p className="text-sm text-gray-500">Total Payable</p>
         <p className="text-xl font-bold text-gray-900">{Number(summaryData.total_due || 0).toLocaleString()}</p>
       </div>
-      <div className="card">
-        <p className="text-sm text-gray-500">Received</p>
+      <div 
+        className="card cursor-pointer hover:shadow-md transition-shadow" 
+        onClick={onFilterPaid}
+        title="Click to filter paid entries"
+      >
+        <p className="text-sm text-gray-500">Total Paid</p>
         <p className="text-xl font-bold text-green-700">{Number(summaryData.total_collected || 0).toLocaleString()}</p>
       </div>
-      <div className="card">
+      <div 
+        className="card cursor-pointer hover:shadow-md transition-shadow" 
+        onClick={onFilterUnpaid}
+        title="Click to filter unpaid entries"
+      >
         <p className="text-sm text-gray-500">Balance</p>
         <p className="text-xl font-bold text-orange-700">{Number(summaryData.total_pending || 0).toLocaleString()}</p>
       </div>

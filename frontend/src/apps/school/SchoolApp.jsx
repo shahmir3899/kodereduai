@@ -40,6 +40,18 @@ export default function SchoolApp() {
     if (school?.data) {
       const schoolInfo = school.data
       setSchoolData(schoolInfo)
+
+      // Apply school branding in browser tab.
+      document.title = `${schoolInfo.name || 'School Portal'} - KoderEduAI`
+      let favicon = document.querySelector("link[rel='icon']")
+      if (!favicon) {
+        favicon = document.createElement('link')
+        favicon.setAttribute('rel', 'icon')
+        document.head.appendChild(favicon)
+      }
+      favicon.setAttribute('type', 'image/png')
+      favicon.setAttribute('href', schoolInfo.logo || '/favicon.png')
+
       // Store school context in localStorage (same keys as LoginPage expects)
       localStorage.setItem('currentSchoolId', schoolInfo.id.toString())
       localStorage.setItem('currentSchoolName', schoolInfo.name)
@@ -70,14 +82,30 @@ export default function SchoolApp() {
 
   // Loading states
   if (!isSubdomain) {
+    const handleReturn = () => {
+      // Try to get subdomain from localStorage
+      const savedSubdomain = localStorage.getItem('dev_subdomain')
+      if (savedSubdomain && savedSubdomain !== 'portal') {
+        window.location.href = `/?subdomain=${savedSubdomain}`
+      } else {
+        window.location.href = '/'
+      }
+    }
+
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-        <div className="text-center">
+        <div className="text-center bg-white p-8 rounded-lg shadow-md max-w-md">
           <h1 className="text-2xl font-bold text-red-600 mb-2">Invalid URL</h1>
-          <p className="text-gray-600">This page must be accessed via a school subdomain.</p>
-          <p className="text-sm text-gray-500 mt-4">
-            Example: <code>focus.kodereduai.pk</code>
+          <p className="text-gray-600 mb-4">This page must be accessed via a school subdomain.</p>
+          <p className="text-sm text-gray-500 mb-6">
+            Example: <code className="bg-gray-100 px-2 py-1 rounded">focus.kodereduai.pk</code>
           </p>
+          <button
+            onClick={handleReturn}
+            className="bg-primary-600 text-white px-6 py-2 rounded hover:bg-primary-700 transition-colors"
+          >
+            Return to Login
+          </button>
         </div>
       </div>
     )
@@ -88,19 +116,34 @@ export default function SchoolApp() {
   }
 
   if (schoolError) {
+    const handleReturn = () => {
+      const hostname = window.location.hostname
+      const isLocalhost = hostname === 'localhost' || hostname.startsWith('127.0.0.1')
+      
+      if (isLocalhost) {
+        // Localhost - clear corrupted data and go to home
+        localStorage.removeItem('dev_subdomain')
+        localStorage.removeItem('active_school_id')
+        window.location.href = '/'
+      } else {
+        // Production
+        window.location.href = 'https://www.kodereduai.pk'
+      }
+    }
+
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-        <div className="text-center">
+        <div className="text-center bg-white p-8 rounded-lg shadow-md max-w-md">
           <h1 className="text-2xl font-bold text-red-600 mb-2">School Not Found</h1>
-          <p className="text-gray-600">
+          <p className="text-gray-600 mb-4">
             School with subdomain "{subdomain}" not found or is inactive.
           </p>
-          <a
-            href="https://www.kodereduai.pk"
-            className="mt-4 inline-block text-blue-600 hover:underline"
+          <button
+            onClick={handleReturn}
+            className="mt-4 bg-primary-600 text-white px-6 py-2 rounded hover:bg-primary-700 transition-colors"
           >
             Return to home
-          </a>
+          </button>
         </div>
       </div>
     )

@@ -23,6 +23,7 @@ export function computeSummaryData(allPayments, month, year) {
   })
   return {
     month, year,
+    total_students: allPayments.length,
     total_due, total_collected,
     total_pending: Math.max(0, total_due - total_collected),
     paid_count, partial_count, unpaid_count, advance_count,

@@ -148,6 +148,14 @@ class Transfer(models.Model):
                     f"Period {self.date.year}/{self.date.month:02d} is closed. "
                     f"Reopen it before modifying transfers."
                 )
+        
+        # Safeguard 3: Audit trail validation - recorded_by is required
+        if not self.recorded_by_id:
+            raise ValidationError(
+                "Audit trail violation: 'recorded_by' user is required for all transfers. "
+                "Transfers must be submitted via the API with proper user context."
+            )
+        
         super().save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):
@@ -595,6 +603,14 @@ class Expense(models.Model):
                     f"Period {self.date.year}/{self.date.month:02d} is closed. "
                     f"Reopen it before modifying expenses."
                 )
+        
+        # Safeguard 3: Audit trail validation - recorded_by is required
+        if not self.recorded_by_id:
+            raise ValidationError(
+                "Audit trail violation: 'recorded_by' user is required for all expenses. "
+                "Expenses must be submitted via the API with proper user context."
+            )
+        
         super().save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):
@@ -723,6 +739,14 @@ class OtherIncome(models.Model):
                     f"Period {self.date.year}/{self.date.month:02d} is closed. "
                     f"Reopen it before modifying income records."
                 )
+        
+        # Safeguard 3: Audit trail validation - recorded_by is required
+        if not self.recorded_by_id:
+            raise ValidationError(
+                "Audit trail violation: 'recorded_by' user is required for all income records. "
+                "Income records must be submitted via the API with proper user context."
+            )
+        
         super().save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):

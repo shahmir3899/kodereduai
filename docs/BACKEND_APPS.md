@@ -291,12 +291,35 @@ school(FK), student(FK SET_NULL nullable), fee_structure(FK nullable), amount, p
 **Financial Record Safety:** FeePayment, FeeStructure, OnlinePayment, and StudentDiscount use `on_delete=SET_NULL` on student ForeignKeys. Deleting a student preserves all financial records (student field becomes NULL, displayed as "Deleted Student" in the UI).
 
 ### Expense
-school(FK), category, description, amount, date, account(FK), payment_method, receipt_number, created_by(FK), academic_year(FK)
+school(FK), category(FK nullable), amount, date, description, recorded_by(FK nullable), account(FK nullable), is_sensitive, created_at, updated_at
+
+**Audit Trail:** `recorded_by` (WHO recorded it), `created_at` (WHEN created), `updated_at` (WHEN last modified), `date` (business date)
+
+**Safeguards:** 
+- Period lock: Cannot modify/delete expenses in closed months
+- Audit compliance (v2.1+): `recorded_by` REQUIRED — validated in model.save(). Error if NULL: "recorded_by user is required for all expenses"
+- Legacy data: 18 records from seed data (Feb 11, 2026) have NULL recorded_by; documented as test-only limitation
+
+**Note:** Automatically set `recorded_by=request.user` via API. Only use direct ORM for test/seed data that will be cleaned during production refresh.
 
 ### OtherIncome
-school(FK), source, description, amount, date, account(FK), academic_year(FK)
+school(FK), category(FK nullable), amount, date, description, recorded_by(FK nullable), account(FK nullable), is_sensitive, created_at, updated_at
 
-### Discount
+**Audit Trail:** Same as Expense. `recorded_by` REQUIRED on all new records (v2.1+).
+
+**Legacy data:** 1 record from seed data (Feb 11, 2026) has NULL recorded_by; documented as test-only limitation.
+
+### Transfer
+school(FK), from_account(FK), to_account(FK), amount, date, description, recorded_by(FK nullable), is_sensitive, created_at, updated_at
+
+**Audit Trail:** Same as Expense/OtherIncome. `recorded_by` REQUIRED on all new records (v2.1+).
+
+**Safeguards:**
+- Period lock: Cannot modify/delete transfers in closed months
+- Audit compliance: `recorded_by` REQUIRED — validated in model.save()
+- Data quality: 100% compliant (0 NULL recorded_by) — API enforcement worked from day 1
+
+
 school(FK), academic_year(FK nullable), name, discount_type (PERCENTAGE/FIXED), value, applies_to (ALL/GRADE_LEVEL/CLASS/STUDENT/SIBLING), target_grade_level(nullable), target_class(FK nullable), start_date, end_date, is_active, max_uses, stackable
 
 ### Scholarship

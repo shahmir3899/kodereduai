@@ -85,24 +85,108 @@ export function useFeeCollection({ month, year, classFilter, statusFilter, feeTy
   const allPayments = payments?.data?.results || payments?.data || []
   const classList = classes?.data?.results || classes?.data || []
   const accountsList = accountsData?.data?.results || accountsData?.data || []
+  
+  // Sort classes by grade_level, section, name to ensure correct ordering
+  const sortedClassList = useMemo(() => {
+    return [...classList].sort((a, b) => {
+      if (a.grade_level !== b.grade_level) {
+        return (a.grade_level || 0) - (b.grade_level || 0)
+      }
+      const sectionCompare = (a.section || '').localeCompare(b.section || '')
+      if (sectionCompare !== 0) return sectionCompare
+      return (a.name || '').localeCompare(b.name || '')
+    })
+  }, [classList])
 
-  const filteredPayments = useMemo(
-    () => filterPayments(allPayments, classFilter, statusFilter, classList),
-    [allPayments, classFilter, statusFilter, classList]
-  )
+  const filteredPayments = useMemo(() => {
+    const filtered = filterPayments(allPayments, classFilter, statusFilter, sortedClassList)
+    
+    // Create mappings for sorting
+    const classOrderMap = new Map()
+    const classNameToOrderMap = new Map()
+    
+    sortedClassList.forEach((cls, index) => {
+      classOrderMap.set(cls.id, index)
+      classNameToOrderMap.set(cls.name, index)
+    })
+    
+    return filtered.sort((a, b) => {
+      // Try to get order by class_obj_id first, fallback to class_name
+      let orderA = classOrderMap.get(a.class_obj_id)
+      if (orderA === undefined && a.class_name) {
+        orderA = classNameToOrderMap.get(a.class_name)
+      }
+      orderA = orderA ?? 999999
+      
+      let orderB = classOrderMap.get(b.class_obj_id)
+      if (orderB === undefined && b.class_name) {
+        orderB = classNameToOrderMap.get(b.class_name)
+      }
+      orderB = orderB ?? 999999
+      
+      if (orderA !== orderB) {
+        return orderA - orderB
+      }
+      
+      // Within same class, sort by roll_number (numeric), then name
+      const rollA = parseInt(a.student_roll || a.roll_number) || 0
+      const rollB = parseInt(b.student_roll || b.roll_number) || 0
+      if (rollA !== rollB) {
+        return rollA - rollB
+      }
+      
+      const nameA = a.student_name || ''
+      const nameB = b.student_name || ''
+      return nameA.localeCompare(nameB)
+    })
+  }, [allPayments, classFilter, statusFilter, sortedClassList])
 
   const summaryData = useMemo(
     () => computeSummaryData(allPayments, apiMonth, year),
     [allPayments, apiMonth, year]
   )
 
+  const filteredSummaryData = useMemo(() => {
+    if (filteredPayments.length === 0) {
+      return {
+        month: apiMonth,
+        year,
+        total_students: 0,
+        total_due: 0,
+        total_collected: 0,
+        total_pending: 0,
+      }
+    }
+
+    const total_due = filteredPayments.reduce((sum, payment) => sum + Number(payment.amount_due || 0), 0)
+    const total_collected = filteredPayments.reduce((sum, payment) => sum + Number(payment.amount_paid || 0), 0)
+    
+    // Balance should only count unpaid/partial entries
+    const unpaidPartialPayments = filteredPayments.filter(p => p.status === 'UNPAID' || p.status === 'PARTIAL')
+    const total_pending = unpaidPartialPayments.reduce((sum, payment) => {
+      const due = Number(payment.amount_due || 0)
+      const paid = Number(payment.amount_paid || 0)
+      return sum + Math.max(0, due - paid)
+    }, 0)
+
+    return {
+      month: apiMonth,
+      year,
+      total_students: filteredPayments.length,
+      total_due,
+      total_collected,
+      total_pending,
+    }
+  }, [filteredPayments, apiMonth, year])
+
   return {
     // Data
     summaryData,
+    filteredSummaryData,
     paymentList: filteredPayments,
     allPayments,
     isLoading,
-    classList,
+    classList: sortedClassList,
     accountsList,
     // Mutations
     generateMutation,

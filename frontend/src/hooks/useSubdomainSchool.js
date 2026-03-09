@@ -36,13 +36,39 @@ export function useSubdomainSchool() {
   }
   // Dev: localhost or 127.0.0.1
   else if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname.startsWith('127.0.0.1')) {
-    // For dev, try to get subdomain from ?subdomain=focus query param
+    // For dev, try to get subdomain from ?subdomain=focus query param OR localStorage
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search)
-      const devSubdomain = params.get('subdomain')
-      if (devSubdomain) {
+      let devSubdomain = params.get('subdomain')
+      
+      // Validate subdomain - should not contain slashes
+      if (devSubdomain && devSubdomain.includes('/')) {
+        console.warn('⚠️ Invalid subdomain in URL (contains slash):', devSubdomain);
+        devSubdomain = devSubdomain.split('/')[0]; // Take only first part
+      }
+      
+      // Fallback to localStorage if URL param not present
+      if (!devSubdomain) {
+        devSubdomain = localStorage.getItem('dev_subdomain')
+        // Validate localStorage value too
+        if (devSubdomain && devSubdomain.includes('/')) {
+          console.warn('⚠️ Invalid subdomain in localStorage (contains slash):', devSubdomain);
+          devSubdomain = devSubdomain.split('/')[0];
+          // Fix localStorage
+          if (devSubdomain) {
+            localStorage.setItem('dev_subdomain', devSubdomain)
+          } else {
+            localStorage.removeItem('dev_subdomain')
+          }
+        }
+      }
+      
+      if (devSubdomain && devSubdomain !== 'portal') {
         isSubdomain = true
         subdomain = devSubdomain
+      } else if (devSubdomain === 'portal') {
+        isPortal = true
+        subdomain = 'portal'
       } else {
         isStatic = true
       }

@@ -45,9 +45,42 @@ export default function Portal() {
   // Logged in but not super admin → access denied
   if (!user.is_super_admin) {
     const handleLogout = () => {
+      // Store subdomain before clearing everything
+      const hostname = window.location.hostname
+      const isLocalhost = hostname === 'localhost' || hostname.startsWith('127.0.0.1')
+      
+      let redirectSubdomain = null
+      if (isLocalhost) {
+        // Check URL param first, then localStorage
+        const params = new URLSearchParams(window.location.search)
+        redirectSubdomain = params.get('subdomain') || localStorage.getItem('dev_subdomain')
+      }
+      
+      // Clear auth tokens and state
       localStorage.removeItem('token')
       localStorage.removeItem('refresh_token')
-      window.location.href = '/login'
+      localStorage.removeItem('access_token')
+      localStorage.removeItem('active_school_id')
+      localStorage.removeItem('active_school_name')
+      localStorage.removeItem('isPortalMode')
+      // Don't clear dev_subdomain on localhost - we need it!
+      
+      if (isLocalhost) {
+        // Redirect with subdomain preserved
+        if (redirectSubdomain && redirectSubdomain !== 'portal') {
+          window.location.href = `/?subdomain=${redirectSubdomain}`
+        } else {
+          window.location.href = '/'
+        }
+      } else {
+        // Production - user logged into wrong portal, send to school subdomain
+        const schoolSubdomain = user.schools?.[0]?.subdomain
+        if (schoolSubdomain && window.location.hostname.includes('kodereduai.pk')) {
+          window.location.href = `https://${schoolSubdomain}.kodereduai.pk/`
+        } else {
+          window.location.href = '/login'
+        }
+      }
     }
 
     return (

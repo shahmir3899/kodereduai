@@ -7,7 +7,7 @@ import { useToast } from '../../components/Toast'
 import { useConfirmModal } from '../../components/ConfirmModal'
 
 export default function OtherIncomePage() {
-  const { isStaffMember } = useAuth()
+  const { user, isStaffMember } = useAuth()
   const { showWarning } = useToast()
   const canWrite = !isStaffMember
   const now = new Date()
@@ -22,6 +22,9 @@ export default function OtherIncomePage() {
   })
 
   const data = useOtherIncome({ month, year })
+
+  const isAdmin = ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL'].includes(user?.role)
+  const canEditIncome = (item) => isAdmin || Number(item?.recorded_by) === Number(user?.id)
 
   const handleAddIncome = (e) => {
     e.preventDefault()
@@ -114,7 +117,11 @@ export default function OtherIncomePage() {
                   </div>
                   <p className="text-xs text-gray-500">{item.date} {item.description && `\u2014 ${item.description}`}</p>
                   {item.account_name && <p className="text-xs text-gray-400 mt-1">Account: {item.account_name}</p>}
-                  {canWrite && <button onClick={() => handleDeleteIncome(item.id)} className="mt-2 text-xs text-red-600 hover:text-red-800">Delete</button>}
+                  <div className="mt-2 pt-2 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
+                    <span>By: {item.recorded_by_name || '-'}</span>
+                    <span>{item.created_at ? new Date(item.created_at).toLocaleDateString() : '-'}</span>
+                  </div>
+                  {canWrite && canEditIncome(item) && <button onClick={() => handleDeleteIncome(item.id)} className="mt-2 text-xs text-red-600 hover:text-red-800">Delete</button>}
                 </div>
               ))}
             </div>
@@ -128,6 +135,8 @@ export default function OtherIncomePage() {
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Account</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Recorded By</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created At</th>
                     <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Amount</th>
                     {canWrite && <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Action</th>}
                   </tr>
@@ -139,10 +148,20 @@ export default function OtherIncomePage() {
                       <td className="px-4 py-3 text-sm text-gray-900">{item.category_name}</td>
                       <td className="px-4 py-3 text-sm text-gray-500">{item.description || '\u2014'}</td>
                       <td className="px-4 py-3 text-sm text-gray-500">{item.account_name || '\u2014'}</td>
+                      <td className="px-4 py-3 text-sm text-gray-500">{item.recorded_by_name || '-'}</td>
+                      <td className="px-4 py-3 text-xs text-gray-400">
+                        {item.created_at ? new Date(item.created_at).toLocaleString('en-US', {
+                          month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                        }) : '-'}
+                      </td>
                       <td className="px-4 py-3 text-sm font-medium text-green-700 text-right">{Number(item.amount).toLocaleString()}</td>
                       {canWrite && (
                         <td className="px-4 py-3 text-center">
-                          <button onClick={() => handleDeleteIncome(item.id)} className="text-sm text-red-600 hover:text-red-800">Delete</button>
+                          {canEditIncome(item) ? (
+                            <button onClick={() => handleDeleteIncome(item.id)} className="text-sm text-red-600 hover:text-red-800">Delete</button>
+                          ) : (
+                            <span className="text-xs text-gray-400">No access</span>
+                          )}
                         </td>
                       )}
                     </tr>

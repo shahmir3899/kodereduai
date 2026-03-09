@@ -50,6 +50,7 @@
         const parts = hostname.split('.');
         
         let appToLoad = 'portal'; // default to portal for simplicity
+        let detectedSubdomain = null;
         
         // Determine which app to load based on subdomain
         if (hostname === 'portal.kodereduai.pk') {
@@ -58,20 +59,46 @@
         } else if (hostname.endsWith('.kodereduai.pk') && parts.length === 3 && parts[0] !== 'www') {
           // School subdomain (e.g., focus.kodereduai.pk, focus2.kodereduai.pk)
           appToLoad = 'school';
+          detectedSubdomain = parts[0];
         } else if (hostname === 'localhost' || hostname.startsWith('127.0.0.1')) {
-          // Development mode - check URL params
+          // Development mode - check URL params first, then localStorage
           const params = new URLSearchParams(window.location.search);
-          const subdomain = params.get('subdomain');
-          if (subdomain === 'portal') {
+          let subdomainParam = params.get('subdomain');
+          
+          // Validate subdomain - should not contain slashes or special chars
+          if (subdomainParam && subdomainParam.includes('/')) {
+            console.warn('⚠️ Invalid subdomain detected (contains slash):', subdomainParam);
+            subdomainParam = subdomainParam.split('/')[0]; // Take only the first part
+          }
+          
+          if (subdomainParam === 'portal') {
             appToLoad = 'portal';
-          } else if (subdomain) {
+            localStorage.removeItem('dev_subdomain'); // Clear school subdomain
+          } else if (subdomainParam) {
             appToLoad = 'school';
+            detectedSubdomain = subdomainParam;
+            localStorage.setItem('dev_subdomain', subdomainParam); // Persist for navigation
           } else {
-            appToLoad = 'portal'; // Default to portal for local dev
+            // No URL param - check localStorage for previously set subdomain
+            const savedSubdomain = localStorage.getItem('dev_subdomain');
+            
+            // Validate saved subdomain
+            const validSubdomain = savedSubdomain && !savedSubdomain.includes('/') ? savedSubdomain : null;
+            
+            if (validSubdomain && validSubdomain !== 'portal') {
+              appToLoad = 'school';
+              detectedSubdomain = validSubdomain;
+              // Add subdomain back to URL for clarity
+              const newUrl = new URL(window.location.href);
+              newUrl.searchParams.set('subdomain', validSubdomain);
+              window.history.replaceState({}, '', newUrl);
+            } else {
+              appToLoad = 'portal'; // Default to portal for local dev
+            }
           }
         }
         
-        console.log('🎯 Detected app to load:', appToLoad, 'for hostname:', hostname);
+        console.log('🎯 Detected app to load:', appToLoad, 'for hostname:', hostname, detectedSubdomain ? `(subdomain: ${detectedSubdomain})` : '');
         
         // Remove loader and load the appropriate app entry point
         const loader = document.getElementById('subdomain-loader');
