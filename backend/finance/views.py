@@ -579,6 +579,7 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
                     fee_type=ft, month=m, year=year,
                     amount_due=amount, amount_paid=0,
                     academic_year_id=academic_year_id,
+                    base_monthly_fee=amount if ft == 'MONTHLY' else None,
                 )
                 created_count += 1
 

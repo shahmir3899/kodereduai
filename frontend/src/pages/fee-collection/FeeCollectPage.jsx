@@ -105,11 +105,9 @@ export default function FeeCollectPage() {
     }
     const payment = data.paymentList.find(p => p.id === id)
 
-    // monthly_fee edit: recalculate amount_due = previous_balance + new monthly fee
-    if (field === 'monthly_fee') {
-      const prevBal = Number(payment?.previous_balance || 0)
-      const newAmountDue = prevBal + parsedValue
-      data.paymentMutation.mutate({ id, data: { amount_due: newAmountDue } })
+    // amount_due edit: direct override of total payable amount
+    if (field === 'amount_due') {
+      data.paymentMutation.mutate({ id, data: { amount_due: parsedValue } })
       setEditingCell(null)
       return
     }

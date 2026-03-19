@@ -91,7 +91,7 @@ export default function FeeTable({
       <div className="sm:hidden space-y-3">
         {sortedList.map((payment) => {
           const prevBal = Number(payment.previous_balance || 0)
-          const monthlyFee = Number(payment.amount_due) - prevBal
+          const monthlyFee = payment.base_monthly_fee !== null && payment.base_monthly_fee !== undefined ? Number(payment.base_monthly_fee) : (Number(payment.amount_due) - prevBal)
           const balance = Number(payment.amount_due) - Number(payment.amount_paid)
           const isSelected = selectedIds.has(payment.id)
           return (
@@ -116,30 +116,30 @@ export default function FeeTable({
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-2 text-sm mb-2">
+                <div>
+                  <p className="text-xs text-gray-500">{feeColumnLabel}</p>
+                  <p className="font-medium">{monthlyFee.toLocaleString()}</p>
+                </div>
                 <div
                   className={canWrite ? 'cursor-pointer' : ''}
-                  onClick={() => canWrite && handleCellClick(payment.id, 'monthly_fee', monthlyFee)}
+                  onClick={() => canWrite && handleCellClick(payment.id, 'amount_due', Number(payment.amount_due))}
                 >
-                  <p className="text-xs text-gray-500">{feeColumnLabel} {canWrite && <span className="text-blue-500">edit</span>}</p>
-                  {editingCell?.id === payment.id && editingCell?.field === 'monthly_fee' ? (
+                  <p className="text-xs text-gray-500">Total Payable {canWrite && <span className="text-blue-500">edit</span>}</p>
+                  {editingCell?.id === payment.id && editingCell?.field === 'amount_due' ? (
                     <input
                       type="number"
                       step="0.01"
                       autoFocus
                       value={editValue}
                       onChange={(e) => setEditValue(e.target.value)}
-                      onBlur={() => onInlineUpdate(payment.id, 'monthly_fee', editValue)}
-                      onKeyDown={(e) => handleKeyDown(e, payment.id, 'monthly_fee')}
+                      onBlur={() => onInlineUpdate(payment.id, 'amount_due', editValue)}
+                      onKeyDown={(e) => handleKeyDown(e, payment.id, 'amount_due')}
                       className="w-full input-field text-sm py-0.5 px-1"
                       onClick={(e) => e.stopPropagation()}
                     />
                   ) : (
-                    <p className="font-medium">{monthlyFee.toLocaleString()}</p>
+                    <p className={`font-medium ${Number(payment.amount_due) < 0 ? 'text-blue-700' : ''}`}>{Number(payment.amount_due).toLocaleString()}</p>
                   )}
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">Total Payable</p>
-                  <p className={`font-medium ${Number(payment.amount_due) < 0 ? 'text-blue-700' : ''}`}>{Number(payment.amount_due).toLocaleString()}</p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500">Balance</p>
@@ -222,11 +222,11 @@ export default function FeeTable({
           <tbody className="bg-white divide-y divide-gray-200">
             {sortedList.map((payment) => {
               const prevBal = Number(payment.previous_balance || 0)
-              const monthlyFee = Number(payment.amount_due) - prevBal
+              const monthlyFee = payment.base_monthly_fee !== null && payment.base_monthly_fee !== undefined ? Number(payment.base_monthly_fee) : (Number(payment.amount_due) - prevBal)
               const balance = Number(payment.amount_due) - Number(payment.amount_paid)
               const isSelected = selectedIds.has(payment.id)
               const isEditingReceived = editingCell?.id === payment.id && editingCell?.field === 'amount_paid'
-              const isEditingMonthlyFee = editingCell?.id === payment.id && editingCell?.field === 'monthly_fee'
+              const isEditingAmountDue = editingCell?.id === payment.id && editingCell?.field === 'amount_due'
               return (
                 <tr key={payment.id} className={isSelected ? 'bg-primary-50' : ''}>
                   {canWrite && (
@@ -254,29 +254,29 @@ export default function FeeTable({
                       {prevBal > 0 ? prevBal.toLocaleString() : prevBal < 0 ? `-${Math.abs(prevBal).toLocaleString()}` : '\u2014'}
                     </td>
                   )}
+                  <td className={`px-3 py-3 text-sm text-gray-900 text-right`}>
+                    {monthlyFee.toLocaleString()}
+                  </td>
                   <td
-                    className={`px-3 py-3 text-sm text-gray-900 text-right ${canWrite ? 'cursor-pointer hover:bg-blue-50' : ''} transition-colors`}
-                    onClick={() => canWrite && !isEditingMonthlyFee && handleCellClick(payment.id, 'monthly_fee', monthlyFee)}
-                    title={canWrite ? 'Click to edit fee amount' : undefined}
+                    className={`px-3 py-3 text-sm font-medium text-right ${canWrite ? 'cursor-pointer hover:bg-blue-50' : ''} transition-colors ${Number(payment.amount_due) < 0 ? 'text-blue-700' : 'text-gray-900'}`}
+                    onClick={() => canWrite && !isEditingAmountDue && handleCellClick(payment.id, 'amount_due', Number(payment.amount_due))}
+                    title={canWrite ? 'Click to override total payable amount' : undefined}
                   >
-                    {isEditingMonthlyFee ? (
+                    {isEditingAmountDue ? (
                       <input
                         type="number"
                         step="0.01"
                         autoFocus
                         value={editValue}
                         onChange={(e) => setEditValue(e.target.value)}
-                        onBlur={() => onInlineUpdate(payment.id, 'monthly_fee', editValue)}
-                        onKeyDown={(e) => handleKeyDown(e, payment.id, 'monthly_fee')}
+                        onBlur={() => onInlineUpdate(payment.id, 'amount_due', editValue)}
+                        onKeyDown={(e) => handleKeyDown(e, payment.id, 'amount_due')}
                         className="w-24 text-right input-field text-sm py-0.5 px-1"
                         onClick={(e) => e.stopPropagation()}
                       />
                     ) : (
-                      monthlyFee.toLocaleString()
+                      Number(payment.amount_due).toLocaleString()
                     )}
-                  </td>
-                  <td className={`px-3 py-3 text-sm font-medium text-right ${Number(payment.amount_due) < 0 ? 'text-blue-700' : 'text-gray-900'}`}>
-                    {Number(payment.amount_due).toLocaleString()}
                   </td>
                   <td
                     className={`px-3 py-3 text-sm text-green-700 text-right ${canWrite && payment.status !== 'ADVANCE' ? 'cursor-pointer hover:bg-green-50' : ''} transition-colors`}

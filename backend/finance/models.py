@@ -405,6 +405,13 @@ class FeePayment(models.Model):
         default=0,
         help_text="Carried-forward balance from previous month"
     )
+    base_monthly_fee = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Original monthly fee from fee structure. Helps reconstruct amount_due when overridden."
+    )
     amount_paid = models.DecimalField(
         max_digits=10,
         decimal_places=2,

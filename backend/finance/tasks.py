@@ -105,6 +105,7 @@ def generate_monthly_fees_task(self, school_id, month, year, class_id=None, acad
                         month=month,
                         year=year,
                         previous_balance=prev_balance,
+                        base_monthly_fee=monthly_fee,
                         amount_due=prev_balance + monthly_fee,
                         amount_paid=0,
                         academic_year_id=academic_year_id,
