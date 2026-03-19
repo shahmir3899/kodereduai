@@ -23,6 +23,17 @@ ROLE_HIERARCHY = {
 }
 
 
+def _is_data_restricted_user(request):
+    """
+    Check if current user has data-restricted access (PRINCIPAL + staff roles).
+    These roles cannot see sensitive financial data.
+    """
+    role = get_effective_role(request)
+    # Include PRINCIPAL with staff for sensitive data hiding
+    data_restricted = STAFF_LEVEL_ROLES + ('PRINCIPAL',)
+    return role in data_restricted
+
+
 def get_effective_role(request):
     """
     Return the user's effective role for the current active school.

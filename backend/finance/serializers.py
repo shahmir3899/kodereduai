@@ -4,6 +4,7 @@ Finance serializers for fee structures, payments, expenses, other income, and AI
 
 from rest_framework import serializers
 from core.mixins import ensure_tenant_school_id
+from core.permissions import _is_data_restricted_user
 from .models import (
     Account, Transfer, FeeStructure, FeePayment, Expense, OtherIncome,
     ExpenseCategory, IncomeCategory,
@@ -65,7 +66,8 @@ class TransferSerializer(serializers.ModelSerializer):
     def get_fields(self):
         fields = super().get_fields()
         request = self.context.get('request')
-        if request and hasattr(request.user, 'is_staff_member') and request.user.is_staff_member:
+        # Hide is_sensitive from PRINCIPAL + staff roles
+        if request and _is_data_restricted_user(request):
             fields.pop('is_sensitive', None)
         return fields
 
@@ -73,7 +75,18 @@ class TransferSerializer(serializers.ModelSerializer):
 class TransferCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Transfer
-        fields = ['from_account', 'to_account', 'amount', 'date', 'description']
+        fields = ['from_account', 'to_account', 'amount', 'date', 'description', 'is_sensitive']
+
+    def get_fields(self):
+        """Plan 2: Only admins can see and set is_sensitive field"""
+        fields = super().get_fields()
+        request = self.context.get('request')
+        if request:
+            from core.permissions import get_effective_role, ADMIN_ROLES
+            user_role = get_effective_role(request)
+            if user_role not in ADMIN_ROLES:
+                fields.pop('is_sensitive', None)
+        return fields
 
     def validate(self, attrs):
         if attrs['from_account'] == attrs['to_account']:
@@ -307,7 +320,8 @@ class ExpenseSerializer(serializers.ModelSerializer):
     def get_fields(self):
         fields = super().get_fields()
         request = self.context.get('request')
-        if request and hasattr(request.user, 'is_staff_member') and request.user.is_staff_member:
+        # Hide is_sensitive from PRINCIPAL + staff roles
+        if request and _is_data_restricted_user(request):
             fields.pop('is_sensitive', None)
         return fields
 
@@ -326,6 +340,17 @@ class ExpenseCreateSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             'school': {'required': False},
         }
+
+    def get_fields(self):
+        """Plan 2: Only admins can see and set is_sensitive field"""
+        fields = super().get_fields()
+        request = self.context.get('request')
+        if request:
+            from core.permissions import get_effective_role, ADMIN_ROLES
+            user_role = get_effective_role(request)
+            if user_role not in ADMIN_ROLES:
+                fields.pop('is_sensitive', None)
+        return fields
 
     def validate(self, attrs):
         if not attrs.get('account'):
@@ -360,7 +385,8 @@ class OtherIncomeSerializer(serializers.ModelSerializer):
     def get_fields(self):
         fields = super().get_fields()
         request = self.context.get('request')
-        if request and hasattr(request.user, 'is_staff_member') and request.user.is_staff_member:
+        # Hide is_sensitive from PRINCIPAL + staff roles
+        if request and _is_data_restricted_user(request):
             fields.pop('is_sensitive', None)
         return fields
 
@@ -368,7 +394,18 @@ class OtherIncomeSerializer(serializers.ModelSerializer):
 class OtherIncomeCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = OtherIncome
-        fields = ['category', 'amount', 'date', 'description', 'account']
+        fields = ['category', 'amount', 'date', 'description', 'account', 'is_sensitive']
+
+    def get_fields(self):
+        """Plan 2: Only admins can see and set is_sensitive field"""
+        fields = super().get_fields()
+        request = self.context.get('request')
+        if request:
+            from core.permissions import get_effective_role, ADMIN_ROLES
+            user_role = get_effective_role(request)
+            if user_role not in ADMIN_ROLES:
+                fields.pop('is_sensitive', None)
+        return fields
 
     def validate(self, attrs):
         if not attrs.get('account'):

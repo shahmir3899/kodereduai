@@ -20,7 +20,7 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from django.http import FileResponse
 
-from core.permissions import IsSchoolAdmin, IsSchoolAdminOrStaffReadOnly, HasSchoolAccess, get_effective_role, ModuleAccessMixin, ADMIN_ROLES
+from core.permissions import IsSchoolAdmin, IsSchoolAdminOrStaffReadOnly, HasSchoolAccess, get_effective_role, ModuleAccessMixin, ADMIN_ROLES, _is_data_restricted_user
 from core.mixins import TenantQuerySetMixin, ensure_tenant_schools, ensure_tenant_school_id
 from students.models import Student, Class
 from django.utils import timezone
@@ -308,6 +308,22 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
                 queryset = queryset.filter(
                     Q(account_id__in=visible_accounts) | Q(account__isnull=True)
                 )
+
+        # TEACHER: restrict to fees for students in their assigned classes
+        role = get_effective_role(self.request)
+        if role == 'TEACHER':
+            from academics.models import ClassSubject
+            school_id = school_id or _resolve_school_id(self.request)
+            if school_id:
+                # Get all classes where this teacher is assigned
+                teacher_classes = ClassSubject.objects.filter(
+                    teacher__user=self.request.user,
+                    school_id=school_id,
+                    is_active=True
+                ).values_list('class_obj_id', flat=True).distinct()
+                
+                # Filter fees to only those classes
+                queryset = queryset.filter(student__class_obj_id__in=teacher_classes)
 
         # Filters
         academic_year = self.request.query_params.get('academic_year')
@@ -883,8 +899,8 @@ class ExpenseViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             else:
                 return queryset.none()
 
-        # Staff: hide sensitive expenses and restrict to visible accounts
-        if _is_staff_user(self.request):
+        # Staff + PRINCIPAL: hide sensitive expenses and restrict to visible accounts
+        if _is_data_restricted_user(self.request):
             queryset = queryset.filter(is_sensitive=False)
             if school_id:
                 visible_accounts = _get_staff_visible_accounts(school_id)
@@ -907,7 +923,18 @@ class ExpenseViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         return queryset
 
     def perform_create(self, serializer):
+        from rest_framework.exceptions import PermissionDenied
+        
         school_id = self.request.data.get('school') or _resolve_school_id(self.request)
+        
+        # Plan 2: Only ADMIN_ROLES can mark expenses as sensitive
+        if 'is_sensitive' in self.request.data and self.request.data.get('is_sensitive'):
+            user_role = get_effective_role(self.request)
+            if user_role not in ADMIN_ROLES:
+                raise PermissionDenied(
+                    "Only administrators can mark expenses as sensitive."
+                )
+        
         if school_id:
             serializer.save(school_id=school_id, recorded_by=self.request.user)
         else:
@@ -941,8 +968,8 @@ class ExpenseViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
 
         queryset = Expense.objects.filter(school_id=school_id).select_related('category')
 
-        # Staff: hide sensitive expenses and restrict to visible accounts
-        if _is_staff_user(request):
+        # Staff + PRINCIPAL: hide sensitive expenses and restrict to visible accounts
+        if _is_data_restricted_user(request):
             queryset = queryset.filter(is_sensitive=False)
             visible_accounts = _get_staff_visible_accounts(school_id)
             queryset = queryset.filter(
@@ -1005,8 +1032,8 @@ class OtherIncomeViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
             else:
                 return queryset.none()
 
-        # Staff: hide sensitive income and restrict to visible accounts
-        if _is_staff_user(self.request):
+        # Staff + PRINCIPAL: hide sensitive income and restrict to visible accounts
+        if _is_data_restricted_user(self.request):
             queryset = queryset.filter(is_sensitive=False)
             if school_id:
                 visible_accounts = _get_staff_visible_accounts(school_id)
@@ -1028,7 +1055,18 @@ class OtherIncomeViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
         return queryset
 
     def perform_create(self, serializer):
+        from rest_framework.exceptions import PermissionDenied
+        
         school_id = _resolve_school_id(self.request)
+        
+        # Plan 2: Only ADMIN_ROLES can mark income as sensitive
+        if 'is_sensitive' in self.request.data and self.request.data.get('is_sensitive'):
+            user_role = get_effective_role(self.request)
+            if user_role not in ADMIN_ROLES:
+                raise PermissionDenied(
+                    "Only administrators can mark income as sensitive."
+                )
+        
         serializer.save(school_id=school_id, recorded_by=self.request.user)
 
     def perform_update(self, serializer):
@@ -1089,9 +1127,12 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             else:
                 return queryset.none()
 
-        # Staff can only see accounts marked as staff_visible
-        if _is_staff_user(self.request):
-            queryset = queryset.filter(staff_visible=True)
+        # Plan 2: Non-admin users see only accounts they own or marked as staff_visible
+        role = get_effective_role(self.request)
+        if role not in ADMIN_ROLES:
+            queryset = queryset.filter(
+                Q(staff_visible=True) | Q(account_owner=user)
+            )
 
         return queryset
 
@@ -2019,8 +2060,8 @@ class TransferViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelView
             else:
                 return queryset.none()
 
-        # Staff: hide sensitive transfers and restrict to visible accounts
-        if _is_staff_user(self.request):
+        # Staff + PRINCIPAL: hide sensitive transfers and restrict to visible accounts
+        if _is_data_restricted_user(self.request):
             queryset = queryset.filter(is_sensitive=False)
             if school_id:
                 visible_accounts = _get_staff_visible_accounts(school_id)
@@ -2045,10 +2086,18 @@ class TransferViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelView
         return queryset
 
     def perform_create(self, serializer):
-        from rest_framework.exceptions import ValidationError
+        from rest_framework.exceptions import ValidationError, PermissionDenied
         school_id = _resolve_school_id(self.request)
         if not school_id:
             raise ValidationError({'detail': 'No school associated with your account.'})
+
+        # Plan 2: Only ADMIN_ROLES can mark transfers as sensitive
+        if 'is_sensitive' in self.request.data and self.request.data.get('is_sensitive'):
+            user_role = get_effective_role(self.request)
+            if user_role not in ADMIN_ROLES:
+                raise PermissionDenied(
+                    "Only administrators can mark transfers as sensitive."
+                )
 
         # Validate that from_account and to_account are accessible
         from schools.models import School

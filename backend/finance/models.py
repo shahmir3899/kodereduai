@@ -37,6 +37,14 @@ class Account(models.Model):
         related_name='accounts',
         help_text="Organization this account belongs to (for shared accounts)",
     )
+    account_owner = models.ForeignKey(
+        'users.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='owned_accounts',
+        help_text="User who owns this account (e.g., personal account for a staff member)",
+    )
     name = models.CharField(
         max_length=100,
         help_text="e.g. Principal Branch 1, Fund Branch 1, Shah Mir"
