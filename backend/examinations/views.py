@@ -138,7 +138,7 @@ class ExamGroupViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Check for conflicts
+        # Check for conflicts (only active exams block new creation)
         conflicts = []
         for cls in valid_classes:
             existing = Exam.objects.filter(
@@ -146,6 +146,7 @@ class ExamGroupViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
                 exam_type_id=data['exam_type'],
                 class_obj=cls,
                 term_id=data.get('term'),
+                is_active=True,
             ).first()
             if existing:
                 conflicts.append({
@@ -155,7 +156,7 @@ class ExamGroupViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
                 })
         if conflicts:
             return Response({
-                'detail': 'Some classes already have an exam of this type for this term.',
+                'detail': 'Some classes already have an active exam of this type for this term.',
                 'conflicts': conflicts,
             }, status=status.HTTP_409_CONFLICT)
 

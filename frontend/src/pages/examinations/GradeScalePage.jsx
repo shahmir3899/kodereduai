@@ -23,13 +23,19 @@ export default function GradeScalePage() {
   const createMut = useMutation({
     mutationFn: (data) => examinationsApi.createGradeScale(data),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['gradeScales'] }); closeModal() },
-    onError: (err) => setErrors(err.response?.data || { detail: 'Failed' }),
+    onError: (err) => {
+      console.error('Grade scale create error', err.response?.data || err)
+      setErrors(err.response?.data || { detail: 'Failed to create grade scale.' })
+    },
   })
 
   const updateMut = useMutation({
     mutationFn: ({ id, data }) => examinationsApi.updateGradeScale(id, data),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['gradeScales'] }); closeModal() },
-    onError: (err) => setErrors(err.response?.data || { detail: 'Failed' }),
+    onError: (err) => {
+      console.error('Grade scale update error', err.response?.data || err)
+      setErrors(err.response?.data || { detail: 'Failed to update grade scale.' })
+    },
   })
 
   const deleteMut = useMutation({
@@ -49,7 +55,35 @@ export default function GradeScalePage() {
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    const payload = { ...form, order: parseInt(form.order) || 0 }
+
+    // Normalize numeric fields and trim text
+    const gradeLabel = (form.grade_label || '').trim()
+    const min_percentage = Number(form.min_percentage)
+    const max_percentage = Number(form.max_percentage)
+    const order = Number.isFinite(Number(form.order)) ? parseInt(form.order, 10) : 0
+    const gpa_points = form.gpa_points === '' || form.gpa_points == null ? 0 : Number(form.gpa_points)
+
+    const validationErrors = {}
+    if (!gradeLabel) validationErrors.grade_label = 'Grade Label is required.'
+    if (!Number.isFinite(min_percentage) || min_percentage < 0 || min_percentage > 100) validationErrors.min_percentage = 'Min percentage must be 0-100.'
+    if (!Number.isFinite(max_percentage) || max_percentage < 0 || max_percentage > 100) validationErrors.max_percentage = 'Max percentage must be 0-100.'
+    if (Number.isFinite(min_percentage) && Number.isFinite(max_percentage) && min_percentage > max_percentage) {
+      validationErrors.min_percentage = 'Min percentage cannot exceed Max percentage.'
+    }
+
+    if (Object.keys(validationErrors).length > 0) {
+      setErrors(validationErrors)
+      return
+    }
+
+    const payload = {
+      grade_label: gradeLabel,
+      min_percentage,
+      max_percentage,
+      order,
+      gpa_points,
+    }
+
     if (editId) updateMut.mutate({ id: editId, data: payload })
     else createMut.mutate(payload)
   }

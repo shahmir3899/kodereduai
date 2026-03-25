@@ -128,6 +128,12 @@ export default function ExamsPage() {
     onError: (err) => setListError(err.response?.data?.detail || 'Failed to publish exam.'),
   })
 
+  const reactivateMut = useMutation({
+    mutationFn: (id) => examinationsApi.updateExam(id, { is_active: true }),
+    onSuccess: () => { setListError(null); queryClient.invalidateQueries({ queryKey: ['exams'] }); queryClient.invalidateQueries({ queryKey: ['examGroups'] }) },
+    onError: (err) => setListError(err.response?.data?.detail || 'Failed to reactivate exam.'),
+  })
+
   const deleteGroupMut = useMutation({
     mutationFn: (id) => examinationsApi.deleteExamGroup(id),
     onSuccess: () => { setListError(null); queryClient.invalidateQueries({ queryKey: ['examGroups'] }); queryClient.invalidateQueries({ queryKey: ['exams'] }) },
@@ -458,7 +464,7 @@ export default function ExamsPage() {
                                   </thead>
                                   <tbody className="divide-y divide-gray-50">
                                     {exams.map(exam => (
-                                      <tr key={exam.id} className="hover:bg-gray-50/50">
+                                      <tr key={exam.id} className={exam.is_active ? 'hover:bg-gray-50/50' : 'bg-gray-50 text-gray-400 opacity-75'}>
                                         <td className="px-4 py-2 text-gray-900 font-medium">{exam.class_name}</td>
                                         <td className="px-4 py-2 text-center">
                                           {exam.subjects_count === 0 ? (
@@ -466,17 +472,24 @@ export default function ExamsPage() {
                                           ) : exam.subjects_count}
                                         </td>
                                         <td className="px-4 py-2 text-center">
-                                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[exam.status] || 'bg-gray-100'}`}>
-                                            {exam.status.replace('_', ' ')}
+                                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${exam.is_active ? (STATUS_STYLES[exam.status] || 'bg-gray-100') : 'bg-gray-100 text-gray-500'}`}>
+                                            {exam.is_active ? exam.status.replace('_', ' ') : 'Inactive'}
                                           </span>
                                         </td>
                                         <td className="px-4 py-2 text-right">
                                           <button onClick={() => openEdit(exam)} className="text-xs text-primary-600 hover:underline mr-2">Edit</button>
-                                          {exam.status !== 'PUBLISHED' && (
+                                          {exam.is_active ? (
+                                            exam.status !== 'PUBLISHED' && (
+                                              <button
+                                                onClick={async () => { const ok = await confirm({ title: 'Publish Exam', message: 'Publish this exam? Results will become visible.', variant: 'warning', confirmLabel: 'Publish' }); if (ok) publishMut.mutate(exam.id) }}
+                                                className="text-xs text-green-600 hover:underline mr-2"
+                                              >Publish</button>
+                                            )
+                                          ) : (
                                             <button
-                                              onClick={async () => { const ok = await confirm({ title: 'Publish Exam', message: 'Publish this exam? Results will become visible.', variant: 'warning', confirmLabel: 'Publish' }); if (ok) publishMut.mutate(exam.id) }}
-                                              className="text-xs text-green-600 hover:underline mr-2"
-                                            >Publish</button>
+                                              onClick={async () => { const ok = await confirm({ title: 'Reactivate Exam', message: `Reactivate "${exam.name}"?`, variant: 'primary', confirmLabel: 'Reactivate' }); if (ok) reactivateMut.mutate(exam.id) }}
+                                              className="text-xs text-blue-600 hover:underline mr-2"
+                                            >Reactivate</button>
                                           )}
                                           <button
                                             onClick={async () => { const ok = await confirm({ title: 'Delete Exam', message: `Delete "${exam.name}"?` }); if (ok) deleteMut.mutate(exam.id) }}
@@ -491,18 +504,21 @@ export default function ExamsPage() {
                               {/* Mobile */}
                               <div className="md:hidden divide-y divide-gray-100">
                                 {exams.map(exam => (
-                                  <div key={exam.id} className="px-4 py-2 flex items-center justify-between">
+                                  <div key={exam.id} className={`px-4 py-2 flex items-center justify-between ${exam.is_active ? '' : 'opacity-75'}`}>
                                     <div>
                                       <p className="text-sm font-medium text-gray-900">{exam.class_name}</p>
                                       <p className="text-xs text-gray-500">
                                         {exam.subjects_count} subjects ·{' '}
-                                        <span className={`${STATUS_STYLES[exam.status]?.includes('text-') ? STATUS_STYLES[exam.status].split(' ').find(c => c.startsWith('text-')) : 'text-gray-600'}`}>
-                                          {exam.status.replace('_', ' ')}
+                                        <span className={`${exam.is_active ? (STATUS_STYLES[exam.status]?.includes('text-') ? STATUS_STYLES[exam.status].split(' ').find(c => c.startsWith('text-')) : 'text-gray-600') : 'text-gray-500'}`}>
+                                          {exam.is_active ? exam.status.replace('_', ' ') : 'Inactive'}
                                         </span>
                                       </p>
                                     </div>
                                     <div className="flex gap-2">
                                       <button onClick={() => openEdit(exam)} className="text-xs text-primary-600 hover:underline">Edit</button>
+                                      {exam.is_active ? null : (
+                                        <button onClick={async () => { const ok = await confirm({ title: 'Reactivate Exam', message: `Reactivate "${exam.name}"?`, variant: 'primary', confirmLabel: 'Reactivate' }); if (ok) reactivateMut.mutate(exam.id) }} className="text-xs text-blue-600 hover:underline">Reactivate</button>
+                                      )}
                                       <button onClick={async () => { const ok = await confirm({ title: 'Delete Exam', message: `Delete "${exam.name}"?` }); if (ok) deleteMut.mutate(exam.id) }} className="text-xs text-red-600 hover:underline">Delete</button>
                                     </div>
                                   </div>
@@ -570,7 +586,7 @@ export default function ExamsPage() {
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {standaloneExams.map(exam => (
-                      <tr key={exam.id} className="hover:bg-gray-50">
+                      <tr key={exam.id} className={exam.is_active ? 'hover:bg-gray-50' : 'bg-gray-50 text-gray-400 opacity-75'}>
                         <td className="px-4 py-2 text-sm font-medium text-gray-900">{exam.name}</td>
                         <td className="px-4 py-2 text-sm text-gray-600">{exam.exam_type_name}</td>
                         <td className="px-4 py-2 text-sm text-gray-600">{exam.class_name}</td>
@@ -592,17 +608,24 @@ export default function ExamsPage() {
                           ) : exam.subjects_count}
                         </td>
                         <td className="px-4 py-2 text-center">
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[exam.status] || 'bg-gray-100'}`}>
-                            {exam.status.replace('_', ' ')}
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${exam.is_active ? (STATUS_STYLES[exam.status] || 'bg-gray-100') : 'bg-gray-100 text-gray-500'}`}>
+                            {exam.is_active ? exam.status.replace('_', ' ') : 'Inactive'}
                           </span>
                         </td>
                         <td className="px-4 py-2 text-right">
                           <button onClick={() => openEdit(exam)} className="text-xs text-primary-600 hover:underline mr-2">Edit</button>
-                          {exam.status !== 'PUBLISHED' && (
+                          {exam.is_active ? (
+                            exam.status !== 'PUBLISHED' && (
+                              <button
+                                onClick={async () => { const ok = await confirm({ title: 'Publish Exam', message: 'Publish this exam? Results will become visible.', variant: 'warning', confirmLabel: 'Publish' }); if (ok) publishMut.mutate(exam.id) }}
+                                className="text-xs text-green-600 hover:underline mr-2"
+                              >Publish</button>
+                            )
+                          ) : (
                             <button
-                              onClick={async () => { const ok = await confirm({ title: 'Publish Exam', message: 'Publish this exam? Results will become visible.', variant: 'warning', confirmLabel: 'Publish' }); if (ok) publishMut.mutate(exam.id) }}
-                              className="text-xs text-green-600 hover:underline mr-2"
-                            >Publish</button>
+                              onClick={async () => { const ok = await confirm({ title: 'Reactivate Exam', message: `Reactivate "${exam.name}"?`, variant: 'primary', confirmLabel: 'Reactivate' }); if (ok) reactivateMut.mutate(exam.id) }}
+                              className="text-xs text-blue-600 hover:underline mr-2"
+                            >Reactivate</button>
                           )}
                           <button
                             onClick={async () => { const ok = await confirm({ title: 'Delete Exam', message: `Delete "${exam.name}"?` }); if (ok) deleteMut.mutate(exam.id) }}
@@ -618,14 +641,14 @@ export default function ExamsPage() {
               {/* Mobile Cards */}
               <div className="md:hidden space-y-3">
                 {standaloneExams.map(exam => (
-                  <div key={exam.id} className="card">
+                  <div key={exam.id} className={`card ${exam.is_active ? '' : 'opacity-75'}`}>
                     <div className="flex items-start justify-between mb-2">
                       <div>
                         <p className="font-medium text-gray-900 text-sm">{exam.name}</p>
                         <p className="text-xs text-gray-500">{exam.exam_type_name} · {exam.class_name}</p>
                       </div>
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[exam.status]}`}>
-                        {exam.status.replace('_', ' ')}
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${exam.is_active ? (STATUS_STYLES[exam.status] || 'bg-gray-100 text-gray-700') : 'bg-gray-100 text-gray-500'}`}>
+                        {exam.is_active ? exam.status.replace('_', ' ') : 'Inactive'}
                       </span>
                     </div>
                     <p className="text-xs text-gray-500 mb-2">
@@ -637,8 +660,10 @@ export default function ExamsPage() {
                     </p>
                     <div className="flex gap-2">
                       <button onClick={() => openEdit(exam)} className="text-xs text-primary-600 hover:underline">Edit</button>
-                      {exam.status !== 'PUBLISHED' && (
+                      {exam.is_active ? (exam.status !== 'PUBLISHED' && (
                         <button onClick={async () => { const ok = await confirm({ title: 'Publish Exam', message: 'Publish this exam? Results will become visible.', variant: 'warning', confirmLabel: 'Publish' }); if (ok) publishMut.mutate(exam.id) }} className="text-xs text-green-600 hover:underline">Publish</button>
+                      )) : (
+                        <button onClick={async () => { const ok = await confirm({ title: 'Reactivate Exam', message: `Reactivate "${exam.name}"?`, variant: 'primary', confirmLabel: 'Reactivate' }); if (ok) reactivateMut.mutate(exam.id) }} className="text-xs text-blue-600 hover:underline">Reactivate</button>
                       )}
                       <button onClick={async () => { const ok = await confirm({ title: 'Delete Exam', message: `Delete "${exam.name}"?` }); if (ok) deleteMut.mutate(exam.id) }} className="text-xs text-red-600 hover:underline">Delete</button>
                     </div>
