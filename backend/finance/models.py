@@ -6,9 +6,24 @@ from django.utils import timezone
 class FeeType(models.TextChoices):
     MONTHLY = 'MONTHLY', 'Monthly'
     ANNUAL = 'ANNUAL', 'Annual'
-    ADMISSION = 'ADMISSION', 'Admission'
-    BOOKS = 'BOOKS', 'Books'
-    FINE = 'FINE', 'Fine'
+    # Deprecated: kept for backward compatibility with existing data only.
+    # Do not use for new fee structures.
+    ADMISSION = 'ADMISSION', 'Admission (Deprecated)'
+    BOOKS = 'BOOKS', 'Books (Deprecated)'
+    FINE = 'FINE', 'Fine (Deprecated)'
+
+
+SUGGESTED_ANNUAL_CATEGORIES = [
+    {'name': 'School Fee', 'description': 'Primary annual education fee'},
+    {'name': 'Sports & Games', 'description': 'Extra-curricular sports activities'},
+    {'name': 'Lab Fee', 'description': 'Science/Computer lab usage'},
+    {'name': 'Books & Stationery', 'description': 'Textbooks and study materials'},
+    {'name': 'Computer Fee', 'description': 'Computer lab and IT resources'},
+    {'name': 'Library Fee', 'description': 'Library membership and resources'},
+    {'name': 'Transport', 'description': 'School bus transportation'},
+    {'name': 'Uniform & Dress Code', 'description': 'Uniforms and dress code items'},
+    {'name': 'Examination Fee', 'description': 'Board exams and test fees'},
+]
 
 
 class Account(models.Model):
@@ -240,6 +255,27 @@ class IncomeCategory(models.Model):
         return self.name
 
 
+class AnnualFeeCategory(models.Model):
+    """Custom annual charge categories per school (e.g. School Fee, Sports, Lab Fee)."""
+    school = models.ForeignKey(
+        'schools.School', on_delete=models.CASCADE, related_name='annual_fee_categories',
+    )
+    name = models.CharField(max_length=100, help_text="Display name for this annual charge (e.g. School Fee)")
+    description = models.CharField(max_length=255, blank=True, help_text="Optional description")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('school', 'name')
+        ordering = ['name']
+        verbose_name = 'Annual Fee Category'
+        verbose_name_plural = 'Annual Fee Categories'
+
+    def __str__(self):
+        return self.name
+
+
 class FeeStructure(models.Model):
     """
     Defines monthly fee amount. Can be set at class level or overridden per student.
@@ -279,7 +315,15 @@ class FeeStructure(models.Model):
         max_length=20,
         choices=FeeType.choices,
         default=FeeType.MONTHLY,
-        help_text="Type of fee: monthly recurring, annual, one-time admission, books, or fine"
+        help_text="Type of fee: monthly recurring or annual"
+    )
+    annual_category = models.ForeignKey(
+        'finance.AnnualFeeCategory',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='fee_structures',
+        help_text="Annual charge category (only used when fee_type=ANNUAL)"
     )
     monthly_amount = models.DecimalField(
         max_digits=10,

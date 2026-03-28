@@ -7,7 +7,7 @@ from core.mixins import ensure_tenant_school_id
 from core.permissions import _is_data_restricted_user
 from .models import (
     Account, Transfer, FeeStructure, FeePayment, Expense, OtherIncome,
-    ExpenseCategory, IncomeCategory,
+    ExpenseCategory, IncomeCategory, AnnualFeeCategory,
     FinanceAIChatMessage, MonthlyClosing, AccountSnapshot,
     Discount, Scholarship, StudentDiscount, PaymentGatewayConfig, OnlinePayment,
 )
@@ -102,6 +102,7 @@ class FeeStructureSerializer(serializers.ModelSerializer):
     school_name = serializers.CharField(source='school.name', read_only=True)
     academic_year_name = serializers.CharField(source='academic_year.name', read_only=True, default=None)
     fee_type_display = serializers.CharField(source='get_fee_type_display', read_only=True)
+    annual_category_name = serializers.CharField(source='annual_category.name', read_only=True, default=None)
 
     class Meta:
         model = FeeStructure
@@ -111,6 +112,7 @@ class FeeStructureSerializer(serializers.ModelSerializer):
             'student', 'student_name',
             'academic_year', 'academic_year_name',
             'fee_type', 'fee_type_display',
+            'annual_category', 'annual_category_name',
             'monthly_amount', 'effective_from', 'effective_to',
             'is_active', 'created_at', 'updated_at'
         ]
@@ -120,7 +122,7 @@ class FeeStructureSerializer(serializers.ModelSerializer):
 class FeeStructureCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = FeeStructure
-        fields = ['class_obj', 'student', 'fee_type', 'monthly_amount', 'effective_from', 'effective_to']
+        fields = ['class_obj', 'student', 'fee_type', 'annual_category', 'monthly_amount', 'effective_from', 'effective_to']
 
     def validate(self, attrs):
         if not attrs.get('class_obj') and not attrs.get('student'):
@@ -136,11 +138,11 @@ class BulkFeeStructureItemSerializer(serializers.Serializer):
     class_obj = serializers.IntegerField()
     monthly_amount = serializers.DecimalField(max_digits=10, decimal_places=2)
     fee_type = serializers.ChoiceField(
-        choices=[('MONTHLY', 'Monthly'), ('ANNUAL', 'Annual'), ('ADMISSION', 'Admission'),
-                 ('BOOKS', 'Books'), ('FINE', 'Fine')],
+        choices=[('MONTHLY', 'Monthly'), ('ANNUAL', 'Annual')],
         default='MONTHLY',
         required=False,
     )
+    annual_category = serializers.IntegerField(required=False, allow_null=True)
 
 
 class BulkFeeStructureSerializer(serializers.Serializer):
@@ -156,8 +158,7 @@ class BulkStudentFeeStructureItemSerializer(serializers.Serializer):
 class BulkStudentFeeStructureSerializer(serializers.Serializer):
     class_id = serializers.IntegerField()
     fee_type = serializers.ChoiceField(
-        choices=[('MONTHLY', 'Monthly'), ('ANNUAL', 'Annual'), ('ADMISSION', 'Admission'),
-                 ('BOOKS', 'Books'), ('FINE', 'Fine')],
+        choices=[('MONTHLY', 'Monthly'), ('ANNUAL', 'Annual')],
     )
     effective_from = serializers.DateField()
     students = BulkStudentFeeStructureItemSerializer(many=True)
@@ -298,6 +299,13 @@ class IncomeCategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = IncomeCategory
         fields = ['id', 'name', 'code', 'is_active']
+
+
+class AnnualFeeCategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AnnualFeeCategory
+        fields = ['id', 'name', 'description', 'is_active', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
 
 
 class ExpenseSerializer(serializers.ModelSerializer):
