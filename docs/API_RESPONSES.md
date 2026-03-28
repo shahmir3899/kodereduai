@@ -628,6 +628,69 @@ Query params: `academic_year`, `class_obj`, `student`, `status`, `page_size`
 }
 ```
 
+Allowed enrollment `status` values:
+- `ACTIVE`
+- `PROMOTED`
+- `RETAINED`
+- `TRANSFERRED`
+- `GRADUATED`
+- `REPEAT`
+
+### POST /api/sessions/enrollments/bulk_promote/
+Supports mixed promotion workflows using `action`.
+
+```json
+// Request (promote)
+{
+  "enrollment_ids": [247, 248],
+  "target_class_id": 74,
+  "target_academic_year_id": 32,
+  "action": "PROMOTE"
+}
+
+// Response
+{
+  "success": true,
+  "message": "2 students promoted successfully",
+  "processed_count": 2,
+  "task_id": "bulk-promote-task-id"
+}
+```
+
+```json
+// Request (graduate)
+{
+  "enrollment_ids": [301, 302],
+  "target_academic_year_id": 32,
+  "action": "GRADUATE"
+}
+
+// Response
+{
+  "success": true,
+  "message": "2 students graduated successfully",
+  "processed_count": 2,
+  "task_id": "bulk-promote-task-id"
+}
+```
+
+```json
+// Request (repeat)
+{
+  "enrollment_ids": [333],
+  "target_academic_year_id": 32,
+  "action": "REPEAT"
+}
+
+// Response
+{
+  "success": true,
+  "message": "1 student marked to repeat successfully",
+  "processed_count": 1,
+  "task_id": "bulk-promote-task-id"
+}
+```
+
 ### GET /api/sessions/health/
 ```json
 {

@@ -228,14 +228,19 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | POST | /api/sessions/academic-years/{id}/set_current/ | |
 | GET | /api/sessions/academic-years/{id}/summary/ | |
 | GET/POST | /api/sessions/terms/ | academic_year, is_active |
-| GET/POST | /api/sessions/enrollments/ | academic_year, class_obj, student, status |
+| GET/POST | /api/sessions/enrollments/ | academic_year, class_obj, student, status (ACTIVE\|PROMOTED\|RETAINED\|TRANSFERRED\|GRADUATED\|REPEAT) |
 | GET | /api/sessions/enrollments/by_class/ | class_id, academic_year |
-| POST | /api/sessions/enrollments/bulk_promote/ | |
+| POST | /api/sessions/enrollments/bulk_promote/ | Body: {enrollment_ids, target_class_id, target_academic_year_id, action}. action: PROMOTE\|GRADUATE\|REPEAT |
 | GET | /api/sessions/promotion-advisor/ | |
 | POST | /api/sessions/setup-wizard/ | |
 | GET | /api/sessions/health/ | |
 | POST | /api/sessions/section-allocator/ | |
 | GET | /api/sessions/attendance-risk/ | |
+
+**Promotion actions:**
+- `PROMOTE` moves students to the target class and marks current enrollment as `PROMOTED`.
+- `GRADUATE` marks current enrollment as `GRADUATED` (no target class required).
+- `REPEAT` keeps student in same class for the target academic year and marks current enrollment as `REPEAT`.
 
 ## Examinations
 | Method | URL | Params | Description |
