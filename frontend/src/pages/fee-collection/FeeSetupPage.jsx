@@ -7,21 +7,16 @@ import { MONTHS } from './FeeFilters'
 import ClassSelector from '../../components/ClassSelector'
 import { financeApi, discountApi, studentsApi } from '../../services/api'
 import { getErrorMessage } from '../../utils/errorUtils'
+import AnnualChargesTab from './AnnualChargesTab'
 
+// Only MONTHLY is used in the structures/generate tabs now.
+// ANNUAL charges are handled by AnnualChargesTab.
 const FEE_TYPE_TABS = [
   { value: 'MONTHLY', label: 'Monthly' },
-  { value: 'ANNUAL', label: 'Annual' },
-  { value: 'ADMISSION', label: 'Admission' },
-  { value: 'BOOKS', label: 'Books' },
-  { value: 'FINE', label: 'Fine' },
 ]
 
 const FEE_TYPE_DESCRIPTIONS = {
   MONTHLY: 'Set the monthly recurring fee for each class.',
-  ANNUAL: 'Set the annual fee for each class (charged once per year).',
-  ADMISSION: 'Set the one-time admission fee for each class.',
-  BOOKS: 'Set the books/materials fee for each class.',
-  FINE: 'Set a default fine amount for each class.',
 }
 
 function calcDiscountOff(discount, scholarship, baseFee) {
@@ -63,17 +58,13 @@ export default function FeeSetupPage() {
   const [studentClassId, setStudentClassId] = useState('')
 
   // Generate state
-  const [generateFeeType, setGenerateFeeType] = useState('MONTHLY')
   const [genMonth, setGenMonth] = useState(now.getMonth() + 1)
   const [genYear, setGenYear] = useState(now.getFullYear())
   const [genClassFilter, setGenClassFilter] = useState('')
-  const [onetimeClass, setOnetimeClass] = useState('')
   const [confirmed, setConfirmed] = useState(false)
-  const [showGenConfirm, setShowGenConfirm] = useState(false)
-  const [showStudentList, setShowStudentList] = useState(false)
 
   // Fee structure state
-  const [feesByType, setFeesByType] = useState({ MONTHLY: {}, ANNUAL: {}, ADMISSION: {}, BOOKS: {}, FINE: {} })
+  const [feesByType, setFeesByType] = useState({ MONTHLY: {} })
   const [showConfirm, setShowConfirm] = useState(false)
   const [studentFees, setStudentFees] = useState([])
   const [studentShowConfirm, setStudentShowConfirm] = useState(false)
@@ -237,11 +228,10 @@ export default function FeeSetupPage() {
   // Populate per-type fees when structures load
   useEffect(() => {
     if (data.allStructuresList.length > 0) {
-      const grouped = { MONTHLY: {}, ANNUAL: {}, ADMISSION: {}, BOOKS: {}, FINE: {} }
+      const grouped = { MONTHLY: {} }
       data.allStructuresList.forEach(fs => {
-        if (fs.class_obj && !fs.student && fs.is_active) {
-          const ft = fs.fee_type || 'MONTHLY'
-          if (grouped[ft]) grouped[ft][fs.class_obj] = String(fs.monthly_amount)
+        if (fs.class_obj && !fs.student && fs.is_active && fs.fee_type === 'MONTHLY') {
+          grouped.MONTHLY[fs.class_obj] = String(fs.monthly_amount)
         }
       })
       setFeesByType(grouped)
@@ -277,7 +267,6 @@ export default function FeeSetupPage() {
   }, [data.classStudents, data.classStructures, structureMode, studentClassId, feeType, localEdits])
 
   // Generate preview queries
-  const isGenMonthly = generateFeeType === 'MONTHLY'
   const { data: monthlyPreview, isFetching: monthlyPreviewLoading } = useQuery({
     queryKey: ['generate-preview', 'MONTHLY', genClassFilter, genMonth, genYear, activeAcademicYear?.id],
     queryFn: () => financeApi.previewGeneration({
@@ -285,24 +274,12 @@ export default function FeeSetupPage() {
       ...(genClassFilter && { class_id: genClassFilter }),
       ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
     }),
-    enabled: activeTab === 'generate' && isGenMonthly,
-    staleTime: 30_000,
-  })
-
-  const { data: onetimePreview, isFetching: onetimePreviewLoading } = useQuery({
-    queryKey: ['generate-preview', generateFeeType, onetimeClass, genYear, activeAcademicYear?.id],
-    queryFn: () => financeApi.previewGeneration({
-      fee_type: generateFeeType, class_id: onetimeClass, year: genYear, month: 0,
-      ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
-    }),
-    enabled: activeTab === 'generate' && !isGenMonthly && !!onetimeClass,
+    enabled: activeTab === 'generate',
     staleTime: 30_000,
   })
 
   const mPreview = monthlyPreview?.data
-  const oPreview = onetimePreview?.data
   const feeLabel = FEE_TYPE_TABS.find(t => t.value === feeType)?.label || 'Monthly'
-  const genFeeLabel = FEE_TYPE_TABS.find(t => t.value === generateFeeType)?.label || 'Fee'
 
   // Fee structure handlers
   const currentFees = feesByType[feeType] || {}
@@ -383,10 +360,11 @@ export default function FeeSetupPage() {
         <p className="text-sm text-gray-600">Configure fee structures and generate fee records</p>
       </div>
 
-      {/* Tab bar */}
-      <div className="flex gap-1 mb-6 bg-gray-100 rounded-lg p-1 w-fit">
+      {/* Top-level tabs: Monthly Fees | Annual Charges | Generate | Discounts */}
+      <div className="flex gap-1 mb-6 bg-gray-100 rounded-lg p-1 w-fit flex-wrap">
         {[
-          { key: 'structures', label: 'Fee Structures' },
+          { key: 'structures', label: 'Monthly Fees' },
+          { key: 'annual', label: 'Annual Charges' },
           { key: 'generate', label: 'Generate Records' },
           { key: 'discounts', label: 'Student Discounts' },
         ].map(tab => (
@@ -402,7 +380,14 @@ export default function FeeSetupPage() {
         ))}
       </div>
 
-      {/* === FEE STRUCTURES TAB === */}
+      {/* === ANNUAL CHARGES TAB === */}
+      {activeTab === 'annual' && (
+        <div className="card">
+          <AnnualChargesTab />
+        </div>
+      )}
+
+      {/* === FEE STRUCTURES TAB (Monthly) === */}
       {activeTab === 'structures' && (
         <div className="card">
           {/* Mode + Fee type controls */}
@@ -606,22 +591,10 @@ export default function FeeSetupPage() {
       {/* === GENERATE RECORDS TAB === */}
       {activeTab === 'generate' && (
         <div className="card">
-          {/* Fee type tabs */}
-          <div className="flex flex-wrap gap-1.5 mb-4">
-            {FEE_TYPE_TABS.map(ft => (
-              <button key={ft.value} type="button"
-                onClick={() => { setGenerateFeeType(ft.value); setShowGenConfirm(false); setShowStudentList(false); setConfirmed(false) }}
-                className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-colors ${
-                  generateFeeType === ft.value ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >{ft.label}</button>
-            ))}
-          </div>
+          <p className="text-sm text-gray-500 mb-4">Generate monthly fee records for all enrolled students. For annual fee generation, use the <strong>Annual Charges</strong> tab.</p>
 
           {/* MONTHLY generation */}
-          {isGenMonthly && (
-            <>
-              <div className="grid grid-cols-2 gap-3 mb-4">
+          <div className="grid grid-cols-2 gap-3 mb-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1">Month</label>
                   <select value={genMonth} onChange={(e) => setGenMonth(parseInt(e.target.value))} className="input-field text-sm">
@@ -685,108 +658,6 @@ export default function FeeSetupPage() {
                   {(data.generateMutation.data?.data?.skipped || data.generateMutation.data?.data?.result?.skipped) > 0 && ` Skipped ${data.generateMutation.data.data.skipped || data.generateMutation.data.data.result?.skipped} (already exist).`}
                 </div>
               )}
-            </>
-          )}
-
-          {/* Non-MONTHLY generation */}
-          {!isGenMonthly && !showGenConfirm && (
-            <>
-              <p className="text-sm text-gray-600 mb-4">
-                Generate <strong>{genFeeLabel}</strong> fee records for all enrolled students in the selected class for <strong>{genYear}</strong>.
-              </p>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Class <span className="text-red-500">*</span></label>
-                <ClassSelector value={onetimeClass} onChange={(e) => { setOnetimeClass(e.target.value); setShowStudentList(false) }} className="input-field" classes={data.classList} />
-              </div>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Year</label>
-                <select value={genYear} onChange={(e) => setGenYear(parseInt(e.target.value))} className="input-field">
-                  {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
-                </select>
-              </div>
-
-              {onetimePreviewLoading && onetimeClass && <p className="text-sm text-gray-400 mb-4">Calculating preview...</p>}
-              {oPreview && !onetimePreviewLoading && (
-                <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-1">
-                  <p className="text-sm text-blue-800">
-                    <span className="font-medium">{oPreview.will_create}</span> new {genFeeLabel.toLowerCase()} records
-                    {oPreview.will_create > 0 && <> (total: <span className="font-medium">{Number(oPreview.total_amount).toLocaleString()}</span>)</>}
-                  </p>
-                  {oPreview.already_exist > 0 && <p className="text-xs text-blue-600">{oPreview.already_exist} already exist (will skip)</p>}
-                  {oPreview.no_fee_structure > 0 && <p className="text-xs text-amber-600">{oPreview.no_fee_structure} students have no fee structure (will skip)</p>}
-                  {oPreview.will_create > 0 && (
-                    <button type="button" onClick={() => setShowStudentList(!showStudentList)} className="text-xs text-blue-700 hover:text-blue-900 underline mt-1">
-                      {showStudentList ? 'Hide' : 'Show'} student details{oPreview.has_more ? ' (first 50)' : ''}
-                    </button>
-                  )}
-                </div>
-              )}
-
-              {showStudentList && oPreview?.students?.length > 0 && (
-                <div className="mb-4 max-h-40 overflow-y-auto border border-gray-200 rounded-lg">
-                  <table className="min-w-full text-xs">
-                    <thead className="bg-gray-50 sticky top-0">
-                      <tr>
-                        <th className="px-2 py-1 text-left text-gray-500">Student</th>
-                        <th className="px-2 py-1 text-right text-gray-500">Amount</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {oPreview.students.map(s => (
-                        <tr key={s.student_id}>
-                          <td className="px-2 py-1 text-gray-700">{s.student_name}</td>
-                          <td className="px-2 py-1 text-right text-gray-900">{Number(s.amount).toLocaleString()}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
-              <button onClick={() => setShowGenConfirm(true)} disabled={!onetimeClass || !oPreview || oPreview.will_create === 0}
-                className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50"
-              >Review & Generate</button>
-            </>
-          )}
-
-          {/* Non-MONTHLY confirmation step */}
-          {!isGenMonthly && showGenConfirm && (
-            <>
-              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-2 mb-4">
-                <p className="text-sm font-medium text-blue-900">Please confirm {genFeeLabel.toLowerCase()} fee generation:</p>
-                <div className="text-sm text-blue-800 space-y-1">
-                  <p><span className="font-medium">Class:</span> {data.classList.find(c => String(c.id) === String(onetimeClass))?.name}</p>
-                  <p><span className="font-medium">Fee Type:</span> {genFeeLabel}</p>
-                  <p><span className="font-medium">Year:</span> {genYear}</p>
-                  <p><span className="font-medium">Records:</span> {oPreview?.will_create} new</p>
-                  <p><span className="font-medium">Total Amount:</span> {Number(oPreview?.total_amount || 0).toLocaleString()}</p>
-                </div>
-              </div>
-              <div className="flex gap-3">
-                <button onClick={() => setShowGenConfirm(false)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">Back</button>
-                <button
-                  onClick={() => {
-                    data.generateOnetimeMutation.mutate({
-                      student_ids: oPreview.students.map(s => s.student_id),
-                      fee_types: [generateFeeType], year: genYear, month: 0,
-                      ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
-                    })
-                  }}
-                  disabled={data.generateOnetimeMutation?.isPending}
-                  className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50"
-                >{data.generateOnetimeMutation?.isPending ? 'Generating...' : 'Confirm & Generate'}</button>
-              </div>
-              {data.generateOnetimeMutation?.isSuccess && (
-                <div className="mt-3 text-sm text-green-700 bg-green-50 p-3 rounded">
-                  Created {data.generateOnetimeMutation.data?.data?.created} records.
-                  {data.generateOnetimeMutation.data?.data?.skipped > 0 && ` Skipped ${data.generateOnetimeMutation.data.data.skipped} (already exist).`}
-                </div>
-              )}
-              {data.generateOnetimeMutation?.isError && (
-                <p className="mt-3 text-sm text-red-600">{getErrorMessage(data.generateOnetimeMutation.error, 'Failed to generate fees')}</p>
-              )}
-            </>
-          )}
         </div>
       )}
 

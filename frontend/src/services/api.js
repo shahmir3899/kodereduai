@@ -289,6 +289,13 @@ export const financeApi = {
   updateIncomeCategory: (id, data) => api.patch(`/api/finance/income-categories/${id}/`, data),
   deleteIncomeCategory: (id) => api.delete(`/api/finance/income-categories/${id}/`),
 
+  // Annual Fee Categories
+  getAnnualCategories: (params) => api.get('/api/finance/annual-categories/', { params }),
+  createAnnualCategory: (data) => api.post('/api/finance/annual-categories/', data),
+  updateAnnualCategory: (id, data) => api.patch(`/api/finance/annual-categories/${id}/`, data),
+  deleteAnnualCategory: (id) => api.delete(`/api/finance/annual-categories/${id}/`),
+  getAnnualCategorySuggestions: () => api.get('/api/finance/annual-categories/suggestions/'),
+
   // Other Income
   getOtherIncome: (params) => api.get('/api/finance/other-income/', { params }),
   createOtherIncome: (data) => api.post('/api/finance/other-income/', data),
