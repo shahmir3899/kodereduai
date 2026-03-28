@@ -11,8 +11,16 @@ function RecBadge({ rec }) {
     PROMOTE: 'bg-green-100 text-green-800 border-green-200',
     NEEDS_REVIEW: 'bg-amber-100 text-amber-800 border-amber-200',
     RETAIN: 'bg-red-100 text-red-800 border-red-200',
+    GRADUATE: 'bg-blue-100 text-blue-800 border-blue-200',
+    REPEAT: 'bg-purple-100 text-purple-800 border-purple-200',
   }
-  const labels = { PROMOTE: 'Promote', NEEDS_REVIEW: 'Needs Review', RETAIN: 'Retain' }
+  const labels = {
+    PROMOTE: 'Promote',
+    NEEDS_REVIEW: 'Needs Review',
+    RETAIN: 'Repeat',
+    GRADUATE: 'Graduate',
+    REPEAT: 'Repeat',
+  }
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border ${styles[rec] || 'bg-gray-100 text-gray-700'}`}>
       {labels[rec] || rec}
@@ -125,9 +133,9 @@ export default function PromotionPage() {
   }
 
   const handlePromote = () => {
-    const included = promotions.filter(p => p.include && p.target_class_id)
+    const included = promotions.filter(p => p.include && (p.target_class_id || p.action === 'GRADUATE'))
     if (included.length === 0) {
-      alert('Please select target classes for at least one student.')
+      alert('Please select target classes for at least one student or mark as Graduate.')
       return
     }
 
@@ -136,8 +144,9 @@ export default function PromotionPage() {
       target_academic_year_id: parseInt(targetYearId),
       promotions: included.map(p => ({
         student_id: p.student_id,
-        target_class_id: parseInt(p.target_class_id),
+        target_class_id: p.target_class_id ? parseInt(p.target_class_id) : null,
         new_roll_number: p.new_roll_number,
+        action: p.action || 'PROMOTE',
       })),
     })
   }
@@ -178,9 +187,10 @@ export default function PromotionPage() {
         student_name: r.student_name,
         current_class: r.class_name,
         current_roll: r.roll_number,
-        target_class_id: effectiveRec === 'PROMOTE' ? targetClassId : '',
+        target_class_id: effectiveRec === 'PROMOTE' ? targetClassId : (effectiveRec === 'REPEAT' ? r.class_id : ''),
         new_roll_number: r.roll_number,
-        include: effectiveRec === 'PROMOTE',
+        include: effectiveRec === 'PROMOTE' || effectiveRec === 'GRADUATE' || effectiveRec === 'REPEAT',
+        action: effectiveRec,
       }
     }).sort(rollSort)
     setPromotions(newPromotions)
@@ -386,8 +396,9 @@ export default function PromotionPage() {
                                     className="input text-xs py-0.5 px-1 w-24"
                                   >
                                     <option value="PROMOTE">Promote</option>
+                                    <option value="GRADUATE">Graduate</option>
+                                    <option value="REPEAT">Repeat</option>
                                     <option value="NEEDS_REVIEW">Review</option>
-                                    <option value="RETAIN">Retain</option>
                                   </select>
                                 </td>
                               </tr>
@@ -436,8 +447,9 @@ export default function PromotionPage() {
                                 className="input text-xs py-0.5 px-1 flex-1"
                               >
                                 <option value="PROMOTE">Promote</option>
+                                <option value="GRADUATE">Graduate</option>
+                                <option value="REPEAT">Repeat</option>
                                 <option value="NEEDS_REVIEW">Review</option>
-                                <option value="RETAIN">Retain</option>
                               </select>
                             </div>
                           </div>

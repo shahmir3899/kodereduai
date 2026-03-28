@@ -89,19 +89,29 @@ class ExamGroupViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
         from django.db.models import Prefetch
         qs = super().get_queryset().select_related(
             'school', 'academic_year', 'term', 'exam_type',
-        ).prefetch_related(
-            Prefetch(
-                'exams',
-                queryset=Exam.objects.filter(is_active=True).select_related(
-                    'class_obj', 'exam_type', 'academic_year', 'term',
-                ).annotate(
-                    subjects_count=Count('exam_subjects', filter=Q(exam_subjects__is_active=True)),
-                ),
-                to_attr='_prefetched_active_exams',
-            ),
-        ).annotate(
-            classes_count=Count('exams'),
         )
+
+        # Support active/inactive/all filter for exam groups
+        exam_is_active = self.request.query_params.get('is_active')
+        exam_filter = None
+        if exam_is_active is not None:
+            if exam_is_active.lower() == 'true':
+                exam_filter = True
+            elif exam_is_active.lower() == 'false':
+                exam_filter = False
+
+        exams_prefetch_qs = Exam.objects.select_related(
+            'class_obj', 'exam_type', 'academic_year', 'term',
+        ).annotate(
+            subjects_count=Count('exam_subjects', filter=Q(exam_subjects__is_active=True)),
+        )
+        if exam_filter is not None:
+            exams_prefetch_qs = exams_prefetch_qs.filter(is_active=exam_filter)
+
+        qs = qs.prefetch_related(
+            Prefetch('exams', queryset=exams_prefetch_qs, to_attr='_prefetched_active_exams'),
+        )
+
         academic_year = self.request.query_params.get('academic_year')
         if academic_year:
             qs = qs.filter(academic_year_id=academic_year)

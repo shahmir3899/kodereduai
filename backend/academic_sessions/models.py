@@ -89,14 +89,23 @@ class Term(models.Model):
 
 
 class StudentEnrollment(models.Model):
-    """Links a student to a class for a specific academic year."""
+    """Links a student to a class for a specific academic year.
+    Statuses:
+      - ACTIVE: Currently enrolled
+      - PROMOTED: Promoted to next class
+      - REPEAT: Repeating the same class
+      - TRANSFERRED: Moved to another school
+      - WITHDRAWN: Left school before completion
+      - GRADUATED: Completed highest class or left school as graduate
+    """
 
     class Status(models.TextChoices):
         ACTIVE = 'ACTIVE', 'Active'
         PROMOTED = 'PROMOTED', 'Promoted'
-        RETAINED = 'RETAINED', 'Retained'
+        REPEAT = 'REPEAT', 'Repeat'
         TRANSFERRED = 'TRANSFERRED', 'Transferred'
         WITHDRAWN = 'WITHDRAWN', 'Withdrawn'
+        GRADUATED = 'GRADUATED', 'Graduated'  # New: For students who have completed highest class or left school as graduate
 
     school = models.ForeignKey(
         'schools.School',

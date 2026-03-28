@@ -29,6 +29,7 @@ def bulk_promote_task(self, school_id, source_year_id, target_year_id, promotion
             student_id = promo.get('student_id')
             target_class_id = promo.get('target_class_id')
             new_roll_number = promo.get('new_roll_number', '')
+            action = promo.get('action', 'PROMOTE')  # PROMOTE, GRADUATE, REPEAT
 
             old_enrollment = StudentEnrollment.objects.filter(
                 school_id=school_id,
@@ -38,24 +39,37 @@ def bulk_promote_task(self, school_id, source_year_id, target_year_id, promotion
             ).first()
 
             if old_enrollment:
-                old_enrollment.status = StudentEnrollment.Status.PROMOTED
+                if action == 'GRADUATE':
+                    old_enrollment.status = StudentEnrollment.Status.GRADUATED
+                elif action == 'REPEAT':
+                    old_enrollment.status = StudentEnrollment.Status.REPEAT
+                else:
+                    old_enrollment.status = StudentEnrollment.Status.PROMOTED
                 old_enrollment.save(update_fields=['status'])
                 if not new_roll_number:
                     new_roll_number = old_enrollment.roll_number
 
             try:
-                StudentEnrollment.objects.create(
-                    school_id=school_id,
-                    student_id=student_id,
-                    academic_year_id=target_year_id,
-                    class_obj_id=target_class_id,
-                    roll_number=new_roll_number,
-                    status=StudentEnrollment.Status.ACTIVE,
-                )
-                Student.objects.filter(pk=student_id).update(
-                    class_obj_id=target_class_id,
-                    roll_number=new_roll_number,
-                )
+                if action == 'GRADUATE':
+                    # Do not create new enrollment, just update student status
+                    Student.objects.filter(pk=student_id).update(
+                        status=Student.Status.GRADUATED
+                    )
+                else:
+                    # For PROMOTE or REPEAT, create new enrollment
+                    StudentEnrollment.objects.create(
+                        school_id=school_id,
+                        student_id=student_id,
+                        academic_year_id=target_year_id,
+                        class_obj_id=target_class_id,
+                        roll_number=new_roll_number,
+                        status=StudentEnrollment.Status.ACTIVE,
+                    )
+                    Student.objects.filter(pk=student_id).update(
+                        class_obj_id=target_class_id,
+                        roll_number=new_roll_number,
+                        status=Student.Status.REPEAT if action == 'REPEAT' else Student.Status.ACTIVE
+                    )
                 created += 1
             except Exception as e:
                 errors.append({'student_id': student_id, 'error': str(e)})

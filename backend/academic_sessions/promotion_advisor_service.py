@@ -20,7 +20,7 @@ class PromotionAdvisorService:
         self.school_id = school_id
         self.academic_year_id = academic_year_id
 
-    def get_recommendations(self, class_id: int) -> list:
+    def get_recommendations(self, class_id: int, manual_graduates: set = None) -> list:
         """
         Analyze all students enrolled in the given class for the academic year
         and return a list of promotion recommendations.
@@ -37,6 +37,11 @@ class PromotionAdvisorService:
             class_obj_id=class_id,
             is_active=True,
         ).select_related('student', 'class_obj')
+
+        # Get highest grade_level for this school
+        from students.models import Class
+        highest_grade = Class.get_highest_grade_level(self.school_id)
+        manual_graduates = manual_graduates or set()
 
         if not enrollments.exists():
             return []
@@ -143,10 +148,15 @@ class PromotionAdvisorService:
                 exam_data, attendance_rate, fee_paid_rate, trend, marks_list,
             )
 
-            # Recommendation
-            recommendation, reasoning = self._determine_recommendation(
-                exam_data, attendance_rate, fee_paid_rate, trend, risk_flags,
-            )
+            # Graduation logic
+            is_highest_class = (enrollment.class_obj.grade_level == highest_grade)
+            if sid in manual_graduates or is_highest_class:
+                recommendation = 'GRADUATE'
+                reasoning = 'Graduation: Highest class or manually flagged.'
+            else:
+                recommendation, reasoning = self._determine_recommendation(
+                    exam_data, attendance_rate, fee_paid_rate, trend, risk_flags,
+                )
 
             recommendations.append({
                 'student_id': sid,
@@ -165,9 +175,9 @@ class PromotionAdvisorService:
                 'failed_subjects': exam_data['failed_subjects'],
             })
 
-        # Sort by recommendation priority: RETAIN first, then NEEDS_REVIEW, then PROMOTE
-        priority = {'RETAIN': 0, 'NEEDS_REVIEW': 1, 'PROMOTE': 2}
-        recommendations.sort(key=lambda r: (priority.get(r['recommendation'], 3), r['roll_number']))
+        # Sort by recommendation priority: REPEAT first, then NEEDS_REVIEW, then PROMOTE, then GRADUATE
+        priority = {'REPEAT': 0, 'NEEDS_REVIEW': 1, 'PROMOTE': 2, 'GRADUATE': 3}
+        recommendations.sort(key=lambda r: (priority.get(r['recommendation'], 4), r['roll_number']))
 
         return recommendations
 

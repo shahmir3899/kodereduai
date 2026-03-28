@@ -37,6 +37,7 @@ export default function ExamsPage() {
   const [dateSheetGroupId, setDateSheetGroupId] = useState(null)
   const [yearFilter, setYearFilter] = useState('')
   const [activeTab, setActiveTab] = useState('exams') // 'exams' | 'tests'
+  const [examStatusFilter, setExamStatusFilter] = useState('active') // 'active' | 'inactive' | 'all'
 
   // Sync year filter with global session switcher
   useEffect(() => {
@@ -53,22 +54,26 @@ export default function ExamsPage() {
   // ── Queries ──
 
   // Exam Groups
+  const examStatusParams = examStatusFilter === 'all' ? {} : { is_active: examStatusFilter === 'active' }
+
   const { data: groupsRes, isLoading: groupsLoading } = useQuery({
-    queryKey: ['examGroups', yearFilter],
+    queryKey: ['examGroups', yearFilter, examStatusFilter],
     queryFn: () => examinationsApi.getExamGroups({
       academic_year: yearFilter || undefined,
       page_size: 9999,
+      ...examStatusParams,
     }),
   })
   const groups = groupsRes?.data?.results || groupsRes?.data || []
 
   // Standalone (ungrouped) exams
   const { data: standaloneRes, isLoading: standaloneLoading } = useQuery({
-    queryKey: ['exams', 'ungrouped', yearFilter],
+    queryKey: ['exams', 'ungrouped', yearFilter, examStatusFilter],
     queryFn: () => examinationsApi.getExams({
       academic_year: yearFilter || undefined,
       ungrouped: true,
       page_size: 9999,
+      ...examStatusParams,
     }),
   })
   const standaloneExams = standaloneRes?.data?.results || standaloneRes?.data || []
@@ -346,12 +351,19 @@ export default function ExamsPage() {
         )}
       </div>
 
-      {/* Year Filter + Tabs */}
+      {/* Year Filter + Status Filter + Tabs */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-4">
         <select value={yearFilter} onChange={e => setYearFilter(e.target.value)} className="input w-full sm:w-44">
           <option value="">All Years</option>
           {years.map(y => <option key={y.id} value={y.id}>{y.name}</option>)}
         </select>
+
+        <select value={examStatusFilter} onChange={e => setExamStatusFilter(e.target.value)} className="input w-full sm:w-44">
+          <option value="active">Active Exams</option>
+          <option value="inactive">Inactive Exams</option>
+          <option value="all">All Exams</option>
+        </select>
+
         <div className="flex border-b border-gray-200 sm:ml-4">
           <button
             onClick={() => setActiveTab('exams')}

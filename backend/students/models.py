@@ -5,6 +5,13 @@ from django.utils import timezone
 
 
 class Class(models.Model):
+
+        @staticmethod
+        def get_highest_grade_level(school_id):
+            """Return the highest grade_level for a given school."""
+            from django.db.models import Max
+            result = Class.objects.filter(school_id=school_id, is_active=True).aggregate(max_level=Max('grade_level'))
+            return result['max_level']
     """
     Represents a class/section within a school.
     Examples: "Class 5-A", "PlayGroup", "Class 10"
@@ -78,6 +85,7 @@ class Student(models.Model):
         ('TRANSFERRED', 'Transferred'),
         ('WITHDRAWN', 'Withdrawn'),
         ('GRADUATED', 'Graduated'),
+        ('REPEAT', 'Repeat'),  # New: For students repeating a class
         ('SUSPENDED', 'Suspended'),
     ]
 
