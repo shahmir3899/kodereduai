@@ -896,10 +896,16 @@ class AnnualFeeCategoryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.
     permission_classes = [IsAuthenticated, IsSchoolAdminOrStaffReadOnly, HasSchoolAccess]
 
     def list(self, request, *args, **kwargs):
-        school_id = _resolve_school_id(request)
         response = super().list(request, *args, **kwargs)
         # Attach suggestions to the response so the frontend can offer them
-        existing_names = {item['name'] for item in response.data.get('results', response.data)}
+        data = response.data
+        if isinstance(data, dict):
+            items = data.get('results', [])
+        elif isinstance(data, list):
+            items = data
+        else:
+            items = []
+        existing_names = {item['name'] for item in items if isinstance(item, dict) and 'name' in item}
         suggestions = [
             s for s in SUGGESTED_ANNUAL_CATEGORIES
             if s['name'] not in existing_names

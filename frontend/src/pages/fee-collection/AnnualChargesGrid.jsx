@@ -49,8 +49,11 @@ export default function AnnualChargesGrid({ categories = [], rows = [], onChange
                       value={row.category_id || ''}
                       onChange={(e) => {
                         const cat = categories.find((c) => String(c.id) === e.target.value)
-                        updateRow(index, 'category_id', e.target.value)
-                        if (cat) updateRow(index, 'annual_category_name', cat.name)
+                        onChange(rows.map((r, i) =>
+                          i === index
+                            ? { ...r, category_id: e.target.value, annual_category_name: cat ? cat.name : r.annual_category_name }
+                            : r
+                        ))
                       }}
                       className="w-full px-2 py-1.5 border border-gray-200 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
                     >

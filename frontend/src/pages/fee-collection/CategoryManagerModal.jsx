@@ -194,7 +194,7 @@ export default function CategoryManagerModal({ onClose }) {
               <div className="flex flex-wrap gap-2">
                 {suggestions.map((s) => (
                   <button
-                    key={s.name}
+                    key={`suggestion-${s.name}`}
                     onClick={() => handleAddSuggestion(s)}
                     disabled={createMutation.isPending}
                     className="px-3 py-1.5 bg-blue-50 text-blue-700 border border-blue-200 text-xs rounded-full hover:bg-blue-100 disabled:opacity-50"
