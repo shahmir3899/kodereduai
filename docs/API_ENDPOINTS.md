@@ -258,7 +258,7 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | GET | /api/examinations/marks/download_template/ | exam_subject_id | |
 | GET/POST | /api/examinations/grade-scales/ | | |
 | GET | /api/examinations/exams/{id}/results/ | | Now includes `exam_type_weight` in response |
-| GET | /api/examinations/report-card/ | student_id, academic_year_id, term_id | Returns flat `subjects` array with per-subject grade/pass/fail, `grade_scales` array, `calculation_mode` (simple\|weighted). Supports per-school weighted average via `exam_config` |
+| GET | /api/examinations/report-card/ | student_id, academic_year_id or enrollment_id, term_id | Enrollment-driven historical report card. Requires `student_id` plus either `academic_year_id` or `enrollment_id`. Returns flat `subjects` array, `grade_scales`, `calculation_mode` (simple\|weighted), and `enrollment_info` with session class vs current class context |
 | **NEW CURRICULUM INTEGRATION** | | | |
 | GET/POST | /api/examinations/questions/ | subject, exam_type, question_type, difficulty, topics, lesson_plan, search, is_active | Includes `tested_topics` and `tested_topics_details` fields |
 | POST | /api/examinations/questions/generate_from_lesson/ | | Generate AI questions from lesson plan. Body: {lesson_plan_id, question_count (5-20), question_type, difficulty_level}. Returns: {questions: [...], message} |

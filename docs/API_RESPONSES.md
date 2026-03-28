@@ -1298,6 +1298,13 @@ Each mark in the results response now includes `ai_comment`:
   "school_name": "The Focus Montessori",
   "academic_year_name": "2025-2026",
   "term_name": "3rd Term",
+  "enrollment_info": {
+    "enrollment_id": 44,
+    "class_at_report_session": "Junior 2",
+    "current_class": "Junior 3",
+    "academic_year_id": 1,
+    "academic_year_name": "2025-2026"
+  },
   "student": {
     "id": 1, "name": "Ahmed Hassan", "roll_number": "15",
     "class_name": "Junior 2", "school_name": "The Focus Montessori"
@@ -1324,6 +1331,14 @@ Each mark in the results response now includes `ai_comment`:
   "grade_scales": [
     { "grade_label": "A+", "min_percentage": 90.0, "max_percentage": 100.0, "gpa_points": 4.0 }
   ]
+}
+```
+
+If neither `academic_year_id` nor `enrollment_id` is provided, the endpoint returns:
+
+```json
+{
+  "detail": "academic_year_id or enrollment_id is required."
 }
 ```
 
