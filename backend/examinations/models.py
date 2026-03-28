@@ -209,6 +209,14 @@ class StudentMark(models.Model):
         on_delete=models.CASCADE,
         related_name='marks',
     )
+    enrollment = models.ForeignKey(
+        'academic_sessions.StudentEnrollment',
+        on_delete=models.SET_NULL,
+        related_name='student_marks',
+        null=True,
+        blank=True,
+        help_text='Enrollment snapshot used for historical/session report accuracy',
+    )
     marks_obtained = models.DecimalField(
         max_digits=6,
         decimal_places=2,
@@ -236,6 +244,7 @@ class StudentMark(models.Model):
         ordering = ['student__roll_number']
         indexes = [
             models.Index(fields=['school', 'student']),
+            models.Index(fields=['school', 'enrollment']),
         ]
 
     def __str__(self):

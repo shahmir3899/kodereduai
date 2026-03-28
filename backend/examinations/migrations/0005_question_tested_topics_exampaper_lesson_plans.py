@@ -7,7 +7,7 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('lms', '0001_initial'),  # Ensure LMS models exist
+        ('lms', '0003_add_curriculum_models'),
         ('examinations', '0004_exampaper_paperupload_paperfeedback_question_and_more'),
     ]
 

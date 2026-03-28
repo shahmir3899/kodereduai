@@ -13,6 +13,7 @@ import pytest
 from decimal import Decimal
 
 from examinations.models import ExamType, Exam, ExamSubject, StudentMark, GradeScale
+from academic_sessions.models import AcademicYear, StudentEnrollment
 from academics.models import Subject
 
 
@@ -1102,11 +1103,27 @@ class TestGradeScales:
 @pytest.mark.phase6
 class TestResultsAndReportCard:
 
+    def _ensure_enrollments(self, d):
+        for student in d['class_1_students']:
+            StudentEnrollment.objects.get_or_create(
+                school=d['school_a'],
+                student=student,
+                academic_year=d['academic_year'],
+                defaults={
+                    'class_obj': d['class_1'],
+                    'roll_number': student.roll_number,
+                    'status': StudentEnrollment.Status.ACTIVE,
+                    'is_active': True,
+                },
+            )
+
     def _setup_full_env(self, d, api):
         """
         Create a complete environment: exam types, exams, exam subjects,
         student marks, and grade scales. Then publish exams.
         """
+        self._ensure_enrollments(d)
+
         token = d['tokens']['admin']
         sid = d['SID_A']
         school = d['school_a']
@@ -1313,7 +1330,7 @@ class TestResultsAndReportCard:
         d = exam_prereqs
         env = self._setup_full_env(d, api)
         resp = api.get(
-            f'/api/examinations/report-card/?student_id={env["student_1"].id}',
+            f'/api/examinations/report-card/?student_id={env["student_1"].id}&academic_year_id={d["academic_year"].id}',
             d['tokens']['admin'], d['SID_A'],
         )
         assert resp.status_code == 200, f"status={resp.status_code}"
@@ -1321,13 +1338,14 @@ class TestResultsAndReportCard:
         assert 'student' in data, f"keys={list(data.keys())}"
         assert 'exams' in data, f"keys={list(data.keys())}"
         assert 'summary' in data, f"keys={list(data.keys())}"
+        assert 'enrollment_info' in data, f"keys={list(data.keys())}"
 
     def test_f6_report_card_structure(self, exam_prereqs, api):
         """F6: Report card student info and summary have correct fields."""
         d = exam_prereqs
         env = self._setup_full_env(d, api)
         resp = api.get(
-            f'/api/examinations/report-card/?student_id={env["student_1"].id}',
+            f'/api/examinations/report-card/?student_id={env["student_1"].id}&academic_year_id={d["academic_year"].id}',
             d['tokens']['admin'], d['SID_A'],
         )
         assert resp.status_code == 200
@@ -1341,12 +1359,16 @@ class TestResultsAndReportCard:
         for key in ['total_obtained', 'total_possible', 'percentage', 'grade']:
             assert key in summary_info, f"missing summary key: {key}, keys={list(summary_info.keys())}"
 
+        enrollment_info = data.get('enrollment_info', {})
+        for key in ['enrollment_id', 'class_at_report_session', 'current_class', 'academic_year_id']:
+            assert key in enrollment_info, f"missing enrollment key: {key}, keys={list(enrollment_info.keys())}"
+
     def test_f7_report_card_shows_published_exams(self, exam_prereqs, api):
         """F7: Report card only shows published exams."""
         d = exam_prereqs
         env = self._setup_full_env(d, api)
         resp = api.get(
-            f'/api/examinations/report-card/?student_id={env["student_1"].id}',
+            f'/api/examinations/report-card/?student_id={env["student_1"].id}&academic_year_id={d["academic_year"].id}',
             d['tokens']['admin'], d['SID_A'],
         )
         assert resp.status_code == 200
@@ -1362,6 +1384,65 @@ class TestResultsAndReportCard:
         resp = api.get('/api/examinations/report-card/',
                        seed_data['tokens']['admin'], seed_data['SID_A'])
         assert resp.status_code == 400, f"status={resp.status_code}"
+
+    def test_f9_report_card_requires_academic_year_or_enrollment(self, exam_prereqs, api):
+        """F9: Report card requires academic_year_id or enrollment_id."""
+        d = exam_prereqs
+        env = self._setup_full_env(d, api)
+        resp = api.get(
+            f'/api/examinations/report-card/?student_id={env["student_1"].id}',
+            d['tokens']['admin'], d['SID_A'],
+        )
+        assert resp.status_code == 400, f"status={resp.status_code} body={resp.content[:200]}"
+
+    def test_f10_historical_report_card_after_promotion(self, exam_prereqs, api):
+        """F10: Old-session report card still uses old class after student is promoted."""
+        d = exam_prereqs
+        env = self._setup_full_env(d, api)
+
+        student = env['student_1']
+        old_enrollment = StudentEnrollment.objects.get(
+            school=d['school_a'],
+            student=student,
+            academic_year=d['academic_year'],
+        )
+
+        target_year = AcademicYear.objects.create(
+            school=d['school_a'],
+            name=f'{P6}2026-2027',
+            start_date=d['academic_year'].end_date,
+            end_date=d['academic_year'].end_date.replace(year=d['academic_year'].end_date.year + 1),
+            is_current=False,
+            is_active=True,
+        )
+
+        resp = api.post('/api/sessions/enrollments/bulk_promote/', {
+            'source_academic_year': d['academic_year'].id,
+            'target_academic_year': target_year.id,
+            'promotions': [{
+                'student_id': student.id,
+                'target_class_id': d['class_2'].id,
+                'new_roll_number': '11',
+                'action': 'PROMOTE',
+            }],
+        }, d['tokens']['admin'], d['SID_A'])
+        assert resp.status_code == 200, f"status={resp.status_code} body={resp.content[:200]}"
+
+        student.refresh_from_db()
+        old_enrollment.refresh_from_db()
+
+        report_resp = api.get(
+            f'/api/examinations/report-card/?student_id={student.id}&academic_year_id={d["academic_year"].id}',
+            d['tokens']['admin'], d['SID_A'],
+        )
+        assert report_resp.status_code == 200, f"status={report_resp.status_code} body={report_resp.content[:200]}"
+
+        data = report_resp.json()
+        assert data['class_name'] == d['class_1'].name
+        assert data['enrollment_info']['class_at_report_session'] == d['class_1'].name
+        assert data['enrollment_info']['current_class'] == d['class_2'].name
+        assert data['student']['class_name'] == d['class_1'].name
+        assert old_enrollment.status == StudentEnrollment.Status.PROMOTED
 
 
 # ==================================================================

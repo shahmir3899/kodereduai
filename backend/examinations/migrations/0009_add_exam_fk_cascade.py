@@ -3,15 +3,23 @@
 from django.db import migrations
 
 
+def add_exam_fk_cascade(apps, schema_editor):
+    if schema_editor.connection.vendor != 'postgresql':
+        return
+
+    schema_editor.execute(
+        'ALTER TABLE examinations_examsubject '
+        'ADD CONSTRAINT examinations_examsub_exam_id_1f9d7189_fk_examinati '
+        'FOREIGN KEY (exam_id) REFERENCES examinations_exam(id) ON DELETE CASCADE;'
+    )
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
         ('examinations', '0008_fix_cascade_sql'),
     ]
 
-    operations = [        migrations.RunSQL(
-            # Add the missing exam_id foreign key constraint with CASCADE
-            'ALTER TABLE examinations_examsubject ADD CONSTRAINT examinations_examsub_exam_id_1f9d7189_fk_examinati FOREIGN KEY (exam_id) REFERENCES examinations_exam(id) ON DELETE CASCADE;',
-            # Reverse operation: drop the constraint
-            'ALTER TABLE examinations_examsubject DROP CONSTRAINT examinations_examsub_exam_id_1f9d7189_fk_examinati;',
-        ),    ]
+    operations = [
+        migrations.RunPython(add_exam_fk_cascade, migrations.RunPython.noop),
+    ]

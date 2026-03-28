@@ -1,25 +1,27 @@
 import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { examinationsApi, sessionsApi, studentsApi, schoolsApi } from '../../services/api'
+import { examinationsApi, sessionsApi, schoolsApi } from '../../services/api'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { exportReportCardPDF } from './reportCardExport'
 import ClassSelector from '../../components/ClassSelector'
 
 export default function ReportCardPage() {
   const { activeAcademicYear } = useAcademicYear()
+  const [mode, setMode] = useState('current')
   const [classId, setClassId] = useState('')
   const [studentId, setStudentId] = useState('')
+  const [enrollmentId, setEnrollmentId] = useState('')
   const [yearId, setYearId] = useState('')
   const [termId, setTermId] = useState('')
   const [search, setSearch] = useState('')
   const [downloading, setDownloading] = useState(false)
 
-  // Sync year filter with global session switcher
+  // In current mode, keep academic year synced with the global selector.
   useEffect(() => {
-    if (activeAcademicYear?.id) {
+    if (mode === 'current' && activeAcademicYear?.id) {
       setYearId(String(activeAcademicYear.id))
     }
-  }, [activeAcademicYear?.id])
+  }, [activeAcademicYear?.id, mode])
 
   // Queries
   const { data: yearsRes } = useQuery({
@@ -33,20 +35,21 @@ export default function ReportCardPage() {
     enabled: !!yearId,
   })
 
-  const { data: studentsRes } = useQuery({
-    queryKey: ['students', classId, search],
-    queryFn: () => studentsApi.getStudents({ class_id: classId, search: search || undefined, is_active: true, page_size: 9999 }),
-    enabled: !!classId,
+  const { data: enrollmentsRes } = useQuery({
+    queryKey: ['reportCardEnrollmentsByClass', classId, yearId],
+    queryFn: () => sessionsApi.getEnrollmentsByClass({ class_id: classId, academic_year_id: yearId }),
+    enabled: !!classId && !!yearId,
   })
 
   const { data: reportRes, isLoading: reportLoading } = useQuery({
-    queryKey: ['reportCard', studentId, yearId, termId],
+    queryKey: ['reportCard', studentId, enrollmentId, yearId, termId],
     queryFn: () => examinationsApi.getReportCard({
       student_id: studentId,
-      academic_year_id: yearId || undefined,
+      enrollment_id: enrollmentId || undefined,
+      academic_year_id: yearId,
       term_id: termId || undefined,
     }),
-    enabled: !!studentId,
+    enabled: !!studentId && !!yearId,
   })
 
   const { data: schoolRes } = useQuery({
@@ -56,9 +59,32 @@ export default function ReportCardPage() {
 
   const years = yearsRes?.data?.results || yearsRes?.data || []
   const terms = termsRes?.data?.results || termsRes?.data || []
-  const students = studentsRes?.data?.results || studentsRes?.data || []
+  const enrollments = enrollmentsRes?.data || []
+  const students = enrollments
+    .filter(e => !search || (e.student_name || '').toLowerCase().includes(search.toLowerCase()))
+    .sort((a, b) => String(a.roll_number || '').localeCompare(String(b.roll_number || ''), undefined, { numeric: true, sensitivity: 'base' }))
   const report = reportRes?.data || null
   const schoolData = schoolRes?.data
+
+  const handleModeChange = (newMode) => {
+    setMode(newMode)
+    setClassId('')
+    setStudentId('')
+    setEnrollmentId('')
+    setTermId('')
+    setSearch('')
+    if (newMode === 'historical') {
+      setYearId('')
+    } else if (activeAcademicYear?.id) {
+      setYearId(String(activeAcademicYear.id))
+    }
+  }
+
+  const handleStudentChange = (value) => {
+    setEnrollmentId(value)
+    const selectedEnrollment = enrollments.find(e => String(e.id) === String(value))
+    setStudentId(selectedEnrollment ? String(selectedEnrollment.student) : '')
+  }
 
   const handleDownloadPDF = async () => {
     if (!report) return
@@ -81,12 +107,24 @@ export default function ReportCardPage() {
 
       {/* Selection */}
       <div className="card mb-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Mode</label>
+            <select value={mode} onChange={e => handleModeChange(e.target.value)} className="input w-full text-sm">
+              <option value="current">Current Session</option>
+              <option value="historical">Historical Session</option>
+            </select>
+          </div>
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">Class</label>
             <ClassSelector
               value={classId}
-              onChange={e => { setClassId(e.target.value); setStudentId(''); setSearch('') }}
+              onChange={e => {
+                setClassId(e.target.value)
+                setStudentId('')
+                setEnrollmentId('')
+                setSearch('')
+              }}
               className="input w-full text-sm"
               placeholder="Select class..."
             />
@@ -99,20 +137,20 @@ export default function ReportCardPage() {
               onChange={e => setSearch(e.target.value)}
               className="input w-full text-sm"
               placeholder="Search by name..."
-              disabled={!classId}
+              disabled={!classId || !yearId}
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Student</label>
-            <select value={studentId} onChange={e => setStudentId(e.target.value)} className="input w-full text-sm" disabled={!classId}>
-              <option value="">{classId ? 'Select student...' : 'Select class first'}</option>
-              {students.map(s => <option key={s.id} value={s.id}>{s.name} ({s.roll_number})</option>)}
+            <label className="block text-xs font-medium text-gray-500 mb-1">Student (Enrollment)</label>
+            <select value={enrollmentId} onChange={e => handleStudentChange(e.target.value)} className="input w-full text-sm" disabled={!classId || !yearId}>
+              <option value="">{classId && yearId ? 'Select student...' : 'Select class and year first'}</option>
+              {students.map(e => <option key={e.id} value={e.id}>{e.student_name} ({e.roll_number})</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Academic Year</label>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Academic Year *</label>
             <select value={yearId} onChange={e => { setYearId(e.target.value); setTermId('') }} className="input w-full text-sm">
-              <option value="">All Years</option>
+              <option value="">Select year...</option>
               {years.map(y => <option key={y.id} value={y.id}>{y.name}</option>)}
             </select>
           </div>
@@ -180,6 +218,12 @@ export default function ReportCardPage() {
               <p className="text-xs text-gray-500">Class</p>
               <p className="text-sm font-medium text-gray-900">{report.class_name}</p>
             </div>
+            {report.enrollment_info?.current_class && report.enrollment_info.current_class !== report.class_name && (
+              <div>
+                <p className="text-xs text-gray-500">Current Class</p>
+                <p className="text-sm font-medium text-gray-900">{report.enrollment_info.current_class}</p>
+              </div>
+            )}
           </div>
 
           {/* Marks Table */}

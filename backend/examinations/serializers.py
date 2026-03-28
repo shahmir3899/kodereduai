@@ -154,7 +154,7 @@ class StudentMarkSerializer(serializers.ModelSerializer):
     class Meta:
         model = StudentMark
         fields = [
-            'id', 'school', 'exam_subject', 'student',
+            'id', 'school', 'exam_subject', 'student', 'enrollment',
             'student_name', 'student_roll_number',
             'subject_name', 'total_marks', 'passing_marks',
             'marks_obtained', 'is_absent', 'remarks',
@@ -192,6 +192,31 @@ class StudentMarkCreateSerializer(serializers.ModelSerializer):
                     'A mark already exists for this student and exam subject.'
                 )
         return data
+
+    def _resolve_enrollment(self, exam_subject, student):
+        from academic_sessions.models import StudentEnrollment
+
+        return StudentEnrollment.objects.filter(
+            school_id=exam_subject.school_id,
+            student=student,
+            academic_year_id=exam_subject.exam.academic_year_id,
+            class_obj_id=exam_subject.exam.class_obj_id,
+        ).order_by('-is_active', '-created_at').first()
+
+    def create(self, validated_data):
+        exam_subject = validated_data['exam_subject']
+        student = validated_data['student']
+        enrollment = self._resolve_enrollment(exam_subject, student)
+        if enrollment:
+            validated_data['enrollment'] = enrollment
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        exam_subject = validated_data.get('exam_subject', instance.exam_subject)
+        student = validated_data.get('student', instance.student)
+        enrollment = self._resolve_enrollment(exam_subject, student)
+        instance.enrollment = enrollment
+        return super().update(instance, validated_data)
 
 
 class StudentMarkBulkEntrySerializer(serializers.Serializer):

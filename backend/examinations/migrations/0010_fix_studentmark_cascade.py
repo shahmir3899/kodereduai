@@ -3,6 +3,21 @@
 from django.db import migrations
 
 
+def fix_studentmark_cascade(apps, schema_editor):
+    if schema_editor.connection.vendor != 'postgresql':
+        return
+
+    schema_editor.execute(
+        'ALTER TABLE examinations_studentmark '
+        'DROP CONSTRAINT examinations_student_exam_subject_id_9b755102_fk_examinati;'
+    )
+    schema_editor.execute(
+        'ALTER TABLE examinations_studentmark '
+        'ADD CONSTRAINT examinations_student_exam_subject_id_9b755102_fk_examinati '
+        'FOREIGN KEY (exam_subject_id) REFERENCES examinations_examsubject(id) ON DELETE CASCADE;'
+    )
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -10,9 +25,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunSQL(
-            # Drop and recreate StudentMark exam_subject constraint with CASCADE
-            'ALTER TABLE examinations_studentmark DROP CONSTRAINT examinations_student_exam_subject_id_9b755102_fk_examinati;',
-            'ALTER TABLE examinations_studentmark ADD CONSTRAINT examinations_student_exam_subject_id_9b755102_fk_examinati FOREIGN KEY (exam_subject_id) REFERENCES examinations_examsubject(id) ON DELETE CASCADE;',
-        ),
+        migrations.RunPython(fix_studentmark_cascade, migrations.RunPython.noop),
     ]

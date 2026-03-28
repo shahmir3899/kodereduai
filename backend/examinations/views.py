@@ -769,6 +769,8 @@ class StudentMarkViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
         updated = 0
         errors = []
 
+        from academic_sessions.models import StudentEnrollment
+
         for entry in marks_data:
             student_id = entry.get('student_id')
             marks_obtained = entry.get('marks_obtained')
@@ -777,6 +779,13 @@ class StudentMarkViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
 
             if marks_obtained is not None:
                 marks_obtained = Decimal(str(marks_obtained))
+
+            enrollment = StudentEnrollment.objects.filter(
+                school_id=school_id,
+                student_id=student_id,
+                academic_year_id=exam_subject.exam.academic_year_id,
+                class_obj_id=exam_subject.exam.class_obj_id,
+            ).order_by('-is_active', '-created_at').first()
 
             try:
                 mark, was_created = StudentMark.objects.update_or_create(
@@ -787,6 +796,7 @@ class StudentMarkViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
                         'marks_obtained': None if is_absent else marks_obtained,
                         'is_absent': is_absent,
                         'remarks': remarks,
+                        'enrollment': enrollment,
                     },
                 )
                 if was_created:
@@ -1003,13 +1013,20 @@ class ReportCardView(ModuleAccessMixin, APIView):
         student_id = request.query_params.get('student_id')
         academic_year_id = request.query_params.get('academic_year_id')
         term_id = request.query_params.get('term_id')
+        enrollment_id = request.query_params.get('enrollment_id')
 
         if not student_id:
             return Response({'detail': 'student_id required.'}, status=400)
+        if not academic_year_id and not enrollment_id:
+            return Response(
+                {'detail': 'academic_year_id or enrollment_id is required.'},
+                status=400,
+            )
 
         school_id = _resolve_school_id(request)
 
         from students.models import Student
+        from academic_sessions.models import StudentEnrollment
         try:
             student = Student.objects.select_related('class_obj', 'school').get(
                 pk=student_id, school_id=school_id,
@@ -1017,15 +1034,30 @@ class ReportCardView(ModuleAccessMixin, APIView):
         except Student.DoesNotExist:
             return Response({'detail': 'Student not found.'}, status=404)
 
-        # Get exams for this student's class
+        enrollment_qs = StudentEnrollment.objects.select_related('class_obj', 'academic_year').filter(
+            school_id=school_id,
+            student_id=student.id,
+        )
+        if enrollment_id:
+            enrollment_qs = enrollment_qs.filter(pk=enrollment_id)
+        else:
+            enrollment_qs = enrollment_qs.filter(academic_year_id=academic_year_id)
+
+        enrollment = enrollment_qs.order_by('-created_at').first()
+        if not enrollment:
+            return Response(
+                {'detail': 'No enrollment found for the selected student/session.'},
+                status=404,
+            )
+
+        # Get exams for the class captured in the selected enrollment/session.
         exam_filter = {
             'school_id': school_id,
-            'class_obj': student.class_obj,
+            'class_obj': enrollment.class_obj,
             'is_active': True,
             'status': Exam.Status.PUBLISHED,
+            'academic_year_id': enrollment.academic_year_id,
         }
-        if academic_year_id:
-            exam_filter['academic_year_id'] = academic_year_id
         if term_id:
             exam_filter['term_id'] = term_id
 
@@ -1175,16 +1207,23 @@ class ReportCardView(ModuleAccessMixin, APIView):
 
         return Response({
             'student_name': student.name,
-            'roll_number': student.roll_number,
-            'class_name': student.class_obj.name,
+            'roll_number': enrollment.roll_number or student.roll_number,
+            'class_name': enrollment.class_obj.name,
             'school_name': student.school.name,
-            'academic_year_name': exams[0].academic_year.name if exams else None,
+            'academic_year_name': enrollment.academic_year.name,
             'term_name': exams[0].term.name if exams and exams[0].term else None,
+            'enrollment_info': {
+                'enrollment_id': enrollment.id,
+                'class_at_report_session': enrollment.class_obj.name,
+                'current_class': student.class_obj.name if student.class_obj else None,
+                'academic_year_id': enrollment.academic_year_id,
+                'academic_year_name': enrollment.academic_year.name,
+            },
             'student': {
                 'id': student.id,
                 'name': student.name,
-                'roll_number': student.roll_number,
-                'class_name': student.class_obj.name,
+                'roll_number': enrollment.roll_number or student.roll_number,
+                'class_name': enrollment.class_obj.name,
                 'school_name': student.school.name,
             },
             'subjects': subject_summaries,

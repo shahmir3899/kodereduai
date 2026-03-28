@@ -5,13 +5,6 @@ from django.utils import timezone
 
 
 class Class(models.Model):
-
-        @staticmethod
-        def get_highest_grade_level(school_id):
-            """Return the highest grade_level for a given school."""
-            from django.db.models import Max
-            result = Class.objects.filter(school_id=school_id, is_active=True).aggregate(max_level=Max('grade_level'))
-            return result['max_level']
     """
     Represents a class/section within a school.
     Examples: "Class 5-A", "PlayGroup", "Class 10"
@@ -24,7 +17,7 @@ class Class(models.Model):
     )
     name = models.CharField(
         max_length=50,
-        help_text="Class name, e.g., 'Class 5-A', 'PlayGroup'"
+        help_text="Class name, e.g., 'Class 1', 'PlayGroup'"
     )
     section = models.CharField(
         max_length=10,
@@ -62,6 +55,17 @@ class Class(models.Model):
     def __str__(self):
         return f"{self.name} - {self.school.name}"
 
+    @staticmethod
+    def get_highest_grade_level(school_id):
+        """Return the highest grade_level for a given school."""
+        from django.db.models import Max
+
+        result = Class.objects.filter(
+            school_id=school_id,
+            is_active=True,
+        ).aggregate(max_level=Max('grade_level'))
+        return result['max_level']
+
     @property
     def student_count(self) -> int:
         """Return the number of active students in this class."""
@@ -80,14 +84,15 @@ class Student(models.Model):
         ('O', 'Other'),
     ]
 
-    STATUS_CHOICES = [
-        ('ACTIVE', 'Active'),
-        ('TRANSFERRED', 'Transferred'),
-        ('WITHDRAWN', 'Withdrawn'),
-        ('GRADUATED', 'Graduated'),
-        ('REPEAT', 'Repeat'),  # New: For students repeating a class
-        ('SUSPENDED', 'Suspended'),
-    ]
+    class Status(models.TextChoices):
+        ACTIVE = 'ACTIVE', 'Active'
+        TRANSFERRED = 'TRANSFERRED', 'Transferred'
+        WITHDRAWN = 'WITHDRAWN', 'Withdrawn'
+        GRADUATED = 'GRADUATED', 'Graduated'
+        REPEAT = 'REPEAT', 'Repeat'
+        SUSPENDED = 'SUSPENDED', 'Suspended'
+
+    STATUS_CHOICES = Status.choices
 
     school = models.ForeignKey(
         'schools.School',
