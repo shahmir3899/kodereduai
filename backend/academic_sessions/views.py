@@ -1,4 +1,5 @@
 from django.db.models import Count, Q
+from django.db import transaction
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -17,6 +18,7 @@ from .serializers import (
     StudentEnrollmentSerializer,
     StudentEnrollmentCreateSerializer,
     BulkPromoteSerializer,
+    BulkReversePromotionSerializer,
     PromotionTargetApplySerializer,
     PromotionTargetPreviewSerializer,
 )
@@ -500,6 +502,85 @@ class StudentEnrollmentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
                 'task_id': bg_task.celery_task_id,
                 'message': 'Bulk promotion started.',
             }, status=202)
+
+    @action(detail=False, methods=['post'])
+    def bulk_reverse_promote(self, request):
+        """Reverse mistaken promotions for selected students.
+
+        Behavior:
+        - Deletes the target-year enrollment for each selected student.
+        - Restores source-year enrollment status back to ACTIVE when found.
+        - Restores student class/roll snapshot from source-year enrollment.
+        """
+        serializer = BulkReversePromotionSerializer(
+            data=request.data,
+            context={'school_id': _resolve_school_id(request)},
+        )
+        serializer.is_valid(raise_exception=True)
+
+        school_id = _resolve_school_id(request)
+        source_year = serializer.validated_data['source_academic_year']
+        target_year = serializer.validated_data['target_academic_year']
+        student_ids = serializer.validated_data['student_ids']
+
+        from students.models import Student
+
+        reverted = 0
+        skipped = []
+        errors = []
+
+        for student_id in student_ids:
+            try:
+                with transaction.atomic():
+                    target_enrollment = StudentEnrollment.objects.filter(
+                        school_id=school_id,
+                        student_id=student_id,
+                        academic_year_id=target_year.id,
+                    ).first()
+
+                    if not target_enrollment:
+                        skipped.append({
+                            'student_id': student_id,
+                            'reason': 'No target-year enrollment found to reverse.',
+                        })
+                        continue
+
+                    source_enrollment = StudentEnrollment.objects.filter(
+                        school_id=school_id,
+                        student_id=student_id,
+                        academic_year_id=source_year.id,
+                    ).first()
+
+                    target_enrollment.delete()
+
+                    if source_enrollment:
+                        source_enrollment.status = StudentEnrollment.Status.ACTIVE
+                        source_enrollment.save(update_fields=['status'])
+
+                        Student.objects.filter(
+                            pk=student_id,
+                            school_id=school_id,
+                        ).update(
+                            class_obj_id=source_enrollment.class_obj_id,
+                            roll_number=source_enrollment.roll_number,
+                            status=Student.Status.ACTIVE,
+                        )
+                    else:
+                        Student.objects.filter(
+                            pk=student_id,
+                            school_id=school_id,
+                        ).update(status=Student.Status.ACTIVE)
+
+                    reverted += 1
+            except Exception as e:
+                errors.append({'student_id': student_id, 'error': str(e)})
+
+        return Response({
+            'reverted': reverted,
+            'skipped': skipped,
+            'errors': errors,
+            'message': f'{reverted} students reversed successfully. {len(skipped)} skipped, {len(errors)} failed.',
+        })
 
 
 class PromotionAdvisorView(APIView):

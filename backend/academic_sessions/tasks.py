@@ -3,6 +3,7 @@ Background tasks for academic session operations.
 """
 
 import logging
+from django.db import transaction
 from celery import shared_task
 
 logger = logging.getLogger(__name__)
@@ -23,6 +24,7 @@ def bulk_promote_task(self, school_id, source_year_id, target_year_id, promotion
         update_task_progress(task_id, current=0, total=total)
 
         created = 0
+        skipped = []
         errors = []
 
         for i, promo in enumerate(promotions):
@@ -31,45 +33,71 @@ def bulk_promote_task(self, school_id, source_year_id, target_year_id, promotion
             new_roll_number = promo.get('new_roll_number', '')
             action = promo.get('action', 'PROMOTE')  # PROMOTE, GRADUATE, REPEAT
 
-            old_enrollment = StudentEnrollment.objects.filter(
-                school_id=school_id,
-                student_id=student_id,
-                academic_year_id=source_year_id,
-                is_active=True,
-            ).first()
-
-            if old_enrollment:
-                if action == 'GRADUATE':
-                    old_enrollment.status = StudentEnrollment.Status.GRADUATED
-                elif action == 'REPEAT':
-                    old_enrollment.status = StudentEnrollment.Status.REPEAT
-                else:
-                    old_enrollment.status = StudentEnrollment.Status.PROMOTED
-                old_enrollment.save(update_fields=['status'])
-                if not new_roll_number:
-                    new_roll_number = old_enrollment.roll_number
-
             try:
-                if action == 'GRADUATE':
-                    # Do not create new enrollment, just update student status
-                    Student.objects.filter(pk=student_id).update(
-                        status=Student.Status.GRADUATED
-                    )
-                else:
-                    # For PROMOTE or REPEAT, create new enrollment
-                    StudentEnrollment.objects.create(
+                with transaction.atomic():
+                    old_enrollment = StudentEnrollment.objects.filter(
                         school_id=school_id,
                         student_id=student_id,
-                        academic_year_id=target_year_id,
-                        class_obj_id=target_class_id,
-                        roll_number=new_roll_number,
-                        status=StudentEnrollment.Status.ACTIVE,
-                    )
-                    Student.objects.filter(pk=student_id).update(
-                        class_obj_id=target_class_id,
-                        roll_number=new_roll_number,
-                        status=Student.Status.REPEAT if action == 'REPEAT' else Student.Status.ACTIVE
-                    )
+                        academic_year_id=source_year_id,
+                        is_active=True,
+                    ).first()
+
+                    if not old_enrollment:
+                        skipped.append({
+                            'student_id': student_id,
+                            'reason': 'No active source-year enrollment found.',
+                        })
+                        update_task_progress(task_id, current=i + 1)
+                        continue
+
+                    if not new_roll_number:
+                        new_roll_number = old_enrollment.roll_number
+
+                    if action != 'GRADUATE':
+                        existing_target = StudentEnrollment.objects.filter(
+                            school_id=school_id,
+                            student_id=student_id,
+                            academic_year_id=target_year_id,
+                        ).first()
+                        if existing_target:
+                            skipped.append({
+                                'student_id': student_id,
+                                'reason': 'Student already has enrollment in target academic year.',
+                                'existing_enrollment_id': existing_target.id,
+                            })
+                            update_task_progress(task_id, current=i + 1)
+                            continue
+
+                    if action == 'GRADUATE':
+                        # Do not create new enrollment, just update statuses
+                        old_enrollment.status = StudentEnrollment.Status.GRADUATED
+                        old_enrollment.save(update_fields=['status'])
+                        Student.objects.filter(pk=student_id).update(
+                            status=Student.Status.GRADUATED,
+                        )
+                    else:
+                        # For PROMOTE or REPEAT, create new enrollment then update source status and student snapshot.
+                        StudentEnrollment.objects.create(
+                            school_id=school_id,
+                            student_id=student_id,
+                            academic_year_id=target_year_id,
+                            class_obj_id=target_class_id,
+                            roll_number=new_roll_number,
+                            status=StudentEnrollment.Status.ACTIVE,
+                        )
+
+                        if action == 'REPEAT':
+                            old_enrollment.status = StudentEnrollment.Status.REPEAT
+                        else:
+                            old_enrollment.status = StudentEnrollment.Status.PROMOTED
+                        old_enrollment.save(update_fields=['status'])
+
+                        Student.objects.filter(pk=student_id).update(
+                            class_obj_id=target_class_id,
+                            roll_number=new_roll_number,
+                            status=Student.Status.REPEAT if action == 'REPEAT' else Student.Status.ACTIVE,
+                        )
+
                 created += 1
             except Exception as e:
                 errors.append({'student_id': student_id, 'error': str(e)})
@@ -78,8 +106,9 @@ def bulk_promote_task(self, school_id, source_year_id, target_year_id, promotion
 
         result_data = {
             'promoted': created,
+            'skipped': skipped,
             'errors': errors,
-            'message': f'{created} students promoted successfully.',
+            'message': f'{created} students processed successfully. {len(skipped)} skipped, {len(errors)} failed.',
         }
         mark_task_success(task_id, result_data=result_data)
         return result_data

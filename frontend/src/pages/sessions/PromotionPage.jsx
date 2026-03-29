@@ -237,6 +237,57 @@ export default function PromotionPage() {
     },
   })
 
+  const reverseMut = useBackgroundTask({
+    mutationFn: (data) => sessionsApi.bulkReversePromote(data),
+    taskType: 'BULK_PROMOTION',
+    title: 'Reversing mistaken promotion',
+    onSuccess: (resultData) => {
+      const reverted = resultData?.reverted || 0
+      const failed = resultData?.errors?.length || 0
+      const skipped = resultData?.skipped?.length || 0
+      showSuccess(`Reverse complete: ${reverted} reverted, ${skipped} skipped, ${failed} failed.`)
+      queryClient.invalidateQueries({ queryKey: ['enrollmentsByClass'] })
+    },
+  })
+
+  const getStudentIdsFromErrors = (errors) => {
+    if (!Array.isArray(errors)) return []
+    const ids = errors
+      .map(err => Number(err?.student_id))
+      .filter(id => Number.isInteger(id) && id > 0)
+    return [...new Set(ids)]
+  }
+
+  const handleReverseStudents = (studentIds) => {
+    if (!sourceYearId || !targetYearId) {
+      showError('Source and target academic year are required for reverse action.')
+      return
+    }
+    if (!Array.isArray(studentIds) || studentIds.length === 0) {
+      showWarning('No eligible students found for reverse action.')
+      return
+    }
+
+    const shouldProceed = window.confirm(
+      `Reverse promotion for ${studentIds.length} student(s)?\n\nThis will remove their target-year enrollment and restore source-year active status.`
+    )
+    if (!shouldProceed) return
+
+    reverseMut.trigger({
+      source_academic_year: parseInt(sourceYearId),
+      target_academic_year: parseInt(targetYearId),
+      student_ids: studentIds,
+    })
+  }
+
+  const getIncludedStudentIds = () => {
+    const ids = promotions
+      .filter(p => p.include)
+      .map(p => Number(p.student_id))
+      .filter(id => Number.isInteger(id) && id > 0)
+    return [...new Set(ids)]
+  }
+
   // Initialize promotions when enrollments load
   const initializePromotions = async () => {
     if (enrollments.length > 0) {
@@ -267,8 +318,13 @@ export default function PromotionPage() {
             return
           }
         } catch (error) {
-          showError(error?.response?.data?.detail || 'Failed to preview target class setup for promotion.')
-          return
+          const statusCode = error?.response?.status
+          if (statusCode === 404 || statusCode === 405) {
+            showWarning('Target setup service is not available on this server yet. Continue with manual target class selection in review step.')
+          } else {
+            showError(error?.response?.data?.detail || 'Failed to preview target class setup for promotion.')
+            return
+          }
         } finally {
           setIsTargetSetupLoading(false)
         }
@@ -947,11 +1003,18 @@ export default function PromotionPage() {
 
               <div className="flex justify-between">
                 <button onClick={() => setStep(2)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Back</button>
-                <button
-                  onClick={handlePromote}
-                  disabled={promoteMut.isSubmitting}
-                  className="btn-primary px-6 py-2 text-sm disabled:opacity-50"
-                >{promoteMut.isSubmitting ? 'Starting...' : 'Promote Students'}</button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleReverseStudents(getIncludedStudentIds())}
+                    disabled={reverseMut.isSubmitting || promoteMut.isSubmitting || getIncludedStudentIds().length === 0}
+                    className="px-4 py-2 text-sm rounded-lg border border-amber-300 text-amber-800 bg-amber-50 hover:bg-amber-100 disabled:opacity-50"
+                  >{reverseMut.isSubmitting ? 'Reversing...' : 'Reverse Selected'}</button>
+                  <button
+                    onClick={handlePromote}
+                    disabled={promoteMut.isSubmitting || reverseMut.isSubmitting}
+                    className="btn-primary px-6 py-2 text-sm disabled:opacity-50"
+                  >{promoteMut.isSubmitting ? 'Starting...' : 'Promote Students'}</button>
+                </div>
               </div>
             </>
           )}
@@ -978,6 +1041,17 @@ export default function PromotionPage() {
               </div>
               <h3 className="text-lg font-semibold text-green-700 mb-2">Promotion Complete</h3>
               <p className="text-sm text-gray-600 mb-4">{result.promoted_count || result.promoted || 0} student(s) promoted successfully.</p>
+              {Array.isArray(result.skipped) && result.skipped.length > 0 && (
+                <div className="text-left bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3">
+                  <p className="text-sm font-medium text-blue-800 mb-1">Some students were skipped:</p>
+                  <ul className="text-xs text-blue-700 space-y-1">
+                    {result.skipped.slice(0, 8).map((item, idx) => (
+                      <li key={idx}>Student {item.student_id}: {item.reason}</li>
+                    ))}
+                    {result.skipped.length > 8 && <li>...and {result.skipped.length - 8} more</li>}
+                  </ul>
+                </div>
+              )}
               {Array.isArray(result.errors) && result.errors.length > 0 && (
                 <div className="text-left bg-amber-50 border border-amber-200 rounded-lg p-3">
                   <p className="text-sm font-medium text-amber-800 mb-1">Some students were not processed:</p>
@@ -987,6 +1061,13 @@ export default function PromotionPage() {
                     ))}
                     {result.errors.length > 8 && <li>...and {result.errors.length - 8} more</li>}
                   </ul>
+                  <div className="mt-3 flex justify-end">
+                    <button
+                      onClick={() => handleReverseStudents(getStudentIdsFromErrors(result.errors))}
+                      disabled={reverseMut.isSubmitting}
+                      className="px-3 py-1.5 text-xs rounded-lg border border-amber-300 text-amber-800 bg-amber-100 hover:bg-amber-200 disabled:opacity-50"
+                    >{reverseMut.isSubmitting ? 'Reversing...' : 'Reverse These Students'}</button>
+                  </div>
                 </div>
               )}
             </div>

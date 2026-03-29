@@ -156,6 +156,38 @@ class BulkPromoteSerializer(serializers.Serializer):
     )
 
 
+class BulkReversePromotionSerializer(serializers.Serializer):
+    source_academic_year = serializers.PrimaryKeyRelatedField(
+        queryset=AcademicYear.objects.all(),
+    )
+    target_academic_year = serializers.PrimaryKeyRelatedField(
+        queryset=AcademicYear.objects.all(),
+    )
+    student_ids = serializers.ListField(
+        child=serializers.IntegerField(min_value=1),
+        allow_empty=False,
+        help_text="List of student IDs to reverse from target year back to source year.",
+    )
+
+    def validate(self, attrs):
+        school_id = self.context.get('school_id')
+        source_year = attrs['source_academic_year']
+        target_year = attrs['target_academic_year']
+
+        if source_year.id == target_year.id:
+            raise serializers.ValidationError('Source and target academic year must be different.')
+
+        if school_id:
+            school_id = int(school_id)
+            if source_year.school_id != school_id:
+                raise serializers.ValidationError({'source_academic_year': 'Source academic year does not belong to this school.'})
+            if target_year.school_id != school_id:
+                raise serializers.ValidationError({'target_academic_year': 'Target academic year does not belong to this school.'})
+
+        attrs['student_ids'] = list(dict.fromkeys(attrs['student_ids']))
+        return attrs
+
+
 class PromotionTargetPreviewSerializer(serializers.Serializer):
     source_academic_year = serializers.PrimaryKeyRelatedField(
         queryset=AcademicYear.objects.all(),
