@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { sessionsApi } from '../../services/api'
 import { useBackgroundTask } from '../../hooks/useBackgroundTask'
 import { useClasses } from '../../hooks/useClasses'
+import { useSessionClasses } from '../../hooks/useSessionClasses'
 import ClassSelector from '../../components/ClassSelector'
 import { useToast } from '../../components/Toast'
 
@@ -68,6 +69,8 @@ export default function PromotionPage() {
   const [showTargetSetupModal, setShowTargetSetupModal] = useState(false)
   const [targetSetupPreview, setTargetSetupPreview] = useState(null)
   const [isTargetSetupLoading, setIsTargetSetupLoading] = useState(false)
+  const [selectedTargetCandidateId, setSelectedTargetCandidateId] = useState('')
+  const [isInitializingSessionClasses, setIsInitializingSessionClasses] = useState(false)
 
   // AI Advisor state
   const [showAdvisor, setShowAdvisor] = useState(false)
@@ -79,7 +82,9 @@ export default function PromotionPage() {
     queryFn: () => sessionsApi.getAcademicYears({ page_size: 9999 }),
   })
 
-  const { classes: classesFromHook } = useClasses()
+  const { classes: masterClasses } = useClasses()
+  const { sessionClasses: sourceSessionClasses } = useSessionClasses(sourceYearId)
+  const { sessionClasses: targetSessionClasses } = useSessionClasses(targetYearId)
 
   const { data: enrollmentsRes, isLoading: enrollmentsLoading } = useQuery({
     queryKey: ['enrollmentsByClass', sourceClassId, sourceYearId],
@@ -100,11 +105,32 @@ export default function PromotionPage() {
   const advisorLoading = advisorTask.isSubmitting || (advisorTask.submittedTaskId && !advisorTask.isComplete && !advisorTask.isFailed)
 
   const years = yearsRes?.data?.results || yearsRes?.data || []
-  const classes = classesFromHook
+  const sourceClassOptions = (sourceSessionClasses?.length > 0
+    ? sourceSessionClasses
+      .filter(sc => !!sc.class_obj)
+      .map(sc => ({
+        id: sc.class_obj,
+        name: sc.display_name || sc.class_obj_name,
+        section: sc.section || '',
+        grade_level: sc.grade_level,
+      }))
+    : masterClasses
+  )
+  const targetClassOptions = (targetSessionClasses?.length > 0
+    ? targetSessionClasses
+      .filter(sc => !!sc.class_obj)
+      .map(sc => ({
+        id: sc.class_obj,
+        name: sc.display_name || sc.class_obj_name,
+        section: sc.section || '',
+        grade_level: sc.grade_level,
+      }))
+    : masterClasses
+  )
   const enrollments = enrollmentsRes?.data?.results || enrollmentsRes?.data || []
   const recommendations = advisorData?.recommendations || []
-  const sourceClass = classes.find(c => String(c.id) === String(sourceClassId))
-  const highestGradeLevel = classes.reduce((highest, classObj) => {
+  const sourceClass = sourceClassOptions.find(c => String(c.id) === String(sourceClassId))
+  const highestGradeLevel = sourceClassOptions.reduce((highest, classObj) => {
     if (typeof classObj.grade_level !== 'number') return highest
     return Math.max(highest, classObj.grade_level)
   }, Number.NEGATIVE_INFINITY)
@@ -146,7 +172,7 @@ export default function PromotionPage() {
       return ''
     }
 
-    const nextGradeClasses = classes.filter(classObj => (
+    const nextGradeClasses = targetClassOptions.filter(classObj => (
       typeof classObj.grade_level === 'number' && classObj.grade_level === sourceClass.grade_level + 1
     ))
 
@@ -217,6 +243,48 @@ export default function PromotionPage() {
       showError(error?.response?.data?.detail || 'Failed to apply target class setup.')
     } finally {
       setIsTargetSetupLoading(false)
+    }
+  }
+
+  const handleUseSelectedTargetCandidate = () => {
+    const candidates = targetSetupPreview?.target_plan?.candidates || []
+    const selectedCandidate = candidates.find(c => String(c.id) === String(selectedTargetCandidateId))
+
+    if (!selectedCandidate) {
+      showWarning('Please select a target class to continue.')
+      return
+    }
+
+    if (!selectedCandidate.is_active) {
+      showWarning('Selected target class is inactive. Please activate it first.')
+      return
+    }
+
+    setShowTargetSetupModal(false)
+    setTargetSetupPreview(null)
+    setSelectedTargetCandidateId('')
+    showSuccess(`Using target class: ${selectedCandidate.label}`)
+    buildInitialPromotions(String(selectedCandidate.id))
+  }
+
+  const handleInitializeTargetSessionClasses = async () => {
+    if (!targetYearId) {
+      showWarning('Please select a target year first.')
+      return
+    }
+
+    setIsInitializingSessionClasses(true)
+    try {
+      const res = await sessionsApi.initializeSessionClasses({
+        academic_year: parseInt(targetYearId),
+        source_academic_year: sourceYearId ? parseInt(sourceYearId) : null,
+      })
+      queryClient.invalidateQueries({ queryKey: ['session-classes'] })
+      showSuccess(res?.data?.message || 'Session classes initialized for target year.')
+    } catch (error) {
+      showError(error?.response?.data?.detail || 'Failed to initialize target session classes.')
+    } finally {
+      setIsInitializingSessionClasses(false)
     }
   }
 
@@ -310,6 +378,12 @@ export default function PromotionPage() {
           if (statusValue === 'exists_active' && existingClassId) {
             defaultTargetClassId = String(existingClassId)
           } else if (statusValue === 'exists_inactive' || statusValue === 'missing' || statusValue === 'ambiguous') {
+            if (statusValue === 'ambiguous') {
+              const firstActiveCandidate = previewRes?.data?.target_plan?.candidates?.find(c => c.is_active)
+              setSelectedTargetCandidateId(firstActiveCandidate ? String(firstActiveCandidate.id) : '')
+            } else {
+              setSelectedTargetCandidateId('')
+            }
             setTargetSetupPreview(previewRes.data)
             setShowTargetSetupModal(true)
             return
@@ -508,7 +582,21 @@ export default function PromotionPage() {
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Class *</label>
-              <ClassSelector value={sourceClassId} onChange={e => setSourceClassId(e.target.value)} className="input w-full" classes={classes} />
+              <ClassSelector value={sourceClassId} onChange={e => setSourceClassId(e.target.value)} className="input w-full" classes={sourceClassOptions} />
+              <p className="text-xs text-gray-500 mt-1">
+                Source class list: {sourceSessionClasses?.length > 0 ? 'Session classes' : 'Master classes'}
+              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleInitializeTargetSessionClasses}
+                  disabled={!targetYearId || isInitializingSessionClasses}
+                  className="px-3 py-1.5 text-xs rounded-lg border border-blue-300 text-blue-700 bg-blue-50 hover:bg-blue-100 disabled:opacity-50"
+                >{isInitializingSessionClasses ? 'Initializing...' : 'Initialize Target Session Classes'}</button>
+                <span className="text-xs text-gray-500">
+                  Target list: {targetSessionClasses?.length || 0} session classes
+                </span>
+              </div>
             </div>
             <div className="flex justify-between pt-2">
               <button onClick={() => setStep(1)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Back</button>
@@ -583,12 +671,20 @@ export default function PromotionPage() {
                   <p className="text-xs font-semibold text-gray-600 uppercase mb-1.5">Possible target classes</p>
                   <div className="max-h-36 overflow-auto rounded border border-gray-200 bg-white">
                     {targetSetupPreview.target_plan.candidates.map(candidate => (
-                      <div key={candidate.id} className="px-2.5 py-2 text-sm border-b border-gray-100 last:border-b-0 flex items-center justify-between gap-2">
-                        <span className="text-gray-800">{candidate.label}</span>
+                      <button
+                        key={candidate.id}
+                        type="button"
+                        onClick={() => setSelectedTargetCandidateId(String(candidate.id))}
+                        className={`w-full px-2.5 py-2 text-sm border-b border-gray-100 last:border-b-0 flex items-center justify-between gap-2 text-left hover:bg-blue-50 ${String(candidate.id) === String(selectedTargetCandidateId) ? 'bg-blue-50 ring-1 ring-blue-200' : ''}`}
+                      >
+                        <span className="text-gray-800 flex items-center gap-2">
+                          <span className={`inline-block w-2 h-2 rounded-full ${String(candidate.id) === String(selectedTargetCandidateId) ? 'bg-blue-600' : 'bg-gray-300'}`} />
+                          {candidate.label}
+                        </span>
                         <span className={`text-xs px-2 py-0.5 rounded-full ${candidate.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-700'}`}>
                           {candidate.is_active ? 'Active' : 'Inactive'}
                         </span>
-                      </div>
+                      </button>
                     ))}
                   </div>
                 </div>
@@ -600,19 +696,28 @@ export default function PromotionPage() {
                 onClick={() => {
                   setShowTargetSetupModal(false)
                   setTargetSetupPreview(null)
+                  setSelectedTargetCandidateId('')
                 }}
                 className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
                 disabled={isTargetSetupLoading}
               >Cancel</button>
-              <button
-                onClick={handleApplyTargetSetup}
-                className="btn-primary px-5 py-2 text-sm disabled:opacity-50"
-                disabled={isTargetSetupLoading || isAmbiguous}
-              >{isTargetSetupLoading ? 'Applying...' : ui.actionLabel}</button>
+              {isAmbiguous ? (
+                <button
+                  onClick={handleUseSelectedTargetCandidate}
+                  className="btn-primary px-5 py-2 text-sm disabled:opacity-50"
+                  disabled={isTargetSetupLoading || !selectedTargetCandidateId}
+                >Use Selected Target</button>
+              ) : (
+                <button
+                  onClick={handleApplyTargetSetup}
+                  className="btn-primary px-5 py-2 text-sm disabled:opacity-50"
+                  disabled={isTargetSetupLoading}
+                >{isTargetSetupLoading ? 'Applying...' : ui.actionLabel}</button>
+              )}
             </div>
             {isAmbiguous && (
               <p className="text-xs text-red-600 mt-2">
-                Automatic setup is blocked because multiple valid targets exist. Create/select the correct target class first, then continue.
+                Automatic setup is blocked because multiple valid targets exist. Select the correct class above to continue.
               </p>
             )}
           </div>
@@ -813,7 +918,7 @@ export default function PromotionPage() {
                         <span>Target class for promoted students:</span>
                         <select id="advisor-target-class" className="input text-sm py-1 w-40">
                           <option value="">Select class...</option>
-                          {classes.map(c => <option key={c.id} value={c.id}>{c.name}{c.section ? ` - ${c.section}` : ''}</option>)}
+                          {targetClassOptions.map(c => <option key={c.id} value={c.id}>{c.name}{c.section ? ` - ${c.section}` : ''}</option>)}
                         </select>
                       </div>
                       <button
@@ -850,7 +955,7 @@ export default function PromotionPage() {
               <label className="text-xs text-gray-600">Set all target class:</label>
               <select onChange={e => setAllTargetClass(e.target.value)} className="input text-sm py-1">
                 <option value="">--</option>
-                {classes.map(c => <option key={c.id} value={c.id}>{c.name}{c.section ? ` - ${c.section}` : ''}</option>)}
+                {targetClassOptions.map(c => <option key={c.id} value={c.id}>{c.name}{c.section ? ` - ${c.section}` : ''}</option>)}
               </select>
             </div>
           </div>
@@ -908,7 +1013,7 @@ export default function PromotionPage() {
                             disabled={!p.include || p.action === 'GRADUATE'}
                           >
                             <option value="">{p.action === 'GRADUATE' ? 'Not needed' : 'Select...'}</option>
-                            {classes.map(c => <option key={c.id} value={c.id}>{c.name}{c.section ? ` - ${c.section}` : ''}</option>)}
+                            {targetClassOptions.map(c => <option key={c.id} value={c.id}>{c.name}{c.section ? ` - ${c.section}` : ''}</option>)}
                           </select>
                         </td>
                         <td className="px-3 py-2">
@@ -974,7 +1079,7 @@ export default function PromotionPage() {
                           disabled={!p.include || p.action === 'GRADUATE'}
                         >
                           <option value="">{p.action === 'GRADUATE' ? 'Not needed' : 'Select...'}</option>
-                          {classes.map(c => <option key={c.id} value={c.id}>{c.name}{c.section ? ` - ${c.section}` : ''}</option>)}
+                          {targetClassOptions.map(c => <option key={c.id} value={c.id}>{c.name}{c.section ? ` - ${c.section}` : ''}</option>)}
                         </select>
                       </div>
                       <div>

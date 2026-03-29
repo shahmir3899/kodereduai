@@ -135,7 +135,21 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             queryset = queryset.filter(school_id=school_id)
 
         class_id = self.request.query_params.get('class_id')
-        if class_id:
+        session_class_id = self.request.query_params.get('session_class_id')
+        if session_class_id:
+            from academic_sessions.models import SessionClass
+            session_class = SessionClass.objects.filter(
+                id=session_class_id,
+                school_id=active_school_id or school_id,
+            ).first()
+            if not session_class or not session_class.class_obj_id:
+                return queryset.none()
+            queryset = queryset.filter(
+                enrollments__academic_year_id=session_class.academic_year_id,
+                enrollments__class_obj_id=session_class.class_obj_id,
+                enrollments__is_active=True,
+            ).distinct()
+        elif class_id:
             queryset = queryset.filter(class_obj_id=class_id)
 
         is_active = self.request.query_params.get('is_active')
@@ -156,7 +170,7 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             queryset = queryset.filter(
                 enrollments__academic_year_id=academic_year,
                 enrollments__is_active=True,
-            )
+            ).distinct()
             # Annotate with enrollment roll_number for this session
             from academic_sessions.models import StudentEnrollment
             enrollment_roll = StudentEnrollment.objects.filter(

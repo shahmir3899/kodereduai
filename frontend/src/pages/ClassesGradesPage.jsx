@@ -2,10 +2,11 @@ import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../contexts/AuthContext'
 import { useAcademicYear } from '../contexts/AcademicYearContext'
-import { classesApi, schoolsApi } from '../services/api'
+import { classesApi, schoolsApi, sessionsApi } from '../services/api'
 import { useToast } from '../components/Toast'
 import SectionAllocator from './sessions/SectionAllocator'
 import { GRADE_PRESETS, GRADE_LEVEL_LABELS } from '../constants/gradePresets'
+import { useSessionClasses } from '../hooks/useSessionClasses'
 
 const SECTION_LABELS = ['A', 'B', 'C', 'D', 'E', 'F']
 
@@ -31,6 +32,7 @@ export default function ClassesGradesPage() {
   }, [activeSchool?.id, isSuperAdmin])
 
   // View state
+  const [classScope, setClassScope] = useState('master') // 'master' or 'session'
   const [viewMode, setViewMode] = useState('grouped') // 'grouped' or 'grid'
   const [expandedLevels, setExpandedLevels] = useState(new Set())
 
@@ -65,6 +67,10 @@ export default function ClassesGradesPage() {
 
   const classes = classesRes?.data?.results || classesRes?.data || []
   const schools = schoolsData?.data?.results || []
+  const {
+    sessionClasses,
+    isLoading: sessionClassesLoading,
+  } = useSessionClasses(activeAcademicYear?.id, selectedSchoolId)
 
   // ─── Class Mutations ────────────────────────────────────────
 
@@ -104,52 +110,136 @@ export default function ClassesGradesPage() {
     onError: (err) => showError(err.response?.data?.detail || err.message || 'Failed to delete class'),
   })
 
+  const createSessionClassMut = useMutation({
+    mutationFn: (data) => sessionsApi.createSessionClass(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['session-classes'] })
+      closeClassModal()
+      showSuccess('Session class added!')
+    },
+    onError: (err) => {
+      const msg = err.response?.data?.display_name?.[0] || err.response?.data?.detail || err.message || 'Failed to add session class'
+      showError(msg)
+    },
+  })
+
+  const updateSessionClassMut = useMutation({
+    mutationFn: ({ id, data }) => sessionsApi.updateSessionClass(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['session-classes'] })
+      closeClassModal()
+      showSuccess('Session class updated!')
+    },
+    onError: (err) => {
+      const msg = err.response?.data?.display_name?.[0] || err.response?.data?.detail || err.message || 'Failed to update session class'
+      showError(msg)
+    },
+  })
+
+  const deleteSessionClassMut = useMutation({
+    mutationFn: (id) => sessionsApi.deleteSessionClass(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['session-classes'] })
+      setDeleteConfirm(null)
+      showSuccess('Session class deleted!')
+    },
+    onError: (err) => showError(err.response?.data?.detail || err.message || 'Failed to delete session class'),
+  })
+
   // Quick-add sections for a grade level
   const quickAddSectionsMut = useMutation({
     mutationFn: async ({ level, sections }) => {
       const baseName = GRADE_LEVEL_LABELS[level] || `Level ${level}`
       const results = []
+      const targetSessionYear = activeAcademicYear?.id
       for (const sec of sections) {
         try {
-          const res = await classesApi.createClass({
-            school: selectedSchoolId,
-            name: baseName,
-            section: sec,
-            grade_level: level,
-          })
+          let res
+          if (classScope === 'session') {
+            if (!targetSessionYear) throw new Error('No active academic year selected for session classes.')
+            const linked = classes.find(c => (
+              String(c.name || '').toLowerCase() === String(baseName || '').toLowerCase()
+              && String(c.section || '') === String(sec || '')
+            ))
+            res = await sessionsApi.createSessionClass({
+              academic_year: targetSessionYear,
+              class_obj: linked?.id || null,
+              display_name: baseName,
+              section: sec,
+              grade_level: level,
+            })
+          } else {
+            res = await classesApi.createClass({
+              school: selectedSchoolId,
+              name: baseName,
+              section: sec,
+              grade_level: level,
+            })
+          }
           results.push(res.data)
         } catch (err) {
-          if (!err.response?.data?.name?.[0]?.includes('already exists')) throw err
+          const duplicateMsg = err.response?.data?.detail || err.response?.data?.display_name?.[0] || err.response?.data?.name?.[0] || ''
+          if (!String(duplicateMsg).toLowerCase().includes('already exists')) throw err
         }
       }
       return results
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['classes'] })
-      showSuccess('Sections added!')
+      queryClient.invalidateQueries({ queryKey: classScope === 'session' ? ['session-classes'] : ['classes'] })
+      showSuccess(classScope === 'session' ? 'Session sections added!' : 'Sections added!')
     },
-    onError: (err) => showError(err.response?.data?.detail || 'Failed to add sections'),
+    onError: (err) => showError(err.response?.data?.detail || err.message || 'Failed to add sections'),
   })
 
   // Add standard classes (bulk)
   const addStandardMut = useMutation({
     mutationFn: async () => {
-      const existingNames = classes.map(c => c.name.toLowerCase())
-      const toAdd = GRADE_PRESETS.filter(p => !existingNames.includes(p.name.toLowerCase()))
+      const existingNames = (classScope === 'session'
+        ? sessionClasses.map(c => `${(c.display_name || '').toLowerCase()}::${(c.section || '').toLowerCase()}`)
+        : classes.map(c => `${(c.name || '').toLowerCase()}::${(c.section || '').toLowerCase()}`)
+      )
+      const toAdd = GRADE_PRESETS.filter(p => !existingNames.includes(`${p.name.toLowerCase()}::`))
       for (const cls of toAdd) {
-        await classesApi.createClass({
-          school: selectedSchoolId,
-          name: cls.name,
-          grade_level: cls.numeric_level,
-        })
+        if (classScope === 'session') {
+          if (!activeAcademicYear?.id) throw new Error('No active academic year selected for session classes.')
+          const linked = classes.find(c => (
+            String(c.name || '').toLowerCase() === String(cls.name || '').toLowerCase()
+            && Number(c.grade_level) === Number(cls.numeric_level)
+            && !c.section
+          ))
+          await sessionsApi.createSessionClass({
+            academic_year: activeAcademicYear.id,
+            class_obj: linked?.id || null,
+            display_name: cls.name,
+            section: '',
+            grade_level: cls.numeric_level,
+          })
+        } else {
+          await classesApi.createClass({
+            school: selectedSchoolId,
+            name: cls.name,
+            grade_level: cls.numeric_level,
+          })
+        }
       }
       return toAdd.length
     },
     onSuccess: (count) => {
-      queryClient.invalidateQueries({ queryKey: ['classes'] })
-      showSuccess(`Added ${count} standard classes!`)
+      queryClient.invalidateQueries({ queryKey: classScope === 'session' ? ['session-classes'] : ['classes'] })
+      showSuccess(classScope === 'session' ? `Added ${count} standard session classes!` : `Added ${count} standard classes!`)
     },
     onError: (err) => showError(err.response?.data?.detail || err.message || 'Failed to add standard classes'),
+  })
+
+  const initializeSessionClassesMut = useMutation({
+    mutationFn: () => sessionsApi.initializeSessionClasses({
+      academic_year: activeAcademicYear?.id,
+    }),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['session-classes'] })
+      showSuccess(res?.data?.message || 'Session classes initialized for active academic year.')
+    },
+    onError: (err) => showError(err.response?.data?.detail || 'Failed to initialize session classes'),
   })
 
   // ─── Class Modal Helpers ────────────────────────────────────
@@ -201,6 +291,27 @@ export default function ClassesGradesPage() {
   }
 
   const handleClassSubmit = () => {
+    if (classScope === 'session') {
+      if (!activeAcademicYear?.id) {
+        showError('Select an active academic year to manage session classes.')
+        return
+      }
+      const linked = classes.find(c => (
+        String(c.name || '').toLowerCase() === String(classForm.name || '').toLowerCase()
+        && String(c.section || '') === String(classForm.section || '')
+      ))
+      const data = {
+        academic_year: activeAcademicYear.id,
+        class_obj: linked?.id || null,
+        display_name: classForm.name,
+        section: classForm.section || '',
+        grade_level: classForm.grade_level ? parseInt(classForm.grade_level) : 0,
+      }
+      if (editingClass) updateSessionClassMut.mutate({ id: editingClass.id, data })
+      else createSessionClassMut.mutate(data)
+      return
+    }
+
     const data = {
       name: classForm.name,
       section: classForm.section || '',
@@ -211,7 +322,7 @@ export default function ClassesGradesPage() {
   }
 
   const handleDeleteClass = (cls) => {
-    if (cls.student_count > 0) {
+    if (classScope !== 'session' && cls.student_count > 0) {
       showError(`Cannot delete class with ${cls.student_count} students. Remove students first.`)
       return
     }
@@ -225,11 +336,26 @@ export default function ClassesGradesPage() {
 
   // ─── Derived Data ───────────────────────────────────────────
 
-  const isClassSubmitting = createClassMut.isPending || updateClassMut.isPending
+  const isClassSubmitting = (
+    createClassMut.isPending
+    || updateClassMut.isPending
+    || createSessionClassMut.isPending
+    || updateSessionClassMut.isPending
+  )
+
+  const activeClasses = classScope === 'session'
+    ? sessionClasses.map(sc => ({
+      ...sc,
+      name: sc.display_name,
+      linked_master_name: sc.class_obj_name || '',
+      student_count: sc.student_count || 0,
+      enrollment_count: sc.enrollment_count || 0,
+    }))
+    : classes
 
   // Group classes by grade_level for the grouped view
   const classesByLevel = {}
-  for (const cls of classes) {
+  for (const cls of activeClasses) {
     const level = cls.grade_level ?? -1
     if (!classesByLevel[level]) classesByLevel[level] = []
     classesByLevel[level].push(cls)
@@ -254,10 +380,20 @@ export default function ClassesGradesPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Classes</h1>
-          <p className="text-sm text-gray-600">Manage classes and sections</p>
+          <p className="text-sm text-gray-600">Manage classes and sections by master catalog or session</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {classes.length > 0 && (
+          <div className="flex bg-blue-50 rounded-lg p-0.5 border border-blue-200">
+            <button
+              onClick={() => setClassScope('master')}
+              className={`px-3 py-1 text-xs rounded-md transition-colors ${classScope === 'master' ? 'bg-white shadow text-blue-900' : 'text-blue-700'}`}
+            >Master</button>
+            <button
+              onClick={() => setClassScope('session')}
+              className={`px-3 py-1 text-xs rounded-md transition-colors ${classScope === 'session' ? 'bg-white shadow text-blue-900' : 'text-blue-700'}`}
+            >Session</button>
+          </div>
+          {activeClasses.length > 0 && (
             <div className="flex bg-gray-100 rounded-lg p-0.5">
               <button
                 onClick={() => setViewMode('grouped')}
@@ -269,23 +405,52 @@ export default function ClassesGradesPage() {
               >Grid</button>
             </div>
           )}
-          <button onClick={() => setShowAllocator(true)} className="text-sm px-3 py-1.5 bg-sky-50 text-sky-700 hover:bg-sky-100 rounded-lg font-medium transition-colors">
+          <button onClick={() => setShowAllocator(true)} disabled={classScope === 'session'} className="text-sm px-3 py-1.5 bg-sky-50 text-sky-700 hover:bg-sky-100 rounded-lg font-medium transition-colors disabled:opacity-50">
             AI Allocator
           </button>
-          {classes.length === 0 && selectedSchoolId && (
+          {activeClasses.length === 0 && selectedSchoolId && (
             <button
               onClick={() => addStandardMut.mutate()}
-              disabled={addStandardMut.isPending}
+              disabled={addStandardMut.isPending || (classScope === 'session' && !activeAcademicYear?.id)}
               className="text-sm px-3 py-1.5 bg-gray-100 text-gray-700 hover:bg-gray-200 rounded-lg font-medium transition-colors disabled:opacity-50"
             >
-              {addStandardMut.isPending ? 'Adding...' : 'Add Standard Classes'}
+              {addStandardMut.isPending ? 'Adding...' : (classScope === 'session' ? 'Add Standard Session Classes' : 'Add Standard Classes')}
             </button>
           )}
-          <button onClick={() => openClassCreate()} disabled={!selectedSchoolId} className="btn-primary text-sm px-3 py-1.5 disabled:opacity-50">
-            + Class
+          <button onClick={() => openClassCreate()} disabled={!selectedSchoolId || (classScope === 'session' && !activeAcademicYear?.id)} className="btn-primary text-sm px-3 py-1.5 disabled:opacity-50">
+            + {classScope === 'session' ? 'Session Class' : 'Class'}
           </button>
         </div>
       </div>
+
+      {/* Session classes quick panel */}
+      <div className="mb-6 rounded-xl border border-blue-200 bg-blue-50/60 p-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-blue-900">Session Classes</h2>
+            <p className="text-xs text-blue-700 mt-0.5">
+              Active year: {activeAcademicYear?.name || 'Not selected'}
+            </p>
+            <p className="text-xs text-blue-700 mt-0.5">
+              {sessionClassesLoading ? 'Loading...' : `${sessionClasses.length} session classes configured`}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => initializeSessionClassesMut.mutate()}
+            disabled={!activeAcademicYear?.id || initializeSessionClassesMut.isPending || classScope !== 'session'}
+            className="px-3 py-2 text-xs rounded-lg border border-blue-300 text-blue-800 bg-white hover:bg-blue-100 disabled:opacity-50"
+          >
+            {initializeSessionClassesMut.isPending ? 'Initializing...' : 'Initialize From Master Classes'}
+          </button>
+        </div>
+      </div>
+
+      {classScope === 'session' && !activeAcademicYear?.id && (
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          Select an active academic year from the session switcher to manage session classes.
+        </div>
+      )}
 
       {/* Super Admin school selector */}
       {isSuperAdmin && (
@@ -341,7 +506,7 @@ export default function ClassesGradesPage() {
       )}
 
       {/* Guideline: No academic year */}
-      {selectedSchoolId && classes.length > 0 && !activeAcademicYear && (
+      {selectedSchoolId && activeClasses.length > 0 && !activeAcademicYear && (
         <div className="flex items-center gap-2 p-3 mb-4 bg-blue-50 border border-blue-200 rounded-lg">
           <svg className="w-5 h-5 text-blue-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -353,11 +518,11 @@ export default function ClassesGradesPage() {
       )}
 
       {/* Main Content */}
-      {selectedSchoolId && (isLoading ? (
+      {selectedSchoolId && (isLoading || (classScope === 'session' && sessionClassesLoading) ? (
         <div className="text-center py-12">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto" />
         </div>
-      ) : classes.length === 0 ? (
+      ) : activeClasses.length === 0 ? (
         <div className="card p-4 sm:p-6">
           <div className="flex items-center gap-3 flex-wrap">
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-green-100 text-green-700">
@@ -376,7 +541,7 @@ export default function ClassesGradesPage() {
             </div>
           </div>
           <p className="text-sm text-gray-500 mt-3">
-            No classes found. Use "Add Standard Classes" to quickly create them, or add classes manually.
+            No {classScope === 'session' ? 'session classes' : 'classes'} found. Use quick add or add manually.
           </p>
         </div>
       ) : viewMode === 'grouped' ? (
@@ -397,7 +562,7 @@ export default function ClassesGradesPage() {
                     <div>
                       <h3 className="font-semibold text-gray-900">{label}</h3>
                       <p className="text-xs text-gray-500">
-                        Level {level} · {levelClasses.length} section(s) · {levelClasses.reduce((sum, c) => sum + (c.student_count || 0), 0)} students
+                        Level {level} · {levelClasses.length} section(s) · {levelClasses.reduce((sum, c) => sum + (classScope === 'session' ? (c.enrollment_count || 0) : (c.student_count || 0)), 0)} students
                       </p>
                     </div>
                     <svg className={`w-4 h-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -419,7 +584,14 @@ export default function ClassesGradesPage() {
                               <div>
                                 <p className="text-sm font-medium text-gray-900">{c.name}</p>
                                 {c.section && <p className="text-xs text-primary-600">Section {c.section}</p>}
-                                <p className="text-xs text-gray-400">{c.student_count || 0} students</p>
+                                <p className="text-xs text-gray-400">
+                                  {classScope === 'session' ? (c.enrollment_count || 0) : (c.student_count || 0)} students
+                                </p>
+                                {classScope === 'session' && (
+                                  <p className="text-[11px] text-blue-700">
+                                    Master: {c.linked_master_name || 'Not linked'}
+                                  </p>
+                                )}
                               </div>
                               <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <button onClick={() => openClassEdit(c)} className="text-xs text-blue-600 hover:underline">Edit</button>
@@ -453,7 +625,7 @@ export default function ClassesGradesPage() {
       ) : (
         /* ───── Grid View ───── */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {classes.map(cls => (
+          {activeClasses.map(cls => (
             <div key={cls.id} className="card">
               <div className="flex items-center justify-between mb-4">
                 <div>
@@ -472,8 +644,14 @@ export default function ClassesGradesPage() {
               <div className="space-y-2 text-sm text-gray-500">
                 <div className="flex justify-between">
                   <span>Students:</span>
-                  <span className="font-medium text-gray-900">{cls.student_count || 0}</span>
+                  <span className="font-medium text-gray-900">{classScope === 'session' ? (cls.enrollment_count || 0) : (cls.student_count || 0)}</span>
                 </div>
+                {classScope === 'session' && (
+                  <div className="flex justify-between">
+                    <span>Master Class:</span>
+                    <span className="font-medium text-blue-700">{cls.linked_master_name || 'Not linked'}</span>
+                  </div>
+                )}
                 {cls.section && (
                   <div className="flex justify-between">
                     <span>Section:</span>
@@ -561,7 +739,7 @@ export default function ClassesGradesPage() {
                 disabled={isClassSubmitting || !classForm.name}
                 className="btn-primary px-4 py-2 text-sm disabled:opacity-50"
               >
-                {isClassSubmitting ? 'Saving...' : (editingClass ? 'Save Changes' : 'Add Class')}
+                {isClassSubmitting ? 'Saving...' : (editingClass ? 'Save Changes' : `Add ${classScope === 'session' ? 'Session Class' : 'Class'}`)}
               </button>
             </div>
           </div>
@@ -579,11 +757,11 @@ export default function ClassesGradesPage() {
             <div className="flex justify-end space-x-3">
               <button onClick={() => setDeleteConfirm(null)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>
               <button
-                onClick={() => deleteClassMut.mutate(deleteConfirm.id)}
-                disabled={deleteClassMut.isPending}
+                onClick={() => (classScope === 'session' ? deleteSessionClassMut.mutate(deleteConfirm.id) : deleteClassMut.mutate(deleteConfirm.id))}
+                disabled={deleteClassMut.isPending || deleteSessionClassMut.isPending}
                 className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
               >
-                {deleteClassMut.isPending ? 'Deleting...' : 'Delete'}
+                {deleteClassMut.isPending || deleteSessionClassMut.isPending ? 'Deleting...' : 'Delete'}
               </button>
             </div>
           </div>

@@ -88,6 +88,69 @@ class Term(models.Model):
         return f"{self.academic_year.name} - {self.name}"
 
 
+class SessionClass(models.Model):
+    """Year-specific class catalog entry.
+
+    This allows schools to keep different class structures per academic year
+    while preserving the existing master Class model for cross-module
+    compatibility.
+    """
+
+    school = models.ForeignKey(
+        'schools.School',
+        on_delete=models.CASCADE,
+        related_name='session_classes',
+    )
+    academic_year = models.ForeignKey(
+        AcademicYear,
+        on_delete=models.CASCADE,
+        related_name='session_classes',
+    )
+    class_obj = models.ForeignKey(
+        'students.Class',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='session_class_links',
+        help_text='Optional link to master class for backward compatibility.',
+    )
+    display_name = models.CharField(max_length=50)
+    section = models.CharField(max_length=10, blank=True, default='')
+    grade_level = models.IntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['academic_year', 'grade_level', 'section', 'display_name']
+        verbose_name = 'Session Class'
+        verbose_name_plural = 'Session Classes'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['school', 'academic_year', 'display_name', 'section'],
+                name='unique_session_class_name_per_year',
+            ),
+            models.UniqueConstraint(
+                fields=['school', 'academic_year', 'class_obj'],
+                condition=models.Q(class_obj__isnull=False),
+                name='unique_session_class_master_link_per_year',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['school', 'academic_year', 'is_active']),
+            models.Index(fields=['school', 'academic_year', 'grade_level', 'section']),
+        ]
+
+    @property
+    def label(self):
+        if self.section:
+            return f"{self.display_name} - {self.section}"
+        return self.display_name
+
+    def __str__(self):
+        return f"{self.label} ({self.academic_year.name})"
+
+
 class StudentEnrollment(models.Model):
     """Links a student to a class for a specific academic year.
     Statuses:

@@ -4,6 +4,8 @@ import { examinationsApi, sessionsApi, schoolsApi } from '../../services/api'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { exportReportCardPDF } from './reportCardExport'
 import ClassSelector from '../../components/ClassSelector'
+import { useSessionClasses } from '../../hooks/useSessionClasses'
+import { buildSessionOrMasterClassParams, getClassSelectorScope } from '../../utils/classScope'
 
 export default function ReportCardPage() {
   const { activeAcademicYear } = useAcademicYear()
@@ -15,6 +17,15 @@ export default function ReportCardPage() {
   const [termId, setTermId] = useState('')
   const [search, setSearch] = useState('')
   const [downloading, setDownloading] = useState(false)
+
+  const { sessionClasses } = useSessionClasses(yearId)
+  const classSelectorScope = getClassSelectorScope(yearId)
+  const enrollmentClassParams = buildSessionOrMasterClassParams({
+    classId,
+    activeAcademicYearId: yearId,
+    sessionClasses,
+    masterKey: 'class_id',
+  })
 
   // In current mode, keep academic year synced with the global selector.
   useEffect(() => {
@@ -36,8 +47,12 @@ export default function ReportCardPage() {
   })
 
   const { data: enrollmentsRes } = useQuery({
-    queryKey: ['reportCardEnrollmentsByClass', classId, yearId],
-    queryFn: () => sessionsApi.getEnrollmentsByClass({ class_id: classId, academic_year_id: yearId }),
+    queryKey: ['reportCardEnrollmentsByClass', classId, yearId, enrollmentClassParams.session_class_id],
+    queryFn: () => sessionsApi.getEnrollments({
+      ...enrollmentClassParams,
+      academic_year: yearId,
+      page_size: 9999,
+    }),
     enabled: !!classId && !!yearId,
   })
 
@@ -59,7 +74,7 @@ export default function ReportCardPage() {
 
   const years = yearsRes?.data?.results || yearsRes?.data || []
   const terms = termsRes?.data?.results || termsRes?.data || []
-  const enrollments = enrollmentsRes?.data || []
+  const enrollments = enrollmentsRes?.data?.results || enrollmentsRes?.data || []
   const students = enrollments
     .filter(e => !search || (e.student_name || '').toLowerCase().includes(search.toLowerCase()))
     .sort((a, b) => String(a.roll_number || '').localeCompare(String(b.roll_number || ''), undefined, { numeric: true, sensitivity: 'base' }))
@@ -127,6 +142,8 @@ export default function ReportCardPage() {
               }}
               className="input w-full text-sm"
               placeholder="Select class..."
+              scope={classSelectorScope}
+              academicYearId={yearId || undefined}
             />
           </div>
           <div>

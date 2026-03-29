@@ -508,6 +508,13 @@ export const sessionsApi = {
   updateTerm: (id, data) => api.patch(`/api/sessions/terms/${id}/`, data),
   deleteTerm: (id) => api.delete(`/api/sessions/terms/${id}/`),
 
+  // Session Classes
+  getSessionClasses: (params) => api.get('/api/sessions/session-classes/', { params }),
+  createSessionClass: (data) => api.post('/api/sessions/session-classes/', data),
+  updateSessionClass: (id, data) => api.patch(`/api/sessions/session-classes/${id}/`, data),
+  deleteSessionClass: (id) => api.delete(`/api/sessions/session-classes/${id}/`),
+  initializeSessionClasses: (data) => api.post('/api/sessions/session-classes/initialize/', data),
+
   // Enrollments
   getEnrollments: (params) => api.get('/api/sessions/enrollments/', { params }),
   createEnrollment: (data) => api.post('/api/sessions/enrollments/', data),

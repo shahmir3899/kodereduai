@@ -66,19 +66,25 @@ function RegisterTab() {
 
   const { data: enrollmentData } = useQuery({
     queryKey: ['enrollments-by-class', classId, activeAcademicYear?.id],
-    queryFn: () => sessionsApi.getEnrollmentsByClass({ class_id: classId, academic_year_id: activeAcademicYear?.id }),
+    queryFn: () => sessionsApi.getEnrollments({
+      ...(activeAcademicYear?.id ? { session_class_id: classId } : { class_id: classId }),
+      ...(activeAcademicYear?.id ? { academic_year: activeAcademicYear.id } : {}),
+      page_size: 9999,
+    }),
     enabled: !!classId && !!activeAcademicYear?.id,
   })
-  const enrolledStudents = (enrollmentData?.data || []).map(e => ({
+  const enrolledStudents = (enrollmentData?.data?.results || enrollmentData?.data || []).map(e => ({
     id: e.student,
     name: e.student_name,
     roll_number: e.roll_number,
   }))
 
   const { data: recordsData, isLoading, error } = useQuery({
-    queryKey: ['attendanceRecords', dateFrom, dateTo, classId],
+    queryKey: ['attendanceRecords', dateFrom, dateTo, classId, activeAcademicYear?.id],
     queryFn: () => attendanceApi.getRegisterData({
-      class_id: classId, date_from: dateFrom, date_to: dateTo,
+      ...(activeAcademicYear?.id ? { session_class_id: classId, academic_year: activeAcademicYear.id } : { class_id: classId }),
+      date_from: dateFrom,
+      date_to: dateTo,
     }),
     enabled: !!classId,
   })
@@ -137,7 +143,13 @@ function RegisterTab() {
         <div className="flex flex-col sm:flex-row items-start sm:items-end gap-3">
           <div className="w-full sm:w-auto sm:min-w-[200px]">
             <label className="block text-xs font-medium text-gray-500 mb-1">Class</label>
-            <ClassSelector value={classId} onChange={e => setClassId(e.target.value)} className="input w-full" />
+            <ClassSelector
+              value={classId}
+              onChange={e => setClassId(e.target.value)}
+              className="input w-full"
+              scope={activeAcademicYear?.id ? 'session' : 'master'}
+              academicYearId={activeAcademicYear?.id}
+            />
           </div>
           <div className="flex items-center gap-2">
             <button onClick={prevMonth} className="btn btn-secondary px-2 py-2">

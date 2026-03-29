@@ -292,7 +292,16 @@ class AttendanceBulkEntryItemSerializer(serializers.Serializer):
 class AttendanceBulkEntrySerializer(serializers.Serializer):
     """Bulk manual attendance entry for a class on a date."""
     class_id = serializers.IntegerField(
-        help_text="ID of the class to mark attendance for"
+        required=False,
+        help_text="ID of the master class to mark attendance for"
+    )
+    session_class_id = serializers.IntegerField(
+        required=False,
+        help_text="ID of the session class to mark attendance for"
+    )
+    academic_year = serializers.IntegerField(
+        required=False,
+        help_text="Optional academic year override for master class mode"
     )
     date = serializers.DateField(
         help_text="Date of attendance (YYYY-MM-DD)"
@@ -301,6 +310,13 @@ class AttendanceBulkEntrySerializer(serializers.Serializer):
         child=AttendanceBulkEntryItemSerializer(),
         help_text="List of {student_id, status} entries",
     )
+
+    def validate(self, attrs):
+        class_id = attrs.get('class_id')
+        session_class_id = attrs.get('session_class_id')
+        if not class_id and not session_class_id:
+            raise serializers.ValidationError('Either class_id or session_class_id is required.')
+        return attrs
 
 
 class DailyAbsentReportSerializer(serializers.Serializer):

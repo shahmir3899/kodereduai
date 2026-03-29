@@ -1,4 +1,4 @@
-from django.db.models import Count, Q
+from django.db.models import Count, Q, F
 from django.db import transaction
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
@@ -9,12 +9,15 @@ from rest_framework.views import APIView
 from core.mixins import TenantQuerySetMixin, ensure_tenant_school_id
 from core.permissions import IsSchoolAdminOrReadOnly, HasSchoolAccess
 
-from .models import AcademicYear, Term, StudentEnrollment
+from .models import AcademicYear, Term, StudentEnrollment, SessionClass
 from .serializers import (
     AcademicYearSerializer,
     AcademicYearCreateSerializer,
     TermSerializer,
     TermCreateSerializer,
+    SessionClassSerializer,
+    SessionClassCreateSerializer,
+    SessionClassInitializeSerializer,
     StudentEnrollmentSerializer,
     StudentEnrollmentCreateSerializer,
     BulkPromoteSerializer,
@@ -141,6 +144,134 @@ class TermViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         return qs
 
 
+class SessionClassViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
+    queryset = SessionClass.objects.all()
+    permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
+
+    def get_serializer_class(self):
+        if self.action in ('create', 'update', 'partial_update'):
+            return SessionClassCreateSerializer
+        return SessionClassSerializer
+
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        ctx['school_id'] = _resolve_school_id(self.request)
+        return ctx
+
+    def get_queryset(self):
+        qs = super().get_queryset().select_related('school', 'academic_year', 'class_obj').annotate(
+            enrollment_count=Count(
+                'class_obj__enrollments',
+                filter=Q(
+                    class_obj__enrollments__academic_year_id=F('academic_year_id'),
+                    class_obj__enrollments__school_id=F('school_id'),
+                    class_obj__enrollments__is_active=True,
+                ),
+                distinct=True,
+            ),
+        )
+        academic_year = self.request.query_params.get('academic_year')
+        if academic_year:
+            qs = qs.filter(academic_year_id=academic_year)
+        class_obj = self.request.query_params.get('class_obj')
+        if class_obj:
+            qs = qs.filter(class_obj_id=class_obj)
+        is_active = self.request.query_params.get('is_active')
+        if is_active is not None:
+            bool_map = {'1': True, 'true': True, 'yes': True, '0': False, 'false': False, 'no': False}
+            parsed = bool_map.get(str(is_active).strip().lower())
+            if parsed is not None:
+                qs = qs.filter(is_active=parsed)
+        return qs
+
+    def perform_create(self, serializer):
+        school_id = _resolve_school_id(self.request)
+        serializer.save(school_id=school_id)
+
+    @action(detail=False, methods=['post'], url_path='initialize')
+    def initialize(self, request):
+        serializer = SessionClassInitializeSerializer(
+            data=request.data,
+            context={'school_id': _resolve_school_id(request)},
+        )
+        serializer.is_valid(raise_exception=True)
+
+        school_id = _resolve_school_id(request)
+        target_year = serializer.validated_data['academic_year']
+        source_year = serializer.validated_data.get('source_academic_year')
+        include_inactive = serializer.validated_data['include_inactive_master_classes']
+
+        from students.models import Class
+
+        if source_year:
+            source_classes = Class.objects.filter(
+                school_id=school_id,
+                enrollments__academic_year=source_year,
+                enrollments__school_id=school_id,
+            ).distinct()
+        else:
+            source_classes = Class.objects.filter(school_id=school_id)
+
+        if not include_inactive:
+            source_classes = source_classes.filter(is_active=True)
+
+        source_classes = source_classes.order_by('grade_level', 'section', 'name', 'id')
+
+        created = 0
+        reactivated = 0
+        unchanged = 0
+
+        with transaction.atomic():
+            for cls in source_classes:
+                obj, was_created = SessionClass.objects.get_or_create(
+                    school_id=school_id,
+                    academic_year=target_year,
+                    class_obj=cls,
+                    defaults={
+                        'display_name': cls.name,
+                        'section': cls.section or '',
+                        'grade_level': cls.grade_level,
+                        'is_active': True,
+                    },
+                )
+                if was_created:
+                    created += 1
+                    continue
+
+                updates = []
+                if obj.display_name != cls.name:
+                    obj.display_name = cls.name
+                    updates.append('display_name')
+                if obj.section != (cls.section or ''):
+                    obj.section = cls.section or ''
+                    updates.append('section')
+                if obj.grade_level != cls.grade_level:
+                    obj.grade_level = cls.grade_level
+                    updates.append('grade_level')
+                if not obj.is_active:
+                    obj.is_active = True
+                    updates.append('is_active')
+
+                if updates:
+                    updates.append('updated_at')
+                    obj.save(update_fields=updates)
+                    if 'is_active' in updates:
+                        reactivated += 1
+                else:
+                    unchanged += 1
+
+        total = created + reactivated + unchanged
+        return Response({
+            'academic_year': {'id': target_year.id, 'name': target_year.name},
+            'source_academic_year': ({'id': source_year.id, 'name': source_year.name} if source_year else None),
+            'created': created,
+            'reactivated': reactivated,
+            'unchanged': unchanged,
+            'total_processed': total,
+            'message': f'Initialized {total} session classes ({created} created, {reactivated} reactivated, {unchanged} unchanged).',
+        })
+
+
 class StudentEnrollmentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
     queryset = StudentEnrollment.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
@@ -163,6 +294,18 @@ class StudentEnrollmentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         academic_year = self.request.query_params.get('academic_year')
         if academic_year:
             qs = qs.filter(academic_year_id=academic_year)
+        session_class_id = self.request.query_params.get('session_class_id')
+        if session_class_id:
+            session_class = SessionClass.objects.filter(
+                id=session_class_id,
+                school_id=_resolve_school_id(self.request),
+            ).first()
+            if not session_class or not session_class.class_obj_id:
+                return qs.none()
+            qs = qs.filter(
+                class_obj_id=session_class.class_obj_id,
+                academic_year_id=session_class.academic_year_id,
+            )
         class_id = self.request.query_params.get('class_id')
         if class_id:
             qs = qs.filter(class_obj_id=class_id)

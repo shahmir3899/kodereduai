@@ -27,6 +27,24 @@ from students.models import Student
 logger = logging.getLogger(__name__)
 
 
+def _resolve_session_class_filter(request):
+    """Resolve session_class_id into (class_obj_id, academic_year_id)."""
+    session_class_id = request.query_params.get('session_class_id')
+    if not session_class_id:
+        return (None, None)
+
+    from academic_sessions.models import SessionClass
+
+    school_id = ensure_tenant_school_id(request)
+    qs = SessionClass.objects.filter(id=session_class_id)
+    if school_id:
+        qs = qs.filter(school_id=school_id)
+    session_class = qs.first()
+    if not session_class or not session_class.class_obj_id:
+        return (None, None)
+    return (session_class.class_obj_id, session_class.academic_year_id)
+
+
 class ImageUploadView(ModuleAccessMixin, APIView):
     """
     Upload attendance images to Supabase storage.
@@ -146,6 +164,9 @@ class AttendanceUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
 
         # Filter by class
         class_id = self.request.query_params.get('class_id')
+        session_class_obj_id, session_class_year_id = _resolve_session_class_filter(self.request)
+        if session_class_obj_id:
+            class_id = session_class_obj_id
         if class_id:
             queryset = queryset.filter(class_obj_id=class_id)
 
@@ -156,6 +177,8 @@ class AttendanceUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
 
         # Filter by academic year
         academic_year_id = self.request.query_params.get('academic_year')
+        if not academic_year_id and session_class_year_id:
+            academic_year_id = session_class_year_id
         if academic_year_id:
             queryset = queryset.filter(academic_year_id=academic_year_id)
 
@@ -639,6 +662,9 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
 
         # Filter by class
         class_id = self.request.query_params.get('class_id')
+        session_class_obj_id, session_class_year_id = _resolve_session_class_filter(self.request)
+        if session_class_obj_id:
+            class_id = session_class_obj_id
         if class_id:
             queryset = queryset.filter(student__class_obj_id=class_id)
 
@@ -657,6 +683,8 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
 
         # Filter by academic year
         academic_year_id = self.request.query_params.get('academic_year')
+        if not academic_year_id and session_class_year_id:
+            academic_year_id = session_class_year_id
         if academic_year_id:
             queryset = queryset.filter(academic_year_id=academic_year_id)
 
@@ -675,12 +703,18 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
         no unnecessary JOINs, no pagination COUNT(*) query.
         """
         class_id = request.query_params.get('class_id')
+        session_class_obj_id, session_class_year_id = _resolve_session_class_filter(request)
+        if session_class_obj_id:
+            class_id = session_class_obj_id
         date_from = request.query_params.get('date_from')
         date_to = request.query_params.get('date_to')
+        academic_year_id = request.query_params.get('academic_year')
+        if not academic_year_id and session_class_year_id:
+            academic_year_id = session_class_year_id
 
         if not class_id or not date_from or not date_to:
             return Response(
-                {'detail': 'class_id, date_from, and date_to are required.'},
+                {'detail': 'class_id (or session_class_id), date_from, and date_to are required.'},
                 status=400,
             )
 
@@ -698,6 +732,8 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
             )
             .values('student_id', 'date', 'status')
         )
+        if academic_year_id:
+            records = records.filter(academic_year_id=academic_year_id)
         return Response(list(records))
 
     @action(detail=False, methods=['get'])
@@ -1006,12 +1042,12 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
         Manually enter/update attendance for a class on a date.
 
         POST /api/attendance/records/bulk_entry/
-        Body: {class_id, date, entries: [{student_id, status}, ...]}
+        Body: {class_id|session_class_id, date, entries: [{student_id, status}, ...]}
         Returns: {created, updated, errors, message}
         """
         from .serializers import AttendanceBulkEntrySerializer
         from students.models import Class
-        from academic_sessions.models import AcademicYear
+        from academic_sessions.models import AcademicYear, SessionClass, StudentEnrollment
 
         serializer = AttendanceBulkEntrySerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -1020,9 +1056,25 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
         if not school_id:
             return Response({'detail': 'No school context.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        class_id = serializer.validated_data['class_id']
+        class_id = serializer.validated_data.get('class_id')
+        session_class_id = serializer.validated_data.get('session_class_id')
+        requested_academic_year = serializer.validated_data.get('academic_year')
         date = serializer.validated_data['date']
         entries = serializer.validated_data['entries']
+
+        session_class = None
+        if session_class_id:
+            session_class = SessionClass.objects.filter(
+                id=session_class_id,
+                school_id=school_id,
+                is_active=True,
+            ).first()
+            if not session_class or not session_class.class_obj_id:
+                return Response(
+                    {'detail': 'Session class not found or not linked to a master class.'},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            class_id = session_class.class_obj_id
 
         # Validate class belongs to school
         try:
@@ -1049,19 +1101,51 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
-        # Auto-resolve academic year
-        academic_year = AcademicYear.objects.filter(
-            school_id=school_id, is_current=True, is_active=True,
-        ).first()
-
-        # Validate all student_ids belong to this class
-        valid_student_ids = set(
-            Student.objects.filter(
+        # Resolve academic year: session class -> requested year -> current year
+        academic_year = None
+        if session_class:
+            academic_year = session_class.academic_year
+            if requested_academic_year and int(requested_academic_year) != academic_year.id:
+                return Response(
+                    {'detail': 'academic_year does not match selected session_class_id.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        elif requested_academic_year:
+            academic_year = AcademicYear.objects.filter(
+                id=requested_academic_year,
                 school_id=school_id,
-                class_obj_id=class_id,
                 is_active=True,
-            ).values_list('id', flat=True)
-        )
+            ).first()
+            if not academic_year:
+                return Response(
+                    {'detail': 'Invalid academic_year for this school.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        else:
+            academic_year = AcademicYear.objects.filter(
+                school_id=school_id,
+                is_current=True,
+                is_active=True,
+            ).first()
+
+        # Validate all student_ids belong to this class and academic year (when available)
+        if academic_year:
+            valid_student_ids = set(
+                StudentEnrollment.objects.filter(
+                    school_id=school_id,
+                    academic_year=academic_year,
+                    class_obj_id=class_id,
+                    is_active=True,
+                ).values_list('student_id', flat=True)
+            )
+        else:
+            valid_student_ids = set(
+                Student.objects.filter(
+                    school_id=school_id,
+                    class_obj_id=class_id,
+                    is_active=True,
+                ).values_list('id', flat=True)
+            )
 
         created = 0
         updated = 0

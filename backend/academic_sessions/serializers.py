@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from students.models import Class
-from .models import AcademicYear, Term, StudentEnrollment
+from .models import AcademicYear, Term, StudentEnrollment, SessionClass
 
 
 # ── AcademicYear ──────────────────────────────────────────────
@@ -90,6 +90,67 @@ class TermCreateSerializer(serializers.ModelSerializer):
                     {'name': 'A term with this name already exists for this academic year.'}
                 )
         return data
+
+
+# ── SessionClass ─────────────────────────────────────────────
+
+class SessionClassSerializer(serializers.ModelSerializer):
+    academic_year_name = serializers.CharField(source='academic_year.name', read_only=True)
+    class_obj_name = serializers.CharField(source='class_obj.name', read_only=True, default='')
+    label = serializers.CharField(read_only=True)
+    enrollment_count = serializers.IntegerField(read_only=True, default=0)
+
+    class Meta:
+        model = SessionClass
+        fields = [
+            'id', 'school', 'academic_year', 'academic_year_name',
+            'class_obj', 'class_obj_name',
+            'display_name', 'section', 'grade_level', 'label',
+            'enrollment_count',
+            'is_active', 'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'school', 'created_at', 'updated_at', 'label']
+
+
+class SessionClassCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SessionClass
+        fields = ['academic_year', 'class_obj', 'display_name', 'section', 'grade_level', 'is_active']
+
+    def validate(self, data):
+        school_id = self.context.get('school_id')
+        academic_year = data.get('academic_year')
+        class_obj = data.get('class_obj')
+        if school_id and academic_year and academic_year.school_id != int(school_id):
+            raise serializers.ValidationError({'academic_year': 'Academic year does not belong to this school.'})
+        if school_id and class_obj and class_obj.school_id != int(school_id):
+            raise serializers.ValidationError({'class_obj': 'Class does not belong to this school.'})
+        return data
+
+
+class SessionClassInitializeSerializer(serializers.Serializer):
+    academic_year = serializers.PrimaryKeyRelatedField(queryset=AcademicYear.objects.all())
+    source_academic_year = serializers.PrimaryKeyRelatedField(
+        queryset=AcademicYear.objects.all(), required=False, allow_null=True,
+    )
+    include_inactive_master_classes = serializers.BooleanField(default=False)
+
+    def validate(self, attrs):
+        school_id = self.context.get('school_id')
+        academic_year = attrs['academic_year']
+        source_year = attrs.get('source_academic_year')
+
+        if school_id:
+            school_id = int(school_id)
+            if academic_year.school_id != school_id:
+                raise serializers.ValidationError({'academic_year': 'Academic year does not belong to this school.'})
+            if source_year and source_year.school_id != school_id:
+                raise serializers.ValidationError({'source_academic_year': 'Source academic year does not belong to this school.'})
+
+        if source_year and source_year.id == academic_year.id:
+            raise serializers.ValidationError('Source and target academic year must be different.')
+
+        return attrs
 
 
 # ── StudentEnrollment ─────────────────────────────────────────

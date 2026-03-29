@@ -4,6 +4,8 @@ import { examinationsApi, sessionsApi, studentsApi } from '../../services/api'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import ClassSelector from '../../components/ClassSelector'
 import * as XLSX from 'xlsx'
+import { useSessionClasses } from '../../hooks/useSessionClasses'
+import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 
 export default function MarksEntryPage() {
   const queryClient = useQueryClient()
@@ -15,6 +17,10 @@ export default function MarksEntryPage() {
   const [selectedSubjectId, setSelectedSubjectId] = useState('')
   const [yearFilter, setYearFilter] = useState('')
   const [classFilter, setClassFilter] = useState('')
+
+  const { sessionClasses } = useSessionClasses(yearFilter)
+  const classSelectorScope = getClassSelectorScope(yearFilter)
+  const resolvedClassFilter = getResolvedMasterClassId(classFilter, yearFilter, sessionClasses)
 
   // Sync year filter with global session switcher
   useEffect(() => {
@@ -35,10 +41,10 @@ export default function MarksEntryPage() {
   })
 
   const { data: examsRes } = useQuery({
-    queryKey: ['exams', yearFilter, classFilter],
+    queryKey: ['exams', yearFilter, classFilter, resolvedClassFilter],
     queryFn: () => examinationsApi.getExams({
       academic_year: yearFilter || undefined,
-      class_obj: classFilter || undefined,
+      class_obj: resolvedClassFilter || undefined,
       page_size: 9999,
     }),
   })
@@ -270,7 +276,14 @@ export default function MarksEntryPage() {
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">Class</label>
-            <ClassSelector value={classFilter} onChange={e => { setClassFilter(e.target.value); setSelectedExamId(''); setSelectedSubjectId(''); setMarksData([]) }} className="input w-full text-sm" showAllOption />
+            <ClassSelector
+              value={classFilter}
+              onChange={e => { setClassFilter(e.target.value); setSelectedExamId(''); setSelectedSubjectId(''); setMarksData([]) }}
+              className="input w-full text-sm"
+              showAllOption
+              scope={classSelectorScope}
+              academicYearId={yearFilter || undefined}
+            />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">Exam</label>

@@ -3,6 +3,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { examinationsApi, sessionsApi } from '../../services/api'
 import ClassSelector from '../../components/ClassSelector'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
+import { useSessionClasses } from '../../hooks/useSessionClasses'
+import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 
 export default function ResultsPage() {
   const queryClient = useQueryClient()
@@ -12,6 +14,10 @@ export default function ResultsPage() {
   const [classFilter, setClassFilter] = useState('')
   const [expandedStudent, setExpandedStudent] = useState(null)
   const [commentMsg, setCommentMsg] = useState('')
+
+  const { sessionClasses } = useSessionClasses(yearFilter)
+  const classSelectorScope = getClassSelectorScope(yearFilter)
+  const resolvedClassFilter = getResolvedMasterClassId(classFilter, yearFilter, sessionClasses)
 
   // Sync year filter with global session switcher
   useEffect(() => {
@@ -27,10 +33,10 @@ export default function ResultsPage() {
   })
 
   const { data: examsRes } = useQuery({
-    queryKey: ['exams', yearFilter, classFilter],
+    queryKey: ['exams', yearFilter, classFilter, resolvedClassFilter],
     queryFn: () => examinationsApi.getExams({
       academic_year: yearFilter || undefined,
-      class_obj: classFilter || undefined,
+      class_obj: resolvedClassFilter || undefined,
     }),
   })
 
@@ -83,7 +89,14 @@ export default function ResultsPage() {
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">Class</label>
-            <ClassSelector value={classFilter} onChange={e => { setClassFilter(e.target.value); setSelectedExamId('') }} className="input w-full text-sm" showAllOption />
+            <ClassSelector
+              value={classFilter}
+              onChange={e => { setClassFilter(e.target.value); setSelectedExamId('') }}
+              className="input w-full text-sm"
+              showAllOption
+              scope={classSelectorScope}
+              academicYearId={yearFilter || undefined}
+            />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">Exam</label>

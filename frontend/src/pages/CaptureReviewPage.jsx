@@ -8,6 +8,8 @@ import { useDropzone } from 'react-dropzone'
 import { useAuth } from '../contexts/AuthContext'
 import { useAcademicYear } from '../contexts/AcademicYearContext'
 import { attendanceApi, studentsApi } from '../services/api'
+import { useSessionClasses } from '../hooks/useSessionClasses'
+import { getClassSelectorScope, getResolvedMasterClassId } from '../utils/classScope'
 
 // Compress image before upload - keeps quality high enough for OCR
 const compressImage = (file) => {
@@ -103,6 +105,7 @@ function AIStatusBadge({ status }) {
 // ═══════════════════════════════════════════
 function UploadTab({ onUploadSuccess }) {
   const { user, activeSchool } = useAuth()
+  const { activeAcademicYear } = useAcademicYear()
   const queryClient = useQueryClient()
 
   const [selectedClass, setSelectedClass] = useState('')
@@ -122,6 +125,15 @@ function UploadTab({ onUploadSuccess }) {
     queryFn: () => attendanceApi.getMyAttendanceClasses(),
   })
   const myClasses = myClassesRes?.data || []
+
+  const { sessionClasses } = useSessionClasses(activeAcademicYear?.id, activeSchool?.id)
+  const allowedMasterClassIds = new Set(myClasses.map(c => c.id))
+  const sessionClassOptions = sessionClasses
+    .filter(sc => sc.class_obj && allowedMasterClassIds.has(sc.class_obj))
+    .map(sc => ({ id: sc.id, name: sc.display_name, section: sc.section || '', label: sc.label, class_obj: sc.class_obj }))
+  const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
+  const useSessionClassSelection = classSelectorScope === 'session' && sessionClassOptions.length > 0
+  const classOptions = useSessionClassSelection ? sessionClassOptions : myClasses
 
   const { data: aiStatusData } = useQuery({
     queryKey: ['aiStatus'],
@@ -220,6 +232,13 @@ function UploadTab({ onUploadSuccess }) {
     if (!selectedClass || !selectedDate || uploadedFiles.length === 0) {
       setError('Please select a class, date, and upload at least one image'); return
     }
+    const resolvedMasterClassId = useSessionClassSelection
+      ? getResolvedMasterClassId(selectedClass, activeAcademicYear?.id, sessionClasses)
+      : String(selectedClass)
+    if (!resolvedMasterClassId) {
+      setError('Selected class is not linked to a master class. Please link it in Session Classes first.'); return
+    }
+
     setError(''); setUploadStep('uploading'); setUploadProgress({ current: 0, total: uploadedFiles.length })
     try {
       const imageUrls = []
@@ -227,11 +246,16 @@ function UploadTab({ onUploadSuccess }) {
         setUploadProgress({ current: i + 1, total: uploadedFiles.length })
         const rotatedFile = await getRotatedImageBlob(uploadedFiles[i])
         const fileToUpload = await compressImage(rotatedFile)
-        const uploadResponse = await attendanceApi.uploadImageToStorage(fileToUpload, activeSchool?.id, selectedClass)
+        const uploadResponse = await attendanceApi.uploadImageToStorage(fileToUpload, activeSchool?.id, resolvedMasterClassId)
         imageUrls.push(uploadResponse.data.url)
       }
       setUploadStep('creating')
-      const createData = { school: activeSchool?.id, class_obj: parseInt(selectedClass), date: selectedDate }
+      const createData = {
+        school: activeSchool?.id,
+        class_obj: parseInt(resolvedMasterClassId),
+        date: selectedDate,
+        ...(activeAcademicYear?.id ? { academic_year: activeAcademicYear.id } : {}),
+      }
       if (imageUrls.length === 1) createData.image_url = imageUrls[0]
       else createData.image_urls = imageUrls
       createMutation.mutate(createData)
@@ -277,10 +301,13 @@ function UploadTab({ onUploadSuccess }) {
               disabled={classesLoading}
             >
               <option value="">{classesLoading ? 'Loading classes...' : 'Select a class'}</option>
-              {myClasses.map(c => (
+              {classOptions.map(c => (
                 <option key={c.id} value={c.id}>{c.name}{c.section ? ` (${c.section})` : ''}</option>
               ))}
             </select>
+            {classSelectorScope === 'session' && sessionClassOptions.length > 0 && (
+              <p className="text-[11px] text-blue-600 mt-1">Using session classes for {activeAcademicYear?.name}</p>
+            )}
           </div>
           <div>
             <label className="label">Date</label>
@@ -508,8 +535,13 @@ function ReviewDetail({ uploadId, onBack }) {
   const upload = uploadData?.data
 
   const { data: studentsData } = useQuery({
-    queryKey: ['classStudents', upload?.class_obj],
-    queryFn: () => studentsApi.getStudents({ class_id: upload?.class_obj, is_active: true, page_size: 9999 }),
+    queryKey: ['classStudents', upload?.class_obj, upload?.academic_year],
+    queryFn: () => studentsApi.getStudents({
+      class_id: upload?.class_obj,
+      ...(upload?.academic_year ? { academic_year: upload.academic_year } : {}),
+      is_active: true,
+      page_size: 9999,
+    }),
     enabled: !!upload?.class_obj,
   })
   const allStudents = (studentsData?.data?.results || studentsData?.data || [])

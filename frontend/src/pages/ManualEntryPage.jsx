@@ -19,10 +19,37 @@ export default function ManualEntryPage() {
   })
   const classes = classesRes?.data || []
 
+  const { data: sessionClassesRes, isLoading: sessionClassesLoading } = useQuery({
+    queryKey: ['manualEntrySessionClasses', activeAcademicYear?.id],
+    queryFn: () => sessionsApi.getSessionClasses({
+      academic_year: activeAcademicYear?.id,
+      page_size: 9999,
+      is_active: true,
+    }),
+    enabled: !!activeAcademicYear?.id,
+  })
+  const sessionClasses = sessionClassesRes?.data?.results || sessionClassesRes?.data || []
+
+  const allowedMasterClassIds = new Set(classes.map(c => c.id))
+  const filteredSessionClasses = sessionClasses.filter(sc => sc.class_obj && allowedMasterClassIds.has(sc.class_obj))
+  const useSessionClassFilter = !!activeAcademicYear?.id && filteredSessionClasses.length > 0
+  const classOptions = useSessionClassFilter
+    ? filteredSessionClasses.map(sc => ({
+      id: sc.id,
+      name: sc.display_name,
+      section: sc.section || '',
+      label: sc.label,
+    }))
+    : classes
+
   // Fetch enrolled students for selected class + academic year
   const { data: studentsRes, isLoading: studentsLoading } = useQuery({
-    queryKey: ['studentsForAttendance', classId, activeAcademicYear?.id],
-    queryFn: () => sessionsApi.getEnrollments({ class_id: classId, academic_year: activeAcademicYear?.id, page_size: 500 }),
+    queryKey: ['studentsForAttendance', classId, activeAcademicYear?.id, useSessionClassFilter],
+    queryFn: () => sessionsApi.getEnrollments({
+      ...(useSessionClassFilter ? { session_class_id: classId } : { class_id: classId }),
+      academic_year: activeAcademicYear?.id,
+      page_size: 500,
+    }),
     enabled: !!classId && !!activeAcademicYear?.id,
   })
   const students = (studentsRes?.data?.results || studentsRes?.data || []).map(e => ({
@@ -33,8 +60,13 @@ export default function ManualEntryPage() {
 
   // Fetch existing records for this class+date
   const { data: existingRes, isLoading: existingLoading } = useQuery({
-    queryKey: ['existingAttendance', classId, date],
-    queryFn: () => attendanceApi.getRecords({ class_id: classId, date, page_size: 500 }),
+    queryKey: ['existingAttendance', classId, date, activeAcademicYear?.id, useSessionClassFilter],
+    queryFn: () => attendanceApi.getRecords({
+      ...(useSessionClassFilter ? { session_class_id: classId } : { class_id: classId }),
+      date,
+      academic_year: activeAcademicYear?.id,
+      page_size: 500,
+    }),
     enabled: !!classId && !!date,
   })
   const existingRecords = existingRes?.data?.results || existingRes?.data || []
@@ -97,7 +129,12 @@ export default function ManualEntryPage() {
       setTimeout(() => setSaveMsg(''), 4000)
       return
     }
-    bulkSaveMut.mutate({ class_id: parseInt(classId), date, entries })
+    bulkSaveMut.mutate({
+      ...(useSessionClassFilter ? { session_class_id: parseInt(classId) } : { class_id: parseInt(classId) }),
+      academic_year: activeAcademicYear?.id,
+      date,
+      entries,
+    })
   }
 
   const presentCount = attendanceData.filter(a => a.status === 'PRESENT').length
@@ -120,10 +157,13 @@ export default function ManualEntryPage() {
               value={classId}
               onChange={e => { setClassId(e.target.value); setAttendanceData([]); setSaveMsg('') }}
               className="input w-full"
-              disabled={classesLoading}
-              classes={classes}
-              placeholder={classesLoading ? 'Loading classes...' : 'Select Class'}
+              disabled={classesLoading || sessionClassesLoading}
+              classes={classOptions}
+              placeholder={classesLoading || sessionClassesLoading ? 'Loading classes...' : 'Select Class'}
             />
+            {useSessionClassFilter && (
+              <p className="text-[11px] text-blue-600 mt-1">Using session classes for {activeAcademicYear?.name}</p>
+            )}
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">Date</label>

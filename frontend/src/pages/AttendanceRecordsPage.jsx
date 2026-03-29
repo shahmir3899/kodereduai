@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { attendanceApi, studentsApi } from '../services/api'
 import ClassSelector from '../components/ClassSelector'
+import { useAcademicYear } from '../contexts/AcademicYearContext'
 
 function getDaysInMonth(year, month) {
   return new Date(year, month + 1, 0).getDate()
@@ -16,6 +17,7 @@ function pad(n) {
 }
 
 export default function AttendanceRecordsPage() {
+  const { activeAcademicYear } = useAcademicYear()
   const today = new Date()
   const [year, setYear] = useState(today.getFullYear())
   const [month, setMonth] = useState(today.getMonth()) // 0-indexed
@@ -27,18 +29,28 @@ export default function AttendanceRecordsPage() {
 
   // Fetch all enrolled students for the selected class (from DB)
   const { data: studentsData } = useQuery({
-    queryKey: ['students', classId],
-    queryFn: () => studentsApi.getStudents({ class_id: classId, page_size: 500 }),
+    queryKey: ['students', classId, activeAcademicYear?.id],
+    queryFn: () => studentsApi.getStudents({
+      ...(activeAcademicYear?.id ? { session_class_id: classId, academic_year: activeAcademicYear.id } : { class_id: classId }),
+      page_size: 500,
+    }),
     enabled: !!classId,
   })
   const enrolledStudents = studentsData?.data?.results || studentsData?.data || []
 
   // Fetch attendance records for the month + class (page_size large enough for full month)
   const { data: recordsData, isLoading, error } = useQuery({
-    queryKey: ['attendanceRecords', dateFrom, dateTo, classId],
+    queryKey: ['attendanceRecords', dateFrom, dateTo, classId, activeAcademicYear?.id],
     queryFn: () => {
       const params = { date_from: dateFrom, date_to: dateTo, page_size: 2000 }
-      if (classId) params.class_id = classId
+      if (classId) {
+        if (activeAcademicYear?.id) {
+          params.session_class_id = classId
+          params.academic_year = activeAcademicYear.id
+        } else {
+          params.class_id = classId
+        }
+      }
       return attendanceApi.getRecords(params)
     },
     enabled: !!classId,
@@ -132,6 +144,8 @@ export default function AttendanceRecordsPage() {
               value={classId}
               onChange={(e) => setClassId(e.target.value)}
               className="input w-full"
+              scope={activeAcademicYear?.id ? 'session' : 'master'}
+              academicYearId={activeAcademicYear?.id}
             />
           </div>
 

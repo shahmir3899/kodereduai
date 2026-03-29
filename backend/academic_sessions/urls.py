@@ -1,10 +1,11 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import AcademicYearViewSet, TermViewSet, StudentEnrollmentViewSet, SessionSetupView, PromotionAdvisorView, SessionHealthView, SectionAllocatorView, AttendanceRiskView
+from .views import AcademicYearViewSet, TermViewSet, SessionClassViewSet, StudentEnrollmentViewSet, SessionSetupView, PromotionAdvisorView, SessionHealthView, SectionAllocatorView, AttendanceRiskView
 
 router = DefaultRouter()
 router.register(r'academic-years', AcademicYearViewSet, basename='academic-year')
 router.register(r'terms', TermViewSet, basename='term')
+router.register(r'session-classes', SessionClassViewSet, basename='session-class')
 router.register(r'enrollments', StudentEnrollmentViewSet, basename='enrollment')
 
 urlpatterns = [
