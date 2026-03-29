@@ -25,7 +25,7 @@ class ClassSerializer(serializers.ModelSerializer):
 class ClassCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Class
-        fields = ['school', 'name', 'section', 'grade_level']
+        fields = ['school', 'name', 'section', 'grade_level', 'is_active']
 
     def validate(self, attrs):
         # On update (PATCH), school isn't in attrs — use instance's school

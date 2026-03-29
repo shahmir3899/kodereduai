@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { sessionsApi } from '../../services/api'
+import { classesApi, sessionsApi } from '../../services/api'
 import { useBackgroundTask } from '../../hooks/useBackgroundTask'
 import { useClasses } from '../../hooks/useClasses'
 import ClassSelector from '../../components/ClassSelector'
+import { useToast } from '../../components/Toast'
 
 // Recommendation badge component
 function RecBadge({ rec }) {
@@ -51,6 +52,7 @@ function TrendIndicator({ trend }) {
 
 export default function PromotionPage() {
   const queryClient = useQueryClient()
+  const { showError, showSuccess, showWarning } = useToast()
 
   // Step state
   const [step, setStep] = useState(1) // 1: Select years, 2: Select class, 3: Review & promote
@@ -98,6 +100,111 @@ export default function PromotionPage() {
   const classes = classesFromHook
   const enrollments = enrollmentsRes?.data?.results || enrollmentsRes?.data || []
   const recommendations = advisorData?.recommendations || []
+  const sourceClass = classes.find(c => String(c.id) === String(sourceClassId))
+  const highestGradeLevel = classes.reduce((highest, classObj) => {
+    if (typeof classObj.grade_level !== 'number') return highest
+    return Math.max(highest, classObj.grade_level)
+  }, Number.NEGATIVE_INFINITY)
+  const isHighestSourceClass =
+    sourceClass && typeof sourceClass.grade_level === 'number' && sourceClass.grade_level === highestGradeLevel
+
+  const formatClassLabel = (classObj) => `${classObj.name}${classObj.section ? ` - ${classObj.section}` : ''}`
+
+  const deriveNextClassName = (classObj, nextGradeClasses) => {
+    if (nextGradeClasses.length > 0) {
+      return nextGradeClasses[0].name
+    }
+
+    const match = String(classObj.name || '').match(/^(.*?)(\d+)([^\d]*)$/)
+    if (!match) {
+      return ''
+    }
+
+    const [, prefix, num, suffix] = match
+    return `${prefix}${Number(num) + 1}${suffix}`.trim()
+  }
+
+  const ensureTargetClassForSource = async () => {
+    if (!sourceClass || isHighestSourceClass || typeof sourceClass.grade_level !== 'number') {
+      return ''
+    }
+
+    const nextGradeLevel = sourceClass.grade_level + 1
+    const nextGradeClasses = classes.filter(classObj => typeof classObj.grade_level === 'number' && classObj.grade_level === nextGradeLevel)
+    const sourceSection = String(sourceClass.section || '').trim().toLowerCase()
+
+    const matchingClass = nextGradeClasses.find(
+      classObj => String(classObj.section || '').trim().toLowerCase() === sourceSection,
+    )
+    if (matchingClass?.is_active) {
+      return String(matchingClass.id)
+    }
+
+    if (matchingClass && !matchingClass.is_active) {
+      await classesApi.updateClass(matchingClass.id, { is_active: true })
+      queryClient.invalidateQueries({ queryKey: ['classes'] })
+      showSuccess(`Reactivated ${formatClassLabel(matchingClass)} for promotion.`)
+      return String(matchingClass.id)
+    }
+
+    if (!sourceSection && nextGradeClasses.length === 1) {
+      const onlyClass = nextGradeClasses[0]
+      if (!onlyClass.is_active) {
+        await classesApi.updateClass(onlyClass.id, { is_active: true })
+        queryClient.invalidateQueries({ queryKey: ['classes'] })
+        showSuccess(`Reactivated ${formatClassLabel(onlyClass)} for promotion.`)
+      }
+      return String(onlyClass.id)
+    }
+
+    const nextClassName = deriveNextClassName(sourceClass, nextGradeClasses)
+    if (!nextClassName) {
+      showWarning('No matching next-grade class exists. Please create the target class name/section first.')
+      return ''
+    }
+
+    if (!sourceSection && nextGradeClasses.length > 1) {
+      showWarning('Multiple target sections exist for the next grade. Please choose the target class manually.')
+      return ''
+    }
+
+    const createdClass = await classesApi.createClass({
+      school: sourceClass.school,
+      name: nextClassName,
+      section: sourceClass.section || '',
+      grade_level: nextGradeLevel,
+    })
+    queryClient.invalidateQueries({ queryKey: ['classes'] })
+    const created = createdClass?.data
+    showSuccess(`Created ${nextClassName}${sourceClass.section ? ` - ${sourceClass.section}` : ''} for promotion.`)
+    return created?.id ? String(created.id) : ''
+  }
+
+  const getDefaultPromoteTargetClassId = () => {
+    if (!sourceClass || isHighestSourceClass || typeof sourceClass.grade_level !== 'number') {
+      return ''
+    }
+
+    const nextGradeClasses = classes.filter(classObj => (
+      typeof classObj.grade_level === 'number' && classObj.grade_level === sourceClass.grade_level + 1
+    ))
+
+    if (nextGradeClasses.length === 0) return ''
+
+    const sourceSection = String(sourceClass.section || '').trim().toLowerCase()
+    if (sourceSection) {
+      const sameSectionClass = nextGradeClasses.find(
+        classObj => classObj.is_active && String(classObj.section || '').trim().toLowerCase() === sourceSection,
+      )
+      if (sameSectionClass) return String(sameSectionClass.id)
+    }
+
+    if (nextGradeClasses.length === 1 && nextGradeClasses[0].is_active) {
+      return String(nextGradeClasses[0].id)
+    }
+
+    return ''
+  }
 
   // Natural sort comparator for roll numbers (handles "1", "2", "10" correctly)
   const rollSort = (a, b) => {
@@ -117,16 +224,29 @@ export default function PromotionPage() {
   })
 
   // Initialize promotions when enrollments load
-  const initializePromotions = () => {
+  const initializePromotions = async () => {
     if (enrollments.length > 0) {
+      const defaultAction = isHighestSourceClass ? 'GRADUATE' : 'PROMOTE'
+      let defaultTargetClassId = defaultAction === 'PROMOTE' ? getDefaultPromoteTargetClassId() : ''
+
+      if (defaultAction === 'PROMOTE' && !defaultTargetClassId) {
+        try {
+          defaultTargetClassId = await ensureTargetClassForSource()
+        } catch (error) {
+          showError(error?.response?.data?.detail || error?.response?.data?.name?.[0] || error.message || 'Failed to prepare target class for promotion.')
+          return
+        }
+      }
+
       setPromotions(enrollments.slice().sort(rollSort).map(e => ({
         student_id: e.student,
         student_name: e.student_name,
         current_class: e.class_name,
         current_roll: e.roll_number,
-        target_class_id: '',
+        target_class_id: defaultTargetClassId,
         new_roll_number: e.roll_number,
         include: true,
+        action: defaultAction,
       })))
       setStep(3)
     }
@@ -139,9 +259,37 @@ export default function PromotionPage() {
       return
     }
 
+    const duplicateRollConflicts = []
+    const seenByTargetClassAndRoll = new Map()
+
+    for (const promo of included) {
+      if (promo.action === 'GRADUATE') continue
+
+      const targetClassId = String(promo.target_class_id || '').trim()
+      const roll = String(promo.new_roll_number || '').trim()
+      if (!targetClassId || !roll) {
+        alert('Each promoted/repeat student must have a target class and roll number.')
+        return
+      }
+
+      const key = `${targetClassId}::${roll}`
+      if (seenByTargetClassAndRoll.has(key)) {
+        const firstStudent = seenByTargetClassAndRoll.get(key)
+        duplicateRollConflicts.push(`${firstStudent} and ${promo.student_name} (roll ${roll})`)
+      } else {
+        seenByTargetClassAndRoll.set(key, promo.student_name)
+      }
+    }
+
+    if (duplicateRollConflicts.length > 0) {
+      const preview = duplicateRollConflicts.slice(0, 5).join('\n')
+      alert(`Duplicate roll numbers detected in the same target class:\n${preview}${duplicateRollConflicts.length > 5 ? '\n...' : ''}\n\nPlease fix before promoting.`)
+      return
+    }
+
     promoteMut.trigger({
-      source_academic_year_id: parseInt(sourceYearId),
-      target_academic_year_id: parseInt(targetYearId),
+      source_academic_year: parseInt(sourceYearId),
+      target_academic_year: parseInt(targetYearId),
       promotions: included.map(p => ({
         student_id: p.student_id,
         target_class_id: p.target_class_id ? parseInt(p.target_class_id) : null,
@@ -155,8 +303,26 @@ export default function PromotionPage() {
     setPromotions(prev => prev.map((p, i) => i === idx ? { ...p, [field]: value } : p))
   }
 
+  const updatePromotionAction = (idx, action) => {
+    setPromotions(prev => prev.map((promotion, promotionIdx) => {
+      if (promotionIdx !== idx) return promotion
+
+      if (action === 'GRADUATE') {
+        return { ...promotion, action, target_class_id: '' }
+      }
+
+      if (action === 'REPEAT') {
+        return { ...promotion, action, target_class_id: sourceClassId || promotion.target_class_id }
+      }
+
+      return { ...promotion, action }
+    }))
+  }
+
   const setAllTargetClass = (classId) => {
-    setPromotions(prev => prev.map(p => ({ ...p, target_class_id: classId })))
+    setPromotions(prev => prev.map(p => (
+      p.action === 'PROMOTE' ? { ...p, target_class_id: classId } : p
+    )))
   }
 
   // AI Advisor helpers
@@ -505,6 +671,9 @@ export default function PromotionPage() {
             <div>
               <h2 className="text-lg font-semibold text-gray-900">Review Promotions</h2>
               <p className="text-xs text-gray-500">{promotions.filter(p => p.include).length} of {promotions.length} students selected</p>
+              {isHighestSourceClass && (
+                <p className="text-xs text-blue-600 mt-1">This is the highest configured class for the school, so students default to Graduate.</p>
+              )}
             </div>
             <div className="flex items-center gap-2">
               <label className="text-xs text-gray-600">Set all target class:</label>
@@ -530,6 +699,7 @@ export default function PromotionPage() {
                       <th className="px-3 py-3 text-center">Include</th>
                       <th className="px-3 py-3 text-left">Student</th>
                       <th className="px-3 py-3 text-left">Current Class</th>
+                      <th className="px-3 py-3 text-left">Action</th>
                       <th className="px-3 py-3 text-left">Target Class</th>
                       <th className="px-3 py-3 text-left">New Roll #</th>
                     </tr>
@@ -549,23 +719,44 @@ export default function PromotionPage() {
                         <td className="px-3 py-2 text-sm text-gray-600">{p.current_class}</td>
                         <td className="px-3 py-2">
                           <select
+                            value={p.action || 'PROMOTE'}
+                            onChange={e => updatePromotionAction(idx, e.target.value)}
+                            className="input text-sm py-1 w-32"
+                            disabled={!p.include}
+                          >
+                            <option value="PROMOTE">Promote</option>
+                            <option value="GRADUATE">Graduate</option>
+                            <option value="REPEAT">Repeat</option>
+                          </select>
+                        </td>
+                        <td className="px-3 py-2">
+                          <select
                             value={p.target_class_id}
                             onChange={e => updatePromotion(idx, 'target_class_id', e.target.value)}
                             className="input text-sm py-1 w-40"
-                            disabled={!p.include}
+                            disabled={!p.include || p.action === 'GRADUATE'}
                           >
-                            <option value="">Select...</option>
+                            <option value="">{p.action === 'GRADUATE' ? 'Not needed' : 'Select...'}</option>
                             {classes.map(c => <option key={c.id} value={c.id}>{c.name}{c.section ? ` - ${c.section}` : ''}</option>)}
                           </select>
                         </td>
                         <td className="px-3 py-2">
-                          <input
-                            type="text"
-                            value={p.new_roll_number}
-                            onChange={e => updatePromotion(idx, 'new_roll_number', e.target.value)}
-                            className="input text-sm py-1 w-24"
-                            disabled={!p.include}
-                          />
+                          {p.action === 'GRADUATE' ? (
+                            <input
+                              type="text"
+                              value="Not needed"
+                              className="input text-sm py-1 w-24"
+                              disabled
+                            />
+                          ) : (
+                            <input
+                              type="text"
+                              value={p.new_roll_number}
+                              onChange={e => updatePromotion(idx, 'new_roll_number', e.target.value)}
+                              className="input text-sm py-1 w-24"
+                              disabled={!p.include}
+                            />
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -591,26 +782,48 @@ export default function PromotionPage() {
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
+                        <label className="text-xs text-gray-500">Action</label>
+                        <select
+                          value={p.action || 'PROMOTE'}
+                          onChange={e => updatePromotionAction(idx, e.target.value)}
+                          className="input text-sm py-1 w-full"
+                          disabled={!p.include}
+                        >
+                          <option value="PROMOTE">Promote</option>
+                          <option value="GRADUATE">Graduate</option>
+                          <option value="REPEAT">Repeat</option>
+                        </select>
+                      </div>
+                      <div>
                         <label className="text-xs text-gray-500">Target Class</label>
                         <select
                           value={p.target_class_id}
                           onChange={e => updatePromotion(idx, 'target_class_id', e.target.value)}
                           className="input text-sm py-1 w-full"
-                          disabled={!p.include}
+                          disabled={!p.include || p.action === 'GRADUATE'}
                         >
-                          <option value="">Select...</option>
+                          <option value="">{p.action === 'GRADUATE' ? 'Not needed' : 'Select...'}</option>
                           {classes.map(c => <option key={c.id} value={c.id}>{c.name}{c.section ? ` - ${c.section}` : ''}</option>)}
                         </select>
                       </div>
                       <div>
                         <label className="text-xs text-gray-500">Roll #</label>
-                        <input
-                          type="text"
-                          value={p.new_roll_number}
-                          onChange={e => updatePromotion(idx, 'new_roll_number', e.target.value)}
-                          className="input text-sm py-1 w-full"
-                          disabled={!p.include}
-                        />
+                        {p.action === 'GRADUATE' ? (
+                          <input
+                            type="text"
+                            value="Not needed"
+                            className="input text-sm py-1 w-full"
+                            disabled
+                          />
+                        ) : (
+                          <input
+                            type="text"
+                            value={p.new_roll_number}
+                            onChange={e => updatePromotion(idx, 'new_roll_number', e.target.value)}
+                            className="input text-sm py-1 w-full"
+                            disabled={!p.include}
+                          />
+                        )}
                       </div>
                     </div>
                   </div>
@@ -650,6 +863,17 @@ export default function PromotionPage() {
               </div>
               <h3 className="text-lg font-semibold text-green-700 mb-2">Promotion Complete</h3>
               <p className="text-sm text-gray-600 mb-4">{result.promoted_count || result.promoted || 0} student(s) promoted successfully.</p>
+              {Array.isArray(result.errors) && result.errors.length > 0 && (
+                <div className="text-left bg-amber-50 border border-amber-200 rounded-lg p-3">
+                  <p className="text-sm font-medium text-amber-800 mb-1">Some students were not processed:</p>
+                  <ul className="text-xs text-amber-700 space-y-1">
+                    {result.errors.slice(0, 8).map((err, idx) => (
+                      <li key={idx}>Student {err.student_id}: {err.error}</li>
+                    ))}
+                    {result.errors.length > 8 && <li>...and {result.errors.length - 8} more</li>}
+                  </ul>
+                </div>
+              )}
             </div>
           )}
           <div className="flex justify-center mt-4">
