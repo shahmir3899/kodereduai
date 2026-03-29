@@ -52,6 +52,10 @@ function formatDiscountLabel(discount, scholarship) {
   return null
 }
 
+// Year options for fee generation selectors – computed once at module load
+const _currentYear = new Date().getFullYear()
+const YEAR_OPTIONS = [_currentYear - 1, _currentYear, _currentYear + 1, _currentYear + 2]
+
 export default function FeeSetupPage() {
   const { activeAcademicYear } = useAcademicYear()
   const queryClient = useQueryClient()
@@ -393,7 +397,13 @@ export default function FeeSetupPage() {
         ].map(tab => (
           <button
             key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
+            onClick={() => {
+              setActiveTab(tab.key)
+              if (tab.key !== 'generate') {
+                setGenFeeType('MONTHLY')
+                setOnetimeShowConfirm(false)
+              }
+            }}
             className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
               activeTab === tab.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
             }`}
@@ -641,7 +651,7 @@ export default function FeeSetupPage() {
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1">Year</label>
                   <select value={genYear} onChange={(e) => setGenYear(parseInt(e.target.value))} className="input-field text-sm">
-                    {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
+                    {YEAR_OPTIONS.map(y => <option key={y} value={y}>{y}</option>)}
                   </select>
                 </div>
               </div>
@@ -716,7 +726,7 @@ export default function FeeSetupPage() {
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Year</label>
                 <select value={genYear} onChange={(e) => setGenYear(parseInt(e.target.value))} className="input-field text-sm">
-                  {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
+                  {YEAR_OPTIONS.map(y => <option key={y} value={y}>{y}</option>)}
                 </select>
               </div>
 
@@ -763,7 +773,7 @@ export default function FeeSetupPage() {
                       student_ids: oPreview.students.map(s => s.student_id),
                       fee_types: [genFeeType],
                       year: genYear,
-                      month: 0,
+                      month: 0, // 0 = not applicable for one-time fees (ADMISSION, BOOKS, FINE)
                       ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
                     }, {
                       onSuccess: () => setOnetimeShowConfirm(false),
