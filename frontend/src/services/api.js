@@ -515,6 +515,8 @@ export const sessionsApi = {
   deleteEnrollment: (id) => api.delete(`/api/sessions/enrollments/${id}/`),
   getEnrollmentsByClass: (params) => api.get('/api/sessions/enrollments/by_class/', { params }),
   bulkPromote: (data) => api.post('/api/sessions/enrollments/bulk_promote/', data),
+  previewPromotionTargets: (data) => api.post('/api/sessions/enrollments/promotion-targets-preview/', data),
+  applyPromotionTargets: (data) => api.post('/api/sessions/enrollments/promotion-targets-apply/', data),
 
   // Setup Wizard (longer timeout for heavy DB operations)
   setupPreview: (data) => api.post('/api/sessions/setup-wizard/', { action: 'preview', ...data }, { timeout: 60000 }),

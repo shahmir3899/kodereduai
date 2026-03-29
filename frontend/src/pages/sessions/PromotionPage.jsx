@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { classesApi, sessionsApi } from '../../services/api'
+import { sessionsApi } from '../../services/api'
 import { useBackgroundTask } from '../../hooks/useBackgroundTask'
 import { useClasses } from '../../hooks/useClasses'
 import ClassSelector from '../../components/ClassSelector'
@@ -65,6 +65,9 @@ export default function PromotionPage() {
   // Promotion data
   const [promotions, setPromotions] = useState([])
   const [result, setResult] = useState(null)
+  const [showTargetSetupModal, setShowTargetSetupModal] = useState(false)
+  const [targetSetupPreview, setTargetSetupPreview] = useState(null)
+  const [isTargetSetupLoading, setIsTargetSetupLoading] = useState(false)
 
   // AI Advisor state
   const [showAdvisor, setShowAdvisor] = useState(false)
@@ -108,76 +111,34 @@ export default function PromotionPage() {
   const isHighestSourceClass =
     sourceClass && typeof sourceClass.grade_level === 'number' && sourceClass.grade_level === highestGradeLevel
 
-  const formatClassLabel = (classObj) => `${classObj.name}${classObj.section ? ` - ${classObj.section}` : ''}`
-
-  const deriveNextClassName = (classObj, nextGradeClasses) => {
-    if (nextGradeClasses.length > 0) {
-      return nextGradeClasses[0].name
+  const getTargetPlanUi = (status) => {
+    const map = {
+      exists_active: {
+        label: 'Ready',
+        badgeClass: 'bg-green-100 text-green-800 border-green-200',
+        actionLabel: 'Continue',
+      },
+      exists_inactive: {
+        label: 'Needs Reactivation',
+        badgeClass: 'bg-amber-100 text-amber-800 border-amber-200',
+        actionLabel: 'Reactivate & Continue',
+      },
+      missing: {
+        label: 'Needs Creation',
+        badgeClass: 'bg-blue-100 text-blue-800 border-blue-200',
+        actionLabel: 'Create & Continue',
+      },
+      ambiguous: {
+        label: 'Manual Setup Required',
+        badgeClass: 'bg-red-100 text-red-800 border-red-200',
+        actionLabel: 'Manual Setup Needed',
+      },
     }
-
-    const match = String(classObj.name || '').match(/^(.*?)(\d+)([^\d]*)$/)
-    if (!match) {
-      return ''
+    return map[status] || {
+      label: 'Unknown',
+      badgeClass: 'bg-gray-100 text-gray-700 border-gray-200',
+      actionLabel: 'Continue',
     }
-
-    const [, prefix, num, suffix] = match
-    return `${prefix}${Number(num) + 1}${suffix}`.trim()
-  }
-
-  const ensureTargetClassForSource = async () => {
-    if (!sourceClass || isHighestSourceClass || typeof sourceClass.grade_level !== 'number') {
-      return ''
-    }
-
-    const nextGradeLevel = sourceClass.grade_level + 1
-    const nextGradeClasses = classes.filter(classObj => typeof classObj.grade_level === 'number' && classObj.grade_level === nextGradeLevel)
-    const sourceSection = String(sourceClass.section || '').trim().toLowerCase()
-
-    const matchingClass = nextGradeClasses.find(
-      classObj => String(classObj.section || '').trim().toLowerCase() === sourceSection,
-    )
-    if (matchingClass?.is_active) {
-      return String(matchingClass.id)
-    }
-
-    if (matchingClass && !matchingClass.is_active) {
-      await classesApi.updateClass(matchingClass.id, { is_active: true })
-      queryClient.invalidateQueries({ queryKey: ['classes'] })
-      showSuccess(`Reactivated ${formatClassLabel(matchingClass)} for promotion.`)
-      return String(matchingClass.id)
-    }
-
-    if (!sourceSection && nextGradeClasses.length === 1) {
-      const onlyClass = nextGradeClasses[0]
-      if (!onlyClass.is_active) {
-        await classesApi.updateClass(onlyClass.id, { is_active: true })
-        queryClient.invalidateQueries({ queryKey: ['classes'] })
-        showSuccess(`Reactivated ${formatClassLabel(onlyClass)} for promotion.`)
-      }
-      return String(onlyClass.id)
-    }
-
-    const nextClassName = deriveNextClassName(sourceClass, nextGradeClasses)
-    if (!nextClassName) {
-      showWarning('No matching next-grade class exists. Please create the target class name/section first.')
-      return ''
-    }
-
-    if (!sourceSection && nextGradeClasses.length > 1) {
-      showWarning('Multiple target sections exist for the next grade. Please choose the target class manually.')
-      return ''
-    }
-
-    const createdClass = await classesApi.createClass({
-      school: sourceClass.school,
-      name: nextClassName,
-      section: sourceClass.section || '',
-      grade_level: nextGradeLevel,
-    })
-    queryClient.invalidateQueries({ queryKey: ['classes'] })
-    const created = createdClass?.data
-    showSuccess(`Created ${nextClassName}${sourceClass.section ? ` - ${sourceClass.section}` : ''} for promotion.`)
-    return created?.id ? String(created.id) : ''
   }
 
   const getDefaultPromoteTargetClassId = () => {
@@ -197,6 +158,8 @@ export default function PromotionPage() {
         classObj => classObj.is_active && String(classObj.section || '').trim().toLowerCase() === sourceSection,
       )
       if (sameSectionClass) return String(sameSectionClass.id)
+
+      return ''
     }
 
     if (nextGradeClasses.length === 1 && nextGradeClasses[0].is_active) {
@@ -204,6 +167,57 @@ export default function PromotionPage() {
     }
 
     return ''
+  }
+
+  const buildInitialPromotions = (defaultTargetClassId) => {
+    const defaultAction = isHighestSourceClass ? 'GRADUATE' : 'PROMOTE'
+    setPromotions(enrollments.slice().sort(rollSort).map(e => ({
+      student_id: e.student,
+      student_name: e.student_name,
+      current_class: e.class_name,
+      current_roll: e.roll_number,
+      target_class_id: defaultAction === 'PROMOTE' ? (defaultTargetClassId || '') : '',
+      new_roll_number: e.roll_number,
+      include: true,
+      action: defaultAction,
+    })))
+    setStep(3)
+  }
+
+  const handleApplyTargetSetup = async () => {
+    if (!targetSetupPreview || !sourceYearId || !targetYearId || !sourceClassId) return
+    const statusValue = targetSetupPreview?.target_plan?.status
+    if (statusValue === 'ambiguous') {
+      showWarning('Target class mapping is ambiguous. Please create or pick the target class manually, then continue.')
+      return
+    }
+
+    setIsTargetSetupLoading(true)
+    try {
+      const applyRes = await sessionsApi.applyPromotionTargets({
+        source_academic_year: parseInt(sourceYearId),
+        target_academic_year: parseInt(targetYearId),
+        source_class: parseInt(sourceClassId),
+        create_if_missing: true,
+        reactivate_if_inactive: true,
+      })
+
+      const targetClassId = applyRes?.data?.target_class?.id
+      if (!targetClassId) {
+        showError('Target class setup did not return a valid target class.')
+        return
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['classes'] })
+      setShowTargetSetupModal(false)
+      setTargetSetupPreview(null)
+      showSuccess(`Target class ready: ${applyRes.data.target_class.label}`)
+      buildInitialPromotions(String(targetClassId))
+    } catch (error) {
+      showError(error?.response?.data?.detail || 'Failed to apply target class setup.')
+    } finally {
+      setIsTargetSetupLoading(false)
+    }
   }
 
   // Natural sort comparator for roll numbers (handles "1", "2", "10" correctly)
@@ -229,26 +243,38 @@ export default function PromotionPage() {
       const defaultAction = isHighestSourceClass ? 'GRADUATE' : 'PROMOTE'
       let defaultTargetClassId = defaultAction === 'PROMOTE' ? getDefaultPromoteTargetClassId() : ''
 
-      if (defaultAction === 'PROMOTE' && !defaultTargetClassId) {
+      if (defaultAction === 'PROMOTE' && !defaultTargetClassId && sourceYearId && targetYearId && sourceClassId) {
+        setIsTargetSetupLoading(true)
         try {
-          defaultTargetClassId = await ensureTargetClassForSource()
+          const previewRes = await sessionsApi.previewPromotionTargets({
+            source_academic_year: parseInt(sourceYearId),
+            target_academic_year: parseInt(targetYearId),
+            source_class: parseInt(sourceClassId),
+          })
+
+          const targetPlan = previewRes?.data?.target_plan
+          const statusValue = targetPlan?.status
+          const existingClassId = targetPlan?.existing_class?.id
+
+          if (statusValue === 'exists_active' && existingClassId) {
+            defaultTargetClassId = String(existingClassId)
+          } else if (statusValue === 'exists_inactive' || statusValue === 'missing' || statusValue === 'ambiguous') {
+            setTargetSetupPreview(previewRes.data)
+            setShowTargetSetupModal(true)
+            return
+          } else {
+            showWarning(targetPlan?.reason || 'Target class mapping is ambiguous. Please configure target classes manually.')
+            return
+          }
         } catch (error) {
-          showError(error?.response?.data?.detail || error?.response?.data?.name?.[0] || error.message || 'Failed to prepare target class for promotion.')
+          showError(error?.response?.data?.detail || 'Failed to preview target class setup for promotion.')
           return
+        } finally {
+          setIsTargetSetupLoading(false)
         }
       }
 
-      setPromotions(enrollments.slice().sort(rollSort).map(e => ({
-        student_id: e.student,
-        student_name: e.student_name,
-        current_class: e.class_name,
-        current_roll: e.roll_number,
-        target_class_id: defaultTargetClassId,
-        new_roll_number: e.roll_number,
-        include: true,
-        action: defaultAction,
-      })))
-      setStep(3)
+      buildInitialPromotions(defaultTargetClassId)
     }
   }
 
@@ -441,13 +467,102 @@ export default function PromotionPage() {
                 </button>
                 <button
                   onClick={initializePromotions}
-                  disabled={!sourceClassId || enrollmentsLoading}
+                  disabled={!sourceClassId || enrollmentsLoading || isTargetSetupLoading}
                   className="btn-primary px-6 py-2 text-sm disabled:opacity-50"
-                >{enrollmentsLoading ? 'Loading...' : 'Next'}</button>
+                >{enrollmentsLoading || isTargetSetupLoading ? 'Loading...' : 'Next'}</button>
               </div>
             </div>
           </div>
         </div>
+      )}
+
+      {/* Target Setup Modal */}
+      {showTargetSetupModal && targetSetupPreview && (
+        (() => {
+          const statusValue = targetSetupPreview?.target_plan?.status
+          const ui = getTargetPlanUi(statusValue)
+          const isAmbiguous = statusValue === 'ambiguous'
+          const candidateCount = targetSetupPreview?.target_plan?.candidates?.length || 0
+
+          return (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full p-5">
+            <div className="flex items-start justify-between gap-3 mb-3">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Prepare Target Class</h3>
+                <p className="text-sm text-gray-600 mt-0.5">Review class mapping before generating the promotion list.</p>
+              </div>
+              <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border ${ui.badgeClass}`}>
+                {ui.label}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4 text-sm">
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-2.5">
+                <p className="text-xs text-gray-500 mb-0.5">Source class</p>
+                <p className="font-medium text-gray-900">{targetSetupPreview?.source_class?.label}</p>
+              </div>
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-2.5">
+                <p className="text-xs text-gray-500 mb-0.5">Target academic year</p>
+                <p className="font-medium text-gray-900">{targetSetupPreview?.target_academic_year?.name}</p>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-gray-200 p-3 mb-4 bg-gray-50 text-sm">
+              <p className="text-gray-700 mb-1"><strong>Status code:</strong> {targetSetupPreview?.target_plan?.status}</p>
+              <p className="text-gray-600">{targetSetupPreview?.target_plan?.reason}</p>
+              {targetSetupPreview?.target_plan?.existing_class && (
+                <p className="text-gray-700 mt-2">
+                  Existing target: <strong>{targetSetupPreview.target_plan.existing_class.label}</strong>
+                  {targetSetupPreview.target_plan.existing_class.is_active ? ' (active)' : ' (inactive)'}
+                </p>
+              )}
+              {targetSetupPreview?.target_plan?.proposed_class && (
+                <p className="text-gray-700 mt-2">
+                  Will create: <strong>{targetSetupPreview.target_plan.proposed_class.label}</strong>
+                </p>
+              )}
+              {isAmbiguous && candidateCount > 0 && (
+                <div className="mt-3">
+                  <p className="text-xs font-semibold text-gray-600 uppercase mb-1.5">Possible target classes</p>
+                  <div className="max-h-36 overflow-auto rounded border border-gray-200 bg-white">
+                    {targetSetupPreview.target_plan.candidates.map(candidate => (
+                      <div key={candidate.id} className="px-2.5 py-2 text-sm border-b border-gray-100 last:border-b-0 flex items-center justify-between gap-2">
+                        <span className="text-gray-800">{candidate.label}</span>
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${candidate.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-700'}`}>
+                          {candidate.is_active ? 'Active' : 'Inactive'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => {
+                  setShowTargetSetupModal(false)
+                  setTargetSetupPreview(null)
+                }}
+                className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
+                disabled={isTargetSetupLoading}
+              >Cancel</button>
+              <button
+                onClick={handleApplyTargetSetup}
+                className="btn-primary px-5 py-2 text-sm disabled:opacity-50"
+                disabled={isTargetSetupLoading || isAmbiguous}
+              >{isTargetSetupLoading ? 'Applying...' : ui.actionLabel}</button>
+            </div>
+            {isAmbiguous && (
+              <p className="text-xs text-red-600 mt-2">
+                Automatic setup is blocked because multiple valid targets exist. Create/select the correct target class first, then continue.
+              </p>
+            )}
+          </div>
+        </div>
+          )
+        })()
       )}
 
       {/* AI Advisor Panel */}

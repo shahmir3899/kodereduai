@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from students.models import Class
 from .models import AcademicYear, Term, StudentEnrollment
 
 
@@ -95,7 +96,7 @@ class TermCreateSerializer(serializers.ModelSerializer):
 
 class StudentEnrollmentSerializer(serializers.ModelSerializer):
     student_name = serializers.CharField(source='student.name', read_only=True)
-    class_name = serializers.CharField(source='class_obj.name', read_only=True)
+    class_name = serializers.SerializerMethodField()
     academic_year_name = serializers.CharField(
         source='academic_year.name', read_only=True,
     )
@@ -109,6 +110,11 @@ class StudentEnrollmentSerializer(serializers.ModelSerializer):
             'is_active', 'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'school', 'created_at', 'updated_at']
+
+    def get_class_name(self, obj):
+        if obj.class_obj.section:
+            return f"{obj.class_obj.name} - {obj.class_obj.section}"
+        return obj.class_obj.name
 
 
 class StudentEnrollmentCreateSerializer(serializers.ModelSerializer):
@@ -148,3 +154,40 @@ class BulkPromoteSerializer(serializers.Serializer):
         child=serializers.DictField(),
         help_text="List of {student_id, target_class_id, new_roll_number}",
     )
+
+
+class PromotionTargetPreviewSerializer(serializers.Serializer):
+    source_academic_year = serializers.PrimaryKeyRelatedField(
+        queryset=AcademicYear.objects.all(),
+    )
+    target_academic_year = serializers.PrimaryKeyRelatedField(
+        queryset=AcademicYear.objects.all(),
+    )
+    source_class = serializers.PrimaryKeyRelatedField(
+        queryset=Class.objects.all(),
+    )
+
+    def validate(self, attrs):
+        school_id = self.context.get('school_id')
+        source_year = attrs['source_academic_year']
+        target_year = attrs['target_academic_year']
+        source_class = attrs['source_class']
+
+        if school_id:
+            school_id = int(school_id)
+            if source_year.school_id != school_id:
+                raise serializers.ValidationError({'source_academic_year': 'Source academic year does not belong to this school.'})
+            if target_year.school_id != school_id:
+                raise serializers.ValidationError({'target_academic_year': 'Target academic year does not belong to this school.'})
+            if source_class.school_id != school_id:
+                raise serializers.ValidationError({'source_class': 'Source class does not belong to this school.'})
+
+        if source_year.id == target_year.id:
+            raise serializers.ValidationError('Source and target academic year must be different.')
+
+        return attrs
+
+
+class PromotionTargetApplySerializer(PromotionTargetPreviewSerializer):
+    create_if_missing = serializers.BooleanField(default=True)
+    reactivate_if_inactive = serializers.BooleanField(default=True)

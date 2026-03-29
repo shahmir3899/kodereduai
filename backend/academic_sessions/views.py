@@ -17,6 +17,8 @@ from .serializers import (
     StudentEnrollmentSerializer,
     StudentEnrollmentCreateSerializer,
     BulkPromoteSerializer,
+    PromotionTargetApplySerializer,
+    PromotionTargetPreviewSerializer,
 )
 
 
@@ -166,6 +168,273 @@ class StudentEnrollmentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         if status_filter:
             qs = qs.filter(status=status_filter)
         return qs
+
+    @staticmethod
+    def _derive_next_class_name(source_name):
+        import re
+
+        match = re.match(r'^(.*?)(\d+)([^\d]*)$', source_name or '')
+        if not match:
+            return ''
+
+        prefix, num, suffix = match.group(1), match.group(2), match.group(3)
+        return f"{prefix}{int(num) + 1}{suffix}".strip()
+
+    @staticmethod
+    def _class_label(class_obj):
+        if class_obj.section:
+            return f"{class_obj.name} - {class_obj.section}"
+        return class_obj.name
+
+    def _compute_promotion_target_plan(self, school_id, source_class):
+        from students.models import Class
+
+        next_grade_level = source_class.grade_level + 1
+        next_grade_classes = list(Class.objects.filter(
+            school_id=school_id,
+            grade_level=next_grade_level,
+        ).order_by('section', 'name', 'id'))
+
+        source_section = (source_class.section or '').strip().lower()
+        status = 'missing'
+        reason = 'No matching target class found.'
+        suggested_name = ''
+        suggested_section = source_class.section or ''
+        existing_class = None
+
+        if source_section:
+            same_section_matches = [
+                c for c in next_grade_classes
+                if (c.section or '').strip().lower() == source_section
+            ]
+            if len(same_section_matches) == 1:
+                existing_class = same_section_matches[0]
+                if existing_class.is_active:
+                    status = 'exists_active'
+                    reason = 'Matching same-section target exists and is active.'
+                else:
+                    status = 'exists_inactive'
+                    reason = 'Matching same-section target exists but is inactive and should be reactivated.'
+            elif len(same_section_matches) > 1:
+                status = 'ambiguous'
+                reason = 'Multiple same-section target classes found. Manual selection required.'
+            else:
+                suggested_name = self._derive_next_class_name(source_class.name)
+                if suggested_name:
+                    reason = 'Missing same-section target class; safe to create.'
+                else:
+                    status = 'ambiguous'
+                    reason = 'Unable to derive next class name automatically. Manual class setup required.'
+        else:
+            if len(next_grade_classes) == 1:
+                existing_class = next_grade_classes[0]
+                if existing_class.is_active:
+                    status = 'exists_active'
+                    reason = 'Single next-grade target exists and is active.'
+                else:
+                    status = 'exists_inactive'
+                    reason = 'Single next-grade target exists but is inactive and should be reactivated.'
+            elif len(next_grade_classes) > 1:
+                status = 'ambiguous'
+                reason = 'Multiple next-grade targets exist for a no-section source class. Manual selection required.'
+            else:
+                suggested_name = self._derive_next_class_name(source_class.name)
+                if suggested_name:
+                    reason = 'Missing next-grade target class; safe to create.'
+                else:
+                    status = 'ambiguous'
+                    reason = 'Unable to derive next class name automatically. Manual class setup required.'
+
+        return {
+            'status': status,
+            'reason': reason,
+            'next_grade_level': next_grade_level,
+            'suggested_name': suggested_name,
+            'suggested_section': suggested_section,
+            'existing_class': existing_class,
+            'candidates': next_grade_classes,
+        }
+
+    @action(detail=False, methods=['post'], url_path='promotion-targets-preview')
+    def promotion_targets_preview(self, request):
+        """Preview safe target-class mapping for promotion (exists/create/reactivate/ambiguous)."""
+        school_id = _resolve_school_id(request)
+        serializer = PromotionTargetPreviewSerializer(
+            data=request.data,
+            context={'school_id': school_id},
+        )
+        serializer.is_valid(raise_exception=True)
+
+        source_year = serializer.validated_data['source_academic_year']
+        target_year = serializer.validated_data['target_academic_year']
+        source_class = serializer.validated_data['source_class']
+
+        plan = self._compute_promotion_target_plan(school_id, source_class)
+        status_value = plan['status']
+        reason = plan['reason']
+        next_grade_level = plan['next_grade_level']
+        suggested_name = plan['suggested_name']
+        suggested_section = plan['suggested_section']
+        existing_class = plan['existing_class']
+        next_grade_classes = plan['candidates']
+
+        can_auto_create = status_value == 'missing' and bool(suggested_name)
+        can_reactivate = status_value == 'exists_inactive'
+
+        response_data = {
+            'source_academic_year': {'id': source_year.id, 'name': source_year.name},
+            'target_academic_year': {'id': target_year.id, 'name': target_year.name},
+            'source_class': {
+                'id': source_class.id,
+                'name': source_class.name,
+                'section': source_class.section,
+                'grade_level': source_class.grade_level,
+                'label': self._class_label(source_class),
+            },
+            'target_plan': {
+                'status': status_value,
+                'reason': reason,
+                'next_grade_level': next_grade_level,
+                'existing_class': (
+                    {
+                        'id': existing_class.id,
+                        'name': existing_class.name,
+                        'section': existing_class.section,
+                        'grade_level': existing_class.grade_level,
+                        'label': self._class_label(existing_class),
+                        'is_active': existing_class.is_active,
+                    }
+                    if existing_class else None
+                ),
+                'proposed_class': (
+                    {
+                        'name': suggested_name,
+                        'section': suggested_section,
+                        'grade_level': next_grade_level,
+                        'label': f"{suggested_name}{f' - {suggested_section}' if suggested_section else ''}",
+                    }
+                    if can_auto_create else None
+                ),
+                'can_auto_create': can_auto_create,
+                'can_reactivate': can_reactivate,
+                'candidates': [
+                    {
+                        'id': c.id,
+                        'name': c.name,
+                        'section': c.section,
+                        'grade_level': c.grade_level,
+                        'label': self._class_label(c),
+                        'is_active': c.is_active,
+                    }
+                    for c in next_grade_classes
+                ],
+            },
+        }
+
+        return Response(response_data)
+
+    @action(detail=False, methods=['post'], url_path='promotion-targets-apply')
+    def promotion_targets_apply(self, request):
+        """Apply safe target-class plan (create/reactivate) and return resolved target class."""
+        school_id = _resolve_school_id(request)
+        serializer = PromotionTargetApplySerializer(
+            data=request.data,
+            context={'school_id': school_id},
+        )
+        serializer.is_valid(raise_exception=True)
+
+        source_year = serializer.validated_data['source_academic_year']
+        target_year = serializer.validated_data['target_academic_year']
+        source_class = serializer.validated_data['source_class']
+        create_if_missing = serializer.validated_data['create_if_missing']
+        reactivate_if_inactive = serializer.validated_data['reactivate_if_inactive']
+
+        plan = self._compute_promotion_target_plan(school_id, source_class)
+        status_value = plan['status']
+        target_class = plan['existing_class']
+        action_taken = 'none'
+
+        if status_value == 'ambiguous':
+            return Response({
+                'detail': plan['reason'],
+                'status': status_value,
+                'candidates': [
+                    {
+                        'id': c.id,
+                        'name': c.name,
+                        'section': c.section,
+                        'grade_level': c.grade_level,
+                        'label': self._class_label(c),
+                        'is_active': c.is_active,
+                    }
+                    for c in plan['candidates']
+                ],
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        if status_value == 'exists_inactive':
+            if not reactivate_if_inactive:
+                return Response(
+                    {'detail': 'Target class exists but is inactive and reactivation is disabled.', 'status': status_value},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            target_class.is_active = True
+            target_class.save(update_fields=['is_active', 'updated_at'])
+            action_taken = 'reactivated'
+
+        if status_value == 'missing':
+            if not create_if_missing:
+                return Response(
+                    {'detail': 'Target class is missing and creation is disabled.', 'status': status_value},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            from students.models import Class
+            if not plan['suggested_name']:
+                return Response(
+                    {'detail': 'Unable to derive target class name for auto-create.', 'status': status_value},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            target_class, created = Class.objects.get_or_create(
+                school_id=school_id,
+                name=plan['suggested_name'],
+                section=plan['suggested_section'],
+                defaults={'grade_level': plan['next_grade_level'], 'is_active': True},
+            )
+            if not created and not target_class.is_active:
+                target_class.is_active = True
+                target_class.save(update_fields=['is_active', 'updated_at'])
+                action_taken = 'reactivated'
+            else:
+                action_taken = 'created' if created else 'reused'
+
+        if target_class is None:
+            return Response(
+                {'detail': 'Target class could not be resolved.', 'status': status_value},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return Response({
+            'source_academic_year': {'id': source_year.id, 'name': source_year.name},
+            'target_academic_year': {'id': target_year.id, 'name': target_year.name},
+            'source_class': {
+                'id': source_class.id,
+                'name': source_class.name,
+                'section': source_class.section,
+                'grade_level': source_class.grade_level,
+                'label': self._class_label(source_class),
+            },
+            'target_class': {
+                'id': target_class.id,
+                'name': target_class.name,
+                'section': target_class.section,
+                'grade_level': target_class.grade_level,
+                'label': self._class_label(target_class),
+                'is_active': target_class.is_active,
+            },
+            'status': status_value,
+            'action_taken': action_taken,
+        })
 
     @action(detail=False, methods=['get'])
     def by_class(self, request):
