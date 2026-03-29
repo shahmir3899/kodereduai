@@ -3,6 +3,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { admissionsApi, sessionsApi } from '../services/api'
 import ClassSelector from './ClassSelector'
 import { useToast } from './Toast'
+import { useSessionClasses } from '../hooks/useSessionClasses'
+import { getClassSelectorScope, getResolvedMasterClassId } from '../utils/classScope'
 
 const FEE_TYPE_OPTIONS = [
   { value: 'ADMISSION', label: 'Admission Fee (one-time)' },
@@ -26,6 +28,9 @@ export default function BatchConvertModal({ enquiryIds, onClose, onSuccess }) {
   })
 
   const years = yearsRes?.data?.results || yearsRes?.data || []
+  const { sessionClasses } = useSessionClasses(academicYearId || null)
+  const classSelectorScope = getClassSelectorScope(academicYearId || null)
+  const resolvedClassId = getResolvedMasterClassId(classId, academicYearId || null, sessionClasses)
 
   // Convert mutation
   const convertMut = useMutation({
@@ -73,7 +78,7 @@ export default function BatchConvertModal({ enquiryIds, onClose, onSuccess }) {
     convertMut.mutate({
       enquiry_ids: enquiryIds,
       academic_year_id: parseInt(academicYearId),
-      class_id: parseInt(classId),
+      class_id: parseInt(resolvedClassId),
       generate_fees: generateFees,
       fee_types: generateFees ? selectedFeeTypes : [],
     })
@@ -133,6 +138,8 @@ export default function BatchConvertModal({ enquiryIds, onClose, onSuccess }) {
               value={classId}
               onChange={(e) => setClassId(e.target.value)}
               className="input w-full"
+              scope={classSelectorScope}
+              academicYearId={academicYearId || undefined}
               required
             />
           </div>
@@ -181,7 +188,7 @@ export default function BatchConvertModal({ enquiryIds, onClose, onSuccess }) {
           </button>
           <button
             onClick={handleConvert}
-            disabled={convertMut.isPending || !academicYearId || !classId}
+            disabled={convertMut.isPending || !academicYearId || !resolvedClassId}
             className="btn-primary px-6 py-2 text-sm disabled:opacity-50 bg-purple-600 hover:bg-purple-700"
           >
             {convertMut.isPending ? 'Converting...' : `Convert ${enquiryIds.length} Enquiries`}

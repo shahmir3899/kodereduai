@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useAuth } from '../../contexts/AuthContext'
+import { useSessionClasses } from '../../hooks/useSessionClasses'
 import { MONTHS } from './FeeFilters'
 import ClassSelector from '../../components/ClassSelector'
 import SearchableSelect from '../../components/SearchableSelect'
 import { studentsApi, financeApi } from '../../services/api'
 import { getErrorMessage } from '../../utils/errorUtils'
+import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 
 const PAYMENT_METHODS = [
   { value: 'CASH', label: 'Cash' },
@@ -85,6 +88,7 @@ export function PaymentModal({ payment, form, setForm, onSubmit, onClose, isPend
 }
 
 export function GenerateModal({ show, onClose, month, year, classList, mutation, onetimeMutation, academicYearId }) {
+  const { activeSchool } = useAuth()
   const [confirmed, setConfirmed] = useState(false)
   const [generateFeeType, setGenerateFeeType] = useState('MONTHLY')
   const [onetimeClass, setOnetimeClass] = useState('')
@@ -95,6 +99,10 @@ export function GenerateModal({ show, onClose, month, year, classList, mutation,
   const [modalClassFilter, setModalClassFilter] = useState('')
 
   const isMonthly = generateFeeType === 'MONTHLY'
+  const { sessionClasses } = useSessionClasses(academicYearId, activeSchool?.id)
+  const classSelectorScope = getClassSelectorScope(academicYearId)
+  const resolvedModalClassFilter = getResolvedMasterClassId(modalClassFilter, academicYearId, sessionClasses)
+  const resolvedOnetimeClass = getResolvedMasterClassId(onetimeClass, academicYearId, sessionClasses)
 
   // Auto-close modal when task is submitted (monthly = background task) or completes (onetime = regular mutation)
   useEffect(() => {
@@ -122,10 +130,10 @@ export function GenerateModal({ show, onClose, month, year, classList, mutation,
 
   // Preview: dry-run showing what will be created (monthly)
   const { data: monthlyPreview, isFetching: monthlyPreviewLoading } = useQuery({
-    queryKey: ['generate-preview', 'MONTHLY', modalClassFilter, modalMonth, modalYear, academicYearId],
+    queryKey: ['generate-preview', 'MONTHLY', resolvedModalClassFilter, modalMonth, modalYear, academicYearId],
     queryFn: () => financeApi.previewGeneration({
       fee_type: 'MONTHLY', year: modalYear, month: modalMonth,
-      ...(modalClassFilter && { class_id: modalClassFilter }),
+      ...(resolvedModalClassFilter && { class_id: resolvedModalClassFilter }),
       ...(academicYearId && { academic_year: academicYearId }),
     }),
     enabled: show && isMonthly,
@@ -134,12 +142,12 @@ export function GenerateModal({ show, onClose, month, year, classList, mutation,
 
   // Preview: dry-run for non-monthly
   const { data: onetimePreview, isFetching: onetimePreviewLoading } = useQuery({
-    queryKey: ['generate-preview', generateFeeType, onetimeClass, modalYear, academicYearId],
+    queryKey: ['generate-preview', generateFeeType, resolvedOnetimeClass, modalYear, academicYearId],
     queryFn: () => financeApi.previewGeneration({
-      fee_type: generateFeeType, class_id: onetimeClass, year: modalYear, month: 0,
+      fee_type: generateFeeType, class_id: resolvedOnetimeClass, year: modalYear, month: 0,
       ...(academicYearId && { academic_year: academicYearId }),
     }),
-    enabled: show && !isMonthly && !!onetimeClass,
+    enabled: show && !isMonthly && !!resolvedOnetimeClass,
     staleTime: 30_000,
   })
 
@@ -148,6 +156,9 @@ export function GenerateModal({ show, onClose, month, year, classList, mutation,
   const feeLabel = FEE_TYPE_TABS.find(t => t.value === generateFeeType)?.label || 'Fee'
   const mPreview = monthlyPreview?.data
   const oPreview = onetimePreview?.data
+  const selectedOnetimeClassLabel = classSelectorScope === 'session'
+    ? (sessionClasses.find(c => String(c.id) === String(onetimeClass))?.display_name || '')
+    : (classList.find(c => String(c.id) === String(onetimeClass))?.name || '')
 
   const handleClose = () => {
     setConfirmed(false)
@@ -241,14 +252,15 @@ export function GenerateModal({ show, onClose, month, year, classList, mutation,
                   onChange={(e) => setModalClassFilter(e.target.value)}
                   className="input-field"
                   showAllOption
-                  classes={classList}
+                  scope={classSelectorScope}
+                  academicYearId={academicYearId}
                 />
               </div>
               <div className="flex gap-3">
                 <button onClick={handleClose} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">Cancel</button>
                 <button
                   onClick={() => {
-                    const data = { month: modalMonth, year: modalYear, ...(modalClassFilter && { class_id: parseInt(modalClassFilter) }), ...(academicYearId && { academic_year: academicYearId }) }
+                    const data = { month: modalMonth, year: modalYear, ...(resolvedModalClassFilter && { class_id: parseInt(resolvedModalClassFilter) }), ...(academicYearId && { academic_year: academicYearId }) }
                     if (mutation.trigger) mutation.trigger(data)
                     else mutation.mutate(data)
                   }}
@@ -280,7 +292,8 @@ export function GenerateModal({ show, onClose, month, year, classList, mutation,
                   value={onetimeClass}
                   onChange={(e) => { setOnetimeClass(e.target.value); setShowStudentList(false) }}
                   className="input-field"
-                  classes={classList}
+                  scope={classSelectorScope}
+                  academicYearId={academicYearId}
                 />
               </div>
               <div className="mb-4">
@@ -357,7 +370,7 @@ export function GenerateModal({ show, onClose, month, year, classList, mutation,
               <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-2 mb-4">
                 <p className="text-sm font-medium text-blue-900">Please confirm {feeLabel.toLowerCase()} fee generation:</p>
                 <div className="text-sm text-blue-800 space-y-1">
-                  <p><span className="font-medium">Class:</span> {classList.find(c => String(c.id) === String(onetimeClass))?.name}</p>
+                  <p><span className="font-medium">Class:</span> {selectedOnetimeClassLabel}</p>
                   <p><span className="font-medium">Fee Type:</span> {feeLabel}</p>
                   <p><span className="font-medium">Year:</span> {modalYear}</p>
                   <p><span className="font-medium">Records:</span> {oPreview?.will_create} new</p>
@@ -416,6 +429,7 @@ const FEE_TYPE_DESCRIPTIONS = {
 }
 
 export function FeeStructureModal({ show, onClose, classList, bulkEffectiveFrom, setBulkEffectiveFrom, onSubmit, mutation, feeTypeFilter, academicYearId, studentFeeMutation }) {
+  const { activeSchool } = useAuth()
   const [showConfirm, setShowConfirm] = useState(false)
   const [structureFeeType, setStructureFeeType] = useState(feeTypeFilter || 'MONTHLY')
   const [feesByType, setFeesByType] = useState({
@@ -429,6 +443,10 @@ export function FeeStructureModal({ show, onClose, classList, bulkEffectiveFrom,
   const [studentShowConfirm, setStudentShowConfirm] = useState(false)
   // Track local edits per fee type so switching tabs preserves unsaved changes
   const [localEdits, setLocalEdits] = useState({})
+
+  const { sessionClasses } = useSessionClasses(academicYearId, activeSchool?.id)
+  const classSelectorScope = getClassSelectorScope(academicYearId)
+  const resolvedStudentClassId = getResolvedMasterClassId(studentClassId, academicYearId, sessionClasses)
 
   // Reset state when modal opens
   useEffect(() => {
@@ -471,22 +489,22 @@ export function FeeStructureModal({ show, onClose, classList, bulkEffectiveFrom,
 
   // --- Student mode queries ---
   const { data: classStudentsData, isLoading: studentsLoading } = useQuery({
-    queryKey: ['students-for-fee-struct', studentClassId, academicYearId],
+    queryKey: ['students-for-fee-struct', resolvedStudentClassId, academicYearId],
     queryFn: () => studentsApi.getStudents({
-      class_id: studentClassId, is_active: true, page_size: 9999,
+      class_id: resolvedStudentClassId, is_active: true, page_size: 9999,
       ...(academicYearId && { academic_year: academicYearId }),
     }),
-    enabled: show && structureMode === 'student' && !!studentClassId,
+    enabled: show && structureMode === 'student' && !!resolvedStudentClassId,
     staleTime: 2 * 60_000,
   })
 
   const { data: classFeeStructures, isLoading: structuresLoading } = useQuery({
-    queryKey: ['feeStructures-class', studentClassId, structureFeeType, academicYearId],
+    queryKey: ['feeStructures-class', resolvedStudentClassId, structureFeeType, academicYearId],
     queryFn: () => financeApi.getFeeStructures({
-      class_id: studentClassId, fee_type: structureFeeType, page_size: 9999,
+      class_id: resolvedStudentClassId, fee_type: structureFeeType, page_size: 9999,
       ...(academicYearId && { academic_year: academicYearId }),
     }),
-    enabled: show && structureMode === 'student' && !!studentClassId,
+    enabled: show && structureMode === 'student' && !!resolvedStudentClassId,
     staleTime: 60_000,
   })
 
@@ -554,7 +572,7 @@ export function FeeStructureModal({ show, onClose, classList, bulkEffectiveFrom,
       .map(s => ({ student_id: s.student_id, monthly_amount: s.amount }))
     if (toSend.length === 0) return
     studentFeeMutation.mutate({
-      class_id: parseInt(studentClassId),
+      class_id: parseInt(resolvedStudentClassId),
       fee_type: structureFeeType,
       effective_from: bulkEffectiveFrom,
       students: toSend,
@@ -701,7 +719,8 @@ export function FeeStructureModal({ show, onClose, classList, bulkEffectiveFrom,
                   value={studentClassId}
                   onChange={(e) => { setStudentClassId(e.target.value); setStudentFees([]); setStudentShowConfirm(false); setLocalEdits({}); studentFeeMutation?.reset?.() }}
                   className="input-field text-sm"
-                  classes={classList}
+                  scope={classSelectorScope}
+                  academicYearId={academicYearId}
                 />
               </div>
               <div className="min-w-[140px]">
@@ -945,6 +964,7 @@ export function StudentFeeModal({ student, amount, setAmount, onSubmit, onClose,
 }
 
 export function CreateSingleFeeModal({ show, onClose, onSubmit, isPending, error, isSuccess, classList, activeSchoolId, academicYearId, accountsList = [] }) {
+  const { activeSchool } = useAuth()
   const now = new Date()
   const initialForm = {
     classId: '', student: '', fee_type: 'MONTHLY',
@@ -954,6 +974,9 @@ export function CreateSingleFeeModal({ show, onClose, onSubmit, isPending, error
     payment_date: new Date().toISOString().split('T')[0],
   }
   const [form, setForm] = useState(initialForm)
+  const { sessionClasses } = useSessionClasses(academicYearId, activeSchool?.id)
+  const classSelectorScope = getClassSelectorScope(academicYearId)
+  const resolvedFormClassId = getResolvedMasterClassId(form.classId, academicYearId, sessionClasses)
 
   // Reset form every time modal opens
   useEffect(() => {
@@ -962,9 +985,9 @@ export function CreateSingleFeeModal({ show, onClose, onSubmit, isPending, error
 
   // Fetch students for selected class, filtered by academic year
   const { data: studentsData, isLoading: studentsLoading } = useQuery({
-    queryKey: ['students-by-class', form.classId, academicYearId],
-    queryFn: () => studentsApi.getStudents({ class_id: form.classId, is_active: true, page_size: 9999, ...(academicYearId && { academic_year: academicYearId }) }),
-    enabled: !!form.classId,
+    queryKey: ['students-by-class', resolvedFormClassId, academicYearId],
+    queryFn: () => studentsApi.getStudents({ class_id: resolvedFormClassId, is_active: true, page_size: 9999, ...(academicYearId && { academic_year: academicYearId }) }),
+    enabled: !!resolvedFormClassId,
     staleTime: 2 * 60_000,
   })
   const studentList = (studentsData?.data?.results || studentsData?.data || [])
@@ -1046,7 +1069,8 @@ export function CreateSingleFeeModal({ show, onClose, onSubmit, isPending, error
                 value={form.classId}
                 onChange={(e) => { setForm(f => ({ ...f, classId: e.target.value, student: '', amount_due: '' })) }}
                 className="input-field"
-                classes={classList}
+                scope={classSelectorScope}
+                academicYearId={academicYearId}
               />
             </div>
             <div>

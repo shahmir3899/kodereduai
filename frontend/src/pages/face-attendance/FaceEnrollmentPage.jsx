@@ -2,14 +2,18 @@ import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../../contexts/AuthContext'
+import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useToast } from '../../components/Toast'
 import { useConfirmModal } from '../../components/ConfirmModal'
 import { faceAttendanceApi, studentsApi } from '../../services/api'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import ClassSelector from '../../components/ClassSelector'
+import { useSessionClasses } from '../../hooks/useSessionClasses'
+import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 
 export default function FaceEnrollmentPage() {
   const { activeSchool } = useAuth()
+  const { activeAcademicYear } = useAcademicYear()
   const { showError, showSuccess } = useToast()
   const { confirm, ConfirmModalRoot } = useConfirmModal()
   const navigate = useNavigate()
@@ -20,20 +24,28 @@ export default function FaceEnrollmentPage() {
   const [selectedStudent, setSelectedStudent] = useState('')
   const [uploading, setUploading] = useState(false)
   const [previewUrl, setPreviewUrl] = useState(null)
+  const { sessionClasses } = useSessionClasses(activeAcademicYear?.id, activeSchool?.id)
+  const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
+  const resolvedSelectedClass = getResolvedMasterClassId(selectedClass, activeAcademicYear?.id, sessionClasses)
 
   // Load students for selected class
   const { data: studentsData } = useQuery({
-    queryKey: ['students', selectedClass],
-    queryFn: () => studentsApi.getStudents({ class_obj: selectedClass, page_size: 100, is_active: true }),
-    enabled: !!selectedClass,
+    queryKey: ['students', resolvedSelectedClass, activeAcademicYear?.id],
+    queryFn: () => studentsApi.getStudents({
+      class_obj: resolvedSelectedClass,
+      page_size: 100,
+      is_active: true,
+      ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
+    }),
+    enabled: !!resolvedSelectedClass,
   })
   const students = studentsData?.data?.results || studentsData?.data || []
 
   // Load enrollments for selected class
   const { data: enrollmentsData, isLoading: enrollmentsLoading } = useQuery({
-    queryKey: ['faceEnrollments', activeSchool?.id, selectedClass],
+    queryKey: ['faceEnrollments', activeSchool?.id, resolvedSelectedClass],
     queryFn: () => faceAttendanceApi.getEnrollments(
-      selectedClass ? { class_obj: selectedClass } : {}
+      resolvedSelectedClass ? { class_obj: resolvedSelectedClass } : {}
     ),
     enabled: !!activeSchool,
   })
@@ -45,7 +57,7 @@ export default function FaceEnrollmentPage() {
       setUploading(true)
       // Upload image
       const uploadRes = await faceAttendanceApi.uploadImage(
-        file, activeSchool?.id, selectedClass || 0
+        file, activeSchool?.id, resolvedSelectedClass || 0
       )
       const imageUrl = uploadRes.data.url || uploadRes.data.image_url
 
@@ -134,6 +146,8 @@ export default function FaceEnrollmentPage() {
                 value={selectedClass}
                 onChange={(e) => { setSelectedClass(e.target.value); setSelectedStudent('') }}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                scope={classSelectorScope}
+                academicYearId={activeAcademicYear?.id}
               />
             </div>
 

@@ -2,11 +2,13 @@ import { useState, useEffect, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
+import { useSessionClasses } from '../../hooks/useSessionClasses'
 import { useFeeSetup } from './useFeeSetup'
 import { MONTHS } from './FeeFilters'
 import ClassSelector from '../../components/ClassSelector'
 import { financeApi, discountApi, studentsApi } from '../../services/api'
 import { getErrorMessage } from '../../utils/errorUtils'
+import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 import AnnualChargesTab from './AnnualChargesTab'
 
 // MONTHLY, ADMISSION, BOOKS, and FINE are managed here.
@@ -57,6 +59,7 @@ const _currentYear = new Date().getFullYear()
 const YEAR_OPTIONS = [_currentYear - 1, _currentYear, _currentYear + 1, _currentYear + 2]
 
 export default function FeeSetupPage() {
+  const { activeSchool } = useAuth()
   const { activeAcademicYear } = useAcademicYear()
   const queryClient = useQueryClient()
   const now = new Date()
@@ -95,10 +98,17 @@ export default function FeeSetupPage() {
   const [bulkSelectedId, setBulkSelectedId] = useState('')
   const [removeConfirm, setRemoveConfirm] = useState(null) // studentDiscount id
 
+  const { sessionClasses } = useSessionClasses(activeAcademicYear?.id, activeSchool?.id)
+  const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
+  const resolvedStudentClassId = getResolvedMasterClassId(studentClassId, activeAcademicYear?.id, sessionClasses)
+  const resolvedGenClassFilter = getResolvedMasterClassId(genClassFilter, activeAcademicYear?.id, sessionClasses)
+  const resolvedOnetimeClass = getResolvedMasterClassId(onetimeClass, activeAcademicYear?.id, sessionClasses)
+  const resolvedDiscClassId = getResolvedMasterClassId(discClassId, activeAcademicYear?.id, sessionClasses)
+
   const data = useFeeSetup({
     academicYearId: activeAcademicYear?.id,
     feeType,
-    studentClassId,
+    studentClassId: resolvedStudentClassId,
     structureMode,
     month: genMonth,
     year: genYear,
@@ -106,22 +116,22 @@ export default function FeeSetupPage() {
 
   // === Student Discounts tab queries ===
   const { data: discStudentsData, isLoading: discStudentsLoading } = useQuery({
-    queryKey: ['disc-tab-students', discClassId, activeAcademicYear?.id],
+    queryKey: ['disc-tab-students', resolvedDiscClassId, activeAcademicYear?.id],
     queryFn: () => studentsApi.getStudents({
-      class_id: discClassId, is_active: true, page_size: 9999,
+      class_id: resolvedDiscClassId, is_active: true, page_size: 9999,
       ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
     }),
-    enabled: activeTab === 'discounts' && !!discClassId,
+    enabled: activeTab === 'discounts' && !!resolvedDiscClassId,
     staleTime: 2 * 60_000,
   })
 
   const { data: discStructuresData } = useQuery({
-    queryKey: ['disc-tab-structures', discClassId, activeAcademicYear?.id],
+    queryKey: ['disc-tab-structures', resolvedDiscClassId, activeAcademicYear?.id],
     queryFn: () => financeApi.getFeeStructures({
-      class_id: discClassId, fee_type: 'MONTHLY', page_size: 9999,
+      class_id: resolvedDiscClassId, fee_type: 'MONTHLY', page_size: 9999,
       ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
     }),
-    enabled: activeTab === 'discounts' && !!discClassId,
+    enabled: activeTab === 'discounts' && !!resolvedDiscClassId,
     staleTime: 2 * 60_000,
   })
 
@@ -282,10 +292,10 @@ export default function FeeSetupPage() {
 
   // Generate preview queries
   const { data: monthlyPreview, isFetching: monthlyPreviewLoading } = useQuery({
-    queryKey: ['generate-preview', 'MONTHLY', genClassFilter, genMonth, genYear, activeAcademicYear?.id],
+    queryKey: ['generate-preview', 'MONTHLY', resolvedGenClassFilter, genMonth, genYear, activeAcademicYear?.id],
     queryFn: () => financeApi.previewGeneration({
       fee_type: 'MONTHLY', year: genYear, month: genMonth,
-      ...(genClassFilter && { class_id: genClassFilter }),
+      ...(resolvedGenClassFilter && { class_id: resolvedGenClassFilter }),
       ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
     }),
     enabled: activeTab === 'generate' && genFeeType === 'MONTHLY',
@@ -294,12 +304,12 @@ export default function FeeSetupPage() {
 
   // Preview for one-time fee types (ADMISSION, BOOKS, FINE)
   const { data: onetimePreview, isFetching: onetimePreviewLoading } = useQuery({
-    queryKey: ['generate-preview', genFeeType, onetimeClass, genYear, activeAcademicYear?.id],
+    queryKey: ['generate-preview', genFeeType, resolvedOnetimeClass, genYear, activeAcademicYear?.id],
     queryFn: () => financeApi.previewGeneration({
-      fee_type: genFeeType, class_id: onetimeClass, year: genYear, month: 0,
+      fee_type: genFeeType, class_id: resolvedOnetimeClass, year: genYear, month: 0,
       ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
     }),
-    enabled: activeTab === 'generate' && genFeeType !== 'MONTHLY' && !!onetimeClass,
+    enabled: activeTab === 'generate' && genFeeType !== 'MONTHLY' && !!resolvedOnetimeClass,
     staleTime: 30_000,
   })
 
@@ -344,7 +354,7 @@ export default function FeeSetupPage() {
       .map(s => ({ student_id: s.student_id, monthly_amount: s.amount }))
     if (toSend.length === 0) return
     data.bulkStudentFeeMutation.mutate({
-      class_id: parseInt(studentClassId), fee_type: feeType,
+      class_id: parseInt(resolvedStudentClassId), fee_type: feeType,
       effective_from: data.bulkEffectiveFrom, students: toSend,
     }, {
       onSuccess: () => {
@@ -367,15 +377,25 @@ export default function FeeSetupPage() {
   }
 
   const handleBulkAssignSubmit = () => {
-    if (!bulkSelectedId || !discClassId || !activeAcademicYear?.id) return
+    if (!bulkSelectedId || !resolvedDiscClassId || !activeAcademicYear?.id) return
     const payload = {
-      class_id: parseInt(discClassId),
+      class_id: parseInt(resolvedDiscClassId),
       academic_year_id: activeAcademicYear.id,
     }
     if (bulkType === 'discount') payload.discount_id = parseInt(bulkSelectedId)
     else payload.scholarship_id = parseInt(bulkSelectedId)
     bulkAssignMutation.mutate(payload)
   }
+
+  const selectedOnetimeClassLabel = useMemo(() => {
+    if (!onetimeClass) return ''
+    if (classSelectorScope === 'session') {
+      const sessionMatch = sessionClasses.find(sc => String(sc.id) === String(onetimeClass))
+      return sessionMatch?.display_name || sessionMatch?.label || ''
+    }
+    const masterMatch = data.classList.find(c => String(c.id) === String(onetimeClass))
+    return masterMatch ? `${masterMatch.name}${masterMatch.section ? ` - ${masterMatch.section}` : ''}` : ''
+  }, [onetimeClass, classSelectorScope, sessionClasses, data.classList])
 
   const discWithAssignments = discGrid.filter(s => s.assignment).length
 
@@ -526,7 +546,8 @@ export default function FeeSetupPage() {
                     value={studentClassId}
                     onChange={(e) => { setStudentClassId(e.target.value); setStudentFees([]); setStudentShowConfirm(false); setLocalEdits({}); data.bulkStudentFeeMutation?.reset?.() }}
                     className="input-field text-sm"
-                    classes={data.classList}
+                    scope={classSelectorScope}
+                    academicYearId={activeAcademicYear?.id}
                   />
                 </div>
                 <div className="min-w-[140px]">
@@ -685,12 +706,19 @@ export default function FeeSetupPage() {
 
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Filter by Class (optional)</label>
-                <ClassSelector value={genClassFilter} onChange={(e) => setGenClassFilter(e.target.value)} className="input-field" showAllOption classes={data.classList} />
+                <ClassSelector
+                  value={genClassFilter}
+                  onChange={(e) => setGenClassFilter(e.target.value)}
+                  className="input-field"
+                  showAllOption
+                  scope={classSelectorScope}
+                  academicYearId={activeAcademicYear?.id}
+                />
               </div>
 
               <button
                 onClick={() => {
-                  const payload = { month: genMonth, year: genYear, ...(genClassFilter && { class_id: parseInt(genClassFilter) }), ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }) }
+                  const payload = { month: genMonth, year: genYear, ...(resolvedGenClassFilter && { class_id: parseInt(resolvedGenClassFilter) }), ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }) }
                   if (data.generateMutation.trigger) data.generateMutation.trigger(payload)
                   else data.generateMutation.mutate(payload)
                 }}
@@ -720,7 +748,8 @@ export default function FeeSetupPage() {
                   value={onetimeClass}
                   onChange={(e) => setOnetimeClass(e.target.value)}
                   className="input-field"
-                  classes={data.classList}
+                  scope={classSelectorScope}
+                  academicYearId={activeAcademicYear?.id}
                 />
               </div>
               <div className="mb-4">
@@ -758,7 +787,7 @@ export default function FeeSetupPage() {
               <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-2 mb-4">
                 <p className="text-sm font-medium text-blue-900">Please confirm {genFeeLabel.toLowerCase()} fee generation:</p>
                 <div className="text-sm text-blue-800 space-y-1">
-                  <p><span className="font-medium">Class:</span> {data.classList.find(c => String(c.id) === String(onetimeClass))?.name}</p>
+                  <p><span className="font-medium">Class:</span> {selectedOnetimeClassLabel}</p>
                   <p><span className="font-medium">Fee Type:</span> {genFeeLabel}</p>
                   <p><span className="font-medium">Year:</span> {genYear}</p>
                   <p><span className="font-medium">Records:</span> {oPreview?.will_create} new</p>
@@ -812,7 +841,8 @@ export default function FeeSetupPage() {
                 value={discClassId}
                 onChange={(e) => setDiscClassId(e.target.value)}
                 className="input-field text-sm"
-                classes={data.classList}
+                scope={classSelectorScope}
+                academicYearId={activeAcademicYear?.id}
               />
             </div>
             {discClassId && discGrid.length > 0 && (

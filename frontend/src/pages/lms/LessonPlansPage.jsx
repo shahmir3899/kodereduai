@@ -2,11 +2,12 @@ import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { lmsApi, hrApi } from '../../services/api'
-import { useClasses } from '../../hooks/useClasses'
 import ClassSelector from '../../components/ClassSelector'
 import SubjectSelector from '../../components/SubjectSelector'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
+import { useSessionClasses } from '../../hooks/useSessionClasses'
+import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 import { useToast } from '../../components/Toast'
 import LessonPlanWizard from './LessonPlanWizard'
 
@@ -33,6 +34,7 @@ export default function LessonPlansPage() {
   const navigate = useNavigate()
   const { user, isSchoolAdmin, isTeacher } = useAuth()
   const { activeAcademicYear } = useAcademicYear()
+  const { sessionClasses } = useSessionClasses(activeAcademicYear?.id)
   const queryClient = useQueryClient()
   const { showError, showSuccess } = useToast()
 
@@ -44,10 +46,18 @@ export default function LessonPlansPage() {
   const [editingPlan, setEditingPlan] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [form, setForm] = useState({ ...EMPTY_FORM })
+  const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
+  const resolvedFilterClass = getResolvedMasterClassId(filterClass, activeAcademicYear?.id, sessionClasses)
+  const resolvedFormClassObj = getResolvedMasterClassId(form.class_obj, activeAcademicYear?.id, sessionClasses)
+  const sessionClassIdByMaster = useMemo(() => {
+    const map = {}
+    sessionClasses.forEach((sc) => {
+      if (sc.class_obj) map[String(sc.class_obj)] = String(sc.id)
+    })
+    return map
+  }, [sessionClasses])
 
   // -- Data fetching --
-
-  const { classes } = useClasses()
 
   const { data: staffData } = useQuery({
     queryKey: ['hrStaff'],
@@ -55,10 +65,10 @@ export default function LessonPlansPage() {
   })
 
   const { data: plansData, isLoading } = useQuery({
-    queryKey: ['lessonPlans', filterClass, filterSubject, activeAcademicYear?.id],
+    queryKey: ['lessonPlans', resolvedFilterClass, filterSubject, activeAcademicYear?.id],
     queryFn: () =>
       lmsApi.getLessonPlans({
-        ...(filterClass && { class_id: filterClass }),
+        ...(resolvedFilterClass && { class_id: resolvedFilterClass }),
         ...(filterSubject && { subject_id: filterSubject }),
         ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
         page_size: 9999,
@@ -141,12 +151,16 @@ export default function LessonPlansPage() {
   }
 
   const openEditModal = (plan) => {
+    const mappedClassObj = classSelectorScope === 'session'
+      ? (sessionClassIdByMaster[String(plan.class_obj)] || '')
+      : (plan.class_obj ? String(plan.class_obj) : '')
+
     setEditingPlan(plan)
     setForm({
       title: plan.title || '',
       description: plan.description || '',
       objectives: plan.objectives || '',
-      class_obj: plan.class_obj ? String(plan.class_obj) : '',
+      class_obj: mappedClassObj,
       subject: plan.subject ? String(plan.subject) : '',
       teacher: plan.teacher ? String(plan.teacher) : '',
       lesson_date: plan.lesson_date || '',
@@ -180,7 +194,7 @@ export default function LessonPlansPage() {
 
     const payload = {
       ...form,
-      class_obj: parseInt(form.class_obj),
+      class_obj: parseInt(resolvedFormClassObj),
       subject: parseInt(form.subject),
       teacher: form.teacher ? parseInt(form.teacher) : null,
       duration_minutes: parseInt(form.duration_minutes) || 45,
@@ -231,7 +245,8 @@ export default function LessonPlansPage() {
               value={filterClass}
               onChange={(e) => setFilterClass(e.target.value)}
               showAllOption
-              classes={classes}
+              scope={classSelectorScope}
+              academicYearId={activeAcademicYear?.id}
             />
           </div>
           <div>
@@ -521,7 +536,8 @@ export default function LessonPlansPage() {
                     className="input"
                     value={form.class_obj}
                     onChange={(e) => setForm({ ...form, class_obj: e.target.value })}
-                    classes={classes}
+                    scope={classSelectorScope}
+                    academicYearId={activeAcademicYear?.id}
                   />
                 </div>
                 <div>

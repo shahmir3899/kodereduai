@@ -134,3 +134,28 @@ All in `backend/`:
 2. **Backups may be stale** — the Supabase backup was too old to help; more frequent backups recommended
 3. **Promotion must create target enrollments atomically** — the current code marks source as PROMOTED but doesn't guarantee target creation
 4. **Cross-referencing admissions is reliable** — admission enquiry records provided a trustworthy recovery source
+
+---
+
+## Addendum (March 30, 2026) - Session Class Standardization Completed
+
+### Objective
+- Standardize class filtering across frontend modules so class dropdowns show the correct classes for the selected/active academic year.
+- Keep backward compatibility with legacy APIs that still expect master class IDs.
+
+### Implementation Summary
+- Completed ticket rollout T1-T13 documented in `docs/SESSION_CLASS_STANDARDIZATION_EXECUTION_CHECKLIST.md`.
+- Migrated major pages/modules: Attendance, Exams, Academics, Finance, Fee Collection, LMS, Students, Transport, Face Attendance.
+- Applied shared helper pattern:
+	- `ClassSelector` with `scope` and `academicYearId` for session-aware filtering.
+	- `getResolvedMasterClassId` for legacy endpoint payload compatibility.
+
+### Verification
+- Edited-file diagnostics completed with no blocking errors.
+- Frontend production build succeeded after final hardening updates.
+- Final hardening pass (T13) included repo audit for unsafe class-selector bypasses and targeted fix in LMS lesson plan wizard.
+
+### Outcome
+- Class filtering behavior is now consistent across modules.
+- Users see academic-year-relevant class options in filter UIs.
+- Legacy API contracts remain functional via safe session-to-master ID mapping.

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
+import { useSessionClasses } from '../../hooks/useSessionClasses'
 import { useFeeCollection } from './useFeeCollection'
 import FeeFilters from './FeeFilters'
 import FeeSummaryCards from './FeeSummaryCards'
@@ -13,6 +14,7 @@ import {
 import { exportFeePDF } from './feeExport'
 import { useToast } from '../../components/Toast'
 import { useConfirmModal } from '../../components/ConfirmModal'
+import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 
 export default function FeeCollectPage() {
   const { user, activeSchool, isStaffMember } = useAuth()
@@ -34,6 +36,9 @@ export default function FeeCollectPage() {
   const [classFilter, setClassFilter] = useState(() => searchParams.get('class') || '')
   const [statusFilter, setStatusFilter] = useState(() => searchParams.get('status') || '')
   const [feeTypeFilter, setFeeTypeFilter] = useState('MONTHLY')
+  const { sessionClasses } = useSessionClasses(activeAcademicYear?.id)
+  const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
+  const resolvedClassFilter = getResolvedMasterClassId(classFilter, activeAcademicYear?.id, sessionClasses)
 
   // Modal state
   const [showPaymentModal, setShowPaymentModal] = useState(null)
@@ -58,7 +63,7 @@ export default function FeeCollectPage() {
 
   // Data hook
   const data = useFeeCollection({
-    month, year, classFilter, statusFilter, feeTypeFilter,
+    month, year, classFilter: resolvedClassFilter, statusFilter, feeTypeFilter,
     academicYearId: activeAcademicYear?.id,
   })
 
@@ -223,7 +228,8 @@ export default function FeeCollectPage() {
             classFilter={classFilter} setClassFilter={setClassFilter}
             statusFilter={statusFilter} setStatusFilter={setStatusFilter}
             feeTypeFilter={feeTypeFilter} setFeeTypeFilter={setFeeTypeFilter}
-            classList={data.classList}
+            selectorScope={classSelectorScope}
+            academicYearId={activeAcademicYear?.id}
           />
           <div className="flex-1" />
           {data.paymentList.length > 0 && (

@@ -4,22 +4,29 @@ import { lmsApi } from '../../services/api'
 import ClassSelector from '../../components/ClassSelector'
 import SubjectSelector from '../../components/SubjectSelector'
 import TopicStatusBadge from './TopicStatusBadge'
+import { useAcademicYear } from '../../contexts/AcademicYearContext'
+import { useSessionClasses } from '../../hooks/useSessionClasses'
+import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 
 export default function CurriculumCoveragePage() {
+  const { activeAcademicYear } = useAcademicYear()
   const [classId, setClassId] = useState('')
   const [subjectId, setSubjectId] = useState('')
   const [coverage, setCoverage] = useState('')
+  const { sessionClasses } = useSessionClasses(activeAcademicYear?.id)
+  const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
+  const resolvedClassId = getResolvedMasterClassId(classId, activeAcademicYear?.id, sessionClasses)
 
   const { data, isLoading } = useQuery({
-    queryKey: ['curriculumCoverageTopics', classId, subjectId, coverage],
+    queryKey: ['curriculumCoverageTopics', resolvedClassId, subjectId, coverage, activeAcademicYear?.id],
     queryFn: () =>
       lmsApi.getTopics({
         page_size: 999,
-        ...(classId && { class_id: classId }),
+        ...(resolvedClassId && { class_id: resolvedClassId }),
         ...(subjectId && { subject_id: subjectId }),
         ...(coverage && { coverage }),
       }),
-    enabled: Boolean(classId && subjectId),
+    enabled: Boolean(resolvedClassId && subjectId),
   })
 
   const topics = data?.data?.results || data?.data || []
@@ -37,7 +44,13 @@ export default function CurriculumCoveragePage() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
             <label className="label">Class</label>
-            <ClassSelector value={classId} onChange={(e) => setClassId(e.target.value)} className="input" />
+            <ClassSelector
+              value={classId}
+              onChange={(e) => setClassId(e.target.value)}
+              className="input"
+              scope={classSelectorScope}
+              academicYearId={activeAcademicYear?.id}
+            />
           </div>
           <div>
             <label className="label">Subject</label>

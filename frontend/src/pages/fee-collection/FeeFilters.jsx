@@ -5,7 +5,20 @@ const MONTHS = [
   'July', 'August', 'September', 'October', 'November', 'December'
 ]
 
-export default function FeeFilters({ month, setMonth, year, setYear, classFilter, setClassFilter, statusFilter, setStatusFilter, feeTypeFilter, setFeeTypeFilter, classList }) {
+export default function FeeFilters({
+  month,
+  setMonth,
+  year,
+  setYear,
+  classFilter,
+  setClassFilter,
+  statusFilter,
+  setStatusFilter,
+  feeTypeFilter,
+  setFeeTypeFilter,
+  selectorScope,
+  academicYearId,
+}) {
   const isMonthly = !feeTypeFilter || feeTypeFilter === 'MONTHLY'
 
   return (
@@ -42,7 +55,8 @@ export default function FeeFilters({ month, setMonth, year, setYear, classFilter
           onChange={(e) => setClassFilter(e.target.value)}
           className="input-field text-sm"
           showAllOption
-          classes={classList}
+          scope={selectorScope}
+          academicYearId={academicYearId}
         />
       </div>
       <div>

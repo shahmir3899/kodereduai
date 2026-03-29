@@ -80,7 +80,7 @@ class UserGuidePDF(FPDF):
         self.set_font("Helvetica", "", 12)
         self.set_text_color(100, 100, 100)
         self.cell(0, 8, "School Management System", align="C", new_x="LMARGIN", new_y="NEXT")
-        self.cell(0, 8, "Version 3.0 - AI Intelligence Edition", align="C", new_x="LMARGIN", new_y="NEXT")
+        self.cell(0, 8, "Version 3.1 - Session Class Standardization", align="C", new_x="LMARGIN", new_y="NEXT")
         self.ln(40)
         self.set_font("Helvetica", "", 10)
         self.cell(0, 6, "Modules Covered:", align="C", new_x="LMARGIN", new_y="NEXT")
@@ -2063,6 +2063,7 @@ def build_guide():
     pdf.chapter_title("Tips, Best Practices & Operations Checklist")
 
     pdf.section_title("General Tips")
+    pdf.bullet("Class dropdowns are session-scoped: always select the correct academic year first to see the right class list")
     pdf.bullet("Use bulk import (Excel) for students when starting with a large number of records")
     pdf.bullet("Use search and filter features to quickly find records in any list")
     pdf.bullet("Export data regularly as backups (Excel, PDF)")
@@ -2123,7 +2124,7 @@ def build_guide():
         "meta": {
             "title": "KoderEduAI",
             "subtitle": "School Administration Guide",
-            "version": "3.0 - AI Intelligence Edition",
+            "version": "3.1 - Session Class Standardization",
             "generatedAt": datetime.now(timezone.utc).isoformat(),
             "totalChapters": len(pdf.json_chapters),
             "modules": pdf.json_modules

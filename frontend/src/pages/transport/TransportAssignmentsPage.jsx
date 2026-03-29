@@ -4,6 +4,8 @@ import { transportApi, studentsApi } from '../../services/api'
 import ClassSelector from '../../components/ClassSelector'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
+import { useSessionClasses } from '../../hooks/useSessionClasses'
+import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 
 const TRANSPORT_TYPES = [
   { value: 'PICKUP', label: 'Pickup Only' },
@@ -14,6 +16,7 @@ const TRANSPORT_TYPES = [
 export default function TransportAssignmentsPage() {
   const { user, activeSchool } = useAuth()
   const { activeAcademicYear } = useAcademicYear()
+  const { sessionClasses } = useSessionClasses(activeAcademicYear?.id, activeSchool?.id)
   const queryClient = useQueryClient()
 
   const [filterRoute, setFilterRoute] = useState('')
@@ -26,6 +29,9 @@ export default function TransportAssignmentsPage() {
   const [studentSearch, setStudentSearch] = useState('')
   const [modalClassFilter, setModalClassFilter] = useState('')
   const [modalSelectedStudents, setModalSelectedStudents] = useState([])
+  const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
+  const resolvedFilterClass = getResolvedMasterClassId(filterClass, activeAcademicYear?.id, sessionClasses)
+  const resolvedModalClassFilter = getResolvedMasterClassId(modalClassFilter, activeAcademicYear?.id, sessionClasses)
 
   const [assignForm, setAssignForm] = useState({
     route: '',
@@ -43,10 +49,10 @@ export default function TransportAssignmentsPage() {
 
   // Fetch assignments
   const { data: assignmentsData, isLoading, error } = useQuery({
-    queryKey: ['transport-assignments', filterRoute, filterClass, filterTransportType],
+    queryKey: ['transport-assignments', filterRoute, resolvedFilterClass, filterTransportType],
     queryFn: () => transportApi.getAssignments({
       ...(filterRoute && { route: filterRoute }),
-      ...(filterClass && { class_id: filterClass }),
+      ...(resolvedFilterClass && { class_id: resolvedFilterClass }),
       ...(filterTransportType && { transport_type: filterTransportType }),
       page_size: 9999,
     }),
@@ -122,8 +128,8 @@ export default function TransportAssignmentsPage() {
   const filteredStudents = useMemo(() => {
     let result = allStudents
     // Filter by class
-    if (modalClassFilter) {
-      result = result.filter((s) => String(s.class_obj) === String(modalClassFilter))
+    if (resolvedModalClassFilter) {
+      result = result.filter((s) => String(s.class_obj) === String(resolvedModalClassFilter))
     }
     // Filter by search
     if (studentSearch.trim()) {
@@ -326,6 +332,8 @@ export default function TransportAssignmentsPage() {
               value={filterClass}
               onChange={(e) => setFilterClass(e.target.value)}
               showAllOption
+              scope={classSelectorScope}
+              academicYearId={activeAcademicYear?.id}
             />
           </div>
           <div>
@@ -514,6 +522,8 @@ export default function TransportAssignmentsPage() {
                     onChange={(e) => setModalClassFilter(e.target.value)}
                     showAllOption
                     allOptionLabel="All Classes"
+                    scope={classSelectorScope}
+                    academicYearId={activeAcademicYear?.id}
                   />
                   <input
                     type="text"

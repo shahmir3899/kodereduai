@@ -6,6 +6,8 @@ import { useAcademicYear } from '../contexts/AcademicYearContext'
 import { studentsApi, classesApi, schoolsApi } from '../services/api'
 import { useToast } from '../components/Toast'
 import ClassSelector from '../components/ClassSelector'
+import { useSessionClasses } from '../hooks/useSessionClasses'
+import { getClassSelectorScope, getResolvedMasterClassId } from '../utils/classScope'
 import { exportStudentsPDF, exportStudentsPNG } from './studentExport'
 import { useDebounce } from '../hooks/useDebounce'
 import WhatsAppTick from '../components/WhatsAppTick'
@@ -56,6 +58,17 @@ export default function StudentsPage() {
   const [bulkConvertError, setBulkConvertError] = useState('')
   const [convertResults, setConvertResults] = useState(null)
   const [isConverting, setIsConverting] = useState(false)
+  const { sessionClasses } = useSessionClasses(activeAcademicYear?.id, selectedSchoolId)
+  const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
+  const resolvedSelectedClass = getResolvedMasterClassId(selectedClass, activeAcademicYear?.id, sessionClasses)
+  const resolvedStudentFormClassId = getResolvedMasterClassId(studentForm.class_id, activeAcademicYear?.id, sessionClasses)
+  const sessionClassIdByMaster = useMemo(() => {
+    const map = {}
+    sessionClasses.forEach((sc) => {
+      if (sc.class_obj) map[String(sc.class_obj)] = String(sc.id)
+    })
+    return map
+  }, [sessionClasses])
 
   // Fetch schools for Super Admin
   const { data: schoolsData } = useQuery({
@@ -226,13 +239,17 @@ export default function StudentsPage() {
   }
 
   const openEditModal = (student) => {
+    const mappedClassId = classSelectorScope === 'session'
+      ? (sessionClassIdByMaster[String(student.class_obj)] || '')
+      : (student.class_obj?.toString() || '')
+
     setEditingStudent(student)
     setStudentForm({
       name: student.name,
       roll_number: student.roll_number,
       parent_phone: student.parent_phone || '',
       parent_name: student.parent_name || '',
-      class_id: student.class_obj?.toString() || '',
+      class_id: mappedClassId,
     })
     setShowModal(true)
   }
@@ -253,7 +270,7 @@ export default function StudentsPage() {
   }
 
   const handleSubmit = async () => {
-    if (!studentForm.class_id) {
+    if (!editingStudent && !resolvedStudentFormClassId) {
       showError('Please select a class')
       return
     }
@@ -296,7 +313,7 @@ export default function StudentsPage() {
       try {
         const response = await studentsApi.createStudent({
           school: selectedSchoolId,
-          class_obj: parseInt(studentForm.class_id),
+          class_obj: parseInt(resolvedStudentFormClassId),
           ...data,
         })
         const newStudent = response.data
@@ -659,7 +676,7 @@ export default function StudentsPage() {
     // First filter
     const filtered = allStudents.filter(student => {
       // Filter by class
-      if (selectedClass && student.class_obj?.toString() !== selectedClass) {
+      if (resolvedSelectedClass && student.class_obj?.toString() !== resolvedSelectedClass) {
         return false
       }
       // Filter by search (name or roll number)
@@ -686,7 +703,7 @@ export default function StudentsPage() {
       const rollB = parseInt(b.roll_number) || 0
       return rollA - rollB
     })
-  }, [allStudents, selectedClass, debouncedSearch, classGradeMap])
+  }, [allStudents, resolvedSelectedClass, debouncedSearch, classGradeMap])
 
   // Students without accounts (for bulk select) — must be after `students` useMemo
   const studentsWithoutAccounts = useMemo(() => {
@@ -727,7 +744,11 @@ export default function StudentsPage() {
 
   const getExportInfo = () => {
     const schoolName = activeSchool?.name || schools.find(s => s.id === selectedSchoolId)?.name || ''
-    const selectedClassName = selectedClass ? classes.find(c => c.id === parseInt(selectedClass))?.name : null
+    const selectedClassName = selectedClass
+      ? (classSelectorScope === 'session'
+        ? (sessionClasses.find(sc => String(sc.id) === String(selectedClass))?.display_name || null)
+        : (classes.find(c => c.id === parseInt(selectedClass))?.name || null))
+      : null
     const parts = []
     if (selectedClassName) parts.push(`Class: ${selectedClassName}`)
     if (search) parts.push(`Search: "${search}"`)
@@ -897,7 +918,9 @@ export default function StudentsPage() {
               onChange={(e) => setSelectedClass(e.target.value)}
               disabled={!selectedSchoolId}
               showAllOption
-              classes={classes}
+              scope={classSelectorScope}
+              academicYearId={activeAcademicYear?.id}
+              schoolId={selectedSchoolId}
             />
           </div>
           <div className={isSuperAdmin ? "md:col-span-2" : "md:col-span-2"}>
@@ -1107,7 +1130,9 @@ export default function StudentsPage() {
                   disabled={!!editingStudent}
                   required
                   placeholder="Select a class"
-                  classes={classes}
+                  scope={classSelectorScope}
+                  academicYearId={activeAcademicYear?.id}
+                  schoolId={selectedSchoolId}
                 />
                 {editingStudent && (
                   <p className="text-xs text-gray-500 mt-1">Class cannot be changed after creation</p>

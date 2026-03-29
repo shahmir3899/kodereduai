@@ -2,11 +2,12 @@ import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { lmsApi, hrApi } from '../../services/api'
-import { useClasses } from '../../hooks/useClasses'
 import ClassSelector from '../../components/ClassSelector'
 import SubjectSelector from '../../components/SubjectSelector'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
+import { useSessionClasses } from '../../hooks/useSessionClasses'
+import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 import { useToast } from '../../components/Toast'
 
 const STATUS_BADGES = {
@@ -42,6 +43,7 @@ const EMPTY_FORM = {
 export default function AssignmentsPage() {
   const { user, isSchoolAdmin, isTeacher } = useAuth()
   const { activeAcademicYear } = useAcademicYear()
+  const { sessionClasses } = useSessionClasses(activeAcademicYear?.id)
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const { showError, showSuccess } = useToast()
@@ -55,10 +57,18 @@ export default function AssignmentsPage() {
   const [editingAssignment, setEditingAssignment] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [form, setForm] = useState({ ...EMPTY_FORM })
+  const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
+  const resolvedFilterClass = getResolvedMasterClassId(filterClass, activeAcademicYear?.id, sessionClasses)
+  const resolvedFormClassObj = getResolvedMasterClassId(form.class_obj, activeAcademicYear?.id, sessionClasses)
+  const sessionClassIdByMaster = useMemo(() => {
+    const map = {}
+    sessionClasses.forEach((sc) => {
+      if (sc.class_obj) map[String(sc.class_obj)] = String(sc.id)
+    })
+    return map
+  }, [sessionClasses])
 
   // -- Data fetching --
-
-  const { classes } = useClasses()
 
   const { data: staffData } = useQuery({
     queryKey: ['hrStaff'],
@@ -66,10 +76,10 @@ export default function AssignmentsPage() {
   })
 
   const { data: assignmentsData, isLoading } = useQuery({
-    queryKey: ['assignments', filterClass, filterSubject, filterStatus, filterType, activeAcademicYear?.id],
+    queryKey: ['assignments', resolvedFilterClass, filterSubject, filterStatus, filterType, activeAcademicYear?.id],
     queryFn: () =>
       lmsApi.getAssignments({
-        ...(filterClass && { class_obj: filterClass }),
+        ...(resolvedFilterClass && { class_obj: resolvedFilterClass }),
         ...(filterSubject && { subject: filterSubject }),
         ...(filterStatus && { status: filterStatus }),
         ...(filterType && { assignment_type: filterType }),
@@ -165,12 +175,16 @@ export default function AssignmentsPage() {
   }
 
   const openEditModal = (assignment) => {
+    const mappedClassObj = classSelectorScope === 'session'
+      ? (sessionClassIdByMaster[String(assignment.class_obj)] || '')
+      : (assignment.class_obj ? String(assignment.class_obj) : '')
+
     setEditingAssignment(assignment)
     setForm({
       title: assignment.title || '',
       description: assignment.description || '',
       instructions: assignment.instructions || '',
-      class_obj: assignment.class_obj ? String(assignment.class_obj) : '',
+      class_obj: mappedClassObj,
       subject: assignment.subject ? String(assignment.subject) : '',
       teacher: assignment.teacher ? String(assignment.teacher) : '',
       assignment_type: assignment.assignment_type || 'HOMEWORK',
@@ -204,7 +218,7 @@ export default function AssignmentsPage() {
 
     const payload = {
       ...form,
-      class_obj: parseInt(form.class_obj),
+      class_obj: parseInt(resolvedFormClassObj),
       subject: parseInt(form.subject),
       teacher: form.teacher ? parseInt(form.teacher) : null,
       total_marks: parseInt(form.total_marks) || 100,
@@ -262,7 +276,8 @@ export default function AssignmentsPage() {
               value={filterClass}
               onChange={(e) => setFilterClass(e.target.value)}
               showAllOption
-              classes={classes}
+              scope={classSelectorScope}
+              academicYearId={activeAcademicYear?.id}
             />
           </div>
           <div>
@@ -592,7 +607,8 @@ export default function AssignmentsPage() {
                     className="input"
                     value={form.class_obj}
                     onChange={(e) => setForm({ ...form, class_obj: e.target.value })}
-                    classes={classes}
+                    scope={classSelectorScope}
+                    academicYearId={activeAcademicYear?.id}
                   />
                 </div>
                 <div>

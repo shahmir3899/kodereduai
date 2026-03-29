@@ -2,10 +2,12 @@ import { useState, useEffect, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
+import { useSessionClasses } from '../../hooks/useSessionClasses'
 import { discountApi, studentsApi, sessionsApi } from '../../services/api'
 import ClassSelector from '../../components/ClassSelector'
 import { useToast } from '../../components/Toast'
 import { GRADE_PRESETS, GRADE_LEVEL_LABELS } from '../../constants/gradePresets'
+import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 
 // ── Badge color maps ──────────────────────────────────────────────────────────
 
@@ -123,10 +125,12 @@ function AcademicCapIcon({ className }) {
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export default function DiscountsPage() {
-  const { user } = useAuth()
+  const { user, activeSchool } = useAuth()
   const { activeAcademicYear } = useAcademicYear()
   const queryClient = useQueryClient()
   const { showError, showSuccess } = useToast()
+  const { sessionClasses } = useSessionClasses(activeAcademicYear?.id, activeSchool?.id)
+  const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
 
   const [tab, setTab] = useState('discounts')
   const [search, setSearch] = useState('')
@@ -155,6 +159,15 @@ export default function DiscountsPage() {
     grade_level: '',
     academic_year_id: '',
   })
+  const resolvedDiscountTargetClass = getResolvedMasterClassId(discountForm.target_class, activeAcademicYear?.id, sessionClasses)
+  const resolvedBulkAssignClassId = getResolvedMasterClassId(bulkAssignForm.class_id, activeAcademicYear?.id, sessionClasses)
+  const sessionClassIdByMasterId = useMemo(() => {
+    const map = {}
+    sessionClasses.forEach((sc) => {
+      if (sc.class_obj) map[String(sc.class_obj)] = String(sc.id)
+    })
+    return map
+  }, [sessionClasses])
 
   // Sync assign forms with global session switcher
   useEffect(() => {
@@ -377,6 +390,10 @@ export default function DiscountsPage() {
   }
 
   const openEditDiscount = (discount) => {
+    const targetClassValue = classSelectorScope === 'session'
+      ? (sessionClassIdByMasterId[String(discount.target_class)] || '')
+      : (discount.target_class || '')
+
     setEditingDiscount(discount)
     setDiscountForm({
       name: discount.name || '',
@@ -384,7 +401,7 @@ export default function DiscountsPage() {
       value: discount.value || '',
       applies_to: discount.applies_to || 'ALL',
       target_grade_level: discount.target_grade_level != null ? String(discount.target_grade_level) : '',
-      target_class: discount.target_class || '',
+      target_class: targetClassValue,
       start_date: discount.start_date || '',
       end_date: discount.end_date || '',
       stackable: discount.stackable || false,
@@ -426,8 +443,8 @@ export default function DiscountsPage() {
     if (discountForm.applies_to === 'GRADE_LEVEL' && discountForm.target_grade_level) {
       payload.target_grade_level = parseInt(discountForm.target_grade_level)
     }
-    if (discountForm.applies_to === 'CLASS' && discountForm.target_class) {
-      payload.target_class = parseInt(discountForm.target_class)
+    if (discountForm.applies_to === 'CLASS' && resolvedDiscountTargetClass) {
+      payload.target_class = parseInt(resolvedDiscountTargetClass)
     }
     if (discountForm.start_date) payload.start_date = discountForm.start_date
     if (discountForm.end_date) payload.end_date = discountForm.end_date
@@ -597,7 +614,7 @@ export default function DiscountsPage() {
     }
     if (bulkAssignForm.discount_id) payload.discount_id = parseInt(bulkAssignForm.discount_id)
     if (bulkAssignForm.scholarship_id) payload.scholarship_id = parseInt(bulkAssignForm.scholarship_id)
-    if (bulkAssignForm.class_id) payload.class_id = parseInt(bulkAssignForm.class_id)
+    if (resolvedBulkAssignClassId) payload.class_id = parseInt(resolvedBulkAssignClassId)
     if (bulkAssignForm.grade_level) payload.grade_level = parseInt(bulkAssignForm.grade_level)
 
     bulkAssignMutation.mutate(payload)
@@ -1226,6 +1243,8 @@ export default function DiscountsPage() {
                     value={discountForm.target_class}
                     onChange={(e) => setDiscountForm({ ...discountForm, target_class: e.target.value })}
                     placeholder="Select Class"
+                    scope={classSelectorScope}
+                    academicYearId={activeAcademicYear?.id}
                   />
                 </div>
               )}
@@ -1644,6 +1663,8 @@ export default function DiscountsPage() {
                     onChange={(e) => setBulkAssignForm({ ...bulkAssignForm, class_id: e.target.value, grade_level: '' })}
                     disabled={!!bulkAssignForm.grade_level}
                     placeholder="-- Select Class --"
+                    scope={classSelectorScope}
+                    academicYearId={activeAcademicYear?.id}
                   />
                 </div>
               </div>

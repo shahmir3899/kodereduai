@@ -2,11 +2,14 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { lmsApi, academicsApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
+import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useToast } from '../../components/Toast'
 import { useConfirmModal } from '../../components/ConfirmModal'
 import RTLWrapper, { isRTLLanguage } from '../../components/RTLWrapper'
 import ClassSelector from '../../components/ClassSelector'
 import SubjectSelector from '../../components/SubjectSelector'
+import { useSessionClasses } from '../../hooks/useSessionClasses'
+import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 
 const LANGUAGES = [
   { value: 'en', label: 'English' },
@@ -42,6 +45,8 @@ const EMPTY_TOPIC_FORM = {
 
 export default function CurriculumPage() {
   const { activeSchool } = useAuth()
+  const { activeAcademicYear } = useAcademicYear()
+  const { sessionClasses } = useSessionClasses(activeAcademicYear?.id)
   const queryClient = useQueryClient()
   const { showError, showSuccess } = useToast()
   const { confirm, ConfirmModalRoot } = useConfirmModal()
@@ -49,6 +54,8 @@ export default function CurriculumPage() {
   // Filters
   const [selectedClass, setSelectedClass] = useState('')
   const [selectedSubject, setSelectedSubject] = useState('')
+  const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
+  const resolvedSelectedClass = getResolvedMasterClassId(selectedClass, activeAcademicYear?.id, sessionClasses)
 
   // Selected book
   const [selectedBookId, setSelectedBookId] = useState(null)
@@ -81,18 +88,18 @@ export default function CurriculumPage() {
 
   // Fetch subjects assigned to selected class
   const { data: classSubjectsData } = useQuery({
-    queryKey: ['classSubjects', selectedClass],
-    queryFn: () => academicsApi.getClassSubjectsByClass(selectedClass),
-    enabled: !!selectedClass,
+    queryKey: ['classSubjects', resolvedSelectedClass],
+    queryFn: () => academicsApi.getClassSubjectsByClass(resolvedSelectedClass),
+    enabled: !!resolvedSelectedClass,
   })
 
   const classSubjects = (classSubjectsData?.data?.results || classSubjectsData?.data || [])
     .map((cs) => ({ id: cs.subject, name: cs.subject_name }))
 
   const { data: booksData, isLoading: booksLoading } = useQuery({
-    queryKey: ['lmsBooks', selectedClass, selectedSubject],
-    queryFn: () => lmsApi.getBooks({ class_id: selectedClass, subject_id: selectedSubject }),
-    enabled: !!selectedClass && !!selectedSubject,
+    queryKey: ['lmsBooks', resolvedSelectedClass, selectedSubject],
+    queryFn: () => lmsApi.getBooks({ class_id: resolvedSelectedClass, subject_id: selectedSubject }),
+    enabled: !!resolvedSelectedClass && !!selectedSubject,
   })
 
   const books = booksData?.data?.results || booksData?.data || []
@@ -106,9 +113,9 @@ export default function CurriculumPage() {
   const bookTree = bookTreeData?.data || null
 
   const { data: progressData } = useQuery({
-    queryKey: ['syllabusProgress', selectedClass, selectedSubject],
-    queryFn: () => lmsApi.getSyllabusProgress({ class_id: selectedClass, subject_id: selectedSubject }),
-    enabled: !!selectedClass && !!selectedSubject,
+    queryKey: ['syllabusProgress', resolvedSelectedClass, selectedSubject],
+    queryFn: () => lmsApi.getSyllabusProgress({ class_id: resolvedSelectedClass, subject_id: selectedSubject }),
+    enabled: !!resolvedSelectedClass && !!selectedSubject,
   })
 
   const progress = progressData?.data || null
@@ -353,7 +360,7 @@ export default function CurriculumPage() {
     const payload = {
       ...bookForm,
       school: activeSchool?.id,
-      class_obj: parseInt(selectedClass),
+      class_obj: parseInt(resolvedSelectedClass),
       subject: parseInt(selectedSubject),
     }
     if (editingBook) {
@@ -517,6 +524,8 @@ export default function CurriculumPage() {
                 setSelectedBookId(null)
               }}
               placeholder="Select Class"
+              scope={classSelectorScope}
+              academicYearId={activeAcademicYear?.id}
             />
           </div>
           <div>
@@ -529,7 +538,7 @@ export default function CurriculumPage() {
               }}
               placeholder={!selectedClass ? 'Select a class first' : 'Select Subject'}
               disabled={!selectedClass}
-              subjects={selectedClass ? classSubjects : []}
+              subjects={resolvedSelectedClass ? classSubjects : []}
             />
           </div>
         </div>

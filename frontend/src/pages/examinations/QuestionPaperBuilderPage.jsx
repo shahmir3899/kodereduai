@@ -5,6 +5,9 @@ import { questionPaperApi, examinationsApi } from '../../services/api'
 import Toast from '../../components/Toast'
 import ClassSelector from '../../components/ClassSelector'
 import SubjectSelector from '../../components/SubjectSelector'
+import { useAcademicYear } from '../../contexts/AcademicYearContext'
+import { useSessionClasses } from '../../hooks/useSessionClasses'
+import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 import ImageCapturePaperTab from './ImageCapturePaperTab'
 import ManualEntryPaperTab from './ManualEntryPaperTab'
 import LessonPlanPaperTab from './LessonPlanPaperTab'
@@ -18,6 +21,7 @@ import LessonPlanPaperTab from './LessonPlanPaperTab'
 export default function QuestionPaperBuilderPage() {
   const navigate = useNavigate()
   const location = useLocation()
+  const { activeAcademicYear } = useAcademicYear()
   const [activeTab, setActiveTab] = useState(location.state?.lessonPlanId ? 'lesson' : 'manual') // 'manual' | 'image' | 'lesson'
   const [toast, setToast] = useState(null)
   const [paperMetadata, setPaperMetadata] = useState({
@@ -25,6 +29,9 @@ export default function QuestionPaperBuilderPage() {
     subject: '',
     exam: '',
   })
+  const { sessionClasses } = useSessionClasses(activeAcademicYear?.id)
+  const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
+  const resolvedClassObj = getResolvedMasterClassId(paperMetadata.class_obj, activeAcademicYear?.id, sessionClasses)
 
   // Fetch exams
   const { data: examsData, isLoading: examsLoading } = useQuery({
@@ -61,6 +68,7 @@ export default function QuestionPaperBuilderPage() {
     // Ensure metadata is included
     const finalData = {
       ...paperMetadata,
+      class_obj: resolvedClassObj,
       ...paperData,
       status: 'DRAFT',
     }
@@ -116,6 +124,8 @@ export default function QuestionPaperBuilderPage() {
                   setPaperMetadata({ ...paperMetadata, class_obj: e.target.value })
                 }
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                scope={classSelectorScope}
+                academicYearId={activeAcademicYear?.id}
                 required
               />
             </div>

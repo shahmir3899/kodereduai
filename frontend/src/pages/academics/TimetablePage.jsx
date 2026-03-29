@@ -3,7 +3,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { academicsApi, hrApi } from '../../services/api'
 import { useBackgroundTask } from '../../hooks/useBackgroundTask'
 import { useClasses } from '../../hooks/useClasses'
+import { useSessionClasses } from '../../hooks/useSessionClasses'
 import ClassSelector from '../../components/ClassSelector'
+import { useAcademicYear } from '../../contexts/AcademicYearContext'
+import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 
 const DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
 const DAY_LABELS = { MON: 'Mon', TUE: 'Tue', WED: 'Wed', THU: 'Thu', FRI: 'Fri', SAT: 'Sat' }
@@ -25,6 +28,7 @@ const isSlotApplicable = (slot, day) => {
 
 export default function TimetablePage() {
   const queryClient = useQueryClient()
+  const { activeAcademicYear } = useAcademicYear()
   const [selectedClassId, setSelectedClassId] = useState('')
   const [showSlotsModal, setShowSlotsModal] = useState(false)
   const [editingCell, setEditingCell] = useState(null)
@@ -77,6 +81,9 @@ export default function TimetablePage() {
 
   // Queries
   const { classes: classesFromHook } = useClasses()
+  const { sessionClasses } = useSessionClasses(activeAcademicYear?.id)
+  const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
+  const resolvedSelectedClassId = getResolvedMasterClassId(selectedClassId, activeAcademicYear?.id, sessionClasses)
 
   const { data: slotsData, isLoading: slotsLoading } = useQuery({
     queryKey: ['timetableSlots'],
@@ -84,15 +91,15 @@ export default function TimetablePage() {
   })
 
   const { data: timetableData, isLoading: ttLoading } = useQuery({
-    queryKey: ['timetable', selectedClassId],
-    queryFn: () => academicsApi.getTimetableByClass(selectedClassId),
-    enabled: !!selectedClassId,
+    queryKey: ['timetable', selectedClassId, resolvedSelectedClassId],
+    queryFn: () => academicsApi.getTimetableByClass(resolvedSelectedClassId),
+    enabled: !!resolvedSelectedClassId,
   })
 
   const { data: classSubjectsData } = useQuery({
-    queryKey: ['classSubjectsByClass', selectedClassId],
-    queryFn: () => academicsApi.getClassSubjectsByClass(selectedClassId),
-    enabled: !!selectedClassId,
+    queryKey: ['classSubjectsByClass', selectedClassId, resolvedSelectedClassId],
+    queryFn: () => academicsApi.getClassSubjectsByClass(resolvedSelectedClassId),
+    enabled: !!resolvedSelectedClassId,
   })
 
   const { data: staffData } = useQuery({
@@ -102,12 +109,21 @@ export default function TimetablePage() {
 
   // Quality score query
   const { data: qualityData } = useQuery({
-    queryKey: ['qualityScore', selectedClassId],
-    queryFn: () => academicsApi.getTimetableQualityScore(selectedClassId),
-    enabled: !!selectedClassId && !!timetableData?.data?.entries?.length && !hasChanges,
+    queryKey: ['qualityScore', selectedClassId, resolvedSelectedClassId],
+    queryFn: () => academicsApi.getTimetableQualityScore(resolvedSelectedClassId),
+    enabled: !!resolvedSelectedClassId && !!timetableData?.data?.entries?.length && !hasChanges,
   })
 
   const classes = classesFromHook
+  const selectedClassName = useMemo(() => {
+    if (!selectedClassId) return ''
+    if (activeAcademicYear?.id) {
+      const sessionClass = sessionClasses.find(sc => String(sc.id) === String(selectedClassId))
+      return sessionClass?.label || sessionClass?.display_name || ''
+    }
+    const cls = classes.find(c => String(c.id) === String(selectedClassId))
+    return cls ? `${cls.name}${cls.section ? ` - ${cls.section}` : ''}` : ''
+  }, [selectedClassId, activeAcademicYear?.id, sessionClasses, classes])
   const slots = slotsData?.data?.results || slotsData?.data || []
   const classSubjects = classSubjectsData?.data || []
   const staffList = staffData?.data?.results || staffData?.data || []
@@ -224,7 +240,7 @@ export default function TimetablePage() {
           teacher: teacherId,
           day: editingCell.day,
           slot: editingCell.slotId,
-          exclude_class: selectedClassId,
+          exclude_class: resolvedSelectedClassId,
         })
         if (res.data.has_conflict) {
           setConflictInfo(res.data)
@@ -242,7 +258,7 @@ export default function TimetablePage() {
         teacher: cellForm.teacher,
         day: editingCell.day,
         slot: editingCell.slotId,
-        class_id: selectedClassId,
+        class_id: resolvedSelectedClassId,
         subject: cellForm.subject || undefined,
       })
       setResolutionData(res.data)
@@ -286,7 +302,7 @@ export default function TimetablePage() {
 
   const handleAutoGenerate = () => {
     setSaveMsg('')
-    autoGenTask.trigger({ class_id: parseInt(selectedClassId), algorithm: selectedAlgorithm })
+    autoGenTask.trigger({ class_id: parseInt(resolvedSelectedClassId), algorithm: selectedAlgorithm })
   }
 
   // Substitute teacher search
@@ -321,7 +337,7 @@ export default function TimetablePage() {
 
       try {
         await academicsApi.bulkSaveTimetable({
-          class_obj: parseInt(selectedClassId),
+          class_obj: parseInt(resolvedSelectedClassId),
           day,
           entries,
         })
@@ -341,8 +357,8 @@ export default function TimetablePage() {
     } else {
       setSaveMsg(`Timetable saved successfully (${savedDays} day${savedDays !== 1 ? 's' : ''}).`)
       setHasChanges(false)
-      queryClient.invalidateQueries({ queryKey: ['timetable', selectedClassId] })
-      queryClient.invalidateQueries({ queryKey: ['qualityScore', selectedClassId] })
+      queryClient.invalidateQueries({ queryKey: ['timetable', selectedClassId, resolvedSelectedClassId] })
+      queryClient.invalidateQueries({ queryKey: ['qualityScore', selectedClassId, resolvedSelectedClassId] })
     }
     setSaving(false)
   }
@@ -443,7 +459,7 @@ export default function TimetablePage() {
 
   const isBreakSlot = (slot) => ['BREAK', 'LUNCH', 'ASSEMBLY'].includes(slot.slot_type)
 
-  const isLoading = slotsLoading || (selectedClassId && ttLoading)
+  const isLoading = slotsLoading || (resolvedSelectedClassId && ttLoading)
 
   const scoreColor = (s) => s >= 80 ? 'bg-green-100 text-green-700' : s >= 60 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
 
@@ -466,7 +482,8 @@ export default function TimetablePage() {
               onChange={e => setSelectedClassId(e.target.value)}
               className="input w-full sm:w-52"
               placeholder="-- Select Class --"
-              classes={classes}
+              scope={classSelectorScope}
+              academicYearId={activeAcademicYear?.id}
             />
           </div>
           {/* Quality Score Badge */}
@@ -840,7 +857,7 @@ export default function TimetablePage() {
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
             <h3 className="text-sm font-semibold text-gray-900 mb-2">AI Auto-Generate Timetable</h3>
             <p className="text-xs text-gray-600 mb-4">
-              This will generate a new timetable for <strong>{classes.find(c => c.id == selectedClassId)?.name}</strong> using
+              This will generate a new timetable for <strong>{selectedClassName || 'selected class'}</strong> using
               AI. Your current unsaved changes will be replaced. You can review and edit before saving.
             </p>
 

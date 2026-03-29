@@ -2,11 +2,13 @@ import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { academicsApi, hrApi } from '../../services/api'
 import { useClasses } from '../../hooks/useClasses'
+import { useSessionClasses } from '../../hooks/useSessionClasses'
 import ClassSelector from '../../components/ClassSelector'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useDebounce } from '../../hooks/useDebounce'
 import { useToast } from '../../components/Toast'
 import { useConfirmModal } from '../../components/ConfirmModal'
+import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 
 const SEVERITY_STYLES = {
   red: { bg: 'bg-red-50', border: 'border-red-200', badge: 'bg-red-100 text-red-700', icon: 'text-red-500' },
@@ -78,6 +80,9 @@ export default function SubjectsPage() {
   const [assignErrors, setAssignErrors] = useState({})
   const [expandedClasses, setExpandedClasses] = useState(new Set())
   const { confirm, ConfirmModalRoot } = useConfirmModal()
+  const { sessionClasses } = useSessionClasses(activeAcademicYear?.id)
+  const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
+  const resolvedClassFilter = getResolvedMasterClassId(classFilter, activeAcademicYear?.id, sessionClasses)
 
   // Queries
   const { data: subjectRes, isLoading: subjectLoading, isError: subjectError, error: subjectFetchError, isFetching: subjectFetching } = useQuery({
@@ -86,9 +91,9 @@ export default function SubjectsPage() {
   })
 
   const { data: assignRes, isLoading: assignLoading, isError: assignError, error: assignFetchError, isFetching: assignFetching } = useQuery({
-    queryKey: ['classSubjects', classFilter],
+    queryKey: ['classSubjects', classFilter, resolvedClassFilter],
     queryFn: () => academicsApi.getClassSubjects({
-      class_obj: classFilter || undefined,
+      class_obj: resolvedClassFilter || undefined,
       page_size: 9999,
     }),
     enabled: tab === 'assignments',
@@ -644,7 +649,8 @@ export default function SubjectsPage() {
               onChange={e => setClassFilter(e.target.value)}
               className="input w-full sm:w-52"
               showAllOption
-              classes={classes}
+              scope={classSelectorScope}
+              academicYearId={activeAcademicYear?.id}
             />
             <button onClick={openCreateAssign} className="btn-primary text-sm px-4 py-2 whitespace-nowrap">
               + Assign Subject

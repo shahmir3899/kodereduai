@@ -2,13 +2,17 @@ import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../../contexts/AuthContext'
+import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useToast } from '../../components/Toast'
 import { faceAttendanceApi } from '../../services/api'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import ClassSelector from '../../components/ClassSelector'
+import { useSessionClasses } from '../../hooks/useSessionClasses'
+import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 
 export default function FaceAttendancePage() {
   const { activeSchool } = useAuth()
+  const { activeAcademicYear } = useAcademicYear()
   const { showError, showSuccess } = useToast()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -19,6 +23,9 @@ export default function FaceAttendancePage() {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
   const [uploadStep, setUploadStep] = useState(null) // null | 'uploading' | 'creating'
   const [previewUrl, setPreviewUrl] = useState(null)
+  const { sessionClasses } = useSessionClasses(activeAcademicYear?.id, activeSchool?.id)
+  const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
+  const resolvedSelectedClass = getResolvedMasterClassId(selectedClass, activeAcademicYear?.id, sessionClasses)
 
   // Load face recognition status
   const { data: statusData } = useQuery({
@@ -49,14 +56,14 @@ export default function FaceAttendancePage() {
       // Step 1: Upload image
       setUploadStep('uploading')
       const uploadRes = await faceAttendanceApi.uploadImage(
-        file, activeSchool?.id, selectedClass
+        file, activeSchool?.id, resolvedSelectedClass
       )
       const imageUrl = uploadRes.data.url || uploadRes.data.image_url
 
       // Step 2: Create session
       setUploadStep('creating')
       const sessionRes = await faceAttendanceApi.createSession({
-        class_obj: parseInt(selectedClass),
+        class_obj: parseInt(resolvedSelectedClass),
         date: selectedDate,
         image_url: imageUrl,
       })
@@ -186,6 +193,8 @@ export default function FaceAttendancePage() {
                 value={selectedClass}
                 onChange={(e) => setSelectedClass(e.target.value)}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                scope={classSelectorScope}
+                academicYearId={activeAcademicYear?.id}
               />
             </div>
             <div>

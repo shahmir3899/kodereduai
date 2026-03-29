@@ -2,8 +2,8 @@
   "meta": {
     "title": "KoderEduAI",
     "subtitle": "School Administration Guide",
-    "version": "3.0 - AI Intelligence Edition",
-    "generatedAt": "2026-03-03T09:32:52.296253+00:00",
+    "version": "3.1 - Session Class Standardization",
+    "generatedAt": "2026-03-29T20:40:48.716772+00:00",
     "totalChapters": 21,
     "modules": [
       "Dashboard | Classes & Students | Attendance (AI-Powered)",
@@ -5295,6 +5295,10 @@
           "title": "General Tips",
           "slug": "general-tips",
           "content": [
+            {
+              "type": "bullet",
+              "text": "Class dropdowns are session-scoped: always select the correct academic year first to see the right class list"
+            },
             {
               "type": "bullet",
               "text": "Use bulk import (Excel) for students when starting with a large number of records"

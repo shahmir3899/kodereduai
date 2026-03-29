@@ -1,10 +1,13 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { lmsApi, academicsApi, hrApi } from '../../services/api'
-import { useClasses } from '../../hooks/useClasses'
 import { useAuth } from '../../contexts/AuthContext'
+import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useToast } from '../../components/Toast'
 import RTLWrapper, { isRTLLanguage } from '../../components/RTLWrapper'
+import ClassSelector from '../../components/ClassSelector'
+import { useSessionClasses } from '../../hooks/useSessionClasses'
+import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 
 const STEPS = [
   { num: 1, label: 'Class & Date' },
@@ -15,6 +18,7 @@ const STEPS = [
 
 export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
   const { activeSchool } = useAuth()
+  const { activeAcademicYear } = useAcademicYear()
   const queryClient = useQueryClient()
   const { showSuccess, showError } = useToast()
 
@@ -31,6 +35,17 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
   const [wasAiGenerated, setWasAiGenerated] = useState(false)
   const [aiLoading, setAiLoading] = useState(false)
 
+  const { sessionClasses } = useSessionClasses(activeAcademicYear?.id, activeSchool?.id)
+  const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
+  const resolvedSelectedClass = getResolvedMasterClassId(selectedClass, activeAcademicYear?.id, sessionClasses)
+  const sessionClassIdByMaster = useMemo(() => {
+    const map = {}
+    sessionClasses.forEach((sc) => {
+      if (sc.class_obj) map[String(sc.class_obj)] = String(sc.id)
+    })
+    return map
+  }, [sessionClasses])
+
   const [title, setTitle] = useState('')
   const [objectives, setObjectives] = useState('')
   const [description, setDescription] = useState('')
@@ -40,7 +55,10 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
   // Pre-populate when editing
   useEffect(() => {
     if (editingPlan) {
-      setSelectedClass(editingPlan.class_obj ? String(editingPlan.class_obj) : '')
+      const mappedClassId = activeAcademicYear?.id
+        ? (sessionClassIdByMaster[String(editingPlan.class_obj)] || '')
+        : (editingPlan.class_obj ? String(editingPlan.class_obj) : '')
+      setSelectedClass(mappedClassId)
       setSelectedSubject(editingPlan.subject ? String(editingPlan.subject) : '')
       setSelectedTeacher(editingPlan.teacher ? String(editingPlan.teacher) : '')
       setLessonDate(editingPlan.lesson_date || '')
@@ -59,15 +77,13 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
         setStep(4)
       }
     }
-  }, [editingPlan])
+  }, [editingPlan, activeAcademicYear?.id, sessionClassIdByMaster])
 
   // Data fetching
-  const { classes } = useClasses()
-
   const { data: classSubjectsData } = useQuery({
-    queryKey: ['classSubjects', selectedClass],
-    queryFn: () => academicsApi.getClassSubjects({ class_obj: selectedClass, page_size: 9999 }),
-    enabled: !!selectedClass,
+    queryKey: ['classSubjects', resolvedSelectedClass],
+    queryFn: () => academicsApi.getClassSubjects({ class_obj: resolvedSelectedClass, page_size: 9999 }),
+    enabled: !!resolvedSelectedClass,
   })
 
   const { data: staffData } = useQuery({
@@ -76,9 +92,9 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
   })
 
   const { data: booksData, isLoading: booksLoading } = useQuery({
-    queryKey: ['booksForClassSubject', selectedClass, selectedSubject],
-    queryFn: () => lmsApi.getBooksForClassSubject({ class_id: selectedClass, subject_id: selectedSubject }),
-    enabled: !!selectedClass && !!selectedSubject && mode === 'TOPICS',
+    queryKey: ['booksForClassSubject', resolvedSelectedClass, selectedSubject],
+    queryFn: () => lmsApi.getBooksForClassSubject({ class_id: resolvedSelectedClass, subject_id: selectedSubject }),
+    enabled: !!resolvedSelectedClass && !!selectedSubject && mode === 'TOPICS',
   })
 
   const classSubjects = classSubjectsData?.data?.results || classSubjectsData?.data || []
@@ -136,7 +152,7 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
 
   // Validation
   const validateStep1 = () => {
-    if (!selectedClass) { showError('Please select a class'); return false }
+    if (!resolvedSelectedClass) { showError('Please select a class'); return false }
     if (!selectedSubject) { showError('Please select a subject'); return false }
     if (!lessonDate) { showError('Please select a lesson date'); return false }
     return true
@@ -218,7 +234,7 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
 
     const payload = {
       school: activeSchool?.id,
-      class_obj: parseInt(selectedClass),
+      class_obj: parseInt(resolvedSelectedClass),
       subject: parseInt(selectedSubject),
       teacher: selectedTeacher ? parseInt(selectedTeacher) : null,
       lesson_date: lessonDate,
@@ -292,7 +308,7 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="label">Class *</label>
-                <select
+                <ClassSelector
                   className="input w-full"
                   value={selectedClass}
                   onChange={(e) => {
@@ -301,14 +317,9 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
                     setSelectedTeacher('')
                     setSelectedTopicIds([])
                   }}
-                >
-                  <option value="">Select Class</option>
-                  {classes.map((cls) => (
-                    <option key={cls.id} value={cls.id}>
-                      {cls.name}{cls.section ? ` - ${cls.section}` : ''}
-                    </option>
-                  ))}
-                </select>
+                  scope={classSelectorScope}
+                  academicYearId={activeAcademicYear?.id}
+                />
               </div>
               <div>
                 <label className="label">Subject *</label>

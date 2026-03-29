@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { examinationsApi, sessionsApi, academicsApi } from '../../services/api'
 import ClassSelector from '../../components/ClassSelector'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
+import { useSessionClasses } from '../../hooks/useSessionClasses'
+import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 import ExamWizard from './ExamWizard'
 import { useConfirmModal } from '../../components/ConfirmModal'
 
@@ -38,6 +40,17 @@ export default function ExamsPage() {
   const [yearFilter, setYearFilter] = useState('')
   const [activeTab, setActiveTab] = useState('exams') // 'exams' | 'tests'
   const [examStatusFilter, setExamStatusFilter] = useState('active') // 'active' | 'inactive' | 'all'
+  const selectedFormAcademicYearId = form.academic_year || activeAcademicYear?.id
+  const { sessionClasses } = useSessionClasses(selectedFormAcademicYearId)
+  const classSelectorScope = getClassSelectorScope(selectedFormAcademicYearId)
+  const resolvedFormClassObj = getResolvedMasterClassId(form.class_obj, selectedFormAcademicYearId, sessionClasses)
+  const sessionClassIdByMaster = useMemo(() => {
+    const map = {}
+    sessionClasses.forEach((sc) => {
+      if (sc.class_obj) map[String(sc.class_obj)] = String(sc.id)
+    })
+    return map
+  }, [sessionClasses])
 
   // Sync year filter with global session switcher
   useEffect(() => {
@@ -96,16 +109,16 @@ export default function ExamsPage() {
 
   // ClassSubjects for Quick Create modal
   const { data: classSubjectsRes, isLoading: classSubjectsLoading } = useQuery({
-    queryKey: ['classSubjectsForExam', form.class_obj],
-    queryFn: () => academicsApi.getClassSubjects({ class_obj: form.class_obj, page_size: 9999 }),
-    enabled: !!form.class_obj && showModal,
+    queryKey: ['classSubjectsForExam', resolvedFormClassObj],
+    queryFn: () => academicsApi.getClassSubjects({ class_obj: resolvedFormClassObj, page_size: 9999 }),
+    enabled: !!resolvedFormClassObj && showModal,
   })
   const classSubjects = classSubjectsRes?.data?.results || classSubjectsRes?.data || []
 
   const { data: allSubjectsRes } = useQuery({
     queryKey: ['allSubjectsForExam'],
     queryFn: () => academicsApi.getSubjects({ page_size: 9999 }),
-    enabled: !!form.class_obj && showModal && !classSubjectsLoading && classSubjects.length === 0,
+    enabled: !!resolvedFormClassObj && showModal && !classSubjectsLoading && classSubjects.length === 0,
   })
   const allSubjects = allSubjectsRes?.data?.results || allSubjectsRes?.data || []
 
@@ -155,9 +168,13 @@ export default function ExamsPage() {
 
   const openCreate = () => { setForm(EMPTY_FORM); setEditId(null); setErrors({}); setSelectedSubjects([]); setShowModal(true) }
   const openEdit = (item) => {
+    const mappedClassObj = classSelectorScope === 'session'
+      ? (sessionClassIdByMaster[String(item.class_obj)] || '')
+      : item.class_obj
+
     setForm({
       academic_year: item.academic_year, term: item.term || '',
-      exam_type: item.exam_type, class_obj: item.class_obj,
+      exam_type: item.exam_type, class_obj: mappedClassObj,
       name: item.name, start_date: item.start_date || '',
       end_date: item.end_date || '', status: item.status,
     })
@@ -174,6 +191,11 @@ export default function ExamsPage() {
   const handleSubmit = async (e) => {
     e.preventDefault()
 
+    if (!resolvedFormClassObj) {
+      setErrors({ class_obj: 'Please select a valid class.' })
+      return
+    }
+
     if (editId) {
       const needsBulkAssign = classSubjects.length === 0 && selectedSubjects.length > 0
       const needsPopulate = editingExam?.subjects_count === 0 && classSubjects.length > 0
@@ -182,12 +204,12 @@ export default function ExamsPage() {
       setErrors({})
       try {
         if (needsBulkAssign) {
-          await academicsApi.bulkAssignSubjects({ class_obj: parseInt(form.class_obj), subjects: selectedSubjects })
+          await academicsApi.bulkAssignSubjects({ class_obj: parseInt(resolvedFormClassObj), subjects: selectedSubjects })
         }
         if (needsBulkAssign || needsPopulate) {
           await examinationsApi.populateExamSubjects(editId)
         }
-        const payload = { ...form, term: form.term || null }
+        const payload = { ...form, class_obj: resolvedFormClassObj, term: form.term || null }
         await examinationsApi.updateExam(editId, payload)
         queryClient.invalidateQueries({ queryKey: ['exams'] })
         closeModal()
@@ -211,9 +233,9 @@ export default function ExamsPage() {
     setErrors({})
     try {
       if (needsBulkAssign) {
-        await academicsApi.bulkAssignSubjects({ class_obj: parseInt(form.class_obj), subjects: selectedSubjects })
+        await academicsApi.bulkAssignSubjects({ class_obj: parseInt(resolvedFormClassObj), subjects: selectedSubjects })
       }
-      const payload = { ...form, term: form.term || null }
+      const payload = { ...form, class_obj: resolvedFormClassObj, term: form.term || null }
       await examinationsApi.createExam(payload)
       queryClient.invalidateQueries({ queryKey: ['exams'] })
       closeModal()
@@ -782,6 +804,8 @@ export default function ExamsPage() {
                     value={form.class_obj}
                     onChange={e => { setForm(p => ({ ...p, class_obj: e.target.value })); setSelectedSubjects([]) }}
                     className="input w-full"
+                    scope={classSelectorScope}
+                    academicYearId={selectedFormAcademicYearId}
                     required
                     placeholder="Select..."
                   />
