@@ -71,6 +71,7 @@ export default function ClassesGradesPage() {
   })
 
   const classes = classesRes?.data?.results || classesRes?.data || []
+  const canonicalMasterClasses = classes.filter(c => !String(c.section || '').trim())
   const schools = schoolsData?.data?.results || []
   const {
     sessionClasses,
@@ -180,9 +181,9 @@ export default function ClassesGradesPage() {
           let res
           if (classScope === 'session') {
             if (!targetSessionYear) throw new Error('No active academic year selected for session classes.')
-            const linked = classes.find(c => (
+            const linked = canonicalMasterClasses.find(c => (
               String(c.name || '').toLowerCase() === String(baseName || '').toLowerCase()
-              && String(c.section || '') === String(sec || '')
+              && Number(c.grade_level) === Number(level)
             ))
             res = await sessionsApi.createSessionClass({
               academic_year: targetSessionYear,
@@ -233,10 +234,9 @@ export default function ClassesGradesPage() {
       for (const cls of toAdd) {
         if (classScope === 'session') {
           if (!activeAcademicYear?.id) throw new Error('No active academic year selected for session classes.')
-          const linked = classes.find(c => (
+          const linked = canonicalMasterClasses.find(c => (
             String(c.name || '').toLowerCase() === String(cls.name || '').toLowerCase()
             && Number(c.grade_level) === Number(cls.numeric_level)
-            && !c.section
           ))
           await sessionsApi.createSessionClass({
             academic_year: activeAcademicYear.id,
@@ -327,9 +327,9 @@ export default function ClassesGradesPage() {
         showError('Select an active academic year to manage session classes.')
         return
       }
-      const linked = classes.find(c => (
+      const linked = canonicalMasterClasses.find(c => (
         String(c.name || '').toLowerCase() === String(classForm.name || '').toLowerCase()
-        && String(c.section || '') === String(classForm.section || '')
+        && Number(c.grade_level) === Number(classForm.grade_level)
       ))
       const data = {
         academic_year: activeAcademicYear.id,
@@ -382,7 +382,7 @@ export default function ClassesGradesPage() {
       student_count: sc.student_count || 0,
       enrollment_count: sc.enrollment_count || 0,
     }))
-    : classes.filter(c => !String(c.section || '').trim())
+    : canonicalMasterClasses
 
   // Group classes by grade_level for the grouped view
   const classesByLevel = {}
@@ -410,20 +410,11 @@ export default function ClassesGradesPage() {
     const sessionSection = normalizeClassKey(sessionClass.section)
 
     // 1. Exact name + section match
-    const byNameSection = classes.filter(c =>
-      normalizeClassKey(c.name) === sessionName && normalizeClassKey(c.section) === sessionSection
-    )
-    if (byNameSection.length === 1) return byNameSection[0]
+    const byName = canonicalMasterClasses.filter(c => normalizeClassKey(c.name) === sessionName)
+    if (byName.length === 1) return byName[0]
 
-    // 2. Name match where master has no section (most common: session has section 'A' but master has none)
-    const byNameNoSection = classes.filter(c =>
-      normalizeClassKey(c.name) === sessionName && !c.section
-    )
-    if (byNameNoSection.length === 1) return byNameNoSection[0]
-
-    // 3. Name-only match (any master section)
-    const byNameAll = classes.filter(c => normalizeClassKey(c.name) === sessionName)
-    if (byNameAll.length === 1) return byNameAll[0]
+    const byGrade = canonicalMasterClasses.filter(c => Number(c.grade_level) === Number(sessionClass.grade_level))
+    if (byGrade.length === 1) return byGrade[0]
 
     return null
   }
@@ -920,9 +911,9 @@ export default function ClassesGradesPage() {
               onChange={e => setLinkPickerModal(prev => ({ ...prev, selectedMasterId: e.target.value }))}
             >
               <option value="">-- Select master class --</option>
-              {classes.map(c => (
+              {canonicalMasterClasses.map(c => (
                 <option key={c.id} value={c.id}>
-                  {c.name}{c.section ? ` — ${c.section}` : ''} (Level {c.grade_level})
+                  {c.name} (Level {c.grade_level})
                 </option>
               ))}
             </select>

@@ -132,6 +132,10 @@ class SessionClassCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({'academic_year': 'Academic year does not belong to this school.'})
         if school_id and class_obj and class_obj.school_id != int(school_id):
             raise serializers.ValidationError({'class_obj': 'Class does not belong to this school.'})
+        if class_obj and (class_obj.section or '').strip() and class_obj.id != getattr(self.instance, 'class_obj_id', None):
+            raise serializers.ValidationError({
+                'class_obj': 'Session classes can only link to section-free master classes.'
+            })
 
         if school_id and academic_year and display_name:
             dup_name_qs = SessionClass.objects.filter(
