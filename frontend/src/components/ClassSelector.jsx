@@ -1,6 +1,43 @@
 import { useClasses } from '../hooks/useClasses'
 import { useSessionClasses } from '../hooks/useSessionClasses'
 
+const classOptionCollator = new Intl.Collator(undefined, {
+  numeric: true,
+  sensitivity: 'base',
+})
+
+function normalizeText(value) {
+  return String(value || '').trim()
+}
+
+function getComparableName(option) {
+  return normalizeText(option.name || option.display_name || option.label)
+}
+
+function getComparableSection(option) {
+  return normalizeText(option.section)
+}
+
+function getComparableGrade(option) {
+  const numericGrade = Number(option.grade_level)
+  return Number.isFinite(numericGrade) ? numericGrade : Number.MAX_SAFE_INTEGER
+}
+
+function sortClassOptions(options = []) {
+  return [...options].sort((left, right) => {
+    const gradeDiff = getComparableGrade(left) - getComparableGrade(right)
+    if (gradeDiff !== 0) return gradeDiff
+
+    const nameDiff = classOptionCollator.compare(getComparableName(left), getComparableName(right))
+    if (nameDiff !== 0) return nameDiff
+
+    const sectionDiff = classOptionCollator.compare(getComparableSection(left), getComparableSection(right))
+    if (sectionDiff !== 0) return sectionDiff
+
+    return classOptionCollator.compare(normalizeText(left.label), normalizeText(right.label))
+  })
+}
+
 export default function ClassSelector({
   value,
   onChange,
@@ -38,6 +75,8 @@ export default function ClassSelector({
       : fetchedMasterClasses
   )
 
+  const sortedClasses = sortClassOptions(resolvedClasses)
+
   const isLoading = externalClasses ? false : (scope === 'session' ? sessionLoading : masterLoading)
 
   return (
@@ -53,7 +92,7 @@ export default function ClassSelector({
       <option value="">
         {!externalClasses && isLoading ? 'Loading classes...' : (showAllOption ? allOptionLabel : placeholder)}
       </option>
-      {resolvedClasses.map((cls) => (
+      {sortedClasses.map((cls) => (
         <option key={cls.id} value={cls.id}>
           {cls.label || `${cls.name}${cls.section ? ` - ${cls.section}` : ''}`}
         </option>
