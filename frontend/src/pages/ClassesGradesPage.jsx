@@ -382,7 +382,7 @@ export default function ClassesGradesPage() {
       student_count: sc.student_count || 0,
       enrollment_count: sc.enrollment_count || 0,
     }))
-    : classes
+    : classes.filter(c => !String(c.section || '').trim())
 
   // Group classes by grade_level for the grouped view
   const classesByLevel = {}
@@ -641,7 +641,10 @@ export default function ClassesGradesPage() {
                     <div>
                       <h3 className="font-semibold text-gray-900">{label}</h3>
                       <p className="text-xs text-gray-500">
-                        Level {level} · {levelClasses.length} section(s) · {levelClasses.reduce((sum, c) => sum + (classScope === 'session' ? (c.enrollment_count || 0) : (c.student_count || 0)), 0)} students
+                        {classScope === 'session'
+                          ? `Level ${level} · ${levelClasses.length} section(s) · ${levelClasses.reduce((sum, c) => sum + (c.enrollment_count || 0), 0)} students`
+                          : `Level ${level} · Master catalog`
+                        }
                       </p>
                     </div>
                     <svg className={`w-4 h-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -670,9 +673,11 @@ export default function ClassesGradesPage() {
                               <div>
                                 <p className="text-sm font-medium text-gray-900">{c.name}</p>
                                 {c.section && <p className="text-xs text-primary-600">Section {c.section}</p>}
-                                <p className="text-xs text-gray-400">
-                                  {classScope === 'session' ? (c.enrollment_count || 0) : (c.student_count || 0)} students
-                                </p>
+                                {classScope === 'session' && (
+                                  <p className="text-xs text-gray-400">
+                                    {c.enrollment_count || 0} students
+                                  </p>
+                                )}
                                 {classScope === 'session' && (
                                   <div className="text-[11px] text-blue-700 flex items-center gap-2 flex-wrap">
                                     <span>Master: {c.linked_master_name || 'Not linked'}</span>
@@ -742,10 +747,12 @@ export default function ClassesGradesPage() {
                 </span>
               </div>
               <div className="space-y-2 text-sm text-gray-500">
-                <div className="flex justify-between">
-                  <span>Students:</span>
-                  <span className="font-medium text-gray-900">{classScope === 'session' ? (cls.enrollment_count || 0) : (cls.student_count || 0)}</span>
-                </div>
+                {classScope === 'session' && (
+                  <div className="flex justify-between">
+                    <span>Students:</span>
+                    <span className="font-medium text-gray-900">{cls.enrollment_count || 0}</span>
+                  </div>
+                )}
                 {classScope === 'session' && (
                   <div className="flex justify-between items-center gap-2 flex-wrap">
                     <span>Master Class:</span>
