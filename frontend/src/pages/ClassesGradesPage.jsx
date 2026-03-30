@@ -35,6 +35,7 @@ export default function ClassesGradesPage() {
   const [classScope, setClassScope] = useState('master') // 'master' or 'session'
   const [viewMode, setViewMode] = useState('grouped') // 'grouped' or 'grid'
   const [expandedLevels, setExpandedLevels] = useState(new Set())
+  const [lastYearId, setLastYearId] = useState(null)
 
   // Class modal state
   const [showClassModal, setShowClassModal] = useState(false)
@@ -44,6 +45,10 @@ export default function ClassesGradesPage() {
   // Delete confirm & section allocator
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [showAllocator, setShowAllocator] = useState(false)
+
+  // Link master class picker modal
+  const [linkPickerModal, setLinkPickerModal] = useState({ open: false, sessionClass: null, selectedMasterId: '' })
+  const closeLinkPicker = () => setLinkPickerModal({ open: false, sessionClass: null, selectedMasterId: '' })
 
   // ─── Queries ────────────────────────────────────────────────
 
@@ -71,6 +76,15 @@ export default function ClassesGradesPage() {
     sessionClasses,
     isLoading: sessionClassesLoading,
   } = useSessionClasses(activeAcademicYear?.id, selectedSchoolId)
+
+  // When academic year changes, default to session scope so users immediately see year-specific classes.
+  useEffect(() => {
+    const currentYearId = activeAcademicYear?.id || null
+    if (currentYearId && lastYearId !== currentYearId) {
+      setClassScope('session')
+    }
+    setLastYearId(currentYearId)
+  }, [activeAcademicYear?.id, lastYearId])
 
   // ─── Class Mutations ────────────────────────────────────────
 
@@ -146,6 +160,15 @@ export default function ClassesGradesPage() {
     onError: (err) => showError(err.response?.data?.detail || err.message || 'Failed to delete session class'),
   })
 
+  const linkSessionClassMut = useMutation({
+    mutationFn: ({ id, classObjId }) => sessionsApi.updateSessionClass(id, { class_obj: classObjId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['session-classes'] })
+      showSuccess('Session class linked to master class.')
+    },
+    onError: (err) => showError(err.response?.data?.detail || err.message || 'Failed to link session class'),
+  })
+
   // Quick-add sections for a grade level
   const quickAddSectionsMut = useMutation({
     mutationFn: async ({ level, sections }) => {
@@ -178,8 +201,16 @@ export default function ClassesGradesPage() {
           }
           results.push(res.data)
         } catch (err) {
-          const duplicateMsg = err.response?.data?.detail || err.response?.data?.display_name?.[0] || err.response?.data?.name?.[0] || ''
-          if (!String(duplicateMsg).toLowerCase().includes('already exists')) throw err
+          const payload = err.response?.data || {}
+          const duplicateMsg = [
+            payload.detail,
+            payload.non_field_errors?.[0],
+            payload.display_name?.[0],
+            payload.name?.[0],
+            payload.class_obj?.[0],
+          ].filter(Boolean).join(' ')
+          const lowered = String(duplicateMsg).toLowerCase()
+          if (!(lowered.includes('already exists') || lowered.includes('already linked'))) throw err
         }
       }
       return results
@@ -372,6 +403,41 @@ export default function ClassesGradesPage() {
     })
   }
 
+  const normalizeClassKey = (value) => String(value || '').trim().toLowerCase()
+
+  const findMasterClassCandidate = (sessionClass) => {
+    const sessionName = normalizeClassKey(sessionClass.name || sessionClass.display_name)
+    const sessionSection = normalizeClassKey(sessionClass.section)
+
+    // 1. Exact name + section match
+    const byNameSection = classes.filter(c =>
+      normalizeClassKey(c.name) === sessionName && normalizeClassKey(c.section) === sessionSection
+    )
+    if (byNameSection.length === 1) return byNameSection[0]
+
+    // 2. Name match where master has no section (most common: session has section 'A' but master has none)
+    const byNameNoSection = classes.filter(c =>
+      normalizeClassKey(c.name) === sessionName && !c.section
+    )
+    if (byNameNoSection.length === 1) return byNameNoSection[0]
+
+    // 3. Name-only match (any master section)
+    const byNameAll = classes.filter(c => normalizeClassKey(c.name) === sessionName)
+    if (byNameAll.length === 1) return byNameAll[0]
+
+    return null
+  }
+
+  const handleLinkNow = (sessionClass) => {
+    const candidate = findMasterClassCandidate(sessionClass)
+    if (candidate) {
+      linkSessionClassMut.mutate({ id: sessionClass.id, classObjId: candidate.id })
+    } else {
+      // Auto-match failed → open picker so user can select manually
+      setLinkPickerModal({ open: true, sessionClass, selectedMasterId: '' })
+    }
+  }
+
   // ─── Render ─────────────────────────────────────────────────
 
   return (
@@ -437,8 +503,11 @@ export default function ClassesGradesPage() {
           </div>
           <button
             type="button"
-            onClick={() => initializeSessionClassesMut.mutate()}
-            disabled={!activeAcademicYear?.id || initializeSessionClassesMut.isPending || classScope !== 'session'}
+            onClick={() => {
+              if (classScope !== 'session') setClassScope('session')
+              initializeSessionClassesMut.mutate()
+            }}
+            disabled={!activeAcademicYear?.id || initializeSessionClassesMut.isPending}
             className="px-3 py-2 text-xs rounded-lg border border-blue-300 text-blue-800 bg-white hover:bg-blue-100 disabled:opacity-50"
           >
             {initializeSessionClassesMut.isPending ? 'Initializing...' : 'Initialize From Master Classes'}
@@ -551,6 +620,7 @@ export default function ClassesGradesPage() {
             const levelClasses = classesByLevel[level] || []
             const isExpanded = expandedLevels.has(level)
             const label = GRADE_LEVEL_LABELS[level] || `Level ${level}`
+            const editableClass = levelClasses.find(c => !c.section) || levelClasses[0]
 
             return (
               <div key={level} className="card">
@@ -570,7 +640,14 @@ export default function ClassesGradesPage() {
                     </svg>
                   </div>
                   <div className="flex items-center gap-2">
-                    <button onClick={() => openClassCreate(level)} className="text-xs text-sky-600 hover:underline">+ Class</button>
+                    <button
+                      onClick={() => editableClass && openClassEdit(editableClass)}
+                      disabled={!editableClass}
+                      className="text-xs text-sky-600 hover:underline disabled:opacity-40 disabled:cursor-not-allowed"
+                      title={levelClasses.length > 1 ? 'Editing primary class in this level. Expand row to edit specific sections.' : 'Edit class'}
+                    >
+                      Edit
+                    </button>
                   </div>
                 </div>
 
@@ -588,9 +665,19 @@ export default function ClassesGradesPage() {
                                   {classScope === 'session' ? (c.enrollment_count || 0) : (c.student_count || 0)} students
                                 </p>
                                 {classScope === 'session' && (
-                                  <p className="text-[11px] text-blue-700">
-                                    Master: {c.linked_master_name || 'Not linked'}
-                                  </p>
+                                  <div className="text-[11px] text-blue-700 flex items-center gap-2 flex-wrap">
+                                    <span>Master: {c.linked_master_name || 'Not linked'}</span>
+                                    {!c.class_obj && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleLinkNow(c)}
+                                        disabled={linkSessionClassMut.isPending}
+                                        className="px-1.5 py-0.5 rounded border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700 disabled:opacity-50"
+                                      >
+                                        Link Now
+                                      </button>
+                                    )}
+                                  </div>
                                 )}
                               </div>
                               <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -647,9 +734,21 @@ export default function ClassesGradesPage() {
                   <span className="font-medium text-gray-900">{classScope === 'session' ? (cls.enrollment_count || 0) : (cls.student_count || 0)}</span>
                 </div>
                 {classScope === 'session' && (
-                  <div className="flex justify-between">
+                  <div className="flex justify-between items-center gap-2 flex-wrap">
                     <span>Master Class:</span>
-                    <span className="font-medium text-blue-700">{cls.linked_master_name || 'Not linked'}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-blue-700">{cls.linked_master_name || 'Not linked'}</span>
+                      {!cls.class_obj && (
+                        <button
+                          type="button"
+                          onClick={() => handleLinkNow(cls)}
+                          disabled={linkSessionClassMut.isPending}
+                          className="text-[11px] px-1.5 py-0.5 rounded border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700 disabled:opacity-50"
+                        >
+                          Link Now
+                        </button>
+                      )}
+                    </div>
                   </div>
                 )}
                 {cls.section && (
@@ -762,6 +861,56 @@ export default function ClassesGradesPage() {
                 className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
               >
                 {deleteClassMut.isPending || deleteSessionClassMut.isPending ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ───── Link Master Class Picker Modal ───── */}
+      {linkPickerModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={closeLinkPicker}>
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-gray-900">Link Master Class</h2>
+              <button onClick={closeLinkPicker} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+            </div>
+            <p className="text-sm text-gray-600 mb-4">
+              Select a master class to link to{' '}
+              <strong>
+                {linkPickerModal.sessionClass?.display_name || linkPickerModal.sessionClass?.name}
+                {linkPickerModal.sessionClass?.section ? ` — ${linkPickerModal.sessionClass.section}` : ''}
+              </strong>.
+            </p>
+            <select
+              className="input w-full mb-4"
+              value={linkPickerModal.selectedMasterId}
+              onChange={e => setLinkPickerModal(prev => ({ ...prev, selectedMasterId: e.target.value }))}
+            >
+              <option value="">-- Select master class --</option>
+              {classes
+                .filter(c => !sessionClasses.some(sc => sc.class_obj === c.id && sc.id !== linkPickerModal.sessionClass?.id))
+                .map(c => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}{c.section ? ` — ${c.section}` : ''} (Level {c.grade_level})
+                  </option>
+                ))
+              }
+            </select>
+            <div className="flex justify-end space-x-3">
+              <button onClick={closeLinkPicker} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>
+              <button
+                onClick={() => {
+                  if (!linkPickerModal.selectedMasterId) return
+                  linkSessionClassMut.mutate(
+                    { id: linkPickerModal.sessionClass.id, classObjId: parseInt(linkPickerModal.selectedMasterId) },
+                    { onSuccess: closeLinkPicker }
+                  )
+                }}
+                disabled={!linkPickerModal.selectedMasterId || linkSessionClassMut.isPending}
+                className="btn-primary px-4 py-2 text-sm disabled:opacity-50"
+              >
+                {linkSessionClassMut.isPending ? 'Linking...' : 'Link'}
               </button>
             </div>
           </div>

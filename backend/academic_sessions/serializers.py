@@ -119,12 +119,46 @@ class SessionClassCreateSerializer(serializers.ModelSerializer):
 
     def validate(self, data):
         school_id = self.context.get('school_id')
-        academic_year = data.get('academic_year')
-        class_obj = data.get('class_obj')
+        school_id = int(school_id) if school_id else None
+        academic_year = data.get('academic_year') or getattr(self.instance, 'academic_year', None)
+        class_obj = data.get('class_obj', getattr(self.instance, 'class_obj', None))
+        display_name = (data.get('display_name') if 'display_name' in data else getattr(self.instance, 'display_name', '')) or ''
+        section = (data.get('section') if 'section' in data else getattr(self.instance, 'section', '')) or ''
+
+        # Normalize section to keep uniqueness checks consistent.
+        data['section'] = section.strip()
+
         if school_id and academic_year and academic_year.school_id != int(school_id):
             raise serializers.ValidationError({'academic_year': 'Academic year does not belong to this school.'})
         if school_id and class_obj and class_obj.school_id != int(school_id):
             raise serializers.ValidationError({'class_obj': 'Class does not belong to this school.'})
+
+        if school_id and academic_year and display_name:
+            dup_name_qs = SessionClass.objects.filter(
+                school_id=school_id,
+                academic_year=academic_year,
+                display_name=display_name,
+                section=data['section'],
+            )
+            if self.instance:
+                dup_name_qs = dup_name_qs.exclude(pk=self.instance.pk)
+            if dup_name_qs.exists():
+                raise serializers.ValidationError({
+                    'display_name': 'A session class with this name and section already exists for this academic year.'
+                })
+
+        if school_id and academic_year and class_obj:
+            dup_link_qs = SessionClass.objects.filter(
+                school_id=school_id,
+                academic_year=academic_year,
+                class_obj=class_obj,
+            )
+            if self.instance:
+                dup_link_qs = dup_link_qs.exclude(pk=self.instance.pk)
+            if dup_link_qs.exists():
+                raise serializers.ValidationError({
+                    'class_obj': 'This master class is already linked to another session class in this academic year.'
+                })
         return data
 
 

@@ -7,22 +7,26 @@ import { useToast } from '../components/Toast'
 
 import SchoolProfileStep from './school-setup/SchoolProfileStep'
 import AcademicYearStep from './school-setup/AcademicYearStep'
+import SessionClassesStep from './school-setup/SessionClassesStep'
 import ClassesStep from './school-setup/ClassesStep'
 import StudentsStep from './school-setup/StudentsStep'
 import StaffStep from './school-setup/StaffStep'
 import SubjectsStep from './school-setup/SubjectsStep'
 import FinanceStep from './school-setup/FinanceStep'
 import ReviewStep from './school-setup/ReviewStep'
+import { useAcademicYear } from '../contexts/AcademicYearContext'
+import { useSessionClasses } from '../hooks/useSessionClasses'
 
 const STEPS = [
   { key: 'profile',  num: 1, label: 'School Profile',   icon: '🏫', moduleKey: null },
   { key: 'academic', num: 2, label: 'Academic Year',     icon: '📅', moduleKey: 'students' },
-  { key: 'classes',  num: 3, label: 'Classes & Grades',  icon: '📚', moduleKey: 'students' },
-  { key: 'students', num: 4, label: 'Students',          icon: '👥', moduleKey: 'students' },
-  { key: 'staff',    num: 5, label: 'Staff & HR',        icon: '💼', moduleKey: 'hr' },
-  { key: 'subjects', num: 6, label: 'Subjects',          icon: '📖', moduleKey: 'academics' },
-  { key: 'finance',  num: 7, label: 'Finance',           icon: '💰', moduleKey: 'finance' },
-  { key: 'review',   num: 8, label: 'Review & Finish',   icon: '✅', moduleKey: null },
+  { key: 'session_classes', num: 3, label: 'Session Classes', icon: '🧩', moduleKey: 'students' },
+  { key: 'classes',  num: 4, label: 'Classes & Grades',  icon: '📚', moduleKey: 'students' },
+  { key: 'students', num: 5, label: 'Students',          icon: '👥', moduleKey: 'students' },
+  { key: 'staff',    num: 6, label: 'Staff & HR',        icon: '💼', moduleKey: 'hr' },
+  { key: 'subjects', num: 7, label: 'Subjects',          icon: '📖', moduleKey: 'academics' },
+  { key: 'finance',  num: 8, label: 'Finance',           icon: '💰', moduleKey: 'finance' },
+  { key: 'review',   num: 9, label: 'Review & Finish',   icon: '✅', moduleKey: null },
 ]
 
 // Map completion module keys to wizard step keys
@@ -36,8 +40,10 @@ const MODULE_TO_STEP = {
 export default function SchoolSetupPage() {
   const navigate = useNavigate()
   const { activeSchool, isModuleEnabled } = useAuth()
+  const { activeAcademicYear } = useAcademicYear()
   const { addToast } = useToast()
   const [activeStep, setActiveStep] = useState(1)
+  const { sessionClasses } = useSessionClasses(activeAcademicYear?.id, activeSchool?.id)
 
   // Filter steps based on enabled modules
   const visibleSteps = useMemo(() => {
@@ -85,6 +91,9 @@ export default function SchoolSetupPage() {
     // Classes: from students module "class" step
     status.classes = isStepDone('students', 'class') ? 'complete' : 'pending'
 
+    // Session classes: complete when active year exists and has at least one session class
+    status.session_classes = (activeAcademicYear?.id && sessionClasses.length > 0) ? 'complete' : 'pending'
+
     // Students: need both students added AND enrolled
     const studentsAdded = isStepDone('students', 'student added', 'students added')
     const enrolled = isStepDone('students', 'enroll')
@@ -111,12 +120,12 @@ export default function SchoolSetupPage() {
       : (accountsDone || feesDone) ? 'partial' : 'pending'
 
     // Review: complete when all other wizard steps are complete
-    const wizardKeys = ['profile', 'academic', 'classes', 'students', 'staff', 'subjects', 'finance']
+    const wizardKeys = ['profile', 'academic', 'session_classes', 'classes', 'students', 'staff', 'subjects', 'finance']
     const allDone = wizardKeys.every(k => status[k] === 'complete')
     status.review = allDone ? 'complete' : 'pending'
 
     return status
-  }, [completion])
+  }, [completion, activeAcademicYear?.id, sessionClasses.length])
 
   // Calculate wizard-specific progress (how many of OUR steps are done)
   const wizardProgress = useMemo(() => {
@@ -166,6 +175,7 @@ export default function SchoolSetupPage() {
     switch (currentStepDef?.key) {
       case 'profile':  return <SchoolProfileStep {...props} />
       case 'academic': return <AcademicYearStep {...props} />
+      case 'session_classes': return <SessionClassesStep {...props} />
       case 'classes':  return <ClassesStep {...props} />
       case 'students': return <StudentsStep {...props} />
       case 'staff':    return <StaffStep {...props} />

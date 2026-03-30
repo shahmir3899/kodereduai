@@ -342,6 +342,7 @@ const studentNavGroups = [
 // Routes where the academic year switcher affects displayed data
 const SESSION_AWARE_PREFIXES = [
   '/dashboard',
+  '/classes',
   '/attendance',
   '/students',
   '/finance/fees',
@@ -356,6 +357,7 @@ const SESSION_AWARE_PREFIXES = [
   '/academics/lesson-plans',
   '/academics/assignments',
   '/academics/sessions',
+  '/school-setup',
 ]
 
 export default function Layout() {
