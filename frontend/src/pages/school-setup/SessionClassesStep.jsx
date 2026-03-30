@@ -15,7 +15,7 @@ export default function SessionClassesStep({ refetchCompletion }) {
 
   const { data: classesRes } = useQuery({
     queryKey: ['classes', activeSchool?.id],
-    queryFn: () => classesApi.getClasses({ school_id: activeSchool?.id, page_size: 200 }),
+    queryFn: () => classesApi.getClasses({ school_id: activeSchool?.id, page_size: 200, is_active: true }),
     enabled: !!activeSchool?.id,
   })
 

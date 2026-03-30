@@ -66,7 +66,7 @@ export default function ClassesGradesPage() {
 
   const { data: classesRes, isLoading } = useQuery({
     queryKey: ['classes', selectedSchoolId],
-    queryFn: () => classesApi.getClasses({ school_id: selectedSchoolId, page_size: 200 }),
+    queryFn: () => classesApi.getClasses({ school_id: selectedSchoolId, page_size: 200, is_active: true }),
     enabled: !!selectedSchoolId,
   })
 
