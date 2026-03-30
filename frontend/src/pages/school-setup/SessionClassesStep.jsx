@@ -37,7 +37,7 @@ export default function SessionClassesStep({ refetchCompletion }) {
     <div>
       <h2 className="text-lg font-semibold text-gray-900 mb-1">Session Class Assignment</h2>
       <p className="text-sm text-gray-500 mb-6">
-        Create class mappings for the active academic year so class filters and counts stay session-specific.
+        Use master classes as the shared catalog, then create year-specific session classes and sections for the active academic year.
       </p>
 
       {!activeAcademicYear?.id ? (
@@ -71,8 +71,8 @@ export default function SessionClassesStep({ refetchCompletion }) {
 
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
             <p className="text-xs text-blue-800">
-              Why this matters: session classes drive per-year class selection and enrollment-based counts.
-              Without session classes, views can fall back to master class totals.
+              Why this matters: keep master classes simple and section-free, then create sections inside session classes for each academic year.
+              This keeps class filters, counts, and promotions year-specific without duplicating the master catalog.
             </p>
           </div>
 

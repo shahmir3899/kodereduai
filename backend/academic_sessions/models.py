@@ -130,11 +130,6 @@ class SessionClass(models.Model):
                 fields=['school', 'academic_year', 'display_name', 'section'],
                 name='unique_session_class_name_per_year',
             ),
-            models.UniqueConstraint(
-                fields=['school', 'academic_year', 'class_obj'],
-                condition=models.Q(class_obj__isnull=False),
-                name='unique_session_class_master_link_per_year',
-            ),
         ]
         indexes = [
             models.Index(fields=['school', 'academic_year', 'is_active']),

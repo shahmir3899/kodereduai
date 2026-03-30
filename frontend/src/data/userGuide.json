@@ -3,7 +3,7 @@
     "title": "KoderEduAI",
     "subtitle": "School Administration Guide",
     "version": "3.1 - Session Class Standardization",
-    "generatedAt": "2026-03-29T20:40:48.716772+00:00",
+    "generatedAt": "2026-03-30T06:17:30.125762+00:00",
     "totalChapters": 21,
     "modules": [
       "Dashboard | Classes & Students | Attendance (AI-Powered)",
@@ -307,27 +307,32 @@
             {
               "type": "step",
               "number": 2,
-              "text": "Click 'Add Class'."
+              "text": "Keep master classes simple: create one section-free class per grade, such as Playgroup, Nursery, Prep, Class 1, and Class 2."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Enter: Class Name (e.g., 'Class 5-A'), Section (e.g., 'A'), Grade Level (e.g., 'Grade 5')."
+              "text": "Click 'Add Class', choose the Grade Level, confirm the Class Name, and save without adding sections."
             },
             {
               "type": "step",
               "number": 4,
-              "text": "Save the class. Repeat for all classes and sections."
+              "text": "Repeat once per grade level. The master class list is the shared class catalog used across academic years."
             },
             {
               "type": "step",
               "number": 5,
+              "text": "After master classes are ready, switch to Session Classes for the active academic year and create sections such as A, B, and C there."
+            },
+            {
+              "type": "step",
+              "number": 6,
               "text": "Classes are displayed grouped by grade level. Use the 'Grid' toggle for an alternate view."
             },
             {
               "type": "info_box",
               "title": "Tip",
-              "text": "Create all sections for a grade. For example: Class 5-A, Class 5-B, Class 5-C. The grade level grouping will organize them automatically."
+              "text": "Create sections in Session Classes, not in the master catalog. Example: keep master 'Class 5' once, then create session sections 'Class 5 - A' and 'Class 5 - B' inside the selected academic year."
             }
           ]
         },

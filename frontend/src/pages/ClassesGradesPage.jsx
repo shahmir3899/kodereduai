@@ -345,7 +345,7 @@ export default function ClassesGradesPage() {
 
     const data = {
       name: classForm.name,
-      section: classForm.section || '',
+      section: editingClass ? (classForm.section || '') : '',
       grade_level: classForm.grade_level ? parseInt(classForm.grade_level) : 0,
     }
     if (editingClass) updateClassMut.mutate({ id: editingClass.id, data })
@@ -500,6 +500,9 @@ export default function ClassesGradesPage() {
             <p className="text-xs text-blue-700 mt-0.5">
               {sessionClassesLoading ? 'Loading...' : `${sessionClasses.length} session classes configured`}
             </p>
+            <p className="text-xs text-blue-700 mt-1">
+              Master classes should stay section-free. Create sections like A/B/C inside Session Classes for each academic year.
+            </p>
           </div>
           <button
             type="button"
@@ -518,6 +521,12 @@ export default function ClassesGradesPage() {
       {classScope === 'session' && !activeAcademicYear?.id && (
         <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
           Select an active academic year from the session switcher to manage session classes.
+        </div>
+      )}
+
+      {classScope === 'master' && (
+        <div className="mb-4 rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-800">
+          Master classes are the shared class catalog only. Keep them section-free and create sections in Session Classes for each academic year.
         </div>
       )}
 
@@ -691,18 +700,22 @@ export default function ClassesGradesPage() {
                     ) : (
                       <p className="text-xs text-gray-400 mb-3">No classes at this level yet.</p>
                     )}
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs text-gray-500">Quick add sections:</span>
-                      {[1, 2, 3, 4, 5, 6].map(count => (
-                        <button
-                          key={count}
-                          onClick={() => handleQuickAddSections(level, count)}
-                          disabled={quickAddSectionsMut.isPending}
-                          className="px-2 py-1 text-xs bg-primary-50 text-primary-700 hover:bg-primary-100 rounded transition-colors disabled:opacity-50"
-                        >+{count}</button>
-                      ))}
-                      {quickAddSectionsMut.isPending && <span className="text-xs text-gray-400">Creating...</span>}
-                    </div>
+                    {classScope === 'session' ? (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs text-gray-500">Quick add sections:</span>
+                        {[1, 2, 3, 4, 5, 6].map(count => (
+                          <button
+                            key={count}
+                            onClick={() => handleQuickAddSections(level, count)}
+                            disabled={quickAddSectionsMut.isPending}
+                            className="px-2 py-1 text-xs bg-primary-50 text-primary-700 hover:bg-primary-100 rounded transition-colors disabled:opacity-50"
+                          >+{count}</button>
+                        ))}
+                        {quickAddSectionsMut.isPending && <span className="text-xs text-gray-400">Creating...</span>}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-sky-700">Sections are created in Session Classes, not in the master catalog.</p>
+                    )}
                   </div>
                 )}
               </div>
@@ -791,31 +804,43 @@ export default function ClassesGradesPage() {
                 </select>
               </div>
 
-              <div>
-                <label className="label">Section (Optional)</label>
-                <div className="flex flex-wrap gap-1.5 mb-1">
-                  {SECTION_LABELS.map(s => (
-                    <button
-                      key={s}
-                      type="button"
-                      onClick={() => handleClassSectionChange(classForm.section === s ? '' : s)}
-                      className={`px-3 py-1.5 text-xs rounded-lg border transition-colors ${
-                        classForm.section === s
-                          ? 'bg-primary-100 border-primary-300 text-primary-700 font-medium'
-                          : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
-                      }`}
-                    >{s}</button>
-                  ))}
+              {classScope === 'session' ? (
+                <div>
+                  <label className="label">Section (Optional)</label>
+                  <div className="flex flex-wrap gap-1.5 mb-1">
+                    {SECTION_LABELS.map(s => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => handleClassSectionChange(classForm.section === s ? '' : s)}
+                        className={`px-3 py-1.5 text-xs rounded-lg border transition-colors ${
+                          classForm.section === s
+                            ? 'bg-primary-100 border-primary-300 text-primary-700 font-medium'
+                            : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                        }`}
+                      >{s}</button>
+                    ))}
+                  </div>
+                  <input
+                    type="text"
+                    className="input mt-1"
+                    placeholder="Or type custom section..."
+                    value={classForm.section}
+                    onChange={(e) => handleClassSectionChange(e.target.value.toUpperCase())}
+                    maxLength={10}
+                  />
                 </div>
-                <input
-                  type="text"
-                  className="input mt-1"
-                  placeholder="Or type custom section..."
-                  value={classForm.section}
-                  onChange={(e) => handleClassSectionChange(e.target.value.toUpperCase())}
-                  maxLength={10}
-                />
-              </div>
+              ) : editingClass && classForm.section ? (
+                <div>
+                  <label className="label">Legacy Section</label>
+                  <input type="text" className="input mt-1 bg-gray-50" value={classForm.section} disabled />
+                  <p className="text-xs text-gray-500 mt-1">This older master class still has a section. New master classes should be section-free.</p>
+                </div>
+              ) : (
+                <div className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-800">
+                  Sections are managed in Session Classes. Master classes should stay section-free.
+                </div>
+              )}
 
               <div>
                 <label className="label">Class Name</label>
@@ -888,14 +913,11 @@ export default function ClassesGradesPage() {
               onChange={e => setLinkPickerModal(prev => ({ ...prev, selectedMasterId: e.target.value }))}
             >
               <option value="">-- Select master class --</option>
-              {classes
-                .filter(c => !sessionClasses.some(sc => sc.class_obj === c.id && sc.id !== linkPickerModal.sessionClass?.id))
-                .map(c => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}{c.section ? ` — ${c.section}` : ''} (Level {c.grade_level})
-                  </option>
-                ))
-              }
+              {classes.map(c => (
+                <option key={c.id} value={c.id}>
+                  {c.name}{c.section ? ` — ${c.section}` : ''} (Level {c.grade_level})
+                </option>
+              ))}
             </select>
             <div className="flex justify-end space-x-3">
               <button onClick={closeLinkPicker} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>

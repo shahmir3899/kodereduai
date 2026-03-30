@@ -146,19 +146,6 @@ class SessionClassCreateSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({
                     'display_name': 'A session class with this name and section already exists for this academic year.'
                 })
-
-        if school_id and academic_year and class_obj:
-            dup_link_qs = SessionClass.objects.filter(
-                school_id=school_id,
-                academic_year=academic_year,
-                class_obj=class_obj,
-            )
-            if self.instance:
-                dup_link_qs = dup_link_qs.exclude(pk=self.instance.pk)
-            if dup_link_qs.exists():
-                raise serializers.ValidationError({
-                    'class_obj': 'This master class is already linked to another session class in this academic year.'
-                })
         return data
 
 

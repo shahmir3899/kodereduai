@@ -445,12 +445,12 @@ def build_guide():
     pdf.section_title("Step 2: Create Classes")
     pdf.nav_path("Sidebar > Management > Classes")
     pdf.step("Navigate to 'Classes' in the sidebar under Management.")
-    pdf.step("Click 'Add Class'.")
-    pdf.step("Enter: Class Name (e.g., 'Class 5-A'), Section (e.g., 'A'), Grade Level (e.g., 'Grade 5').")
-    pdf.step("Save the class. Repeat for all classes and sections.")
+    pdf.step("Keep master classes simple: create one section-free class per grade, such as Playgroup, Nursery, Prep, Class 1, and Class 2.")
+    pdf.step("Click 'Add Class', choose the Grade Level, confirm the Class Name, and save without adding sections.")
+    pdf.step("Repeat once per grade level. The master class list is the shared class catalog used across academic years.")
+    pdf.step("After master classes are ready, switch to Session Classes for the active academic year and create sections such as A, B, and C there.")
     pdf.step("Classes are displayed grouped by grade level. Use the 'Grid' toggle for an alternate view.")
-    pdf.info_box("Tip", "Create all sections for a grade. For example: Class 5-A, Class 5-B, Class 5-C. "
-                 "The grade level grouping will organize them automatically.")
+    pdf.info_box("Tip", "Create sections in Session Classes, not in the master catalog. Example: keep master 'Class 5' once, then create session sections 'Class 5 - A' and 'Class 5 - B' inside the selected academic year.")
 
     pdf.section_title("Step 3: Add Students")
     pdf.nav_path("Sidebar > Management > Students")
