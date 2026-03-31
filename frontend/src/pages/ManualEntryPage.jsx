@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { attendanceApi, sessionsApi } from '../services/api'
 import { useAcademicYear } from '../contexts/AcademicYearContext'
@@ -49,6 +49,24 @@ export default function ManualEntryPage() {
     sessionClasses: filteredSessionClasses,
   })
 
+  const selectedMasterClassId = useMemo(() => {
+    if (!classId) return ''
+    if (!useSessionClassFilter) return classId
+    const selectedSessionClass = filteredSessionClasses.find(sc => String(sc.id) === String(classId))
+    return selectedSessionClass?.class_obj || ''
+  }, [classId, useSessionClassFilter, filteredSessionClasses])
+
+  const { data: selectedDayStatusRes } = useQuery({
+    queryKey: ['manualEntryDayStatus', date, selectedMasterClassId, activeAcademicYear?.id],
+    queryFn: () => sessionsApi.getCalendarDayStatus({
+      date_from: date,
+      date_to: date,
+      class_id: selectedMasterClassId || undefined,
+      academic_year: activeAcademicYear?.id || undefined,
+    }),
+    enabled: !!classId && !!date,
+  })
+
   // Fetch enrolled students for selected class + academic year
   const { data: studentsRes, isLoading: studentsLoading } = useQuery({
     queryKey: ['studentsForAttendance', classId, activeAcademicYear?.id, useSessionClassFilter],
@@ -77,6 +95,10 @@ export default function ManualEntryPage() {
     enabled: !!classId && !!date,
   })
   const existingRecords = existingRes?.data?.results || existingRes?.data || []
+  const selectedDayStatus = selectedDayStatusRes?.data?.days?.[date] || null
+  const selectedDayIsOff = !!selectedDayStatus?.is_off_day
+  const selectedDayOffTypes = selectedDayStatus?.off_day_types || []
+  const isAttendanceApplicable = !selectedDayIsOff
 
   // Merge students + existing records into grid
   useEffect(() => {
@@ -116,6 +138,7 @@ export default function ManualEntryPage() {
   })
 
   const toggleStatus = (idx) => {
+    if (!isAttendanceApplicable) return
     setAttendanceData(prev => prev.map((item, i) => {
       if (i !== idx) return item
       const next = item.status === 'NOT_SET' ? 'PRESENT' : item.status === 'PRESENT' ? 'ABSENT' : 'NOT_SET'
@@ -124,10 +147,16 @@ export default function ManualEntryPage() {
   }
 
   const markAll = (status) => {
+    if (!isAttendanceApplicable) return
     setAttendanceData(prev => prev.map(item => ({ ...item, status })))
   }
 
   const handleSave = () => {
+    if (!isAttendanceApplicable) {
+      setSaveMsg('Attendance is not applicable on OFF day.')
+      setTimeout(() => setSaveMsg(''), 4000)
+      return
+    }
     const entries = attendanceData
       .filter(a => a.status !== 'NOT_SET')
       .map(a => ({ student_id: a.student_id, status: a.status }))
@@ -180,6 +209,11 @@ export default function ManualEntryPage() {
               onChange={e => { setDate(e.target.value); setAttendanceData([]); setSaveMsg('') }}
               className="input w-full"
             />
+            {selectedDayIsOff && (
+              <p className="mt-1 text-[11px] font-semibold text-rose-700">
+                OFF Day{selectedDayOffTypes.length ? `: ${selectedDayOffTypes.join(', ')}` : ''}
+              </p>
+            )}
           </div>
         </div>
       </div>
@@ -203,6 +237,17 @@ export default function ManualEntryPage() {
         </div>
       ) : (
         <>
+          {selectedDayIsOff && (
+            <div className="flex items-start gap-2 p-3 bg-rose-50 text-rose-800 rounded-lg text-sm">
+              <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586A1 1 0 0113.293 3.293l5.414 5.414A1 1 0 0119 9.414V19a2 2 0 01-2 2z" />
+              </svg>
+              <span>
+                Selected date is marked as OFF day{selectedDayOffTypes.length ? ` (${selectedDayOffTypes.join(', ')})` : ''}. Manual save may be blocked by backend policy.
+              </span>
+            </div>
+          )}
+
           {/* Existing records info */}
           {hasExisting && (
             <div className="flex items-start gap-2 p-3 bg-blue-50 text-blue-800 rounded-lg text-sm">
@@ -217,9 +262,9 @@ export default function ManualEntryPage() {
           <div className="card">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
               <div className="flex gap-2 flex-wrap">
-                <button onClick={() => markAll('PRESENT')} className="px-3 py-1.5 text-xs font-medium rounded-lg bg-green-100 text-green-700 hover:bg-green-200">Mark All Present</button>
-                <button onClick={() => markAll('ABSENT')} className="px-3 py-1.5 text-xs font-medium rounded-lg bg-red-100 text-red-700 hover:bg-red-200">Mark All Absent</button>
-                <button onClick={() => markAll('NOT_SET')} className="px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200">Reset All</button>
+                <button onClick={() => markAll('PRESENT')} disabled={!isAttendanceApplicable} className="px-3 py-1.5 text-xs font-medium rounded-lg bg-green-100 text-green-700 hover:bg-green-200 disabled:opacity-40 disabled:cursor-not-allowed">Mark All Present</button>
+                <button onClick={() => markAll('ABSENT')} disabled={!isAttendanceApplicable} className="px-3 py-1.5 text-xs font-medium rounded-lg bg-red-100 text-red-700 hover:bg-red-200 disabled:opacity-40 disabled:cursor-not-allowed">Mark All Absent</button>
+                <button onClick={() => markAll('NOT_SET')} disabled={!isAttendanceApplicable} className="px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed">Reset All</button>
               </div>
               <div className="flex gap-4 text-sm">
                 <span className="text-green-600 font-semibold">{presentCount} Present</span>
@@ -250,15 +295,18 @@ export default function ManualEntryPage() {
                     <td className="px-4 py-2.5 text-center">
                       <button
                         onClick={() => toggleStatus(idx)}
+                        disabled={!isAttendanceApplicable}
                         className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors min-w-[80px] ${
-                          item.status === 'PRESENT'
+                          !isAttendanceApplicable
+                            ? 'bg-gray-100 text-gray-500 cursor-not-allowed'
+                            : item.status === 'PRESENT'
                             ? 'bg-green-100 text-green-700 hover:bg-green-200'
                             : item.status === 'ABSENT'
                               ? 'bg-red-100 text-red-700 hover:bg-red-200'
                               : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                         }`}
                       >
-                        {item.status === 'PRESENT' ? 'Present' : item.status === 'ABSENT' ? 'Absent' : 'Not Set'}
+                        {!isAttendanceApplicable ? 'N/A' : item.status === 'PRESENT' ? 'Present' : item.status === 'ABSENT' ? 'Absent' : 'Not Set'}
                       </button>
                     </td>
                   </tr>
@@ -277,15 +325,18 @@ export default function ManualEntryPage() {
                 </div>
                 <button
                   onClick={() => toggleStatus(idx)}
+                  disabled={!isAttendanceApplicable}
                   className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
-                    item.status === 'PRESENT'
+                    !isAttendanceApplicable
+                      ? 'bg-gray-100 text-gray-500 cursor-not-allowed'
+                      : item.status === 'PRESENT'
                       ? 'bg-green-100 text-green-700 hover:bg-green-200'
                       : item.status === 'ABSENT'
                         ? 'bg-red-100 text-red-700 hover:bg-red-200'
                         : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                   }`}
                 >
-                  {item.status === 'PRESENT' ? 'P' : item.status === 'ABSENT' ? 'A' : '—'}
+                  {!isAttendanceApplicable ? 'N/A' : item.status === 'PRESENT' ? 'P' : item.status === 'ABSENT' ? 'A' : '—'}
                 </button>
               </div>
             ))}
@@ -300,10 +351,10 @@ export default function ManualEntryPage() {
             </div>
             <button
               onClick={handleSave}
-              disabled={bulkSaveMut.isPending || (presentCount + absentCount) === 0}
+              disabled={bulkSaveMut.isPending || (isAttendanceApplicable && (presentCount + absentCount) === 0)}
               className="btn btn-primary min-w-[180px]"
             >
-              {bulkSaveMut.isPending ? 'Saving...' : `Save Attendance (${presentCount + absentCount})`}
+              {!isAttendanceApplicable ? 'Attendance Not Applicable (OFF Day)' : bulkSaveMut.isPending ? 'Saving...' : `Save Attendance (${presentCount + absentCount})`}
             </button>
           </div>
         </>

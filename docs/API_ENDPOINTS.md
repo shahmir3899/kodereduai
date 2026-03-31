@@ -228,6 +228,8 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | POST | /api/sessions/academic-years/{id}/set_current/ | |
 | GET | /api/sessions/academic-years/{id}/summary/ | |
 | GET/POST | /api/sessions/terms/ | academic_year, is_active |
+| POST | /api/sessions/terms/import-preview/ | Body: {source_academic_year_id, target_academic_year_id, conflict_mode=skip|update, include_inactive=false}. Returns per-term action preview + counts |
+| POST | /api/sessions/terms/import-apply/ | Body: {source_academic_year_id, target_academic_year_id, conflict_mode=skip|update, include_inactive=false}. Applies import and returns created/updated/skipped summary |
 | GET/POST | /api/sessions/enrollments/ | academic_year, class_obj, student, status (ACTIVE\|PROMOTED\|RETAINED\|TRANSFERRED\|GRADUATED\|REPEAT) |
 | GET | /api/sessions/enrollments/by_class/ | class_id, academic_year |
 | POST | /api/sessions/enrollments/bulk_promote/ | Body: {enrollment_ids, target_class_id, target_academic_year_id, action}. action: PROMOTE\|GRADUATE\|REPEAT |

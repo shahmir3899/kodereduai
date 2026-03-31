@@ -1,6 +1,6 @@
 import { useParams, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { parentsApi } from '../../services/api'
+import { parentsApi, sessionsApi } from '../../services/api'
 
 function StatCard({ label, value, sub, color = 'primary', icon }) {
   const colorMap = {
@@ -32,6 +32,7 @@ function StatCard({ label, value, sub, color = 'primary', icon }) {
 
 export default function ChildOverview() {
   const { studentId } = useParams()
+  const today = new Date().toISOString().split('T')[0]
 
   const { data: overviewData, isLoading, isError } = useQuery({
     queryKey: ['childOverview', studentId],
@@ -40,6 +41,22 @@ export default function ChildOverview() {
   })
 
   const overview = overviewData?.data
+  const child = overview?.student || overview || {}
+  const childClassId = child?.class_id || child?.class_obj || child?.class_obj_id || null
+
+  const { data: dayStatusRes } = useQuery({
+    queryKey: ['parentChildOverviewDayStatus', studentId, today, childClassId],
+    queryFn: () => sessionsApi.getCalendarDayStatus({
+      date_from: today,
+      date_to: today,
+      class_id: childClassId || undefined,
+    }),
+    enabled: !!studentId && !!childClassId,
+  })
+
+  const dayStatus = dayStatusRes?.data?.days?.[today] || null
+  const isOffDay = !!dayStatus?.is_off_day
+  const offTypes = dayStatus?.off_day_types || []
 
   if (isLoading) {
     return (
@@ -69,8 +86,6 @@ export default function ChildOverview() {
       </div>
     )
   }
-
-  const child = overview.student || overview
 
   return (
     <div className="space-y-6">
@@ -106,9 +121,12 @@ export default function ChildOverview() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           label="Attendance Rate"
-          value={overview.attendance_rate != null ? `${overview.attendance_rate}%` : 'N/A'}
-          sub={`${overview.present_days || 0} of ${overview.total_days || 0} days`}
+          value={isOffDay ? 'N/A' : (overview.attendance_rate != null ? `${overview.attendance_rate}%` : 'N/A')}
+          sub={isOffDay
+            ? `OFF day${offTypes.length ? ` (${offTypes.join(', ')})` : ''}`
+            : `${overview.present_days || 0} of ${overview.total_days || 0} days`}
           color={
+            isOffDay ? 'primary' :
             overview.attendance_rate == null ? 'primary' :
             overview.attendance_rate >= 75 ? 'green' :
             overview.attendance_rate >= 60 ? 'yellow' : 'red'

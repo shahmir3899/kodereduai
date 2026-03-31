@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { studentPortalApi, notificationsApi } from '../../services/api'
+import { studentPortalApi, sessionsApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import NotificationsFeed from '../../components/dashboard/NotificationsFeed'
 
@@ -21,6 +21,23 @@ export default function StudentDashboard() {
   const dashboard = dashboardData?.data || {}
   const student = dashboard.student || {}
   const stats = dashboard.stats || {}
+  const today = new Date().toISOString().split('T')[0]
+  const studentClassId = student.class_id || student.class_obj || student.class_obj_id || null
+
+  const { data: dayStatusRes } = useQuery({
+    queryKey: ['studentDashboardDayStatus', today, studentClassId],
+    queryFn: () => sessionsApi.getCalendarDayStatus({
+      date_from: today,
+      date_to: today,
+      class_id: studentClassId || undefined,
+    }),
+    enabled: !!studentClassId,
+  })
+
+  const dayStatus = dayStatusRes?.data?.days?.[today] || null
+  const isOffDay = !!dayStatus?.is_off_day
+  const offTypes = dayStatus?.off_day_types || []
+
   const todayTimetable = dashboard.today_timetable || []
   const upcomingAssignments = dashboard.upcoming_assignments || []
   const recentResults = resultsData?.data?.results || resultsData?.data || []
@@ -88,11 +105,16 @@ export default function StudentDashboard() {
             <div className="min-w-0">
               <p className="text-xs text-gray-500">Attendance</p>
               <p className={`text-lg font-bold ${
-                (stats.attendance_rate ?? 0) >= 75 ? 'text-green-700' :
-                (stats.attendance_rate ?? 0) >= 60 ? 'text-yellow-700' : 'text-red-700'
+                isOffDay ? 'text-gray-700' :
+                stats.attendance_rate == null ? 'text-gray-400' :
+                stats.attendance_rate >= 75 ? 'text-green-700' :
+                stats.attendance_rate >= 60 ? 'text-yellow-700' : 'text-red-700'
               }`}>
-                {stats.attendance_rate != null ? `${stats.attendance_rate}%` : 'N/A'}
+                {isOffDay ? 'N/A' : (stats.attendance_rate != null ? `${stats.attendance_rate}%` : 'N/A')}
               </p>
+              {isOffDay && (
+                <p className="text-[11px] text-gray-500 mt-0.5">OFF day{offTypes.length ? ` (${offTypes.join(', ')})` : ''}</p>
+              )}
             </div>
           </div>
         </div>

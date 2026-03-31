@@ -508,6 +508,8 @@ export const sessionsApi = {
   createTerm: (data) => api.post('/api/sessions/terms/', data),
   updateTerm: (id, data) => api.patch(`/api/sessions/terms/${id}/`, data),
   deleteTerm: (id) => api.delete(`/api/sessions/terms/${id}/`),
+  importTermsPreview: (data) => api.post('/api/sessions/terms/import-preview/', data),
+  importTermsApply: (data) => api.post('/api/sessions/terms/import-apply/', data),
 
   // Session Classes
   getSessionClasses: (params) => api.get('/api/sessions/session-classes/', { params }),
@@ -544,6 +546,14 @@ export const sessionsApi = {
 
   // Attendance Risk Predictor
   getAttendanceRisk: (params) => api.get('/api/sessions/attendance-risk/', { params }),
+
+  // Academic Calendar
+  getCalendarEntries: (params) => api.get('/api/sessions/calendar-entries/', { params }),
+  createCalendarEntry: (data) => api.post('/api/sessions/calendar-entries/', data),
+  updateCalendarEntry: (id, data) => api.patch(`/api/sessions/calendar-entries/${id}/`, data),
+  deleteCalendarEntry: (id) => api.delete(`/api/sessions/calendar-entries/${id}/`),
+  getCalendarMonthView: (params) => api.get('/api/sessions/calendar-entries/month-view/', { params }),
+  getCalendarDayStatus: (params) => api.get('/api/sessions/calendar-entries/day-status/', { params }),
 }
 
 // Examinations API

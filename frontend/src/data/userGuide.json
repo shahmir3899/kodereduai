@@ -1197,6 +1197,30 @@
               "type": "step",
               "number": 8,
               "text": "Terms define when exams happen and how report cards are structured."
+            },
+            {
+              "type": "sub_section",
+              "title": "Importing Terms from Previous Session"
+            },
+            {
+              "type": "step",
+              "number": 9,
+              "text": "In the 'Terms' tab, click 'Import Terms'."
+            },
+            {
+              "type": "step",
+              "number": 10,
+              "text": "Select Source Academic Year and Target Academic Year, then choose Conflict Mode: Skip Existing or Update Existing."
+            },
+            {
+              "type": "step",
+              "number": 11,
+              "text": "Click 'Preview Import' to review what will be created, updated, or skipped with adjusted dates."
+            },
+            {
+              "type": "step",
+              "number": 12,
+              "text": "Click 'Import Terms' to apply the import. Use this at the start of a new session to save setup time and keep term structure consistent."
             }
           ]
         },

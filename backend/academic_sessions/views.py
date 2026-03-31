@@ -1,5 +1,9 @@
+from calendar import monthrange
+from datetime import date, timedelta
+
 from django.db.models import Count, Q, F
 from django.db import transaction
+from django.utils.dateparse import parse_date
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -9,12 +13,15 @@ from rest_framework.views import APIView
 from core.mixins import TenantQuerySetMixin, ensure_tenant_school_id
 from core.permissions import IsSchoolAdminOrReadOnly, HasSchoolAccess
 
-from .models import AcademicYear, Term, StudentEnrollment, SessionClass
+from .models import AcademicYear, Term, StudentEnrollment, SessionClass, SchoolCalendarEntry
 from .serializers import (
     AcademicYearSerializer,
     AcademicYearCreateSerializer,
     TermSerializer,
     TermCreateSerializer,
+    TermImportSerializer,
+    SchoolCalendarEntrySerializer,
+    SchoolCalendarEntryCreateSerializer,
     SessionClassSerializer,
     SessionClassCreateSerializer,
     SessionClassInitializeSerializer,
@@ -25,6 +32,7 @@ from .serializers import (
     PromotionTargetApplySerializer,
     PromotionTargetPreviewSerializer,
 )
+from .term_import_service import TermImportService
 
 
 def _resolve_school_id(request):
@@ -142,6 +150,278 @@ class TermViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         if academic_year:
             qs = qs.filter(academic_year_id=academic_year)
         return qs
+
+    @action(detail=False, methods=['post'], url_path='import-preview')
+    def import_preview(self, request):
+        serializer = TermImportSerializer(
+            data=request.data,
+            context={'school_id': _resolve_school_id(request)},
+        )
+        serializer.is_valid(raise_exception=True)
+
+        school_id = _resolve_school_id(request)
+        source_year = serializer.validated_data['source_academic_year']
+        target_year = serializer.validated_data['target_academic_year']
+        conflict_mode = serializer.validated_data['conflict_mode']
+        include_inactive = serializer.validated_data['include_inactive']
+
+        service = TermImportService(school_id=school_id)
+        preview = service.build_preview(
+            source_academic_year=source_year,
+            target_academic_year=target_year,
+            conflict_mode=conflict_mode,
+            include_inactive=include_inactive,
+        )
+        preview['message'] = 'Preview generated successfully.'
+        return Response(preview)
+
+    @action(detail=False, methods=['post'], url_path='import-apply')
+    def import_apply(self, request):
+        serializer = TermImportSerializer(
+            data=request.data,
+            context={'school_id': _resolve_school_id(request)},
+        )
+        serializer.is_valid(raise_exception=True)
+
+        school_id = _resolve_school_id(request)
+        source_year = serializer.validated_data['source_academic_year']
+        target_year = serializer.validated_data['target_academic_year']
+        conflict_mode = serializer.validated_data['conflict_mode']
+        include_inactive = serializer.validated_data['include_inactive']
+
+        service = TermImportService(school_id=school_id)
+        preview = service.build_preview(
+            source_academic_year=source_year,
+            target_academic_year=target_year,
+            conflict_mode=conflict_mode,
+            include_inactive=include_inactive,
+        )
+        if preview.get('counts', {}).get('conflict', 0) > 0:
+            return Response(
+                {
+                    **preview,
+                    'detail': 'Import preview contains conflicts. Resolve them before applying.',
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        result = service.apply_from_preview(preview)
+
+        return Response({
+            **preview,
+            'applied': result,
+            'message': (
+                f"Terms import completed: {result['created']} created, "
+                f"{result['updated']} updated, {result['skipped']} skipped."
+            ),
+        })
+
+
+class SchoolCalendarEntryViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
+    queryset = SchoolCalendarEntry.objects.all()
+    permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
+
+    def get_serializer_class(self):
+        if self.action in ('create', 'update', 'partial_update'):
+            return SchoolCalendarEntryCreateSerializer
+        return SchoolCalendarEntrySerializer
+
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        ctx['school_id'] = _resolve_school_id(self.request)
+        return ctx
+
+    def get_queryset(self):
+        qs = super().get_queryset().select_related(
+            'school', 'academic_year', 'created_by', 'updated_by',
+        ).prefetch_related('classes')
+        academic_year = self.request.query_params.get('academic_year')
+        if academic_year:
+            qs = qs.filter(academic_year_id=academic_year)
+
+        entry_kind = self.request.query_params.get('entry_kind')
+        if entry_kind:
+            qs = qs.filter(entry_kind=entry_kind)
+
+        scope = self.request.query_params.get('scope')
+        if scope:
+            qs = qs.filter(scope=scope)
+
+        is_active = self.request.query_params.get('is_active')
+        if is_active is not None:
+            bool_map = {
+                '1': True,
+                'true': True,
+                'yes': True,
+                '0': False,
+                'false': False,
+                'no': False,
+            }
+            parsed = bool_map.get(str(is_active).strip().lower())
+            if parsed is not None:
+                qs = qs.filter(is_active=parsed)
+
+        class_id = self.request.query_params.get('class_id')
+        if class_id:
+            qs = qs.filter(
+                Q(scope=SchoolCalendarEntry.Scope.SCHOOL)
+                | Q(scope=SchoolCalendarEntry.Scope.CLASS, classes__id=class_id)
+            )
+
+        date_from = self.request.query_params.get('date_from')
+        date_to = self.request.query_params.get('date_to')
+        if date_from:
+            qs = qs.filter(end_date__gte=date_from)
+        if date_to:
+            qs = qs.filter(start_date__lte=date_to)
+
+        return qs.distinct()
+
+    def perform_create(self, serializer):
+        school_id = _resolve_school_id(self.request)
+        serializer.save(
+            school_id=school_id,
+            created_by=self.request.user,
+            updated_by=self.request.user,
+        )
+
+    def perform_update(self, serializer):
+        serializer.save(updated_by=self.request.user)
+
+    @staticmethod
+    def _build_day_map(start_dt, end_dt, entries):
+        by_date = {}
+
+        normalized_entries = []
+        for entry in entries:
+            class_ids = [cls.id for cls in entry.classes.all()]
+            normalized_entries.append({
+                'id': entry.id,
+                'name': entry.name,
+                'description': entry.description,
+                'entry_kind': entry.entry_kind,
+                'off_day_type': entry.off_day_type,
+                'scope': entry.scope,
+                'class_ids': class_ids,
+                'start_date': entry.start_date,
+                'end_date': entry.end_date,
+                'color': entry.color,
+            })
+
+        for entry in normalized_entries:
+            current = max(entry['start_date'], start_dt)
+            cutoff = min(entry['end_date'], end_dt)
+            while current <= cutoff:
+                by_date.setdefault(current, []).append(entry)
+                current += timedelta(days=1)
+
+        days = []
+        cursor = start_dt
+        while cursor <= end_dt:
+            day_entries = by_date.get(cursor, [])
+            off_entries = [it for it in day_entries if it['entry_kind'] == SchoolCalendarEntry.EntryKind.OFF_DAY]
+            event_entries = [it for it in day_entries if it['entry_kind'] == SchoolCalendarEntry.EntryKind.EVENT]
+            is_sunday = cursor.weekday() == 6
+
+            off_types = []
+            if is_sunday:
+                off_types.append('SUNDAY')
+            off_types.extend([
+                it['off_day_type'] for it in off_entries if it['off_day_type']
+            ])
+
+            days.append({
+                'date': cursor.isoformat(),
+                'day': cursor.day,
+                'is_sunday': is_sunday,
+                'is_off_day': is_sunday or bool(off_entries),
+                'off_day_types': sorted(set(off_types)),
+                'events': event_entries,
+                'entries': day_entries,
+            })
+            cursor += timedelta(days=1)
+
+        return days
+
+    @action(detail=False, methods=['get'], url_path='month-view')
+    def month_view(self, request):
+        year_raw = request.query_params.get('year')
+        month_raw = request.query_params.get('month')
+        if not year_raw or not month_raw:
+            return Response(
+                {'detail': 'year and month are required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            year = int(year_raw)
+            month = int(month_raw)
+            start_dt = date(year, month, 1)
+        except (TypeError, ValueError):
+            return Response(
+                {'detail': 'Invalid year or month.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        _, days_count = monthrange(year, month)
+        end_dt = date(year, month, days_count)
+
+        entries = self.filter_queryset(
+            self.get_queryset().filter(
+                is_active=True,
+                start_date__lte=end_dt,
+                end_date__gte=start_dt,
+            )
+        )
+        day_map = self._build_day_map(start_dt, end_dt, entries)
+
+        return Response({
+            'year': year,
+            'month': month,
+            'start_date': start_dt.isoformat(),
+            'end_date': end_dt.isoformat(),
+            'days': day_map,
+        })
+
+    @action(detail=False, methods=['get'], url_path='day-status')
+    def day_status(self, request):
+        date_from_raw = request.query_params.get('date_from')
+        date_to_raw = request.query_params.get('date_to')
+        date_from = parse_date(date_from_raw) if date_from_raw else None
+        date_to = parse_date(date_to_raw) if date_to_raw else None
+
+        if not date_from or not date_to:
+            return Response(
+                {'detail': 'date_from and date_to are required (YYYY-MM-DD).'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if date_from > date_to:
+            return Response(
+                {'detail': 'date_from cannot be after date_to.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        entries = self.filter_queryset(
+            self.get_queryset().filter(
+                is_active=True,
+                start_date__lte=date_to,
+                end_date__gte=date_from,
+            )
+        )
+        day_map = self._build_day_map(date_from, date_to, entries)
+        compact = {}
+        for item in day_map:
+            compact[item['date']] = {
+                'is_off_day': item['is_off_day'],
+                'is_sunday': item['is_sunday'],
+                'off_day_types': item['off_day_types'],
+                'events_count': len(item['events']),
+            }
+
+        return Response({
+            'date_from': date_from.isoformat(),
+            'date_to': date_to.isoformat(),
+            'days': compact,
+        })
 
 
 class SessionClassViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):

@@ -88,6 +88,91 @@ class Term(models.Model):
         return f"{self.academic_year.name} - {self.name}"
 
 
+class SchoolCalendarEntry(models.Model):
+    """Calendar entries for off days and school events."""
+
+    class EntryKind(models.TextChoices):
+        OFF_DAY = 'OFF_DAY', 'Off Day'
+        EVENT = 'EVENT', 'Event'
+
+    class OffDayType(models.TextChoices):
+        SUMMER_VACATION = 'SUMMER_VACATION', 'Summer Vacation'
+        WINTER_VACATION = 'WINTER_VACATION', 'Winter Vacation'
+        RELIGIOUS_HOLIDAY = 'RELIGIOUS_HOLIDAY', 'Religious Holiday'
+        NATIONAL_HOLIDAY = 'NATIONAL_HOLIDAY', 'National Holiday'
+        EXAM_BREAK = 'EXAM_BREAK', 'Exam Break'
+        OTHER = 'OTHER', 'Other'
+
+    class Scope(models.TextChoices):
+        SCHOOL = 'SCHOOL', 'Whole School'
+        CLASS = 'CLASS', 'Specific Classes'
+
+    school = models.ForeignKey(
+        'schools.School',
+        on_delete=models.CASCADE,
+        related_name='calendar_entries',
+    )
+    academic_year = models.ForeignKey(
+        AcademicYear,
+        on_delete=models.CASCADE,
+        related_name='calendar_entries',
+    )
+    name = models.CharField(max_length=120)
+    description = models.TextField(blank=True)
+    entry_kind = models.CharField(
+        max_length=20,
+        choices=EntryKind.choices,
+    )
+    off_day_type = models.CharField(
+        max_length=30,
+        choices=OffDayType.choices,
+        blank=True,
+        default='',
+    )
+    scope = models.CharField(
+        max_length=10,
+        choices=Scope.choices,
+        default=Scope.SCHOOL,
+    )
+    classes = models.ManyToManyField(
+        'students.Class',
+        blank=True,
+        related_name='calendar_entries',
+    )
+    start_date = models.DateField()
+    end_date = models.DateField()
+    color = models.CharField(max_length=20, blank=True, default='')
+    is_active = models.BooleanField(default=True)
+    created_by = models.ForeignKey(
+        'users.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_calendar_entries',
+    )
+    updated_by = models.ForeignKey(
+        'users.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='updated_calendar_entries',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['start_date', 'name', 'id']
+        verbose_name = 'School Calendar Entry'
+        verbose_name_plural = 'School Calendar Entries'
+        indexes = [
+            models.Index(fields=['school', 'academic_year', 'start_date', 'end_date']),
+            models.Index(fields=['school', 'entry_kind', 'scope', 'is_active']),
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.start_date} - {self.end_date})"
+
+
 class SessionClass(models.Model):
     """Year-specific class catalog entry.
 

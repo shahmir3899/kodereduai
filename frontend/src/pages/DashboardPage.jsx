@@ -200,12 +200,13 @@ export default function DashboardPage({ variant }) {
   const pendingCount = pendingReviews?.data?.length || 0
   const admissionsCount = admissionsData?.data?.count || 0
   const examsCount = examsData?.data?.count || 0
+  const attendanceIsOffDay = !!report?.is_off_day
 
-  const attendanceRate = report?.total_students > 0
+  const attendanceRate = !attendanceIsOffDay && report?.total_students > 0
     ? Math.round((report.present_count / report.total_students) * 100) : null
   const collectionRate = fin?.total_due > 0
     ? Math.round((Number(fin.total_collected) / Number(fin.total_due)) * 100) : null
-  const staffPresentPct = hr?.active_staff > 0
+  const staffPresentPct = !attendanceIsOffDay && hr?.active_staff > 0
     ? Math.round(((hr.attendance_present_today || 0) / hr.active_staff) * 100) : null
 
   // ─── Quick Actions ──────────────────────────────────────────────────────────
@@ -232,8 +233,8 @@ export default function DashboardPage({ variant }) {
   if (isModuleEnabled('attendance')) {
     moduleCards.push({
       key: 'attendance', icon: icons.attendance, label: 'Attendance',
-      metric: attendanceRate != null ? `${attendanceRate}%` : '—',
-      metricLabel: 'today',
+      metric: attendanceIsOffDay ? 'N/A' : attendanceRate != null ? `${attendanceRate}%` : '—',
+      metricLabel: attendanceIsOffDay ? 'off day' : 'today',
       status: attendanceRate == null ? 'gray' : attendanceRate >= 90 ? 'green' : attendanceRate >= 75 ? 'yellow' : 'red',
       href: '/attendance', loading: loadingAttendance,
     })
@@ -252,8 +253,8 @@ export default function DashboardPage({ variant }) {
   if (isModuleEnabled('hr')) {
     moduleCards.push({
       key: 'hr', icon: icons.staff, label: 'HR & Staff',
-      metric: staffPresentPct != null ? `${staffPresentPct}%` : '—',
-      metricLabel: 'present',
+      metric: attendanceIsOffDay ? 'N/A' : staffPresentPct != null ? `${staffPresentPct}%` : '—',
+      metricLabel: attendanceIsOffDay ? 'off day' : 'present',
       status: staffPresentPct == null ? 'gray' : staffPresentPct >= 90 ? 'green' : staffPresentPct >= 75 ? 'yellow' : 'red',
       href: '/hr', loading: loadingHR,
     })
@@ -351,7 +352,7 @@ export default function DashboardPage({ variant }) {
         <StatCard
           label="Total Students"
           value={report?.total_students ?? '—'}
-          subtitle={report ? `${report.present_count} present today` : undefined}
+          subtitle={report ? (attendanceIsOffDay ? 'OFF day' : `${report.present_count} present today`) : undefined}
           icon={icons.students}
           color="blue"
           href="/students"
@@ -359,10 +360,10 @@ export default function DashboardPage({ variant }) {
         />
         <StatCard
           label="Attendance Rate"
-          value={attendanceRate != null ? `${attendanceRate}%` : '—'}
-          subtitle={report ? `${report.absent_count} absent` : undefined}
+          value={attendanceIsOffDay ? 'N/A' : attendanceRate != null ? `${attendanceRate}%` : '—'}
+          subtitle={attendanceIsOffDay ? `OFF day${report?.off_day_types?.length ? ` (${report.off_day_types.join(', ')})` : ''}` : report ? `${report.absent_count} absent` : undefined}
           icon={icons.attendance}
-          color={attendanceRate >= 90 ? 'green' : attendanceRate >= 75 ? 'amber' : 'red'}
+          color={attendanceIsOffDay ? 'gray' : attendanceRate >= 90 ? 'green' : attendanceRate >= 75 ? 'amber' : 'red'}
           href="/attendance"
           loading={isModuleEnabled('attendance') && loadingAttendance}
         />
@@ -377,10 +378,10 @@ export default function DashboardPage({ variant }) {
         />
         <StatCard
           label="Staff Present"
-          value={staffPresentPct != null ? `${staffPresentPct}%` : hr ? `${hr.total_staff}` : '—'}
-          subtitle={hr ? (staffPresentPct != null ? `${hr.staff_on_leave_today || 0} on leave` : 'total staff') : undefined}
+          value={attendanceIsOffDay ? 'N/A' : staffPresentPct != null ? `${staffPresentPct}%` : hr ? `${hr.total_staff}` : '—'}
+          subtitle={hr ? (attendanceIsOffDay ? 'OFF day' : (staffPresentPct != null ? `${hr.staff_on_leave_today || 0} on leave` : 'total staff')) : undefined}
           icon={icons.staff}
-          color="purple"
+          color={attendanceIsOffDay ? 'gray' : 'purple'}
           href="/hr"
           loading={isModuleEnabled('hr') && loadingHR}
         />
@@ -414,42 +415,53 @@ export default function DashboardPage({ variant }) {
                 <h2 className="text-sm font-semibold text-gray-900">Today's Attendance</h2>
                 <Link to="/attendance" className="text-xs text-sky-600 hover:text-sky-700 font-medium">View Details</Link>
               </div>
-              {/* Horizontal bar */}
-              <div className="flex items-center gap-3 mb-3">
-                <div className="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden flex">
-                  {report.total_students > 0 && (
-                    <>
-                      <div
-                        className="bg-green-500 h-full transition-all duration-500"
-                        style={{ width: `${(report.present_count / report.total_students) * 100}%` }}
-                      />
-                      <div
-                        className="bg-red-400 h-full transition-all duration-500"
-                        style={{ width: `${(report.absent_count / report.total_students) * 100}%` }}
-                      />
-                    </>
-                  )}
+              {attendanceIsOffDay && (
+                <div className="mb-3 inline-flex items-center gap-2 rounded-lg px-3 py-2 bg-gray-100 text-gray-700 text-xs font-semibold">
+                  OFF day{report?.off_day_types?.length ? `: ${report.off_day_types.join(', ')}` : ''}
                 </div>
-                <span className="text-xs text-gray-500 shrink-0 tabular-nums">
-                  {report.present_count}/{report.total_students}
-                </span>
-              </div>
-              <div className="flex gap-4 text-xs">
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-green-500" />
-                  Present: {report.present_count}
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-red-400" />
-                  Absent: {report.absent_count}
-                </span>
-                {pendingCount > 0 && (
-                  <Link to="/attendance?tab=review" className="flex items-center gap-1.5 text-amber-600 hover:text-amber-700 font-medium">
-                    <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
-                    {pendingCount} pending review
-                  </Link>
-                )}
-              </div>
+              )}
+              {/* Horizontal bar */}
+              {!attendanceIsOffDay ? (
+                <>
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden flex">
+                      {report.total_students > 0 && (
+                        <>
+                          <div
+                            className="bg-green-500 h-full transition-all duration-500"
+                            style={{ width: `${(report.present_count / report.total_students) * 100}%` }}
+                          />
+                          <div
+                            className="bg-red-400 h-full transition-all duration-500"
+                            style={{ width: `${(report.absent_count / report.total_students) * 100}%` }}
+                          />
+                        </>
+                      )}
+                    </div>
+                    <span className="text-xs text-gray-500 shrink-0 tabular-nums">
+                      {report.present_count}/{report.total_students}
+                    </span>
+                  </div>
+                  <div className="flex gap-4 text-xs">
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full bg-green-500" />
+                      Present: {report.present_count}
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full bg-red-400" />
+                      Absent: {report.absent_count}
+                    </span>
+                    {pendingCount > 0 && (
+                      <Link to="/attendance?tab=review" className="flex items-center gap-1.5 text-amber-600 hover:text-amber-700 font-medium">
+                        <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
+                        {pendingCount} pending review
+                      </Link>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <p className="text-sm text-gray-600">Attendance is not applicable today.</p>
+              )}
             </div>
           )}
 

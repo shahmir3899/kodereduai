@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
-import { parentsApi } from '../../services/api'
+import { parentsApi, sessionsApi } from '../../services/api'
 import NotificationsFeed from '../../components/dashboard/NotificationsFeed'
 import QuickActionGrid from '../../components/dashboard/QuickActionGrid'
 
@@ -119,9 +119,23 @@ export default function ParentDashboard() {
 
 /** Per-child card with overview data */
 function ChildCard({ child }) {
+  const today = new Date().toISOString().split('T')[0]
+
   const { data: overviewData, isLoading } = useQuery({
     queryKey: ['childOverview', child.id],
     queryFn: () => parentsApi.getChildOverview(child.id),
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const childClassId = child.class_id || child.class_obj || child.class_obj_id || null
+  const { data: dayStatusRes } = useQuery({
+    queryKey: ['childTodayDayStatus', child.id, today, childClassId],
+    queryFn: () => sessionsApi.getCalendarDayStatus({
+      date_from: today,
+      date_to: today,
+      class_id: childClassId || undefined,
+    }),
+    enabled: !!childClassId,
     staleTime: 5 * 60 * 1000,
   })
 
@@ -129,6 +143,9 @@ function ChildCard({ child }) {
   const attendance = overview.attendance || {}
   const fees = overview.fees || overview.fee_summary || {}
   const recentExams = overview.recent_exams || overview.exam_results || []
+  const dayStatus = dayStatusRes?.data?.days?.[today] || null
+  const isOffDay = !!dayStatus?.is_off_day
+  const offTypes = dayStatus?.off_day_types || []
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -218,6 +235,13 @@ function ChildCard({ child }) {
           {isLoading ? (
             <div className="h-5 bg-gray-200 rounded w-14 mx-auto animate-pulse" />
           ) : (() => {
+            if (isOffDay) {
+              return (
+                <p className="text-sm font-bold text-gray-700" title={offTypes.length ? offTypes.join(', ') : undefined}>
+                  OFF
+                </p>
+              )
+            }
             const todayStatus = attendance.today ?? overview.today_attendance
             if (!todayStatus) return <p className="text-sm font-bold text-gray-400">—</p>
             const statusColors = {

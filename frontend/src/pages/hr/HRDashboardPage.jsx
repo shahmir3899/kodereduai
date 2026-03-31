@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { hrApi } from '../../services/api'
+import { hrApi, sessionsApi } from '../../services/api'
 
 const statusColors = {
   ACTIVE: 'bg-green-500',
@@ -19,12 +19,22 @@ const typeColors = {
 }
 
 export default function HRDashboardPage() {
+  const today = new Date().toISOString().split('T')[0]
+
   const { data: statsData, isLoading } = useQuery({
     queryKey: ['hrDashboardStats'],
     queryFn: () => hrApi.getDashboardStats(),
   })
 
+  const { data: dayStatusData } = useQuery({
+    queryKey: ['hrDashboardDayStatus', today],
+    queryFn: () => sessionsApi.getCalendarDayStatus({ date_from: today, date_to: today }),
+  })
+
   const stats = statsData?.data || {}
+  const dayStatus = dayStatusData?.data?.days?.[today] || null
+  const isOffDay = !!dayStatus?.is_off_day
+  const offTypes = dayStatus?.off_day_types || []
   const departmentBreakdown = stats.department_breakdown || []
   const statusBreakdown = stats.status_breakdown || []
   const typeBreakdown = stats.type_breakdown || []
@@ -84,11 +94,14 @@ export default function HRDashboardPage() {
         </div>
         <div className="card">
           <p className="text-xs text-gray-500 mb-1">Attendance Today</p>
-          <p className="text-2xl font-bold text-teal-700">
-            {stats.attendance_present_today || 0}
-            <span className="text-sm font-normal text-gray-500"> / {stats.active_staff || 0} present</span>
+          <p className={`text-2xl font-bold ${isOffDay ? 'text-gray-700' : 'text-teal-700'}`}>
+            {isOffDay ? 'N/A' : (stats.attendance_present_today || 0)}
+            <span className="text-sm font-normal text-gray-500">{isOffDay ? ' (OFF day)' : ` / ${stats.active_staff || 0} present`}</span>
           </p>
-          {(stats.attendance_marked_today || 0) < (stats.active_staff || 0) && (
+          {isOffDay && offTypes.length > 0 && (
+            <p className="text-xs text-gray-600 mt-1">{offTypes.join(', ')}</p>
+          )}
+          {!isOffDay && (stats.attendance_marked_today || 0) < (stats.active_staff || 0) && (
             <p className="text-xs text-yellow-600 mt-1">{(stats.active_staff || 0) - (stats.attendance_marked_today || 0)} unmarked</p>
           )}
         </div>

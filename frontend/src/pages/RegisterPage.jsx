@@ -79,6 +79,24 @@ function RegisterTab() {
     roll_number: e.roll_number,
   }))
 
+  const selectedMasterClassId = useMemo(() => {
+    if (!classId) return ''
+    if (!activeAcademicYear?.id) return classId
+    const selectedSessionClass = filteredSessionClasses.find(sc => String(sc.id) === String(classId))
+    return selectedSessionClass?.class_obj || ''
+  }, [classId, activeAcademicYear?.id, filteredSessionClasses])
+
+  const { data: dayStatusRes } = useQuery({
+    queryKey: ['registerDayStatus', year, month, selectedMasterClassId, activeAcademicYear?.id],
+    queryFn: () => sessionsApi.getCalendarDayStatus({
+      date_from: dateFrom,
+      date_to: dateTo,
+      class_id: selectedMasterClassId || undefined,
+      academic_year: activeAcademicYear?.id || undefined,
+    }),
+    enabled: !!classId,
+  })
+
   const { data: recordsData, isLoading, error } = useQuery({
     queryKey: ['attendanceRecords', dateFrom, dateTo, classId, activeAcademicYear?.id],
     queryFn: () => attendanceApi.getRegisterData({
@@ -114,6 +132,16 @@ function RegisterTab() {
   }, [records, enrolledStudents])
 
   const allDays = Array.from({ length: daysInMonth }, (_, i) => i + 1)
+  const dayStatusMap = dayStatusRes?.data?.days || {}
+  const offDayByDay = useMemo(() => {
+    const map = {}
+    Object.entries(dayStatusMap).forEach(([dateKey, value]) => {
+      const day = parseInt(dateKey.split('-')[2], 10)
+      map[day] = !!value?.is_off_day
+    })
+    return map
+  }, [dayStatusMap])
+  const offDayCount = useMemo(() => Object.values(offDayByDay).filter(Boolean).length, [offDayByDay])
 
   // Build weeks for mobile week-view
   const weeks = useMemo(() => {
@@ -183,6 +211,7 @@ function RegisterTab() {
             <div className="card"><p className="text-xs text-gray-500">Days Recorded</p><p className="text-xl sm:text-2xl font-bold text-gray-900">{datesWithData.length}</p></div>
             <div className="card bg-green-50"><p className="text-xs text-gray-500">Present</p><p className="text-xl sm:text-2xl font-bold text-green-600">{summary.totalPresent}</p></div>
             <div className="card bg-red-50"><p className="text-xs text-gray-500">Absent</p><p className="text-xl sm:text-2xl font-bold text-red-600">{summary.totalAbsent}</p></div>
+            <div className="card bg-gray-50 col-span-2 sm:col-span-1"><p className="text-xs text-gray-500">OFF Days</p><p className="text-xl sm:text-2xl font-bold text-gray-700">{offDayCount}</p></div>
           </div>
 
           {/* Mobile View Toggle */}
@@ -207,7 +236,14 @@ function RegisterTab() {
                     <th className="sticky left-0 z-10 bg-gray-50 px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase border-b border-r border-gray-200 min-w-[40px]">Roll</th>
                     <th className="sticky left-[52px] z-10 bg-gray-50 px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase border-b border-r border-gray-200 min-w-[140px]">Name</th>
                     {allDays.map(day => (
-                      <th key={day} className={`px-0 py-2 text-center text-xs font-medium border-b border-gray-200 min-w-[32px] ${datesWithData.includes(day) ? 'text-gray-700' : 'text-gray-300'}`}>{day}</th>
+                      <th key={day} className={`px-0 py-2 text-center text-xs font-medium border-b border-gray-200 min-w-[32px] ${datesWithData.includes(day) ? 'text-gray-700' : 'text-gray-300'}`}>
+                        <div className="flex flex-col items-center leading-none gap-0.5">
+                          <span>{day}</span>
+                          {offDayByDay[day] && (
+                            <span className="text-[9px] px-1 py-0.5 rounded bg-gray-200 text-gray-700">OFF</span>
+                          )}
+                        </div>
+                      </th>
                     ))}
                     <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase border-b border-l border-gray-200 min-w-[32px]">P</th>
                     <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase border-b border-gray-200 min-w-[32px]">A</th>
@@ -316,6 +352,7 @@ function RegisterTab() {
                           <th key={day} className={`px-1 py-2 text-center font-medium border-b border-gray-200 min-w-[36px] ${datesWithData.includes(day) ? 'text-gray-700' : 'text-gray-300'}`}>
                             <div>{getDayName(year, month, day)}</div>
                             <div className="text-[10px]">{day}</div>
+                            {offDayByDay[day] && <div className="text-[9px] mt-0.5 px-1 py-0.5 rounded bg-gray-200 text-gray-700 inline-block">OFF</div>}
                           </th>
                         ))}
                         <th className="px-2 py-2 text-center font-medium text-gray-500 border-b border-l border-gray-200">P</th>

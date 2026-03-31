@@ -8,6 +8,12 @@ import SessionSetupWizard from './SessionSetupWizard'
 
 const EMPTY_YEAR = { name: '', start_date: '', end_date: '' }
 const EMPTY_TERM = { academic_year: '', name: '', term_type: 'TERM', order: 1, start_date: '', end_date: '' }
+const EMPTY_TERM_IMPORT = {
+  source_academic_year_id: '',
+  target_academic_year_id: '',
+  conflict_mode: 'skip',
+  include_inactive: false,
+}
 
 export default function AcademicYearsPage() {
   const queryClient = useQueryClient()
@@ -28,6 +34,10 @@ export default function AcademicYearsPage() {
   const [editTermId, setEditTermId] = useState(null)
   const [termForm, setTermForm] = useState(EMPTY_TERM)
   const [termErrors, setTermErrors] = useState({})
+  const [showImportModal, setShowImportModal] = useState(false)
+  const [importForm, setImportForm] = useState(EMPTY_TERM_IMPORT)
+  const [importErrors, setImportErrors] = useState({})
+  const [importPreview, setImportPreview] = useState(null)
 
   // Expanded year for summary - default to activeAcademicYear
   const [expandedYearId, setExpandedYearId] = useState(activeAcademicYear?.id || null)
@@ -130,6 +140,36 @@ export default function AcademicYearsPage() {
     },
   })
 
+  const importPreviewMut = useMutation({
+    mutationFn: (data) => sessionsApi.importTermsPreview(data),
+    onSuccess: (res) => {
+      setImportPreview(res?.data || null)
+      setImportErrors({})
+      showSuccess('Preview generated')
+    },
+    onError: (err) => {
+      const data = err.response?.data || {}
+      setImportErrors(data)
+      showError(data.detail || data.non_field_errors?.[0] || 'Failed to generate preview')
+    },
+  })
+
+  const importApplyMut = useMutation({
+    mutationFn: (data) => sessionsApi.importTermsApply(data),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['terms'] })
+      queryClient.invalidateQueries({ queryKey: ['academicYears'] })
+      const applied = res?.data?.applied || {}
+      showSuccess(`Imported terms (${applied.created || 0} created, ${applied.updated || 0} updated, ${applied.skipped || 0} skipped)`)
+      closeImportModal()
+    },
+    onError: (err) => {
+      const data = err.response?.data || {}
+      setImportErrors(data)
+      showError(data.detail || data.non_field_errors?.[0] || 'Failed to import terms')
+    },
+  })
+
   // Year modal helpers
   const openCreateYear = () => { setYearForm(EMPTY_YEAR); setEditYearId(null); setYearErrors({}); setShowYearModal(true) }
   const openEditYear = (y) => {
@@ -157,6 +197,40 @@ export default function AcademicYearsPage() {
     setEditTermId(t.id); setTermErrors({}); setShowTermModal(true)
   }
   const closeTermModal = () => { setShowTermModal(false); setEditTermId(null); setTermForm(EMPTY_TERM); setTermErrors({}) }
+
+  const openImportModal = () => {
+    setImportErrors({})
+    setImportPreview(null)
+    setImportForm({
+      ...EMPTY_TERM_IMPORT,
+      target_academic_year_id: yearFilter ? parseInt(yearFilter) : '',
+    })
+    setShowImportModal(true)
+  }
+
+  const closeImportModal = () => {
+    setShowImportModal(false)
+    setImportErrors({})
+    setImportPreview(null)
+    setImportForm(EMPTY_TERM_IMPORT)
+  }
+
+  const handleImportPreview = (e) => {
+    e.preventDefault()
+    if (!importForm.source_academic_year_id || !importForm.target_academic_year_id) {
+      setImportErrors({ detail: 'Please select source and target academic years.' })
+      return
+    }
+    importPreviewMut.mutate(importForm)
+  }
+
+  const handleImportApply = () => {
+    if (!importPreview) {
+      showError('Generate preview before importing terms.')
+      return
+    }
+    importApplyMut.mutate(importForm)
+  }
 
   const handleTermSubmit = (e) => {
     e.preventDefault()
@@ -375,6 +449,9 @@ export default function AcademicYearsPage() {
             <button onClick={() => openCreateTerm(yearFilter)} className="btn-primary text-sm px-4 py-2 whitespace-nowrap">
               + Add Term
             </button>
+            <button onClick={openImportModal} className="btn-secondary text-sm px-4 py-2 whitespace-nowrap">
+              Import Terms
+            </button>
           </div>
 
           {termsLoading ? (
@@ -541,6 +618,148 @@ export default function AcademicYearsPage() {
                     </button>
                   </div>
                 </form>
+              </div>
+            </div>
+          )}
+
+          {showImportModal && (
+            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={closeImportModal}>
+              <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-semibold text-gray-900">Import Terms From Previous Session</h2>
+                  <button onClick={closeImportModal} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+                </div>
+
+                {(importErrors.detail || importErrors.non_field_errors) && (
+                  <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">
+                    {importErrors.detail || importErrors.non_field_errors}
+                  </div>
+                )}
+
+                <form onSubmit={handleImportPreview} className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Source Academic Year *</label>
+                      <select
+                        value={importForm.source_academic_year_id}
+                        onChange={e => setImportForm(p => ({ ...p, source_academic_year_id: e.target.value ? parseInt(e.target.value) : '' }))}
+                        className="input w-full"
+                        required
+                      >
+                        <option value="">Select source year...</option>
+                        {years
+                          .filter(y => String(y.id) !== String(importForm.target_academic_year_id || ''))
+                          .map(y => <option key={y.id} value={y.id}>{y.name}</option>)}
+                      </select>
+                      {importErrors.source_academic_year_id && <p className="text-xs text-red-600 mt-1">{importErrors.source_academic_year_id}</p>}
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Target Academic Year *</label>
+                      <select
+                        value={importForm.target_academic_year_id}
+                        onChange={e => setImportForm(p => ({ ...p, target_academic_year_id: e.target.value ? parseInt(e.target.value) : '' }))}
+                        className="input w-full"
+                        required
+                      >
+                        <option value="">Select target year...</option>
+                        {years
+                          .filter(y => String(y.id) !== String(importForm.source_academic_year_id || ''))
+                          .map(y => <option key={y.id} value={y.id}>{y.name}</option>)}
+                      </select>
+                      {importErrors.target_academic_year_id && <p className="text-xs text-red-600 mt-1">{importErrors.target_academic_year_id}</p>}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Conflict Mode</label>
+                      <select
+                        value={importForm.conflict_mode}
+                        onChange={e => setImportForm(p => ({ ...p, conflict_mode: e.target.value }))}
+                        className="input w-full"
+                      >
+                        <option value="skip">Skip existing terms</option>
+                        <option value="update">Update existing terms</option>
+                      </select>
+                    </div>
+                    <div className="flex items-end">
+                      <label className="inline-flex items-center gap-2 text-sm text-gray-700 mb-2">
+                        <input
+                          type="checkbox"
+                          checked={importForm.include_inactive}
+                          onChange={e => setImportForm(p => ({ ...p, include_inactive: e.target.checked }))}
+                        />
+                        Include inactive source terms
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end">
+                    <button type="submit" disabled={importPreviewMut.isPending} className="btn-primary px-4 py-2 text-sm disabled:opacity-50">
+                      {importPreviewMut.isPending ? 'Generating Preview...' : 'Preview Import'}
+                    </button>
+                  </div>
+                </form>
+
+                {importPreview && (
+                  <div className="mt-5 border-t pt-4">
+                    <div className="flex flex-wrap gap-2 mb-3 text-xs">
+                      <span className="px-2 py-1 rounded bg-green-100 text-green-700">Create: {importPreview.counts?.create || 0}</span>
+                      <span className="px-2 py-1 rounded bg-amber-100 text-amber-700">Update: {importPreview.counts?.update || 0}</span>
+                      <span className="px-2 py-1 rounded bg-gray-100 text-gray-700">Skip: {importPreview.counts?.skip || 0}</span>
+                      <span className="px-2 py-1 rounded bg-red-100 text-red-700">Conflict: {importPreview.counts?.conflict || 0}</span>
+                    </div>
+
+                    {(importPreview.counts?.conflict || 0) > 0 && (
+                      <div className="mb-3 p-2 rounded border border-red-200 bg-red-50 text-red-700 text-xs">
+                        Preview contains conflicts (duplicate order/date overlap). Resolve terms in the target year or switch conflict mode before importing.
+                      </div>
+                    )}
+
+                    <div className="max-h-72 overflow-auto border border-gray-200 rounded-lg">
+                      <table className="min-w-full text-sm">
+                        <thead>
+                          <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
+                            <th className="px-3 py-2 text-left">Term</th>
+                            <th className="px-3 py-2 text-left">Source Dates</th>
+                            <th className="px-3 py-2 text-left">Target Dates</th>
+                            <th className="px-3 py-2 text-left">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {(importPreview.terms || []).map((row) => (
+                            <tr key={row.source_term_id}>
+                              <td className="px-3 py-2">
+                                <p className="font-medium text-gray-900">{row.name}</p>
+                                <p className="text-xs text-gray-500">{row.term_type} | Order {row.order}</p>
+                              </td>
+                              <td className="px-3 py-2 text-gray-600">{row.source_start_date} to {row.source_end_date}</td>
+                              <td className="px-3 py-2 text-gray-600">{row.start_date} to {row.end_date}</td>
+                              <td className="px-3 py-2">
+                                <span className={`px-2 py-0.5 rounded-full text-xs ${row.action === 'create' ? 'bg-green-100 text-green-700' : row.action === 'update' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-700'}`}>
+                                  {row.action}
+                                </span>
+                                {row.reason && <p className="text-xs text-gray-500 mt-1">{row.reason}</p>}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div className="flex justify-end gap-3 pt-4">
+                      <button type="button" onClick={closeImportModal} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>
+                      <button
+                        type="button"
+                        onClick={handleImportApply}
+                        disabled={importApplyMut.isPending || (importPreview.counts?.conflict || 0) > 0 || (importPreview.counts?.create || 0) + (importPreview.counts?.update || 0) === 0}
+                        className="btn-primary px-4 py-2 text-sm disabled:opacity-50"
+                      >
+                        {importApplyMut.isPending ? 'Importing...' : 'Import Terms'}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}

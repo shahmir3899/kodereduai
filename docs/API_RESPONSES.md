@@ -603,6 +603,125 @@ Validation errors (400):
 }
 ```
 
+### POST /api/sessions/terms/import-preview/
+Request:
+```json
+{
+  "source_academic_year_id": 31,
+  "target_academic_year_id": 32,
+  "conflict_mode": "skip",
+  "include_inactive": false
+}
+```
+
+Response (200):
+```json
+{
+  "source_year": {
+    "id": 31,
+    "name": "P1SESS_2025-2026",
+    "start_date": "2025-04-01",
+    "end_date": "2026-03-31"
+  },
+  "target_year": {
+    "id": 32,
+    "name": "P1SESS_2026-2027",
+    "start_date": "2026-04-01",
+    "end_date": "2027-03-31"
+  },
+  "conflict_mode": "skip",
+  "include_inactive": false,
+  "counts": {
+    "create": 3,
+    "update": 0,
+    "skip": 0
+  },
+  "terms": [
+    {
+      "source_term_id": 85,
+      "name": "Term 1",
+      "term_type": "TERM",
+      "order": 1,
+      "source_start_date": "2025-04-01",
+      "source_end_date": "2025-08-31",
+      "start_date": "2026-04-01",
+      "end_date": "2026-08-31",
+      "is_active": true,
+      "action": "create",
+      "reason": ""
+    }
+  ],
+  "total_source_terms": 3,
+  "message": "Preview generated successfully."
+}
+```
+
+### POST /api/sessions/terms/import-apply/
+Request:
+```json
+{
+  "source_academic_year_id": 31,
+  "target_academic_year_id": 32,
+  "conflict_mode": "update",
+  "include_inactive": false
+}
+```
+
+Response (200):
+```json
+{
+  "source_year": {
+    "id": 31,
+    "name": "P1SESS_2025-2026",
+    "start_date": "2025-04-01",
+    "end_date": "2026-03-31"
+  },
+  "target_year": {
+    "id": 32,
+    "name": "P1SESS_2026-2027",
+    "start_date": "2026-04-01",
+    "end_date": "2027-03-31"
+  },
+  "conflict_mode": "update",
+  "include_inactive": false,
+  "counts": {
+    "create": 2,
+    "update": 1,
+    "skip": 0
+  },
+  "terms": [
+    {
+      "source_term_id": 85,
+      "name": "Term 1",
+      "term_type": "TERM",
+      "order": 1,
+      "source_start_date": "2025-04-01",
+      "source_end_date": "2025-08-31",
+      "start_date": "2026-04-01",
+      "end_date": "2026-08-31",
+      "is_active": true,
+      "action": "update",
+      "reason": "",
+      "existing_term_id": 120
+    }
+  ],
+  "total_source_terms": 3,
+  "applied": {
+    "created": 2,
+    "updated": 1,
+    "skipped": 0
+  },
+  "message": "Terms import completed: 2 created, 1 updated, 0 skipped."
+}
+```
+
+Validation errors (400):
+```json
+{
+  "target_academic_year_id": "Source and target academic year must be different."
+}
+```
+
 ### GET /api/sessions/enrollments/
 Query params: `academic_year`, `class_obj`, `student`, `status`, `page_size`
 ```json

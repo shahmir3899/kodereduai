@@ -16,6 +16,7 @@ from rest_framework.permissions import IsAuthenticated
 
 from core.permissions import HasSchoolAccess, get_effective_role, ModuleAccessMixin, ROLE_HIERARCHY, ADMIN_ROLES
 from core.mixins import TenantQuerySetMixin, ensure_tenant_schools, ensure_tenant_school_id
+from academic_sessions.calendar_rules import is_off_day_for_date, off_day_types_for_date, build_off_day_date_set
 from .models import (
     StaffDepartment, StaffDesignation, StaffMember,
     SalaryStructure, Payslip, LeavePolicy, LeaveApplication,
@@ -1372,7 +1373,36 @@ class StaffAttendanceViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mo
         if not school_id:
             from rest_framework.exceptions import ValidationError
             raise ValidationError({'detail': 'No school associated with your account.'})
+
+        staff_member = serializer.validated_data.get('staff_member')
+        att_date = serializer.validated_data.get('date')
+        status_value = serializer.validated_data.get('status')
+
+        class_ids = self._resolve_teacher_class_ids(staff_member)
+        if is_off_day_for_date(school_id, att_date, class_ids=class_ids):
+            off_types = off_day_types_for_date(school_id, att_date, class_ids=class_ids)
+            if status_value != StaffAttendance.Status.ON_LEAVE:
+                serializer.validated_data['status'] = StaffAttendance.Status.ON_LEAVE
+            note = serializer.validated_data.get('notes') or ''
+            auto_note = f"Auto-marked ON_LEAVE (OFF day: {', '.join(off_types)})"
+            serializer.validated_data['notes'] = f"{note} | {auto_note}".strip(' |')
+
         serializer.save(school_id=school_id, marked_by=self.request.user)
+
+    @staticmethod
+    def _resolve_teacher_class_ids(staff_member):
+        if not staff_member or not staff_member.user_id:
+            return []
+
+        from academics.models import ClassSubject
+
+        return list(
+            ClassSubject.objects.filter(
+                school_id=staff_member.school_id,
+                teacher__user_id=staff_member.user_id,
+                is_active=True,
+            ).values_list('class_obj_id', flat=True).distinct()
+        )
 
     @action(detail=False, methods=['post'])
     def bulk_mark(self, request):
@@ -1382,9 +1412,15 @@ class StaffAttendanceViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mo
             return Response({'detail': 'No school selected.'}, status=400)
 
         records = request.data.get('records', [])
-        att_date = request.data.get('date')
+        att_date_raw = request.data.get('date')
+        try:
+            att_date = date.fromisoformat(str(att_date_raw))
+        except Exception:
+            return Response({'detail': 'Invalid date format. Use YYYY-MM-DD.'}, status=400)
         if not records or not att_date:
             return Response({'detail': 'date and records are required.'}, status=400)
+
+        respect_calendar = request.data.get('respect_calendar', True)
 
         normalized_records = {}
         for record in records:
@@ -1404,6 +1440,27 @@ class StaffAttendanceViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mo
             return Response({'detail': 'No valid attendance records provided.'}, status=400)
 
         staff_ids = list(normalized_records.keys())
+        staff_members = StaffMember.objects.filter(
+            school_id=school_id,
+            id__in=staff_ids,
+        ).only('id', 'user_id', 'school_id')
+        staff_map = {member.id: member for member in staff_members}
+
+        teacher_class_cache = {}
+        if respect_calendar:
+            for staff_id, payload in normalized_records.items():
+                member = staff_map.get(staff_id)
+                class_ids = []
+                if member and member.user_id:
+                    if member.user_id not in teacher_class_cache:
+                        teacher_class_cache[member.user_id] = self._resolve_teacher_class_ids(member)
+                    class_ids = teacher_class_cache[member.user_id]
+
+                if is_off_day_for_date(school_id, att_date, class_ids=class_ids):
+                    payload['status'] = StaffAttendance.Status.ON_LEAVE
+                    off_types = off_day_types_for_date(school_id, att_date, class_ids=class_ids)
+                    extra_note = f"Auto-marked ON_LEAVE (OFF day: {', '.join(off_types)})"
+                    payload['notes'] = f"{payload['notes']} | {extra_note}".strip(' |')
         existing_records = StaffAttendance.objects.filter(
             school_id=school_id,
             date=att_date,
@@ -1461,26 +1518,89 @@ class StaffAttendanceViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mo
         if not school_id:
             return Response({'detail': 'No school selected.'}, status=400)
 
-        date_from = request.query_params.get('date_from')
-        date_to = request.query_params.get('date_to')
-        if not date_from or not date_to:
+        date_from_raw = request.query_params.get('date_from')
+        date_to_raw = request.query_params.get('date_to')
+        if not date_from_raw or not date_to_raw:
             return Response({'detail': 'date_from and date_to are required.'}, status=400)
 
-        records = StaffAttendance.objects.filter(
-            school_id=school_id,
-            date__gte=date_from,
-            date__lte=date_to,
-        ).values('staff_member', 'staff_member__first_name', 'staff_member__last_name',
-                 'staff_member__employee_id').annotate(
-            present=Count('id', filter=Q(status='PRESENT')),
-            absent=Count('id', filter=Q(status='ABSENT')),
-            late=Count('id', filter=Q(status='LATE')),
-            half_day=Count('id', filter=Q(status='HALF_DAY')),
-            on_leave=Count('id', filter=Q(status='ON_LEAVE')),
-            total=Count('id'),
-        ).order_by('staff_member__first_name')
+        try:
+            date_from = date.fromisoformat(str(date_from_raw))
+            date_to = date.fromisoformat(str(date_to_raw))
+        except Exception:
+            return Response({'detail': 'Invalid date format. Use YYYY-MM-DD.'}, status=400)
 
-        return Response(list(records))
+        if date_from > date_to:
+            return Response({'detail': 'date_from cannot be after date_to.'}, status=400)
+
+        staff_members = list(
+            StaffMember.objects.filter(
+                school_id=school_id,
+                is_active=True,
+            ).only('id', 'first_name', 'last_name', 'employee_id', 'user_id', 'school_id')
+        )
+        if not staff_members:
+            return Response([])
+
+        staff_ids = [member.id for member in staff_members]
+        aggregated_records = list(
+            StaffAttendance.objects.filter(
+                school_id=school_id,
+                staff_member_id__in=staff_ids,
+                date__gte=date_from,
+                date__lte=date_to,
+            ).values('staff_member_id', 'status').annotate(count=Count('id'))
+        )
+
+        by_staff = {}
+        for row in aggregated_records:
+            sid = row['staff_member_id']
+            by_staff.setdefault(sid, {})[row['status']] = row['count']
+
+        total_days_in_range = (date_to - date_from).days + 1
+        summary = []
+
+        for staff in staff_members:
+            counts = by_staff.get(staff.id, {})
+            present = counts.get(StaffAttendance.Status.PRESENT, 0)
+            absent = counts.get(StaffAttendance.Status.ABSENT, 0)
+            late = counts.get(StaffAttendance.Status.LATE, 0)
+            half_day = counts.get(StaffAttendance.Status.HALF_DAY, 0)
+            on_leave = counts.get(StaffAttendance.Status.ON_LEAVE, 0)
+
+            class_ids = self._resolve_teacher_class_ids(staff)
+            off_days = build_off_day_date_set(
+                school_id=school_id,
+                date_from=date_from,
+                date_to=date_to,
+                class_ids=class_ids,
+            )
+            off_days_count = len(off_days)
+            working_days = max(total_days_in_range - off_days_count, 0)
+
+            recorded_days = present + absent + late + half_day + on_leave
+            unmarked_working_days = max(working_days - recorded_days, 0)
+            attendance_points = present + late + (half_day * 0.5)
+            attendance_rate = round((attendance_points / working_days) * 100, 1) if working_days else None
+
+            summary.append({
+                'staff_member': staff.id,
+                'staff_member__first_name': staff.first_name,
+                'staff_member__last_name': staff.last_name,
+                'staff_member__employee_id': staff.employee_id,
+                'present': present,
+                'absent': absent,
+                'late': late,
+                'half_day': half_day,
+                'on_leave': on_leave,
+                'total': recorded_days,
+                'working_days': working_days,
+                'off_days': off_days_count,
+                'unmarked_working_days': unmarked_working_days,
+                'attendance_rate': attendance_rate,
+            })
+
+        summary.sort(key=lambda item: (item.get('staff_member__first_name') or '').lower())
+        return Response(summary)
 
 
 # ── Performance Appraisal ViewSet ────────────────────────────────────────────

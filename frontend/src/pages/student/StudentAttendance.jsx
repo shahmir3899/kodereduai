@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { studentPortalApi } from '../../services/api'
+import { studentPortalApi, sessionsApi } from '../../services/api'
 
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -32,6 +32,15 @@ function getCalendarDays(year, month) {
   return days
 }
 
+function getDateRange(year, month) {
+  const daysInMonth = new Date(year, month, 0).getDate()
+  const mm = String(month).padStart(2, '0')
+  return {
+    dateFrom: `${year}-${mm}-01`,
+    dateTo: `${year}-${mm}-${String(daysInMonth).padStart(2, '0')}`,
+  }
+}
+
 export default function StudentAttendance() {
   const now = new Date()
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1)
@@ -40,6 +49,12 @@ export default function StudentAttendance() {
   const { data: attendanceData, isLoading, error } = useQuery({
     queryKey: ['studentAttendance', selectedMonth, selectedYear],
     queryFn: () => studentPortalApi.getAttendance({ month: selectedMonth, year: selectedYear }),
+  })
+
+  const { dateFrom, dateTo } = getDateRange(selectedYear, selectedMonth)
+  const { data: dayStatusRes } = useQuery({
+    queryKey: ['studentCalendarDayStatus', selectedYear, selectedMonth],
+    queryFn: () => sessionsApi.getCalendarDayStatus({ date_from: dateFrom, date_to: dateTo }),
   })
 
   const attendance = attendanceData?.data
@@ -58,6 +73,12 @@ export default function StudentAttendance() {
   }
 
   const calendarDays = getCalendarDays(selectedYear, selectedMonth)
+  const dayStatusByDate = dayStatusRes?.data?.days || {}
+  const dayCalendarStatusMap = {}
+  for (let d = 1; d <= new Date(selectedYear, selectedMonth, 0).getDate(); d++) {
+    const dateKey = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+    dayCalendarStatusMap[d] = dayStatusByDate[dateKey] || null
+  }
 
   const presentCount = summary.present_count ?? summary.present ?? Object.values(dayStatusMap).filter(s => s === 'PRESENT').length
   const absentCount = summary.absent_count ?? summary.absent ?? Object.values(dayStatusMap).filter(s => s === 'ABSENT').length
@@ -78,6 +99,12 @@ export default function StudentAttendance() {
     return date.getDay() === 0 // Sunday
   }
 
+  const isOffDay = (day) => {
+    const fromCalendar = dayCalendarStatusMap[day]
+    if (fromCalendar) return !!fromCalendar.is_off_day
+    return isWeekend(day)
+  }
+
   const getDayColor = (day) => {
     if (!day) return ''
     const status = dayStatusMap[day]
@@ -85,7 +112,7 @@ export default function StudentAttendance() {
     if (status === 'ABSENT') return 'bg-red-100 text-red-800 border-red-200'
     if (status === 'LATE') return 'bg-yellow-100 text-yellow-800 border-yellow-200'
     if (status === 'HOLIDAY') return 'bg-gray-100 text-gray-500 border-gray-200'
-    if (isWeekend(day)) return 'bg-gray-50 text-gray-400 border-gray-100'
+    if (isOffDay(day)) return 'bg-gray-50 text-gray-400 border-gray-100'
     return 'bg-white text-gray-700 border-gray-200'
   }
 
@@ -187,6 +214,11 @@ export default function StudentAttendance() {
                 {day && (
                   <>
                     <span className="text-sm sm:text-base">{day}</span>
+                    {isOffDay(day) && (
+                      <span className="mt-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-gray-200 text-gray-700 leading-none">
+                        OFF
+                      </span>
+                    )}
                     {dayStatusMap[day] && (
                       <span className={`mt-0.5 hidden sm:block w-2 h-2 rounded-full ${
                         dayStatusMap[day] === 'PRESENT' ? 'bg-green-500' :

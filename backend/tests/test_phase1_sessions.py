@@ -62,6 +62,193 @@ class TestAcademicYear:
         assert current == ay, "Current year lookup should return the seed academic year"
 
 
+@pytest.mark.django_db
+@pytest.mark.phase1
+class TestTermImportAPI:
+    """Import terms from one academic year to another with preview/apply."""
+
+    def _create_target_year(self, seed_data):
+        from academic_sessions.models import AcademicYear
+
+        school = seed_data['school_a']
+        prefix = seed_data['prefix']
+        return AcademicYear.objects.create(
+            school=school,
+            name=f"{prefix}2026-2027",
+            start_date=date(2026, 4, 1),
+            end_date=date(2027, 3, 31),
+            is_current=False,
+            is_active=True,
+        )
+
+    def test_import_preview_returns_expected_counts(self, seed_data, api):
+        target = self._create_target_year(seed_data)
+        source = seed_data['academic_year']
+        token = seed_data['tokens']['admin_a']
+
+        resp = api.post('/api/sessions/terms/import-preview/', {
+            'source_academic_year_id': source.id,
+            'target_academic_year_id': target.id,
+            'conflict_mode': 'skip',
+        }, token, seed_data['SID_A'])
+
+        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
+        body = resp.json()
+        assert body.get('counts', {}).get('create') == 2, "Expected 2 terms to create in preview"
+        assert len(body.get('terms', [])) == 2, "Expected 2 term rows in preview"
+
+    def test_import_apply_creates_terms(self, seed_data, api):
+        from academic_sessions.models import Term
+
+        target = self._create_target_year(seed_data)
+        source = seed_data['academic_year']
+        token = seed_data['tokens']['admin_a']
+
+        resp = api.post('/api/sessions/terms/import-apply/', {
+            'source_academic_year_id': source.id,
+            'target_academic_year_id': target.id,
+            'conflict_mode': 'skip',
+        }, token, seed_data['SID_A'])
+
+        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
+        body = resp.json()
+        applied = body.get('applied', {})
+        assert applied.get('created') == 2, "Expected 2 terms created"
+
+        created_terms = Term.objects.filter(school=seed_data['school_a'], academic_year=target)
+        assert created_terms.count() == 2, "Target year should have 2 imported terms"
+
+    def test_import_apply_update_mode_updates_existing_term(self, seed_data, api):
+        from academic_sessions.models import Term
+
+        target = self._create_target_year(seed_data)
+        source = seed_data['academic_year']
+        token = seed_data['tokens']['admin_a']
+        prefix = seed_data['prefix']
+
+        existing = Term.objects.create(
+            school=seed_data['school_a'],
+            academic_year=target,
+            name=f"{prefix}Term 1",
+            term_type='SEMESTER',
+            order=9,
+            start_date=date(2026, 5, 1),
+            end_date=date(2026, 6, 1),
+            is_active=True,
+        )
+
+        resp = api.post('/api/sessions/terms/import-apply/', {
+            'source_academic_year_id': source.id,
+            'target_academic_year_id': target.id,
+            'conflict_mode': 'update',
+        }, token, seed_data['SID_A'])
+
+        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
+        body = resp.json()
+        applied = body.get('applied', {})
+        assert applied.get('updated') == 1, "Expected one existing term to be updated"
+
+        existing.refresh_from_db()
+        assert existing.term_type == 'TERM', "Existing term type should be updated from source"
+        assert existing.order == 1, "Existing term order should be updated from source"
+
+    def test_import_preview_rejects_same_source_and_target(self, seed_data, api):
+        source = seed_data['academic_year']
+        token = seed_data['tokens']['admin_a']
+
+        resp = api.post('/api/sessions/terms/import-preview/', {
+            'source_academic_year_id': source.id,
+            'target_academic_year_id': source.id,
+            'conflict_mode': 'skip',
+        }, token, seed_data['SID_A'])
+
+        assert resp.status_code == 400, f"Expected 400, got {resp.status_code}"
+
+    def test_import_apply_blocks_when_order_conflict_exists(self, seed_data, api):
+        from academic_sessions.models import Term
+
+        target = self._create_target_year(seed_data)
+        source = seed_data['academic_year']
+        token = seed_data['tokens']['admin_a']
+
+        Term.objects.create(
+            school=seed_data['school_a'],
+            academic_year=target,
+            name='Target Custom Order One',
+            term_type='TERM',
+            order=1,
+            start_date=date(2026, 6, 1),
+            end_date=date(2026, 7, 1),
+            is_active=True,
+        )
+
+        resp = api.post('/api/sessions/terms/import-apply/', {
+            'source_academic_year_id': source.id,
+            'target_academic_year_id': target.id,
+            'conflict_mode': 'skip',
+        }, token, seed_data['SID_A'])
+
+        assert resp.status_code == 400, f"Expected 400, got {resp.status_code}"
+        body = resp.json()
+        assert body.get('counts', {}).get('conflict', 0) > 0, 'Expected conflict count in preview'
+
+
+@pytest.mark.django_db
+@pytest.mark.phase1
+class TestTermIntegrityValidation:
+    """Validation guards to prevent duplicate and invalid terms."""
+
+    def test_create_term_blocks_duplicate_order(self, seed_data, api):
+        ay = seed_data['academic_year']
+        token = seed_data['tokens']['admin_a']
+
+        resp = api.post('/api/sessions/terms/', {
+            'academic_year': ay.id,
+            'name': 'Another Order One',
+            'term_type': 'TERM',
+            'order': 1,
+            'start_date': '2025-11-01',
+            'end_date': '2025-12-01',
+        }, token, seed_data['SID_A'])
+
+        assert resp.status_code == 400, f"Expected 400, got {resp.status_code}"
+        assert 'order' in resp.json(), 'Duplicate order should return order validation error'
+
+    def test_create_term_blocks_date_overlap(self, seed_data, api):
+        ay = seed_data['academic_year']
+        token = seed_data['tokens']['admin_a']
+
+        resp = api.post('/api/sessions/terms/', {
+            'academic_year': ay.id,
+            'name': 'Overlap Term',
+            'term_type': 'TERM',
+            'order': 5,
+            'start_date': '2025-08-15',
+            'end_date': '2025-10-15',
+        }, token, seed_data['SID_A'])
+
+        assert resp.status_code == 400, f"Expected 400, got {resp.status_code}"
+        body = resp.json()
+        assert 'non_field_errors' in body, 'Overlapping term should return non_field_errors'
+
+    def test_create_term_blocks_dates_outside_academic_year(self, seed_data, api):
+        ay = seed_data['academic_year']
+        token = seed_data['tokens']['admin_a']
+
+        resp = api.post('/api/sessions/terms/', {
+            'academic_year': ay.id,
+            'name': 'Outside Year Term',
+            'term_type': 'TERM',
+            'order': 6,
+            'start_date': '2025-03-15',
+            'end_date': '2025-04-15',
+        }, token, seed_data['SID_A'])
+
+        assert resp.status_code == 400, f"Expected 400, got {resp.status_code}"
+        body = resp.json()
+        assert 'start_date' in body, 'Term before year start should be blocked'
+
+
 # ---------------------------------------------------------------------------
 # B1-B2: Section System
 # ---------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { hrApi } from '../../services/api'
+import { hrApi, sessionsApi } from '../../services/api'
 import { useToast } from '../../components/Toast'
 
 const STATUS_OPTIONS = [
@@ -60,9 +60,18 @@ export default function StaffAttendancePage() {
     enabled: viewMode === 'summary',
   })
 
+  const { data: selectedDayStatusRes } = useQuery({
+    queryKey: ['hrSelectedDayStatus', selectedDate],
+    queryFn: () => sessionsApi.getCalendarDayStatus({ date_from: selectedDate, date_to: selectedDate }),
+    enabled: viewMode === 'mark' && !!selectedDate,
+  })
+
   const staffList = staffRes?.data?.results || staffRes?.data || []
   const existingAttendance = attendanceRes?.data?.results || attendanceRes?.data || []
   const summaryData = summaryRes?.data || []
+  const selectedDayStatus = selectedDayStatusRes?.data?.days?.[selectedDate] || null
+  const selectedDayIsOff = !!selectedDayStatus?.is_off_day
+  const selectedDayOffTypes = selectedDayStatus?.off_day_types || []
 
   // Build map of existing attendance: staff_member_id -> record
   const existingMap = useMemo(() => {
@@ -275,6 +284,11 @@ export default function StaffAttendancePage() {
             <span className="text-sm text-gray-500 ml-2">
               {new Date(selectedDate + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
             </span>
+            {selectedDayIsOff && (
+              <span className="text-xs font-semibold px-2 py-1 rounded-full bg-rose-100 text-rose-700 border border-rose-200">
+                OFF Day{selectedDayOffTypes.length ? `: ${selectedDayOffTypes.join(', ')}` : ''}
+              </span>
+            )}
           </div>
 
           {/* Summary Bar */}
@@ -535,11 +549,15 @@ export default function StaffAttendancePage() {
                   <thead>
                     <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
                       <th className="px-4 py-3 text-left">Staff Member</th>
+                      <th className="px-4 py-3 text-center">Working Days</th>
+                      <th className="px-4 py-3 text-center">OFF Days</th>
                       <th className="px-4 py-3 text-center">Present</th>
                       <th className="px-4 py-3 text-center">Absent</th>
                       <th className="px-4 py-3 text-center">Late</th>
                       <th className="px-4 py-3 text-center">Half Day</th>
                       <th className="px-4 py-3 text-center">On Leave</th>
+                      <th className="px-4 py-3 text-center">Unmarked</th>
+                      <th className="px-4 py-3 text-center">Rate %</th>
                       <th className="px-4 py-3 text-center">Total Days</th>
                     </tr>
                   </thead>
@@ -555,11 +573,15 @@ export default function StaffAttendancePage() {
                       return (
                         <tr key={i} className="hover:bg-gray-50">
                           <td className="px-4 py-2 text-sm font-medium text-gray-900">{getSummaryName(row)}</td>
+                          <td className="px-4 py-2 text-sm text-center text-indigo-700 font-semibold">{row.working_days ?? '-'}</td>
+                          <td className="px-4 py-2 text-sm text-center text-purple-700 font-semibold">{row.off_days ?? '-'}</td>
                           <td className="px-4 py-2 text-sm text-center text-green-700 font-semibold">{getSummaryCount(row, 'PRESENT')}</td>
                           <td className="px-4 py-2 text-sm text-center text-red-700 font-semibold">{getSummaryCount(row, 'ABSENT')}</td>
                           <td className="px-4 py-2 text-sm text-center text-yellow-700 font-semibold">{getSummaryCount(row, 'LATE')}</td>
                           <td className="px-4 py-2 text-sm text-center text-orange-700 font-semibold">{getSummaryCount(row, 'HALF_DAY')}</td>
                           <td className="px-4 py-2 text-sm text-center text-blue-700 font-semibold">{getSummaryCount(row, 'ON_LEAVE')}</td>
+                          <td className="px-4 py-2 text-sm text-center text-gray-700 font-semibold">{row.unmarked_working_days ?? 0}</td>
+                          <td className="px-4 py-2 text-sm text-center font-semibold text-gray-900">{row.attendance_rate ?? '-'}{row.attendance_rate != null ? '%' : ''}</td>
                           <td className="px-4 py-2 text-sm text-center font-bold text-gray-900">{total}</td>
                         </tr>
                       )
@@ -581,6 +603,10 @@ export default function StaffAttendancePage() {
                   return (
                     <div key={i} className="card">
                       <p className="font-medium text-gray-900 text-sm mb-2">{getSummaryName(row)}</p>
+                      <div className="grid grid-cols-2 gap-2 text-xs mb-2">
+                        <div className="bg-indigo-50 rounded p-1 text-center"><span className="font-bold text-indigo-700">{row.working_days ?? '-'}</span><br />Working</div>
+                        <div className="bg-purple-50 rounded p-1 text-center"><span className="font-bold text-purple-700">{row.off_days ?? '-'}</span><br />OFF</div>
+                      </div>
                       <div className="grid grid-cols-3 gap-2 text-center text-xs">
                         <div className="bg-green-50 rounded p-1"><span className="font-bold text-green-700">{getSummaryCount(row, 'PRESENT')}</span><br />Present</div>
                         <div className="bg-red-50 rounded p-1"><span className="font-bold text-red-700">{getSummaryCount(row, 'ABSENT')}</span><br />Absent</div>
@@ -588,6 +614,10 @@ export default function StaffAttendancePage() {
                         <div className="bg-orange-50 rounded p-1"><span className="font-bold text-orange-700">{getSummaryCount(row, 'HALF_DAY')}</span><br />Half Day</div>
                         <div className="bg-blue-50 rounded p-1"><span className="font-bold text-blue-700">{getSummaryCount(row, 'ON_LEAVE')}</span><br />On Leave</div>
                         <div className="bg-gray-50 rounded p-1"><span className="font-bold text-gray-900">{total}</span><br />Total</div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-center text-xs mt-2">
+                        <div className="bg-gray-50 rounded p-1"><span className="font-bold text-gray-900">{row.unmarked_working_days ?? 0}</span><br />Unmarked</div>
+                        <div className="bg-emerald-50 rounded p-1"><span className="font-bold text-emerald-700">{row.attendance_rate ?? '-'}{row.attendance_rate != null ? '%' : ''}</span><br />Rate</div>
                       </div>
                     </div>
                   )

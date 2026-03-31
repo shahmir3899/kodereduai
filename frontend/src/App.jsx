@@ -48,6 +48,7 @@ const LetterComposerPage = lazy(() => import('./pages/hr/LetterComposerPage'))
 const SubjectsPage = lazy(() => import('./pages/academics/SubjectsPage'))
 const TimetablePage = lazy(() => import('./pages/academics/TimetablePage'))
 const AcademicsAnalyticsPage = lazy(() => import('./pages/academics/AcademicsAnalyticsPage'))
+const AcademicCalendarPage = lazy(() => import('./pages/academics/AcademicCalendarPage'))
 const AcademicYearsPage = lazy(() => import('./pages/sessions/AcademicYearsPage'))
 const PromotionPage = lazy(() => import('./pages/sessions/PromotionPage'))
 
@@ -303,6 +304,7 @@ function App() {
             <Route path="academics/subjects" element={<SchoolRoute><ModuleRoute module="academics"><SubjectsPage /></ModuleRoute></SchoolRoute>} />
             <Route path="academics/timetable" element={<SchoolRoute><ModuleRoute module="academics"><TimetablePage /></ModuleRoute></SchoolRoute>} />
             <Route path="academics/analytics" element={<SchoolRoute><ModuleRoute module="academics"><AcademicsAnalyticsPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="academics/calendar" element={<SchoolRoute><ModuleRoute module="academics"><AcademicCalendarPage /></ModuleRoute></SchoolRoute>} />
             <Route path="academics/sessions" element={<SchoolRoute><ModuleRoute module="academics"><AcademicYearsPage /></ModuleRoute></SchoolRoute>} />
             <Route path="academics/promotion" element={<SchoolRoute><ModuleRoute module="academics"><PromotionPage /></ModuleRoute></SchoolRoute>} />
             <Route path="academics/exam-types" element={<SchoolRoute><ModuleRoute module="examinations"><ExamTypesPage /></ModuleRoute></SchoolRoute>} />

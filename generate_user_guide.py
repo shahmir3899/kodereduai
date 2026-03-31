@@ -739,6 +739,12 @@ def build_guide():
     pdf.step("Click 'Add Term' and fill in: Name, Type (Term/Semester/Quarter), Order, Dates.")
     pdf.step("Terms define when exams happen and how report cards are structured.")
 
+    pdf.sub_section("Importing Terms from Previous Session")
+    pdf.step("In the 'Terms' tab, click 'Import Terms'.")
+    pdf.step("Select Source Academic Year and Target Academic Year, then choose Conflict Mode: Skip Existing or Update Existing.")
+    pdf.step("Click 'Preview Import' to review what will be created, updated, or skipped with adjusted dates.")
+    pdf.step("Click 'Import Terms' to apply the import. Use this at the start of a new session to save setup time and keep term structure consistent.")
+
     pdf.section_title("Student Promotion")
     pdf.nav_path("Sidebar > Academics > Promotion")
     pdf.step("Select the source academic year and source class.")

@@ -357,6 +357,7 @@ const SESSION_AWARE_PREFIXES = [
   '/academics/lesson-plans',
   '/academics/assignments',
   '/academics/sessions',
+  '/academics/calendar',
   '/school-setup',
 ]
 
@@ -482,6 +483,7 @@ export default function Layout() {
         ] : []),
         ...(isModuleEnabled('academics') ? [
           { type: 'divider', label: 'Academic Ops' },
+          { name: 'Academic Calendar', href: '/academics/calendar', icon: CalendarIcon },
           { name: 'Sessions', href: '/academics/sessions', icon: CalendarIcon },
           { name: 'Promotion', href: '/academics/promotion', icon: UsersIcon },
         ] : []),

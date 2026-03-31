@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { hrApi } from '../services/api'
+import { hrApi, sessionsApi } from '../services/api'
 import { useToast } from '../components/Toast'
 import StatCard from '../components/dashboard/StatCard'
 import QuickActionGrid from '../components/dashboard/QuickActionGrid'
@@ -97,6 +97,11 @@ export default function HRManagerDashboard() {
   })
   const attendanceSummary = attendanceSummaryRes?.data || []
 
+  const { data: dayStatusRes } = useQuery({
+    queryKey: ['hrManagerDayStatus', today],
+    queryFn: () => sessionsApi.getCalendarDayStatus({ date_from: today, date_to: today }),
+  })
+
   // ─── Leave Approve/Reject ─────────────────────────────────────────────────────
 
   const approveMut = useMutation({
@@ -123,7 +128,10 @@ export default function HRManagerDashboard() {
 
   const activeStaff = stats.active_staff || 0
   const presentToday = stats.present_today || 0
-  const presentPct = activeStaff > 0 ? Math.round((presentToday / activeStaff) * 100) : null
+  const todayStatus = dayStatusRes?.data?.days?.[today] || null
+  const isOffDay = !!todayStatus?.is_off_day
+  const offTypes = todayStatus?.off_day_types || []
+  const presentPct = !isOffDay && activeStaff > 0 ? Math.round((presentToday / activeStaff) * 100) : null
   const pendingLeaveCount = stats.pending_leave_requests || 0
   const onLeave = stats.on_leave_count || stats.on_leave_today || 0
 
@@ -177,10 +185,10 @@ export default function HRManagerDashboard() {
         />
         <StatCard
           label="Present Today"
-          value={presentPct != null ? `${presentPct}%` : '—'}
-          subtitle={`${presentToday} of ${activeStaff}`}
+          value={isOffDay ? 'N/A' : presentPct != null ? `${presentPct}%` : '—'}
+          subtitle={isOffDay ? `OFF day${offTypes.length ? ` (${offTypes.join(', ')})` : ''}` : `${presentToday} of ${activeStaff}`}
           icon={icons.present}
-          color="green"
+          color={isOffDay ? 'gray' : 'green'}
           href="/hr/attendance"
           loading={loadingStats}
         />

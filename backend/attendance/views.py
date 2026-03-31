@@ -10,10 +10,12 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.utils import timezone
+from django.utils.dateparse import parse_date
 from django.db.models import Count, Q
 
 from core.permissions import IsSchoolAdmin, HasSchoolAccess, CanConfirmAttendance, CanUploadAttendance, CanManualAttendance, ModuleAccessMixin, get_effective_role, ADMIN_ROLES
 from core.mixins import TenantQuerySetMixin, ensure_tenant_schools, ensure_tenant_school_id
+from academic_sessions.calendar_rules import is_off_day_for_date, off_day_types_for_date, build_off_day_date_set
 from .models import AttendanceUpload, AttendanceRecord
 from .serializers import (
     AttendanceUploadSerializer,
@@ -367,6 +369,16 @@ class AttendanceUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
             context={'upload': upload, 'request': request}
         )
         serializer.is_valid(raise_exception=True)
+
+        # Do not allow attendance confirmation on configured OFF days.
+        if is_off_day_for_date(upload.school_id, upload.date, class_id=upload.class_obj_id):
+            return Response(
+                {
+                    'error': 'Attendance cannot be confirmed on an OFF day.',
+                    'off_day_types': off_day_types_for_date(upload.school_id, upload.date, class_id=upload.class_obj_id),
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         absent_student_ids = set(serializer.validated_data['absent_student_ids'])
         name_corrections = serializer.validated_data.get('name_corrections', [])
@@ -739,7 +751,10 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
     @action(detail=False, methods=['get'])
     def daily_report(self, request):
         """Get daily attendance report."""
-        date = request.query_params.get('date', timezone.now().date())
+        date_param = request.query_params.get('date')
+        date = parse_date(date_param) if date_param else timezone.now().date()
+        if not date:
+            return Response({'error': 'Invalid date format. Use YYYY-MM-DD.'}, status=400)
         school_id = request.query_params.get('school_id') or ensure_tenant_school_id(request) or request.user.school_id
         academic_year = request.query_params.get('academic_year')
 
@@ -758,8 +773,11 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
 
         absent_records = records.filter(status=AttendanceRecord.AttendanceStatus.ABSENT)
 
+        is_off_day = is_off_day_for_date(school_id, date)
         return Response({
             'date': date,
+            'is_off_day': is_off_day,
+            'off_day_types': off_day_types_for_date(school_id, date),
             'total_students': total,
             'present_count': records.filter(status=AttendanceRecord.AttendanceStatus.PRESENT).count(),
             'absent_count': absent_records.count(),
@@ -778,35 +796,50 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
 
         date_from = timezone.now().date() - timezone.timedelta(days=days)
 
-        # Get absence counts per student
-        from django.db.models import Count, F
-        from django.db.models.functions import Cast
-        from django.db.models import FloatField
-
-        students = Student.objects.filter(
+        students_qs = Student.objects.filter(
             school_id=school_id,
-            is_active=True
-        ).annotate(
-            absent_count=Count(
-                'attendance_records',
-                filter=Q(
-                    attendance_records__date__gte=date_from,
-                    attendance_records__status=AttendanceRecord.AttendanceStatus.ABSENT
+            is_active=True,
+        ).select_related('class_obj')
+        student_map = {student.id: student for student in students_qs}
+
+        attendance_rows = AttendanceRecord.objects.filter(
+            school_id=school_id,
+            date__gte=date_from,
+            student_id__in=student_map.keys(),
+        ).values('student_id', 'date', 'status')
+
+        class_off_dates_cache = {}
+        stats = {sid: {'absent_count': 0, 'total_days': 0} for sid in student_map.keys()}
+
+        for row in attendance_rows:
+            student = student_map.get(row['student_id'])
+            if not student:
+                continue
+
+            class_id = getattr(student, 'class_obj_id', None)
+            if class_id not in class_off_dates_cache:
+                class_off_dates_cache[class_id] = build_off_day_date_set(
+                    school_id=school_id,
+                    date_from=date_from,
+                    date_to=timezone.now().date(),
+                    class_id=class_id,
                 )
-            ),
-            total_days=Count(
-                'attendance_records',
-                filter=Q(attendance_records__date__gte=date_from)
-            )
-        ).filter(
-            total_days__gt=0
-        )
+
+            if row['date'] in class_off_dates_cache[class_id]:
+                continue
+
+            stats[row['student_id']]['total_days'] += 1
+            if row['status'] == AttendanceRecord.AttendanceStatus.ABSENT:
+                stats[row['student_id']]['absent_count'] += 1
 
         # Calculate percentage and filter
         chronic = []
-        for student in students:
-            if student.total_days > 0:
-                percentage = (student.absent_count / student.total_days) * 100
+        for student_id, summary in stats.items():
+            total_days = summary['total_days']
+            absent_count = summary['absent_count']
+            student = student_map.get(student_id)
+            if total_days > 0 and student:
+                percentage = (absent_count / total_days) * 100
                 if percentage >= threshold:
                     chronic.append({
                         'student': {
@@ -815,8 +848,8 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
                             'roll_number': student.roll_number,
                             'class_name': student.class_obj.name,
                         },
-                        'absent_count': student.absent_count,
-                        'total_days': student.total_days,
+                        'absent_count': absent_count,
+                        'total_days': total_days,
                         'absence_percentage': round(percentage, 1),
                     })
 

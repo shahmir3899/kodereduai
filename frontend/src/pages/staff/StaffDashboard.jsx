@@ -80,6 +80,13 @@ export default function StaffDashboard() {
   })
   const attendanceRecords = attendanceRes?.data?.results || attendanceRes?.data || []
 
+  const { data: attendanceSummaryRes } = useQuery({
+    queryKey: ['myStaffAttendanceSummary', myStaffId, monthStart, today],
+    queryFn: () => hrApi.getAttendanceSummary({ staff_member: myStaffId, date_from: monthStart, date_to: today }),
+    enabled: !!myStaffId,
+  })
+  const attendanceSummaryRows = attendanceSummaryRes?.data || []
+
   // My leave balance
   const { data: leaveBalanceRes, isLoading: loadingLeave } = useQuery({
     queryKey: ['myLeaveBalance', myStaffId],
@@ -123,6 +130,18 @@ export default function StaffDashboard() {
     })
     return { present, absent, leave, total: present + absent + leave }
   }, [attendanceRecords])
+
+  const mySummaryRow = useMemo(() => {
+    if (!Array.isArray(attendanceSummaryRows) || !myStaffId) return null
+    return attendanceSummaryRows.find(r => Number(r.staff_member) === Number(myStaffId)) || null
+  }, [attendanceSummaryRows, myStaffId])
+
+  const workingDays = mySummaryRow?.working_days
+  const offDays = mySummaryRow?.off_days
+  const presentDays = mySummaryRow?.present ?? attendanceSummary.present
+  const presentRate = mySummaryRow?.attendance_rate != null
+    ? Math.round(Number(mySummaryRow.attendance_rate))
+    : (attendanceSummary.total > 0 ? Math.round((attendanceSummary.present / attendanceSummary.total) * 100) : null)
 
   const totalLeaveRemaining = useMemo(() => {
     if (!Array.isArray(leaveBalances)) return null
@@ -219,8 +238,10 @@ export default function StaffDashboard() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
         <StatCard
           label="Attendance This Month"
-          value={hrEnabled ? `${attendanceSummary.present}/${attendanceSummary.total}` : '—'}
-          subtitle={hrEnabled && attendanceSummary.total > 0 ? `${Math.round((attendanceSummary.present / attendanceSummary.total) * 100)}% present` : undefined}
+          value={hrEnabled ? (workingDays === 0 ? 'N/A' : `${presentDays}/${workingDays ?? attendanceSummary.total}`) : '—'}
+          subtitle={hrEnabled ? (workingDays === 0
+            ? `Only OFF days${offDays != null ? ` (${offDays})` : ''}`
+            : `${presentRate ?? 0}% present${offDays != null ? ` • ${offDays} OFF` : ''}`) : undefined}
           icon={icons.calendar}
           color="green"
           loading={hrEnabled && loadingAttendance}

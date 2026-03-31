@@ -75,7 +75,7 @@ Redirects: /attendance/upload, /attendance/review, /attendance/records → remap
 | /academics/lesson-plans | LessonPlansPage.jsx | Lesson plans with SubjectSelector filter | GET/POST lesson-plans/ |
 | /academics/assignments | AssignmentsPage.jsx | Assignments with SubjectSelector filter | GET/POST assignments/ |
 | /academics/assignments/:id/submissions | SubmissionReviewPage.jsx | Review submissions | GET submissions/ |
-| /academics/sessions | AcademicYearsPage.jsx | Academic year/term management | GET/POST academic-years/, terms/ |
+| /academics/sessions | AcademicYearsPage.jsx | Academic year/term management, including Import Terms from a previous academic year with preview and conflict handling | GET/POST academic-years/, terms/, POST terms/import-preview/, POST terms/import-apply/ |
 | /academics/promotion | PromotionPage.jsx | Student promotion | GET promotion-advisor/, POST bulk_promote/ |
 
 ## Finance
