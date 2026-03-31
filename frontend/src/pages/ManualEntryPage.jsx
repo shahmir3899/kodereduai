@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { attendanceApi, sessionsApi } from '../services/api'
 import { useAcademicYear } from '../contexts/AcademicYearContext'
 import ClassSelector from '../components/ClassSelector'
+import { buildSessionOrMasterClassParams } from '../utils/classScope'
 
 export default function ManualEntryPage() {
   const queryClient = useQueryClient()
@@ -42,11 +43,17 @@ export default function ManualEntryPage() {
     }))
     : classes
 
+  const classFilterParams = buildSessionOrMasterClassParams({
+    classId,
+    activeAcademicYearId: useSessionClassFilter ? activeAcademicYear?.id : null,
+    sessionClasses: filteredSessionClasses,
+  })
+
   // Fetch enrolled students for selected class + academic year
   const { data: studentsRes, isLoading: studentsLoading } = useQuery({
     queryKey: ['studentsForAttendance', classId, activeAcademicYear?.id, useSessionClassFilter],
     queryFn: () => sessionsApi.getEnrollments({
-      ...(useSessionClassFilter ? { session_class_id: classId } : { class_id: classId }),
+      ...classFilterParams,
       academic_year: activeAcademicYear?.id,
       page_size: 500,
     }),
@@ -62,7 +69,7 @@ export default function ManualEntryPage() {
   const { data: existingRes, isLoading: existingLoading } = useQuery({
     queryKey: ['existingAttendance', classId, date, activeAcademicYear?.id, useSessionClassFilter],
     queryFn: () => attendanceApi.getRecords({
-      ...(useSessionClassFilter ? { session_class_id: classId } : { class_id: classId }),
+      ...classFilterParams,
       date,
       academic_year: activeAcademicYear?.id,
       page_size: 500,
@@ -130,7 +137,7 @@ export default function ManualEntryPage() {
       return
     }
     bulkSaveMut.mutate({
-      ...(useSessionClassFilter ? { session_class_id: parseInt(classId) } : { class_id: parseInt(classId) }),
+      ...classFilterParams,
       academic_year: activeAcademicYear?.id,
       date,
       entries,

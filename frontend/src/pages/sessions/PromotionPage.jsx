@@ -51,6 +51,16 @@ function TrendIndicator({ trend }) {
   return <span className="text-gray-400 text-xs">N/A</span>
 }
 
+function getClassOptionLabel(classObj) {
+  if (!classObj) return ''
+  if (classObj.label) return classObj.label
+
+  const baseName = classObj.display_name || classObj.name || ''
+  if (!baseName) return ''
+
+  return classObj.section ? `${baseName} - ${classObj.section}` : baseName
+}
+
 export default function PromotionPage() {
   const queryClient = useQueryClient()
   const { showError, showSuccess, showWarning } = useToast()
@@ -88,7 +98,11 @@ export default function PromotionPage() {
 
   const { data: enrollmentsRes, isLoading: enrollmentsLoading } = useQuery({
     queryKey: ['enrollmentsByClass', sourceClassId, sourceYearId],
-    queryFn: () => sessionsApi.getEnrollmentsByClass({ class_id: sourceClassId, academic_year_id: sourceYearId, page_size: 9999 }),
+    queryFn: () => sessionsApi.getEnrollmentsByClass({
+      ...(sourceSessionClasses?.length > 0 ? { session_class_id: sourceClassId } : { class_id: sourceClassId }),
+      academic_year_id: sourceYearId,
+      page_size: 9999,
+    }),
     enabled: !!sourceClassId && !!sourceYearId && step >= 2,
   })
 
@@ -105,31 +119,13 @@ export default function PromotionPage() {
   const advisorLoading = advisorTask.isSubmitting || (advisorTask.submittedTaskId && !advisorTask.isComplete && !advisorTask.isFailed)
 
   const years = yearsRes?.data?.results || yearsRes?.data || []
-  const sourceClassOptions = (sourceSessionClasses?.length > 0
-    ? sourceSessionClasses
-      .filter(sc => !!sc.class_obj)
-      .map(sc => ({
-        id: sc.class_obj,
-        name: sc.display_name || sc.class_obj_name,
-        section: sc.section || '',
-        grade_level: sc.grade_level,
-      }))
-    : masterClasses
-  )
-  const targetClassOptions = (targetSessionClasses?.length > 0
-    ? targetSessionClasses
-      .filter(sc => !!sc.class_obj)
-      .map(sc => ({
-        id: sc.class_obj,
-        name: sc.display_name || sc.class_obj_name,
-        section: sc.section || '',
-        grade_level: sc.grade_level,
-      }))
-    : masterClasses
-  )
+  const sourceClassOptions = sourceSessionClasses?.length > 0 ? sourceSessionClasses : masterClasses
+  const targetClassOptions = targetSessionClasses?.length > 0 ? targetSessionClasses : masterClasses
   const enrollments = enrollmentsRes?.data?.results || enrollmentsRes?.data || []
   const recommendations = advisorData?.recommendations || []
   const sourceClass = sourceClassOptions.find(c => String(c.id) === String(sourceClassId))
+  const sourceUsesSessionClasses = sourceSessionClasses?.length > 0
+  const targetUsesSessionClasses = targetSessionClasses?.length > 0
   const highestGradeLevel = sourceClassOptions.reduce((highest, classObj) => {
     if (typeof classObj.grade_level !== 'number') return highest
     return Math.max(highest, classObj.grade_level)
@@ -223,7 +219,9 @@ export default function PromotionPage() {
       const applyRes = await sessionsApi.applyPromotionTargets({
         source_academic_year: parseInt(sourceYearId),
         target_academic_year: parseInt(targetYearId),
-        source_class: parseInt(sourceClassId),
+        ...(sourceUsesSessionClasses
+          ? { source_session_class: parseInt(sourceClassId) }
+          : { source_class: parseInt(sourceClassId) }),
         create_if_missing: true,
         reactivate_if_inactive: true,
       })
@@ -368,7 +366,9 @@ export default function PromotionPage() {
           const previewRes = await sessionsApi.previewPromotionTargets({
             source_academic_year: parseInt(sourceYearId),
             target_academic_year: parseInt(targetYearId),
-            source_class: parseInt(sourceClassId),
+            ...(sourceUsesSessionClasses
+              ? { source_session_class: parseInt(sourceClassId) }
+              : { source_class: parseInt(sourceClassId) }),
           })
 
           const targetPlan = previewRes?.data?.target_plan
@@ -448,7 +448,9 @@ export default function PromotionPage() {
       target_academic_year: parseInt(targetYearId),
       promotions: included.map(p => ({
         student_id: p.student_id,
-        target_class_id: p.target_class_id ? parseInt(p.target_class_id) : null,
+        ...(targetUsesSessionClasses
+          ? { target_session_class_id: p.target_class_id ? parseInt(p.target_class_id) : null }
+          : { target_class_id: p.target_class_id ? parseInt(p.target_class_id) : null }),
         new_roll_number: p.new_roll_number,
         action: p.action || 'PROMOTE',
       })),
@@ -468,7 +470,15 @@ export default function PromotionPage() {
       }
 
       if (action === 'REPEAT') {
-        return { ...promotion, action, target_class_id: sourceClassId || promotion.target_class_id }
+        return {
+          ...promotion,
+          action,
+          target_class_id: (
+            targetUsesSessionClasses
+              ? sourceClassId
+              : (sourceUsesSessionClasses ? String(sourceClass?.class_obj || '') : sourceClassId)
+          ) || promotion.target_class_id,
+        }
       }
 
       return { ...promotion, action }
@@ -484,9 +494,15 @@ export default function PromotionPage() {
   // AI Advisor helpers
   const handleFetchAdvisor = () => {
     if (sourceYearId && sourceClassId) {
+      const advisorClassId = sourceUsesSessionClasses ? sourceClass?.class_obj : sourceClassId
+      if (sourceUsesSessionClasses && !advisorClassId) {
+        showWarning('Selected source session class is not linked to a master class, so the advisor cannot run yet.')
+        return
+      }
+
       setShowAdvisor(true)
       setAdvisorOverrides({})
-      advisorTask.trigger({ academic_year: sourceYearId, class_id: sourceClassId })
+      advisorTask.trigger({ academic_year: sourceYearId, class_id: advisorClassId })
     }
   }
 
@@ -509,7 +525,11 @@ export default function PromotionPage() {
         student_name: r.student_name,
         current_class: r.class_name,
         current_roll: r.roll_number,
-        target_class_id: effectiveRec === 'PROMOTE' ? targetClassId : (effectiveRec === 'REPEAT' ? r.class_id : ''),
+        target_class_id: effectiveRec === 'PROMOTE'
+          ? targetClassId
+          : (effectiveRec === 'REPEAT'
+            ? (targetUsesSessionClasses ? sourceClassId : String(sourceClass?.class_obj || sourceClassId || ''))
+            : ''),
         new_roll_number: r.roll_number,
         include: effectiveRec === 'PROMOTE' || effectiveRec === 'GRADUATE' || effectiveRec === 'REPEAT',
         action: effectiveRec,
@@ -918,7 +938,7 @@ export default function PromotionPage() {
                         <span>Target class for promoted students:</span>
                         <select id="advisor-target-class" className="input text-sm py-1 w-40">
                           <option value="">Select class...</option>
-                          {targetClassOptions.map(c => <option key={c.id} value={c.id}>{c.name}{c.section ? ` - ${c.section}` : ''}</option>)}
+                          {targetClassOptions.map(c => <option key={c.id} value={c.id}>{getClassOptionLabel(c)}</option>)}
                         </select>
                       </div>
                       <button
@@ -955,7 +975,7 @@ export default function PromotionPage() {
               <label className="text-xs text-gray-600">Set all target class:</label>
               <select onChange={e => setAllTargetClass(e.target.value)} className="input text-sm py-1">
                 <option value="">--</option>
-                {targetClassOptions.map(c => <option key={c.id} value={c.id}>{c.name}{c.section ? ` - ${c.section}` : ''}</option>)}
+                {targetClassOptions.map(c => <option key={c.id} value={c.id}>{getClassOptionLabel(c)}</option>)}
               </select>
             </div>
           </div>
@@ -1013,7 +1033,7 @@ export default function PromotionPage() {
                             disabled={!p.include || p.action === 'GRADUATE'}
                           >
                             <option value="">{p.action === 'GRADUATE' ? 'Not needed' : 'Select...'}</option>
-                            {targetClassOptions.map(c => <option key={c.id} value={c.id}>{c.name}{c.section ? ` - ${c.section}` : ''}</option>)}
+                            {targetClassOptions.map(c => <option key={c.id} value={c.id}>{getClassOptionLabel(c)}</option>)}
                           </select>
                         </td>
                         <td className="px-3 py-2">
@@ -1079,7 +1099,7 @@ export default function PromotionPage() {
                           disabled={!p.include || p.action === 'GRADUATE'}
                         >
                           <option value="">{p.action === 'GRADUATE' ? 'Not needed' : 'Select...'}</option>
-                          {targetClassOptions.map(c => <option key={c.id} value={c.id}>{c.name}{c.section ? ` - ${c.section}` : ''}</option>)}
+                          {targetClassOptions.map(c => <option key={c.id} value={c.id}>{getClassOptionLabel(c)}</option>)}
                         </select>
                       </div>
                       <div>

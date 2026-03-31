@@ -268,6 +268,7 @@ export const financeApi = {
   createPayment: (data) => api.post('/api/finance/fee-payments/', data),
   generateMonthly: (data) => api.post('/api/finance/fee-payments/generate_monthly/', data),
   generateOnetimeFees: (data) => api.post('/api/finance/fee-payments/generate_onetime_fees/', data),
+  generateAnnualFees: (data) => api.post('/api/finance/fee-payments/generate_annual_fees/', data),
   getMonthlySummary: (params) => api.get('/api/finance/fee-payments/monthly_summary/', { params }),
   getMonthlySummaryAll: (params) => api.get('/api/finance/fee-payments/monthly_summary_all/', { params }),
   getStudentLedger: (params) => api.get('/api/finance/fee-payments/student_ledger/', { params }),
@@ -514,6 +515,7 @@ export const sessionsApi = {
   updateSessionClass: (id, data) => api.patch(`/api/sessions/session-classes/${id}/`, data),
   deleteSessionClass: (id) => api.delete(`/api/sessions/session-classes/${id}/`),
   initializeSessionClasses: (data) => api.post('/api/sessions/session-classes/initialize/', data),
+  assignUnassignedToSessionClass: (id) => api.post(`/api/sessions/session-classes/${id}/assign-unassigned/`),
 
   // Enrollments
   getEnrollments: (params) => api.get('/api/sessions/enrollments/', { params }),

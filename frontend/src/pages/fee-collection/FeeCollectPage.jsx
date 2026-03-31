@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
@@ -14,7 +14,11 @@ import {
 import { exportFeePDF } from './feeExport'
 import { useToast } from '../../components/Toast'
 import { useConfirmModal } from '../../components/ConfirmModal'
-import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
+import {
+  buildSessionLabeledMasterClassOptions,
+  getClassSelectorScope,
+  resolveClassIdToMasterClassId,
+} from '../../utils/classScope'
 
 export default function FeeCollectPage() {
   const { user, activeSchool, isStaffMember } = useAuth()
@@ -36,9 +40,10 @@ export default function FeeCollectPage() {
   const [classFilter, setClassFilter] = useState(() => searchParams.get('class') || '')
   const [statusFilter, setStatusFilter] = useState(() => searchParams.get('status') || '')
   const [feeTypeFilter, setFeeTypeFilter] = useState('MONTHLY')
+  const [annualCategoryFilter, setAnnualCategoryFilter] = useState('')
   const { sessionClasses } = useSessionClasses(activeAcademicYear?.id)
   const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
-  const resolvedClassFilter = getResolvedMasterClassId(classFilter, activeAcademicYear?.id, sessionClasses)
+  const resolvedClassFilter = resolveClassIdToMasterClassId(classFilter, activeAcademicYear?.id, sessionClasses)
 
   // Modal state
   const [showPaymentModal, setShowPaymentModal] = useState(null)
@@ -64,8 +69,19 @@ export default function FeeCollectPage() {
   // Data hook
   const data = useFeeCollection({
     month, year, classFilter: resolvedClassFilter, statusFilter, feeTypeFilter,
+    annualCategoryFilter,
     academicYearId: activeAcademicYear?.id,
   })
+
+  const classFilterOptions = useMemo(() => {
+    if (!activeAcademicYear?.id) return data.classList
+    if (!sessionClasses?.length) return []
+    return buildSessionLabeledMasterClassOptions({
+      sessionClasses,
+      masterClasses: data.classList,
+      sessionScopedOnly: true,
+    })
+  }, [activeAcademicYear?.id, data.classList, sessionClasses])
 
   // Deep-link: auto-scroll to specific student from URL
   const urlStudentId = searchParams.get('student')
@@ -228,6 +244,9 @@ export default function FeeCollectPage() {
             classFilter={classFilter} setClassFilter={setClassFilter}
             statusFilter={statusFilter} setStatusFilter={setStatusFilter}
             feeTypeFilter={feeTypeFilter} setFeeTypeFilter={setFeeTypeFilter}
+            annualCategoryFilter={annualCategoryFilter} setAnnualCategoryFilter={setAnnualCategoryFilter}
+            annualCategories={data.annualCategories}
+            classOptions={classFilterOptions}
             selectorScope={classSelectorScope}
             academicYearId={activeAcademicYear?.id}
           />

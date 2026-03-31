@@ -160,12 +160,25 @@ class SessionClassViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = super().get_queryset().select_related('school', 'academic_year', 'class_obj').annotate(
+            # Count only enrollments directly linked to this session class
             enrollment_count=Count(
+                'enrollments',
+                filter=Q(
+                    enrollments__academic_year_id=F('academic_year_id'),
+                    enrollments__school_id=F('school_id'),
+                    enrollments__is_active=True,
+                ),
+                distinct=True,
+            ),
+            # Count enrollments that belong to the master class but have no session_class assigned
+            # (orphan rows from promotions done before session_class tracking was added)
+            unassigned_count=Count(
                 'class_obj__enrollments',
                 filter=Q(
                     class_obj__enrollments__academic_year_id=F('academic_year_id'),
                     class_obj__enrollments__school_id=F('school_id'),
                     class_obj__enrollments__is_active=True,
+                    class_obj__enrollments__session_class__isnull=True,
                 ),
                 distinct=True,
             ),
@@ -187,6 +200,35 @@ class SessionClassViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
     def perform_create(self, serializer):
         school_id = _resolve_school_id(self.request)
         serializer.save(school_id=school_id)
+
+    @action(detail=True, methods=['post'], url_path='assign-unassigned')
+    def assign_unassigned(self, request, pk=None):
+        target = self.get_object()
+        if not target.class_obj_id:
+            return Response(
+                {'detail': 'Session class is not linked to a master class.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        with transaction.atomic():
+            qs = StudentEnrollment.objects.filter(
+                school_id=target.school_id,
+                academic_year_id=target.academic_year_id,
+                class_obj_id=target.class_obj_id,
+                is_active=True,
+                session_class__isnull=True,
+            )
+            updated_count = qs.update(session_class=target)
+
+        return Response({
+            'updated_count': updated_count,
+            'session_class': {
+                'id': target.id,
+                'label': target.label,
+                'academic_year_id': target.academic_year_id,
+                'class_obj_id': target.class_obj_id,
+            },
+        })
 
     @action(detail=False, methods=['post'], url_path='initialize')
     def initialize(self, request):
@@ -289,7 +331,7 @@ class StudentEnrollmentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = super().get_queryset().select_related(
-            'school', 'student', 'academic_year', 'class_obj',
+            'school', 'student', 'academic_year', 'session_class', 'class_obj',
         )
         academic_year = self.request.query_params.get('academic_year')
         if academic_year:
@@ -303,8 +345,10 @@ class StudentEnrollmentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
             if not session_class or not session_class.class_obj_id:
                 return qs.none()
             qs = qs.filter(
-                class_obj_id=session_class.class_obj_id,
                 academic_year_id=session_class.academic_year_id,
+            ).filter(
+                Q(session_class_id=session_class.id) |
+                Q(session_class__isnull=True, class_obj_id=session_class.class_obj_id)
             )
         class_id = self.request.query_params.get('class_id')
         if class_id:
@@ -331,20 +375,78 @@ class StudentEnrollmentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
             return f"{class_obj.name} - {class_obj.section}"
         return class_obj.name
 
-    def _compute_promotion_target_plan(self, school_id, source_class):
+    @staticmethod
+    def _session_class_label(session_class):
+        return session_class.label
+
+    @staticmethod
+    def _serialize_session_class(session_class):
+        return {
+            'id': session_class.id,
+            'class_obj': session_class.class_obj_id,
+            'name': session_class.display_name,
+            'section': session_class.section,
+            'grade_level': session_class.grade_level,
+            'label': session_class.label,
+            'is_active': session_class.is_active,
+        }
+
+    def _resolve_target_master_class(self, school_id, target_year, source_class_like, suggested_name, next_grade_level, create_if_missing=False):
         from students.models import Class
 
-        next_grade_level = source_class.grade_level + 1
-        next_grade_classes = list(Class.objects.filter(
-            school_id=school_id,
-            grade_level=next_grade_level,
-        ).order_by('section', 'name', 'id'))
+        if getattr(source_class_like, 'class_obj_id', None):
+            current_master = source_class_like.class_obj
+        else:
+            current_master = source_class_like
 
-        source_section = (source_class.section or '').strip().lower()
+        existing = Class.objects.filter(
+            school_id=school_id,
+            name=suggested_name,
+            section='',
+        ).order_by('id').first()
+        if existing:
+            if not existing.is_active and create_if_missing:
+                existing.is_active = True
+                existing.save(update_fields=['is_active', 'updated_at'])
+            return existing
+
+        if not create_if_missing:
+            return None
+
+        return Class.objects.create(
+            school_id=school_id,
+            name=suggested_name,
+            section='',
+            grade_level=next_grade_level,
+            is_active=True,
+        )
+
+    def _compute_promotion_target_plan(self, school_id, source_year, target_year, source_class=None, source_session_class=None):
+        from students.models import Class
+
+        if source_session_class:
+            next_grade_level = source_session_class.grade_level + 1
+            next_grade_classes = list(SessionClass.objects.filter(
+                school_id=school_id,
+                academic_year_id=target_year.id,
+                grade_level=next_grade_level,
+            ).order_by('section', 'display_name', 'id'))
+            source_name = source_session_class.display_name
+            source_section = (source_session_class.section or '').strip().lower()
+            suggested_section = source_session_class.section or ''
+        else:
+            next_grade_level = source_class.grade_level + 1
+            next_grade_classes = list(Class.objects.filter(
+                school_id=school_id,
+                grade_level=next_grade_level,
+            ).order_by('section', 'name', 'id'))
+            source_name = source_class.name
+            source_section = (source_class.section or '').strip().lower()
+            suggested_section = source_class.section or ''
+
         status = 'missing'
         reason = 'No matching target class found.'
         suggested_name = ''
-        suggested_section = source_class.section or ''
         existing_class = None
 
         if source_section:
@@ -364,7 +466,7 @@ class StudentEnrollmentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
                 status = 'ambiguous'
                 reason = 'Multiple same-section target classes found. Manual selection required.'
             else:
-                suggested_name = self._derive_next_class_name(source_class.name)
+                suggested_name = self._derive_next_class_name(source_name)
                 if suggested_name:
                     reason = 'Missing same-section target class; safe to create.'
                 else:
@@ -383,7 +485,7 @@ class StudentEnrollmentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
                 status = 'ambiguous'
                 reason = 'Multiple next-grade targets exist for a no-section source class. Manual selection required.'
             else:
-                suggested_name = self._derive_next_class_name(source_class.name)
+                suggested_name = self._derive_next_class_name(source_name)
                 if suggested_name:
                     reason = 'Missing next-grade target class; safe to create.'
                 else:
@@ -412,9 +514,16 @@ class StudentEnrollmentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
 
         source_year = serializer.validated_data['source_academic_year']
         target_year = serializer.validated_data['target_academic_year']
-        source_class = serializer.validated_data['source_class']
+        source_class = serializer.validated_data.get('source_class')
+        source_session_class = serializer.validated_data.get('source_session_class')
 
-        plan = self._compute_promotion_target_plan(school_id, source_class)
+        plan = self._compute_promotion_target_plan(
+            school_id,
+            source_year,
+            target_year,
+            source_class=source_class,
+            source_session_class=source_session_class,
+        )
         status_value = plan['status']
         reason = plan['reason']
         next_grade_level = plan['next_grade_level']
@@ -430,29 +539,33 @@ class StudentEnrollmentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
             'source_academic_year': {'id': source_year.id, 'name': source_year.name},
             'target_academic_year': {'id': target_year.id, 'name': target_year.name},
             'source_class': {
-                'id': source_class.id,
-                'name': source_class.name,
-                'section': source_class.section,
-                'grade_level': source_class.grade_level,
-                'label': self._class_label(source_class),
+                'id': (source_session_class.id if source_session_class else source_class.id),
+                'class_obj': source_class.id if source_class else None,
+                'name': (source_session_class.display_name if source_session_class else source_class.name),
+                'section': (source_session_class.section if source_session_class else source_class.section),
+                'grade_level': (source_session_class.grade_level if source_session_class else source_class.grade_level),
+                'label': (self._session_class_label(source_session_class) if source_session_class else self._class_label(source_class)),
+                'is_session_class': bool(source_session_class),
             },
             'target_plan': {
                 'status': status_value,
                 'reason': reason,
                 'next_grade_level': next_grade_level,
                 'existing_class': (
-                    {
+                    (self._serialize_session_class(existing_class) if source_session_class else {
                         'id': existing_class.id,
+                        'class_obj': existing_class.id,
                         'name': existing_class.name,
                         'section': existing_class.section,
                         'grade_level': existing_class.grade_level,
                         'label': self._class_label(existing_class),
                         'is_active': existing_class.is_active,
-                    }
+                    })
                     if existing_class else None
                 ),
                 'proposed_class': (
                     {
+                        'class_obj': None,
                         'name': suggested_name,
                         'section': suggested_section,
                         'grade_level': next_grade_level,
@@ -463,14 +576,15 @@ class StudentEnrollmentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
                 'can_auto_create': can_auto_create,
                 'can_reactivate': can_reactivate,
                 'candidates': [
-                    {
+                    (self._serialize_session_class(c) if source_session_class else {
                         'id': c.id,
+                        'class_obj': c.id,
                         'name': c.name,
                         'section': c.section,
                         'grade_level': c.grade_level,
                         'label': self._class_label(c),
                         'is_active': c.is_active,
-                    }
+                    })
                     for c in next_grade_classes
                 ],
             },
@@ -490,11 +604,18 @@ class StudentEnrollmentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
 
         source_year = serializer.validated_data['source_academic_year']
         target_year = serializer.validated_data['target_academic_year']
-        source_class = serializer.validated_data['source_class']
+        source_class = serializer.validated_data.get('source_class')
+        source_session_class = serializer.validated_data.get('source_session_class')
         create_if_missing = serializer.validated_data['create_if_missing']
         reactivate_if_inactive = serializer.validated_data['reactivate_if_inactive']
 
-        plan = self._compute_promotion_target_plan(school_id, source_class)
+        plan = self._compute_promotion_target_plan(
+            school_id,
+            source_year,
+            target_year,
+            source_class=source_class,
+            source_session_class=source_session_class,
+        )
         status_value = plan['status']
         target_class = plan['existing_class']
         action_taken = 'none'
@@ -504,14 +625,15 @@ class StudentEnrollmentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
                 'detail': plan['reason'],
                 'status': status_value,
                 'candidates': [
-                    {
+                    (self._serialize_session_class(c) if source_session_class else {
                         'id': c.id,
+                        'class_obj': c.id,
                         'name': c.name,
                         'section': c.section,
                         'grade_level': c.grade_level,
                         'label': self._class_label(c),
                         'is_active': c.is_active,
-                    }
+                    })
                     for c in plan['candidates']
                 ],
             }, status=status.HTTP_400_BAD_REQUEST)
@@ -533,25 +655,70 @@ class StudentEnrollmentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            from students.models import Class
             if not plan['suggested_name']:
                 return Response(
                     {'detail': 'Unable to derive target class name for auto-create.', 'status': status_value},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            target_class, created = Class.objects.get_or_create(
-                school_id=school_id,
-                name=plan['suggested_name'],
-                section=plan['suggested_section'],
-                defaults={'grade_level': plan['next_grade_level'], 'is_active': True},
-            )
-            if not created and not target_class.is_active:
-                target_class.is_active = True
-                target_class.save(update_fields=['is_active', 'updated_at'])
-                action_taken = 'reactivated'
+            if source_session_class:
+                target_master_class = self._resolve_target_master_class(
+                    school_id,
+                    target_year,
+                    source_session_class,
+                    plan['suggested_name'],
+                    plan['next_grade_level'],
+                    create_if_missing=True,
+                )
+                target_class, created = SessionClass.objects.get_or_create(
+                    school_id=school_id,
+                    academic_year_id=target_year.id,
+                    display_name=plan['suggested_name'],
+                    section=plan['suggested_section'],
+                    defaults={
+                        'grade_level': plan['next_grade_level'],
+                        'class_obj': target_master_class,
+                        'is_active': True,
+                    },
+                )
+                updates = []
+                if target_class.class_obj_id != target_master_class.id:
+                    target_class.class_obj = target_master_class
+                    updates.append('class_obj')
+                if not target_class.is_active:
+                    target_class.is_active = True
+                    updates.append('is_active')
+                if updates:
+                    updates.append('updated_at')
+                    target_class.save(update_fields=updates)
+                action_taken = 'created' if created else ('reactivated' if 'is_active' in updates else 'reused')
             else:
-                action_taken = 'created' if created else 'reused'
+                from students.models import Class
+
+                target_class, created = Class.objects.get_or_create(
+                    school_id=school_id,
+                    name=plan['suggested_name'],
+                    section=plan['suggested_section'],
+                    defaults={'grade_level': plan['next_grade_level'], 'is_active': True},
+                )
+                if not created and not target_class.is_active:
+                    target_class.is_active = True
+                    target_class.save(update_fields=['is_active', 'updated_at'])
+                    action_taken = 'reactivated'
+                else:
+                    action_taken = 'created' if created else 'reused'
+
+        if source_session_class and target_class and not target_class.class_obj_id:
+            target_master_class = self._resolve_target_master_class(
+                school_id,
+                target_year,
+                source_session_class,
+                target_class.display_name,
+                target_class.grade_level,
+                create_if_missing=True,
+            )
+            target_class.class_obj = target_master_class
+            target_class.save(update_fields=['class_obj', 'updated_at'])
 
         if target_class is None:
             return Response(
@@ -563,19 +730,24 @@ class StudentEnrollmentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
             'source_academic_year': {'id': source_year.id, 'name': source_year.name},
             'target_academic_year': {'id': target_year.id, 'name': target_year.name},
             'source_class': {
-                'id': source_class.id,
-                'name': source_class.name,
-                'section': source_class.section,
-                'grade_level': source_class.grade_level,
-                'label': self._class_label(source_class),
+                'id': (source_session_class.id if source_session_class else source_class.id),
+                'class_obj': source_class.id if source_class else None,
+                'name': (source_session_class.display_name if source_session_class else source_class.name),
+                'section': (source_session_class.section if source_session_class else source_class.section),
+                'grade_level': (source_session_class.grade_level if source_session_class else source_class.grade_level),
+                'label': (self._session_class_label(source_session_class) if source_session_class else self._class_label(source_class)),
+                'is_session_class': bool(source_session_class),
             },
             'target_class': {
-                'id': target_class.id,
-                'name': target_class.name,
-                'section': target_class.section,
-                'grade_level': target_class.grade_level,
-                'label': self._class_label(target_class),
-                'is_active': target_class.is_active,
+                **(self._serialize_session_class(target_class) if source_session_class else {
+                    'id': target_class.id,
+                    'class_obj': target_class.id,
+                    'name': target_class.name,
+                    'section': target_class.section,
+                    'grade_level': target_class.grade_level,
+                    'label': self._class_label(target_class),
+                    'is_active': target_class.is_active,
+                }),
             },
             'status': status_value,
             'action_taken': action_taken,
@@ -584,22 +756,26 @@ class StudentEnrollmentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def by_class(self, request):
         class_id = request.query_params.get('class_id')
+        session_class_id = request.query_params.get('session_class_id')
         academic_year_id = request.query_params.get('academic_year_id')
-        if not class_id or not academic_year_id:
+        if (not class_id and not session_class_id) or not academic_year_id:
             return Response(
-                {'detail': 'class_id and academic_year_id params required.'},
+                {'detail': 'class_id or session_class_id and academic_year_id params required.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        qs = self.get_queryset().filter(
-            class_obj_id=class_id, academic_year_id=academic_year_id,
-        )
+        qs = self.get_queryset().filter(academic_year_id=academic_year_id)
+        if class_id:
+            qs = qs.filter(class_obj_id=class_id)
         serializer = StudentEnrollmentSerializer(qs, many=True)
         return Response(serializer.data)
 
     @action(detail=False, methods=['post'])
     def bulk_promote(self, request):
         """Promote students in bulk (background task)."""
-        serializer = BulkPromoteSerializer(data=request.data)
+        serializer = BulkPromoteSerializer(
+            data=request.data,
+            context={'school_id': _resolve_school_id(request)},
+        )
         serializer.is_valid(raise_exception=True)
 
         school_id = _resolve_school_id(request)

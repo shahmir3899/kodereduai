@@ -125,3 +125,5 @@ School ID: **37** (SEED_TEST_School_Alpha) — has all modules enabled, seed dat
 - Reports endpoint is `reports/list/` and `reports/generate/` not just `reports/`
 - Parent messages only support POST (send), thread listing is at `messages/threads/`
 - Tasks endpoint is `tasks/tasks/` (nested router)
+
+### Do not create virtual environments

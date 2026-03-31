@@ -357,9 +357,9 @@ class FeeStructure(models.Model):
         return f"{target} - {self.monthly_amount} ({type_label})"
 
 
-def resolve_fee_amount(student, fee_type='MONTHLY'):
+def resolve_fee_amount(student, fee_type='MONTHLY', annual_category_id=None):
     """
-    Resolve the fee for a student by fee_type.
+    Resolve the fee for a student by fee_type (and optionally annual_category).
     Priority: student-level FeeStructure > class-level FeeStructure.
     Returns Decimal amount or None if no fee structure found.
     """
@@ -370,6 +370,10 @@ def resolve_fee_amount(student, fee_type='MONTHLY'):
     school_id = student.school_id
     class_obj_id = student.class_obj_id
 
+    extra_filters = {}
+    if fee_type == 'ANNUAL' and annual_category_id:
+        extra_filters['annual_category_id'] = annual_category_id
+
     # Try student-level first
     student_fee = FeeStructure.objects.filter(
         school_id=school_id,
@@ -377,6 +381,7 @@ def resolve_fee_amount(student, fee_type='MONTHLY'):
         fee_type=fee_type,
         is_active=True,
         effective_from__lte=today,
+        **extra_filters,
     ).filter(
         models.Q(effective_to__isnull=True) | models.Q(effective_to__gte=today)
     ).order_by('-effective_from').first()
@@ -392,6 +397,7 @@ def resolve_fee_amount(student, fee_type='MONTHLY'):
         fee_type=fee_type,
         is_active=True,
         effective_from__lte=today,
+        **extra_filters,
     ).filter(
         models.Q(effective_to__isnull=True) | models.Q(effective_to__gte=today)
     ).order_by('-effective_from').first()
@@ -443,6 +449,14 @@ class FeePayment(models.Model):
         choices=FeeType.choices,
         default=FeeType.MONTHLY,
         help_text="Type of fee this payment record belongs to"
+    )
+    annual_category = models.ForeignKey(
+        'finance.AnnualFeeCategory',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='fee_payments',
+        help_text="Annual charge category (only used when fee_type=ANNUAL)"
     )
     month = models.IntegerField(help_text="Month number (1-12 for monthly, 0 for annual/admission/books/fine)")
     year = models.IntegerField(help_text="Year (e.g. 2026)")
@@ -513,7 +527,7 @@ class FeePayment(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = ('school', 'student', 'month', 'year', 'fee_type')
+        unique_together = ('school', 'student', 'month', 'year', 'fee_type', 'annual_category')
         ordering = ['-year', '-month', 'student__class_obj', 'student__roll_number']
         verbose_name = 'Fee Payment'
         verbose_name_plural = 'Fee Payments'

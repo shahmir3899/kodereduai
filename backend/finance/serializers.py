@@ -148,6 +148,10 @@ class BulkFeeStructureItemSerializer(serializers.Serializer):
 class BulkFeeStructureSerializer(serializers.Serializer):
     structures = BulkFeeStructureItemSerializer(many=True)
     effective_from = serializers.DateField()
+    academic_year = serializers.IntegerField(
+        required=False, allow_null=True,
+        help_text='Academic year ID. Auto-resolved to current if not provided.',
+    )
 
 
 class BulkStudentFeeStructureItemSerializer(serializers.Serializer):
@@ -180,6 +184,8 @@ class FeePaymentSerializer(serializers.ModelSerializer):
             return None
         return f"{cls.name} - {cls.section}" if cls.section else cls.name
 
+    annual_category_name = serializers.CharField(source='annual_category.name', read_only=True, default=None)
+
     class Meta:
         model = FeePayment
         fields = [
@@ -187,6 +193,7 @@ class FeePaymentSerializer(serializers.ModelSerializer):
             'student_name', 'student_roll', 'class_name', 'class_obj_id',
             'academic_year', 'academic_year_name',
             'fee_type', 'fee_type_display',
+            'annual_category', 'annual_category_name',
             'month', 'year', 'previous_balance', 'amount_due', 'amount_paid',
             'status', 'payment_date', 'payment_method',
             'receipt_number', 'notes',
@@ -201,7 +208,8 @@ class FeePaymentCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = FeePayment
         fields = [
-            'school', 'student', 'fee_type', 'month', 'year',
+            'school', 'student', 'fee_type', 'annual_category',
+            'month', 'year',
             'academic_year', 'amount_due', 'amount_paid',
             'payment_date', 'payment_method',
             'receipt_number', 'notes',
@@ -283,6 +291,23 @@ class GenerateOnetimeFeesSerializer(serializers.Serializer):
         default=0,
         help_text='Month for monthly fee (1-12). Use 0 for annual/admission/books/fine.',
     )
+    academic_year = serializers.IntegerField(
+        required=False,
+        help_text='Academic year ID. Auto-resolved to current if not provided.',
+    )
+
+
+class GenerateAnnualFeesSerializer(serializers.Serializer):
+    """For generating ANNUAL fee records per-class, per-category."""
+    class_id = serializers.IntegerField(
+        help_text='Class ID to generate annual fees for.',
+    )
+    annual_category_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        min_length=1,
+        help_text='List of AnnualFeeCategory IDs to generate.',
+    )
+    year = serializers.IntegerField(min_value=2020, max_value=2100)
     academic_year = serializers.IntegerField(
         required=False,
         help_text='Academic year ID. Auto-resolved to current if not provided.',

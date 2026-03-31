@@ -170,6 +170,18 @@ export default function ClassesGradesPage() {
     onError: (err) => showError(err.response?.data?.detail || err.message || 'Failed to link session class'),
   })
 
+  const assignUnassignedMut = useMutation({
+    mutationFn: ({ id }) => sessionsApi.assignUnassignedToSessionClass(id),
+    onSuccess: (res, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['session-classes'] })
+      const updated = res?.data?.updated_count ?? 0
+      const label = vars?.label || 'selected section'
+      if (updated > 0) showSuccess(`Assigned ${updated} unassigned students to ${label}.`)
+      else showSuccess('No unassigned students found.')
+    },
+    onError: (err) => showError(err.response?.data?.detail || err.message || 'Failed to assign unassigned students'),
+  })
+
   // Quick-add sections for a grade level
   const quickAddSectionsMut = useMutation({
     mutationFn: async ({ level, sections }) => {
@@ -381,6 +393,7 @@ export default function ClassesGradesPage() {
       linked_master_name: sc.class_obj_name || '',
       student_count: sc.student_count || 0,
       enrollment_count: sc.enrollment_count || 0,
+      unassigned_count: sc.unassigned_count || 0,
     }))
     : canonicalMasterClasses
 
@@ -622,6 +635,20 @@ export default function ClassesGradesPage() {
             const label = GRADE_LEVEL_LABELS[level] || `Level ${level}`
             const editableClass = levelClasses.find(c => !c.section) || levelClasses[0]
 
+            // Compute accurate totals: direct (session_class-linked) + unassigned (orphan) per master class
+            const primaryIdByMaster = {}
+            for (const c of levelClasses) {
+              if (c.class_obj != null && !(c.class_obj in primaryIdByMaster)) {
+                primaryIdByMaster[c.class_obj] = c.id
+              }
+            }
+            const totalDirect = levelClasses.reduce((sum, c) => sum + (c.enrollment_count || 0), 0)
+            const totalUnassigned = Object.entries(primaryIdByMaster).reduce((sum, [, primaryId]) => {
+              const primary = levelClasses.find(c => c.id === primaryId)
+              return sum + (primary?.unassigned_count || 0)
+            }, 0)
+            const totalStudents = totalDirect + totalUnassigned
+
             return (
               <div key={level} className="card">
                 <div className="flex items-center justify-between">
@@ -633,7 +660,7 @@ export default function ClassesGradesPage() {
                       <h3 className="font-semibold text-gray-900">{label}</h3>
                       <p className="text-xs text-gray-500">
                         {classScope === 'session'
-                          ? `Level ${level} · ${levelClasses.length} section(s) · ${levelClasses.reduce((sum, c) => sum + (c.enrollment_count || 0), 0)} students`
+                          ? `Level ${level} · ${levelClasses.length} section(s) · ${totalStudents} students`
                           : `Level ${level} · Master catalog`
                         }
                       </p>
@@ -658,7 +685,13 @@ export default function ClassesGradesPage() {
                   <div className="mt-3 pt-3 border-t border-gray-200">
                     {levelClasses.length > 0 ? (
                       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 mb-3">
-                        {levelClasses.map(c => (
+                        {levelClasses.map(c => {
+                          const isPrimary = !c.class_obj || primaryIdByMaster[c.class_obj] === c.id
+                          const displayCount = (c.enrollment_count || 0) + (isPrimary ? (c.unassigned_count || 0) : 0)
+                          const masterUnassigned = c.class_obj
+                            ? (levelClasses.find(x => x.id === primaryIdByMaster[c.class_obj])?.unassigned_count || 0)
+                            : (c.unassigned_count || 0)
+                          return (
                           <div key={c.id} className="px-3 py-2 bg-gray-50 rounded-lg group relative">
                             <div className="flex items-center justify-between">
                               <div>
@@ -666,12 +699,26 @@ export default function ClassesGradesPage() {
                                 {c.section && <p className="text-xs text-primary-600">Section {c.section}</p>}
                                 {classScope === 'session' && (
                                   <p className="text-xs text-gray-400">
-                                    {c.enrollment_count || 0} students
+                                    {displayCount} students
+                                    {isPrimary && (c.unassigned_count || 0) > 0 && (
+                                      <span className="ml-1 text-amber-500 text-[10px]" title="Students promoted without section assignment">({c.unassigned_count} unassigned)</span>
+                                    )}
                                   </p>
                                 )}
                                 {classScope === 'session' && (
                                   <div className="text-[11px] text-blue-700 flex items-center gap-2 flex-wrap">
                                     <span>Master: {c.linked_master_name || 'Not linked'}</span>
+                                    {masterUnassigned > 0 && !!c.class_obj && (
+                                      <button
+                                        type="button"
+                                        onClick={() => assignUnassignedMut.mutate({ id: c.id, label: c.label || c.name })}
+                                        disabled={assignUnassignedMut.isPending}
+                                        className="px-1.5 py-0.5 rounded border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-700 disabled:opacity-50"
+                                        title="Assign currently unassigned students of this class to this section"
+                                      >
+                                        Assign {masterUnassigned} here
+                                      </button>
+                                    )}
                                     {!c.class_obj && (
                                       <button
                                         type="button"
@@ -691,7 +738,8 @@ export default function ClassesGradesPage() {
                               </div>
                             </div>
                           </div>
-                        ))}
+                        )})
+                        }
                       </div>
                     ) : (
                       <p className="text-xs text-gray-400 mb-3">No classes at this level yet.</p>

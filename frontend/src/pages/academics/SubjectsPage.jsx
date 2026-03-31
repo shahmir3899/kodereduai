@@ -8,7 +8,11 @@ import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useDebounce } from '../../hooks/useDebounce'
 import { useToast } from '../../components/Toast'
 import { useConfirmModal } from '../../components/ConfirmModal'
-import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
+import {
+  buildSessionLabeledMasterClassOptions,
+  getClassSelectorScope,
+  resolveClassIdToMasterClassId,
+} from '../../utils/classScope'
 
 const SEVERITY_STYLES = {
   red: { bg: 'bg-red-50', border: 'border-red-200', badge: 'bg-red-100 text-red-700', icon: 'text-red-500' },
@@ -82,7 +86,7 @@ export default function SubjectsPage() {
   const { confirm, ConfirmModalRoot } = useConfirmModal()
   const { sessionClasses } = useSessionClasses(activeAcademicYear?.id)
   const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
-  const resolvedClassFilter = getResolvedMasterClassId(classFilter, activeAcademicYear?.id, sessionClasses)
+  const resolvedClassFilter = resolveClassIdToMasterClassId(classFilter, activeAcademicYear?.id, sessionClasses)
 
   // Queries
   const { data: subjectRes, isLoading: subjectLoading, isError: subjectError, error: subjectFetchError, isFetching: subjectFetching } = useQuery({
@@ -100,6 +104,14 @@ export default function SubjectsPage() {
   })
 
   const { classes } = useClasses()
+  const assignmentClassOptions = useMemo(() => {
+    if (!activeAcademicYear?.id) return classes
+    return buildSessionLabeledMasterClassOptions({
+      sessionClasses,
+      masterClasses: classes,
+      sessionScopedOnly: true,
+    })
+  }, [activeAcademicYear?.id, classes, sessionClasses])
 
   const { data: staffData } = useQuery({
     queryKey: ['hrStaffActive'],
@@ -794,7 +806,7 @@ export default function SubjectsPage() {
                       onChange={e => setAssignForm(p => ({ ...p, class_obj: e.target.value }))}
                       className="input w-full"
                       required
-                      classes={classes}
+                      classes={assignmentClassOptions}
                     />
                   </div>
                   <div>

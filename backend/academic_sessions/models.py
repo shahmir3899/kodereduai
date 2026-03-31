@@ -180,6 +180,14 @@ class StudentEnrollment(models.Model):
         on_delete=models.CASCADE,
         related_name='enrollments',
     )
+    session_class = models.ForeignKey(
+        SessionClass,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='enrollments',
+        help_text='Year-specific class placement for this enrollment.',
+    )
     class_obj = models.ForeignKey(
         'students.Class',
         on_delete=models.CASCADE,
@@ -197,19 +205,27 @@ class StudentEnrollment(models.Model):
 
     class Meta:
         unique_together = ('school', 'student', 'academic_year')
-        ordering = ['academic_year', 'class_obj', 'roll_number']
+        ordering = ['academic_year', 'session_class', 'class_obj', 'roll_number']
         verbose_name = 'Student Enrollment'
         verbose_name_plural = 'Student Enrollments'
         indexes = [
             models.Index(fields=['school', 'academic_year', 'class_obj']),
+            models.Index(fields=['school', 'academic_year', 'session_class']),
             models.Index(fields=['academic_year', 'is_active', 'student']),
         ]
         constraints = [
             models.UniqueConstraint(
+                fields=['school', 'academic_year', 'session_class', 'roll_number'],
+                condition=models.Q(session_class__isnull=False),
+                name='unique_roll_per_session_class_enrollment',
+            ),
+            models.UniqueConstraint(
                 fields=['school', 'academic_year', 'class_obj', 'roll_number'],
-                name='unique_roll_per_session_class',
+                condition=models.Q(session_class__isnull=True),
+                name='unique_roll_per_legacy_class_enrollment',
             ),
         ]
 
     def __str__(self):
-        return f"{self.student.name} -> {self.class_obj.name} ({self.academic_year.name})"
+        class_label = self.session_class.label if self.session_class_id else self.class_obj.name
+        return f"{self.student.name} -> {class_label} ({self.academic_year.name})"

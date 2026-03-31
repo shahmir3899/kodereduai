@@ -16,24 +16,35 @@ export default function FeeFilters({
   setStatusFilter,
   feeTypeFilter,
   setFeeTypeFilter,
+  annualCategoryFilter,
+  setAnnualCategoryFilter,
+  annualCategories,
+  classOptions,
   selectorScope,
   academicYearId,
 }) {
   const isMonthly = !feeTypeFilter || feeTypeFilter === 'MONTHLY'
+  const isAnnual = feeTypeFilter === 'ANNUAL'
 
   return (
     <>
       <div>
         <label className="block text-xs font-medium text-gray-500 mb-1">Fee Type</label>
-        <select value={feeTypeFilter || ''} onChange={(e) => setFeeTypeFilter(e.target.value)} className="input-field text-sm">
+        <select value={feeTypeFilter || ''} onChange={(e) => { setFeeTypeFilter(e.target.value); setAnnualCategoryFilter?.('') }} className="input-field text-sm">
           <option value="">All Types</option>
           <option value="MONTHLY">Monthly</option>
           <option value="ANNUAL">Annual</option>
-          <option value="ADMISSION">Admission</option>
-          <option value="BOOKS">Books</option>
-          <option value="FINE">Fine</option>
         </select>
       </div>
+      {isAnnual && annualCategories?.length > 0 && (
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">Category</label>
+          <select value={annualCategoryFilter || ''} onChange={(e) => setAnnualCategoryFilter(e.target.value)} className="input-field text-sm">
+            <option value="">All Categories</option>
+            {annualCategories.map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
+          </select>
+        </div>
+      )}
       {isMonthly && (
         <div>
           <label className="block text-xs font-medium text-gray-500 mb-1">Month</label>
@@ -55,8 +66,9 @@ export default function FeeFilters({
           onChange={(e) => setClassFilter(e.target.value)}
           className="input-field text-sm"
           showAllOption
-          scope={selectorScope}
-          academicYearId={academicYearId}
+          classes={classOptions}
+          scope={classOptions ? 'master' : selectorScope}
+          academicYearId={classOptions ? undefined : academicYearId}
         />
       </div>
       <div>

@@ -38,6 +38,7 @@ export default function FeeTable({
   canWrite = true, feeTypeFilter = 'MONTHLY',
 }) {
   const isMonthly = !feeTypeFilter || feeTypeFilter === 'MONTHLY'
+  const isAnnual = feeTypeFilter === 'ANNUAL'
   const showPrevBal = isMonthly
   const feeColumnLabel = FEE_TYPE_LABEL[feeTypeFilter] || 'Fee Amount'
   const headerCheckboxRef = useRef(null)
@@ -110,6 +111,9 @@ export default function FeeTable({
                     <div>
                       <p className="font-medium text-gray-900">{payment.student_name}</p>
                       <p className="text-xs text-gray-500">{payment.class_name} - Roll #{payment.student_roll}</p>
+                      {isAnnual && payment.annual_category_name && (
+                        <span className="inline-block mt-0.5 px-1.5 py-0.5 text-xs bg-purple-100 text-purple-700 rounded">{payment.annual_category_name}</span>
+                      )}
                     </div>
                     {statusBadge(payment.status)}
                   </div>
@@ -207,6 +211,7 @@ export default function FeeTable({
               <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase">Roll#</th>
               <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Student</th>
               <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Class</th>
+              {isAnnual && <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>}
               {showPrevBal && <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">Prev Bal</th>}
               <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">{feeColumnLabel}</th>
               <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">Total Payable</th>
@@ -244,11 +249,12 @@ export default function FeeTable({
                     {payment.student_name}
                     {!feeTypeFilter && payment.fee_type && payment.fee_type !== 'MONTHLY' && (
                       <span className={`ml-2 px-1.5 py-0.5 text-xs rounded ${FEE_TYPE_BADGE[payment.fee_type] || 'bg-gray-100 text-gray-700'}`}>
-                        {payment.fee_type_display || payment.fee_type}
+                        {payment.annual_category_name || payment.fee_type_display || payment.fee_type}
                       </span>
                     )}
                   </td>
                   <td className="px-3 py-3 text-sm text-gray-500">{payment.class_name}</td>
+                  {isAnnual && <td className="px-3 py-3 text-sm text-gray-600">{payment.annual_category_name || '—'}</td>}
                   {showPrevBal && (
                     <td className={`px-3 py-3 text-sm text-right ${prevBal > 0 ? 'text-orange-700 font-medium' : prevBal < 0 ? 'text-blue-700 font-medium' : 'text-gray-400'}`}>
                       {prevBal > 0 ? prevBal.toLocaleString() : prevBal < 0 ? `-${Math.abs(prevBal).toLocaleString()}` : '\u2014'}

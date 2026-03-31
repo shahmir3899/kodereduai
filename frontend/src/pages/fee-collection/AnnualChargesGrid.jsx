@@ -20,97 +20,91 @@ export default function AnnualChargesGrid({ categories = [], rows = [], onChange
   const total = rows.reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0)
 
   return (
-    <div className="space-y-3">
-      <div className="overflow-x-auto rounded-lg border border-gray-200">
-        <table className="min-w-full">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide w-1/2">
-                Category
-              </th>
-              <th className="px-4 py-2 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide w-2/5">
-                Amount (PKR)
-              </th>
-              <th className="px-4 py-2 w-10"></th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {rows.length === 0 ? (
-              <tr>
-                <td colSpan={3} className="px-4 py-6 text-center text-sm text-gray-400 italic">
-                  No charges added yet. Select a category or click "Add Row".
-                </td>
-              </tr>
-            ) : (
-              rows.map((row, index) => (
-                <tr key={index} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-3 py-2">
-                    <select
-                      value={row.category_id || ''}
-                      onChange={(e) => {
-                        const cat = categories.find((c) => String(c.id) === e.target.value)
-                        onChange(rows.map((r, i) =>
-                          i === index
-                            ? { ...r, category_id: e.target.value, annual_category_name: cat ? cat.name : r.annual_category_name }
-                            : r
-                        ))
-                      }}
-                      className="w-full px-2 py-1.5 border border-gray-200 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary-500 bg-white"
-                    >
-                      <option value="">— Select category —</option>
-                      {categories.map((c) => (
-                        <option key={c.id} value={String(c.id)}>
-                          {c.name}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="px-3 py-2">
-                    <input
-                      type="number"
-                      min="0"
-                      step="1"
-                      value={row.amount}
-                      onChange={(e) => updateRow(index, 'amount', e.target.value)}
-                      placeholder="0"
-                      className="w-full px-2 py-1.5 border border-gray-200 rounded text-sm text-right focus:outline-none focus:ring-1 focus:ring-primary-500"
-                    />
-                  </td>
-                  <td className="px-3 py-2 text-center">
-                    <button
-                      type="button"
-                      onClick={() => removeRow(index)}
-                      className="text-gray-300 hover:text-red-500 transition-colors text-lg leading-none font-light"
-                      title="Remove row"
-                    >
-                      &times;
-                    </button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-          {rows.length > 0 && (
-            <tfoot className="bg-gray-50 border-t-2 border-gray-200">
-              <tr>
-                <td className="px-4 py-2 text-sm font-semibold text-gray-700">Total per Student / Year</td>
-                <td className="px-4 py-2 text-right text-sm font-bold text-green-700">
-                  {total.toLocaleString()}
-                </td>
-                <td></td>
-              </tr>
-            </tfoot>
-          )}
-        </table>
-      </div>
+    <div className="space-y-2">
+      {rows.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-gray-300 px-4 py-5 text-center text-sm text-gray-400 italic">
+          No charges added yet. Select a category or click "Add Row".
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {rows.map((row, index) => (
+            <div key={index} className="rounded-lg border border-gray-200 bg-gray-50/60 p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                  Charge {index + 1}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => removeRow(index)}
+                  className="rounded px-2 py-0.5 text-xs text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                  title="Remove row"
+                >
+                  Remove
+                </button>
+              </div>
 
-      <button
-        type="button"
-        onClick={onAddRow}
-        className="px-3 py-1.5 text-sm text-primary-700 border border-dashed border-primary-300 rounded-lg hover:bg-primary-50 transition-colors"
-      >
-        + Add Row
-      </button>
+              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_140px]">
+                <div>
+                  <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-gray-500">
+                    Category
+                  </label>
+                  <select
+                    value={row.category_id || ''}
+                    onChange={(e) => {
+                      const cat = categories.find((c) => String(c.id) === e.target.value)
+                      onChange(rows.map((r, i) =>
+                        i === index
+                          ? { ...r, category_id: e.target.value, annual_category_name: cat ? cat.name : r.annual_category_name }
+                          : r
+                      ))
+                    }}
+                    className="w-full rounded-md border border-gray-200 bg-white px-2.5 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
+                  >
+                    <option value="">Select category</option>
+                    {categories.map((c) => (
+                      <option key={c.id} value={String(c.id)}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-gray-500">
+                    Amount
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={row.amount}
+                    onChange={(e) => updateRow(index, 'amount', e.target.value)}
+                    placeholder="0"
+                    className="w-full rounded-md border border-gray-200 bg-white px-2.5 py-2 text-right text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
+                  />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {rows.length > 0 && (
+        <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2">
+          <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Total per Student / Year</span>
+          <span className="text-sm font-bold text-green-700">Rs. {total.toLocaleString()}</span>
+        </div>
+      )}
+
+      <div>
+        <button
+          type="button"
+          onClick={onAddRow}
+          className="px-3 py-1.5 text-sm text-primary-700 border border-dashed border-primary-300 rounded-lg hover:bg-primary-50 transition-colors"
+        >
+          + Add Charge
+        </button>
+      </div>
     </div>
   )
 }

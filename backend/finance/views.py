@@ -38,7 +38,7 @@ from .serializers import (
     TransferSerializer, TransferCreateSerializer,
     FeeStructureSerializer, FeeStructureCreateSerializer, BulkFeeStructureSerializer, BulkStudentFeeStructureSerializer,
     FeePaymentSerializer, FeePaymentCreateSerializer, FeePaymentUpdateSerializer,
-    GenerateMonthlySerializer, GenerateOnetimeFeesSerializer,
+    GenerateMonthlySerializer, GenerateOnetimeFeesSerializer, GenerateAnnualFeesSerializer,
     ExpenseCategorySerializer, IncomeCategorySerializer, AnnualFeeCategorySerializer,
     ExpenseSerializer, ExpenseCreateSerializer,
     OtherIncomeSerializer, OtherIncomeCreateSerializer,
@@ -127,6 +127,10 @@ class FeeStructureViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Model
     def get_queryset(self):
         queryset = FeeStructure.objects.select_related('school', 'class_obj', 'student', 'academic_year')
 
+        # Only return active structures unless explicitly requested
+        if self.request.query_params.get('show_inactive') != 'true':
+            queryset = queryset.filter(is_active=True)
+
         # Filter by active school (works for all users including super admin)
         school_id = _resolve_school_id(self.request)
         if school_id:
@@ -189,6 +193,16 @@ class FeeStructureViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Model
         structures = serializer.validated_data['structures']
         created_count = 0
 
+        # Resolve academic year
+        from academic_sessions.models import AcademicYear
+        academic_year_id = serializer.validated_data.get('academic_year')
+        if not academic_year_id:
+            ay = AcademicYear.objects.filter(
+                school_id=school_id, is_current=True, is_active=True,
+            ).first()
+            if ay:
+                academic_year_id = ay.id
+
         try:
             for item in structures:
                 class_id = item['class_obj']
@@ -216,6 +230,7 @@ class FeeStructureViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Model
                     annual_category_id=annual_category_id if fee_type == 'ANNUAL' else None,
                     monthly_amount=monthly_amount,
                     effective_from=effective_from,
+                    academic_year_id=academic_year_id,
                 )
                 created_count += 1
         except Exception as e:
@@ -291,7 +306,7 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
     def get_queryset(self):
         queryset = FeePayment.objects.select_related(
             'school', 'student', 'student__class_obj', 'collected_by', 'account',
-            'academic_year',
+            'academic_year', 'annual_category',
         )
 
         # Filter by active school (works for all users including super admin)
@@ -355,6 +370,10 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         fee_type = self.request.query_params.get('fee_type')
         if fee_type:
             queryset = queryset.filter(fee_type=fee_type.upper())
+
+        annual_category = self.request.query_params.get('annual_category')
+        if annual_category:
+            queryset = queryset.filter(annual_category_id=annual_category)
 
         return queryset
 
@@ -423,6 +442,7 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         year_param = request.query_params.get('year', date.today().year)
         month_param = request.query_params.get('month', date.today().month)
         academic_year_id = request.query_params.get('academic_year')
+        annual_categories = request.query_params.get('annual_categories', '')
 
         school_id = _resolve_school_id(request)
         if not school_id:
@@ -439,6 +459,60 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         students = students.select_related('class_obj').distinct()
 
         m = int(month_param) if fee_type == 'MONTHLY' else 0
+
+        # Parse annual category IDs for ANNUAL preview
+        cat_ids = []
+        if fee_type == 'ANNUAL' and annual_categories:
+            cat_ids = [int(x) for x in annual_categories.split(',') if x.strip().isdigit()]
+
+        from decimal import Decimal as D
+
+        if fee_type == 'ANNUAL' and cat_ids:
+            # Per-category preview: count records that would be created across all selected categories
+            will_create = []
+            already_exist = 0
+            no_fee_structure = 0
+
+            for cat_id in cat_ids:
+                existing_ids = set(
+                    FeePayment.objects.filter(
+                        school_id=school_id, month=0, year=int(year_param),
+                        fee_type='ANNUAL', annual_category_id=cat_id,
+                    ).values_list('student_id', flat=True)
+                )
+                cat_name = ''
+                try:
+                    cat_name = AnnualFeeCategory.objects.get(id=cat_id, school_id=school_id).name
+                except AnnualFeeCategory.DoesNotExist:
+                    continue
+
+                for s in students:
+                    if s.id in existing_ids:
+                        already_exist += 1
+                        continue
+                    amount = resolve_fee_amount(s, 'ANNUAL', annual_category_id=cat_id)
+                    if amount is None:
+                        no_fee_structure += 1
+                    else:
+                        will_create.append({
+                            'student_id': s.id,
+                            'student_name': s.name,
+                            'class_name': s.class_obj.name if s.class_obj else '',
+                            'amount': str(amount),
+                            'category': cat_name,
+                        })
+
+            total = sum(D(s['amount']) for s in will_create)
+            return Response({
+                'will_create': len(will_create),
+                'already_exist': already_exist,
+                'no_fee_structure': no_fee_structure,
+                'total_amount': str(total),
+                'students': will_create[:50],
+                'has_more': len(will_create) > 50,
+            })
+
+        # Default (MONTHLY or legacy) preview
         existing_ids = set(
             FeePayment.objects.filter(
                 school_id=school_id, month=m, year=int(year_param), fee_type=fee_type
@@ -463,7 +537,6 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
                     'amount': str(amount),
                 })
 
-        from decimal import Decimal as D
         total = sum(D(s['amount']) for s in will_create)
 
         return Response({
@@ -609,6 +682,82 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
             'skipped': skipped_count,
             'no_fee_structure': no_fee_count,
             'message': f'{created_count} fee record(s) created.',
+        })
+
+    @action(detail=False, methods=['post'], url_path='generate_annual_fees')
+    def generate_annual_fees(self, request):
+        """Generate ANNUAL fee payment records per-class, per-category.
+
+        Creates one FeePayment per (student, category) combo. Uses resolve_fee_amount
+        with annual_category_id to find the correct amount from FeeStructure.
+        """
+        serializer = GenerateAnnualFeesSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        class_id = serializer.validated_data['class_id']
+        cat_ids = serializer.validated_data['annual_category_ids']
+        year = serializer.validated_data['year']
+
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response({'detail': 'No school associated.'}, status=400)
+
+        # Resolve academic year
+        from academic_sessions.models import AcademicYear
+        academic_year_id = serializer.validated_data.get('academic_year')
+        if not academic_year_id:
+            ay = AcademicYear.objects.filter(
+                school_id=school_id, is_current=True, is_active=True
+            ).first()
+            if ay:
+                academic_year_id = ay.id
+
+        # Validate categories belong to this school
+        valid_cats = AnnualFeeCategory.objects.filter(
+            id__in=cat_ids, school_id=school_id, is_active=True,
+        )
+        valid_cat_ids = set(valid_cats.values_list('id', flat=True))
+        if not valid_cat_ids:
+            return Response({'detail': 'No valid annual categories found.'}, status=400)
+
+        students = Student.objects.filter(
+            school_id=school_id, class_obj_id=class_id, is_active=True,
+        ).select_related('class_obj')
+
+        created_count = 0
+        skipped_count = 0
+        no_fee_count = 0
+
+        for student in students:
+            for cat_id in valid_cat_ids:
+                # Check if record already exists (unique_together includes annual_category)
+                if FeePayment.objects.filter(
+                    school_id=school_id, student=student,
+                    month=0, year=year, fee_type='ANNUAL',
+                    annual_category_id=cat_id,
+                ).exists():
+                    skipped_count += 1
+                    continue
+
+                amount = resolve_fee_amount(student, 'ANNUAL', annual_category_id=cat_id)
+                if amount is None:
+                    no_fee_count += 1
+                    continue
+
+                FeePayment.objects.create(
+                    school_id=school_id, student=student,
+                    fee_type='ANNUAL', annual_category_id=cat_id,
+                    month=0, year=year,
+                    amount_due=amount, amount_paid=0,
+                    academic_year_id=academic_year_id,
+                )
+                created_count += 1
+
+        return Response({
+            'created': created_count,
+            'skipped': skipped_count,
+            'no_fee_structure': no_fee_count,
+            'message': f'{created_count} annual fee record(s) created.',
         })
 
     @action(detail=False, methods=['post'])

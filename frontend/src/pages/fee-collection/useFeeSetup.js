@@ -84,6 +84,14 @@ export function useFeeSetup({ academicYearId, feeType, studentClassId, structure
     },
   })
 
+  const generateAnnualMutation = useMutation({
+    mutationFn: (data) => financeApi.generateAnnualFees(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['feePayments'] })
+      queryClient.invalidateQueries({ queryKey: ['generate-preview'] })
+    },
+  })
+
   // Derived data
   const classList = classes?.data?.results || classes?.data || []
   const classStudents = classStudentsData?.data?.results || classStudentsData?.data || []
@@ -103,5 +111,6 @@ export function useFeeSetup({ academicYearId, feeType, studentClassId, structure
     bulkStudentFeeMutation,
     generateMutation,
     generateOnetimeMutation,
+    generateAnnualMutation,
   }
 }

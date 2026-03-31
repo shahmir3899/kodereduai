@@ -426,7 +426,6 @@ export default function Layout() {
         { type: 'divider', label: 'Curriculum' },
         { name: 'Subjects', href: '/academics/subjects', icon: AcademicIcon },
         { name: 'Timetable', href: '/academics/timetable', icon: ClockIcon },
-        { name: 'Sessions', href: '/academics/sessions', icon: CalendarIcon },
         ...(isModuleEnabled('examinations') ? [
           { type: 'divider', label: 'Assessment' },
           { name: 'Exam Types', href: '/academics/exam-types', icon: FolderIcon },
@@ -447,7 +446,6 @@ export default function Layout() {
         ] : []),
         { type: 'divider', label: 'Insights' },
         { name: 'AI Analytics', href: '/academics/analytics', icon: ChartIcon },
-        { name: 'Promotion', href: '/academics/promotion', icon: UsersIcon },
       ],
     }] : []),
 
@@ -473,13 +471,20 @@ export default function Layout() {
       : []),
 
     // Management group
-    ...(isModuleEnabled('students') ? [{
+    ...((isModuleEnabled('students') || isModuleEnabled('academics')) ? [{
       type: 'group',
       name: 'Management',
       icon: FolderIcon,
       children: [
-        { name: 'Classes', href: '/classes', icon: TableIcon },
-        { name: 'Students', href: '/students', icon: UsersIcon },
+        ...(isModuleEnabled('students') ? [
+          { name: 'Classes', href: '/classes', icon: TableIcon },
+          { name: 'Students', href: '/students', icon: UsersIcon },
+        ] : []),
+        ...(isModuleEnabled('academics') ? [
+          { type: 'divider', label: 'Academic Ops' },
+          { name: 'Sessions', href: '/academics/sessions', icon: CalendarIcon },
+          { name: 'Promotion', href: '/academics/promotion', icon: UsersIcon },
+        ] : []),
       ],
     }] : []),
 

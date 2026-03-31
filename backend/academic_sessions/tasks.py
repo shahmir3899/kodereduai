@@ -30,6 +30,7 @@ def bulk_promote_task(self, school_id, source_year_id, target_year_id, promotion
         for i, promo in enumerate(promotions):
             student_id = promo.get('student_id')
             target_class_id = promo.get('target_class_id')
+            target_session_class_id = promo.get('target_session_class_id')
             new_roll_number = promo.get('new_roll_number', '')
             action = promo.get('action', 'PROMOTE')  # PROMOTE, GRADUATE, REPEAT
 
@@ -52,6 +53,29 @@ def bulk_promote_task(self, school_id, source_year_id, target_year_id, promotion
 
                     if not new_roll_number:
                         new_roll_number = old_enrollment.roll_number
+
+                    resolved_target_session_class_id = None
+                    if action != 'GRADUATE':
+                        if target_session_class_id:
+                            from academic_sessions.models import SessionClass
+
+                            target_session_class = SessionClass.objects.filter(
+                                id=target_session_class_id,
+                                school_id=school_id,
+                                academic_year_id=target_year_id,
+                            ).first()
+                            if not target_session_class:
+                                raise ValueError('Selected target session class was not found in the target academic year.')
+                            if not target_session_class.class_obj_id:
+                                raise ValueError('Selected target session class is not linked to a master class.')
+
+                            if target_class_id and target_class_id != target_session_class.class_obj_id:
+                                raise ValueError('Target class does not match selected target session class.')
+
+                            target_class_id = target_session_class.class_obj_id
+                            resolved_target_session_class_id = target_session_class.id
+                        elif old_enrollment.session_class_id and action == 'REPEAT':
+                            resolved_target_session_class_id = old_enrollment.session_class_id
 
                     if action != 'GRADUATE':
                         existing_target = StudentEnrollment.objects.filter(
@@ -81,6 +105,7 @@ def bulk_promote_task(self, school_id, source_year_id, target_year_id, promotion
                             school_id=school_id,
                             student_id=student_id,
                             academic_year_id=target_year_id,
+                            session_class_id=resolved_target_session_class_id,
                             class_obj_id=target_class_id,
                             roll_number=new_roll_number,
                             status=StudentEnrollment.Status.ACTIVE,

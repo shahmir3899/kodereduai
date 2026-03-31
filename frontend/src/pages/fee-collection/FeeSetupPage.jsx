@@ -8,23 +8,16 @@ import { MONTHS } from './FeeFilters'
 import ClassSelector from '../../components/ClassSelector'
 import { financeApi, discountApi, studentsApi } from '../../services/api'
 import { getErrorMessage } from '../../utils/errorUtils'
-import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
+import {
+  buildSessionLabeledMasterClassOptions,
+  resolveClassIdToMasterClassId,
+} from '../../utils/classScope'
 import AnnualChargesTab from './AnnualChargesTab'
 
-// MONTHLY, ADMISSION, BOOKS, and FINE are managed here.
+// MONTHLY fees are managed here.
 // ANNUAL charges are handled by the dedicated AnnualChargesTab.
-const FEE_TYPE_TABS = [
-  { value: 'MONTHLY', label: 'Monthly' },
-  { value: 'ADMISSION', label: 'Admission' },
-  { value: 'BOOKS', label: 'Books' },
-  { value: 'FINE', label: 'Fine' },
-]
-
 const FEE_TYPE_DESCRIPTIONS = {
-  MONTHLY: 'Set the monthly recurring fee for each class.',
-  ADMISSION: 'Set the one-time admission fee for each class.',
-  BOOKS: 'Set the books/materials fee for each class.',
-  FINE: 'Set a default fine amount for each class.',
+  MONTHLY: 'Set the monthly recurring fee for each class or override per student.',
 }
 
 function calcDiscountOff(discount, scholarship, baseFee) {
@@ -65,7 +58,7 @@ export default function FeeSetupPage() {
   const now = new Date()
 
   // Tab state
-  const [activeTab, setActiveTab] = useState('structures')
+  const [activeTab, setActiveTab] = useState('monthly')
   const [feeType, setFeeType] = useState('MONTHLY')
   const [structureMode, setStructureMode] = useState('class')
   const [studentClassId, setStudentClassId] = useState('')
@@ -75,13 +68,14 @@ export default function FeeSetupPage() {
   const [genYear, setGenYear] = useState(now.getFullYear())
   const [genClassFilter, setGenClassFilter] = useState('')
   const [confirmed, setConfirmed] = useState(false)
-  // One-time fee generation state (ADMISSION / BOOKS / FINE)
-  const [genFeeType, setGenFeeType] = useState('MONTHLY')
-  const [onetimeClass, setOnetimeClass] = useState('')
-  const [onetimeShowConfirm, setOnetimeShowConfirm] = useState(false)
+  // Annual fee generation state
+  const [genAnnualYear, setGenAnnualYear] = useState(now.getFullYear())
+  const [genAnnualClassFilter, setGenAnnualClassFilter] = useState('')
+  const [selectedAnnualCategories, setSelectedAnnualCategories] = useState([])
+  const [annualShowConfirm, setAnnualShowConfirm] = useState(false)
 
   // Fee structure state
-  const [feesByType, setFeesByType] = useState({ MONTHLY: {}, ADMISSION: {}, BOOKS: {}, FINE: {} })
+  const [feesByType, setFeesByType] = useState({ MONTHLY: {} })
   const [showConfirm, setShowConfirm] = useState(false)
   const [studentFees, setStudentFees] = useState([])
   const [studentShowConfirm, setStudentShowConfirm] = useState(false)
@@ -99,11 +93,10 @@ export default function FeeSetupPage() {
   const [removeConfirm, setRemoveConfirm] = useState(null) // studentDiscount id
 
   const { sessionClasses } = useSessionClasses(activeAcademicYear?.id, activeSchool?.id)
-  const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
-  const resolvedStudentClassId = getResolvedMasterClassId(studentClassId, activeAcademicYear?.id, sessionClasses)
-  const resolvedGenClassFilter = getResolvedMasterClassId(genClassFilter, activeAcademicYear?.id, sessionClasses)
-  const resolvedOnetimeClass = getResolvedMasterClassId(onetimeClass, activeAcademicYear?.id, sessionClasses)
-  const resolvedDiscClassId = getResolvedMasterClassId(discClassId, activeAcademicYear?.id, sessionClasses)
+  const resolvedStudentClassId = resolveClassIdToMasterClassId(studentClassId, activeAcademicYear?.id, sessionClasses)
+  const resolvedGenClassFilter = resolveClassIdToMasterClassId(genClassFilter, activeAcademicYear?.id, sessionClasses)
+  const resolvedGenAnnualClassFilter = resolveClassIdToMasterClassId(genAnnualClassFilter, activeAcademicYear?.id, sessionClasses)
+  const resolvedDiscClassId = resolveClassIdToMasterClassId(discClassId, activeAcademicYear?.id, sessionClasses)
 
   const data = useFeeSetup({
     academicYearId: activeAcademicYear?.id,
@@ -113,6 +106,17 @@ export default function FeeSetupPage() {
     month: genMonth,
     year: genYear,
   })
+
+  const feeSetupClassOptions = useMemo(() => {
+    if (!activeAcademicYear?.id) return data.classList
+    return buildSessionLabeledMasterClassOptions({
+      sessionClasses,
+      masterClasses: data.classList,
+      sessionScopedOnly: true,
+    })
+  }, [activeAcademicYear?.id, sessionClasses, data.classList])
+
+  const feeStructureClassList = feeSetupClassOptions
 
   // === Student Discounts tab queries ===
   const { data: discStudentsData, isLoading: discStudentsLoading } = useQuery({
@@ -290,6 +294,15 @@ export default function FeeSetupPage() {
     setStudentFees(grid)
   }, [data.classStudents, data.classStructures, structureMode, studentClassId, feeType, localEdits])
 
+  // Fetch annual fee categories
+  const { data: annualCategoriesData } = useQuery({
+    queryKey: ['annual-categories', activeSchool?.id],
+    queryFn: () => financeApi.getAnnualCategories({}),
+    enabled: activeTab === 'generate',
+    staleTime: 5 * 60_000,
+  })
+  const annualCategories = annualCategoriesData?.data?.results || annualCategoriesData?.data || []
+
   // Generate preview queries
   const { data: monthlyPreview, isFetching: monthlyPreviewLoading } = useQuery({
     queryKey: ['generate-preview', 'MONTHLY', resolvedGenClassFilter, genMonth, genYear, activeAcademicYear?.id],
@@ -298,29 +311,30 @@ export default function FeeSetupPage() {
       ...(resolvedGenClassFilter && { class_id: resolvedGenClassFilter }),
       ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
     }),
-    enabled: activeTab === 'generate' && genFeeType === 'MONTHLY',
+    enabled: activeTab === 'generate',
     staleTime: 30_000,
   })
 
-  // Preview for one-time fee types (ADMISSION, BOOKS, FINE)
-  const { data: onetimePreview, isFetching: onetimePreviewLoading } = useQuery({
-    queryKey: ['generate-preview', genFeeType, resolvedOnetimeClass, genYear, activeAcademicYear?.id],
+  // Preview for annual fee categories
+  const { data: annualPreview, isFetching: annualPreviewLoading } = useQuery({
+    queryKey: ['generate-preview', 'ANNUAL', resolvedGenAnnualClassFilter, selectedAnnualCategories, genAnnualYear, activeAcademicYear?.id],
     queryFn: () => financeApi.previewGeneration({
-      fee_type: genFeeType, class_id: resolvedOnetimeClass, year: genYear, month: 0,
+      fee_type: 'ANNUAL', year: genAnnualYear, month: 0,
+      ...(resolvedGenAnnualClassFilter && { class_id: resolvedGenAnnualClassFilter }),
+      ...(selectedAnnualCategories.length > 0 && { annual_categories: selectedAnnualCategories.join(',') }),
       ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
     }),
-    enabled: activeTab === 'generate' && genFeeType !== 'MONTHLY' && !!resolvedOnetimeClass,
+    enabled: activeTab === 'generate' && selectedAnnualCategories.length > 0 && !!resolvedGenAnnualClassFilter,
     staleTime: 30_000,
   })
 
   const mPreview = monthlyPreview?.data
-  const oPreview = onetimePreview?.data
-  const feeLabel = FEE_TYPE_TABS.find(t => t.value === feeType)?.label || 'Monthly'
-  const genFeeLabel = FEE_TYPE_TABS.find(t => t.value === genFeeType)?.label || 'Monthly'
+  const aPreview = annualPreview?.data
+  const feeLabel = 'Monthly' // feeType is always MONTHLY (Annual fees via AnnualChargesTab)
 
   // Fee structure handlers
   const currentFees = feesByType[feeType] || {}
-  const feesWithValues = data.classList.filter(c => currentFees[c.id] && Number(currentFees[c.id]) > 0)
+  const feesWithValues = feeStructureClassList.filter(c => currentFees[c.id] && Number(currentFees[c.id]) > 0)
   const overrideCount = studentFees.filter(s => s.isOverride).length
 
   const handleFeeChange = (classId, value) => {
@@ -387,15 +401,15 @@ export default function FeeSetupPage() {
     bulkAssignMutation.mutate(payload)
   }
 
-  const selectedOnetimeClassLabel = useMemo(() => {
-    if (!onetimeClass) return ''
-    if (classSelectorScope === 'session') {
-      const sessionMatch = sessionClasses.find(sc => String(sc.id) === String(onetimeClass))
-      return sessionMatch?.display_name || sessionMatch?.label || ''
-    }
-    const masterMatch = data.classList.find(c => String(c.id) === String(onetimeClass))
+  // Annual fee generation uses category selection (no per-class filtering)
+
+  const selectedDiscountClassLabel = useMemo(() => {
+    if (!discClassId) return ''
+    const optionMatch = feeSetupClassOptions.find(c => String(c.id) === String(discClassId))
+    if (optionMatch?.label) return optionMatch.label
+    const masterMatch = data.classList.find(c => String(c.id) === String(discClassId))
     return masterMatch ? `${masterMatch.name}${masterMatch.section ? ` - ${masterMatch.section}` : ''}` : ''
-  }, [onetimeClass, classSelectorScope, sessionClasses, data.classList])
+  }, [discClassId, feeSetupClassOptions, data.classList])
 
   const discWithAssignments = discGrid.filter(s => s.assignment).length
 
@@ -407,23 +421,17 @@ export default function FeeSetupPage() {
         <p className="text-sm text-gray-600">Configure fee structures and generate fee records</p>
       </div>
 
-      {/* Top-level tabs: Monthly Fees | Annual Charges | Generate | Discounts */}
+      {/* Top-level tabs: Monthly Structure | Annual Charges | Generate | Discounts */}
       <div className="flex gap-1 mb-6 bg-gray-100 rounded-lg p-1 w-fit flex-wrap">
         {[
-          { key: 'structures', label: 'Fee Structures' },
+          { key: 'monthly', label: 'Monthly Structure' },
           { key: 'annual', label: 'Annual Charges' },
           { key: 'generate', label: 'Generate Records' },
           { key: 'discounts', label: 'Student Discounts' },
         ].map(tab => (
           <button
             key={tab.key}
-            onClick={() => {
-              setActiveTab(tab.key)
-              if (tab.key !== 'generate') {
-                setGenFeeType('MONTHLY')
-                setOnetimeShowConfirm(false)
-              }
-            }}
+            onClick={() => setActiveTab(tab.key)}
             className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
               activeTab === tab.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
             }`}
@@ -440,29 +448,17 @@ export default function FeeSetupPage() {
         </div>
       )}
 
-      {/* === FEE STRUCTURES TAB (Monthly, Admission, Books, Fine) === */}
-      {activeTab === 'structures' && (
+      {/* === MONTHLY STRUCTURE TAB === */}
+      {activeTab === 'monthly' && (
         <div className="card">
-          {/* Mode + Fee type controls */}
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-            <div className="flex gap-2">
-              <button type="button" onClick={() => { setStructureMode('class'); setStudentShowConfirm(false) }}
-                className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-colors ${structureMode === 'class' ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-              >By Class</button>
-              <button type="button" onClick={() => { setStructureMode('student'); setShowConfirm(false) }}
-                className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-colors ${structureMode === 'student' ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-              >By Student</button>
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {FEE_TYPE_TABS.map(ft => (
-                <button key={ft.value} type="button"
-                  onClick={() => { setFeeType(ft.value); setStudentShowConfirm(false); setShowConfirm(false) }}
-                  className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-colors ${
-                    feeType === ft.value ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
-                >{ft.label}</button>
-              ))}
-            </div>
+          {/* Mode controls */}
+          <div className="flex gap-2 mb-4">
+            <button type="button" onClick={() => { setStructureMode('class'); setStudentShowConfirm(false) }}
+              className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-colors ${structureMode === 'class' ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+            >By Class</button>
+            <button type="button" onClick={() => { setStructureMode('student'); setShowConfirm(false) }}
+              className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-colors ${structureMode === 'student' ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+            >By Student</button>
           </div>
 
           {/* BY CLASS MODE */}
@@ -484,7 +480,7 @@ export default function FeeSetupPage() {
                     <div className="space-y-1">
                       {feesWithValues.length > 0 ? feesWithValues.map(c => (
                         <p key={c.id} className="text-sm text-blue-800">
-                          <span className="font-medium">{c.name}{c.section ? ` - ${c.section}` : ''}:</span> {Number(currentFees[c.id]).toLocaleString()} ({feeLabel})
+                          <span className="font-medium">{c.label || `${c.name}${c.section ? ` - ${c.section}` : ''}`}:</span> {Number(currentFees[c.id]).toLocaleString()} ({feeLabel})
                         </p>
                       )) : (
                         <p className="text-sm text-blue-800">No fees set. Nothing will be saved.</p>
@@ -511,9 +507,9 @@ export default function FeeSetupPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
-                        {data.classList.map(c => (
+                        {feeStructureClassList.map(c => (
                           <tr key={c.id}>
-                            <td className="px-3 py-2 text-sm text-gray-900">{c.name}{c.section ? ` - ${c.section}` : ''}</td>
+                            <td className="px-3 py-2 text-sm text-gray-900">{c.label || `${c.name}${c.section ? ` - ${c.section}` : ''}`}</td>
                             <td className="px-3 py-2">
                               <input type="number" step="0.01" placeholder="0.00"
                                 value={currentFees[c.id] || ''}
@@ -546,8 +542,7 @@ export default function FeeSetupPage() {
                     value={studentClassId}
                     onChange={(e) => { setStudentClassId(e.target.value); setStudentFees([]); setStudentShowConfirm(false); setLocalEdits({}); data.bulkStudentFeeMutation?.reset?.() }}
                     className="input-field text-sm"
-                    scope={classSelectorScope}
-                    academicYearId={activeAcademicYear?.id}
+                    classes={feeSetupClassOptions}
                   />
                 </div>
                 <div className="min-w-[140px]">
@@ -645,23 +640,11 @@ export default function FeeSetupPage() {
       {/* === GENERATE RECORDS TAB === */}
       {activeTab === 'generate' && (
         <div className="card">
-          <p className="text-sm text-gray-500 mb-4">Generate fee records for enrolled students. For annual fee generation, use the <strong>Annual Charges</strong> tab.</p>
-
-          {/* Fee type tabs */}
-          <div className="flex flex-wrap gap-1.5 mb-4">
-            {FEE_TYPE_TABS.map(ft => (
-              <button key={ft.value} type="button"
-                onClick={() => { setGenFeeType(ft.value); setOnetimeShowConfirm(false); setConfirmed(false) }}
-                className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-colors ${
-                  genFeeType === ft.value ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >{ft.label}</button>
-            ))}
-          </div>
+          <p className="text-sm text-gray-500 mb-4">Generate fee payment records for students. <strong>Monthly fees</strong> are recurring; <strong>annual fees</strong> use categories defined in the <strong>Annual Charges</strong> tab.</p>
 
           {/* MONTHLY generation */}
-          {genFeeType === 'MONTHLY' && (
-            <>
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Monthly Fee Records</h3>
               <div className="grid grid-cols-2 gap-3 mb-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1">Month</label>
@@ -711,8 +694,7 @@ export default function FeeSetupPage() {
                   onChange={(e) => setGenClassFilter(e.target.value)}
                   className="input-field"
                   showAllOption
-                  scope={classSelectorScope}
-                  academicYearId={activeAcademicYear?.id}
+                  classes={feeSetupClassOptions}
                 />
               </div>
 
@@ -733,98 +715,130 @@ export default function FeeSetupPage() {
                   {(data.generateMutation.data?.data?.skipped || data.generateMutation.data?.data?.result?.skipped) > 0 && ` Skipped ${data.generateMutation.data.data.skipped || data.generateMutation.data.data.result?.skipped} (already exist).`}
                 </div>
               )}
-            </>
-          )}
+            </div>
 
-          {/* One-time fee generation (ADMISSION, BOOKS, FINE) */}
-          {genFeeType !== 'MONTHLY' && !onetimeShowConfirm && (
-            <>
-              <p className="text-sm text-gray-600 mb-4">
-                Generate <strong>{genFeeLabel}</strong> fee records for all enrolled students in the selected class for <strong>{genYear}</strong>.
-              </p>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Class <span className="text-red-500">*</span></label>
-                <ClassSelector
-                  value={onetimeClass}
-                  onChange={(e) => setOnetimeClass(e.target.value)}
-                  className="input-field"
-                  scope={classSelectorScope}
-                  academicYearId={activeAcademicYear?.id}
-                />
-              </div>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Year</label>
-                <select value={genYear} onChange={(e) => setGenYear(parseInt(e.target.value))} className="input-field text-sm">
-                  {YEAR_OPTIONS.map(y => <option key={y} value={y}>{y}</option>)}
-                </select>
-              </div>
+          {/* === ANNUAL FEE RECORDS === */}
+          <div className="border-t border-gray-200 pt-6 mt-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Annual Fee Records</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Generate annual fee payment records for students in a class. Select class, categories, and year.
+            </p>
 
-              {onetimePreviewLoading && onetimeClass && <p className="text-sm text-gray-400 mb-4">Calculating preview...</p>}
-              {oPreview && !onetimePreviewLoading && (
-                <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-1">
-                  <p className="text-sm text-blue-800">
-                    <span className="font-medium">{oPreview.will_create}</span> new {genFeeLabel.toLowerCase()} records
-                    {oPreview.will_create > 0 && <> (total: <span className="font-medium">{Number(oPreview.total_amount).toLocaleString()}</span>)</>}
-                  </p>
-                  {oPreview.already_exist > 0 && <p className="text-xs text-blue-600">{oPreview.already_exist} already exist (will skip)</p>}
-                  {oPreview.no_fee_structure > 0 && <p className="text-xs text-amber-600">{oPreview.no_fee_structure} students have no {genFeeLabel.toLowerCase()} fee structure (will skip)</p>}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Class <span className="text-red-500">*</span></label>
+              <select value={genAnnualClassFilter} onChange={(e) => { setGenAnnualClassFilter(e.target.value); setAnnualShowConfirm(false) }} className="input-field text-sm">
+                <option value="">— Select class —</option>
+                {feeSetupClassOptions.map(c => <option key={c.id} value={c.id}>{c.label || c.name}{c.section ? ` - ${c.section}` : ''}</option>)}
+              </select>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Categories <span className="text-red-500">*</span></label>
+              {annualCategories.length === 0 ? (
+                <p className="text-sm text-amber-600 bg-amber-50 p-3 rounded-lg">No annual fee categories defined. Set up categories in the <strong>Annual Charges</strong> tab first.</p>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  {annualCategories.map(cat => (
+                    <label key={cat.id} className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selectedAnnualCategories.includes(cat.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedAnnualCategories([...selectedAnnualCategories, cat.id])
+                          } else {
+                            setSelectedAnnualCategories(selectedAnnualCategories.filter(id => id !== cat.id))
+                          }
+                          setAnnualShowConfirm(false)
+                        }}
+                        className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                      />
+                      <span className="text-sm text-gray-700">{cat.name}</span>
+                    </label>
+                  ))}
                 </div>
               )}
+            </div>
 
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Year</label>
+              <select value={genAnnualYear} onChange={(e) => { setGenAnnualYear(parseInt(e.target.value)); setAnnualShowConfirm(false) }} className="input-field text-sm">
+                {YEAR_OPTIONS.map(y => <option key={y} value={y}>{y}</option>)}
+              </select>
+            </div>
+
+            {annualPreviewLoading && selectedAnnualCategories.length > 0 && <p className="text-sm text-gray-400 mb-4">Calculating preview...</p>}
+            {aPreview && !annualPreviewLoading && (
+              <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-1">
+                <p className="text-sm text-blue-800">
+                  <span className="font-medium">{aPreview.will_create}</span> new annual fee records
+                  {aPreview.will_create > 0 && <> (total: <span className="font-medium">{Number(aPreview.total_amount).toLocaleString()}</span>)</>}
+                </p>
+                {aPreview.already_exist > 0 && <p className="text-xs text-blue-600">{aPreview.already_exist} already exist (will skip)</p>}
+                {aPreview.no_fee_structure > 0 && <p className="text-xs text-amber-600">{aPreview.no_fee_structure} students have no fee structure for selected categories (will skip)</p>}
+              </div>
+            )}
+
+            {!annualShowConfirm ? (
               <button
-                onClick={() => setOnetimeShowConfirm(true)}
-                disabled={!onetimeClass || !oPreview || oPreview.will_create === 0}
+                onClick={() => setAnnualShowConfirm(true)}
+                disabled={!resolvedGenAnnualClassFilter || selectedAnnualCategories.length === 0 || !aPreview || aPreview.will_create === 0 || annualPreviewLoading}
                 className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50"
               >
                 Review & Generate
               </button>
-            </>
-          )}
-
-          {/* One-time fee confirmation step */}
-          {genFeeType !== 'MONTHLY' && onetimeShowConfirm && (
-            <>
-              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-2 mb-4">
-                <p className="text-sm font-medium text-blue-900">Please confirm {genFeeLabel.toLowerCase()} fee generation:</p>
-                <div className="text-sm text-blue-800 space-y-1">
-                  <p><span className="font-medium">Class:</span> {selectedOnetimeClassLabel}</p>
-                  <p><span className="font-medium">Fee Type:</span> {genFeeLabel}</p>
-                  <p><span className="font-medium">Year:</span> {genYear}</p>
-                  <p><span className="font-medium">Records:</span> {oPreview?.will_create} new</p>
-                  <p><span className="font-medium">Total Amount:</span> {Number(oPreview?.total_amount || 0).toLocaleString()}</p>
+            ) : (
+              <>
+                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-2 mb-4">
+                  <p className="text-sm font-medium text-blue-900">Please confirm annual fee generation:</p>
+                  <div className="text-sm text-blue-800 space-y-1">
+                    <p><span className="font-medium">Class:</span> {(() => {
+                      const cls = feeSetupClassOptions.find(c => String(c.id) === String(genAnnualClassFilter))
+                      return cls ? (cls.label || cls.name) + (cls.section ? ` - ${cls.section}` : '') : genAnnualClassFilter
+                    })()}</p>
+                    <p><span className="font-medium">Categories:</span> {selectedAnnualCategories.map(id => {
+                      const cat = annualCategories.find(c => c.id === id)
+                      return cat?.name
+                    }).filter(Boolean).join(', ')}</p>
+                    <p><span className="font-medium">Year:</span> {genAnnualYear}</p>
+                    <p><span className="font-medium">Records:</span> {aPreview?.will_create} new</p>
+                    <p><span className="font-medium">Total Amount:</span> {Number(aPreview?.total_amount || 0).toLocaleString()}</p>
+                  </div>
                 </div>
-              </div>
-              <div className="flex gap-3">
-                <button type="button" onClick={() => setOnetimeShowConfirm(false)} className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">Back</button>
-                <button
-                  onClick={() => {
-                    data.generateOnetimeMutation.mutate({
-                      student_ids: oPreview.students.map(s => s.student_id),
-                      fee_types: [genFeeType],
-                      year: genYear,
-                      month: 0, // 0 = not applicable for one-time fees (ADMISSION, BOOKS, FINE)
-                      ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
-                    }, {
-                      onSuccess: () => setOnetimeShowConfirm(false),
-                    })
-                  }}
-                  disabled={data.generateOnetimeMutation?.isPending}
-                  className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50"
-                >
-                  {data.generateOnetimeMutation?.isPending ? 'Generating...' : 'Confirm & Generate'}
-                </button>
-              </div>
-              {data.generateOnetimeMutation?.isSuccess && (
-                <div className="mt-3 text-sm text-green-700 bg-green-50 p-3 rounded">
-                  Created {data.generateOnetimeMutation.data?.data?.created} records.
-                  {data.generateOnetimeMutation.data?.data?.skipped > 0 && ` Skipped ${data.generateOnetimeMutation.data.data.skipped} (already exist).`}
+                <div className="flex gap-3">
+                  <button type="button" onClick={() => setAnnualShowConfirm(false)} className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">Back</button>
+                  <button
+                    onClick={() => {
+                      data.generateAnnualMutation.mutate({
+                        class_id: parseInt(resolvedGenAnnualClassFilter),
+                        annual_category_ids: selectedAnnualCategories,
+                        year: genAnnualYear,
+                        ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
+                      }, {
+                        onSuccess: () => {
+                          setAnnualShowConfirm(false)
+                          setSelectedAnnualCategories([])
+                        },
+                      })
+                    }}
+                    disabled={data.generateAnnualMutation?.isPending}
+                    className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50"
+                  >
+                    {data.generateAnnualMutation?.isPending ? 'Generating...' : 'Confirm & Generate'}
+                  </button>
                 </div>
-              )}
-              {data.generateOnetimeMutation?.isError && (
-                <p className="mt-3 text-sm text-red-600">{getErrorMessage(data.generateOnetimeMutation.error, 'Failed to generate fees')}</p>
-              )}
-            </>
-          )}
+                {data.generateAnnualMutation?.isSuccess && (
+                  <div className="mt-3 text-sm text-green-700 bg-green-50 p-3 rounded">
+                    Created {data.generateAnnualMutation.data?.data?.created} records.
+                    {data.generateAnnualMutation.data?.data?.skipped > 0 && ` Skipped ${data.generateAnnualMutation.data.data.skipped} (already exist).`}
+                  </div>
+                )}
+                {data.generateAnnualMutation?.isError && (
+                  <p className="mt-3 text-sm text-red-600">{getErrorMessage(data.generateAnnualMutation.error, 'Failed to generate annual fees')}</p>
+                )}
+              </>
+            )}
+          </div>
         </div>
       )}
 
@@ -841,8 +855,7 @@ export default function FeeSetupPage() {
                 value={discClassId}
                 onChange={(e) => setDiscClassId(e.target.value)}
                 className="input-field text-sm"
-                scope={classSelectorScope}
-                academicYearId={activeAcademicYear?.id}
+                classes={feeSetupClassOptions}
               />
             </div>
             {discClassId && discGrid.length > 0 && (
@@ -993,7 +1006,7 @@ export default function FeeSetupPage() {
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-5" onClick={e => e.stopPropagation()}>
             <h3 className="text-lg font-semibold text-gray-900 mb-1">Bulk Assign to Class</h3>
             <p className="text-sm text-gray-600 mb-4">
-              Assign to all {discGrid.length} students in <span className="font-medium">{data.classList.find(c => String(c.id) === String(discClassId))?.name}</span>
+              Assign to all {discGrid.length} students in <span className="font-medium">{selectedDiscountClassLabel}</span>
             </p>
 
             {/* Type toggle */}

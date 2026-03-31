@@ -8,7 +8,7 @@ import { computeSummaryData, filterPayments } from './feeUtils'
  * Data hook for FeeCollectPage — payment collection workbench.
  * Handles fee payments queries + all payment-related mutations.
  */
-export function useFeeCollection({ month, year, classFilter, statusFilter, feeTypeFilter, academicYearId }) {
+export function useFeeCollection({ month, year, classFilter, statusFilter, feeTypeFilter, annualCategoryFilter, academicYearId }) {
   const queryClient = useQueryClient()
 
   // Reference data
@@ -28,10 +28,11 @@ export function useFeeCollection({ month, year, classFilter, statusFilter, feeTy
   const apiMonth = isMonthlyType ? month : 0
 
   const { data: payments, isLoading } = useQuery({
-    queryKey: ['feePayments', apiMonth, year, feeTypeFilter, academicYearId],
+    queryKey: ['feePayments', apiMonth, year, feeTypeFilter, annualCategoryFilter, academicYearId],
     queryFn: () => financeApi.getFeePayments({
       month: apiMonth, year,
       ...(feeTypeFilter && { fee_type: feeTypeFilter }),
+      ...(annualCategoryFilter && { annual_category: annualCategoryFilter }),
       ...(academicYearId && { academic_year: academicYearId }),
       page_size: 9999,
     }),
@@ -85,6 +86,14 @@ export function useFeeCollection({ month, year, classFilter, statusFilter, feeTy
   const allPayments = payments?.data?.results || payments?.data || []
   const classList = classes?.data?.results || classes?.data || []
   const accountsList = accountsData?.data?.results || accountsData?.data || []
+
+  // Annual categories for sub-filter
+  const { data: annualCategoriesData } = useQuery({
+    queryKey: ['annual-categories'],
+    queryFn: () => financeApi.getAnnualCategories({}),
+    staleTime: 5 * 60_000,
+  })
+  const annualCategories = annualCategoriesData?.data?.results || annualCategoriesData?.data || []
   
   // Sort classes by grade_level, section, name to ensure correct ordering
   const sortedClassList = useMemo(() => {
@@ -188,6 +197,7 @@ export function useFeeCollection({ month, year, classFilter, statusFilter, feeTy
     isLoading,
     classList: sortedClassList,
     accountsList,
+    annualCategories,
     // Mutations
     generateMutation,
     paymentMutation,
