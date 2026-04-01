@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
@@ -73,6 +73,15 @@ export default function FeeSetupPage() {
   const [selectedAnnualCategories, setSelectedAnnualCategories] = useState([])
   const [selectedMonthlyCategories, setSelectedMonthlyCategories] = useState([])
   const [annualShowConfirm, setAnnualShowConfirm] = useState(false)
+  const [singleStructForm, setSingleStructForm] = useState({
+    classId: '',
+    studentId: '',
+    feeType: 'MONTHLY',
+    amount: '',
+    effectiveFrom: new Date().toISOString().split('T')[0],
+    annualCategoryId: '',
+    monthlyCategoryId: '',
+  })
 
   // Student Discounts tab state
   const [discClassId, setDiscClassId] = useState('')
@@ -88,6 +97,7 @@ export default function FeeSetupPage() {
   const { sessionClasses } = useSessionClasses(activeAcademicYear?.id, activeSchool?.id)
   const resolvedGenClassFilter = resolveClassIdToMasterClassId(genClassFilter, activeAcademicYear?.id, sessionClasses)
   const resolvedGenAnnualClassFilter = resolveClassIdToMasterClassId(genAnnualClassFilter, activeAcademicYear?.id, sessionClasses)
+  const resolvedSingleStructClassId = resolveClassIdToMasterClassId(singleStructForm.classId, activeAcademicYear?.id, sessionClasses)
   const resolvedDiscClassId = resolveClassIdToMasterClassId(discClassId, activeAcademicYear?.id, sessionClasses)
 
   const data = useFeeSetup({
@@ -259,6 +269,34 @@ export default function FeeSetupPage() {
   })
   const monthlyCategories = monthlyCatData?.data?.results || monthlyCatData?.data || []
 
+  const { data: singleStructStudentsData, isLoading: singleStructStudentsLoading } = useQuery({
+    queryKey: ['single-struct-students', resolvedSingleStructClassId, activeAcademicYear?.id],
+    queryFn: () => studentsApi.getStudents({
+      class_id: resolvedSingleStructClassId,
+      is_active: true,
+      page_size: 9999,
+      ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
+    }),
+    enabled: activeTab === 'generate' && !!resolvedSingleStructClassId,
+    staleTime: 2 * 60_000,
+  })
+  const singleStructStudents = (singleStructStudentsData?.data?.results || singleStructStudentsData?.data || [])
+    .slice()
+    .sort((a, b) => (parseInt(a.roll_number) || 9999) - (parseInt(b.roll_number) || 9999))
+
+  const { data: singleStructStructuresData } = useQuery({
+    queryKey: ['single-struct-structures', resolvedSingleStructClassId, singleStructForm.feeType, activeAcademicYear?.id],
+    queryFn: () => financeApi.getFeeStructures({
+      class_id: resolvedSingleStructClassId,
+      fee_type: singleStructForm.feeType,
+      page_size: 9999,
+      ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
+    }),
+    enabled: activeTab === 'generate' && !!resolvedSingleStructClassId && !!singleStructForm.feeType,
+    staleTime: 60_000,
+  })
+  const singleStructStructures = singleStructStructuresData?.data?.results || singleStructStructuresData?.data || []
+
   // Generate preview queries
   const { data: monthlyPreview, isFetching: monthlyPreviewLoading } = useQuery({
     queryKey: ['generate-preview', 'MONTHLY', resolvedGenClassFilter, genMonth, genYear, activeAcademicYear?.id],
@@ -286,6 +324,51 @@ export default function FeeSetupPage() {
 
   const mPreview = monthlyPreview?.data
   const aPreview = annualPreview?.data
+
+  const createSingleStructureMutation = useMutation({
+    mutationFn: (payload) => financeApi.createFeeStructure(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['feeStructures'] })
+      queryClient.invalidateQueries({ queryKey: ['feeStructures-all'] })
+      queryClient.invalidateQueries({ queryKey: ['feeStructures-class'] })
+      queryClient.invalidateQueries({ queryKey: ['annual-fee-structures-all'] })
+      queryClient.invalidateQueries({ queryKey: ['annual-fee-structures-class'] })
+      queryClient.invalidateQueries({ queryKey: ['monthly-fee-structures-all'] })
+      queryClient.invalidateQueries({ queryKey: ['generate-preview'] })
+      setSingleStructForm(prev => ({
+        ...prev,
+        studentId: '',
+        amount: '',
+      }))
+    },
+  })
+
+  const selectedSingleStructCategoryId = singleStructForm.feeType === 'ANNUAL'
+    ? singleStructForm.annualCategoryId
+    : singleStructForm.monthlyCategoryId
+
+  const matchingSingleStructClassStructure = useMemo(() => {
+    if (!resolvedSingleStructClassId || !selectedSingleStructCategoryId) return null
+
+    return singleStructStructures.find((fs) => {
+      if (!fs.class_obj || fs.student) return false
+      if (singleStructForm.feeType === 'ANNUAL') {
+        return String(fs.annual_category || '') === String(selectedSingleStructCategoryId)
+      }
+      return String(fs.monthly_category || '') === String(selectedSingleStructCategoryId)
+    }) || null
+  }, [resolvedSingleStructClassId, selectedSingleStructCategoryId, singleStructStructures, singleStructForm.feeType])
+
+  useEffect(() => {
+    if (!resolvedSingleStructClassId || !selectedSingleStructCategoryId) return
+
+    if (matchingSingleStructClassStructure?.monthly_amount != null) {
+      setSingleStructForm(prev => ({
+        ...prev,
+        amount: String(matchingSingleStructClassStructure.monthly_amount),
+      }))
+    }
+  }, [resolvedSingleStructClassId, selectedSingleStructCategoryId, matchingSingleStructClassStructure])
 
   const handleAssignSubmit = () => {
     if (!assignModal || !assignSelectedId || !activeAcademicYear?.id) return
@@ -592,6 +675,145 @@ export default function FeeSetupPage() {
                   <p className="mt-3 text-sm text-red-600">{getErrorMessage(data.generateAnnualMutation.error, 'Failed to generate annual fees')}</p>
                 )}
               </>
+            )}
+          </div>
+
+          {/* === SINGLE STUDENT FEE STRUCTURE === */}
+          <div className="border-t border-gray-200 pt-6 mt-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Create Single Student Fee Structure</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Add a one-off student-level fee structure override for a specific student.
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Class <span className="text-red-500">*</span></label>
+                <ClassSelector
+                  value={singleStructForm.classId}
+                  onChange={(e) => setSingleStructForm(prev => ({
+                    ...prev,
+                    classId: e.target.value,
+                    studentId: '',
+                    amount: '',
+                  }))}
+                  className="input-field"
+                  classes={feeSetupClassOptions}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Student <span className="text-red-500">*</span></label>
+                <select
+                  value={singleStructForm.studentId}
+                  onChange={(e) => setSingleStructForm(prev => ({ ...prev, studentId: e.target.value }))}
+                  disabled={!singleStructForm.classId || singleStructStudentsLoading}
+                  className="input-field text-sm"
+                >
+                  <option value="">{!singleStructForm.classId ? 'Select class first' : (singleStructStudentsLoading ? 'Loading students...' : 'Select student')}</option>
+                  {singleStructStudents.map(s => (
+                    <option key={s.id} value={s.id}>{s.name}{s.roll_number ? ` (Roll #${s.roll_number})` : ''}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Fee Type <span className="text-red-500">*</span></label>
+                <select
+                  value={singleStructForm.feeType}
+                  onChange={(e) => setSingleStructForm(prev => ({
+                    ...prev,
+                    feeType: e.target.value,
+                    annualCategoryId: '',
+                    monthlyCategoryId: '',
+                    amount: '',
+                  }))}
+                  className="input-field text-sm"
+                >
+                  <option value="MONTHLY">Monthly</option>
+                  <option value="ANNUAL">Annual</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Category <span className="text-red-500">*</span></label>
+                <select
+                  value={selectedSingleStructCategoryId}
+                  onChange={(e) => setSingleStructForm(prev => ({
+                    ...prev,
+                    amount: '',
+                    annualCategoryId: prev.feeType === 'ANNUAL' ? e.target.value : '',
+                    monthlyCategoryId: prev.feeType === 'MONTHLY' ? e.target.value : '',
+                  }))}
+                  className="input-field text-sm"
+                >
+                  <option value="">Select category</option>
+                  {(singleStructForm.feeType === 'ANNUAL' ? annualCategories : monthlyCategories).map(cat => (
+                    <option key={cat.id} value={cat.id}>{cat.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Amount <span className="text-red-500">*</span></label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={singleStructForm.amount}
+                  onChange={(e) => setSingleStructForm(prev => ({ ...prev, amount: e.target.value }))}
+                  className="input-field text-sm"
+                  placeholder="0.00"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Effective From <span className="text-red-500">*</span></label>
+                <input
+                  type="date"
+                  value={singleStructForm.effectiveFrom}
+                  onChange={(e) => setSingleStructForm(prev => ({ ...prev, effectiveFrom: e.target.value }))}
+                  className="input-field text-sm"
+                />
+              </div>
+            </div>
+
+            {resolvedSingleStructClassId && singleStructForm.studentId && selectedSingleStructCategoryId && !matchingSingleStructClassStructure && (
+              <p className="mb-3 text-xs text-amber-600 bg-amber-50 p-2 rounded">
+                No matching class structure amount was found for the selected type and category. Enter the amount manually.
+              </p>
+            )}
+
+            <button
+              type="button"
+              onClick={() => {
+                const payload = {
+                  student: parseInt(singleStructForm.studentId),
+                  fee_type: singleStructForm.feeType,
+                  monthly_amount: parseFloat(singleStructForm.amount),
+                  effective_from: singleStructForm.effectiveFrom,
+                  ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
+                  ...(singleStructForm.feeType === 'ANNUAL' && singleStructForm.annualCategoryId && { annual_category: parseInt(singleStructForm.annualCategoryId) }),
+                  ...(singleStructForm.feeType === 'MONTHLY' && singleStructForm.monthlyCategoryId && { monthly_category: parseInt(singleStructForm.monthlyCategoryId) }),
+                }
+                createSingleStructureMutation.mutate(payload)
+              }}
+              disabled={
+                createSingleStructureMutation.isPending
+                || !resolvedSingleStructClassId
+                || !singleStructForm.studentId
+                || !selectedSingleStructCategoryId
+                || !singleStructForm.amount
+                || !singleStructForm.effectiveFrom
+              }
+              className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50"
+            >
+              {createSingleStructureMutation.isPending ? 'Creating...' : 'Create Student Fee Structure'}
+            </button>
+
+            {createSingleStructureMutation.isSuccess && (
+              <p className="mt-3 text-sm text-green-700 bg-green-50 p-3 rounded">Student fee structure created successfully.</p>
+            )}
+            {createSingleStructureMutation.isError && (
+              <p className="mt-3 text-sm text-red-600">{getErrorMessage(createSingleStructureMutation.error, 'Failed to create student fee structure')}</p>
             )}
           </div>
         </div>

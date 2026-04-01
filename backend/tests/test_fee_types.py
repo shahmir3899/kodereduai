@@ -765,6 +765,96 @@ class TestBulkFeeStructure:
         ).exists()
         assert monthly_active, "G2 MONTHLY structure was deactivated by ANNUAL bulk_set"
 
+    def test_bulk_set_students_annual_requires_category(self, seed_data, api):
+        """G3 - ANNUAL student overrides must provide annual_category."""
+        token = seed_data['tokens']['admin']
+        sid = seed_data['SID_A']
+        class_1 = seed_data['classes'][0]
+        student = seed_data['students'][0]
+
+        resp = api.post('/api/finance/fee-structures/bulk_set_students/', {
+            'class_id': class_1.id,
+            'fee_type': 'ANNUAL',
+            'effective_from': str(date.today()),
+            'students': [
+                {
+                    'student_id': student.id,
+                    'monthly_amount': '12000.00',
+                },
+            ],
+        }, token, sid)
+
+        assert resp.status_code == 400, f"G3 expected 400, got {resp.status_code}"
+
+    def test_annual_student_override_by_category_used_in_generation(self, seed_data, api):
+        """G4 - Category-scoped ANNUAL student override is used during annual fee generation."""
+        from finance.models import AnnualFeeCategory, FeePayment, FeeStructure
+
+        token = seed_data['tokens']['admin']
+        sid = seed_data['SID_A']
+        class_1 = seed_data['classes'][0]
+        student = seed_data['students'][0]
+        other_student = seed_data['students'][1]
+
+        cat = AnnualFeeCategory.objects.create(
+            school=seed_data['school_a'],
+            name=f"{seed_data['prefix']}Annual Cat A",
+            description='Annual category for per-student override test',
+            is_active=True,
+        )
+
+        FeeStructure.objects.create(
+            school=seed_data['school_a'],
+            class_obj=class_1,
+            fee_type='ANNUAL',
+            annual_category=cat,
+            monthly_amount=Decimal('15000.00'),
+            effective_from=date.today() - timedelta(days=1),
+            is_active=True,
+        )
+
+        override_resp = api.post('/api/finance/fee-structures/bulk_set_students/', {
+            'class_id': class_1.id,
+            'fee_type': 'ANNUAL',
+            'effective_from': str(date.today()),
+            'students': [
+                {
+                    'student_id': student.id,
+                    'monthly_amount': '12000.00',
+                    'annual_category': cat.id,
+                },
+            ],
+        }, token, sid)
+        assert override_resp.status_code in (200, 201), f"G4 override save failed: {override_resp.status_code} {override_resp.content[:300]}"
+
+        gen_resp = api.post('/api/finance/fee-payments/generate_annual_fees/', {
+            'class_id': class_1.id,
+            'annual_category_ids': [cat.id],
+            'year': 2026,
+            'academic_year': seed_data['academic_year'].id,
+        }, token, sid)
+        assert gen_resp.status_code == 200, f"G4 generation failed: {gen_resp.status_code} {gen_resp.content[:300]}"
+
+        student_payment = FeePayment.objects.get(
+            school=seed_data['school_a'],
+            student=student,
+            fee_type='ANNUAL',
+            annual_category=cat,
+            month=0,
+            year=2026,
+        )
+        assert student_payment.amount_due == Decimal('12000.00')
+
+        other_payment = FeePayment.objects.get(
+            school=seed_data['school_a'],
+            student=other_student,
+            fee_type='ANNUAL',
+            annual_category=cat,
+            month=0,
+            year=2026,
+        )
+        assert other_payment.amount_due == Decimal('15000.00')
+
 
 # ====================================================================
 # LEVEL H: PERMISSIONS & SCHOOL ISOLATION

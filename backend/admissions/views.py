@@ -5,7 +5,7 @@ notes, and followups.
 
 from datetime import date
 
-from django.db import transaction
+from django.db import transaction, IntegrityError
 from django.db.models import Q
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
@@ -201,89 +201,90 @@ class AdmissionEnquiryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
         errors_list = []
         fees_generated_count = 0
 
-        # Calculate max roll from StudentEnrollment for the TARGET year only
-        # Roll numbers are session-scoped — uniqueness is per (school, year, class)
-        existing_rolls = StudentEnrollment.objects.filter(
+        from academic_sessions.roll_allocator_service import RollAllocatorService
+        allocator = RollAllocatorService(
             school_id=school_id,
-            academic_year=academic_year,
-            class_obj=class_obj,
-        ).values_list('roll_number', flat=True)
-
-        max_roll = 0
-        for r in existing_rolls:
-            try:
-                max_roll = max(max_roll, int(r))
-            except (ValueError, TypeError):
-                pass
+            academic_year_id=academic_year.id,
+            class_obj_id=class_obj.id,
+        )
 
         for enquiry in enquiries:
-            max_roll += 1
-            roll_number = str(max_roll)
-
             try:
-                with transaction.atomic():
-                    student = Student.objects.create(
-                        school_id=school_id,
-                        class_obj=class_obj,
-                        roll_number=roll_number,
-                        name=enquiry.name,
-                        parent_name=enquiry.father_name,
-                        parent_phone=enquiry.mobile,
-                        admission_date=date.today(),
-                    )
+                student = None
+                student_fees = []
+                roll_number = ''
 
-                    StudentEnrollment.objects.create(
-                        school_id=school_id,
-                        student=student,
-                        academic_year=academic_year,
-                        class_obj=class_obj,
-                        roll_number=roll_number,
-                        status='ACTIVE',
-                    )
+                for attempt in range(3):
+                    try:
+                        with transaction.atomic():
+                            roll_number = allocator.resolve_roll()
 
-                    enquiry.status = 'CONVERTED'
-                    enquiry.converted_student = student
-                    enquiry.save(update_fields=['status', 'converted_student', 'updated_at'])
+                            student = Student.objects.create(
+                                school_id=school_id,
+                                class_obj=class_obj,
+                                roll_number=roll_number,
+                                name=enquiry.name,
+                                parent_name=enquiry.father_name,
+                                parent_phone=enquiry.mobile,
+                                admission_date=date.today(),
+                            )
 
-                    AdmissionNote.objects.create(
-                        enquiry=enquiry,
-                        user=request.user,
-                        note=f"Converted to student #{student.id} (Roll: {roll_number}, Class: {class_obj.name})",
-                        note_type='STATUS_CHANGE',
-                    )
+                            StudentEnrollment.objects.create(
+                                school_id=school_id,
+                                student=student,
+                                academic_year=academic_year,
+                                class_obj=class_obj,
+                                roll_number=roll_number,
+                                status='ACTIVE',
+                            )
 
-                    # Generate fee records if requested
-                    student_fees = []
-                    if generate_fees and fee_types_to_generate:
-                        from finance.models import FeePayment, resolve_fee_amount
-                        current_date = date.today()
+                            enquiry.status = 'CONVERTED'
+                            enquiry.converted_student = student
+                            enquiry.save(update_fields=['status', 'converted_student', 'updated_at'])
 
-                        for ft in fee_types_to_generate:
-                            m = current_date.month if ft == 'MONTHLY' else 0
-                            y = current_date.year
+                            AdmissionNote.objects.create(
+                                enquiry=enquiry,
+                                user=request.user,
+                                note=f"Converted to student #{student.id} (Roll: {roll_number}, Class: {class_obj.name})",
+                                note_type='STATUS_CHANGE',
+                            )
 
-                            amount = resolve_fee_amount(student, ft)
-                            if amount is not None:
-                                FeePayment.objects.create(
-                                    school_id=school_id,
-                                    student=student,
-                                    fee_type=ft,
-                                    month=m,
-                                    year=y,
-                                    amount_due=amount,
-                                    amount_paid=0,
-                                    academic_year_id=academic_year_id,
-                                )
-                                fees_generated_count += 1
-                                student_fees.append(ft)
+                            # Generate fee records if requested
+                            if generate_fees and fee_types_to_generate:
+                                from finance.models import FeePayment, resolve_fee_amount
+                                current_date = date.today()
 
-                    created_students.append({
-                        'enquiry_id': enquiry.id,
-                        'student_id': student.id,
-                        'name': student.name,
-                        'roll_number': roll_number,
-                        'fees_generated': student_fees,
-                    })
+                                for ft in fee_types_to_generate:
+                                    m = current_date.month if ft == 'MONTHLY' else 0
+                                    y = current_date.year
+
+                                    amount = resolve_fee_amount(student, ft)
+                                    if amount is not None:
+                                        FeePayment.objects.create(
+                                            school_id=school_id,
+                                            student=student,
+                                            fee_type=ft,
+                                            month=m,
+                                            year=y,
+                                            amount_due=amount,
+                                            amount_paid=0,
+                                            academic_year_id=academic_year_id,
+                                        )
+                                        fees_generated_count += 1
+                                        student_fees.append(ft)
+                        break
+                    except IntegrityError:
+                        if attempt == 2:
+                            raise
+                        continue
+
+                created_students.append({
+                    'enquiry_id': enquiry.id,
+                    'student_id': student.id,
+                    'name': student.name,
+                    'roll_number': roll_number,
+                    'fees_generated': student_fees,
+                })
             except Exception as e:
                 errors_list.append({
                     'enquiry_id': enquiry.id,

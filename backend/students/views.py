@@ -180,6 +180,7 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             queryset = queryset.annotate(
                 _enrollment_roll_number=Subquery(enrollment_roll),
             )
+            return queryset.order_by('class_obj__grade_level', 'class_obj__name', '_enrollment_roll_number', 'name')
 
         return queryset.order_by('class_obj__grade_level', 'class_obj__name', 'roll_number')
 

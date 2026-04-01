@@ -106,6 +106,14 @@ export function useFeeCollection({ month, year, classFilter, statusFilter, feeTy
     },
   })
 
+  const generateAnnualMutation = useMutation({
+    mutationFn: (data) => financeApi.generateAnnualFees(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['feePayments'] })
+      queryClient.invalidateQueries({ queryKey: ['generate-preview'] })
+    },
+  })
+
   const createFeePaymentMutation = useMutation({
     mutationFn: (data) => financeApi.createPayment(data),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['feePayments'] }),
@@ -283,6 +291,7 @@ export function useFeeCollection({ month, year, classFilter, statusFilter, feeTy
     bulkUpdateMutation,
     bulkDeleteMutation,
     generateOnetimeMutation,
+    generateAnnualMutation,
     createFeePaymentMutation,
   }
 }

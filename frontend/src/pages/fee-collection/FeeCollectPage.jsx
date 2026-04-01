@@ -320,7 +320,10 @@ export default function FeeCollectPage() {
         classList={data.classList}
         mutation={data.generateMutation}
         onetimeMutation={data.generateOnetimeMutation}
+        annualMutation={data.generateAnnualMutation}
         academicYearId={activeAcademicYear?.id}
+        annualCategories={data.annualCategories}
+        monthlyCategories={data.monthlyCategories}
       />
 
       <CreateSingleFeeModal

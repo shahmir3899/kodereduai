@@ -265,14 +265,23 @@ class FeeStructureViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Model
                 for item in students_data:
                     student_id = item['student_id']
                     monthly_amount = item['monthly_amount']
+                    annual_category_id = item.get('annual_category')
+                    monthly_category_id = item.get('monthly_category')
 
-                    # Deactivate any existing student-level fee structure
-                    FeeStructure.objects.filter(
+                    # Deactivate matching-scope existing student-level fee structures only.
+                    qs = FeeStructure.objects.filter(
                         school_id=school_id,
                         student_id=student_id,
                         fee_type=fee_type,
                         is_active=True,
-                    ).update(is_active=False)
+                    )
+                    if fee_type == 'ANNUAL':
+                        qs = qs.filter(annual_category_id=annual_category_id)
+                    elif monthly_category_id:
+                        qs = qs.filter(monthly_category_id=monthly_category_id)
+                    else:
+                        qs = qs.filter(monthly_category__isnull=True)
+                    qs.update(is_active=False)
 
                     # Create student-level fee structure (no academic_year,
                     # consistent with class-level bulk_set; resolve_fee_amount
@@ -281,6 +290,8 @@ class FeeStructureViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Model
                         school_id=school_id,
                         student_id=student_id,
                         fee_type=fee_type,
+                        annual_category_id=annual_category_id if fee_type == 'ANNUAL' else None,
+                        monthly_category_id=monthly_category_id if fee_type == 'MONTHLY' else None,
                         monthly_amount=monthly_amount,
                         effective_from=effective_from,
                     )
@@ -411,9 +422,11 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
 
     @action(detail=False, methods=['get'])
     def resolve_amount(self, request):
-        """Resolve fee amount for a student + fee_type from FeeStructure."""
+        """Resolve fee amount for a student + fee_type and optional category from FeeStructure."""
         student_id = request.query_params.get('student_id')
         fee_type = request.query_params.get('fee_type', 'MONTHLY')
+        annual_category_id = request.query_params.get('annual_category')
+        monthly_category_id = request.query_params.get('monthly_category')
 
         if not student_id:
             return Response({'detail': 'student_id is required.'}, status=400)
@@ -427,17 +440,38 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         except Student.DoesNotExist:
             return Response({'detail': 'Student not found.'}, status=404)
 
-        amount = resolve_fee_amount(student, fee_type)
+        amount = resolve_fee_amount(
+            student,
+            fee_type,
+            annual_category_id=annual_category_id,
+            monthly_category_id=monthly_category_id,
+        )
         source = None
         if amount is not None:
+            today = date.today()
+            extra_filters = {}
+            if fee_type == 'ANNUAL' and annual_category_id:
+                extra_filters['annual_category_id'] = annual_category_id
+            elif fee_type == 'MONTHLY' and monthly_category_id:
+                extra_filters['monthly_category_id'] = monthly_category_id
+
             has_student_override = FeeStructure.objects.filter(
-                school_id=school_id, student=student, fee_type=fee_type, is_active=True
+                school_id=school_id,
+                student=student,
+                fee_type=fee_type,
+                is_active=True,
+                effective_from__lte=today,
+                **extra_filters,
+            ).filter(
+                Q(effective_to__isnull=True) | Q(effective_to__gte=today)
             ).exists()
             source = 'student_override' if has_student_override else 'class_default'
 
         return Response({
             'student_id': int(student_id),
             'fee_type': fee_type,
+            'annual_category': int(annual_category_id) if annual_category_id else None,
+            'monthly_category': int(monthly_category_id) if monthly_category_id else None,
             'amount': str(amount) if amount is not None else None,
             'source': source,
         })
@@ -686,7 +720,8 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         serializer = GenerateOnetimeFeesSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        student_ids = serializer.validated_data['student_ids']
+        student_ids = serializer.validated_data.get('student_ids') or []
+        class_id = serializer.validated_data.get('class_id')
         fee_types = serializer.validated_data['fee_types']
         year = serializer.validated_data['year']
         month_for_monthly = serializer.validated_data.get('month', 0)
@@ -706,8 +741,19 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
                 academic_year_id = ay.id
 
         students = Student.objects.filter(
-            id__in=student_ids, school_id=school_id, is_active=True
-        ).select_related('class_obj')
+            school_id=school_id,
+            is_active=True,
+        )
+        if student_ids:
+            students = students.filter(id__in=student_ids)
+        elif class_id:
+            students = students.filter(class_obj_id=class_id)
+        if academic_year_id:
+            students = students.filter(
+                enrollments__academic_year_id=academic_year_id,
+                enrollments__is_active=True,
+            )
+        students = students.select_related('class_obj').distinct()
 
         created_count = 0
         skipped_count = 0
@@ -755,7 +801,7 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         serializer = GenerateAnnualFeesSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        class_id = serializer.validated_data['class_id']
+        class_id = serializer.validated_data.get('class_id')
         cat_ids = serializer.validated_data['annual_category_ids']
         year = serializer.validated_data['year']
 
@@ -782,8 +828,12 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
             return Response({'detail': 'No valid annual categories found.'}, status=400)
 
         students = Student.objects.filter(
-            school_id=school_id, class_obj_id=class_id, is_active=True,
-        ).select_related('class_obj')
+            school_id=school_id,
+            is_active=True,
+        )
+        if class_id:
+            students = students.filter(class_obj_id=class_id)
+        students = students.select_related('class_obj')
 
         created_count = 0
         skipped_count = 0

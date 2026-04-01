@@ -90,18 +90,32 @@ export function PaymentModal({ payment, form, setForm, onSubmit, onClose, isPend
   )
 }
 
-export function GenerateModal({ show, onClose, month, year, classList, mutation, onetimeMutation, academicYearId }) {
+export function GenerateModal({
+  show,
+  onClose,
+  month,
+  year,
+  classList,
+  mutation,
+  onetimeMutation,
+  annualMutation,
+  academicYearId,
+  annualCategories = [],
+  monthlyCategories = [],
+}) {
   const { activeSchool } = useAuth()
   const [confirmed, setConfirmed] = useState(false)
   const [generateFeeType, setGenerateFeeType] = useState('MONTHLY')
-  const [onetimeClass, setOnetimeClass] = useState('')
   const [showConfirm, setShowConfirm] = useState(false)
   const [showStudentList, setShowStudentList] = useState(false)
   const [modalMonth, setModalMonth] = useState(month)
   const [modalYear, setModalYear] = useState(year)
   const [modalClassFilter, setModalClassFilter] = useState('')
+  const [selectedAnnualCategories, setSelectedAnnualCategories] = useState([])
+  const [selectedMonthlyCategories, setSelectedMonthlyCategories] = useState([])
 
   const isMonthly = generateFeeType === 'MONTHLY'
+  const isAnnual = generateFeeType === 'ANNUAL'
   const { sessionClasses } = useSessionClasses(academicYearId, activeSchool?.id)
   const feeModalClassOptions = useMemo(() => {
     if (!academicYearId) return classList
@@ -113,74 +127,109 @@ export function GenerateModal({ show, onClose, month, year, classList, mutation,
     })
   }, [academicYearId, classList, sessionClasses])
   const resolvedModalClassFilter = resolveClassIdToMasterClassId(modalClassFilter, academicYearId, sessionClasses)
-  const resolvedOnetimeClass = resolveClassIdToMasterClassId(onetimeClass, academicYearId, sessionClasses)
 
-  // Auto-close modal when task is submitted (monthly = background task) or completes (onetime = regular mutation)
+  const selectedAnnualCategoryNames = annualCategories
+    .filter((cat) => selectedAnnualCategories.includes(cat.id))
+    .map((cat) => cat.name)
+  const selectedMonthlyCategoryNames = monthlyCategories
+    .filter((cat) => selectedMonthlyCategories.includes(cat.id))
+    .map((cat) => cat.name)
+
+  const previewEnabled = show && (!isAnnual || selectedAnnualCategories.length > 0)
+  const previewParams = useMemo(() => ({
+    fee_type: generateFeeType,
+    year: modalYear,
+    month: isMonthly ? modalMonth : 0,
+    ...(resolvedModalClassFilter && { class_id: resolvedModalClassFilter }),
+    ...(academicYearId && { academic_year: academicYearId }),
+    ...(isAnnual && selectedAnnualCategories.length > 0 && { annual_categories: selectedAnnualCategories.join(',') }),
+    ...(isMonthly && selectedMonthlyCategories.length > 0 && { monthly_categories: selectedMonthlyCategories.join(',') }),
+  }), [generateFeeType, modalYear, isMonthly, modalMonth, resolvedModalClassFilter, academicYearId, isAnnual, selectedAnnualCategories, selectedMonthlyCategories])
+
+  const { data: previewData, isFetching: previewLoading } = useQuery({
+    queryKey: ['generate-preview', generateFeeType, resolvedModalClassFilter, modalMonth, modalYear, academicYearId, selectedAnnualCategories, selectedMonthlyCategories],
+    queryFn: () => financeApi.previewGeneration(previewParams),
+    enabled: previewEnabled,
+    staleTime: 30_000,
+  })
+
+  // Auto-close modal when task is submitted or completes
   useEffect(() => {
-    if (show && (mutation.submittedTaskId || onetimeMutation?.isSuccess)) {
+    if (show && (mutation.submittedTaskId || onetimeMutation?.isSuccess || annualMutation?.isSuccess)) {
       const timer = setTimeout(() => handleClose(), mutation.submittedTaskId ? 300 : 1500)
       return () => clearTimeout(timer)
     }
-  }, [show, mutation.submittedTaskId, onetimeMutation?.isSuccess])
+  }, [show, mutation.submittedTaskId, onetimeMutation?.isSuccess, annualMutation?.isSuccess])
 
   // Reset state when modal opens
   useEffect(() => {
     if (show) {
       setConfirmed(false)
       setGenerateFeeType('MONTHLY')
-      setOnetimeClass('')
       setShowConfirm(false)
       setShowStudentList(false)
       setModalMonth(month)
       setModalYear(year)
       setModalClassFilter('')
+      setSelectedAnnualCategories([])
+      setSelectedMonthlyCategories([])
       mutation.reset?.()
       onetimeMutation?.reset?.()
+      annualMutation?.reset?.()
     }
   }, [show])
-
-  // Preview: dry-run showing what will be created (monthly)
-  const { data: monthlyPreview, isFetching: monthlyPreviewLoading } = useQuery({
-    queryKey: ['generate-preview', 'MONTHLY', resolvedModalClassFilter, modalMonth, modalYear, academicYearId],
-    queryFn: () => financeApi.previewGeneration({
-      fee_type: 'MONTHLY', year: modalYear, month: modalMonth,
-      ...(resolvedModalClassFilter && { class_id: resolvedModalClassFilter }),
-      ...(academicYearId && { academic_year: academicYearId }),
-    }),
-    enabled: show && isMonthly,
-    staleTime: 30_000,
-  })
-
-  // Preview: dry-run for non-monthly
-  const { data: onetimePreview, isFetching: onetimePreviewLoading } = useQuery({
-    queryKey: ['generate-preview', generateFeeType, resolvedOnetimeClass, modalYear, academicYearId],
-    queryFn: () => financeApi.previewGeneration({
-      fee_type: generateFeeType, class_id: resolvedOnetimeClass, year: modalYear, month: 0,
-      ...(academicYearId && { academic_year: academicYearId }),
-    }),
-    enabled: show && !isMonthly && !!resolvedOnetimeClass,
-    staleTime: 30_000,
-  })
 
   if (!show) return null
 
   const feeLabel = FEE_TYPE_TABS.find(t => t.value === generateFeeType)?.label || 'Fee'
-  const mPreview = monthlyPreview?.data
-  const oPreview = onetimePreview?.data
-  const selectedOnetimeClassLabel = feeModalClassOptions.find(c => String(c.id) === String(onetimeClass))?.label
-    || classList.find(c => String(c.id) === String(onetimeClass))?.name
-    || ''
+  const preview = previewData?.data
+  const selectedClassLabel = feeModalClassOptions.find(c => String(c.id) === String(modalClassFilter))?.label
+    || classList.find(c => String(c.id) === String(modalClassFilter))?.name
+    || 'All classes'
 
   const handleClose = () => {
     setConfirmed(false)
     setGenerateFeeType('MONTHLY')
-    setOnetimeClass('')
     setShowConfirm(false)
     setShowStudentList(false)
     setModalMonth(month)
     setModalYear(year)
     setModalClassFilter('')
+    setSelectedAnnualCategories([])
+    setSelectedMonthlyCategories([])
     onClose()
+  }
+
+  const handleGenerateMonthly = () => {
+    const data = {
+      month: modalMonth,
+      year: modalYear,
+      ...(resolvedModalClassFilter && { class_id: parseInt(resolvedModalClassFilter) }),
+      ...(academicYearId && { academic_year: academicYearId }),
+      ...(selectedMonthlyCategories.length > 0 && { monthly_category_ids: selectedMonthlyCategories }),
+    }
+    if (mutation.trigger) mutation.trigger(data)
+    else mutation.mutate(data)
+  }
+
+  const handleGenerateConfirmed = () => {
+    if (isAnnual) {
+      annualMutation?.mutate({
+        ...(resolvedModalClassFilter && { class_id: parseInt(resolvedModalClassFilter) }),
+        annual_category_ids: selectedAnnualCategories,
+        year: modalYear,
+        ...(academicYearId && { academic_year: academicYearId }),
+      })
+      return
+    }
+
+    onetimeMutation?.mutate({
+      ...(resolvedModalClassFilter && { class_id: parseInt(resolvedModalClassFilter) }),
+      fee_types: [generateFeeType],
+      year: modalYear,
+      month: 0,
+      ...(academicYearId && { academic_year: academicYearId }),
+    })
   }
 
   return (
@@ -195,7 +244,11 @@ export function GenerateModal({ show, onClose, month, year, classList, mutation,
               <button
                 key={ft.value}
                 type="button"
-                onClick={() => { setGenerateFeeType(ft.value); setShowConfirm(false); setShowStudentList(false) }}
+                onClick={() => {
+                  setGenerateFeeType(ft.value)
+                  setShowConfirm(false)
+                  setShowStudentList(false)
+                }}
                 className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-colors ${
                   generateFeeType === ft.value
                     ? 'bg-primary-600 text-white'
@@ -205,6 +258,76 @@ export function GenerateModal({ show, onClose, month, year, classList, mutation,
                 {ft.label}
               </button>
             ))}
+          </div>
+
+          {isMonthly && (
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Categories (optional)</label>
+              {monthlyCategories.length === 0 ? (
+                <p className="text-xs text-amber-600 bg-amber-50 p-2 rounded">No monthly categories available.</p>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  {monthlyCategories.map((cat) => (
+                    <label key={cat.id} className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selectedMonthlyCategories.includes(cat.id)}
+                        onChange={(e) => {
+                          setShowConfirm(false)
+                          if (e.target.checked) setSelectedMonthlyCategories([...selectedMonthlyCategories, cat.id])
+                          else setSelectedMonthlyCategories(selectedMonthlyCategories.filter((id) => id !== cat.id))
+                        }}
+                        className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                      />
+                      <span className="text-sm text-gray-700">{cat.name}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+              <p className="text-xs text-gray-400 mt-1">Leave all unchecked to generate for all active monthly categories.</p>
+            </div>
+          )}
+
+          {isAnnual && (
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Categories <span className="text-red-500">*</span></label>
+              {annualCategories.length === 0 ? (
+                <p className="text-xs text-amber-600 bg-amber-50 p-2 rounded">No annual categories available.</p>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  {annualCategories.map((cat) => (
+                    <label key={cat.id} className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selectedAnnualCategories.includes(cat.id)}
+                        onChange={(e) => {
+                          setShowConfirm(false)
+                          if (e.target.checked) setSelectedAnnualCategories([...selectedAnnualCategories, cat.id])
+                          else setSelectedAnnualCategories(selectedAnnualCategories.filter((id) => id !== cat.id))
+                        }}
+                        className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                      />
+                      <span className="text-sm text-gray-700">{cat.name}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Class (optional)</label>
+            <ClassSelector
+              value={modalClassFilter}
+              onChange={(e) => {
+                setModalClassFilter(e.target.value)
+                setShowConfirm(false)
+                setShowStudentList(false)
+              }}
+              className="input-field"
+              showAllOption
+              classes={feeModalClassOptions}
+            />
           </div>
 
           {/* MONTHLY tab */}
@@ -225,30 +348,30 @@ export function GenerateModal({ show, onClose, month, year, classList, mutation,
                 </div>
               </div>
               <p className="text-sm text-gray-600 mb-2">
-                Create monthly fee records for all enrolled students for <strong>{MONTHS[modalMonth - 1]} {modalYear}</strong>.
+                Create monthly fee records for enrolled students in <strong>{selectedClassLabel}</strong> for <strong>{MONTHS[modalMonth - 1]} {modalYear}</strong>.
               </p>
               <p className="text-sm text-gray-500 mb-4">
                 Unpaid balances from the previous month will be automatically carried forward.
               </p>
 
               {/* Live preview */}
-              {monthlyPreviewLoading && <p className="text-sm text-gray-400 mb-4">Calculating preview...</p>}
-              {mPreview && !monthlyPreviewLoading && (
+              {previewLoading && <p className="text-sm text-gray-400 mb-4">Calculating preview...</p>}
+              {preview && !previewLoading && (
                 <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-1">
                   <p className="text-sm text-blue-800">
-                    <span className="font-medium">{mPreview.will_create}</span> new records will be created
-                    {mPreview.will_create > 0 && <> (total: <span className="font-medium">{Number(mPreview.total_amount).toLocaleString()}</span>)</>}
+                    <span className="font-medium">{preview.will_create}</span> new records will be created
+                    {preview.will_create > 0 && <> (total: <span className="font-medium">{Number(preview.total_amount).toLocaleString()}</span>)</>}
                   </p>
-                  {mPreview.already_exist > 0 && (
-                    <p className="text-xs text-blue-600">{mPreview.already_exist} already exist (will skip)</p>
+                  {preview.already_exist > 0 && (
+                    <p className="text-xs text-blue-600">{preview.already_exist} already exist (will skip)</p>
                   )}
-                  {mPreview.no_fee_structure > 0 && (
-                    <p className="text-xs text-amber-600">{mPreview.no_fee_structure} students have no fee structure (will skip)</p>
+                  {preview.no_fee_structure > 0 && (
+                    <p className="text-xs text-amber-600">{preview.no_fee_structure} students have no fee structure (will skip)</p>
                   )}
                 </div>
               )}
 
-              {mPreview?.already_exist > 0 && (
+              {preview?.already_exist > 0 && (
                 <div className="mb-4">
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} className="rounded border-amber-300 text-amber-600 focus:ring-amber-500" />
@@ -256,25 +379,11 @@ export function GenerateModal({ show, onClose, month, year, classList, mutation,
                   </label>
                 </div>
               )}
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Filter by Class (optional)</label>
-                <ClassSelector
-                  value={modalClassFilter}
-                  onChange={(e) => setModalClassFilter(e.target.value)}
-                  className="input-field"
-                  showAllOption
-                  classes={feeModalClassOptions}
-                />
-              </div>
               <div className="flex gap-3">
                 <button onClick={handleClose} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">Cancel</button>
                 <button
-                  onClick={() => {
-                    const data = { month: modalMonth, year: modalYear, ...(resolvedModalClassFilter && { class_id: parseInt(resolvedModalClassFilter) }), ...(academicYearId && { academic_year: academicYearId }) }
-                    if (mutation.trigger) mutation.trigger(data)
-                    else mutation.mutate(data)
-                  }}
-                  disabled={(mutation.isSubmitting ?? mutation.isPending) || (mPreview?.already_exist > 0 && !confirmed) || mPreview?.will_create === 0}
+                  onClick={handleGenerateMonthly}
+                  disabled={(mutation.isSubmitting ?? mutation.isPending) || (preview?.already_exist > 0 && !confirmed) || preview?.will_create === 0}
                   className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50"
                 >
                   {(mutation.isSubmitting ?? mutation.isPending) ? 'Starting...' : 'Generate'}
@@ -290,21 +399,12 @@ export function GenerateModal({ show, onClose, month, year, classList, mutation,
             </>
           )}
 
-          {/* Non-MONTHLY tab */}
+          {/* Non-MONTHLY setup */}
           {!isMonthly && !showConfirm && (
             <>
               <p className="text-sm text-gray-600 mb-4">
-                Generate <strong>{feeLabel}</strong> fee records for all enrolled students in the selected class for <strong>{modalYear}</strong>.
+                Generate <strong>{feeLabel}</strong> fee records for enrolled students in <strong>{selectedClassLabel}</strong> for <strong>{modalYear}</strong>.
               </p>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Class <span className="text-red-500">*</span></label>
-                <ClassSelector
-                  value={onetimeClass}
-                  onChange={(e) => { setOnetimeClass(e.target.value); setShowStudentList(false) }}
-                  className="input-field"
-                  classes={feeModalClassOptions}
-                />
-              </div>
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Year</label>
                 <select value={modalYear} onChange={(e) => setModalYear(parseInt(e.target.value))} className="input-field">
@@ -313,45 +413,50 @@ export function GenerateModal({ show, onClose, month, year, classList, mutation,
               </div>
 
               {/* Live preview for non-monthly */}
-              {onetimePreviewLoading && onetimeClass && <p className="text-sm text-gray-400 mb-4">Calculating preview...</p>}
-              {oPreview && !onetimePreviewLoading && (
+              {isAnnual && selectedAnnualCategories.length === 0 && (
+                <p className="text-xs text-amber-600 bg-amber-50 p-2 rounded mb-4">Select at least one annual category to preview and generate annual records.</p>
+              )}
+              {previewLoading && previewEnabled && <p className="text-sm text-gray-400 mb-4">Calculating preview...</p>}
+              {preview && !previewLoading && (
                 <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-1">
                   <p className="text-sm text-blue-800">
-                    <span className="font-medium">{oPreview.will_create}</span> new {feeLabel.toLowerCase()} records
-                    {oPreview.will_create > 0 && <> (total: <span className="font-medium">{Number(oPreview.total_amount).toLocaleString()}</span>)</>}
+                    <span className="font-medium">{preview.will_create}</span> new {feeLabel.toLowerCase()} records
+                    {preview.will_create > 0 && <> (total: <span className="font-medium">{Number(preview.total_amount).toLocaleString()}</span>)</>}
                   </p>
-                  {oPreview.already_exist > 0 && (
-                    <p className="text-xs text-blue-600">{oPreview.already_exist} already exist (will skip)</p>
+                  {preview.already_exist > 0 && (
+                    <p className="text-xs text-blue-600">{preview.already_exist} already exist (will skip)</p>
                   )}
-                  {oPreview.no_fee_structure > 0 && (
-                    <p className="text-xs text-amber-600">{oPreview.no_fee_structure} students have no fee structure (will skip)</p>
+                  {preview.no_fee_structure > 0 && (
+                    <p className="text-xs text-amber-600">{preview.no_fee_structure} students have no fee structure (will skip)</p>
                   )}
-                  {oPreview.will_create > 0 && (
+                  {preview.will_create > 0 && (
                     <button
                       type="button"
                       onClick={() => setShowStudentList(!showStudentList)}
                       className="text-xs text-blue-700 hover:text-blue-900 underline mt-1"
                     >
-                      {showStudentList ? 'Hide' : 'Show'} student details{oPreview.has_more ? ` (first 50)` : ''}
+                      {showStudentList ? 'Hide' : 'Show'} student details{preview.has_more ? ` (first 50)` : ''}
                     </button>
                   )}
                 </div>
               )}
 
               {/* Expandable student preview list */}
-              {showStudentList && oPreview?.students?.length > 0 && (
+              {showStudentList && preview?.students?.length > 0 && (
                 <div className="mb-4 max-h-40 overflow-y-auto border border-gray-200 rounded-lg">
                   <table className="min-w-full text-xs">
                     <thead className="bg-gray-50 sticky top-0">
                       <tr>
                         <th className="px-2 py-1 text-left text-gray-500">Student</th>
+                        {(isAnnual || preview.students.some((s) => s.category)) && <th className="px-2 py-1 text-left text-gray-500">Category</th>}
                         <th className="px-2 py-1 text-right text-gray-500">Amount</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {oPreview.students.map(s => (
+                      {preview.students.map(s => (
                         <tr key={s.student_id}>
                           <td className="px-2 py-1 text-gray-700">{s.student_name}</td>
+                          {(isAnnual || preview.students.some((item) => item.category)) && <td className="px-2 py-1 text-gray-600">{s.category || '—'}</td>}
                           <td className="px-2 py-1 text-right text-gray-900">{Number(s.amount).toLocaleString()}</td>
                         </tr>
                       ))}
@@ -364,7 +469,7 @@ export function GenerateModal({ show, onClose, month, year, classList, mutation,
                 <button onClick={handleClose} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">Cancel</button>
                 <button
                   onClick={() => setShowConfirm(true)}
-                  disabled={!onetimeClass || !oPreview || oPreview.will_create === 0}
+                  disabled={!previewEnabled || !preview || preview.will_create === 0}
                   className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50"
                 >
                   Review & Generate
@@ -379,39 +484,35 @@ export function GenerateModal({ show, onClose, month, year, classList, mutation,
               <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-2 mb-4">
                 <p className="text-sm font-medium text-blue-900">Please confirm {feeLabel.toLowerCase()} fee generation:</p>
                 <div className="text-sm text-blue-800 space-y-1">
-                  <p><span className="font-medium">Class:</span> {selectedOnetimeClassLabel}</p>
+                  <p><span className="font-medium">Class:</span> {selectedClassLabel}</p>
                   <p><span className="font-medium">Fee Type:</span> {feeLabel}</p>
+                  {isAnnual && <p><span className="font-medium">Categories:</span> {selectedAnnualCategoryNames.join(', ')}</p>}
+                  {!isAnnual && isMonthly === false && preview?.students?.some((s) => s.category) === true && (
+                    <p><span className="font-medium">Categories:</span> {selectedMonthlyCategoryNames.join(', ')}</p>
+                  )}
                   <p><span className="font-medium">Year:</span> {modalYear}</p>
-                  <p><span className="font-medium">Records:</span> {oPreview?.will_create} new</p>
-                  <p><span className="font-medium">Total Amount:</span> {Number(oPreview?.total_amount || 0).toLocaleString()}</p>
+                  <p><span className="font-medium">Records:</span> {preview?.will_create} new</p>
+                  <p><span className="font-medium">Total Amount:</span> {Number(preview?.total_amount || 0).toLocaleString()}</p>
                 </div>
               </div>
               <div className="flex gap-3">
                 <button onClick={() => setShowConfirm(false)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">Back</button>
                 <button
-                  onClick={() => {
-                    onetimeMutation.mutate({
-                      student_ids: oPreview.students.map(s => s.student_id),
-                      fee_types: [generateFeeType],
-                      year: modalYear,
-                      month: 0,
-                      ...(academicYearId && { academic_year: academicYearId }),
-                    })
-                  }}
-                  disabled={onetimeMutation?.isPending}
+                  onClick={handleGenerateConfirmed}
+                  disabled={annualMutation?.isPending || onetimeMutation?.isPending}
                   className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50"
                 >
-                  {onetimeMutation?.isPending ? 'Generating...' : 'Confirm & Generate'}
+                  {(annualMutation?.isPending || onetimeMutation?.isPending) ? 'Generating...' : 'Confirm & Generate'}
                 </button>
               </div>
-              {onetimeMutation?.isSuccess && (
+              {(isAnnual ? annualMutation?.isSuccess : onetimeMutation?.isSuccess) && (
                 <div className="mt-3 text-sm text-green-700 bg-green-50 p-3 rounded">
-                  Created {onetimeMutation.data?.data?.created} records.
-                  {onetimeMutation.data?.data?.skipped > 0 && ` Skipped ${onetimeMutation.data.data.skipped} (already exist).`}
+                  Created {(isAnnual ? annualMutation?.data?.data?.created : onetimeMutation?.data?.data?.created)} records.
+                  {(isAnnual ? annualMutation?.data?.data?.skipped : onetimeMutation?.data?.data?.skipped) > 0 && ` Skipped ${isAnnual ? annualMutation.data.data.skipped : onetimeMutation.data.data.skipped} (already exist).`}
                 </div>
               )}
-              {onetimeMutation?.isError && (
-                <p className="mt-3 text-sm text-red-600">{getErrorMessage(onetimeMutation.error, 'Failed to generate fees')}</p>
+              {(isAnnual ? annualMutation?.isError : onetimeMutation?.isError) && (
+                <p className="mt-3 text-sm text-red-600">{getErrorMessage(isAnnual ? annualMutation.error : onetimeMutation.error, 'Failed to generate fees')}</p>
               )}
             </>
           )}
@@ -978,6 +1079,7 @@ export function CreateSingleFeeModal({ show, onClose, onSubmit, isPending, error
   const now = new Date()
   const initialForm = {
     classId: '', student: '', fee_type: 'MONTHLY',
+    annualCategoryId: '', monthlyCategoryId: '',
     month: now.getMonth() + 1, year: now.getFullYear(),
     amount_due: '', amount_paid: '0', notes: '',
     account: '', payment_method: 'CASH',
@@ -1012,11 +1114,34 @@ export function CreateSingleFeeModal({ show, onClose, onSubmit, isPending, error
     .slice()
     .sort((a, b) => (parseInt(a.roll_number) || 9999) - (parseInt(b.roll_number) || 9999))
 
-  // Auto-resolve fee amount from FeeStructure when student + fee_type are selected
+  const { data: annualCategoriesData } = useQuery({
+    queryKey: ['annual-categories'],
+    queryFn: () => financeApi.getAnnualCategories({}),
+    staleTime: 5 * 60_000,
+  })
+  const annualCategories = annualCategoriesData?.data?.results || annualCategoriesData?.data || []
+
+  const { data: monthlyCategoriesData } = useQuery({
+    queryKey: ['monthly-categories'],
+    queryFn: () => financeApi.getMonthlyCategories({}),
+    staleTime: 5 * 60_000,
+  })
+  const monthlyCategories = monthlyCategoriesData?.data?.results || monthlyCategoriesData?.data || []
+
+  const isMonthly = form.fee_type === 'MONTHLY'
+  const selectedCategoryId = isMonthly ? form.monthlyCategoryId : form.annualCategoryId
+  const selectedCategories = isMonthly ? monthlyCategories : annualCategories
+
+  // Auto-resolve fee amount from FeeStructure when student + fee_type + category are selected
   const { data: resolvedFee, isFetching: resolvingFee } = useQuery({
-    queryKey: ['resolve-fee-amount', form.student, form.fee_type],
-    queryFn: () => financeApi.resolveFeeAmount({ student_id: form.student, fee_type: form.fee_type }),
-    enabled: !!form.student && !!form.fee_type,
+    queryKey: ['resolve-fee-amount', form.student, form.fee_type, selectedCategoryId],
+    queryFn: () => financeApi.resolveFeeAmount({
+      student_id: form.student,
+      fee_type: form.fee_type,
+      ...(form.fee_type === 'ANNUAL' && form.annualCategoryId && { annual_category: form.annualCategoryId }),
+      ...(form.fee_type === 'MONTHLY' && form.monthlyCategoryId && { monthly_category: form.monthlyCategoryId }),
+    }),
+    enabled: !!form.student && !!form.fee_type && !!selectedCategoryId,
     staleTime: 60_000,
   })
 
@@ -1027,14 +1152,15 @@ export function CreateSingleFeeModal({ show, onClose, onSubmit, isPending, error
   }, [resolvedFee])
 
   // Duplicate check
-  const isMonthly = form.fee_type === 'MONTHLY'
   const { data: dupCheck } = useQuery({
-    queryKey: ['fee-dup-check', form.student, form.fee_type, isMonthly ? form.month : 0, form.year],
+    queryKey: ['fee-dup-check', form.student, form.fee_type, isMonthly ? form.month : 0, form.year, selectedCategoryId],
     queryFn: () => financeApi.getFeePayments({
       student_id: form.student, fee_type: form.fee_type,
       month: isMonthly ? form.month : 0, year: form.year, page_size: 1,
+      ...(form.fee_type === 'ANNUAL' && form.annualCategoryId && { annual_category: form.annualCategoryId }),
+      ...(form.fee_type === 'MONTHLY' && form.monthlyCategoryId && { monthly_category: form.monthlyCategoryId }),
     }),
-    enabled: !!form.student && !!form.fee_type && !!form.year,
+    enabled: !!form.student && !!form.fee_type && !!form.year && !!selectedCategoryId,
     staleTime: 10_000,
   })
   const hasDuplicate = (dupCheck?.data?.results || dupCheck?.data || []).length > 0
@@ -1044,6 +1170,7 @@ export function CreateSingleFeeModal({ show, onClose, onSubmit, isPending, error
   const feeLabel = FEE_TYPE_TABS.find(t => t.value === form.fee_type)?.label || 'Fee'
   const hasPaid = parseFloat(form.amount_paid || 0) > 0
   const feeSource = resolvedFee?.data?.source
+  const selectedCategoryName = selectedCategories.find((cat) => String(cat.id) === String(selectedCategoryId))?.name || ''
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -1055,6 +1182,8 @@ export function CreateSingleFeeModal({ show, onClose, onSubmit, isPending, error
       year: parseInt(form.year),
       amount_due: parseFloat(form.amount_due),
       amount_paid: parseFloat(form.amount_paid || 0),
+      ...(form.fee_type === 'ANNUAL' && form.annualCategoryId && { annual_category: parseInt(form.annualCategoryId) }),
+      ...(form.fee_type === 'MONTHLY' && form.monthlyCategoryId && { monthly_category: parseInt(form.monthlyCategoryId) }),
       ...(academicYearId && { academic_year: parseInt(academicYearId) }),
       ...(form.notes && { notes: form.notes }),
       ...(hasPaid && {
@@ -1104,10 +1233,16 @@ export function CreateSingleFeeModal({ show, onClose, onSubmit, isPending, error
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Fee Type</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Fee Type <span className="text-red-500">*</span></label>
                 <select
                   value={form.fee_type}
-                  onChange={(e) => setForm(f => ({ ...f, fee_type: e.target.value, amount_due: '' }))}
+                  onChange={(e) => setForm(f => ({
+                    ...f,
+                    fee_type: e.target.value,
+                    annualCategoryId: '',
+                    monthlyCategoryId: '',
+                    amount_due: '',
+                  }))}
                   className="input-field"
                 >
                   {FEE_TYPE_TABS.map(ft => (
@@ -1116,26 +1251,47 @@ export function CreateSingleFeeModal({ show, onClose, onSubmit, isPending, error
                 </select>
               </div>
               <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Category <span className="text-red-500">*</span></label>
+                <select
+                  value={selectedCategoryId}
+                  onChange={(e) => setForm(f => ({
+                    ...f,
+                    amount_due: '',
+                    annualCategoryId: f.fee_type === 'ANNUAL' ? e.target.value : '',
+                    monthlyCategoryId: f.fee_type === 'MONTHLY' ? e.target.value : '',
+                  }))}
+                  className="input-field"
+                >
+                  <option value="">Select category</option>
+                  {selectedCategories.map((category) => (
+                    <option key={category.id} value={category.id}>{category.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Year</label>
                 <select value={form.year} onChange={(e) => setForm(f => ({ ...f, year: e.target.value }))} className="input-field">
                   {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
                 </select>
               </div>
+              {isMonthly && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Month</label>
+                  <select value={form.month} onChange={(e) => setForm(f => ({ ...f, month: e.target.value }))} className="input-field">
+                    {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+                  </select>
+                </div>
+              )}
             </div>
-            {isMonthly && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Month</label>
-                <select value={form.month} onChange={(e) => setForm(f => ({ ...f, month: e.target.value }))} className="input-field">
-                  {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
-                </select>
-              </div>
-            )}
 
             {/* Duplicate warning */}
             {hasDuplicate && (
               <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
                 <p className="text-sm text-amber-800 font-medium">
                   A {feeLabel.toLowerCase()} fee record already exists for this student
+                  {selectedCategoryName ? ` for ${selectedCategoryName}` : ''}
                   {isMonthly ? ` in ${MONTHS[form.month - 1]}` : ''} {form.year}.
                 </p>
                 <p className="text-xs text-amber-600 mt-1">Creating another will fail due to duplicate constraint.</p>
@@ -1161,8 +1317,8 @@ export function CreateSingleFeeModal({ show, onClose, onSubmit, isPending, error
                     {feeSource === 'student_override' ? 'Student-specific fee' : 'From class fee structure'}
                   </p>
                 )}
-                {form.student && !resolvingFee && resolvedFee?.data && !resolvedFee.data.amount && (
-                  <p className="text-xs text-amber-600 mt-1">No fee structure found for this fee type</p>
+                {form.student && selectedCategoryId && !resolvingFee && resolvedFee?.data && !resolvedFee.data.amount && (
+                  <p className="text-xs text-amber-600 mt-1">No fee structure found for this type and category</p>
                 )}
               </div>
               <div>
@@ -1213,7 +1369,7 @@ export function CreateSingleFeeModal({ show, onClose, onSubmit, isPending, error
             </div>
             <div className="flex gap-3 pt-2">
               <button type="button" onClick={handleClose} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">Cancel</button>
-              <button type="submit" disabled={isPending || hasDuplicate} className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50">
+              <button type="submit" disabled={isPending || hasDuplicate || !selectedCategoryId} className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50">
                 {isPending ? 'Creating...' : 'Create'}
               </button>
             </div>

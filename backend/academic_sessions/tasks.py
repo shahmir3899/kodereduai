@@ -3,7 +3,7 @@ Background tasks for academic session operations.
 """
 
 import logging
-from django.db import transaction
+from django.db import transaction, IntegrityError
 from celery import shared_task
 
 logger = logging.getLogger(__name__)
@@ -100,28 +100,48 @@ def bulk_promote_task(self, school_id, source_year_id, target_year_id, promotion
                             status=Student.Status.GRADUATED,
                         )
                     else:
-                        # For PROMOTE or REPEAT, create new enrollment then update source status and student snapshot.
-                        StudentEnrollment.objects.create(
+                        from academic_sessions.roll_allocator_service import RollAllocatorService
+
+                        allocator = RollAllocatorService(
                             school_id=school_id,
-                            student_id=student_id,
                             academic_year_id=target_year_id,
-                            session_class_id=resolved_target_session_class_id,
                             class_obj_id=target_class_id,
-                            roll_number=new_roll_number,
-                            status=StudentEnrollment.Status.ACTIVE,
                         )
 
-                        if action == 'REPEAT':
-                            old_enrollment.status = StudentEnrollment.Status.REPEAT
-                        else:
-                            old_enrollment.status = StudentEnrollment.Status.PROMOTED
-                        old_enrollment.save(update_fields=['status'])
+                        # For PROMOTE or REPEAT, create new enrollment then update source status and student snapshot.
+                        for attempt in range(3):
+                            try:
+                                resolved_roll_number = allocator.resolve_roll(
+                                    preferred_roll=new_roll_number,
+                                    exclude_student_id=student_id,
+                                )
 
-                        Student.objects.filter(pk=student_id).update(
-                            class_obj_id=target_class_id,
-                            roll_number=new_roll_number,
-                            status=Student.Status.REPEAT if action == 'REPEAT' else Student.Status.ACTIVE,
-                        )
+                                StudentEnrollment.objects.create(
+                                    school_id=school_id,
+                                    student_id=student_id,
+                                    academic_year_id=target_year_id,
+                                    session_class_id=resolved_target_session_class_id,
+                                    class_obj_id=target_class_id,
+                                    roll_number=resolved_roll_number,
+                                    status=StudentEnrollment.Status.ACTIVE,
+                                )
+
+                                if action == 'REPEAT':
+                                    old_enrollment.status = StudentEnrollment.Status.REPEAT
+                                else:
+                                    old_enrollment.status = StudentEnrollment.Status.PROMOTED
+                                old_enrollment.save(update_fields=['status'])
+
+                                Student.objects.filter(pk=student_id).update(
+                                    class_obj_id=target_class_id,
+                                    roll_number=resolved_roll_number,
+                                    status=Student.Status.REPEAT if action == 'REPEAT' else Student.Status.ACTIVE,
+                                )
+                                break
+                            except IntegrityError:
+                                if attempt == 2:
+                                    raise
+                                continue
 
                 created += 1
             except Exception as e:

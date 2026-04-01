@@ -160,6 +160,8 @@ class BulkFeeStructureSerializer(serializers.Serializer):
 class BulkStudentFeeStructureItemSerializer(serializers.Serializer):
     student_id = serializers.IntegerField()
     monthly_amount = serializers.DecimalField(max_digits=10, decimal_places=2)
+    annual_category = serializers.IntegerField(required=False, allow_null=True)
+    monthly_category = serializers.IntegerField(required=False, allow_null=True)
 
 
 class BulkStudentFeeStructureSerializer(serializers.Serializer):
@@ -169,6 +171,19 @@ class BulkStudentFeeStructureSerializer(serializers.Serializer):
     )
     effective_from = serializers.DateField()
     students = BulkStudentFeeStructureItemSerializer(many=True)
+
+    def validate(self, attrs):
+        fee_type = attrs.get('fee_type')
+        students = attrs.get('students', [])
+
+        if fee_type == 'ANNUAL':
+            missing_rows = [idx + 1 for idx, item in enumerate(students) if not item.get('annual_category')]
+            if missing_rows:
+                raise serializers.ValidationError({
+                    'students': f'Annual category is required for ANNUAL overrides (rows: {missing_rows}).'
+                })
+
+        return attrs
 
 
 class FeePaymentSerializer(serializers.ModelSerializer):
@@ -285,7 +300,12 @@ class GenerateOnetimeFeesSerializer(serializers.Serializer):
     student_ids = serializers.ListField(
         child=serializers.IntegerField(),
         min_length=1,
+        required=False,
         help_text='List of student IDs to generate fees for.',
+    )
+    class_id = serializers.IntegerField(
+        required=False,
+        help_text='Optional class ID to generate fees for. Omit for all classes.',
     )
     fee_types = serializers.ListField(
         child=serializers.ChoiceField(
@@ -306,11 +326,21 @@ class GenerateOnetimeFeesSerializer(serializers.Serializer):
         help_text='Academic year ID. Auto-resolved to current if not provided.',
     )
 
+    def validate(self, attrs):
+        student_ids = attrs.get('student_ids') or []
+        class_id = attrs.get('class_id')
+
+        if student_ids and class_id:
+            raise serializers.ValidationError('Provide either student_ids or class_id, not both.')
+
+        return attrs
+
 
 class GenerateAnnualFeesSerializer(serializers.Serializer):
     """For generating ANNUAL fee records per-class, per-category."""
     class_id = serializers.IntegerField(
-        help_text='Class ID to generate annual fees for.',
+        required=False,
+        help_text='Optional class ID to generate annual fees for. Omit for all classes.',
     )
     annual_category_ids = serializers.ListField(
         child=serializers.IntegerField(),

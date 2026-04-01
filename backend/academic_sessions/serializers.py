@@ -492,6 +492,8 @@ class BulkPromoteSerializer(serializers.Serializer):
                 raise serializers.ValidationError({'target_academic_year': 'Target academic year does not belong to this school.'})
 
         normalized_promotions = []
+        seen_students = set()
+        seen_target_rolls = set()
         for idx, promotion in enumerate(promotions):
             student_id = promotion.get('student_id')
             target_class_id = promotion.get('target_class_id')
@@ -517,11 +519,32 @@ class BulkPromoteSerializer(serializers.Serializer):
                     'promotions': f'Promotion item {idx + 1} requires a target class or target session class.'
                 })
 
+            student_id = int(student_id)
+            if student_id in seen_students:
+                raise serializers.ValidationError({
+                    'promotions': f'Student {student_id} appears multiple times in one bulk request.'
+                })
+            seen_students.add(student_id)
+
+            normalized_roll = str(new_roll_number or '').strip()
+            if action != 'GRADUATE' and normalized_roll:
+                target_key = (
+                    f'session:{int(target_session_class_id)}'
+                    if target_session_class_id
+                    else f'class:{int(target_class_id)}'
+                )
+                roll_key = (target_key, normalized_roll)
+                if roll_key in seen_target_rolls:
+                    raise serializers.ValidationError({
+                        'promotions': f'Duplicate target roll {normalized_roll} in promotion item {idx + 1}.'
+                    })
+                seen_target_rolls.add(roll_key)
+
             normalized_promotions.append({
-                'student_id': int(student_id),
+                'student_id': student_id,
                 'target_class_id': int(target_class_id) if target_class_id else None,
                 'target_session_class_id': int(target_session_class_id) if target_session_class_id else None,
-                'new_roll_number': str(new_roll_number or '').strip(),
+                'new_roll_number': normalized_roll,
                 'action': action,
             })
 
