@@ -9,21 +9,30 @@ export default function FeeSummaryCards({ summaryData, onFilterUnpaid, onFilterP
     : 0
 
   const byClass = summaryData.by_class || []
-  const classStudents = byClass.length > 1 ? byClass.map(c => `${c.class_name}(${c.students})`).join(', ') : ''
-  const classPayable = byClass.length > 1 ? byClass.map(c => `${c.class_name}(${Number(c.total_due).toLocaleString()})`).join(', ') : ''
-  const classPaid = byClass.length > 1 ? byClass.map(c => `${c.class_name}(${Number(c.total_collected).toLocaleString()})`).join(', ') : ''
+  const showBreakdown = byClass.length > 1
+
+  const ClassBreakdownLines = ({ items }) => (
+    <div className="mt-1.5 space-y-0.5">
+      {items.map((item, i) => (
+        <div key={i} className="flex justify-between text-xs text-gray-400">
+          <span>{item.label}</span>
+          <span className="font-medium text-gray-500">{item.value}</span>
+        </div>
+      ))}
+    </div>
+  )
 
   return (
     <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
       <div className="card">
         <p className="text-sm text-gray-500">Total Students</p>
         <p className="text-xl font-bold text-gray-900">{Number(summaryData.total_students || 0).toLocaleString()}</p>
-        {classStudents && <p className="text-xs text-gray-400 mt-1 leading-tight">{classStudents}</p>}
+        {showBreakdown && <ClassBreakdownLines items={byClass.map(c => ({ label: c.class_name, value: c.students }))} />}
       </div>
       <div className="card">
         <p className="text-sm text-gray-500">Total Payable</p>
         <p className="text-xl font-bold text-gray-900">{Number(summaryData.total_due || 0).toLocaleString()}</p>
-        {classPayable && <p className="text-xs text-gray-400 mt-1 leading-tight">{classPayable}</p>}
+        {showBreakdown && <ClassBreakdownLines items={byClass.map(c => ({ label: c.class_name, value: Number(c.total_due).toLocaleString() }))} />}
       </div>
       <div 
         className="card cursor-pointer hover:shadow-md transition-shadow" 
@@ -32,7 +41,7 @@ export default function FeeSummaryCards({ summaryData, onFilterUnpaid, onFilterP
       >
         <p className="text-sm text-gray-500">Total Paid</p>
         <p className="text-xl font-bold text-green-700">{Number(summaryData.total_collected || 0).toLocaleString()}</p>
-        {classPaid && <p className="text-xs text-gray-400 mt-1 leading-tight">{classPaid}</p>}
+        {showBreakdown && <ClassBreakdownLines items={byClass.map(c => ({ label: c.class_name, value: Number(c.total_collected).toLocaleString() }))} />}
       </div>
       <div 
         className="card cursor-pointer hover:shadow-md transition-shadow" 
@@ -41,10 +50,18 @@ export default function FeeSummaryCards({ summaryData, onFilterUnpaid, onFilterP
       >
         <p className="text-sm text-gray-500">Balance</p>
         <p className="text-xl font-bold text-orange-700">{Number(summaryData.total_pending || 0).toLocaleString()}</p>
+        {showBreakdown && <ClassBreakdownLines items={byClass.map(c => {
+          const bal = Math.max(0, Number(c.total_due) - Number(c.total_collected))
+          return { label: c.class_name, value: bal.toLocaleString() }
+        })} />}
       </div>
       <div className="card">
         <p className="text-sm text-gray-500">Collection Rate</p>
         <p className="text-xl font-bold text-blue-700">{collectionRate}%</p>
+        {showBreakdown && <ClassBreakdownLines items={byClass.map(c => {
+          const rate = c.total_due > 0 ? Math.round((c.total_collected / c.total_due) * 100) : 0
+          return { label: c.class_name, value: `${rate}%` }
+        })} />}
       </div>
     </div>
   )
