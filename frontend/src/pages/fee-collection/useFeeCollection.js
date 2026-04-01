@@ -234,6 +234,26 @@ export function useFeeCollection({ month, year, classFilter, statusFilter, feeTy
     // Count unique students, not records
     const uniqueStudents = new Set(filteredPayments.map(p => p.student || p.student_id))
 
+    // Class-wise breakdown
+    const classMap = new Map()
+    filteredPayments.forEach(p => {
+      const key = p.class_obj_id || p.class_name || 'unknown'
+      if (!classMap.has(key)) {
+        classMap.set(key, { class_name: p.class_name || 'Unknown', students: new Set(), total_due: 0, total_collected: 0 })
+      }
+      const entry = classMap.get(key)
+      entry.students.add(p.student || p.student_id)
+      entry.total_due += Number(p.amount_due || 0)
+      entry.total_collected += Number(p.amount_paid || 0)
+    })
+
+    // Sort by class order
+    const classOrderMap = new Map()
+    sortedClassList.forEach((cls, i) => { classOrderMap.set(cls.id, i); classOrderMap.set(cls.name, i) })
+    const by_class = [...classMap.entries()]
+      .map(([key, v]) => ({ class_name: v.class_name, students: v.students.size, total_due: v.total_due, total_collected: v.total_collected }))
+      .sort((a, b) => (classOrderMap.get(a.class_name) ?? 999) - (classOrderMap.get(b.class_name) ?? 999))
+
     return {
       month,
       year,
@@ -241,8 +261,9 @@ export function useFeeCollection({ month, year, classFilter, statusFilter, feeTy
       total_due,
       total_collected,
       total_pending,
+      by_class,
     }
-  }, [filteredPayments, month, year])
+  }, [filteredPayments, month, year, sortedClassList])
 
   return {
     // Data

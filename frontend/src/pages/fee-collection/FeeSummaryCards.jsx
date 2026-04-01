@@ -8,15 +8,22 @@ export default function FeeSummaryCards({ summaryData, onFilterUnpaid, onFilterP
     ? Math.round((summaryData.total_collected / summaryData.total_due) * 100)
     : 0
 
+  const byClass = summaryData.by_class || []
+  const classStudents = byClass.length > 1 ? byClass.map(c => `${c.class_name}(${c.students})`).join(', ') : ''
+  const classPayable = byClass.length > 1 ? byClass.map(c => `${c.class_name}(${Number(c.total_due).toLocaleString()})`).join(', ') : ''
+  const classPaid = byClass.length > 1 ? byClass.map(c => `${c.class_name}(${Number(c.total_collected).toLocaleString()})`).join(', ') : ''
+
   return (
     <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
       <div className="card">
         <p className="text-sm text-gray-500">Total Students</p>
         <p className="text-xl font-bold text-gray-900">{Number(summaryData.total_students || 0).toLocaleString()}</p>
+        {classStudents && <p className="text-xs text-gray-400 mt-1 leading-tight">{classStudents}</p>}
       </div>
       <div className="card">
         <p className="text-sm text-gray-500">Total Payable</p>
         <p className="text-xl font-bold text-gray-900">{Number(summaryData.total_due || 0).toLocaleString()}</p>
+        {classPayable && <p className="text-xs text-gray-400 mt-1 leading-tight">{classPayable}</p>}
       </div>
       <div 
         className="card cursor-pointer hover:shadow-md transition-shadow" 
@@ -25,6 +32,7 @@ export default function FeeSummaryCards({ summaryData, onFilterUnpaid, onFilterP
       >
         <p className="text-sm text-gray-500">Total Paid</p>
         <p className="text-xl font-bold text-green-700">{Number(summaryData.total_collected || 0).toLocaleString()}</p>
+        {classPaid && <p className="text-xs text-gray-400 mt-1 leading-tight">{classPaid}</p>}
       </div>
       <div 
         className="card cursor-pointer hover:shadow-md transition-shadow" 
