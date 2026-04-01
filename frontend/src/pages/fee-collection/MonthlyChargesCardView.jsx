@@ -8,20 +8,20 @@ import { getErrorMessage } from '../../utils/errorUtils'
 import {
   buildSessionLabeledMasterClassOptions,
 } from '../../utils/classScope'
-import AnnualChargesGrid from './AnnualChargesGrid'
-import CategoryManagerModal from './CategoryManagerModal'
+import MonthlyChargesGrid from './MonthlyChargesGrid'
+import MonthlyCategoryManagerModal from './MonthlyCategoryManagerModal'
 
 /**
- * AnnualChargesCardView — Card-based layout showing all classes with their annual charges.
- * 
+ * MonthlyChargesCardView — Card-based layout showing all classes with their monthly charges.
+ *
  * Each card represents one class and contains:
- * - Grid of existing annual charges (category + amount)
+ * - Grid of existing monthly charges (category + amount per month)
  * - "Add Charge" button
  * - "Save Changes" button
- * 
- * This replaces the old class-selector approach, allowing schools to see all classes at once.
+ *
+ * Mirrors AnnualChargesCardView but for monthly categories.
  */
-export default function AnnualChargesCardView() {
+export default function MonthlyChargesCardView() {
   const { activeAcademicYear } = useAcademicYear()
   const queryClient = useQueryClient()
   const { showToast } = useToast()
@@ -29,8 +29,8 @@ export default function AnnualChargesCardView() {
   const now = new Date()
   const [effectiveFrom, setEffectiveFrom] = useState(now.toISOString().split('T')[0])
   const [showCategoryModal, setShowCategoryModal] = useState(false)
-  
-  // State per class: { [classId]: { rows, loading, error } }
+
+  // State per class: { [classId]: rows[] }
   const [classRows, setClassRows] = useState({})
   const [classShowConfirm, setClassShowConfirm] = useState({})
   const [classEditMode, setClassEditMode] = useState({})
@@ -56,18 +56,18 @@ export default function AnnualChargesCardView() {
     })
   }, [activeAcademicYear?.id, classList, sessionClasses])
 
-  // Fetch annual categories for this school
+  // Fetch monthly categories for this school
   const { data: catData } = useQuery({
-    queryKey: ['annual-categories'],
-    queryFn: () => financeApi.getAnnualCategories(),
+    queryKey: ['monthly-categories'],
+    queryFn: () => financeApi.getMonthlyCategories(),
   })
   const categories = catData?.data?.results ?? catData?.data ?? []
 
-  // Fetch annual fee structures for all classes at once
+  // Fetch monthly fee structures for all classes at once
   const { data: allStructuresData, isLoading: structuresLoading } = useQuery({
-    queryKey: ['annual-fee-structures-all', activeAcademicYear?.id],
+    queryKey: ['monthly-fee-structures-all', activeAcademicYear?.id],
     queryFn: () => financeApi.getFeeStructures({
-      fee_type: 'ANNUAL',
+      fee_type: 'MONTHLY',
       page_size: 9999,
       ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
     }),
@@ -86,16 +86,16 @@ export default function AnnualChargesCardView() {
       if (!structuresLoading && allStructures.length > 0) {
         const classStructures = allStructures.filter((s) => String(s.class_obj) === String(cls.id))
         const prefilled = classStructures
-          .filter((s) => s.annual_category && s.is_active !== false)
+          .filter((s) => s.monthly_category && s.is_active !== false)
           .map((s) => ({
-            category_id: String(s.annual_category),
-            annual_category_name: s.annual_category_name || '',
+            category_id: String(s.monthly_category),
+            monthly_category_name: s.monthly_category_name || '',
             amount: String(s.monthly_amount),
             _structureId: s.id,
           }))
-        newClassRows[cls.id] = prefilled.length > 0 ? prefilled : [{ category_id: '', annual_category_name: '', amount: '' }]
+        newClassRows[cls.id] = prefilled.length > 0 ? prefilled : [{ category_id: '', monthly_category_name: '', amount: '' }]
       } else {
-        newClassRows[cls.id] = [{ category_id: '', annual_category_name: '', amount: '' }]
+        newClassRows[cls.id] = [{ category_id: '', monthly_category_name: '', amount: '' }]
       }
     })
     setClassRows(newClassRows)
@@ -105,13 +105,14 @@ export default function AnnualChargesCardView() {
   const saveMutation = useMutation({
     mutationFn: (payload) => financeApi.bulkSetFeeStructures(payload),
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['annual-fee-structures-all'] })
-      showToast('Annual charges saved successfully', 'success')
+      queryClient.invalidateQueries({ queryKey: ['monthly-fee-structures-all'] })
+      showToast('Monthly charges saved successfully', 'success')
+      // Auto-exit edit mode for the saved class
       const savedClassId = variables.structures?.[0]?.class_obj
       if (savedClassId) setClassEditMode((prev) => ({ ...prev, [savedClassId]: false }))
       setClassShowConfirm({})
     },
-    onError: (err) => showToast(getErrorMessage(err, 'Failed to save annual charges'), 'error'),
+    onError: (err) => showToast(getErrorMessage(err, 'Failed to save monthly charges'), 'error'),
   })
 
   function handleSaveClass(classId) {
@@ -124,8 +125,8 @@ export default function AnnualChargesCardView() {
 
     const structures = validRows.map((r) => ({
       class_obj: classId,
-      fee_type: 'ANNUAL',
-      annual_category: parseInt(r.category_id),
+      fee_type: 'MONTHLY',
+      monthly_category: parseInt(r.category_id),
       monthly_amount: parseFloat(r.amount),
     }))
 
@@ -135,7 +136,7 @@ export default function AnnualChargesCardView() {
   function handleAddRow(classId) {
     setClassRows((prev) => ({
       ...prev,
-      [classId]: [...(prev[classId] || []), { category_id: '', annual_category_name: '', amount: '' }],
+      [classId]: [...(prev[classId] || []), { category_id: '', monthly_category_name: '', amount: '' }],
     }))
   }
 
@@ -149,28 +150,25 @@ export default function AnnualChargesCardView() {
   function handleCancelEdit(classId) {
     const classStructures = allStructures.filter((s) => String(s.class_obj) === String(classId))
     const prefilled = classStructures
-      .filter((s) => s.annual_category && s.is_active !== false)
+      .filter((s) => s.monthly_category && s.is_active !== false)
       .map((s) => ({
-        category_id: String(s.annual_category),
-        annual_category_name: s.annual_category_name || '',
+        category_id: String(s.monthly_category),
+        monthly_category_name: s.monthly_category_name || '',
         amount: String(s.monthly_amount),
         _structureId: s.id,
       }))
     setClassRows((prev) => ({
       ...prev,
-      [classId]: prefilled.length > 0 ? prefilled : [{ category_id: '', annual_category_name: '', amount: '' }],
+      [classId]: prefilled.length > 0 ? prefilled : [{ category_id: '', monthly_category_name: '', amount: '' }],
     }))
     setClassEditMode((prev) => ({ ...prev, [classId]: false }))
     setClassShowConfirm((prev) => ({ ...prev, [classId]: false }))
   }
 
-  const selectedClass = (classId) => classOptions.find((c) => c.id === classId)
-
-  // Categories loading state
   if (structuresLoading && classOptions.length > 0) {
     return (
       <div className="space-y-4">
-        <p className="text-sm text-gray-400">Loading annual charges for all classes...</p>
+        <p className="text-sm text-gray-400">Loading monthly charges for all classes...</p>
       </div>
     )
   }
@@ -179,15 +177,15 @@ export default function AnnualChargesCardView() {
     <div className="space-y-3">
       {/* Category Manager Modal */}
       {showCategoryModal && (
-        <CategoryManagerModal onClose={() => setShowCategoryModal(false)} />
+        <MonthlyCategoryManagerModal onClose={() => setShowCategoryModal(false)} />
       )}
 
       {/* Header with manage categories button */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <div>
-          <h2 className="text-base font-bold text-gray-900">Annual Charges</h2>
+          <h2 className="text-base font-bold text-gray-900">Monthly Charges</h2>
           <p className="text-xs text-gray-500 mt-0.5">
-            Define annual charge categories and amounts for each class.
+            Define monthly charge categories and amounts for each class.
           </p>
         </div>
         <button
@@ -212,10 +210,10 @@ export default function AnnualChargesCardView() {
         </div>
       </div>
 
-      {/* Categories validation */}
+      {/* No categories warning */}
       {categories.length === 0 && (
         <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg text-center">
-          <p className="text-sm text-amber-800 font-medium mb-2">No annual categories defined yet.</p>
+          <p className="text-sm text-amber-800 font-medium mb-2">No monthly categories defined yet.</p>
           <p className="text-xs text-amber-700 mb-3">Click "Manage Categories" to add categories for your school.</p>
           <button
             type="button"
@@ -236,7 +234,7 @@ export default function AnnualChargesCardView() {
             </div>
           ) : (
             classOptions.map((cls) => {
-              const rows = classRows[cls.id] || [{ category_id: '', annual_category_name: '', amount: '' }]
+              const rows = classRows[cls.id] || [{ category_id: '', monthly_category_name: '', amount: '' }]
               const validRows = rows.filter((r) => r.category_id && parseFloat(r.amount) > 0)
               const total = validRows.reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0)
               const hasData = validRows.length > 0
@@ -249,7 +247,7 @@ export default function AnnualChargesCardView() {
                     <div>
                       <h3 className="font-semibold text-sm text-gray-900">{cls.label || `${cls.name}${cls.section ? ` - ${cls.section}` : ''}`}</h3>
                       <p className="text-xs text-gray-500 mt-0.5">
-                        {validRows.length > 0 ? `${validRows.length} charge(s) • Total: Rs. ${total.toLocaleString()}` : 'No charges added'}
+                        {validRows.length > 0 ? `${validRows.length} charge(s) • Rs. ${total.toLocaleString()} / month` : 'No charges added'}
                       </p>
                     </div>
                     {!isEditing && !classShowConfirm[cls.id] && (
@@ -271,12 +269,12 @@ export default function AnnualChargesCardView() {
                         <div className="mt-1 space-y-0.5">
                           {validRows.map((r, idx) => (
                             <p key={idx} className="text-blue-800">
-                              {r.annual_category_name}: <span className="font-semibold">Rs. {parseFloat(r.amount).toLocaleString()}</span>
+                              {r.monthly_category_name}: <span className="font-semibold">Rs. {parseFloat(r.amount).toLocaleString()}</span>
                             </p>
                           ))}
                         </div>
                         <p className="text-blue-800 mt-1 font-semibold">
-                          Total: Rs. {total.toLocaleString()}
+                          Total: Rs. {total.toLocaleString()} / month
                         </p>
                       </div>
                       <div className="flex gap-2">
@@ -291,7 +289,7 @@ export default function AnnualChargesCardView() {
                     </div>
                   ) : isEditing ? (
                     <div className="space-y-2">
-                      <AnnualChargesGrid
+                      <MonthlyChargesGrid
                         categories={categories}
                         rows={rows}
                         onChange={(newRows) => handleRowsChange(cls.id, newRows)}
@@ -307,7 +305,7 @@ export default function AnnualChargesCardView() {
                       </div>
                     </div>
                   ) : (
-                    <AnnualChargesGrid
+                    <MonthlyChargesGrid
                       categories={categories}
                       rows={hasData ? validRows : []}
                       readOnly

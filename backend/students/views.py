@@ -492,12 +492,12 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         return Response({
             'student': StudentSerializer(student).data,
             'attendance_rate': attendance_rate,
-            'total_present': total_present,
+            'present_days': total_present,
             'total_absent': total_absent,
             'total_days': total_days,
-            'fee_total_due': str(fee_total_due),
-            'fee_total_paid': str(fee_total_paid),
-            'fee_outstanding': str(fee_total_due - fee_total_paid),
+            'total_due': float(fee_total_due),
+            'total_paid': float(fee_total_paid),
+            'outstanding': float(fee_total_due - fee_total_paid),
             'exam_average': exam_average,
             'enrollment_status': enrollment_status,
         })
@@ -516,10 +516,23 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         ).values('month').annotate(
             present=Count('id', filter=Q(status='PRESENT')),
             absent=Count('id', filter=Q(status='ABSENT')),
+            late=Count('id', filter=Q(status='LATE')),
             total=Count('id'),
         ).order_by('-month')
 
-        return Response(list(records))
+        months = []
+        for r in records:
+            rate = round(r['present'] / r['total'] * 100, 1) if r['total'] > 0 else 0.0
+            months.append({
+                'month': r['month'].strftime('%B %Y') if r['month'] else None,
+                'present': r['present'],
+                'absent': r['absent'],
+                'late': r['late'],
+                'total': r['total'],
+                'rate': rate,
+            })
+
+        return Response({'months': months})
 
     @action(detail=True, methods=['get'])
     def fee_ledger(self, request, pk=None):

@@ -41,6 +41,7 @@ export default function FeeCollectPage() {
   const [statusFilter, setStatusFilter] = useState(() => searchParams.get('status') || '')
   const [feeTypeFilter, setFeeTypeFilter] = useState('MONTHLY')
   const [annualCategoryFilter, setAnnualCategoryFilter] = useState('')
+  const [monthlyCategoryFilter, setMonthlyCategoryFilter] = useState('')
   const { sessionClasses } = useSessionClasses(activeAcademicYear?.id)
   const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
   const resolvedClassFilter = resolveClassIdToMasterClassId(classFilter, activeAcademicYear?.id, sessionClasses)
@@ -70,6 +71,7 @@ export default function FeeCollectPage() {
   const data = useFeeCollection({
     month, year, classFilter: resolvedClassFilter, statusFilter, feeTypeFilter,
     annualCategoryFilter,
+    monthlyCategoryFilter,
     academicYearId: activeAcademicYear?.id,
   })
 
@@ -245,7 +247,9 @@ export default function FeeCollectPage() {
             statusFilter={statusFilter} setStatusFilter={setStatusFilter}
             feeTypeFilter={feeTypeFilter} setFeeTypeFilter={setFeeTypeFilter}
             annualCategoryFilter={annualCategoryFilter} setAnnualCategoryFilter={setAnnualCategoryFilter}
+            monthlyCategoryFilter={monthlyCategoryFilter} setMonthlyCategoryFilter={setMonthlyCategoryFilter}
             annualCategories={data.annualCategories}
+            monthlyCategories={data.monthlyCategories}
             classOptions={classFilterOptions}
             selectorScope={classSelectorScope}
             academicYearId={activeAcademicYear?.id}

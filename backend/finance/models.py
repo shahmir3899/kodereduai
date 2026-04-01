@@ -25,6 +25,13 @@ SUGGESTED_ANNUAL_CATEGORIES = [
     {'name': 'Examination Fee', 'description': 'Board exams and test fees'},
 ]
 
+SUGGESTED_MONTHLY_CATEGORIES = [
+    {'name': 'Tuition Fee', 'description': 'Core monthly tuition charge'},
+    {'name': 'Transport', 'description': 'Monthly school bus / transport charge'},
+    {'name': 'Hostel', 'description': 'Monthly boarding/hostel charge'},
+    {'name': 'Canteen', 'description': 'Monthly canteen / meal charge'},
+]
+
 
 class Account(models.Model):
     """
@@ -223,6 +230,10 @@ class ExpenseCategory(models.Model):
     name = models.CharField(max_length=100)
     code = models.CharField(max_length=30, blank=True, help_text="Short code (e.g. SALARY)")
     is_active = models.BooleanField(default=True)
+    is_sensitive = models.BooleanField(
+        default=False,
+        help_text="Hide this category and its expenses from staff members",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -271,6 +282,27 @@ class AnnualFeeCategory(models.Model):
         ordering = ['name']
         verbose_name = 'Annual Fee Category'
         verbose_name_plural = 'Annual Fee Categories'
+
+    def __str__(self):
+        return self.name
+
+
+class MonthlyFeeCategory(models.Model):
+    """Custom monthly charge categories per school (e.g. Tuition Fee, Transport, Hostel)."""
+    school = models.ForeignKey(
+        'schools.School', on_delete=models.CASCADE, related_name='monthly_fee_categories',
+    )
+    name = models.CharField(max_length=100, help_text="Display name for this monthly charge (e.g. Tuition Fee)")
+    description = models.CharField(max_length=255, blank=True, help_text="Optional description")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('school', 'name')
+        ordering = ['name']
+        verbose_name = 'Monthly Fee Category'
+        verbose_name_plural = 'Monthly Fee Categories'
 
     def __str__(self):
         return self.name
@@ -325,6 +357,14 @@ class FeeStructure(models.Model):
         related_name='fee_structures',
         help_text="Annual charge category (only used when fee_type=ANNUAL)"
     )
+    monthly_category = models.ForeignKey(
+        'finance.MonthlyFeeCategory',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='fee_structures',
+        help_text="Monthly charge category (only used when fee_type=MONTHLY)"
+    )
     monthly_amount = models.DecimalField(
         max_digits=10,
         decimal_places=2,
@@ -357,9 +397,9 @@ class FeeStructure(models.Model):
         return f"{target} - {self.monthly_amount} ({type_label})"
 
 
-def resolve_fee_amount(student, fee_type='MONTHLY', annual_category_id=None):
+def resolve_fee_amount(student, fee_type='MONTHLY', annual_category_id=None, monthly_category_id=None):
     """
-    Resolve the fee for a student by fee_type (and optionally annual_category).
+    Resolve the fee for a student by fee_type (and optionally annual_category or monthly_category).
     Priority: student-level FeeStructure > class-level FeeStructure.
     Returns Decimal amount or None if no fee structure found.
     """
@@ -373,6 +413,8 @@ def resolve_fee_amount(student, fee_type='MONTHLY', annual_category_id=None):
     extra_filters = {}
     if fee_type == 'ANNUAL' and annual_category_id:
         extra_filters['annual_category_id'] = annual_category_id
+    elif fee_type == 'MONTHLY' and monthly_category_id:
+        extra_filters['monthly_category_id'] = monthly_category_id
 
     # Try student-level first
     student_fee = FeeStructure.objects.filter(
@@ -458,6 +500,14 @@ class FeePayment(models.Model):
         related_name='fee_payments',
         help_text="Annual charge category (only used when fee_type=ANNUAL)"
     )
+    monthly_category = models.ForeignKey(
+        'finance.MonthlyFeeCategory',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='fee_payments',
+        help_text="Monthly charge category (only used when fee_type=MONTHLY)"
+    )
     month = models.IntegerField(help_text="Month number (1-12 for monthly, 0 for annual/admission/books/fine)")
     year = models.IntegerField(help_text="Year (e.g. 2026)")
     amount_due = models.DecimalField(
@@ -527,7 +577,7 @@ class FeePayment(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = ('school', 'student', 'month', 'year', 'fee_type', 'annual_category')
+        unique_together = ('school', 'student', 'month', 'year', 'fee_type', 'annual_category', 'monthly_category')
         ordering = ['-year', '-month', 'student__class_obj', 'student__roll_number']
         verbose_name = 'Fee Payment'
         verbose_name_plural = 'Fee Payments'

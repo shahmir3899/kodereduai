@@ -170,7 +170,19 @@ class ExamGroupViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
                 'conflicts': conflicts,
             }, status=status.HTTP_409_CONFLICT)
 
-        date_sheet = data.get('date_sheet', {})
+        # Build lookup: (class_id, subject_id) -> {exam_date, start_time, end_time}
+        date_sheet_list = data.get('date_sheet', [])
+        date_sheet_map = {}
+        for entry in date_sheet_list:
+            class_id = entry.get('class_id')
+            subject_id = entry.get('subject_id')
+            if class_id and subject_id:
+                date_sheet_map[(int(class_id), int(subject_id))] = {
+                    'exam_date': entry.get('exam_date'),
+                    'start_time': entry.get('start_time'),
+                    'end_time': entry.get('end_time'),
+                }
+
         default_total = data.get('default_total_marks', 100)
         default_passing = data.get('default_passing_marks', 33)
 
@@ -210,14 +222,16 @@ class ExamGroupViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
                     is_active=True,
                 ).select_related('subject')
                 for cs in class_subjects:
-                    subject_date = date_sheet.get(str(cs.subject_id))
+                    slot = date_sheet_map.get((exam.class_obj_id, cs.subject_id), {})
                     all_exam_subjects.append(ExamSubject(
                         school_id=school_id,
                         exam=exam,
                         subject=cs.subject,
                         total_marks=default_total,
                         passing_marks=default_passing,
-                        exam_date=subject_date,
+                        exam_date=slot.get('exam_date'),
+                        start_time=slot.get('start_time'),
+                        end_time=slot.get('end_time'),
                     ))
 
             if all_exam_subjects:
@@ -262,6 +276,8 @@ class ExamGroupViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
                     'exam_id': es.exam_id,
                     'class_name': es.exam.class_obj.name,
                     'exam_date': str(es.exam_date) if es.exam_date else None,
+                    'start_time': str(es.start_time) if es.start_time else None,
+                    'end_time': str(es.end_time) if es.end_time else None,
                 })
 
             return Response({
@@ -278,11 +294,19 @@ class ExamGroupViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
         updated_count = 0
         for entry in serializer.validated_data['date_sheet']:
             es_id = entry.get('exam_subject_id')
-            exam_date = entry.get('exam_date')
-            if es_id:
+            if not es_id:
+                continue
+            update_fields = {}
+            if 'exam_date' in entry:
+                update_fields['exam_date'] = entry['exam_date']
+            if 'start_time' in entry:
+                update_fields['start_time'] = entry['start_time']
+            if 'end_time' in entry:
+                update_fields['end_time'] = entry['end_time']
+            if update_fields:
                 count = ExamSubject.objects.filter(
                     id=es_id, exam__exam_group=group, school_id=school_id,
-                ).update(exam_date=exam_date)
+                ).update(**update_fields)
                 updated_count += count
 
         return Response({'updated_count': updated_count})
@@ -324,25 +348,40 @@ class ExamGroupViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
         ws = wb.active
         ws.title = 'Date Sheet'
 
-        ws.merge_cells('A1:E1')
+        ws.merge_cells('A1:G1')
         ws['A1'] = f'Date Sheet - {group.name}'
         ws['A1'].font = Font(bold=True, size=14)
 
-        ws.merge_cells('A2:E2')
+        ws.merge_cells('A2:G2')
         period = ''
         if group.start_date and group.end_date:
             period = f' | {group.start_date} to {group.end_date}'
         ws['A2'] = f'Exam Type: {group.exam_type.name}{period}'
         ws['A2'].font = Font(size=10, color='555555')
 
-        headers = ['#', 'Date', 'Subject', 'Code', 'Classes']
         header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
         header_font = Font(bold=True, color='FFFFFF', size=10)
         thin_border = Border(
             left=Side(style='thin'), right=Side(style='thin'),
             top=Side(style='thin'), bottom=Side(style='thin'),
         )
+        flat_rows = []
+        for es in exam_subjects:
+            flat_rows.append({
+                'subject_name': es.subject.name,
+                'subject_code': es.subject.code,
+                'class_name': es.exam.class_obj.name,
+                'exam_date': es.exam_date,
+                'start_time': es.start_time,
+                'end_time': es.end_time,
+            })
 
+        flat_rows.sort(key=lambda x: (
+            str(x['exam_date'] or '9999-99-99'), x['subject_name'], x['class_name'],
+        ))
+
+        # Update headers to include time columns
+        headers = ['#', 'Date', 'Subject', 'Code', 'Class', 'Start Time', 'End Time']
         for col_idx, header in enumerate(headers, 1):
             cell = ws.cell(row=4, column=col_idx, value=header)
             cell.font = header_font
@@ -350,35 +389,26 @@ class ExamGroupViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
             cell.alignment = Alignment(horizontal='center')
             cell.border = thin_border
 
-        by_subject = {}
-        for es in exam_subjects:
-            sid = es.subject_id
-            if sid not in by_subject:
-                by_subject[sid] = {
-                    'subject_name': es.subject.name,
-                    'subject_code': es.subject.code,
-                    'exam_date': es.exam_date,
-                    'classes': [],
-                }
-            by_subject[sid]['classes'].append(es.exam.class_obj.name)
-
-        sorted_subjects = sorted(
-            by_subject.values(),
-            key=lambda x: (str(x['exam_date'] or '9999-99-99'), x['subject_name']),
-        )
-
-        for row_idx, subj in enumerate(sorted_subjects, 5):
+        for row_idx, row in enumerate(flat_rows, 5):
+            def fmt_time(t):
+                if not t:
+                    return ''
+                return t.strftime('%H:%M') if hasattr(t, 'strftime') else str(t)[:5]
             ws.cell(row=row_idx, column=1, value=row_idx - 4).border = thin_border
-            ws.cell(row=row_idx, column=2, value=str(subj['exam_date'] or 'TBD')).border = thin_border
-            ws.cell(row=row_idx, column=3, value=subj['subject_name']).border = thin_border
-            ws.cell(row=row_idx, column=4, value=subj['subject_code']).border = thin_border
-            ws.cell(row=row_idx, column=5, value=', '.join(subj['classes'])).border = thin_border
+            ws.cell(row=row_idx, column=2, value=str(row['exam_date'] or 'TBD')).border = thin_border
+            ws.cell(row=row_idx, column=3, value=row['subject_name']).border = thin_border
+            ws.cell(row=row_idx, column=4, value=row['subject_code']).border = thin_border
+            ws.cell(row=row_idx, column=5, value=row['class_name']).border = thin_border
+            ws.cell(row=row_idx, column=6, value=fmt_time(row['start_time'])).border = thin_border
+            ws.cell(row=row_idx, column=7, value=fmt_time(row['end_time'])).border = thin_border
 
         ws.column_dimensions['A'].width = 5
         ws.column_dimensions['B'].width = 14
         ws.column_dimensions['C'].width = 25
         ws.column_dimensions['D'].width = 10
-        ws.column_dimensions['E'].width = 40
+        ws.column_dimensions['E'].width = 20
+        ws.column_dimensions['F'].width = 12
+        ws.column_dimensions['G'].width = 12
 
         buffer = io.BytesIO()
         wb.save(buffer)

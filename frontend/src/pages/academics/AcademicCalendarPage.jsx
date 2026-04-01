@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { classesApi, sessionsApi } from '../../services/api'
+import { classesApi, sessionsApi, examinationsApi } from '../../services/api'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useToast } from '../../components/Toast'
 
@@ -57,6 +57,10 @@ export default function AcademicCalendarPage() {
   const [showModal, setShowModal] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
   const [formErrors, setFormErrors] = useState({})
+  const [isRangeSelecting, setIsRangeSelecting] = useState(false)
+  const [rangeAnchorDate, setRangeAnchorDate] = useState('')
+  const [rangeHoverDate, setRangeHoverDate] = useState('')
+  const dragRangeRef = useRef({ active: false, startDate: '', moved: false })
 
   const { daysInMonth, startOffset } = useMemo(
     () => getMonthMeta(year, month),
@@ -122,6 +126,35 @@ export default function AcademicCalendarPage() {
 
   const visibleEntries = entriesRes?.data?.results || entriesRes?.data || []
 
+  const { data: examGroupsRes } = useQuery({
+    queryKey: ['calendarExamGroups', activeAcademicYear?.id],
+    queryFn: () => examinationsApi.getExamGroups({ academic_year: activeAcademicYear?.id, page_size: 100, is_active: true }),
+    enabled: !!activeAcademicYear?.id,
+  })
+
+  const examGroups = examGroupsRes?.data?.results || examGroupsRes?.data || []
+
+  // Map each date in an exam group's range → array of group names
+  const examGroupsByDate = useMemo(() => {
+    const map = {}
+    examGroups.forEach((g) => {
+      if (!g.start_date || !g.end_date) return
+      const start = new Date(g.start_date)
+      const end = new Date(g.end_date)
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        const key = d.toISOString().slice(0, 10)
+        if (!map[key]) map[key] = []
+        if (!map[key].includes(g.name)) map[key].push(g.name)
+      }
+    })
+    return map
+  }, [examGroups])
+
+  const currentExamGroups = examGroups.filter((g) => {
+    if (!g.start_date || !g.end_date) return false
+    return g.end_date >= monthStart && g.start_date <= monthEnd
+  })
+
   const createEntryMut = useMutation({
     mutationFn: (payload) => sessionsApi.createCalendarEntry(payload),
     onSuccess: () => {
@@ -165,20 +198,91 @@ export default function AcademicCalendarPage() {
     setMonth((cur) => cur + 1)
   }
 
-  const openAddModal = () => {
+  const openAddModalForDates = (startDate, endDate = startDate) => {
     setForm({
       ...EMPTY_FORM,
-      start_date: monthStart,
-      end_date: monthStart,
+      start_date: startDate,
+      end_date: endDate,
     })
     setFormErrors({})
     setShowModal(true)
+  }
+
+  const openAddModal = () => {
+    openAddModalForDates(monthStart, monthStart)
   }
 
   const closeModal = () => {
     setShowModal(false)
     setForm(EMPTY_FORM)
     setFormErrors({})
+  }
+
+  const toggleRangeSelecting = () => {
+    setIsRangeSelecting((cur) => !cur)
+    setRangeAnchorDate('')
+    setRangeHoverDate('')
+    dragRangeRef.current = { active: false, startDate: '', moved: false }
+  }
+
+  const handleCalendarDateSelect = (dateKey) => {
+    if (!isRangeSelecting) {
+      openAddModalForDates(dateKey, dateKey)
+      return
+    }
+    if (!rangeAnchorDate) {
+      setRangeAnchorDate(dateKey)
+      setRangeHoverDate(dateKey)
+      return
+    }
+    const [start, end] = [rangeAnchorDate, dateKey].sort()
+    openAddModalForDates(start, end)
+    setIsRangeSelecting(false)
+    setRangeAnchorDate('')
+    setRangeHoverDate('')
+    dragRangeRef.current = { active: false, startDate: '', moved: false }
+  }
+
+  const handleDayPointerDown = (e, dateKey) => {
+    if (!isRangeSelecting || e.pointerType !== 'mouse') return
+    dragRangeRef.current = { active: true, startDate: dateKey, moved: false }
+  }
+
+  const handleDayPointerEnter = (e, dateKey) => {
+    if (!dragRangeRef.current.active || e.pointerType !== 'mouse') return
+    if (dateKey !== dragRangeRef.current.startDate) {
+      dragRangeRef.current.moved = true
+      setRangeAnchorDate(dragRangeRef.current.startDate)
+      setRangeHoverDate(dateKey)
+    }
+  }
+
+  const resetDragState = () => {
+    dragRangeRef.current = { active: false, startDate: '', moved: false }
+  }
+
+  const finalizeRangeSelection = (fromDate, toDate) => {
+    const [start, end] = [fromDate, toDate].sort()
+    openAddModalForDates(start, end)
+    setIsRangeSelecting(false)
+    setRangeAnchorDate('')
+    setRangeHoverDate('')
+    resetDragState()
+  }
+
+  const handleDayPointerUp = (e, dateKey) => {
+    if (e.pointerType === 'mouse' && dragRangeRef.current.active) {
+      const { startDate, moved } = dragRangeRef.current
+      if (moved) {
+        finalizeRangeSelection(startDate || dateKey, dateKey)
+      } else {
+        // Mouse click in range mode should use the same two-click flow as touch.
+        handleCalendarDateSelect(dateKey)
+        resetDragState()
+      }
+      return
+    }
+    handleCalendarDateSelect(dateKey)
   }
 
   const toggleClassId = (id) => {
@@ -217,6 +321,12 @@ export default function AcademicCalendarPage() {
   }
 
   const dayCells = []
+  const previewStart = isRangeSelecting && rangeAnchorDate
+    ? (rangeHoverDate && rangeHoverDate < rangeAnchorDate ? rangeHoverDate : rangeAnchorDate)
+    : ''
+  const previewEnd = isRangeSelecting && rangeAnchorDate
+    ? (rangeHoverDate && rangeHoverDate > rangeAnchorDate ? rangeHoverDate : rangeAnchorDate)
+    : ''
   for (let i = 0; i < startOffset; i += 1) {
     dayCells.push(<div key={`blank-${i}`} className="rounded-xl border border-gray-100 bg-gray-50 min-h-[120px]" />)
   }
@@ -226,11 +336,25 @@ export default function AcademicCalendarPage() {
     const isOff = !!dayInfo?.is_off_day
     const eventsCount = dayInfo?.events?.length || 0
     const labels = dayInfo?.off_day_types || []
+    const examNames = examGroupsByDate[dateKey] || []
+    const isAnchor = isRangeSelecting && rangeAnchorDate === dateKey
+    const isWithinPendingRange = !!previewStart && dateKey >= previewStart && dateKey <= previewEnd
 
     dayCells.push(
       <div
         key={dateKey}
-        className={`rounded-xl border min-h-[120px] p-2 sm:p-3 ${isOff ? 'border-rose-200 bg-rose-50' : 'border-gray-200 bg-white'}`}
+        className={`rounded-xl border min-h-[120px] p-2 sm:p-3 cursor-pointer hover:border-orange-300 transition select-none ${isOff ? 'border-rose-200 bg-rose-50' : 'border-gray-200 bg-white'} ${isWithinPendingRange ? 'ring-2 ring-orange-200' : ''} ${isAnchor ? 'ring-2 ring-orange-400' : ''}`}
+        onPointerDown={(e) => handleDayPointerDown(e, dateKey)}
+        onPointerEnter={(e) => handleDayPointerEnter(e, dateKey)}
+        onPointerUp={(e) => handleDayPointerUp(e, dateKey)}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            handleCalendarDateSelect(dateKey)
+          }
+        }}
       >
         <div className="flex items-center justify-between">
           <p className="text-sm font-semibold text-gray-900">{day}</p>
@@ -242,6 +366,11 @@ export default function AcademicCalendarPage() {
         {eventsCount > 0 && (
           <p className="mt-2 text-[11px] text-blue-700">{eventsCount} event{eventsCount > 1 ? 's' : ''}</p>
         )}
+        {examNames.map((name) => (
+          <span key={name} className="mt-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 block truncate" title={name}>
+            {name}
+          </span>
+        ))}
       </div>,
     )
   }
@@ -258,7 +387,15 @@ export default function AcademicCalendarPage() {
           <h1 className="text-2xl font-bold text-gray-900">Academic Calendar</h1>
           <p className="text-sm text-gray-600">Large calendar view for sessions, terms, off-days and school events.</p>
         </div>
-        <button className="btn-primary px-4 py-2 text-sm" onClick={openAddModal}>+ Add Event / Off Day</button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button className="btn-primary px-4 py-2 text-sm" onClick={openAddModal}>+ Add Event / Off Day</button>
+          <button
+            className={`px-4 py-2 text-sm rounded-lg border ${isRangeSelecting ? 'bg-orange-50 border-orange-300 text-orange-700' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'}`}
+            onClick={toggleRangeSelecting}
+          >
+            {!isRangeSelecting ? 'Select Date Range' : (!rangeAnchorDate ? 'Pick Start Date' : 'Pick End Date')}
+          </button>
+        </div>
       </div>
 
       <div className="card p-4 sm:p-5">
@@ -328,7 +465,16 @@ export default function AcademicCalendarPage() {
         <div className="mb-3 flex flex-wrap items-center gap-3 text-xs text-gray-600">
           <span className="inline-flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-rose-300" /> OFF day</span>
           <span className="inline-flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-blue-300" /> Event</span>
+          <span className="inline-flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-indigo-300" /> Exam period</span>
           <span className="inline-flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-gray-200" /> Sunday auto OFF</span>
+        </div>
+
+        <div className="mb-3 text-xs text-gray-600">
+          {isRangeSelecting && rangeAnchorDate
+            ? `Range start selected: ${rangeAnchorDate}. Tap/click another date to set end.`
+            : isRangeSelecting
+              ? 'Range mode active. Tap/click a start date.'
+              : 'Tip: Tap/click any date to add a single-day event, use "Select Date Range" for duration events, or drag across dates on desktop.'}
         </div>
 
         {monthLoading ? (
@@ -390,6 +536,23 @@ export default function AcademicCalendarPage() {
             </div>
           )}
         </div>
+      </div>
+
+      <div className="card p-4 sm:p-5">
+        <h3 className="text-sm font-semibold text-gray-900 mb-3">Exam Groups This Month</h3>
+        {currentExamGroups.length === 0 ? (
+          <p className="text-sm text-gray-500">No exam groups scheduled this month.</p>
+        ) : (
+          <div className="space-y-2">
+            {currentExamGroups.map((g) => (
+              <div key={g.id} className="rounded-lg border border-indigo-200 bg-indigo-50 p-3">
+                <p className="text-sm font-medium text-indigo-900">{g.name}</p>
+                <p className="text-xs text-indigo-700">{g.start_date} to {g.end_date}</p>
+                {g.exam_type && <p className="text-xs text-indigo-600 mt-0.5">{g.exam_type_name || g.exam_type?.name || ''}</p>}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {showModal && (

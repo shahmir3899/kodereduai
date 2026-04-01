@@ -1,13 +1,13 @@
 /**
- * AnnualChargesGrid — Excel-like grid for entering annual charge amounts per category.
+ * MonthlyChargesGrid — Excel-like grid for entering monthly charge amounts per category.
  *
  * Props:
- *   categories      — array of { id, name, description } from AnnualFeeCategory
- *   rows            — array of { category_id, annual_category_name, amount }
+ *   categories      — array of { id, name, description } from MonthlyFeeCategory
+ *   rows            — array of { category_id, monthly_category_name, amount }
  *   onChange(rows)  — called when any row changes
  *   onAddRow()      — called when "Add Row" is clicked
  */
-export default function AnnualChargesGrid({ categories = [], rows = [], onChange, onAddRow, readOnly = false }) {
+export default function MonthlyChargesGrid({ categories = [], rows = [], onChange, onAddRow, readOnly = false }) {
   function updateRow(index, field, value) {
     const updated = rows.map((row, i) => (i === index ? { ...row, [field]: value } : row))
     onChange(updated)
@@ -51,7 +51,7 @@ export default function AnnualChargesGrid({ categories = [], rows = [], onChange
                     Category
                   </label>
                   {readOnly ? (
-                    <span className="block px-2.5 py-2 text-sm text-gray-900">{row.annual_category_name || '—'}</span>
+                    <span className="block px-2.5 py-2 text-sm text-gray-900">{row.monthly_category_name || '—'}</span>
                   ) : (
                     <select
                       value={row.category_id || ''}
@@ -59,7 +59,7 @@ export default function AnnualChargesGrid({ categories = [], rows = [], onChange
                         const cat = categories.find((c) => String(c.id) === e.target.value)
                         onChange(rows.map((r, i) =>
                           i === index
-                            ? { ...r, category_id: e.target.value, annual_category_name: cat ? cat.name : r.annual_category_name }
+                            ? { ...r, category_id: e.target.value, monthly_category_name: cat ? cat.name : r.monthly_category_name }
                             : r
                         ))
                       }}
@@ -101,7 +101,7 @@ export default function AnnualChargesGrid({ categories = [], rows = [], onChange
 
       {rows.length > 0 && (
         <div className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-3 py-2">
-          <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Total per Student / Year</span>
+          <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Total per Student / Month</span>
           <span className="text-sm font-bold text-green-700">Rs. {total.toLocaleString()}</span>
         </div>
       )}

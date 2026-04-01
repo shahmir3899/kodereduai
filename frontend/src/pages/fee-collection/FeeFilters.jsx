@@ -18,7 +18,10 @@ export default function FeeFilters({
   setFeeTypeFilter,
   annualCategoryFilter,
   setAnnualCategoryFilter,
+  monthlyCategoryFilter,
+  setMonthlyCategoryFilter,
   annualCategories,
+  monthlyCategories,
   classOptions,
   selectorScope,
   academicYearId,
@@ -30,7 +33,7 @@ export default function FeeFilters({
     <>
       <div>
         <label className="block text-xs font-medium text-gray-500 mb-1">Fee Type</label>
-        <select value={feeTypeFilter || ''} onChange={(e) => { setFeeTypeFilter(e.target.value); setAnnualCategoryFilter?.('') }} className="input-field text-sm">
+        <select value={feeTypeFilter || ''} onChange={(e) => { setFeeTypeFilter(e.target.value); setAnnualCategoryFilter?.(''); setMonthlyCategoryFilter?.('') }} className="input-field text-sm">
           <option value="">All Types</option>
           <option value="MONTHLY">Monthly</option>
           <option value="ANNUAL">Annual</option>
@@ -42,6 +45,15 @@ export default function FeeFilters({
           <select value={annualCategoryFilter || ''} onChange={(e) => setAnnualCategoryFilter(e.target.value)} className="input-field text-sm">
             <option value="">All Categories</option>
             {annualCategories.map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
+          </select>
+        </div>
+      )}
+      {isMonthly && monthlyCategories?.length > 0 && (
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">Category</label>
+          <select value={monthlyCategoryFilter || ''} onChange={(e) => setMonthlyCategoryFilter(e.target.value)} className="input-field text-sm">
+            <option value="">All Categories</option>
+            {monthlyCategories.map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
           </select>
         </div>
       )}

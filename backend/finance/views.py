@@ -26,8 +26,8 @@ from students.models import Student, Class
 from django.utils import timezone
 from .models import (
     Account, Transfer, FeeStructure, FeePayment, Expense, OtherIncome,
-    ExpenseCategory, IncomeCategory, AnnualFeeCategory,
-    DEFAULT_EXPENSE_CATEGORIES, DEFAULT_INCOME_CATEGORIES, SUGGESTED_ANNUAL_CATEGORIES,
+    ExpenseCategory, IncomeCategory, AnnualFeeCategory, MonthlyFeeCategory,
+    DEFAULT_EXPENSE_CATEGORIES, DEFAULT_INCOME_CATEGORIES, SUGGESTED_ANNUAL_CATEGORIES, SUGGESTED_MONTHLY_CATEGORIES,
     FinanceAIChatMessage, MonthlyClosing, AccountSnapshot,
     Discount, Scholarship, StudentDiscount, PaymentGatewayConfig, OnlinePayment,
     SiblingGroup, SiblingGroupMember, SiblingSuggestion,
@@ -39,7 +39,7 @@ from .serializers import (
     FeeStructureSerializer, FeeStructureCreateSerializer, BulkFeeStructureSerializer, BulkStudentFeeStructureSerializer,
     FeePaymentSerializer, FeePaymentCreateSerializer, FeePaymentUpdateSerializer,
     GenerateMonthlySerializer, GenerateOnetimeFeesSerializer, GenerateAnnualFeesSerializer,
-    ExpenseCategorySerializer, IncomeCategorySerializer, AnnualFeeCategorySerializer,
+    ExpenseCategorySerializer, IncomeCategorySerializer, AnnualFeeCategorySerializer, MonthlyFeeCategorySerializer,
     ExpenseSerializer, ExpenseCreateSerializer,
     OtherIncomeSerializer, OtherIncomeCreateSerializer,
     FinanceAIChatMessageSerializer, FinanceAIChatInputSerializer,
@@ -125,7 +125,7 @@ class FeeStructureViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Model
         return FeeStructureSerializer
 
     def get_queryset(self):
-        queryset = FeeStructure.objects.select_related('school', 'class_obj', 'student', 'academic_year')
+        queryset = FeeStructure.objects.select_related('school', 'class_obj', 'student', 'academic_year', 'annual_category', 'monthly_category')
 
         # Only return active structures unless explicitly requested
         if self.request.query_params.get('show_inactive') != 'true':
@@ -209,6 +209,7 @@ class FeeStructureViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Model
                 monthly_amount = item['monthly_amount']
                 fee_type = item.get('fee_type', 'MONTHLY')
                 annual_category_id = item.get('annual_category')
+                monthly_category_id = item.get('monthly_category')
 
                 # Deactivate existing active class-level fee structures for this class + fee_type
                 qs = FeeStructure.objects.filter(
@@ -220,6 +221,8 @@ class FeeStructureViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Model
                 )
                 if fee_type == 'ANNUAL' and annual_category_id:
                     qs = qs.filter(annual_category_id=annual_category_id)
+                elif fee_type == 'MONTHLY' and monthly_category_id:
+                    qs = qs.filter(monthly_category_id=monthly_category_id)
                 qs.update(is_active=False)
 
                 # Create new fee structure
@@ -228,6 +231,7 @@ class FeeStructureViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Model
                     class_obj_id=class_id,
                     fee_type=fee_type,
                     annual_category_id=annual_category_id if fee_type == 'ANNUAL' else None,
+                    monthly_category_id=monthly_category_id if fee_type == 'MONTHLY' else None,
                     monthly_amount=monthly_amount,
                     effective_from=effective_from,
                     academic_year_id=academic_year_id,
@@ -306,7 +310,7 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
     def get_queryset(self):
         queryset = FeePayment.objects.select_related(
             'school', 'student', 'student__class_obj', 'collected_by', 'account',
-            'academic_year', 'annual_category',
+            'academic_year', 'annual_category', 'monthly_category',
         )
 
         # Filter by active school (works for all users including super admin)
@@ -374,6 +378,10 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         annual_category = self.request.query_params.get('annual_category')
         if annual_category:
             queryset = queryset.filter(annual_category_id=annual_category)
+
+        monthly_category = self.request.query_params.get('monthly_category')
+        if monthly_category:
+            queryset = queryset.filter(monthly_category_id=monthly_category)
 
         return queryset
 
@@ -443,6 +451,7 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         month_param = request.query_params.get('month', date.today().month)
         academic_year_id = request.query_params.get('academic_year')
         annual_categories = request.query_params.get('annual_categories', '')
+        monthly_categories = request.query_params.get('monthly_categories', '')
 
         school_id = _resolve_school_id(request)
         if not school_id:
@@ -464,6 +473,11 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         cat_ids = []
         if fee_type == 'ANNUAL' and annual_categories:
             cat_ids = [int(x) for x in annual_categories.split(',') if x.strip().isdigit()]
+
+        # Parse monthly category IDs for MONTHLY preview
+        monthly_cat_ids = []
+        if fee_type == 'MONTHLY' and monthly_categories:
+            monthly_cat_ids = [int(x) for x in monthly_categories.split(',') if x.strip().isdigit()]
 
         from decimal import Decimal as D
 
@@ -512,7 +526,52 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
                 'has_more': len(will_create) > 50,
             })
 
-        # Default (MONTHLY or legacy) preview
+        if fee_type == 'MONTHLY' and monthly_cat_ids:
+            # Per-monthly-category preview
+            will_create = []
+            already_exist = 0
+            no_fee_structure = 0
+
+            for cat_id in monthly_cat_ids:
+                existing_ids = set(
+                    FeePayment.objects.filter(
+                        school_id=school_id, month=m, year=int(year_param),
+                        fee_type='MONTHLY', monthly_category_id=cat_id,
+                    ).values_list('student_id', flat=True)
+                )
+                cat_name = ''
+                try:
+                    cat_name = MonthlyFeeCategory.objects.get(id=cat_id, school_id=school_id).name
+                except MonthlyFeeCategory.DoesNotExist:
+                    continue
+
+                for s in students:
+                    if s.id in existing_ids:
+                        already_exist += 1
+                        continue
+                    amount = resolve_fee_amount(s, 'MONTHLY', monthly_category_id=cat_id)
+                    if amount is None:
+                        no_fee_structure += 1
+                    else:
+                        will_create.append({
+                            'student_id': s.id,
+                            'student_name': s.name,
+                            'class_name': s.class_obj.name if s.class_obj else '',
+                            'amount': str(amount),
+                            'category': cat_name,
+                        })
+
+            total = sum(D(s['amount']) for s in will_create)
+            return Response({
+                'will_create': len(will_create),
+                'already_exist': already_exist,
+                'no_fee_structure': no_fee_structure,
+                'total_amount': str(total),
+                'students': will_create[:50],
+                'has_more': len(will_create) > 50,
+            })
+
+        # Default (MONTHLY without category filter or legacy) preview
         existing_ids = set(
             FeePayment.objects.filter(
                 school_id=school_id, month=m, year=int(year_param), fee_type=fee_type
@@ -558,6 +617,7 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         year = serializer.validated_data['year']
         class_id = serializer.validated_data.get('class_id')
         academic_year_id = serializer.validated_data.get('academic_year')
+        monthly_category_ids = serializer.validated_data.get('monthly_category_ids')
 
         school_id = _resolve_school_id(request)
         if not school_id:
@@ -578,6 +638,7 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
             'year': year,
             'class_id': class_id,
             'academic_year_id': academic_year_id,
+            'monthly_category_ids': monthly_category_ids,
         }
         title = f"Generating fees for {month}/{year}"
 
@@ -878,6 +939,10 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         if fee_type:
             payments = payments.filter(fee_type=fee_type.upper())
 
+        monthly_category = request.query_params.get('monthly_category')
+        if monthly_category:
+            payments = payments.filter(monthly_category_id=monthly_category)
+
         totals = payments.aggregate(
             total_due=Sum('amount_due'),
             total_collected=Sum('amount_paid'),
@@ -898,6 +963,17 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
             count=Count('id'),
         ).order_by('student__class_obj__name')
 
+        # Per-category breakdown (monthly categories)
+        by_category = payments.filter(
+            fee_type='MONTHLY', monthly_category__isnull=False
+        ).values(
+            'monthly_category__id', 'monthly_category__name'
+        ).annotate(
+            total_due=Sum('amount_due'),
+            total_collected=Sum('amount_paid'),
+            count=Count('id'),
+        ).order_by('monthly_category__name')
+
         return Response({
             'month': int(month),
             'year': int(year),
@@ -917,6 +993,16 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
                     'count': item['count'],
                 }
                 for item in by_class
+            ],
+            'by_category': [
+                {
+                    'category_id': item['monthly_category__id'],
+                    'category_name': item['monthly_category__name'],
+                    'total_due': item['total_due'],
+                    'total_collected': item['total_collected'],
+                    'count': item['count'],
+                }
+                for item in by_category
             ],
         })
 
@@ -998,6 +1084,12 @@ class ExpenseCategoryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mo
     serializer_class = ExpenseCategorySerializer
     permission_classes = [IsAuthenticated, IsSchoolAdminOrStaffReadOnly, HasSchoolAccess]
 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        if _is_data_restricted_user(self.request):
+            qs = qs.filter(is_sensitive=False)
+        return qs
+
     def list(self, request, *args, **kwargs):
         school_id = _resolve_school_id(request)
         if school_id and not ExpenseCategory.objects.filter(school_id=school_id).exists():
@@ -1006,7 +1098,20 @@ class ExpenseCategoryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mo
 
     def perform_create(self, serializer):
         school_id = _resolve_school_id(self.request)
+        if serializer.validated_data.get('is_sensitive'):
+            user_role = get_effective_role(self.request)
+            if user_role not in ADMIN_ROLES:
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied("Only administrators can mark categories as sensitive.")
         serializer.save(school_id=school_id)
+
+    def perform_update(self, serializer):
+        if 'is_sensitive' in serializer.validated_data:
+            user_role = get_effective_role(self.request)
+            if user_role not in ADMIN_ROLES:
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied("Only administrators can change sensitive flag.")
+        serializer.save()
 
 
 class IncomeCategoryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
@@ -1035,6 +1140,15 @@ def _seed_annual_categories(school_id):
             name=suggestion['name'],
             defaults={'description': suggestion.get('description', '')},
         )
+
+
+def _seed_monthly_categories(school_id):
+    """Create a default monthly fee category for a school if none exist."""
+    MonthlyFeeCategory.objects.get_or_create(
+        school_id=school_id,
+        name='Tuition Fee',
+        defaults={'description': 'Default monthly tuition charge'},
+    )
 
 
 class AnnualFeeCategoryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
@@ -1077,6 +1191,53 @@ class AnnualFeeCategoryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.
             AnnualFeeCategory.objects.filter(school_id=school_id).values_list('name', flat=True)
         )
         available = [s for s in SUGGESTED_ANNUAL_CATEGORIES if s['name'] not in existing_names]
+        return Response({'suggestions': available})
+
+
+class MonthlyFeeCategoryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
+    """CRUD for school monthly fee categories with suggested defaults."""
+    required_module = 'finance'
+    queryset = MonthlyFeeCategory.objects.all()
+    serializer_class = MonthlyFeeCategorySerializer
+    permission_classes = [IsAuthenticated, IsSchoolAdminOrStaffReadOnly, HasSchoolAccess]
+
+    def list(self, request, *args, **kwargs):
+        school_id = _resolve_school_id(request)
+        # Auto-seed a default category if the school has none yet
+        if school_id and not MonthlyFeeCategory.objects.filter(school_id=school_id).exists():
+            _seed_monthly_categories(school_id)
+        response = super().list(request, *args, **kwargs)
+        # Attach suggestions to the response so the frontend can offer them
+        data = response.data
+        if isinstance(data, dict):
+            items = data.get('results', [])
+        elif isinstance(data, list):
+            items = data
+        else:
+            items = []
+        existing_names = {item['name'] for item in items if isinstance(item, dict) and 'name' in item}
+        suggestions = [
+            s for s in SUGGESTED_MONTHLY_CATEGORIES
+            if s['name'] not in existing_names
+        ]
+        if isinstance(response.data, dict):
+            response.data['suggestions'] = suggestions
+        return response
+
+    def perform_create(self, serializer):
+        school_id = _resolve_school_id(self.request)
+        serializer.save(school_id=school_id)
+
+    @action(detail=False, methods=['get'], url_path='suggestions')
+    def suggestions(self, request):
+        """Return suggested monthly charge category names not yet created for this school."""
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response({'suggestions': SUGGESTED_MONTHLY_CATEGORIES})
+        existing_names = set(
+            MonthlyFeeCategory.objects.filter(school_id=school_id).values_list('name', flat=True)
+        )
+        available = [s for s in SUGGESTED_MONTHLY_CATEGORIES if s['name'] not in existing_names]
         return Response({'suggestions': available})
 
 

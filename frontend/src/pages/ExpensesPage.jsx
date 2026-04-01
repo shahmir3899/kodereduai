@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { financeApi } from '../services/api'
 import TransferModal from '../components/TransferModal'
 import { useConfirmModal } from '../components/ConfirmModal'
+import ExpenseCategoryManagerModal from './ExpenseCategoryManagerModal'
 
 const COLOR_PALETTE = [
   'bg-blue-100 text-blue-800',
@@ -39,6 +40,7 @@ export default function ExpensesPage() {
     category: '', amount: '', date: new Date().toISOString().split('T')[0], description: '', account: '', is_sensitive: false
   })
   const [newCategoryName, setNewCategoryName] = useState('')
+  const [showCategoryModal, setShowCategoryModal] = useState(false)
 
   // Transfer state
   const [tfrDateFrom, setTfrDateFrom] = useState('')
@@ -211,9 +213,14 @@ export default function ExpensesPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           {canWrite && activeTab === 'expenses' && (
-            <button onClick={() => setShowModal(true)} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm">
-              Add Expense
-            </button>
+            <>
+              <button onClick={() => setShowCategoryModal(true)} className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm">
+                ⚙ Categories
+              </button>
+              <button onClick={() => setShowModal(true)} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm">
+                Add Expense
+              </button>
+            </>
           )}
           {canWrite && activeTab === 'transfers' && (
             <button onClick={() => setShowTransferModal(true)} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm">
@@ -567,6 +574,7 @@ export default function ExpensesPage() {
       />
 
       <ConfirmModalRoot />
+      {showCategoryModal && <ExpenseCategoryManagerModal onClose={() => setShowCategoryModal(false)} />}
     </div>
   )
 }

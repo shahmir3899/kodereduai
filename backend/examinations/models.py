@@ -176,6 +176,8 @@ class ExamSubject(models.Model):
         max_digits=6, decimal_places=2, default=33.00,
     )
     exam_date = models.DateField(null=True, blank=True)
+    start_time = models.TimeField(null=True, blank=True)
+    end_time = models.TimeField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

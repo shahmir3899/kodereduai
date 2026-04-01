@@ -250,8 +250,8 @@ export default function ExamsPage() {
   // ── Date Sheet Modal ──
 
   const DateSheetModal = ({ groupId, onClose: closeDateSheet }) => {
-    const [dateSheetData, setDateSheetData] = useState(null)
-    const [saving, setSaving] = useState({})
+    const [localRows, setLocalRows] = useState([])
+    const [saving, setSaving] = useState(new Set())
 
     const { data: dsRes, isLoading: dsLoading } = useQuery({
       queryKey: ['dateSheet', groupId],
@@ -260,23 +260,45 @@ export default function ExamsPage() {
     })
 
     useEffect(() => {
-      if (dsRes?.data) {
-        setDateSheetData(dsRes.data)
+      if (dsRes?.data?.subjects) {
+        const rows = []
+        dsRes.data.subjects.forEach(sub => {
+          sub.classes.forEach(cls => {
+            rows.push({
+              exam_subject_id: cls.exam_subject_id,
+              subject_name: sub.subject_name,
+              subject_code: sub.subject_code,
+              class_name: cls.class_name,
+              exam_date: cls.exam_date || '',
+              start_time: cls.start_time || '',
+              end_time: cls.end_time || '',
+            })
+          })
+        })
+        setLocalRows(rows)
       }
     }, [dsRes])
 
-    const subjects = dateSheetData?.subjects || []
+    const handleChange = (examSubjectId, field, value) => {
+      setLocalRows(prev => prev.map(r =>
+        r.exam_subject_id === examSubjectId ? { ...r, [field]: value } : r
+      ))
+    }
 
-    const handleDateChange = async (subjectId, date) => {
-      setSaving(p => ({ ...p, [subjectId]: true }))
+    const handleSave = async (row) => {
+      setSaving(prev => new Set(prev).add(row.exam_subject_id))
       try {
-        await examinationsApi.updateDateBySubject(groupId, { subject_id: subjectId, exam_date: date || null })
-        queryClient.invalidateQueries({ queryKey: ['dateSheet', groupId] })
+        await examinationsApi.updateDateSheet(groupId, [{
+          exam_subject_id: row.exam_subject_id,
+          exam_date: row.exam_date || null,
+          start_time: row.start_time || null,
+          end_time: row.end_time || null,
+        }])
         queryClient.invalidateQueries({ queryKey: ['examGroups'] })
-      } catch (err) {
-        setListError('Failed to update date.')
+      } catch {
+        setListError('Failed to save.')
       } finally {
-        setSaving(p => ({ ...p, [subjectId]: false }))
+        setSaving(prev => { const s = new Set(prev); s.delete(row.exam_subject_id); return s })
       }
     }
 
@@ -296,9 +318,12 @@ export default function ExamsPage() {
 
     return (
       <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={closeDateSheet}>
-        <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[85vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">Date Sheet</h2>
+        <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[85vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center justify-between mb-1">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">Date Sheet</h2>
+              <p className="text-xs text-gray-500">Each class–subject row is independent. Changes save on blur.</p>
+            </div>
             <div className="flex items-center gap-2">
               <button onClick={handleDownload} className="text-xs px-3 py-1.5 bg-green-50 text-green-700 hover:bg-green-100 rounded-lg font-medium">
                 Download Excel
@@ -311,37 +336,63 @@ export default function ExamsPage() {
             <div className="text-center py-8">
               <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600 mx-auto"></div>
             </div>
-          ) : subjects.length === 0 ? (
+          ) : localRows.length === 0 ? (
             <p className="text-sm text-gray-500 text-center py-8">No subjects found in this exam group.</p>
           ) : (
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
-                  <th className="px-3 py-2 text-left">Subject</th>
-                  <th className="px-3 py-2 text-left">Code</th>
-                  <th className="px-3 py-2 text-left">Date</th>
-                  <th className="px-3 py-2 text-left">Classes</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {subjects.map(sub => (
-                  <tr key={sub.subject_id}>
-                    <td className="px-3 py-2 font-medium text-gray-900">{sub.subject_name}</td>
-                    <td className="px-3 py-2 text-gray-500">{sub.subject_code || '—'}</td>
-                    <td className="px-3 py-2">
-                      <input
-                        type="date"
-                        value={sub.exam_date || ''}
-                        onChange={e => handleDateChange(sub.subject_id, e.target.value)}
-                        className="input text-sm py-1 px-2 w-36"
-                        disabled={saving[sub.subject_id]}
-                      />
-                    </td>
-                    <td className="px-3 py-2 text-gray-500 text-xs">{sub.classes?.map(c => c.class_name).join(', ') || '—'}</td>
+            <div className="overflow-auto mt-4">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
+                    <th className="px-3 py-2 text-left">Subject</th>
+                    <th className="px-3 py-2 text-left">Class</th>
+                    <th className="px-3 py-2 text-left w-36">Date</th>
+                    <th className="px-3 py-2 text-left w-28">Start</th>
+                    <th className="px-3 py-2 text-left w-28">End</th>
+                    <th className="px-3 py-2 w-8"></th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {localRows.map((row, idx) => {
+                    const prev = localRows[idx - 1]
+                    const isFirst = !prev || prev.subject_name !== row.subject_name
+                    const isSaving = saving.has(row.exam_subject_id)
+                    return (
+                      <tr key={row.exam_subject_id} className={`hover:bg-gray-50 ${isFirst && idx > 0 ? 'border-t-2 border-gray-200' : ''}`}>
+                        <td className="px-3 py-2 font-medium text-gray-900">
+                          {isFirst ? (
+                            <span>{row.subject_name}{row.subject_code ? <span className="text-xs text-gray-400 ml-1">({row.subject_code})</span> : null}</span>
+                          ) : (
+                            <span className="text-gray-300 text-xs">↳</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-gray-600 text-xs">{row.class_name}</td>
+                        <td className="px-3 py-2">
+                          <input type="date" value={row.exam_date}
+                            onChange={e => handleChange(row.exam_subject_id, 'exam_date', e.target.value)}
+                            onBlur={() => handleSave(row)}
+                            className="input text-sm py-1 w-full" disabled={isSaving} />
+                        </td>
+                        <td className="px-3 py-2">
+                          <input type="time" value={row.start_time}
+                            onChange={e => handleChange(row.exam_subject_id, 'start_time', e.target.value)}
+                            onBlur={() => handleSave(row)}
+                            className="input text-sm py-1 w-full" disabled={isSaving} />
+                        </td>
+                        <td className="px-3 py-2">
+                          <input type="time" value={row.end_time}
+                            onChange={e => handleChange(row.exam_subject_id, 'end_time', e.target.value)}
+                            onBlur={() => handleSave(row)}
+                            className="input text-sm py-1 w-full" disabled={isSaving} />
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          {isSaving && <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary-600 mx-auto" />}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       </div>

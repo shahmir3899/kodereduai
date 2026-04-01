@@ -27,7 +27,7 @@ export default function ExamWizard({ onClose, onSuccess }) {
     default_total_marks: '100',
     default_passing_marks: '33',
     class_ids: [],
-    date_sheet: {},
+    date_sheet: {},  // Key: "classId_subjectId" → { exam_date, start_time, end_time }
   })
 
   // Shared queries
@@ -65,7 +65,7 @@ export default function ExamWizard({ onClose, onSuccess }) {
     return counts
   }, [allClassSubjects])
 
-  // Unique subjects across selected classes
+  // Unique subjects across selected classes (for legacy unused references)
   const uniqueSubjects = useMemo(() => {
     const subjectMap = {}
     allClassSubjects
@@ -81,6 +81,32 @@ export default function ExamWizard({ onClose, onSuccess }) {
       })
     return Object.values(subjectMap).sort((a, b) => a.name.localeCompare(b.name))
   }, [allClassSubjects, wizardData.class_ids])
+
+  // Per-class per-subject pairs for Step 3 timetable
+  const subjectClassPairs = useMemo(() => {
+    const selectedClassMap = {}
+    classes.forEach(c => { selectedClassMap[c.id] = c })
+    const rows = []
+    allClassSubjects
+      .filter(cs => wizardData.class_ids.includes(cs.class_obj))
+      .forEach(cs => {
+        const cls = selectedClassMap[cs.class_obj]
+        if (!cls) return
+        rows.push({
+          key: `${cs.class_obj}_${cs.subject}`,
+          classId: cs.class_obj,
+          className: cls.section ? `${cls.name} - ${cls.section}` : cls.name,
+          subjectId: cs.subject,
+          subjectName: cs.subject_name,
+          subjectCode: cs.subject_code || '',
+        })
+      })
+    rows.sort((a, b) => {
+      const s = a.subjectName.localeCompare(b.subjectName)
+      return s !== 0 ? s : a.className.localeCompare(b.className)
+    })
+    return rows
+  }, [allClassSubjects, wizardData.class_ids, classes])
 
   const selectedType = examTypes.find(t => String(t.id) === String(wizardData.exam_type))
   const selectedYear = years.find(y => String(y.id) === String(wizardData.academic_year))
@@ -174,6 +200,20 @@ export default function ExamWizard({ onClose, onSuccess }) {
   }
 
   const handleSubmit = () => {
+    // Convert date_sheet from { "classId_subjectId": {exam_date, start_time, end_time} }
+    // to list of { class_id, subject_id, exam_date, start_time, end_time } (only rows with a date)
+    const dateSheetList = Object.entries(wizardData.date_sheet)
+      .filter(([, val]) => val.exam_date)
+      .map(([key, val]) => {
+        const [class_id, subject_id] = key.split('_').map(Number)
+        return {
+          class_id,
+          subject_id,
+          exam_date: val.exam_date || null,
+          start_time: val.start_time || null,
+          end_time: val.end_time || null,
+        }
+      })
     const payload = {
       academic_year: parseInt(wizardData.academic_year),
       term: wizardData.term ? parseInt(wizardData.term) : null,
@@ -184,13 +224,13 @@ export default function ExamWizard({ onClose, onSuccess }) {
       class_ids: wizardData.class_ids,
       default_total_marks: parseFloat(wizardData.default_total_marks) || 100,
       default_passing_marks: parseFloat(wizardData.default_passing_marks) || 33,
-      date_sheet: wizardData.date_sheet,
+      date_sheet: dateSheetList,
     }
     wizardMut.mutate(payload)
   }
 
   const selectedClasses = classes.filter(c => wizardData.class_ids.includes(c.id))
-  const dateSheetCount = Object.values(wizardData.date_sheet).filter(Boolean).length
+  const dateSheetCount = Object.values(wizardData.date_sheet).filter(v => v?.exam_date).length
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
@@ -401,51 +441,80 @@ export default function ExamWizard({ onClose, onSuccess }) {
             </div>
           )}
 
-          {/* Step 3: Date Sheet (Optional) */}
+          {/* Step 3: Date Sheet */}
           {step === 3 && (
             <div>
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <p className="text-sm font-medium text-gray-700">Assign Exam Dates to Subjects</p>
-                  <p className="text-xs text-gray-500">Optional - you can set dates later from the group actions</p>
+                  <p className="text-sm font-medium text-gray-700">Assign Exam Dates &amp; Times</p>
+                  <p className="text-xs text-gray-500">One row per class per subject. Optional — you can set or adjust later.</p>
                 </div>
                 <button type="button" onClick={() => setStep(4)} className="text-xs text-sky-600 hover:underline">
                   Skip &rarr;
                 </button>
               </div>
 
-              {uniqueSubjects.length === 0 ? (
+              {subjectClassPairs.length === 0 ? (
                 <div className="text-center py-8 text-gray-400 text-sm">
                   No subjects found for selected classes. You can assign subjects later.
                 </div>
               ) : (
-                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                <div className="border border-gray-200 rounded-lg overflow-auto max-h-[360px]">
                   <table className="min-w-full text-sm">
-                    <thead>
+                    <thead className="sticky top-0 z-10">
                       <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
-                        <th className="px-4 py-2 text-left">Subject</th>
-                        <th className="px-4 py-2 text-left">Code</th>
-                        <th className="px-4 py-2 text-left w-40">Date</th>
+                        <th className="px-3 py-2 text-left">Subject</th>
+                        <th className="px-3 py-2 text-left">Class</th>
+                        <th className="px-3 py-2 text-left w-36">Date</th>
+                        <th className="px-3 py-2 text-left w-28">Start</th>
+                        <th className="px-3 py-2 text-left w-28">End</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {uniqueSubjects.map(s => (
-                        <tr key={s.id} className="hover:bg-gray-50">
-                          <td className="px-4 py-2 font-medium text-gray-800">{s.name}</td>
-                          <td className="px-4 py-2 text-gray-500">{s.code}</td>
-                          <td className="px-4 py-2">
-                            <input type="date"
-                              value={wizardData.date_sheet[s.id] || ''}
-                              min={wizardData.start_date || undefined}
-                              max={wizardData.end_date || undefined}
-                              onChange={e => setWizardData(prev => ({
-                                ...prev,
-                                date_sheet: { ...prev.date_sheet, [s.id]: e.target.value },
-                              }))}
-                              className="input text-sm py-1 w-full" />
-                          </td>
-                        </tr>
-                      ))}
+                      {subjectClassPairs.map((row, idx) => {
+                        const prev = subjectClassPairs[idx - 1]
+                        const isFirstOfSubject = !prev || prev.subjectName !== row.subjectName
+                        const slot = wizardData.date_sheet[row.key] || {}
+                        const setSlot = (field, val) => setWizardData(prev => ({
+                          ...prev,
+                          date_sheet: {
+                            ...prev.date_sheet,
+                            [row.key]: { ...(prev.date_sheet[row.key] || {}), [field]: val },
+                          },
+                        }))
+                        return (
+                          <tr key={row.key} className={`hover:bg-gray-50 ${isFirstOfSubject && idx > 0 ? 'border-t-2 border-gray-200' : ''}`}>
+                            <td className="px-3 py-2 font-medium text-gray-800">
+                              {isFirstOfSubject ? (
+                                <span>{row.subjectName}{row.subjectCode ? <span className="text-xs text-gray-400 ml-1">({row.subjectCode})</span> : null}</span>
+                              ) : (
+                                <span className="text-gray-300 text-xs">↳</span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2 text-gray-600 text-xs">{row.className}</td>
+                            <td className="px-3 py-2">
+                              <input type="date"
+                                value={slot.exam_date || ''}
+                                min={wizardData.start_date || undefined}
+                                max={wizardData.end_date || undefined}
+                                onChange={e => setSlot('exam_date', e.target.value)}
+                                className="input text-sm py-1 w-full" />
+                            </td>
+                            <td className="px-3 py-2">
+                              <input type="time"
+                                value={slot.start_time || ''}
+                                onChange={e => setSlot('start_time', e.target.value)}
+                                className="input text-sm py-1 w-full" />
+                            </td>
+                            <td className="px-3 py-2">
+                              <input type="time"
+                                value={slot.end_time || ''}
+                                onChange={e => setSlot('end_time', e.target.value)}
+                                className="input text-sm py-1 w-full" />
+                            </td>
+                          </tr>
+                        )
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -500,14 +569,21 @@ export default function ExamWizard({ onClose, onSuccess }) {
               {/* Date sheet preview */}
               {dateSheetCount > 0 && (
                 <div>
-                  <h3 className="text-sm font-semibold text-gray-700 mb-2">Date Sheet</h3>
-                  <div className="space-y-1">
-                    {uniqueSubjects.filter(s => wizardData.date_sheet[s.id]).map(s => (
-                      <div key={s.id} className="flex items-center justify-between py-1 px-3 bg-gray-50 rounded text-sm">
-                        <span>{s.name}</span>
-                        <span className="text-gray-500">{wizardData.date_sheet[s.id]}</span>
-                      </div>
-                    ))}
+                  <h3 className="text-sm font-semibold text-gray-700 mb-2">Date Sheet ({dateSheetCount} entries)</h3>
+                  <div className="space-y-1 max-h-40 overflow-y-auto">
+                    {subjectClassPairs.filter(row => wizardData.date_sheet[row.key]?.exam_date).map(row => {
+                      const slot = wizardData.date_sheet[row.key]
+                      return (
+                        <div key={row.key} className="flex items-center justify-between py-1 px-3 bg-gray-50 rounded text-sm">
+                          <span>{row.subjectName} <span className="text-gray-400 text-xs">({row.className})</span></span>
+                          <span className="text-gray-500 text-xs">
+                            {slot.exam_date}
+                            {slot.start_time ? ` · ${slot.start_time.slice(0, 5)}` : ''}
+                            {slot.end_time ? `–${slot.end_time.slice(0, 5)}` : ''}
+                          </span>
+                        </div>
+                      )
+                    })}
                   </div>
                 </div>
               )}

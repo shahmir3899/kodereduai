@@ -2,6 +2,7 @@ from django.contrib import admin
 from .models import (
     Account, Transfer, FeeStructure, FeePayment, Expense, OtherIncome,
     FinanceAIChatMessage, MonthlyClosing, AccountSnapshot, AnnualFeeCategory,
+    MonthlyFeeCategory,
 )
 
 
@@ -31,6 +32,20 @@ class FeePaymentAdmin(admin.ModelAdmin):
     list_display = ['student', 'month', 'year', 'amount_due', 'amount_paid', 'status', 'payment_date']
     list_filter = ['school', 'status', 'year', 'month']
     search_fields = ['student__name', 'receipt_number']
+
+
+@admin.register(AnnualFeeCategory)
+class AnnualFeeCategoryAdmin(admin.ModelAdmin):
+    list_display = ['school', 'name', 'is_active']
+    list_filter = ['school', 'is_active']
+    search_fields = ['name']
+
+
+@admin.register(MonthlyFeeCategory)
+class MonthlyFeeCategoryAdmin(admin.ModelAdmin):
+    list_display = ['school', 'name', 'is_active']
+    list_filter = ['school', 'is_active']
+    search_fields = ['name']
 
 
 @admin.register(Expense)
@@ -67,8 +82,4 @@ class AccountSnapshotAdmin(admin.ModelAdmin):
     search_fields = ['account__name']
 
 
-@admin.register(AnnualFeeCategory)
-class AnnualFeeCategoryAdmin(admin.ModelAdmin):
-    list_display = ['school', 'name', 'description', 'is_active', 'created_at']
-    list_filter = ['school', 'is_active']
-    search_fields = ['name']
+

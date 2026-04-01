@@ -297,6 +297,13 @@ export const financeApi = {
   deleteAnnualCategory: (id) => api.delete(`/api/finance/annual-categories/${id}/`),
   getAnnualCategorySuggestions: () => api.get('/api/finance/annual-categories/suggestions/'),
 
+  // Monthly Fee Categories
+  getMonthlyCategories: (params) => api.get('/api/finance/monthly-categories/', { params }),
+  createMonthlyCategory: (data) => api.post('/api/finance/monthly-categories/', data),
+  updateMonthlyCategory: (id, data) => api.patch(`/api/finance/monthly-categories/${id}/`, data),
+  deleteMonthlyCategory: (id) => api.delete(`/api/finance/monthly-categories/${id}/`),
+  getMonthlyCategorySuggestions: () => api.get('/api/finance/monthly-categories/suggestions/'),
+
   // Other Income
   getOtherIncome: (params) => api.get('/api/finance/other-income/', { params }),
   createOtherIncome: (data) => api.post('/api/finance/other-income/', data),
@@ -581,6 +588,7 @@ export const examinationsApi = {
   deleteExamGroup: (id) => api.delete(`/api/examinations/exam-groups/${id}/`),
   getDateSheet: (groupId) => api.get(`/api/examinations/exam-groups/${groupId}/date-sheet/`),
   updateDateBySubject: (groupId, data) => api.post(`/api/examinations/exam-groups/${groupId}/update-date-by-subject/`, data),
+  updateDateSheet: (groupId, entries) => api.patch(`/api/examinations/exam-groups/${groupId}/date-sheet/`, { date_sheet: entries }),
   downloadDateSheet: (groupId) => api.get(`/api/examinations/exam-groups/${groupId}/download-date-sheet/`, { responseType: 'blob' }),
   publishAllExams: (groupId) => api.post(`/api/examinations/exam-groups/${groupId}/publish-all/`),
 

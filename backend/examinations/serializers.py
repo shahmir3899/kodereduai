@@ -101,7 +101,7 @@ class ExamSubjectSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'school', 'exam', 'exam_name',
             'subject', 'subject_name', 'subject_code',
-            'total_marks', 'passing_marks', 'exam_date',
+            'total_marks', 'passing_marks', 'exam_date', 'start_time', 'end_time',
             'is_active', 'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'school', 'created_at', 'updated_at']
@@ -110,7 +110,7 @@ class ExamSubjectSerializer(serializers.ModelSerializer):
 class ExamSubjectCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = ExamSubject
-        fields = ['exam', 'subject', 'total_marks', 'passing_marks', 'exam_date']
+        fields = ['exam', 'subject', 'total_marks', 'passing_marks', 'exam_date', 'start_time', 'end_time']
 
     def validate(self, data):
         if data.get('passing_marks') and data.get('total_marks'):
@@ -332,8 +332,11 @@ class ExamGroupWizardCreateSerializer(serializers.Serializer):
     default_passing_marks = serializers.DecimalField(
         max_digits=6, decimal_places=2, default=33.00, required=False,
     )
-    date_sheet = serializers.DictField(
-        child=serializers.DateField(), required=False, default=dict,
+    date_sheet = serializers.ListField(
+        child=serializers.DictField(),
+        required=False,
+        default=list,
+        help_text="List of {class_id, subject_id, exam_date, start_time, end_time} entries",
     )
 
     def validate(self, data):
@@ -345,11 +348,18 @@ class ExamGroupWizardCreateSerializer(serializers.Serializer):
         return data
 
 
+class DateSheetEntrySerializer(serializers.Serializer):
+    exam_subject_id = serializers.IntegerField()
+    exam_date = serializers.DateField(allow_null=True, required=False)
+    start_time = serializers.TimeField(allow_null=True, required=False)
+    end_time = serializers.TimeField(allow_null=True, required=False)
+
+
 class DateSheetUpdateSerializer(serializers.Serializer):
-    """Bulk-update exam_date on ExamSubjects."""
+    """Bulk-update exam_date/start_time/end_time on ExamSubjects."""
     date_sheet = serializers.ListField(
-        child=serializers.DictField(),
-        help_text="List of {exam_subject_id, exam_date} entries",
+        child=DateSheetEntrySerializer(),
+        help_text="List of {exam_subject_id, exam_date, start_time, end_time} entries",
     )
 
 

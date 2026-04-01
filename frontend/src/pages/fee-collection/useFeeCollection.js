@@ -8,7 +8,7 @@ import { computeSummaryData, filterPayments } from './feeUtils'
  * Data hook for FeeCollectPage — payment collection workbench.
  * Handles fee payments queries + all payment-related mutations.
  */
-export function useFeeCollection({ month, year, classFilter, statusFilter, feeTypeFilter, annualCategoryFilter, academicYearId }) {
+export function useFeeCollection({ month, year, classFilter, statusFilter, feeTypeFilter, annualCategoryFilter, monthlyCategoryFilter, academicYearId }) {
   const queryClient = useQueryClient()
 
   // Reference data
@@ -28,11 +28,12 @@ export function useFeeCollection({ month, year, classFilter, statusFilter, feeTy
   const apiMonth = isMonthlyType ? month : 0
 
   const { data: payments, isLoading } = useQuery({
-    queryKey: ['feePayments', apiMonth, year, feeTypeFilter, annualCategoryFilter, academicYearId],
+    queryKey: ['feePayments', apiMonth, year, feeTypeFilter, annualCategoryFilter, monthlyCategoryFilter, academicYearId],
     queryFn: () => financeApi.getFeePayments({
       month: apiMonth, year,
       ...(feeTypeFilter && { fee_type: feeTypeFilter }),
       ...(annualCategoryFilter && { annual_category: annualCategoryFilter }),
+      ...(monthlyCategoryFilter && { monthly_category: monthlyCategoryFilter }),
       ...(academicYearId && { academic_year: academicYearId }),
       page_size: 9999,
     }),
@@ -94,6 +95,14 @@ export function useFeeCollection({ month, year, classFilter, statusFilter, feeTy
     staleTime: 5 * 60_000,
   })
   const annualCategories = annualCategoriesData?.data?.results || annualCategoriesData?.data || []
+
+  // Monthly categories for sub-filter
+  const { data: monthlyCategoriesData } = useQuery({
+    queryKey: ['monthly-categories'],
+    queryFn: () => financeApi.getMonthlyCategories({}),
+    staleTime: 5 * 60_000,
+  })
+  const monthlyCategories = monthlyCategoriesData?.data?.results || monthlyCategoriesData?.data || []
   
   // Sort classes by grade_level, section, name to ensure correct ordering
   const sortedClassList = useMemo(() => {
@@ -198,6 +207,7 @@ export function useFeeCollection({ month, year, classFilter, statusFilter, feeTy
     classList: sortedClassList,
     accountsList,
     annualCategories,
+    monthlyCategories,
     // Mutations
     generateMutation,
     paymentMutation,

@@ -8,7 +8,7 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     AccountViewSet, TransferViewSet,
     FeeStructureViewSet, FeePaymentViewSet,
-    ExpenseCategoryViewSet, IncomeCategoryViewSet, AnnualFeeCategoryViewSet,
+    ExpenseCategoryViewSet, IncomeCategoryViewSet, AnnualFeeCategoryViewSet, MonthlyFeeCategoryViewSet,
     ExpenseViewSet, OtherIncomeViewSet,
     FinanceReportsView, FinanceAIChatView,
     FeePredictorView,
@@ -28,6 +28,7 @@ router.register(r'fee-payments', FeePaymentViewSet, basename='fee-payment')
 router.register(r'expense-categories', ExpenseCategoryViewSet, basename='expense-category')
 router.register(r'income-categories', IncomeCategoryViewSet, basename='income-category')
 router.register(r'annual-categories', AnnualFeeCategoryViewSet, basename='annual-category')
+router.register(r'monthly-categories', MonthlyFeeCategoryViewSet, basename='monthly-category')
 router.register(r'expenses', ExpenseViewSet, basename='expense')
 router.register(r'other-income', OtherIncomeViewSet, basename='other-income')
 router.register(r'discounts', DiscountViewSet, basename='discount')

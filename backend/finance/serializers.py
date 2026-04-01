@@ -7,7 +7,7 @@ from core.mixins import ensure_tenant_school_id
 from core.permissions import _is_data_restricted_user
 from .models import (
     Account, Transfer, FeeStructure, FeePayment, Expense, OtherIncome,
-    ExpenseCategory, IncomeCategory, AnnualFeeCategory,
+    ExpenseCategory, IncomeCategory, AnnualFeeCategory, MonthlyFeeCategory,
     FinanceAIChatMessage, MonthlyClosing, AccountSnapshot,
     Discount, Scholarship, StudentDiscount, PaymentGatewayConfig, OnlinePayment,
 )
@@ -103,6 +103,7 @@ class FeeStructureSerializer(serializers.ModelSerializer):
     academic_year_name = serializers.CharField(source='academic_year.name', read_only=True, default=None)
     fee_type_display = serializers.CharField(source='get_fee_type_display', read_only=True)
     annual_category_name = serializers.CharField(source='annual_category.name', read_only=True, default=None)
+    monthly_category_name = serializers.CharField(source='monthly_category.name', read_only=True, default=None)
 
     class Meta:
         model = FeeStructure
@@ -113,6 +114,7 @@ class FeeStructureSerializer(serializers.ModelSerializer):
             'academic_year', 'academic_year_name',
             'fee_type', 'fee_type_display',
             'annual_category', 'annual_category_name',
+            'monthly_category', 'monthly_category_name',
             'monthly_amount', 'effective_from', 'effective_to',
             'is_active', 'created_at', 'updated_at'
         ]
@@ -122,7 +124,7 @@ class FeeStructureSerializer(serializers.ModelSerializer):
 class FeeStructureCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = FeeStructure
-        fields = ['class_obj', 'student', 'fee_type', 'annual_category', 'monthly_amount', 'effective_from', 'effective_to']
+        fields = ['class_obj', 'student', 'fee_type', 'annual_category', 'monthly_category', 'monthly_amount', 'effective_from', 'effective_to']
 
     def validate(self, attrs):
         if not attrs.get('class_obj') and not attrs.get('student'):
@@ -143,6 +145,7 @@ class BulkFeeStructureItemSerializer(serializers.Serializer):
         required=False,
     )
     annual_category = serializers.IntegerField(required=False, allow_null=True)
+    monthly_category = serializers.IntegerField(required=False, allow_null=True)
 
 
 class BulkFeeStructureSerializer(serializers.Serializer):
@@ -185,6 +188,7 @@ class FeePaymentSerializer(serializers.ModelSerializer):
         return f"{cls.name} - {cls.section}" if cls.section else cls.name
 
     annual_category_name = serializers.CharField(source='annual_category.name', read_only=True, default=None)
+    monthly_category_name = serializers.CharField(source='monthly_category.name', read_only=True, default=None)
 
     class Meta:
         model = FeePayment
@@ -194,6 +198,7 @@ class FeePaymentSerializer(serializers.ModelSerializer):
             'academic_year', 'academic_year_name',
             'fee_type', 'fee_type_display',
             'annual_category', 'annual_category_name',
+            'monthly_category', 'monthly_category_name',
             'month', 'year', 'previous_balance', 'amount_due', 'amount_paid',
             'status', 'payment_date', 'payment_method',
             'receipt_number', 'notes',
@@ -208,7 +213,7 @@ class FeePaymentCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = FeePayment
         fields = [
-            'school', 'student', 'fee_type', 'annual_category',
+            'school', 'student', 'fee_type', 'annual_category', 'monthly_category',
             'month', 'year',
             'academic_year', 'amount_due', 'amount_paid',
             'payment_date', 'payment_method',
@@ -268,6 +273,11 @@ class GenerateMonthlySerializer(serializers.Serializer):
     year = serializers.IntegerField(min_value=2020, max_value=2100)
     class_id = serializers.IntegerField(required=False)
     academic_year = serializers.IntegerField(required=False)
+    monthly_category_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        help_text='List of MonthlyFeeCategory IDs to generate. Defaults to all active categories.',
+    )
 
 
 class GenerateOnetimeFeesSerializer(serializers.Serializer):
@@ -317,7 +327,14 @@ class GenerateAnnualFeesSerializer(serializers.Serializer):
 class ExpenseCategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = ExpenseCategory
-        fields = ['id', 'name', 'code', 'is_active']
+        fields = ['id', 'name', 'code', 'is_active', 'is_sensitive']
+
+    def get_fields(self):
+        fields = super().get_fields()
+        request = self.context.get('request')
+        if request and _is_data_restricted_user(request):
+            fields.pop('is_sensitive', None)
+        return fields
 
 
 class IncomeCategorySerializer(serializers.ModelSerializer):
@@ -329,6 +346,13 @@ class IncomeCategorySerializer(serializers.ModelSerializer):
 class AnnualFeeCategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = AnnualFeeCategory
+        fields = ['id', 'name', 'description', 'is_active', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class MonthlyFeeCategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MonthlyFeeCategory
         fields = ['id', 'name', 'description', 'is_active', 'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']
 
