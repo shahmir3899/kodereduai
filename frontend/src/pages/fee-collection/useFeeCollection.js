@@ -24,20 +24,48 @@ export function useFeeCollection({ month, year, classFilter, statusFilter, feeTy
     staleTime: 5 * 60_000,
   })
 
-  const isMonthlyType = !feeTypeFilter || feeTypeFilter === 'MONTHLY'
-  const apiMonth = isMonthlyType ? month : 0
+  const isAllTypes = !feeTypeFilter
+  const isMonthlyType = feeTypeFilter === 'MONTHLY'
+  const isAnnualType = feeTypeFilter === 'ANNUAL'
 
-  const { data: payments, isLoading } = useQuery({
-    queryKey: ['feePayments', apiMonth, year, feeTypeFilter, annualCategoryFilter, monthlyCategoryFilter, academicYearId],
+  // Single query when a specific fee type is selected
+  const { data: payments, isLoading: singleLoading } = useQuery({
+    queryKey: ['feePayments', feeTypeFilter, isMonthlyType ? month : 0, year, annualCategoryFilter, monthlyCategoryFilter, academicYearId],
     queryFn: () => financeApi.getFeePayments({
-      month: apiMonth, year,
-      ...(feeTypeFilter && { fee_type: feeTypeFilter }),
+      month: isMonthlyType ? month : 0, year,
+      fee_type: feeTypeFilter,
       ...(annualCategoryFilter && { annual_category: annualCategoryFilter }),
       ...(monthlyCategoryFilter && { monthly_category: monthlyCategoryFilter }),
       ...(academicYearId && { academic_year: academicYearId }),
       page_size: 9999,
     }),
+    enabled: !isAllTypes,
   })
+
+  // "All Types" mode: two parallel queries — monthly (month=N) + annual (month=0)
+  const { data: monthlyPayments, isLoading: monthlyLoading } = useQuery({
+    queryKey: ['feePayments', 'MONTHLY', month, year, monthlyCategoryFilter, academicYearId],
+    queryFn: () => financeApi.getFeePayments({
+      month, year, fee_type: 'MONTHLY',
+      ...(monthlyCategoryFilter && { monthly_category: monthlyCategoryFilter }),
+      ...(academicYearId && { academic_year: academicYearId }),
+      page_size: 9999,
+    }),
+    enabled: isAllTypes,
+  })
+
+  const { data: annualPayments, isLoading: annualLoading } = useQuery({
+    queryKey: ['feePayments', 'ANNUAL', 0, year, annualCategoryFilter, academicYearId],
+    queryFn: () => financeApi.getFeePayments({
+      month: 0, year, fee_type: 'ANNUAL',
+      ...(annualCategoryFilter && { annual_category: annualCategoryFilter }),
+      ...(academicYearId && { academic_year: academicYearId }),
+      page_size: 9999,
+    }),
+    enabled: isAllTypes,
+  })
+
+  const isLoading = isAllTypes ? (monthlyLoading || annualLoading) : singleLoading
 
   // Mutations
   const generateMutation = useBackgroundTask({
@@ -83,8 +111,15 @@ export function useFeeCollection({ month, year, classFilter, statusFilter, feeTy
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['feePayments'] }),
   })
 
-  // Derived data
-  const allPayments = payments?.data?.results || payments?.data || []
+  // Derived data — merge from dual queries in "All Types" mode
+  const allPayments = useMemo(() => {
+    if (isAllTypes) {
+      const monthly = monthlyPayments?.data?.results || monthlyPayments?.data || []
+      const annual = annualPayments?.data?.results || annualPayments?.data || []
+      return [...monthly, ...annual]
+    }
+    return payments?.data?.results || payments?.data || []
+  }, [isAllTypes, monthlyPayments, annualPayments, payments])
   const classList = classes?.data?.results || classes?.data || []
   const accountsList = accountsData?.data?.results || accountsData?.data || []
 
@@ -146,28 +181,37 @@ export function useFeeCollection({ month, year, classFilter, statusFilter, feeTy
         return orderA - orderB
       }
       
-      // Within same class, sort by roll_number (numeric), then name
+      // Within same class, sort by roll_number (numeric), then student ID (group same student), then fee_type
       const rollA = parseInt(a.student_roll || a.roll_number) || 0
       const rollB = parseInt(b.student_roll || b.roll_number) || 0
       if (rollA !== rollB) {
         return rollA - rollB
       }
       
-      const nameA = a.student_name || ''
-      const nameB = b.student_name || ''
-      return nameA.localeCompare(nameB)
+      // Group same student's records together
+      const studentA = a.student || a.student_id || 0
+      const studentB = b.student || b.student_id || 0
+      if (studentA !== studentB) {
+        const nameA = a.student_name || ''
+        const nameB = b.student_name || ''
+        return nameA.localeCompare(nameB)
+      }
+
+      // Within same student: MONTHLY first, then ANNUAL, then others
+      const typeOrder = { MONTHLY: 0, ANNUAL: 1, ADMISSION: 2, BOOKS: 3, FINE: 4 }
+      return (typeOrder[a.fee_type] ?? 9) - (typeOrder[b.fee_type] ?? 9)
     })
   }, [allPayments, classFilter, statusFilter, sortedClassList])
 
   const summaryData = useMemo(
-    () => computeSummaryData(allPayments, apiMonth, year),
-    [allPayments, apiMonth, year]
+    () => computeSummaryData(allPayments, month, year),
+    [allPayments, month, year]
   )
 
   const filteredSummaryData = useMemo(() => {
     if (filteredPayments.length === 0) {
       return {
-        month: apiMonth,
+        month,
         year,
         total_students: 0,
         total_due: 0,
@@ -187,15 +231,18 @@ export function useFeeCollection({ month, year, classFilter, statusFilter, feeTy
       return sum + Math.max(0, due - paid)
     }, 0)
 
+    // Count unique students, not records
+    const uniqueStudents = new Set(filteredPayments.map(p => p.student || p.student_id))
+
     return {
-      month: apiMonth,
+      month,
       year,
-      total_students: filteredPayments.length,
+      total_students: uniqueStudents.size,
       total_due,
       total_collected,
       total_pending,
     }
-  }, [filteredPayments, apiMonth, year])
+  }, [filteredPayments, month, year])
 
   return {
     // Data

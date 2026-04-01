@@ -26,7 +26,8 @@ export default function FeeFilters({
   selectorScope,
   academicYearId,
 }) {
-  const isMonthly = !feeTypeFilter || feeTypeFilter === 'MONTHLY'
+  const isAllTypes = !feeTypeFilter
+  const isMonthly = feeTypeFilter === 'MONTHLY'
   const isAnnual = feeTypeFilter === 'ANNUAL'
 
   return (
@@ -57,7 +58,7 @@ export default function FeeFilters({
           </select>
         </div>
       )}
-      {isMonthly && (
+      {(isMonthly || isAllTypes) && (
         <div>
           <label className="block text-xs font-medium text-gray-500 mb-1">Month</label>
           <select value={month} onChange={(e) => setMonth(parseInt(e.target.value))} className="input-field text-sm">

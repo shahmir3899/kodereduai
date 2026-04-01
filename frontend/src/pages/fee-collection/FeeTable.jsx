@@ -37,10 +37,11 @@ export default function FeeTable({
   onInlineUpdate, onRecordPayment, onDelete,
   canWrite = true, feeTypeFilter = 'MONTHLY',
 }) {
-  const isMonthly = !feeTypeFilter || feeTypeFilter === 'MONTHLY'
+  const isAllTypes = !feeTypeFilter
+  const isMonthly = feeTypeFilter === 'MONTHLY'
   const isAnnual = feeTypeFilter === 'ANNUAL'
-  const showPrevBal = isMonthly
-  const feeColumnLabel = FEE_TYPE_LABEL[feeTypeFilter] || 'Fee Amount'
+  const showPrevBal = isMonthly || isAllTypes
+  const feeColumnLabel = isAllTypes ? 'Fee Amount' : (FEE_TYPE_LABEL[feeTypeFilter] || 'Fee Amount')
   const headerCheckboxRef = useRef(null)
 
   // Manage indeterminate state
@@ -52,6 +53,25 @@ export default function FeeTable({
 
   // Use paymentList directly - sorting is handled by useFeeCollection hook
   const sortedList = paymentList
+
+  // Pre-compute rowSpan for student grouping in "All Types" mode
+  const studentGroups = useMemo(() => {
+    if (!isAllTypes) return null
+    const map = new Map() // paymentId → { isFirst, rowSpan }
+    let i = 0
+    while (i < sortedList.length) {
+      const studentId = sortedList[i].student || sortedList[i].student_id
+      let j = i + 1
+      while (j < sortedList.length && (sortedList[j].student || sortedList[j].student_id) === studentId) j++
+      const span = j - i
+      map.set(sortedList[i].id, { isFirst: true, rowSpan: span })
+      for (let k = i + 1; k < j; k++) {
+        map.set(sortedList[k].id, { isFirst: false, rowSpan: 0 })
+      }
+      i = j
+    }
+    return map
+  }, [isAllTypes, sortedList])
 
   if (isLoading) {
     return <div className="card"><div className="text-center py-8 text-gray-500">Loading...</div></div>
@@ -111,7 +131,17 @@ export default function FeeTable({
                     <div>
                       <p className="font-medium text-gray-900">{payment.student_name}</p>
                       <p className="text-xs text-gray-500">{payment.class_name} - Roll #{payment.student_roll}</p>
-                      {isAnnual && payment.annual_category_name && (
+                      {isAllTypes && (
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <span className={`px-1.5 py-0.5 text-xs rounded ${payment.fee_type === 'MONTHLY' ? 'bg-green-100 text-green-700' : FEE_TYPE_BADGE[payment.fee_type] || 'bg-gray-100 text-gray-700'}`}>
+                            {payment.fee_type_display || payment.fee_type}
+                          </span>
+                          {(payment.annual_category_name || payment.monthly_category_name) && (
+                            <span className="px-1.5 py-0.5 text-xs bg-gray-100 text-gray-600 rounded">{payment.annual_category_name || payment.monthly_category_name}</span>
+                          )}
+                        </div>
+                      )}
+                      {!isAllTypes && isAnnual && payment.annual_category_name && (
                         <span className="inline-block mt-0.5 px-1.5 py-0.5 text-xs bg-purple-100 text-purple-700 rounded">{payment.annual_category_name}</span>
                       )}
                     </div>
@@ -211,7 +241,8 @@ export default function FeeTable({
               <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase">Roll#</th>
               <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Student</th>
               <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Class</th>
-              {isAnnual && <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>}
+              {isAllTypes && <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>}
+              {(isAnnual || isAllTypes) && <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>}
               {showPrevBal && <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">Prev Bal</th>}
               <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">{feeColumnLabel}</th>
               <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">Total Payable</th>
@@ -232,8 +263,10 @@ export default function FeeTable({
               const isSelected = selectedIds.has(payment.id)
               const isEditingReceived = editingCell?.id === payment.id && editingCell?.field === 'amount_paid'
               const isEditingAmountDue = editingCell?.id === payment.id && editingCell?.field === 'amount_due'
+              const group = studentGroups?.get(payment.id)
+              const showStudentCols = !isAllTypes || !group || group.isFirst
               return (
-                <tr key={payment.id} className={isSelected ? 'bg-primary-50' : ''}>
+                <tr key={payment.id} className={`${isSelected ? 'bg-primary-50' : ''} ${isAllTypes && group && !group.isFirst ? 'border-t border-dashed border-gray-100' : ''}`}>
                   {canWrite && (
                     <td className="px-3 py-3 text-center">
                       <input
@@ -244,17 +277,29 @@ export default function FeeTable({
                       />
                     </td>
                   )}
-                  <td className="px-3 py-3 text-sm text-gray-500 text-center">{payment.student_roll}</td>
-                  <td className="px-3 py-3 text-sm text-gray-900">
-                    {payment.student_name}
-                    {!feeTypeFilter && payment.fee_type && payment.fee_type !== 'MONTHLY' && (
-                      <span className={`ml-2 px-1.5 py-0.5 text-xs rounded ${FEE_TYPE_BADGE[payment.fee_type] || 'bg-gray-100 text-gray-700'}`}>
-                        {payment.annual_category_name || payment.fee_type_display || payment.fee_type}
+                  {showStudentCols && (
+                    <td className="px-3 py-3 text-sm text-gray-500 text-center" rowSpan={group?.rowSpan || 1}>{payment.student_roll}</td>
+                  )}
+                  {showStudentCols && (
+                    <td className="px-3 py-3 text-sm text-gray-900" rowSpan={group?.rowSpan || 1}>
+                      {payment.student_name}
+                    </td>
+                  )}
+                  {showStudentCols && (
+                    <td className="px-3 py-3 text-sm text-gray-500" rowSpan={group?.rowSpan || 1}>{payment.class_name}</td>
+                  )}
+                  {isAllTypes && (
+                    <td className="px-3 py-3 text-sm">
+                      <span className={`px-1.5 py-0.5 text-xs rounded ${payment.fee_type === 'MONTHLY' ? 'bg-green-100 text-green-700' : FEE_TYPE_BADGE[payment.fee_type] || 'bg-gray-100 text-gray-700'}`}>
+                        {payment.fee_type_display || payment.fee_type}
                       </span>
-                    )}
-                  </td>
-                  <td className="px-3 py-3 text-sm text-gray-500">{payment.class_name}</td>
-                  {isAnnual && <td className="px-3 py-3 text-sm text-gray-600">{payment.annual_category_name || '—'}</td>}
+                    </td>
+                  )}
+                  {(isAnnual || isAllTypes) && (
+                    <td className="px-3 py-3 text-sm text-gray-600">
+                      {payment.annual_category_name || payment.monthly_category_name || '—'}
+                    </td>
+                  )}
                   {showPrevBal && (
                     <td className={`px-3 py-3 text-sm text-right ${prevBal > 0 ? 'text-orange-700 font-medium' : prevBal < 0 ? 'text-blue-700 font-medium' : 'text-gray-400'}`}>
                       {prevBal > 0 ? prevBal.toLocaleString() : prevBal < 0 ? `-${Math.abs(prevBal).toLocaleString()}` : '\u2014'}
