@@ -24,7 +24,7 @@ import MonthlyCategoryManagerModal from './MonthlyCategoryManagerModal'
 export default function MonthlyChargesCardView() {
   const { activeAcademicYear } = useAcademicYear()
   const queryClient = useQueryClient()
-  const { showToast } = useToast()
+  const { addToast } = useToast()
 
   const now = new Date()
   const [effectiveFrom, setEffectiveFrom] = useState(now.toISOString().split('T')[0])
@@ -106,20 +106,20 @@ export default function MonthlyChargesCardView() {
     mutationFn: (payload) => financeApi.bulkSetFeeStructures(payload),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['monthly-fee-structures-all'] })
-      showToast('Monthly charges saved successfully', 'success')
+      addToast('Monthly charges saved successfully', 'success')
       // Auto-exit edit mode for the saved class
       const savedClassId = variables.structures?.[0]?.class_obj
       if (savedClassId) setClassEditMode((prev) => ({ ...prev, [savedClassId]: false }))
       setClassShowConfirm({})
     },
-    onError: (err) => showToast(getErrorMessage(err, 'Failed to save monthly charges'), 'error'),
+    onError: (err) => addToast(getErrorMessage(err, 'Failed to save monthly charges'), 'error'),
   })
 
   function handleSaveClass(classId) {
     const rows = classRows[classId] || []
     const validRows = rows.filter((r) => r.category_id && r.amount !== '' && parseFloat(r.amount) > 0)
     if (validRows.length === 0) {
-      showToast('Add at least one charge with a category and amount', 'error')
+      addToast('Add at least one charge with a category and amount', 'error')
       return
     }
 

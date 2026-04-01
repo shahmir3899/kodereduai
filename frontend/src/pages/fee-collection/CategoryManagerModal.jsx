@@ -10,7 +10,7 @@ import { getErrorMessage } from '../../utils/errorUtils'
  */
 export default function CategoryManagerModal({ onClose }) {
   const queryClient = useQueryClient()
-  const { showToast } = useToast()
+  const { addToast } = useToast()
 
   const [newName, setNewName] = useState('')
   const [newDesc, setNewDesc] = useState('')
@@ -39,9 +39,9 @@ export default function CategoryManagerModal({ onClose }) {
       queryClient.invalidateQueries(['annual-category-suggestions'])
       setNewName('')
       setNewDesc('')
-      showToast('Category created', 'success')
+      addToast('Category created', 'success')
     },
-    onError: (err) => showToast(getErrorMessage(err, 'Failed to create category'), 'error'),
+    onError: (err) => addToast(getErrorMessage(err, 'Failed to create category'), 'error'),
   })
 
   const updateMutation = useMutation({
@@ -49,9 +49,9 @@ export default function CategoryManagerModal({ onClose }) {
     onSuccess: () => {
       queryClient.invalidateQueries(['annual-categories'])
       setEditingId(null)
-      showToast('Category updated', 'success')
+      addToast('Category updated', 'success')
     },
-    onError: (err) => showToast(getErrorMessage(err, 'Failed to update category'), 'error'),
+    onError: (err) => addToast(getErrorMessage(err, 'Failed to update category'), 'error'),
   })
 
   const deleteMutation = useMutation({
@@ -60,9 +60,9 @@ export default function CategoryManagerModal({ onClose }) {
       queryClient.invalidateQueries(['annual-categories'])
       queryClient.invalidateQueries(['annual-category-suggestions'])
       setDeleteConfirmId(null)
-      showToast('Category deleted', 'success')
+      addToast('Category deleted', 'success')
     },
-    onError: (err) => showToast(getErrorMessage(err, 'Failed to delete category'), 'error'),
+    onError: (err) => addToast(getErrorMessage(err, 'Failed to delete category'), 'error'),
   })
 
   function handleCreate(e) {
