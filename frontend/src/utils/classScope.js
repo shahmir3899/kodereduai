@@ -17,6 +17,34 @@ export function resolveClassIdToMasterClassId(classId, activeAcademicYearId, ses
   return String(classId)
 }
 
+export function resolveSessionClassId(classId, activeAcademicYearId, sessionClasses = []) {
+  if (!classId || !activeAcademicYearId) return ''
+  const match = sessionClasses.find(sc => String(sc.id) === String(classId))
+  return match ? String(classId) : ''
+}
+
+export function buildStudentClassFilterParams({
+  classId,
+  activeAcademicYearId,
+  sessionClasses = [],
+  includeAcademicYear = true,
+  classKey = 'class_id',
+}) {
+  const resolvedMasterClassId = resolveClassIdToMasterClassId(classId, activeAcademicYearId, sessionClasses)
+  const resolvedSessionClassId = resolveSessionClassId(classId, activeAcademicYearId, sessionClasses)
+
+  const params = {
+    ...(resolvedMasterClassId && { [classKey]: resolvedMasterClassId }),
+    ...(resolvedSessionClassId && { session_class_id: resolvedSessionClassId }),
+  }
+
+  if (includeAcademicYear && activeAcademicYearId) {
+    params.academic_year = activeAcademicYearId
+  }
+
+  return params
+}
+
 export function buildSessionLabeledMasterClassOptions({
   sessionClasses = [],
   masterClasses = [],
@@ -92,6 +120,37 @@ export function buildSessionLabeledMasterClassOptions({
       has_section_variants: sessionVariants.length > 1,
     }
   })
+}
+
+export function buildSessionClassOptions(sessionClasses = []) {
+  const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
+
+  return (sessionClasses || [])
+    .filter(sc => !!sc?.id && !!sc?.class_obj && sc?.is_active !== false)
+    .map(sc => {
+      const displayName = sc.display_name || sc.class_obj_name || `Class ${sc.class_obj}`
+      const section = String(sc.section || '').trim()
+      const label = sc.label || (section ? `${displayName} - ${section}` : displayName)
+
+      return {
+        id: sc.id,
+        class_obj: sc.class_obj,
+        name: displayName,
+        section,
+        grade_level: sc.grade_level,
+        is_active: sc.is_active,
+        label,
+      }
+    })
+    .sort((left, right) => {
+      const gradeDiff = Number(left.grade_level || 0) - Number(right.grade_level || 0)
+      if (gradeDiff !== 0) return gradeDiff
+
+      const nameDiff = collator.compare(String(left.name || ''), String(right.name || ''))
+      if (nameDiff !== 0) return nameDiff
+
+      return collator.compare(String(left.section || ''), String(right.section || ''))
+    })
 }
 
 export function buildSessionOrMasterClassParams({

@@ -8,7 +8,7 @@ import { computeSummaryData, filterPayments } from './feeUtils'
  * Data hook for FeeCollectPage — payment collection workbench.
  * Handles fee payments queries + all payment-related mutations.
  */
-export function useFeeCollection({ month, year, classFilter, statusFilter, feeTypeFilter, annualCategoryFilter, monthlyCategoryFilter, academicYearId }) {
+export function useFeeCollection({ month, year, classFilter, statusFilter, feeTypeFilter, annualCategoryFilter, monthlyCategoryFilter, sessionClassId, academicYearId }) {
   const queryClient = useQueryClient()
 
   // Reference data
@@ -30,10 +30,12 @@ export function useFeeCollection({ month, year, classFilter, statusFilter, feeTy
 
   // Single query when a specific fee type is selected
   const { data: payments, isLoading: singleLoading } = useQuery({
-    queryKey: ['feePayments', feeTypeFilter, isMonthlyType ? month : 0, year, annualCategoryFilter, monthlyCategoryFilter, academicYearId],
+    queryKey: ['feePayments', feeTypeFilter, isMonthlyType ? month : 0, year, classFilter, sessionClassId, annualCategoryFilter, monthlyCategoryFilter, academicYearId],
     queryFn: () => financeApi.getFeePayments({
       month: isMonthlyType ? month : 0, year,
       fee_type: feeTypeFilter,
+      ...(classFilter && { class_id: classFilter }),
+      ...(sessionClassId && { session_class_id: sessionClassId }),
       ...(annualCategoryFilter && { annual_category: annualCategoryFilter }),
       ...(monthlyCategoryFilter && { monthly_category: monthlyCategoryFilter }),
       ...(academicYearId && { academic_year: academicYearId }),
@@ -44,9 +46,11 @@ export function useFeeCollection({ month, year, classFilter, statusFilter, feeTy
 
   // "All Types" mode: two parallel queries — monthly (month=N) + annual (month=0)
   const { data: monthlyPayments, isLoading: monthlyLoading } = useQuery({
-    queryKey: ['feePayments', 'MONTHLY', month, year, monthlyCategoryFilter, academicYearId],
+    queryKey: ['feePayments', 'MONTHLY', month, year, classFilter, sessionClassId, monthlyCategoryFilter, academicYearId],
     queryFn: () => financeApi.getFeePayments({
       month, year, fee_type: 'MONTHLY',
+      ...(classFilter && { class_id: classFilter }),
+      ...(sessionClassId && { session_class_id: sessionClassId }),
       ...(monthlyCategoryFilter && { monthly_category: monthlyCategoryFilter }),
       ...(academicYearId && { academic_year: academicYearId }),
       page_size: 9999,
@@ -55,9 +59,11 @@ export function useFeeCollection({ month, year, classFilter, statusFilter, feeTy
   })
 
   const { data: annualPayments, isLoading: annualLoading } = useQuery({
-    queryKey: ['feePayments', 'ANNUAL', 0, year, annualCategoryFilter, academicYearId],
+    queryKey: ['feePayments', 'ANNUAL', 0, year, classFilter, sessionClassId, annualCategoryFilter, academicYearId],
     queryFn: () => financeApi.getFeePayments({
       month: 0, year, fee_type: 'ANNUAL',
+      ...(classFilter && { class_id: classFilter }),
+      ...(sessionClassId && { session_class_id: sessionClassId }),
       ...(annualCategoryFilter && { annual_category: annualCategoryFilter }),
       ...(academicYearId && { academic_year: academicYearId }),
       page_size: 9999,
@@ -98,16 +104,20 @@ export function useFeeCollection({ month, year, classFilter, statusFilter, feeTy
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['feePayments'] }),
   })
 
-  const generateOnetimeMutation = useMutation({
+  const generateOnetimeMutation = useBackgroundTask({
     mutationFn: (data) => financeApi.generateOnetimeFees(data),
+    taskType: 'FEE_GENERATION',
+    title: `Generating one-time fees for ${year}`,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['feePayments'] })
       queryClient.invalidateQueries({ queryKey: ['generate-preview'] })
     },
   })
 
-  const generateAnnualMutation = useMutation({
+  const generateAnnualMutation = useBackgroundTask({
     mutationFn: (data) => financeApi.generateAnnualFees(data),
+    taskType: 'FEE_GENERATION',
+    title: `Generating annual fees for ${year}`,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['feePayments'] })
       queryClient.invalidateQueries({ queryKey: ['generate-preview'] })

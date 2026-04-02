@@ -8,7 +8,8 @@ import SearchableSelect from '../../components/SearchableSelect'
 import { studentsApi, financeApi } from '../../services/api'
 import { getErrorMessage } from '../../utils/errorUtils'
 import {
-  buildSessionLabeledMasterClassOptions,
+  buildSessionClassOptions,
+  buildStudentClassFilterParams,
   resolveClassIdToMasterClassId,
 } from '../../utils/classScope'
 
@@ -120,11 +121,7 @@ export function GenerateModal({
   const feeModalClassOptions = useMemo(() => {
     if (!academicYearId) return classList
     if (!sessionClasses?.length) return []
-    return buildSessionLabeledMasterClassOptions({
-      sessionClasses,
-      masterClasses: classList,
-      sessionScopedOnly: true,
-    })
+    return buildSessionClassOptions(sessionClasses)
   }, [academicYearId, classList, sessionClasses])
   const resolvedModalClassFilter = resolveClassIdToMasterClassId(modalClassFilter, academicYearId, sessionClasses)
 
@@ -499,16 +496,21 @@ export function GenerateModal({
                 <button onClick={() => setShowConfirm(false)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">Back</button>
                 <button
                   onClick={handleGenerateConfirmed}
-                  disabled={annualMutation?.isPending || onetimeMutation?.isPending}
+                  disabled={(annualMutation?.isSubmitting ?? annualMutation?.isPending) || (onetimeMutation?.isSubmitting ?? onetimeMutation?.isPending)}
                   className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50"
                 >
-                  {(annualMutation?.isPending || onetimeMutation?.isPending) ? 'Generating...' : 'Confirm & Generate'}
+                  {((annualMutation?.isSubmitting ?? annualMutation?.isPending) || (onetimeMutation?.isSubmitting ?? onetimeMutation?.isPending)) ? 'Generating...' : 'Confirm & Generate'}
                 </button>
               </div>
               {(isAnnual ? annualMutation?.isSuccess : onetimeMutation?.isSuccess) && (
                 <div className="mt-3 text-sm text-green-700 bg-green-50 p-3 rounded">
-                  Created {(isAnnual ? annualMutation?.data?.data?.created : onetimeMutation?.data?.data?.created)} records.
-                  {(isAnnual ? annualMutation?.data?.data?.skipped : onetimeMutation?.data?.data?.skipped) > 0 && ` Skipped ${isAnnual ? annualMutation.data.data.skipped : onetimeMutation.data.data.skipped} (already exist).`}
+                  {(() => {
+                    const payload = isAnnual ? annualMutation?.data?.data : onetimeMutation?.data?.data
+                    const created = payload?.created ?? payload?.result?.created
+                    const skipped = payload?.skipped ?? payload?.result?.skipped
+                    if (created == null) return 'Fee generation started. Track progress in Tasks.'
+                    return `Created ${created} records.${skipped > 0 ? ` Skipped ${skipped} (already exist).` : ''}`
+                  })()}
                 </div>
               )}
               {(isAnnual ? annualMutation?.isError : onetimeMutation?.isError) && (
@@ -552,13 +554,14 @@ export function FeeStructureModal({ show, onClose, classList, bulkEffectiveFrom,
   const feeStructureClassOptions = useMemo(() => {
     if (!academicYearId) return classList
     if (!sessionClasses?.length) return []
-    return buildSessionLabeledMasterClassOptions({
-      sessionClasses,
-      masterClasses: classList,
-      sessionScopedOnly: true,
-    })
+    return buildSessionClassOptions(sessionClasses)
   }, [academicYearId, classList, sessionClasses])
   const resolvedStudentClassId = resolveClassIdToMasterClassId(studentClassId, academicYearId, sessionClasses)
+  const studentClassFilterParams = useMemo(() => buildStudentClassFilterParams({
+    classId: studentClassId,
+    activeAcademicYearId: academicYearId,
+    sessionClasses,
+  }), [studentClassId, academicYearId, sessionClasses])
 
   // Reset state when modal opens
   useEffect(() => {
@@ -601,10 +604,11 @@ export function FeeStructureModal({ show, onClose, classList, bulkEffectiveFrom,
 
   // --- Student mode queries ---
   const { data: classStudentsData, isLoading: studentsLoading } = useQuery({
-    queryKey: ['students-for-fee-struct', resolvedStudentClassId, academicYearId],
+    queryKey: ['students-for-fee-struct', studentClassFilterParams.class_id, studentClassFilterParams.session_class_id, studentClassFilterParams.academic_year],
     queryFn: () => studentsApi.getStudents({
-      class_id: resolvedStudentClassId, is_active: true, page_size: 9999,
-      ...(academicYearId && { academic_year: academicYearId }),
+      ...studentClassFilterParams,
+      is_active: true,
+      page_size: 9999,
     }),
     enabled: show && structureMode === 'student' && !!resolvedStudentClassId,
     staleTime: 2 * 60_000,
@@ -1090,13 +1094,14 @@ export function CreateSingleFeeModal({ show, onClose, onSubmit, isPending, error
   const createSingleClassOptions = useMemo(() => {
     if (!academicYearId) return classList
     if (!sessionClasses?.length) return []
-    return buildSessionLabeledMasterClassOptions({
-      sessionClasses,
-      masterClasses: classList,
-      sessionScopedOnly: true,
-    })
+    return buildSessionClassOptions(sessionClasses)
   }, [academicYearId, classList, sessionClasses])
   const resolvedFormClassId = resolveClassIdToMasterClassId(form.classId, academicYearId, sessionClasses)
+  const formClassFilterParams = useMemo(() => buildStudentClassFilterParams({
+    classId: form.classId,
+    activeAcademicYearId: academicYearId,
+    sessionClasses,
+  }), [form.classId, academicYearId, sessionClasses])
 
   // Reset form every time modal opens
   useEffect(() => {
@@ -1105,8 +1110,8 @@ export function CreateSingleFeeModal({ show, onClose, onSubmit, isPending, error
 
   // Fetch students for selected class, filtered by academic year
   const { data: studentsData, isLoading: studentsLoading } = useQuery({
-    queryKey: ['students-by-class', resolvedFormClassId, academicYearId],
-    queryFn: () => studentsApi.getStudents({ class_id: resolvedFormClassId, is_active: true, page_size: 9999, ...(academicYearId && { academic_year: academicYearId }) }),
+    queryKey: ['students-by-class', formClassFilterParams.class_id, formClassFilterParams.session_class_id, formClassFilterParams.academic_year],
+    queryFn: () => studentsApi.getStudents({ ...formClassFilterParams, is_active: true, page_size: 9999 }),
     enabled: !!resolvedFormClassId,
     staleTime: 2 * 60_000,
   })

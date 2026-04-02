@@ -4,6 +4,7 @@ Finance views for fee structures, payments, expenses, reports, and AI chat.
 
 import calendar
 import logging
+from collections import defaultdict
 from datetime import date, timedelta
 from decimal import Decimal
 from io import BytesIO
@@ -52,6 +53,7 @@ from .serializers import (
     SiblingGroupMemberSerializer, SiblingGroupSerializer,
     SiblingSuggestionSerializer,
 )
+from .generation_planner import build_preview_plan
 
 logger = logging.getLogger(__name__)
 
@@ -223,6 +225,10 @@ class FeeStructureViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Model
                     qs = qs.filter(annual_category_id=annual_category_id)
                 elif fee_type == 'MONTHLY' and monthly_category_id:
                     qs = qs.filter(monthly_category_id=monthly_category_id)
+                elif fee_type == 'MONTHLY' and not monthly_category_id:
+                    # Global monthly class-level override should replace all
+                    # active monthly class-level rows regardless of category.
+                    qs = qs
                 qs.update(is_active=False)
 
                 # Create new fee structure
@@ -258,49 +264,92 @@ class FeeStructureViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Model
         effective_from = serializer.validated_data['effective_from']
         students_data = serializer.validated_data['students']
 
+        logger.info(
+            "bulk_set_students request: school=%s class=%s fee_type=%s rows=%s effective_from=%s",
+            school_id,
+            class_id,
+            fee_type,
+            len(students_data),
+            effective_from,
+        )
+
         created_count = 0
 
         try:
             with transaction.atomic():
-                for item in students_data:
-                    student_id = item['student_id']
-                    monthly_amount = item['monthly_amount']
-                    annual_category_id = item.get('annual_category')
-                    monthly_category_id = item.get('monthly_category')
+                student_ids = [item['student_id'] for item in students_data]
 
-                    # Deactivate matching-scope existing student-level fee structures only.
+                # Validate all students in one query (avoid per-row lookup).
+                valid_ids = set(Student.objects.filter(
+                    id__in=student_ids,
+                    school_id=school_id,
+                    class_obj_id=class_id,
+                ).values_list('id', flat=True))
+                missing_ids = sorted(set(student_ids) - valid_ids)
+                if missing_ids:
+                    return Response(
+                        {
+                            'detail': (
+                                'Some students do not belong to this school/class context. '
+                                f'Refresh and retry. Invalid IDs: {missing_ids[:10]}'
+                            )
+                        },
+                        status=400,
+                    )
+
+                # Group updates by scope to reduce query count.
+                # Key: category id (or None). Value: list of student ids.
+                grouped_student_ids = defaultdict(list)
+                for item in students_data:
+                    if fee_type == 'ANNUAL':
+                        scope_key = item.get('annual_category')
+                    else:
+                        scope_key = item.get('monthly_category')
+                    grouped_student_ids[scope_key].append(item['student_id'])
+
+                for scope_key, scoped_student_ids in grouped_student_ids.items():
                     qs = FeeStructure.objects.filter(
                         school_id=school_id,
-                        student_id=student_id,
+                        student_id__in=scoped_student_ids,
                         fee_type=fee_type,
                         is_active=True,
                     )
                     if fee_type == 'ANNUAL':
-                        qs = qs.filter(annual_category_id=annual_category_id)
-                    elif monthly_category_id:
-                        qs = qs.filter(monthly_category_id=monthly_category_id)
+                        qs = qs.filter(annual_category_id=scope_key)
+                    elif scope_key:
+                        qs = qs.filter(monthly_category_id=scope_key)
                     else:
-                        qs = qs.filter(monthly_category__isnull=True)
+                        # Global monthly override (no category selected) should replace
+                        # all monthly student-level overrides regardless of category.
+                        qs = qs.filter(monthly_category__isnull=True) if fee_type != 'MONTHLY' else qs
                     qs.update(is_active=False)
 
-                    # Create student-level fee structure (no academic_year,
-                    # consistent with class-level bulk_set; resolve_fee_amount
-                    # uses effective_from, not academic_year)
-                    FeeStructure.objects.create(
+                # Bulk create new student-level fee structures.
+                to_create = []
+                for item in students_data:
+                    to_create.append(FeeStructure(
                         school_id=school_id,
-                        student_id=student_id,
+                        student_id=item['student_id'],
                         fee_type=fee_type,
-                        annual_category_id=annual_category_id if fee_type == 'ANNUAL' else None,
-                        monthly_category_id=monthly_category_id if fee_type == 'MONTHLY' else None,
-                        monthly_amount=monthly_amount,
+                        annual_category_id=item.get('annual_category') if fee_type == 'ANNUAL' else None,
+                        monthly_category_id=item.get('monthly_category') if fee_type == 'MONTHLY' else None,
+                        monthly_amount=item['monthly_amount'],
                         effective_from=effective_from,
-                    )
-                    created_count += 1
+                    ))
+
+                FeeStructure.objects.bulk_create(to_create, batch_size=1000)
+                created_count = len(to_create)
 
         except Exception as e:
             logger.error(f"Bulk student fee structure error: {e}")
             return Response({'detail': str(e)}, status=400)
 
+        logger.info(
+            "bulk_set_students success: school=%s class=%s created=%s",
+            school_id,
+            class_id,
+            created_count,
+        )
         return Response({'created': created_count})
 
 
@@ -365,6 +414,7 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         month = self.request.query_params.get('month')
         year = self.request.query_params.get('year')
         class_id = self.request.query_params.get('class_id')
+        session_class_id = self.request.query_params.get('session_class_id')
         fee_status = self.request.query_params.get('status')
         student_id = self.request.query_params.get('student_id')
 
@@ -377,6 +427,14 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
             queryset = queryset.filter(year=year)
         if class_id:
             queryset = queryset.filter(student__class_obj_id=class_id)
+        if session_class_id:
+            enrollment_filter = {
+                'student__enrollments__session_class_id': session_class_id,
+                'student__enrollments__is_active': True,
+            }
+            if academic_year:
+                enrollment_filter['student__enrollments__academic_year_id'] = academic_year
+            queryset = queryset.filter(**enrollment_filter).distinct()
         if fee_status:
             queryset = queryset.filter(status=fee_status.upper())
         if student_id:
@@ -501,7 +559,8 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
             students = students.filter(class_obj_id=class_id)
         students = students.select_related('class_obj').distinct()
 
-        m = int(month_param) if fee_type == 'MONTHLY' else 0
+        month = int(month_param) if fee_type == 'MONTHLY' else 0
+        year = int(year_param)
 
         # Parse annual category IDs for ANNUAL preview
         cat_ids = []
@@ -513,133 +572,16 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         if fee_type == 'MONTHLY' and monthly_categories:
             monthly_cat_ids = [int(x) for x in monthly_categories.split(',') if x.strip().isdigit()]
 
-        from decimal import Decimal as D
-
-        if fee_type == 'ANNUAL' and cat_ids:
-            # Per-category preview: count records that would be created across all selected categories
-            will_create = []
-            already_exist = 0
-            no_fee_structure = 0
-
-            for cat_id in cat_ids:
-                existing_ids = set(
-                    FeePayment.objects.filter(
-                        school_id=school_id, month=0, year=int(year_param),
-                        fee_type='ANNUAL', annual_category_id=cat_id,
-                    ).values_list('student_id', flat=True)
-                )
-                cat_name = ''
-                try:
-                    cat_name = AnnualFeeCategory.objects.get(id=cat_id, school_id=school_id).name
-                except AnnualFeeCategory.DoesNotExist:
-                    continue
-
-                for s in students:
-                    if s.id in existing_ids:
-                        already_exist += 1
-                        continue
-                    amount = resolve_fee_amount(s, 'ANNUAL', annual_category_id=cat_id)
-                    if amount is None:
-                        no_fee_structure += 1
-                    else:
-                        will_create.append({
-                            'student_id': s.id,
-                            'student_name': s.name,
-                            'class_name': s.class_obj.name if s.class_obj else '',
-                            'amount': str(amount),
-                            'category': cat_name,
-                        })
-
-            total = sum(D(s['amount']) for s in will_create)
-            return Response({
-                'will_create': len(will_create),
-                'already_exist': already_exist,
-                'no_fee_structure': no_fee_structure,
-                'total_amount': str(total),
-                'students': will_create[:50],
-                'has_more': len(will_create) > 50,
-            })
-
-        if fee_type == 'MONTHLY' and monthly_cat_ids:
-            # Per-monthly-category preview
-            will_create = []
-            already_exist = 0
-            no_fee_structure = 0
-
-            for cat_id in monthly_cat_ids:
-                existing_ids = set(
-                    FeePayment.objects.filter(
-                        school_id=school_id, month=m, year=int(year_param),
-                        fee_type='MONTHLY', monthly_category_id=cat_id,
-                    ).values_list('student_id', flat=True)
-                )
-                cat_name = ''
-                try:
-                    cat_name = MonthlyFeeCategory.objects.get(id=cat_id, school_id=school_id).name
-                except MonthlyFeeCategory.DoesNotExist:
-                    continue
-
-                for s in students:
-                    if s.id in existing_ids:
-                        already_exist += 1
-                        continue
-                    amount = resolve_fee_amount(s, 'MONTHLY', monthly_category_id=cat_id)
-                    if amount is None:
-                        no_fee_structure += 1
-                    else:
-                        will_create.append({
-                            'student_id': s.id,
-                            'student_name': s.name,
-                            'class_name': s.class_obj.name if s.class_obj else '',
-                            'amount': str(amount),
-                            'category': cat_name,
-                        })
-
-            total = sum(D(s['amount']) for s in will_create)
-            return Response({
-                'will_create': len(will_create),
-                'already_exist': already_exist,
-                'no_fee_structure': no_fee_structure,
-                'total_amount': str(total),
-                'students': will_create[:50],
-                'has_more': len(will_create) > 50,
-            })
-
-        # Default (MONTHLY without category filter or legacy) preview
-        existing_ids = set(
-            FeePayment.objects.filter(
-                school_id=school_id, month=m, year=int(year_param), fee_type=fee_type
-            ).values_list('student_id', flat=True)
+        preview = build_preview_plan(
+            school_id=school_id,
+            students=students,
+            fee_type=fee_type,
+            year=year,
+            month=month,
+            annual_category_ids=cat_ids,
+            monthly_category_ids=monthly_cat_ids,
         )
-
-        will_create = []
-        already_exist = 0
-        no_fee_structure = 0
-        for s in students:
-            if s.id in existing_ids:
-                already_exist += 1
-                continue
-            amount = resolve_fee_amount(s, fee_type)
-            if amount is None:
-                no_fee_structure += 1
-            else:
-                will_create.append({
-                    'student_id': s.id,
-                    'student_name': s.name,
-                    'class_name': s.class_obj.name if s.class_obj else '',
-                    'amount': str(amount),
-                })
-
-        total = sum(D(s['amount']) for s in will_create)
-
-        return Response({
-            'will_create': len(will_create),
-            'already_exist': already_exist,
-            'no_fee_structure': no_fee_structure,
-            'total_amount': str(total),
-            'students': will_create[:50],
-            'has_more': len(will_create) > 50,
-        })
+        return Response(preview)
 
     @action(detail=False, methods=['post'])
     def generate_monthly(self, request):
@@ -753,43 +695,58 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
                 enrollments__academic_year_id=academic_year_id,
                 enrollments__is_active=True,
             )
-        students = students.select_related('class_obj').distinct()
+        students = students.distinct()
 
-        created_count = 0
-        skipped_count = 0
-        no_fee_count = 0
+        from core.models import BackgroundTask
+        from .tasks import generate_onetime_fees_task
 
-        for student in students:
-            for ft in fee_types:
-                m = month_for_monthly if (ft == 'MONTHLY' and month_for_monthly >= 1) else (date.today().month if ft == 'MONTHLY' else 0)
+        task_kwargs = {
+            'school_id': school_id,
+            'fee_types': fee_types,
+            'year': year,
+            'month_for_monthly': month_for_monthly,
+            'class_id': class_id,
+            'student_ids': student_ids,
+            'academic_year_id': academic_year_id,
+        }
+        title = f"Generating one-time fees for {year}"
 
-                if FeePayment.objects.filter(
-                    school_id=school_id, student=student,
-                    month=m, year=year, fee_type=ft,
-                ).exists():
-                    skipped_count += 1
-                    continue
+        operation_count = students.count() * len(fee_types)
+        sync_threshold = 300
 
-                amount = resolve_fee_amount(student, ft)
-                if amount is None:
-                    no_fee_count += 1
-                    continue
-
-                FeePayment.objects.create(
-                    school_id=school_id, student=student,
-                    fee_type=ft, month=m, year=year,
-                    amount_due=amount, amount_paid=0,
-                    academic_year_id=academic_year_id,
-                    base_monthly_fee=amount if ft == 'MONTHLY' else None,
+        if operation_count < sync_threshold:
+            from core.task_utils import run_task_sync
+            try:
+                bg_task = run_task_sync(
+                    generate_onetime_fees_task,
+                    BackgroundTask.TaskType.FEE_GENERATION,
+                    title,
+                    school_id,
+                    request.user,
+                    task_kwargs=task_kwargs,
                 )
-                created_count += 1
+            except Exception as e:
+                return Response({'detail': str(e)}, status=500)
 
+            return Response({
+                'task_id': bg_task.celery_task_id,
+                'message': bg_task.result_data.get('message', 'Fees generated.') if bg_task.result_data else 'Fees generated.',
+                'result': bg_task.result_data,
+            })
+
+        from core.task_utils import dispatch_background_task
+        bg_task = dispatch_background_task(
+            celery_task_func=generate_onetime_fees_task,
+            task_type=BackgroundTask.TaskType.FEE_GENERATION,
+            title=title,
+            school_id=school_id,
+            user=request.user,
+            task_kwargs=task_kwargs,
+        )
         return Response({
-            'created': created_count,
-            'skipped': skipped_count,
-            'no_fee_structure': no_fee_count,
-            'message': f'{created_count} fee record(s) created.',
-        })
+            'task_id': bg_task.celery_task_id,
+            'message': 'Fee generation started.',
+        }, status=202)
 
     @action(detail=False, methods=['post'], url_path='generate_annual_fees')
     def generate_annual_fees(self, request):
@@ -833,43 +790,61 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         )
         if class_id:
             students = students.filter(class_obj_id=class_id)
-        students = students.select_related('class_obj')
+        if academic_year_id:
+            students = students.filter(
+                enrollments__academic_year_id=academic_year_id,
+                enrollments__is_active=True,
+            )
+        students = students.distinct()
 
-        created_count = 0
-        skipped_count = 0
-        no_fee_count = 0
+        from core.models import BackgroundTask
+        from .tasks import generate_annual_fees_task
 
-        for student in students:
-            for cat_id in valid_cat_ids:
-                # Check if record already exists (unique_together includes annual_category)
-                if FeePayment.objects.filter(
-                    school_id=school_id, student=student,
-                    month=0, year=year, fee_type='ANNUAL',
-                    annual_category_id=cat_id,
-                ).exists():
-                    skipped_count += 1
-                    continue
+        task_kwargs = {
+            'school_id': school_id,
+            'year': year,
+            'annual_category_ids': list(valid_cat_ids),
+            'class_id': class_id,
+            'academic_year_id': academic_year_id,
+        }
+        title = f"Generating annual fees for {year}"
 
-                amount = resolve_fee_amount(student, 'ANNUAL', annual_category_id=cat_id)
-                if amount is None:
-                    no_fee_count += 1
-                    continue
+        operation_count = students.count() * len(valid_cat_ids)
+        sync_threshold = 300
 
-                FeePayment.objects.create(
-                    school_id=school_id, student=student,
-                    fee_type='ANNUAL', annual_category_id=cat_id,
-                    month=0, year=year,
-                    amount_due=amount, amount_paid=0,
-                    academic_year_id=academic_year_id,
+        if operation_count < sync_threshold:
+            from core.task_utils import run_task_sync
+            try:
+                bg_task = run_task_sync(
+                    generate_annual_fees_task,
+                    BackgroundTask.TaskType.FEE_GENERATION,
+                    title,
+                    school_id,
+                    request.user,
+                    task_kwargs=task_kwargs,
                 )
-                created_count += 1
+            except Exception as e:
+                return Response({'detail': str(e)}, status=500)
 
+            return Response({
+                'task_id': bg_task.celery_task_id,
+                'message': bg_task.result_data.get('message', 'Annual fees generated.') if bg_task.result_data else 'Annual fees generated.',
+                'result': bg_task.result_data,
+            })
+
+        from core.task_utils import dispatch_background_task
+        bg_task = dispatch_background_task(
+            celery_task_func=generate_annual_fees_task,
+            task_type=BackgroundTask.TaskType.FEE_GENERATION,
+            title=title,
+            school_id=school_id,
+            user=request.user,
+            task_kwargs=task_kwargs,
+        )
         return Response({
-            'created': created_count,
-            'skipped': skipped_count,
-            'no_fee_structure': no_fee_count,
-            'message': f'{created_count} annual fee record(s) created.',
-        })
+            'task_id': bg_task.celery_task_id,
+            'message': 'Annual fee generation started.',
+        }, status=202)
 
     @action(detail=False, methods=['post'])
     def bulk_update(self, request):

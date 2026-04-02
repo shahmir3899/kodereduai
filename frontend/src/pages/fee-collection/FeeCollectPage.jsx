@@ -15,8 +15,9 @@ import { exportFeePDF } from './feeExport'
 import { useToast } from '../../components/Toast'
 import { useConfirmModal } from '../../components/ConfirmModal'
 import {
-  buildSessionLabeledMasterClassOptions,
+  buildSessionClassOptions,
   getClassSelectorScope,
+  resolveSessionClassId,
   resolveClassIdToMasterClassId,
 } from '../../utils/classScope'
 
@@ -45,6 +46,7 @@ export default function FeeCollectPage() {
   const { sessionClasses } = useSessionClasses(activeAcademicYear?.id)
   const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
   const resolvedClassFilter = resolveClassIdToMasterClassId(classFilter, activeAcademicYear?.id, sessionClasses)
+  const selectedSessionClassId = resolveSessionClassId(classFilter, activeAcademicYear?.id, sessionClasses)
 
   // Modal state
   const [showPaymentModal, setShowPaymentModal] = useState(null)
@@ -72,18 +74,24 @@ export default function FeeCollectPage() {
     month, year, classFilter: resolvedClassFilter, statusFilter, feeTypeFilter,
     annualCategoryFilter,
     monthlyCategoryFilter,
+    sessionClassId: selectedSessionClassId,
     academicYearId: activeAcademicYear?.id,
   })
 
   const classFilterOptions = useMemo(() => {
     if (!activeAcademicYear?.id) return data.classList
     if (!sessionClasses?.length) return []
-    return buildSessionLabeledMasterClassOptions({
-      sessionClasses,
-      masterClasses: data.classList,
-      sessionScopedOnly: true,
-    })
+    return buildSessionClassOptions(sessionClasses)
   }, [activeAcademicYear?.id, data.classList, sessionClasses])
+
+  const selectedClassLabel = useMemo(() => {
+    if (!classFilter) return 'All Classes'
+    const option = classFilterOptions.find((c) => String(c.id) === String(classFilter))
+    if (option?.label) return option.label
+    const fallback = data.classList.find((c) => String(c.id) === String(classFilter))
+    if (!fallback) return 'All Classes'
+    return `${fallback.name}${fallback.section ? ` - ${fallback.section}` : ''}`
+  }, [classFilter, classFilterOptions, data.classList])
 
   // Deep-link: auto-scroll to specific student from URL
   const urlStudentId = searchParams.get('student')
@@ -204,8 +212,10 @@ export default function FeeCollectPage() {
     exportFeePDF({
       paymentList: data.paymentList,
       month, year,
-      summaryData: data.filteredSummaryData,
       schoolName: activeSchool?.name || user?.school_name,
+      selectedClassLabel,
+      feeTypeFilter,
+      statusFilter,
     })
   }
 

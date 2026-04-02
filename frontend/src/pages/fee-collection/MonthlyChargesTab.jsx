@@ -3,10 +3,12 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import { useAuth } from '../../contexts/AuthContext'
+import { useToast } from '../../components/Toast'
 import { financeApi, studentsApi, classesApi } from '../../services/api'
 import { getErrorMessage } from '../../utils/errorUtils'
 import {
-  buildSessionLabeledMasterClassOptions,
+  buildSessionClassOptions,
+  buildStudentClassFilterParams,
   resolveClassIdToMasterClassId,
 } from '../../utils/classScope'
 import ClassSelector from '../../components/ClassSelector'
@@ -16,6 +18,7 @@ export default function MonthlyChargesTab() {
   const [mode, setMode] = useState('class') // 'class' | 'student'
   const { activeAcademicYear } = useAcademicYear()
   const { activeSchool } = useAuth()
+  const { addToast } = useToast()
   const queryClient = useQueryClient()
 
   // Student mode state
@@ -28,11 +31,17 @@ export default function MonthlyChargesTab() {
 
   const { sessionClasses } = useSessionClasses(activeAcademicYear?.id, activeSchool?.id)
   const resolvedStudentClassId = resolveClassIdToMasterClassId(studentClassId, activeAcademicYear?.id, sessionClasses)
+  const studentClassFilterParams = useMemo(() => buildStudentClassFilterParams({
+    classId: studentClassId,
+    activeAcademicYearId: activeAcademicYear?.id,
+    sessionClasses,
+  }), [studentClassId, activeAcademicYear?.id, sessionClasses])
 
   // Classes list for selector
   const { data: classesData } = useQuery({
-    queryKey: ['classes'],
+    queryKey: ['classes', activeSchool?.id],
     queryFn: () => classesApi.getClasses({ page_size: 9999 }),
+    enabled: !!activeSchool?.id,
     staleTime: 5 * 60_000,
   })
   const classList = classesData?.data?.results ?? classesData?.data ?? []
@@ -40,42 +49,60 @@ export default function MonthlyChargesTab() {
   const classOptions = useMemo(() => {
     if (!activeAcademicYear?.id) return classList
     if (!sessionClasses?.length) return []
-    return buildSessionLabeledMasterClassOptions({
-      sessionClasses, masterClasses: classList, sessionScopedOnly: true,
-    })
+    return buildSessionClassOptions(sessionClasses)
   }, [activeAcademicYear?.id, classList, sessionClasses])
 
   // Student-mode queries
   const { data: studentsData, isLoading: studentsLoading } = useQuery({
-    queryKey: ['students-for-fee-struct', resolvedStudentClassId, activeAcademicYear?.id],
+    queryKey: ['students-for-fee-struct', activeSchool?.id, studentClassFilterParams.class_id, studentClassFilterParams.session_class_id, studentClassFilterParams.academic_year],
     queryFn: () => studentsApi.getStudents({
-      class_id: resolvedStudentClassId, is_active: true, page_size: 9999,
-      ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
+      ...studentClassFilterParams,
+      is_active: true,
+      page_size: 9999,
     }),
-    enabled: mode === 'student' && !!resolvedStudentClassId,
+    enabled: mode === 'student' && !!activeSchool?.id && !!resolvedStudentClassId,
     staleTime: 2 * 60_000,
   })
   const classStudents = studentsData?.data?.results ?? studentsData?.data ?? []
 
   const { data: structsData, isLoading: structuresLoading } = useQuery({
-    queryKey: ['feeStructures-class', resolvedStudentClassId, 'MONTHLY', activeAcademicYear?.id],
+    queryKey: ['feeStructures-class', activeSchool?.id, resolvedStudentClassId, 'MONTHLY', activeAcademicYear?.id],
     queryFn: () => financeApi.getFeeStructures({
       class_id: resolvedStudentClassId, fee_type: 'MONTHLY', page_size: 9999,
       ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
     }),
-    enabled: mode === 'student' && !!resolvedStudentClassId,
+    enabled: mode === 'student' && !!activeSchool?.id && !!resolvedStudentClassId,
     staleTime: 60_000,
   })
   const classStructures = structsData?.data?.results ?? structsData?.data ?? []
 
   const bulkStudentFeeMutation = useMutation({
     mutationFn: (payload) => financeApi.bulkSetStudentFeeStructures(payload),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['feeStructures'] })
-      queryClient.invalidateQueries({ queryKey: ['feeStructures-all'] })
-      queryClient.invalidateQueries({ queryKey: ['feeStructures-class'] })
-      queryClient.invalidateQueries({ queryKey: ['monthly-fee-structures-all'] })
+    onSuccess: (res, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['feeStructures', activeSchool?.id] })
+      queryClient.invalidateQueries({ queryKey: ['feeStructures-all', activeAcademicYear?.id] })
+      queryClient.invalidateQueries({ queryKey: ['feeStructures-class', activeSchool?.id] })
+      queryClient.invalidateQueries({ queryKey: ['monthly-fee-structures-all', activeAcademicYear?.id] })
       queryClient.invalidateQueries({ queryKey: ['generate-preview'] })
+
+      const savedCount = res?.data?.created ?? variables?.students?.length ?? 0
+      addToast(`Saved monthly fee overrides for ${savedCount} student${savedCount === 1 ? '' : 's'}.`, 'success')
+    },
+    onError: (err) => {
+      const backendMessage = String(
+        err?.response?.data?.detail || err?.response?.data?.message || err?.message || ''
+      ).toLowerCase()
+
+      if (
+        backendMessage.includes('duplicate') ||
+        backendMessage.includes('conflict') ||
+        backendMessage.includes('integrity')
+      ) {
+        addToast('Duplicate records found. Please delete those first.', 'warning')
+        return
+      }
+
+      addToast(getErrorMessage(err, 'Failed to save student fees'), 'error')
     },
   })
 
@@ -88,7 +115,9 @@ export default function MonthlyChargesTab() {
     const defaultAmount = classDefault ? String(classDefault.monthly_amount) : ''
     const overrideMap = {}
     classStructures.forEach(fs => {
-      if (fs.student && fs.is_active) overrideMap[fs.student] = String(fs.monthly_amount)
+      if (fs.student && fs.is_active && overrideMap[fs.student] === undefined) {
+        overrideMap[fs.student] = String(fs.monthly_amount)
+      }
     })
     const edits = localEdits['MONTHLY'] || {}
     const grid = classStudents
@@ -101,6 +130,7 @@ export default function MonthlyChargesTab() {
         return {
           student_id: s.id, student_name: s.name,
           roll_number: s.roll_number || '', amount,
+          originalAmount: serverAmount,
           isOverride: amount !== defaultAmount, classDefault: defaultAmount,
         }
       })
@@ -108,6 +138,21 @@ export default function MonthlyChargesTab() {
   }, [classStudents, classStructures, mode, resolvedStudentClassId, localEdits])
 
   const overrideCount = studentFees.filter(s => s.isOverride).length
+  const editedStudentRows = useMemo(() => {
+    const edits = localEdits['MONTHLY'] || {}
+    return studentFees.filter((s) => {
+      if (edits[s.student_id] === undefined) return false
+      if (s.amount === '') return false
+      return String(s.amount) !== String(s.originalAmount || '')
+    })
+  }, [localEdits, studentFees])
+
+  const formatAmount = (value) => {
+    if (value === '' || value == null) return 'Not set'
+    const n = Number(value)
+    if (Number.isNaN(n)) return String(value)
+    return n.toLocaleString()
+  }
 
   const handleStudentFeeChange = (idx, value) => {
     const s = studentFees[idx]
@@ -118,10 +163,19 @@ export default function MonthlyChargesTab() {
   }
 
   const handleStudentFeeSave = () => {
+    // Save only rows that were edited in this session to make progress explicit.
+    const edits = localEdits['MONTHLY'] || {}
     const toSend = studentFees
-      .filter(s => s.amount !== '')
+      .filter(s => edits[s.student_id] !== undefined && s.amount !== '')
       .map(s => ({ student_id: s.student_id, monthly_amount: s.amount }))
-    if (toSend.length === 0) return
+
+    if (toSend.length === 0) {
+      addToast('No changes detected. Edit at least one student fee before saving.', 'warning')
+      return
+    }
+
+    addToast(`Saving ${toSend.length} student update${toSend.length === 1 ? '' : 's'}...`, 'info')
+
     bulkStudentFeeMutation.mutate({
       class_id: parseInt(resolvedStudentClassId), fee_type: 'MONTHLY',
       effective_from: effectiveFrom, students: toSend,
@@ -141,7 +195,12 @@ export default function MonthlyChargesTab() {
         <button type="button" onClick={() => { setMode('class'); setShowConfirm(false) }}
           className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-colors ${mode === 'class' ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
         >By Class</button>
-        <button type="button" onClick={() => setMode('student')}
+        <button type="button" onClick={() => {
+          setMode('student')
+          setShowConfirm(false)
+          setStudentEditMode(false)
+          setLocalEdits({})
+        }}
           className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-colors ${mode === 'student' ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
         >By Student</button>
       </div>
@@ -184,13 +243,13 @@ export default function MonthlyChargesTab() {
           ) : showConfirm ? (
             <>
               <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg mb-4">
-                <p className="text-sm font-medium text-blue-900 mb-2">Confirm fee structures for {studentFees.filter(s => s.amount !== '').length} students:</p>
+                <p className="text-sm font-medium text-blue-900 mb-2">Confirm fee structures for {editedStudentRows.length} edited student{editedStudentRows.length === 1 ? '' : 's'}:</p>
                 <p className="text-xs text-blue-700 mb-3">Fee type: Monthly | Effective from: {effectiveFrom}</p>
                 <div className="space-y-1 max-h-60 overflow-y-auto">
-                  {studentFees.filter(s => s.amount !== '').map(s => (
+                  {editedStudentRows.map(s => (
                     <p key={s.student_id} className="text-sm text-blue-800">
                       <span className="font-medium">{s.student_name}</span>
-                      {s.roll_number && <span className="text-blue-600"> (#{s.roll_number})</span>}: {Number(s.amount).toLocaleString()}
+                      {s.roll_number && <span className="text-blue-600"> (#{s.roll_number})</span>}: {formatAmount(s.originalAmount)} -> {formatAmount(s.amount)}
                     </p>
                   ))}
                 </div>
@@ -265,7 +324,7 @@ export default function MonthlyChargesTab() {
                     className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm"
                   >Cancel</button>
                   <button type="button" onClick={() => setShowConfirm(true)}
-                    disabled={studentFees.length === 0 || studentFees.every(s => s.amount === '')}
+                    disabled={editedStudentRows.length === 0}
                     className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50"
                   >Review & Save</button>
                 </div>

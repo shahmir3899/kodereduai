@@ -190,13 +190,34 @@ class FeePaymentSerializer(serializers.ModelSerializer):
     student_name = serializers.CharField(source='student.name', read_only=True, default='Deleted Student')
     student_roll = serializers.CharField(source='student.roll_number', read_only=True, default=None)
     class_name = serializers.SerializerMethodField()
+    session_class_label = serializers.SerializerMethodField()
     class_obj_id = serializers.IntegerField(source='student.class_obj.id', read_only=True, default=None)
     collected_by_name = serializers.CharField(source='collected_by.username', read_only=True, default=None)
     account_name = serializers.CharField(source='account.name', read_only=True, default=None)
     academic_year_name = serializers.CharField(source='academic_year.name', read_only=True, default=None)
     fee_type_display = serializers.CharField(source='get_fee_type_display', read_only=True)
 
+    def get_session_class_label(self, obj):
+        """Get the session-specific class label if available."""
+        if not obj.student or not obj.academic_year:
+            return None
+        try:
+            enrollment = obj.student.enrollments.filter(
+                academic_year=obj.academic_year,
+                is_active=True
+            ).first()
+            if enrollment and enrollment.session_class:
+                return enrollment.session_class.label
+        except Exception:
+            pass
+        return None
+
     def get_class_name(self, obj):
+        """Prefer session_class_label if available, fall back to master class."""
+        session_label = self.get_session_class_label(obj)
+        if session_label:
+            return session_label
+        
         cls = obj.student.class_obj if obj.student else None
         if not cls:
             return None
@@ -209,7 +230,7 @@ class FeePaymentSerializer(serializers.ModelSerializer):
         model = FeePayment
         fields = [
             'id', 'school', 'student',
-            'student_name', 'student_roll', 'class_name', 'class_obj_id',
+            'student_name', 'student_roll', 'class_name', 'session_class_label', 'class_obj_id',
             'academic_year', 'academic_year_name',
             'fee_type', 'fee_type_display',
             'annual_category', 'annual_category_name',

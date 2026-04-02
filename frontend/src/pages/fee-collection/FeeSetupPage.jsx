@@ -9,7 +9,8 @@ import ClassSelector from '../../components/ClassSelector'
 import { financeApi, discountApi, studentsApi } from '../../services/api'
 import { getErrorMessage } from '../../utils/errorUtils'
 import {
-  buildSessionLabeledMasterClassOptions,
+  buildSessionClassOptions,
+  buildStudentClassFilterParams,
   resolveClassIdToMasterClassId,
 } from '../../utils/classScope'
 import AnnualChargesTab from './AnnualChargesTab'
@@ -99,6 +100,16 @@ export default function FeeSetupPage() {
   const resolvedGenAnnualClassFilter = resolveClassIdToMasterClassId(genAnnualClassFilter, activeAcademicYear?.id, sessionClasses)
   const resolvedSingleStructClassId = resolveClassIdToMasterClassId(singleStructForm.classId, activeAcademicYear?.id, sessionClasses)
   const resolvedDiscClassId = resolveClassIdToMasterClassId(discClassId, activeAcademicYear?.id, sessionClasses)
+  const discStudentClassFilterParams = useMemo(() => buildStudentClassFilterParams({
+    classId: discClassId,
+    activeAcademicYearId: activeAcademicYear?.id,
+    sessionClasses,
+  }), [discClassId, activeAcademicYear?.id, sessionClasses])
+  const singleStructClassFilterParams = useMemo(() => buildStudentClassFilterParams({
+    classId: singleStructForm.classId,
+    activeAcademicYearId: activeAcademicYear?.id,
+    sessionClasses,
+  }), [singleStructForm.classId, activeAcademicYear?.id, sessionClasses])
 
   const data = useFeeSetup({
     academicYearId: activeAcademicYear?.id,
@@ -109,19 +120,16 @@ export default function FeeSetupPage() {
 
   const feeSetupClassOptions = useMemo(() => {
     if (!activeAcademicYear?.id) return data.classList
-    return buildSessionLabeledMasterClassOptions({
-      sessionClasses,
-      masterClasses: data.classList,
-      sessionScopedOnly: true,
-    })
+    return buildSessionClassOptions(sessionClasses)
   }, [activeAcademicYear?.id, sessionClasses, data.classList])
 
   // === Student Discounts tab queries ===
   const { data: discStudentsData, isLoading: discStudentsLoading } = useQuery({
-    queryKey: ['disc-tab-students', resolvedDiscClassId, activeAcademicYear?.id],
+    queryKey: ['disc-tab-students', discStudentClassFilterParams.class_id, discStudentClassFilterParams.session_class_id, discStudentClassFilterParams.academic_year],
     queryFn: () => studentsApi.getStudents({
-      class_id: resolvedDiscClassId, is_active: true, page_size: 9999,
-      ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
+      ...discStudentClassFilterParams,
+      is_active: true,
+      page_size: 9999,
     }),
     enabled: activeTab === 'discounts' && !!resolvedDiscClassId,
     staleTime: 2 * 60_000,
@@ -270,12 +278,11 @@ export default function FeeSetupPage() {
   const monthlyCategories = monthlyCatData?.data?.results || monthlyCatData?.data || []
 
   const { data: singleStructStudentsData, isLoading: singleStructStudentsLoading } = useQuery({
-    queryKey: ['single-struct-students', resolvedSingleStructClassId, activeAcademicYear?.id],
+    queryKey: ['single-struct-students', singleStructClassFilterParams.class_id, singleStructClassFilterParams.session_class_id, singleStructClassFilterParams.academic_year],
     queryFn: () => studentsApi.getStudents({
-      class_id: resolvedSingleStructClassId,
+      ...singleStructClassFilterParams,
       is_active: true,
       page_size: 9999,
-      ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
     }),
     enabled: activeTab === 'generate' && !!resolvedSingleStructClassId,
     staleTime: 2 * 60_000,
@@ -667,8 +674,12 @@ export default function FeeSetupPage() {
                 </div>
                 {data.generateAnnualMutation?.isSuccess && (
                   <div className="mt-3 text-sm text-green-700 bg-green-50 p-3 rounded">
-                    Created {data.generateAnnualMutation.data?.data?.created} records.
-                    {data.generateAnnualMutation.data?.data?.skipped > 0 && ` Skipped ${data.generateAnnualMutation.data.data.skipped} (already exist).`}
+                    {(() => {
+                      const created = data.generateAnnualMutation.data?.data?.created ?? data.generateAnnualMutation.data?.data?.result?.created
+                      const skipped = data.generateAnnualMutation.data?.data?.skipped ?? data.generateAnnualMutation.data?.data?.result?.skipped
+                      if (created == null) return 'Annual fee generation started. Track progress in Tasks.'
+                      return `Created ${created} records.${skipped > 0 ? ` Skipped ${skipped} (already exist).` : ''}`
+                    })()}
                   </div>
                 )}
                 {data.generateAnnualMutation?.isError && (

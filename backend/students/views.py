@@ -146,7 +146,7 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
                 return queryset.none()
             queryset = queryset.filter(
                 enrollments__academic_year_id=session_class.academic_year_id,
-                enrollments__class_obj_id=session_class.class_obj_id,
+                enrollments__session_class_id=session_class.id,
                 enrollments__is_active=True,
             ).distinct()
         elif class_id:

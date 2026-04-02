@@ -6,7 +6,8 @@ import { useSessionClasses } from '../../hooks/useSessionClasses'
 import { financeApi, studentsApi, classesApi } from '../../services/api'
 import { getErrorMessage } from '../../utils/errorUtils'
 import {
-  buildSessionLabeledMasterClassOptions,
+  buildSessionClassOptions,
+  buildStudentClassFilterParams,
   resolveClassIdToMasterClassId,
 } from '../../utils/classScope'
 import ClassSelector from '../../components/ClassSelector'
@@ -26,6 +27,11 @@ export default function AnnualChargesStudentTab() {
 
   const { sessionClasses } = useSessionClasses(activeAcademicYear?.id, activeSchool?.id)
   const resolvedStudentClassId = resolveClassIdToMasterClassId(studentClassId, activeAcademicYear?.id, sessionClasses)
+  const studentClassFilterParams = useMemo(() => buildStudentClassFilterParams({
+    classId: studentClassId,
+    activeAcademicYearId: activeAcademicYear?.id,
+    sessionClasses,
+  }), [studentClassId, activeAcademicYear?.id, sessionClasses])
 
   const { data: classesData } = useQuery({
     queryKey: ['classes'],
@@ -37,11 +43,7 @@ export default function AnnualChargesStudentTab() {
   const classOptions = useMemo(() => {
     if (!activeAcademicYear?.id) return classList
     if (!sessionClasses?.length) return []
-    return buildSessionLabeledMasterClassOptions({
-      sessionClasses,
-      masterClasses: classList,
-      sessionScopedOnly: true,
-    })
+    return buildSessionClassOptions(sessionClasses)
   }, [activeAcademicYear?.id, classList, sessionClasses])
 
   const { data: annualCatData } = useQuery({
@@ -58,12 +60,11 @@ export default function AnnualChargesStudentTab() {
   }, [annualCategories, categoryId])
 
   const { data: studentsData, isLoading: studentsLoading } = useQuery({
-    queryKey: ['annual-students-fee-struct', resolvedStudentClassId, activeAcademicYear?.id],
+    queryKey: ['annual-students-fee-struct', studentClassFilterParams.class_id, studentClassFilterParams.session_class_id, studentClassFilterParams.academic_year],
     queryFn: () => studentsApi.getStudents({
-      class_id: resolvedStudentClassId,
+      ...studentClassFilterParams,
       is_active: true,
       page_size: 9999,
-      ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
     }),
     enabled: !!resolvedStudentClassId,
     staleTime: 2 * 60_000,
