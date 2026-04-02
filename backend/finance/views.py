@@ -13,7 +13,7 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
 from django.db import transaction
-from django.db.models import Sum, Count, Q
+from django.db.models import Sum, Count, Q, Prefetch
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -368,9 +368,19 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         return FeePaymentSerializer
 
     def get_queryset(self):
+        from academic_sessions.models import StudentEnrollment
+
         queryset = FeePayment.objects.select_related(
             'school', 'student', 'student__class_obj', 'collected_by', 'account',
             'academic_year', 'annual_category', 'monthly_category',
+        ).prefetch_related(
+            Prefetch(
+                'student__enrollments',
+                queryset=StudentEnrollment.objects.select_related('session_class', 'academic_year')
+                .filter(is_active=True)
+                .order_by('-updated_at', '-id'),
+                to_attr='prefetched_enrollments',
+            )
         )
 
         # Filter by active school (works for all users including super admin)

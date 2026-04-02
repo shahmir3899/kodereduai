@@ -64,6 +64,17 @@ function RegisterTab() {
 
   const { activeAcademicYear } = useAcademicYear()
 
+  const { data: sessionClassesRes } = useQuery({
+    queryKey: ['registerSessionClasses', activeAcademicYear?.id],
+    queryFn: () => sessionsApi.getSessionClasses({
+      academic_year: activeAcademicYear?.id,
+      page_size: 9999,
+      is_active: true,
+    }),
+    enabled: !!activeAcademicYear?.id,
+  })
+  const sessionClasses = sessionClassesRes?.data?.results || sessionClassesRes?.data || []
+
   const { data: enrollmentData } = useQuery({
     queryKey: ['enrollments-by-class', classId, activeAcademicYear?.id],
     queryFn: () => sessionsApi.getEnrollments({
@@ -82,9 +93,9 @@ function RegisterTab() {
   const selectedMasterClassId = useMemo(() => {
     if (!classId) return ''
     if (!activeAcademicYear?.id) return classId
-    const selectedSessionClass = filteredSessionClasses.find(sc => String(sc.id) === String(classId))
+    const selectedSessionClass = sessionClasses.find(sc => String(sc.id) === String(classId))
     return selectedSessionClass?.class_obj || ''
-  }, [classId, activeAcademicYear?.id, filteredSessionClasses])
+  }, [classId, activeAcademicYear?.id, sessionClasses])
 
   const { data: dayStatusRes } = useQuery({
     queryKey: ['registerDayStatus', year, month, selectedMasterClassId, activeAcademicYear?.id],

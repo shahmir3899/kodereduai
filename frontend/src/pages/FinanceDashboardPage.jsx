@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { financeApi } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
+import { useAcademicYear } from '../contexts/AcademicYearContext'
 import TransferModal from '../components/TransferModal'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
@@ -29,6 +30,7 @@ const MONTH_NAMES = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug',
 
 export default function FinanceDashboardPage() {
   const { user, isStaffMember, isPrincipal } = useAuth()
+  const { activeAcademicYear } = useAcademicYear()
   const canWrite = !isStaffMember
   const hasMultipleSchools = !isStaffMember && (user?.schools?.length > 1 || user?.is_super_admin)
   const isAdmin = !isPrincipal && !isStaffMember
@@ -46,6 +48,13 @@ export default function FinanceDashboardPage() {
   const period = useCustom
     ? { date_from: customFrom, date_to: customTo }
     : PERIODS[periodIdx].getValue()
+
+  const monthlySummaryParams = {
+    month: currentMonth,
+    year: currentYear,
+    fee_type: 'MONTHLY',
+    ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
+  }
 
   // --- Queries ---
 
@@ -65,15 +74,26 @@ export default function FinanceDashboardPage() {
 
   // Fee collection summary (current month)
   const { data: feeSummary } = useQuery({
-    queryKey: ['feeSummaryDashboard', currentMonth, currentYear],
-    queryFn: () => financeApi.getMonthlySummary({ month: currentMonth, year: currentYear }),
+    queryKey: ['feeSummaryDashboard', currentMonth, currentYear, 'MONTHLY', activeAcademicYear?.id],
+    queryFn: () => financeApi.getMonthlySummary(monthlySummaryParams),
   })
 
   // Cross-school fee summary (admin only)
   const { data: feeSummaryAll } = useQuery({
-    queryKey: ['feeSummaryAllDashboard', currentMonth, currentYear],
-    queryFn: () => financeApi.getMonthlySummaryAll({ month: currentMonth, year: currentYear }),
+    queryKey: ['feeSummaryAllDashboard', currentMonth, currentYear, 'MONTHLY', activeAcademicYear?.id],
+    queryFn: () => financeApi.getMonthlySummaryAll(monthlySummaryParams),
     enabled: hasMultipleSchools,
+  })
+
+  // Annual fee collection overview
+  const { data: annualPaymentsData } = useQuery({
+    queryKey: ['annualFeeDashboard', currentYear, activeAcademicYear?.id],
+    queryFn: () => financeApi.getFeePayments({
+      fee_type: 'ANNUAL',
+      year: currentYear,
+      ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
+      page_size: 9999,
+    }),
   })
 
   // Recent transfers (last 5)
@@ -124,6 +144,47 @@ export default function FinanceDashboardPage() {
   const feeTotalCollected = feeData?.total_collected || 0
   const feeTotalPending = feeData?.total_pending || 0
   const feeCollectionRate = feeTotalDue > 0 ? Math.round((feeTotalCollected / feeTotalDue) * 100) : 0
+  const monthlyCategories = feeData?.by_category || []
+
+  const annualPayments = annualPaymentsData?.data?.results || annualPaymentsData?.data || []
+  const annualSummary = useMemo(() => {
+    const byCategory = {}
+    let totalDue = 0
+    let totalCollected = 0
+
+    annualPayments.forEach((payment) => {
+      const due = Number(payment.amount_due || 0)
+      const paid = Number(payment.amount_paid || 0)
+      const categoryId = payment.annual_category || null
+      const categoryName = payment.annual_category_name || 'Uncategorized'
+      const key = categoryId || categoryName
+
+      totalDue += due
+      totalCollected += paid
+
+      if (!byCategory[key]) {
+        byCategory[key] = {
+          category_id: categoryId,
+          category_name: categoryName,
+          total_due: 0,
+          total_collected: 0,
+          count: 0,
+        }
+      }
+
+      byCategory[key].total_due += due
+      byCategory[key].total_collected += paid
+      byCategory[key].count += 1
+    })
+
+    return {
+      total_due: totalDue,
+      total_collected: totalCollected,
+      total_pending: Math.max(0, totalDue - totalCollected),
+      collection_rate: totalDue > 0 ? Math.round((totalCollected / totalDue) * 100) : 0,
+      by_category: Object.values(byCategory).sort((a, b) => (a.category_name || '').localeCompare(b.category_name || '')),
+    }
+  }, [annualPayments])
 
   const allTransfers = transfersData?.data?.results || transfersData?.data || []
   const recentTransfers = allTransfers.slice(0, 5)
@@ -268,25 +329,44 @@ export default function FinanceDashboardPage() {
         <div className="card">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-semibold text-gray-700">Fee Collection — {MONTH_NAMES[currentMonth]}</h2>
-            <Link to="/finance/fees" className="text-xs text-primary-600 hover:underline">
+            <Link to="/finance/fees?feeType=MONTHLY" className="text-xs text-primary-600 hover:underline">
               Details
             </Link>
           </div>
 
           {!hasMultipleSchools ? (
-            <div className="grid grid-cols-3 gap-3">
-              <div className="bg-green-50 rounded-lg p-3 text-center">
-                <p className="text-xs text-green-600 mb-1">Collected</p>
-                <p className="text-lg font-bold text-green-700">{Number(feeTotalCollected).toLocaleString()}</p>
+            <div>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-green-50 rounded-lg p-3 text-center">
+                  <p className="text-xs text-green-600 mb-1">Collected</p>
+                  <p className="text-lg font-bold text-green-700">{Number(feeTotalCollected).toLocaleString()}</p>
+                </div>
+                <div className="bg-orange-50 rounded-lg p-3 text-center">
+                  <p className="text-xs text-orange-600 mb-1">Pending</p>
+                  <p className="text-lg font-bold text-orange-700">{Number(feeTotalPending).toLocaleString()}</p>
+                </div>
+                <div className="bg-blue-50 rounded-lg p-3 text-center">
+                  <p className="text-xs text-blue-600 mb-1">Rate</p>
+                  <p className="text-lg font-bold text-blue-700">{feeCollectionRate}%</p>
+                </div>
               </div>
-              <div className="bg-orange-50 rounded-lg p-3 text-center">
-                <p className="text-xs text-orange-600 mb-1">Pending</p>
-                <p className="text-lg font-bold text-orange-700">{Number(feeTotalPending).toLocaleString()}</p>
-              </div>
-              <div className="bg-blue-50 rounded-lg p-3 text-center">
-                <p className="text-xs text-blue-600 mb-1">Rate</p>
-                <p className="text-lg font-bold text-blue-700">{feeCollectionRate}%</p>
-              </div>
+              {monthlyCategories.length > 1 && (
+                <div className="mt-3 pt-3 border-t border-gray-100 space-y-1.5">
+                  {monthlyCategories.map((category) => {
+                    const categoryRate = Number(category.total_due) > 0
+                      ? Math.round((Number(category.total_collected) / Number(category.total_due)) * 100)
+                      : 0
+                    return (
+                      <div key={category.category_id || category.category_name} className="flex items-center justify-between text-xs">
+                        <span className="text-gray-600">{category.category_name}</span>
+                        <span className="text-gray-800 font-medium">
+                          {Number(category.total_collected).toLocaleString()} / {Number(category.total_due).toLocaleString()} ({categoryRate}%)
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           ) : (
             feeSummaryAllData ? (
@@ -331,6 +411,53 @@ export default function FinanceDashboardPage() {
             ) : (
               <div className="text-center py-4 text-gray-400 text-sm">Loading...</div>
             )
+          )}
+        </div>
+
+        {/* --- Annual Fee Overview Card --- */}
+        <div className="card">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-gray-700">Annual Fee Overview</h2>
+            <Link to="/finance/fees?feeType=ANNUAL" className="text-xs text-primary-600 hover:underline">
+              Details
+            </Link>
+          </div>
+
+          {annualPayments.length === 0 ? (
+            <p className="text-sm text-gray-400 py-4 text-center">No annual fee records for this academic year</p>
+          ) : (
+            <div>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-green-50 rounded-lg p-3 text-center">
+                  <p className="text-xs text-green-600 mb-1">Collected</p>
+                  <p className="text-lg font-bold text-green-700">{Number(annualSummary.total_collected).toLocaleString()}</p>
+                </div>
+                <div className="bg-orange-50 rounded-lg p-3 text-center">
+                  <p className="text-xs text-orange-600 mb-1">Pending</p>
+                  <p className="text-lg font-bold text-orange-700">{Number(annualSummary.total_pending).toLocaleString()}</p>
+                </div>
+                <div className="bg-blue-50 rounded-lg p-3 text-center">
+                  <p className="text-xs text-blue-600 mb-1">Rate</p>
+                  <p className="text-lg font-bold text-blue-700">{annualSummary.collection_rate}%</p>
+                </div>
+              </div>
+
+              <div className="mt-3 pt-3 border-t border-gray-100 space-y-1.5">
+                {annualSummary.by_category.map((category) => {
+                  const categoryRate = Number(category.total_due) > 0
+                    ? Math.round((Number(category.total_collected) / Number(category.total_due)) * 100)
+                    : 0
+                  return (
+                    <div key={category.category_id || category.category_name} className="flex items-center justify-between text-xs">
+                      <span className="text-gray-600">{category.category_name}</span>
+                      <span className="text-gray-800 font-medium">
+                        {Number(category.total_collected).toLocaleString()} / {Number(category.total_due).toLocaleString()} ({categoryRate}%)
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
           )}
         </div>
 

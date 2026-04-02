@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useFeeOverview } from './useFeeOverview'
@@ -10,17 +10,30 @@ import FeeCharts from './FeeCharts'
 export default function FeeOverviewPage() {
   const { isStaffMember } = useAuth()
   const { activeAcademicYear } = useAcademicYear()
+  const [searchParams, setSearchParams] = useSearchParams()
   const canWrite = !isStaffMember
   const now = new Date()
+  const initialFeeType = (searchParams.get('feeType') || 'MONTHLY').toUpperCase() === 'ANNUAL' ? 'ANNUAL' : 'MONTHLY'
 
   const [month, setMonth] = useState(now.getMonth() + 1)
   const [year, setYear] = useState(now.getFullYear())
+  const [feeType, setFeeType] = useState(initialFeeType)
   const [showCharts, setShowCharts] = useState(false)
 
   const { allPayments, summaryData, isLoading } = useFeeOverview({
     month, year,
+    feeType,
     academicYearId: activeAcademicYear?.id,
   })
+
+  const handleFeeTypeChange = (nextType) => {
+    setFeeType(nextType)
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      next.set('feeType', nextType)
+      return next
+    }, { replace: true })
+  }
 
   const handlePrevMonth = () => {
     if (month === 1) { setMonth(12); setYear(y => y - 1) }
@@ -43,11 +56,35 @@ export default function FeeOverviewPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Fee Overview</h1>
-          <p className="text-sm text-gray-600">Monthly fee status at a glance</p>
+          <p className="text-sm text-gray-600">
+            {feeType === 'ANNUAL' ? 'Annual fee status at a glance' : 'Monthly fee status at a glance'}
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <div className="flex items-center rounded-lg border border-gray-200 overflow-hidden">
+            <button
+              onClick={() => handleFeeTypeChange('MONTHLY')}
+              className={`px-3 py-2 text-sm font-medium transition-colors ${
+                feeType === 'MONTHLY'
+                  ? 'bg-primary-600 text-white'
+                  : 'bg-white text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              Monthly
+            </button>
+            <button
+              onClick={() => handleFeeTypeChange('ANNUAL')}
+              className={`px-3 py-2 text-sm font-medium transition-colors ${
+                feeType === 'ANNUAL'
+                  ? 'bg-primary-600 text-white'
+                  : 'bg-white text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              Annual
+            </button>
+          </div>
           <Link
-            to={`/finance/fees/collect?month=${month}&year=${year}`}
+            to={`/finance/fees/collect?month=${month}&year=${year}&fee_type=${feeType}`}
             className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm"
           >
             Collect Payments
@@ -64,25 +101,55 @@ export default function FeeOverviewPage() {
       </div>
 
       {/* Month/Year Selector */}
-      <div className="flex items-center gap-3 mb-6">
-        <button
-          onClick={handlePrevMonth}
-          className="p-2 rounded-lg border border-gray-300 hover:bg-gray-50 text-gray-600"
-          title="Previous month"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-        </button>
-
-        <div className="flex items-center gap-2">
-          <select
-            value={month}
-            onChange={(e) => setMonth(parseInt(e.target.value))}
-            className="input-field text-sm font-medium"
+      {feeType === 'MONTHLY' ? (
+        <div className="flex items-center gap-3 mb-6">
+          <button
+            onClick={handlePrevMonth}
+            className="p-2 rounded-lg border border-gray-300 hover:bg-gray-50 text-gray-600"
+            title="Previous month"
           >
-            {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
-          </select>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+
+          <div className="flex items-center gap-2">
+            <select
+              value={month}
+              onChange={(e) => setMonth(parseInt(e.target.value))}
+              className="input-field text-sm font-medium"
+            >
+              {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+            </select>
+            <select
+              value={year}
+              onChange={(e) => setYear(parseInt(e.target.value))}
+              className="input-field text-sm font-medium"
+            >
+              {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+          </div>
+
+          <button
+            onClick={handleNextMonth}
+            className="p-2 rounded-lg border border-gray-300 hover:bg-gray-50 text-gray-600"
+            title="Next month"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+
+          <button
+            onClick={handleCurrentMonth}
+            className="px-3 py-1.5 text-xs font-medium text-primary-600 border border-primary-300 rounded-lg hover:bg-primary-50"
+          >
+            Current Month
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-3 mb-6">
+          <label className="text-sm font-medium text-gray-600">Year</label>
           <select
             value={year}
             onChange={(e) => setYear(parseInt(e.target.value))}
@@ -91,24 +158,7 @@ export default function FeeOverviewPage() {
             {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
           </select>
         </div>
-
-        <button
-          onClick={handleNextMonth}
-          className="p-2 rounded-lg border border-gray-300 hover:bg-gray-50 text-gray-600"
-          title="Next month"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-          </svg>
-        </button>
-
-        <button
-          onClick={handleCurrentMonth}
-          className="px-3 py-1.5 text-xs font-medium text-primary-600 border border-primary-300 rounded-lg hover:bg-primary-50"
-        >
-          Current Month
-        </button>
-      </div>
+      )}
 
       {/* Loading state */}
       {isLoading && (
@@ -198,7 +248,7 @@ export default function FeeOverviewPage() {
                 </div>
               </div>
               <p className="text-sm text-gray-500 mt-3">
-                No fee records for <strong>{MONTHS[month - 1]} {year}</strong>. Fee records need to be generated first.
+                No fee records for <strong>{feeType === 'ANNUAL' ? year : `${MONTHS[month - 1]} ${year}`}</strong>. Fee records need to be generated first.
               </p>
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-3">
                 <p className="text-xs text-blue-700">

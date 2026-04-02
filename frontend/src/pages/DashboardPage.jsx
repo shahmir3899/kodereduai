@@ -159,8 +159,8 @@ export default function DashboardPage({ variant }) {
 
   // Exams
   const { data: examsData } = useQuery({
-    queryKey: ['upcomingExams'],
-    queryFn: () => examinationsApi.getExams({ status: 'SCHEDULED', page_size: 1 }),
+    queryKey: ['upcomingExams', activeAcademicYear?.id],
+    queryFn: () => examinationsApi.getExams({ status: 'SCHEDULED', page_size: 1, academic_year: activeAcademicYear?.id || undefined }),
     enabled: !!activeSchool?.id && isModuleEnabled('examinations'),
   })
 

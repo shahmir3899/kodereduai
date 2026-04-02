@@ -190,6 +190,9 @@ class FeePaymentSerializer(serializers.ModelSerializer):
     student_name = serializers.CharField(source='student.name', read_only=True, default='Deleted Student')
     student_roll = serializers.CharField(source='student.roll_number', read_only=True, default=None)
     class_name = serializers.SerializerMethodField()
+    session_class_id = serializers.SerializerMethodField()
+    session_class_name = serializers.SerializerMethodField()
+    session_class_section = serializers.SerializerMethodField()
     session_class_label = serializers.SerializerMethodField()
     class_obj_id = serializers.IntegerField(source='student.class_obj.id', read_only=True, default=None)
     collected_by_name = serializers.CharField(source='collected_by.username', read_only=True, default=None)
@@ -197,19 +200,53 @@ class FeePaymentSerializer(serializers.ModelSerializer):
     academic_year_name = serializers.CharField(source='academic_year.name', read_only=True, default=None)
     fee_type_display = serializers.CharField(source='get_fee_type_display', read_only=True)
 
-    def get_session_class_label(self, obj):
-        """Get the session-specific class label if available."""
+    def _get_active_enrollment(self, obj):
         if not obj.student or not obj.academic_year:
             return None
+
+        prefetched = getattr(obj.student, 'prefetched_enrollments', None)
+        if prefetched is not None:
+            for enrollment in prefetched:
+                if enrollment.academic_year_id == obj.academic_year_id:
+                    return enrollment
+            return None
+
         try:
-            enrollment = obj.student.enrollments.filter(
-                academic_year=obj.academic_year,
+            return obj.student.enrollments.select_related('session_class').filter(
+                academic_year_id=obj.academic_year_id,
                 is_active=True
-            ).first()
-            if enrollment and enrollment.session_class:
-                return enrollment.session_class.label
+            ).order_by('-updated_at', '-id').first()
         except Exception:
-            pass
+            return None
+
+    def _get_session_class(self, obj):
+        enrollment = self._get_active_enrollment(obj)
+        return enrollment.session_class if enrollment and enrollment.session_class else None
+
+    def _build_session_class_label(self, session_class):
+        if not session_class:
+            return None
+        if session_class.section:
+            return f"{session_class.display_name} - {session_class.section}"
+        return session_class.display_name
+
+    def get_session_class_id(self, obj):
+        session_class = self._get_session_class(obj)
+        return session_class.id if session_class else None
+
+    def get_session_class_name(self, obj):
+        session_class = self._get_session_class(obj)
+        return session_class.display_name if session_class else None
+
+    def get_session_class_section(self, obj):
+        session_class = self._get_session_class(obj)
+        return session_class.section if session_class else None
+
+    def get_session_class_label(self, obj):
+        """Get the session-specific class label if available."""
+        session_class = self._get_session_class(obj)
+        if session_class:
+            return self._build_session_class_label(session_class)
         return None
 
     def get_class_name(self, obj):
@@ -230,7 +267,9 @@ class FeePaymentSerializer(serializers.ModelSerializer):
         model = FeePayment
         fields = [
             'id', 'school', 'student',
-            'student_name', 'student_roll', 'class_name', 'session_class_label', 'class_obj_id',
+            'student_name', 'student_roll', 'class_name',
+            'session_class_id', 'session_class_name', 'session_class_section', 'session_class_label',
+            'class_obj_id',
             'academic_year', 'academic_year_name',
             'fee_type', 'fee_type_display',
             'annual_category', 'annual_category_name',

@@ -249,7 +249,7 @@ export default function MonthlyChargesTab() {
                   {editedStudentRows.map(s => (
                     <p key={s.student_id} className="text-sm text-blue-800">
                       <span className="font-medium">{s.student_name}</span>
-                      {s.roll_number && <span className="text-blue-600"> (#{s.roll_number})</span>}: {formatAmount(s.originalAmount)} -> {formatAmount(s.amount)}
+                      {s.roll_number && <span className="text-blue-600"> (#{s.roll_number})</span>}: {formatAmount(s.originalAmount)} {' -> '} {formatAmount(s.amount)}
                     </p>
                   ))}
                 </div>

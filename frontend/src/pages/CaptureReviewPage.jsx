@@ -10,6 +10,7 @@ import { useAcademicYear } from '../contexts/AcademicYearContext'
 import { attendanceApi, studentsApi } from '../services/api'
 import { useSessionClasses } from '../hooks/useSessionClasses'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../utils/classScope'
+import { sortClassOptions } from '../utils/classOrdering'
 
 // Compress image before upload - keeps quality high enough for OCR
 const compressImage = (file) => {
@@ -128,12 +129,12 @@ function UploadTab({ onUploadSuccess }) {
 
   const { sessionClasses } = useSessionClasses(activeAcademicYear?.id, activeSchool?.id)
   const allowedMasterClassIds = new Set(myClasses.map(c => c.id))
-  const sessionClassOptions = sessionClasses
+  const sessionClassOptions = sortClassOptions(sessionClasses
     .filter(sc => sc.class_obj && allowedMasterClassIds.has(sc.class_obj))
-    .map(sc => ({ id: sc.id, name: sc.display_name, section: sc.section || '', label: sc.label, class_obj: sc.class_obj }))
+    .map(sc => ({ id: sc.id, name: sc.display_name, section: sc.section || '', label: sc.label, class_obj: sc.class_obj, grade_level: sc.grade_level })))
   const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
   const useSessionClassSelection = classSelectorScope === 'session' && sessionClassOptions.length > 0
-  const classOptions = useSessionClassSelection ? sessionClassOptions : myClasses
+  const classOptions = useSessionClassSelection ? sessionClassOptions : sortClassOptions(myClasses)
 
   const { data: aiStatusData } = useQuery({
     queryKey: ['aiStatus'],

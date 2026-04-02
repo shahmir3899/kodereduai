@@ -1,5 +1,6 @@
 import { Fragment, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { getPaymentClassKey } from './feeUtils'
 
 export default function FeeSummaryCards({ summaryData, onFilterUnpaid, onFilterPaid }) {
   if (!summaryData) return null
@@ -88,7 +89,7 @@ export function ClassBreakdown({ summaryData, allPayments, month, year, showColl
   const paymentsByClass = {}
   if (canExpand) {
     allPayments.forEach(p => {
-      const key = p.class_obj_id || p.class_name || 'unknown'
+      const key = getPaymentClassKey(p)
       if (!paymentsByClass[key]) paymentsByClass[key] = []
       paymentsByClass[key].push(p)
     })
@@ -107,7 +108,7 @@ export function ClassBreakdown({ summaryData, allPayments, month, year, showColl
         {byClass.map((cls) => {
           const balance = Number(cls.total_due) - Number(cls.total_collected)
           const rate = cls.total_due > 0 ? Math.round((cls.total_collected / cls.total_due) * 100) : 0
-          const classKey = cls.class_id || cls.class_name
+          const classKey = cls.class_key || cls.class_name || cls.class_id || 'unknown'
           const isExpanded = expandedClasses[classKey]
           const students = paymentsByClass[classKey] || []
           return (
@@ -179,7 +180,7 @@ export function ClassBreakdown({ summaryData, allPayments, month, year, showColl
             {byClass.map((cls) => {
               const balance = Number(cls.total_due) - Number(cls.total_collected)
               const rate = cls.total_due > 0 ? Math.round((cls.total_collected / cls.total_due) * 100) : 0
-              const classKey = cls.class_id || cls.class_name
+              const classKey = cls.class_key || cls.class_name || cls.class_id || 'unknown'
               const isExpanded = expandedClasses[classKey]
               const students = paymentsByClass[classKey] || []
               return (

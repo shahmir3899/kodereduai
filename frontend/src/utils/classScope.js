@@ -1,3 +1,5 @@
+import { sortClassOptions } from './classOrdering'
+
 export function getClassSelectorScope(activeAcademicYearId) {
   return activeAcademicYearId ? 'session' : 'master'
 }
@@ -123,9 +125,7 @@ export function buildSessionLabeledMasterClassOptions({
 }
 
 export function buildSessionClassOptions(sessionClasses = []) {
-  const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
-
-  return (sessionClasses || [])
+  return sortClassOptions((sessionClasses || [])
     .filter(sc => !!sc?.id && !!sc?.class_obj && sc?.is_active !== false)
     .map(sc => {
       const displayName = sc.display_name || sc.class_obj_name || `Class ${sc.class_obj}`
@@ -141,16 +141,7 @@ export function buildSessionClassOptions(sessionClasses = []) {
         is_active: sc.is_active,
         label,
       }
-    })
-    .sort((left, right) => {
-      const gradeDiff = Number(left.grade_level || 0) - Number(right.grade_level || 0)
-      if (gradeDiff !== 0) return gradeDiff
-
-      const nameDiff = collator.compare(String(left.name || ''), String(right.name || ''))
-      if (nameDiff !== 0) return nameDiff
-
-      return collator.compare(String(left.section || ''), String(right.section || ''))
-    })
+    }))
 }
 
 export function buildSessionOrMasterClassParams({

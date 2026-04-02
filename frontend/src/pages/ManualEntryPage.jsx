@@ -40,6 +40,7 @@ export default function ManualEntryPage() {
       name: sc.display_name,
       section: sc.section || '',
       label: sc.label,
+      grade_level: sc.grade_level,
     }))
     : classes
 
