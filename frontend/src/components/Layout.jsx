@@ -656,7 +656,7 @@ export default function Layout() {
               <Link
                 to="/admin"
                 className={`flex items-center px-4 py-2.5 mb-1 rounded-lg transition-colors text-sm ${
-                  isActive('/admin')
+                  location.pathname === '/admin'
                     ? 'bg-primary-50 text-primary-700'
                     : 'text-gray-600 hover:bg-gray-100'
                 }`}
@@ -664,6 +664,18 @@ export default function Layout() {
               >
                 <CogIcon />
                 <span className="ml-3 font-medium">Admin Panel</span>
+              </Link>
+              <Link
+                to="/admin/brochure"
+                className={`flex items-center px-4 py-2.5 mb-1 rounded-lg transition-colors text-sm ${
+                  isActive('/admin/brochure')
+                    ? 'bg-primary-50 text-primary-700'
+                    : 'text-gray-600 hover:bg-gray-100'
+                }`}
+                onClick={() => setSidebarOpen(false)}
+              >
+                <DocumentIcon />
+                <span className="ml-3 font-medium">Brochure Editor</span>
               </Link>
               <Link
                 to="/guide"

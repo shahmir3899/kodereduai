@@ -85,6 +85,7 @@ INSTALLED_APPS = [
     'inventory',
     'face_attendance',
     'messaging',
+    'brochure',
 ]
 
 MIDDLEWARE = [

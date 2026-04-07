@@ -182,6 +182,7 @@ urlpatterns = [
 
     # Background Tasks
     path('api/tasks/', include('core.urls')),
+    path('api/admin/brochure/', include('brochure.urls')),
 ]
 
 # Serve media files in development

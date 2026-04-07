@@ -18,6 +18,7 @@ const AnomaliesPage = lazy(() => import('./pages/attendance/AnomaliesPage'))
 const StudentsPage = lazy(() => import('./pages/StudentsPage'))
 const ClassesGradesPage = lazy(() => import('./pages/ClassesGradesPage'))
 const SuperAdminDashboard = lazy(() => import('./pages/SuperAdminDashboard'))
+const BrochurePage = lazy(() => import('./pages/admin/BrochurePage'))
 const ProfilePage = lazy(() => import('./pages/ProfilePage'))
 const FeeOverviewPage = lazy(() => import('./pages/fee-collection/FeeOverviewPage'))
 const FeeCollectPage = lazy(() => import('./pages/fee-collection/FeeCollectPage'))
@@ -403,6 +404,14 @@ function App() {
               element={
                 <ProtectedRoute requireSuperAdmin>
                   <SuperAdminDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="admin/brochure"
+              element={
+                <ProtectedRoute requireSuperAdmin>
+                  <BrochurePage />
                 </ProtectedRoute>
               }
             />

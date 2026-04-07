@@ -1181,3 +1181,13 @@ export const questionPaperApi = {
   // Paper Feedback (for learning loop)
   getPaperFeedback: (params) => api.get('/api/examinations/paper-feedback/', { params }),
 }
+
+// Brochure CMS API (Super-admins only)
+export const brochureApi = {
+  getSections: () => api.get('/api/admin/brochure/sections/'),
+  getSection: (id) => api.get(`/api/admin/brochure/sections/${id}/`),
+  updateSection: (id, data) => api.patch(`/api/admin/brochure/sections/${id}/`, data),
+  reorderSections: (items) => api.post('/api/admin/brochure/sections/reorder/', { items }),
+  getPreviewHtml: () => api.get('/api/admin/brochure/preview/'),
+  downloadPdf: () => api.get('/api/admin/brochure/download-pdf/', { responseType: 'blob' }),
+}
