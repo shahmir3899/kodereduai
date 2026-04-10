@@ -400,6 +400,7 @@ export default function Layout() {
       icon: CurrencyIcon,
       children: [
         { name: 'Dashboard', href: '/finance', icon: ChartIcon },
+        { name: 'Accounts', href: '/finance/accounts', icon: BanknotesIcon },
         { type: 'divider', label: 'Fees' },
         { name: 'Fee Overview', href: '/finance/fees', icon: ClipboardCheckIcon },
         { name: 'Collect Payments', href: '/finance/fees/collect', icon: ReceiptIcon },

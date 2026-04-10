@@ -1,33 +1,32 @@
-import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { classesApi, financeApi, sessionsApi } from '../../services/api'
-import { computeSummaryData } from './feeUtils'
+import { financeApi } from '../../services/api'
 
 /**
  * Read-only data hook for FeeOverviewPage.
  * No mutations — this page is purely for viewing fee status.
+ *
+ * Summary data (stat cards + by_class ordering) now comes from the
+ * canonical backend endpoint so that ordering is consistent with
+ * FeeCollectPage and any future consumer.
  */
 export function useFeeOverview({ month, year, feeType = 'MONTHLY', academicYearId }) {
   const isMonthly = feeType === 'MONTHLY'
 
-  const { data: classesData } = useQuery({
-    queryKey: ['classes-ordering'],
-    queryFn: () => classesApi.getClasses({ is_active: true, page_size: 9999 }),
-    staleTime: 5 * 60_000,
-  })
-
-  const { data: sessionClassesData } = useQuery({
-    queryKey: ['session-classes-ordering', academicYearId],
-    queryFn: () => sessionsApi.getSessionClasses({
-      academic_year: academicYearId,
-      is_active: true,
-      page_size: 9999,
+  // Canonical backend summary — single source of truth for stat cards
+  const { data: summaryRes, isLoading: summaryLoading } = useQuery({
+    queryKey: ['feeSummary', isMonthly ? month : 0, year, feeType, academicYearId],
+    queryFn: () => financeApi.getFeeSummary({
+      ...(isMonthly ? { month } : { month: 0 }),
+      year,
+      fee_type: feeType,
+      ...(academicYearId && { academic_year: academicYearId }),
     }),
-    enabled: !!academicYearId,
-    staleTime: 5 * 60_000,
+    staleTime: 30_000,
   })
 
-  const { data: payments, isLoading } = useQuery({
+  // Individual payments — still needed for ClassBreakdown expansion rows
+  // and PendingStudents drill-down
+  const { data: payments, isLoading: paymentsLoading } = useQuery({
     queryKey: isMonthly
       ? ['feePayments', month, year, feeType, academicYearId]
       : ['feePayments', year, feeType, academicYearId],
@@ -41,17 +40,11 @@ export function useFeeOverview({ month, year, feeType = 'MONTHLY', academicYearI
   })
 
   const allPayments = payments?.data?.results || payments?.data || []
-  const classes = classesData?.data?.results || classesData?.data || []
-  const sessionClasses = sessionClassesData?.data?.results || sessionClassesData?.data || []
-
-  const summaryData = useMemo(
-    () => computeSummaryData(allPayments, month, year, { classes, sessionClasses }),
-    [allPayments, month, year, classes, sessionClasses]
-  )
+  const summaryData = summaryRes?.data || null
 
   return {
     allPayments,
     summaryData,
-    isLoading,
+    isLoading: summaryLoading || paymentsLoading,
   }
 }

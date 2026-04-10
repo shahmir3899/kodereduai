@@ -334,8 +334,11 @@ export default function AcademicCalendarPage() {
     const dateKey = isoDate(year, month, day)
     const dayInfo = monthDaysByDate[dateKey]
     const isOff = !!dayInfo?.is_off_day
-    const eventsCount = dayInfo?.events?.length || 0
-    const labels = dayInfo?.off_day_types || []
+    const events = dayInfo?.events || []
+    const eventsCount = events.length
+    const offDayEntries = (dayInfo?.entries || []).filter((entry) => entry.entry_kind === 'OFF_DAY')
+    const offDayTitles = [...new Set(offDayEntries.map((entry) => entry.name).filter(Boolean))]
+    const hasSundayOnlyOff = isOff && offDayTitles.length === 0 && (dayInfo?.is_sunday || false)
     const examNames = examGroupsByDate[dateKey] || []
     const isAnchor = isRangeSelecting && rangeAnchorDate === dateKey
     const isWithinPendingRange = !!previewStart && dateKey >= previewStart && dateKey <= previewEnd
@@ -360,11 +363,23 @@ export default function AcademicCalendarPage() {
           <p className="text-sm font-semibold text-gray-900">{day}</p>
           {isOff && <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-rose-100 text-rose-700">OFF</span>}
         </div>
-        {labels.length > 0 && (
-          <p className="mt-2 text-[11px] text-rose-700 line-clamp-2">{labels.join(', ')}</p>
+        {(offDayTitles.length > 0 || hasSundayOnlyOff) && (
+          <div className="mt-2">
+            <p className="text-[11px] text-rose-700 line-clamp-1">{offDayTitles[0] || 'Sunday'}</p>
+            {offDayTitles.length > 1 && (
+              <p className="mt-0.5 text-[10px] text-rose-700">+{offDayTitles.length - 1} more</p>
+            )}
+          </div>
         )}
         {eventsCount > 0 && (
-          <p className="mt-2 text-[11px] text-blue-700">{eventsCount} event{eventsCount > 1 ? 's' : ''}</p>
+          <div className="mt-2">
+            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 block truncate" title={events[0]?.name || ''}>
+              {events[0]?.name || 'Event'}
+            </span>
+            {eventsCount > 1 && (
+              <p className="mt-1 text-[10px] text-blue-700">+{eventsCount - 1} more</p>
+            )}
+          </div>
         )}
         {examNames.map((name) => (
           <span key={name} className="mt-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 block truncate" title={name}>

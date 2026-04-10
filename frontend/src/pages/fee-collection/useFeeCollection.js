@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { financeApi, classesApi } from '../../services/api'
 import { useBackgroundTask } from '../../hooks/useBackgroundTask'
-import { computeSummaryData, filterPayments } from './feeUtils'
+import { filterPayments } from './feeUtils'
 
 /**
  * Data hook for FeeCollectPage — payment collection workbench.
@@ -80,28 +80,29 @@ export function useFeeCollection({ month, year, classFilter, statusFilter, feeTy
     title: `Generating fees for ${month}/${year}`,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['feePayments'] })
+      queryClient.invalidateQueries({ queryKey: ['feeSummary'] })
       queryClient.invalidateQueries({ queryKey: ['generate-preview'] })
     },
   })
 
   const paymentMutation = useMutation({
     mutationFn: ({ id, data }) => financeApi.recordPayment(id, data),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['feePayments'] }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['feePayments'] }); queryClient.invalidateQueries({ queryKey: ['feeSummary'] }) },
   })
 
   const deleteFeePaymentMutation = useMutation({
     mutationFn: (id) => financeApi.deleteFeePayment(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['feePayments'] }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['feePayments'] }); queryClient.invalidateQueries({ queryKey: ['feeSummary'] }) },
   })
 
   const bulkUpdateMutation = useMutation({
     mutationFn: (data) => financeApi.bulkUpdatePayments(data),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['feePayments'] }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['feePayments'] }); queryClient.invalidateQueries({ queryKey: ['feeSummary'] }) },
   })
 
   const bulkDeleteMutation = useMutation({
     mutationFn: (data) => financeApi.bulkDeletePayments(data),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['feePayments'] }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['feePayments'] }); queryClient.invalidateQueries({ queryKey: ['feeSummary'] }) },
   })
 
   const generateOnetimeMutation = useBackgroundTask({
@@ -110,6 +111,7 @@ export function useFeeCollection({ month, year, classFilter, statusFilter, feeTy
     title: `Generating one-time fees for ${year}`,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['feePayments'] })
+      queryClient.invalidateQueries({ queryKey: ['feeSummary'] })
       queryClient.invalidateQueries({ queryKey: ['generate-preview'] })
     },
   })
@@ -120,13 +122,14 @@ export function useFeeCollection({ month, year, classFilter, statusFilter, feeTy
     title: `Generating annual fees for ${year}`,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['feePayments'] })
+      queryClient.invalidateQueries({ queryKey: ['feeSummary'] })
       queryClient.invalidateQueries({ queryKey: ['generate-preview'] })
     },
   })
 
   const createFeePaymentMutation = useMutation({
     mutationFn: (data) => financeApi.createPayment(data),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['feePayments'] }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['feePayments'] }); queryClient.invalidateQueries({ queryKey: ['feeSummary'] }) },
   })
 
   // Derived data — merge from dual queries in "All Types" mode
@@ -221,71 +224,37 @@ export function useFeeCollection({ month, year, classFilter, statusFilter, feeTy
     })
   }, [allPayments, classFilter, statusFilter, sortedClassList])
 
-  const summaryData = useMemo(
-    () => computeSummaryData(allPayments, month, year),
-    [allPayments, month, year]
-  )
-
-  const filteredSummaryData = useMemo(() => {
-    if (filteredPayments.length === 0) {
-      return {
-        month,
-        year,
-        total_students: 0,
-        total_due: 0,
-        total_collected: 0,
-        total_pending: 0,
-      }
+  // --- Canonical backend summary for stat cards ---
+  // Build query params matching the current filter state so that the summary
+  // endpoint applies the same permission / filter pipeline as get_queryset.
+  const summaryParams = useMemo(() => {
+    const params = { year }
+    if (feeTypeFilter) {
+      params.fee_type = feeTypeFilter
+      params.month = feeTypeFilter === 'MONTHLY' ? month : 0
+    } else {
+      // "All Types" — omit fee_type so backend includes everything for month+year
+      params.month = month
     }
+    if (classFilter) params.class_id = classFilter
+    if (sessionClassId) params.session_class_id = sessionClassId
+    if (annualCategoryFilter) params.annual_category = annualCategoryFilter
+    if (monthlyCategoryFilter) params.monthly_category = monthlyCategoryFilter
+    if (academicYearId) params.academic_year = academicYearId
+    if (statusFilter) params.status = statusFilter
+    return params
+  }, [month, year, feeTypeFilter, classFilter, sessionClassId, annualCategoryFilter, monthlyCategoryFilter, academicYearId, statusFilter])
 
-    const total_due = filteredPayments.reduce((sum, payment) => sum + Number(payment.amount_due || 0), 0)
-    const total_collected = filteredPayments.reduce((sum, payment) => sum + Number(payment.amount_paid || 0), 0)
-    
-    // Balance should only count unpaid/partial entries
-    const unpaidPartialPayments = filteredPayments.filter(p => p.status === 'UNPAID' || p.status === 'PARTIAL')
-    const total_pending = unpaidPartialPayments.reduce((sum, payment) => {
-      const due = Number(payment.amount_due || 0)
-      const paid = Number(payment.amount_paid || 0)
-      return sum + Math.max(0, due - paid)
-    }, 0)
+  const { data: summaryRes } = useQuery({
+    queryKey: ['feeSummary', summaryParams],
+    queryFn: () => financeApi.getFeeSummary(summaryParams),
+    staleTime: 30_000,
+  })
 
-    // Count unique students, not records
-    const uniqueStudents = new Set(filteredPayments.map(p => p.student || p.student_id))
-
-    // Class-wise breakdown
-    const classMap = new Map()
-    filteredPayments.forEach(p => {
-      const key = p.class_obj_id || p.class_name || 'unknown'
-      if (!classMap.has(key)) {
-        classMap.set(key, { class_name: p.class_name || 'Unknown', students: new Set(), total_due: 0, total_collected: 0 })
-      }
-      const entry = classMap.get(key)
-      entry.students.add(p.student || p.student_id)
-      entry.total_due += Number(p.amount_due || 0)
-      entry.total_collected += Number(p.amount_paid || 0)
-    })
-
-    // Sort by class order
-    const classOrderMap = new Map()
-    sortedClassList.forEach((cls, i) => { classOrderMap.set(cls.id, i); classOrderMap.set(cls.name, i) })
-    const by_class = [...classMap.entries()]
-      .map(([key, v]) => ({ class_name: v.class_name, students: v.students.size, total_due: v.total_due, total_collected: v.total_collected }))
-      .sort((a, b) => (classOrderMap.get(a.class_name) ?? 999) - (classOrderMap.get(b.class_name) ?? 999))
-
-    return {
-      month,
-      year,
-      total_students: uniqueStudents.size,
-      total_due,
-      total_collected,
-      total_pending,
-      by_class,
-    }
-  }, [filteredPayments, month, year, sortedClassList])
+  const filteredSummaryData = summaryRes?.data || null
 
   return {
     // Data
-    summaryData,
     filteredSummaryData,
     paymentList: filteredPayments,
     allPayments,

@@ -129,6 +129,7 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | POST | /api/finance/accounts/close_month/ | |
 | GET | /api/finance/accounts/closings/ | |
 | GET | /api/finance/accounts/recent_entries/ | |
+| GET | /api/finance/accounts/ledger/ | account_id (required), date_from, date_to, ordering (asc\|desc, default asc), limit (integer, caps entries returned) |
 | POST | /api/finance/accounts/{id}/reopen/ | |
 | GET/POST | /api/finance/transfers/ | |
 | GET/POST | /api/finance/fee-structures/ | class_obj, academic_year, fee_type |
@@ -138,6 +139,7 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | POST | /api/finance/fee-payments/generate_onetime_fees/ | Body: {student_ids, fee_types, year, month}. Generates non-MONTHLY fee records |
 | GET | /api/finance/fee-payments/monthly_summary/ | month, year, fee_type |
 | GET | /api/finance/fee-payments/monthly_summary_all/ | |
+| GET | /api/finance/fee-payments/fee_summary/ | month, year, fee_type, class_id, session_class_id, academic_year, annual_category, monthly_category, status. Canonical summary for stat cards — returns totals, status counts, by_class (session-class-aware ordering), by_category. Used by both Fee Overview and Fee Collect pages |
 | GET | /api/finance/fee-payments/student_ledger/ | student_id |
 | POST | /api/finance/fee-payments/bulk_update/ | Body: {ids, amount_paid, account, payment_method, payment_date}. Supports `mode=pay_full` to set each student's paid amount = their total payable (amount_due + previous_balance) |
 | POST | /api/finance/fee-payments/bulk_delete/ | |

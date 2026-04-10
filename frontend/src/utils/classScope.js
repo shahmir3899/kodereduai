@@ -79,7 +79,7 @@ export function buildSessionLabeledMasterClassOptions({
 
   const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
 
-  return [...allMasterIds].map(masterId => {
+  return sortClassOptions([...allMasterIds].map(masterId => {
     const masterClass = masterClassById.get(masterId)
     const sessionVariants = byMasterClassId.get(masterId) || []
     const sectionList = [...new Set(
@@ -121,7 +121,7 @@ export function buildSessionLabeledMasterClassOptions({
       session_variant_count: sessionVariants.length,
       has_section_variants: sessionVariants.length > 1,
     }
-  })
+  }))
 }
 
 export function buildSessionClassOptions(sessionClasses = []) {

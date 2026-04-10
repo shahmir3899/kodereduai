@@ -1,35 +1,21 @@
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { schoolsApi, financeApi, usersApi } from '../services/api'
+import { schoolsApi, usersApi } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 import { getErrorMessage } from '../utils/errorUtils'
 import { useConfirmModal } from '../components/ConfirmModal'
 
-const ACCOUNT_TYPES = [
-  { value: 'CASH', label: 'Cash' },
-  { value: 'BANK', label: 'Bank' },
-  { value: 'PERSON', label: 'Person' },
-]
-
-const typeColors = {
-  CASH: 'bg-green-100 text-green-800',
-  BANK: 'bg-blue-100 text-blue-800',
-  PERSON: 'bg-purple-100 text-purple-800',
-}
-
 export default function SettingsPage() {
   const queryClient = useQueryClient()
-  const { isPrincipal, isStaffMember, isSchoolAdmin, isSuperAdmin, getAllowableRoles } = useAuth()
+  const { isSchoolAdmin, isSuperAdmin, getAllowableRoles } = useAuth()
   const { confirm, ConfirmModalRoot } = useConfirmModal()
-  const isFinanceAdmin = !isPrincipal && !isStaffMember
   const canManageUsers = isSchoolAdmin && !isSuperAdmin
   const [searchParams, setSearchParams] = useSearchParams()
 
   const getInitialTab = () => {
     const tab = searchParams.get('tab')
     if (tab === 'profile') return 'profile'
-    if (tab === 'accounts' && isFinanceAdmin) return 'accounts'
     if (tab === 'users' && canManageUsers) return 'users'
     return 'profile'
   }
@@ -38,7 +24,7 @@ export default function SettingsPage() {
 
   const handleTabChange = (tab) => {
     setActiveTab(tab)
-    if (['profile', 'accounts', 'users'].includes(tab)) {
+    if (['profile', 'users'].includes(tab)) {
       setSearchParams({ tab })
     } else {
       setSearchParams({})
@@ -50,19 +36,6 @@ export default function SettingsPage() {
   const [uploadingLetterhead, setUploadingLetterhead] = useState(false)
   const [logoPreview, setLogoPreview] = useState(null)
   const [letterheadPreview, setLetterheadPreview] = useState(null)
-
-  // Finance Accounts State
-  const [showAccountModal, setShowAccountModal] = useState(false)
-  const [editingAccount, setEditingAccount] = useState(null)
-  const [accountForm, setAccountForm] = useState({
-    name: '', account_type: 'CASH', opening_balance: '', staff_visible: true
-  })
-  const [showCloseMonthModal, setShowCloseMonthModal] = useState(false)
-  const now = new Date()
-  const [closeMonthForm, setCloseMonthForm] = useState({
-    year: now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear(),
-    month: now.getMonth() === 0 ? 12 : now.getMonth(),
-  })
 
   // --- Users State ---
   const [showUserModal, setShowUserModal] = useState(false)
@@ -130,100 +103,6 @@ export default function SettingsPage() {
       setUploadingLetterhead(true)
     }
     uploadAssetMutation.mutate({ file, assetType })
-  }
-
-  // --- Finance Account Queries ---
-  const { data: accountsData, isLoading: accountsLoading } = useQuery({
-    queryKey: ['accounts'],
-    queryFn: () => financeApi.getAccounts({ page_size: 9999 }),
-    enabled: isFinanceAdmin && activeTab === 'accounts',
-  })
-
-  const { data: closingsData } = useQuery({
-    queryKey: ['monthlyClosings'],
-    queryFn: () => financeApi.getClosings({ page_size: 9999 }),
-    enabled: isFinanceAdmin && activeTab === 'accounts',
-  })
-
-  const closingsList = closingsData?.data || []
-  const lastClosed = closingsList.length > 0 ? closingsList[0] : null
-  const accountList = accountsData?.data?.results || accountsData?.data || []
-
-  // Account mutations
-  const createAccountMutation = useMutation({
-    mutationFn: (data) => financeApi.createAccount(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['accounts'] })
-      queryClient.invalidateQueries({ queryKey: ['accountBalances'] })
-      closeAccountModal()
-    },
-  })
-
-  const updateAccountMutation = useMutation({
-    mutationFn: ({ id, data }) => financeApi.updateAccount(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['accounts'] })
-      queryClient.invalidateQueries({ queryKey: ['accountBalances'] })
-      closeAccountModal()
-    },
-  })
-
-  const deleteAccountMutation = useMutation({
-    mutationFn: (id) => financeApi.deleteAccount(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['accounts'] })
-      queryClient.invalidateQueries({ queryKey: ['accountBalances'] })
-    },
-  })
-
-  const closeMonthMutation = useMutation({
-    mutationFn: (data) => financeApi.closeMonth(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['monthlyClosings'] })
-      queryClient.invalidateQueries({ queryKey: ['accountBalances'] })
-      queryClient.invalidateQueries({ queryKey: ['accountBalancesAll'] })
-      setShowCloseMonthModal(false)
-    },
-  })
-
-  const reopenMonthMutation = useMutation({
-    mutationFn: (id) => financeApi.reopenMonth(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['monthlyClosings'] })
-      queryClient.invalidateQueries({ queryKey: ['accountBalances'] })
-      queryClient.invalidateQueries({ queryKey: ['accountBalancesAll'] })
-    },
-  })
-
-  const closeAccountModal = () => {
-    setShowAccountModal(false)
-    setEditingAccount(null)
-    setAccountForm({ name: '', account_type: 'CASH', opening_balance: '', staff_visible: true })
-  }
-
-  const openEditAccount = (account) => {
-    setEditingAccount(account)
-    setAccountForm({
-      name: account.name,
-      account_type: account.account_type,
-      opening_balance: account.opening_balance,
-      staff_visible: account.staff_visible !== false,
-    })
-    setShowAccountModal(true)
-  }
-
-  const handleAccountSubmit = (e) => {
-    e.preventDefault()
-    const data = {
-      ...accountForm,
-      opening_balance: parseFloat(accountForm.opening_balance || 0),
-      staff_visible: accountForm.staff_visible,
-    }
-    if (editingAccount) {
-      updateAccountMutation.mutate({ id: editingAccount.id, data })
-    } else {
-      createAccountMutation.mutate(data)
-    }
   }
 
   // --- Users Queries & Mutations ---
@@ -343,7 +222,7 @@ export default function SettingsPage() {
     <div>
       <div className="mb-6">
         <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Settings</h1>
-        <p className="text-sm sm:text-base text-gray-600">School profile, finance, and user settings</p>
+        <p className="text-sm sm:text-base text-gray-600">School profile and user settings</p>
       </div>
 
       {/* Tabs */}
@@ -359,18 +238,6 @@ export default function SettingsPage() {
           >
             School Profile
           </button>
-          {isFinanceAdmin && (
-            <button
-              onClick={() => handleTabChange('accounts')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
-                activeTab === 'accounts'
-                  ? 'border-primary-600 text-primary-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              Finance Accounts
-            </button>
-          )}
           {canManageUsers && (
             <button
               onClick={() => handleTabChange('users')}
@@ -526,202 +393,6 @@ export default function SettingsPage() {
           ) : (
             <div className="card text-center py-8 text-gray-500">No school data available.</div>
           )}
-        </div>
-      )}
-
-      {/* Finance Accounts Tab (Admin Only) */}
-      {activeTab === 'accounts' && isFinanceAdmin && (
-        <div className="space-y-6">
-          {/* Actions */}
-          <div className="flex flex-wrap gap-2">
-            <button onClick={() => setShowAccountModal(true)} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm">
-              Add Account
-            </button>
-            <button onClick={() => setShowCloseMonthModal(true)} className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 text-sm">
-              Close Month
-            </button>
-          </div>
-
-          {lastClosed && (
-            <div className="flex items-center justify-between text-xs text-gray-600 bg-gray-50 p-3 rounded-lg border border-gray-200">
-              <span>
-                Last closed: <span className="font-medium">{['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][lastClosed.month]} {lastClosed.year}</span>
-              </span>
-              <button
-                onClick={() => {
-                  if (confirm(`Reopen ${['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][lastClosed.month]} ${lastClosed.year}? This will delete the snapshots and allow editing transactions from that month.`)) {
-                    reopenMonthMutation.mutate(lastClosed.id)
-                  }
-                }}
-                disabled={reopenMonthMutation.isPending}
-                className="px-3 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200 text-xs font-medium disabled:opacity-50"
-              >
-                {reopenMonthMutation.isPending ? 'Reopening...' : 'Reopen'}
-              </button>
-            </div>
-          )}
-
-          {/* Account List */}
-          <div className="card">
-            <h3 className="font-medium text-gray-900 mb-4">Accounts</h3>
-            {accountsLoading ? (
-              <div className="text-center py-8 text-gray-500">Loading...</div>
-            ) : accountList.length === 0 ? (
-              <div className="text-center py-8">
-                <p className="text-gray-500 mb-2">No accounts yet</p>
-                <p className="text-sm text-gray-400">Click "Add Account" to create your first account</p>
-              </div>
-            ) : (
-              <>
-                {/* Mobile */}
-                <div className="sm:hidden space-y-3">
-                  {accountList.map((account) => (
-                    <div key={account.id} className="border rounded-lg p-3">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="font-medium text-gray-900">{account.name}</span>
-                        <div className="flex items-center gap-1">
-                          {!account.staff_visible && <span className="px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">Hidden</span>}
-                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${typeColors[account.account_type]}`}>{account.account_type}</span>
-                        </div>
-                      </div>
-                      <p className="text-sm text-gray-600">Opening Balance: {Number(account.opening_balance).toLocaleString()}</p>
-                      <p className="text-xs text-gray-500">{account.is_active ? 'Active' : 'Inactive'}</p>
-                      <div className="flex gap-2 mt-2">
-                        <button onClick={() => openEditAccount(account)} className="text-xs text-primary-600 hover:underline">Edit</button>
-                        <button onClick={async () => { const ok = await confirm({ title: 'Delete Account', message: 'Delete this account? This cannot be undone.' }); if (ok) deleteAccountMutation.mutate(account.id) }} className="text-xs text-red-600 hover:underline">Delete</button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Desktop */}
-                <div className="hidden sm:block overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Opening Balance</th>
-                        <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Status</th>
-                        <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Staff Visible</th>
-                        <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {accountList.map((account) => (
-                        <tr key={account.id}>
-                          <td className="px-4 py-3 text-sm font-medium text-gray-900">{account.name}</td>
-                          <td className="px-4 py-3">
-                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${typeColors[account.account_type]}`}>{account.account_type}</span>
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-700 text-right">{Number(account.opening_balance).toLocaleString()}</td>
-                          <td className="px-4 py-3 text-center">
-                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${account.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
-                              {account.is_active ? 'Active' : 'Inactive'}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-center">
-                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${account.staff_visible ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
-                              {account.staff_visible ? 'Yes' : 'Hidden'}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-center">
-                            <button onClick={() => openEditAccount(account)} className="text-sm text-primary-600 hover:underline mr-3">Edit</button>
-                            <button onClick={async () => { const ok = await confirm({ title: 'Delete Account', message: 'Delete this account? This cannot be undone.' }); if (ok) deleteAccountMutation.mutate(account.id) }} className="text-sm text-red-600 hover:underline">Delete</button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Closed Months History */}
-      {activeTab === 'accounts' && isFinanceAdmin && closingsList.length > 0 && (
-        <div className="space-y-6 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="card">
-            <h3 className="font-medium text-gray-900 mb-4">Closed Months History</h3>
-            <div className="space-y-2">
-              {closingsList.map((closing) => (
-                <div key={closing.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
-                  <div>
-                    <span className="font-medium text-gray-900">
-                      {['','January','February','March','April','May','June','July','August','September','October','November','December'][closing.month]} {closing.year}
-                    </span>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Closed by {closing.closed_by_name || 'N/A'} on {new Date(closing.closed_at).toLocaleDateString()}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => {
-                      if (confirm(`Reopen ${['','Jan','Feb','Mar','Apr','May','June','July','August','September','October','November','December'][closing.month]} ${closing.year}? This will delete the snapshots and allow editing transactions from that month.`)) {
-                        reopenMonthMutation.mutate(closing.id)
-                      }
-                    }}
-                    disabled={reopenMonthMutation.isPending}
-                    className="px-3 py-1.5 bg-red-100 text-red-700 rounded hover:bg-red-200 text-sm font-medium disabled:opacity-50 transition-colors"
-                  >
-                    {reopenMonthMutation.isPending ? 'Reopening...' : 'Reopen'}
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Add/Edit Account Modal */}
-      {showAccountModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
-            <div className="p-6">
-              <h3 className="text-lg font-semibold mb-4">{editingAccount ? 'Edit Account' : 'Add Account'}</h3>
-              <form onSubmit={handleAccountSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Account Name</label>
-                  <input type="text" value={accountForm.name} onChange={(e) => setAccountForm(f => ({ ...f, name: e.target.value }))} className="input-field" required placeholder="e.g. Principal Branch 1" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
-                  <select value={accountForm.account_type} onChange={(e) => setAccountForm(f => ({ ...f, account_type: e.target.value }))} className="input-field">
-                    {ACCOUNT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Opening Balance (BBF)</label>
-                  <input type="number" step="0.01" value={accountForm.opening_balance} onChange={(e) => setAccountForm(f => ({ ...f, opening_balance: e.target.value }))} className="input-field" placeholder="0.00" />
-                </div>
-                {editingAccount && (
-                  <div>
-                    <label className="flex items-center gap-2 text-sm">
-                      <input type="checkbox" checked={accountForm.is_active !== false} onChange={(e) => setAccountForm(f => ({ ...f, is_active: e.target.checked }))} className="rounded" />
-                      Active
-                    </label>
-                  </div>
-                )}
-                <div>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" checked={accountForm.staff_visible} onChange={(e) => setAccountForm(f => ({ ...f, staff_visible: e.target.checked }))} className="rounded" />
-                    Visible to Staff
-                  </label>
-                  <p className="text-xs text-gray-400 mt-1 ml-6">Staff members can see this account and its transactions</p>
-                </div>
-                <div className="flex gap-3 pt-2">
-                  <button type="button" onClick={closeAccountModal} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">Cancel</button>
-                  <button type="submit" disabled={createAccountMutation.isPending || updateAccountMutation.isPending} className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50">
-                    {(createAccountMutation.isPending || updateAccountMutation.isPending) ? 'Saving...' : 'Save'}
-                  </button>
-                </div>
-                {(createAccountMutation.isError || updateAccountMutation.isError) && (
-                  <p className="text-sm text-red-600">{getErrorMessage(createAccountMutation.error || updateAccountMutation.error, 'Failed to save account')}</p>
-                )}
-              </form>
-            </div>
-          </div>
         </div>
       )}
 
@@ -918,46 +589,6 @@ export default function SettingsPage() {
                   </button>
                 </div>
               </form>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Close Month Modal */}
-      {showCloseMonthModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-sm">
-            <div className="p-6">
-              <h3 className="text-lg font-semibold mb-4">Close Month</h3>
-              <p className="text-sm text-gray-600 mb-4">Snapshot all account balances as of the last day of the selected month. This BBF will speed up future balance lookups.</p>
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Month</label>
-                    <select value={closeMonthForm.month} onChange={(e) => setCloseMonthForm(f => ({ ...f, month: parseInt(e.target.value) }))} className="input-field">
-                      {['January','February','March','April','May','June','July','August','September','October','November','December'].map((name, i) => (
-                        <option key={i + 1} value={i + 1}>{name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Year</label>
-                    <input type="number" value={closeMonthForm.year} onChange={(e) => setCloseMonthForm(f => ({ ...f, year: parseInt(e.target.value) }))} className="input-field" min={2020} max={2100} />
-                  </div>
-                </div>
-                {lastClosed && (
-                  <p className="text-xs text-gray-400">Last closed: {['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][lastClosed.month]} {lastClosed.year}</p>
-                )}
-                <div className="flex gap-3 pt-2">
-                  <button type="button" onClick={() => setShowCloseMonthModal(false)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">Cancel</button>
-                  <button onClick={() => closeMonthMutation.mutate(closeMonthForm)} disabled={closeMonthMutation.isPending} className="flex-1 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 text-sm disabled:opacity-50">
-                    {closeMonthMutation.isPending ? 'Closing...' : 'Close Month'}
-                  </button>
-                </div>
-                {closeMonthMutation.isError && (
-                  <p className="text-sm text-red-600">{getErrorMessage(closeMonthMutation.error, 'Failed to close month')}</p>
-                )}
-              </div>
             </div>
           </div>
         </div>

@@ -493,74 +493,119 @@ export default function ExpensesPage() {
 
       {/* Add/Edit Expense Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
-            <div className="p-6">
-              <h3 className="text-lg font-semibold mb-4">{editingExpense ? 'Edit Expense' : 'Add Expense'}</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3 sm:p-4" onClick={closeModal}>
+          <div className="w-full max-w-md rounded-xl bg-white shadow-xl" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4 sm:px-6">
+              <h3 className="text-lg font-semibold text-gray-900">{editingExpense ? 'Edit Expense' : 'New Expense'}</h3>
+              <button
+                type="button"
+                onClick={closeModal}
+                className="-mr-1 flex h-8 w-8 items-center justify-center rounded-full text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
+                aria-label="Close"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="max-h-[75vh] overflow-y-auto px-5 py-4 sm:px-6">
               <form onSubmit={handleSubmit} className="space-y-4">
+                {/* Amount — hero field */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-                  <select value={form.category} onChange={(e) => setForm(f => ({ ...f, category: e.target.value }))} className="input-field" required>
-                    <option value="">-- Select Category --</option>
-                    {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
-                  {canWrite && (
-                    <div className="flex gap-2 mt-2">
-                      <input
-                        type="text"
-                        value={newCategoryName}
-                        onChange={(e) => setNewCategoryName(e.target.value)}
-                        placeholder="New category name..."
-                        className="input-field text-sm flex-1"
-                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddCategory() } }}
-                      />
-                      <button
-                        type="button"
-                        onClick={handleAddCategory}
-                        disabled={!newCategoryName.trim() || addCategoryMutation.isPending}
-                        className="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50"
-                      >
-                        + Add
-                      </button>
-                    </div>
-                  )}
+                  <label className="label">Amount</label>
+                  <div className="relative">
+                    <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-xs font-semibold text-gray-400">PKR</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={form.amount}
+                      onChange={(e) => setForm(f => ({ ...f, amount: e.target.value }))}
+                      className="input pl-12 text-lg font-semibold"
+                      placeholder="0.00"
+                      required
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
-                  <input type="number" step="0.01" value={form.amount} onChange={(e) => setForm(f => ({ ...f, amount: e.target.value }))} className="input-field" required />
+
+                {/* Category + Date row */}
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="label">Category</label>
+                    <select value={form.category} onChange={(e) => setForm(f => ({ ...f, category: e.target.value }))} className="input" required>
+                      <option value="">Select category</option>
+                      {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="label">Date</label>
+                    <input type="date" value={form.date} onChange={(e) => setForm(f => ({ ...f, date: e.target.value }))} className="input" required />
+                  </div>
                 </div>
+
+                {/* Quick add category */}
+                {canWrite && (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={newCategoryName}
+                      onChange={(e) => setNewCategoryName(e.target.value)}
+                      placeholder="New category..."
+                      className="input flex-1 !py-1.5 text-sm"
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddCategory() } }}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddCategory}
+                      disabled={!newCategoryName.trim() || addCategoryMutation.isPending}
+                      className="shrink-0 rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-600 transition hover:bg-gray-50 disabled:opacity-40"
+                    >
+                      + Add
+                    </button>
+                  </div>
+                )}
+
+                {/* Account */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
-                  <input type="date" value={form.date} onChange={(e) => setForm(f => ({ ...f, date: e.target.value }))} className="input-field" required />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Account <span className="text-red-500">*</span></label>
-                  <select value={form.account} onChange={(e) => setForm(f => ({ ...f, account: e.target.value }))} className="input-field" required>
-                    <option value="">-- Select Account --</option>
+                  <label className="label">Account <span className="text-red-500">*</span></label>
+                  <select value={form.account} onChange={(e) => setForm(f => ({ ...f, account: e.target.value }))} className="input" required>
+                    <option value="">Select account</option>
                     {accountsList.filter(a => a.is_active).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                   </select>
                 </div>
+
+                {/* Description */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                  <textarea value={form.description} onChange={(e) => setForm(f => ({ ...f, description: e.target.value }))} className="input-field" rows={3} placeholder="Brief description of the expense..." />
+                  <label className="label">Description</label>
+                  <textarea value={form.description} onChange={(e) => setForm(f => ({ ...f, description: e.target.value }))} className="input" rows={2} placeholder="What was this expense for?" />
                 </div>
-                <div>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" checked={form.is_sensitive} onChange={(e) => setForm(f => ({ ...f, is_sensitive: e.target.checked }))} className="rounded" />
-                    Mark as Sensitive
-                  </label>
-                  <p className="text-xs text-gray-400 mt-1 ml-6">Hidden from staff members</p>
-                </div>
-                <div className="flex gap-3 pt-2">
-                  <button type="button" onClick={closeModal} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">Cancel</button>
-                  <button type="submit" disabled={createMutation.isPending || updateMutation.isPending} className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50">
-                    {(createMutation.isPending || updateMutation.isPending) ? 'Saving...' : 'Save'}
-                  </button>
-                </div>
+
+                {/* Sensitive toggle */}
+                <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-gray-200 px-3 py-2.5 transition hover:bg-gray-50">
+                  <input type="checkbox" checked={form.is_sensitive} onChange={(e) => setForm(f => ({ ...f, is_sensitive: e.target.checked }))} className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+                  <div>
+                    <span className="text-sm font-medium text-gray-700">Mark as Sensitive</span>
+                    <p className="text-xs text-gray-400">Hidden from staff members</p>
+                  </div>
+                </label>
+
                 {(createMutation.isError || updateMutation.isError) && (
                   <p className="text-sm text-red-600">Failed to save expense. Please try again.</p>
                 )}
               </form>
+            </div>
+
+            {/* Footer */}
+            <div className="flex flex-col-reverse gap-2 border-t border-gray-100 px-5 py-4 sm:flex-row sm:justify-end sm:gap-3 sm:px-6">
+              <button type="button" onClick={closeModal} className="btn btn-secondary w-full sm:w-auto">Cancel</button>
+              <button
+                type="submit"
+                disabled={createMutation.isPending || updateMutation.isPending}
+                className="btn btn-primary w-full sm:w-auto"
+                onClick={handleSubmit}
+              >
+                {(createMutation.isPending || updateMutation.isPending) ? 'Saving...' : editingExpense ? 'Update Expense' : 'Add Expense'}
+              </button>
             </div>
           </div>
         </div>

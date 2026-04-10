@@ -7,6 +7,7 @@ import ClassSelector from '../../components/ClassSelector'
 import SearchableSelect from '../../components/SearchableSelect'
 import { studentsApi, financeApi } from '../../services/api'
 import { getErrorMessage } from '../../utils/errorUtils'
+import FeeGenerationSurface from './FeeGenerationSurface'
 import {
   buildSessionClassOptions,
   buildStudentClassFilterParams,
@@ -98,495 +99,25 @@ export function GenerateModal({
   year,
   classList,
   mutation,
-  onetimeMutation,
   annualMutation,
   academicYearId,
   annualCategories = [],
   monthlyCategories = [],
 }) {
-  const { activeSchool } = useAuth()
-  const [conflictStrategy, setConflictStrategy] = useState('skip')
-  const [generateFeeType, setGenerateFeeType] = useState('MONTHLY')
-  const [showConfirm, setShowConfirm] = useState(false)
-  const [showStudentList, setShowStudentList] = useState(false)
-  const [modalMonth, setModalMonth] = useState(month)
-  const [modalYear, setModalYear] = useState(year)
-  const [modalClassFilter, setModalClassFilter] = useState('')
-  const [selectedAnnualCategories, setSelectedAnnualCategories] = useState([])
-  const [selectedMonthlyCategories, setSelectedMonthlyCategories] = useState([])
-
-  const isMonthly = generateFeeType === 'MONTHLY'
-  const isAnnual = generateFeeType === 'ANNUAL'
-  const { sessionClasses } = useSessionClasses(academicYearId, activeSchool?.id)
-  const feeModalClassOptions = useMemo(() => {
-    if (!academicYearId) return classList
-    if (!sessionClasses?.length) return []
-    return buildSessionClassOptions(sessionClasses)
-  }, [academicYearId, classList, sessionClasses])
-  const resolvedModalClassFilter = resolveClassIdToMasterClassId(modalClassFilter, academicYearId, sessionClasses)
-
-  const selectedAnnualCategoryNames = annualCategories
-    .filter((cat) => selectedAnnualCategories.includes(cat.id))
-    .map((cat) => cat.name)
-  const selectedMonthlyCategoryNames = monthlyCategories
-    .filter((cat) => selectedMonthlyCategories.includes(cat.id))
-    .map((cat) => cat.name)
-
-  const previewEnabled = show && (!isAnnual || selectedAnnualCategories.length > 0)
-  const previewParams = useMemo(() => ({
-    fee_type: generateFeeType,
-    year: modalYear,
-    month: isMonthly ? modalMonth : 0,
-    ...(resolvedModalClassFilter && { class_id: resolvedModalClassFilter }),
-    ...(academicYearId && { academic_year: academicYearId }),
-    ...(isAnnual && selectedAnnualCategories.length > 0 && { annual_categories: selectedAnnualCategories.join(',') }),
-    ...(isMonthly && selectedMonthlyCategories.length > 0 && { monthly_categories: selectedMonthlyCategories.join(',') }),
-  }), [generateFeeType, modalYear, isMonthly, modalMonth, resolvedModalClassFilter, academicYearId, isAnnual, selectedAnnualCategories, selectedMonthlyCategories])
-
-  const { data: previewData, isFetching: previewLoading } = useQuery({
-    queryKey: ['generate-preview', generateFeeType, resolvedModalClassFilter, modalMonth, modalYear, academicYearId, selectedAnnualCategories, selectedMonthlyCategories],
-    queryFn: () => financeApi.previewGeneration(previewParams),
-    enabled: previewEnabled,
-    staleTime: 30_000,
-  })
-
-  // Auto-close modal when task is submitted or completes
-  useEffect(() => {
-    if (show && (mutation.submittedTaskId || onetimeMutation?.isSuccess || annualMutation?.isSuccess)) {
-      const timer = setTimeout(() => handleClose(), mutation.submittedTaskId ? 300 : 1500)
-      return () => clearTimeout(timer)
-    }
-  }, [show, mutation.submittedTaskId, onetimeMutation?.isSuccess, annualMutation?.isSuccess])
-
-  // Reset state when modal opens
-  useEffect(() => {
-    if (show) {
-      setConflictStrategy('skip')
-      setGenerateFeeType('MONTHLY')
-      setShowConfirm(false)
-      setShowStudentList(false)
-      setModalMonth(month)
-      setModalYear(year)
-      setModalClassFilter('')
-      setSelectedAnnualCategories([])
-      setSelectedMonthlyCategories([])
-      mutation.reset?.()
-      onetimeMutation?.reset?.()
-      annualMutation?.reset?.()
-    }
-  }, [show])
-
-  if (!show) return null
-
-  const feeLabel = FEE_TYPE_TABS.find(t => t.value === generateFeeType)?.label || 'Fee'
-  const preview = previewData?.data
-  const hasPreviewWork = (preview?.will_create || 0) > 0 || (preview?.already_exist || 0) > 0
-  const selectedClassLabel = feeModalClassOptions.find(c => String(c.id) === String(modalClassFilter))?.label
-    || classList.find(c => String(c.id) === String(modalClassFilter))?.name
-    || 'All classes'
-
-  const handleClose = () => {
-    setConflictStrategy('skip')
-    setGenerateFeeType('MONTHLY')
-    setShowConfirm(false)
-    setShowStudentList(false)
-    setModalMonth(month)
-    setModalYear(year)
-    setModalClassFilter('')
-    setSelectedAnnualCategories([])
-    setSelectedMonthlyCategories([])
-    onClose()
-  }
-
-  const handleGenerateMonthly = () => {
-    const data = {
-      month: modalMonth,
-      year: modalYear,
-      conflict_strategy: conflictStrategy,
-      ...(resolvedModalClassFilter && { class_id: parseInt(resolvedModalClassFilter) }),
-      ...(academicYearId && { academic_year: academicYearId }),
-      ...(selectedMonthlyCategories.length > 0 && { monthly_category_ids: selectedMonthlyCategories }),
-    }
-    if (mutation.trigger) mutation.trigger(data)
-    else mutation.mutate(data)
-  }
-
-  const handleGenerateConfirmed = () => {
-    if (isAnnual) {
-      annualMutation?.mutate({
-        ...(resolvedModalClassFilter && { class_id: parseInt(resolvedModalClassFilter) }),
-        annual_category_ids: selectedAnnualCategories,
-        year: modalYear,
-        conflict_strategy: conflictStrategy,
-        ...(academicYearId && { academic_year: academicYearId }),
-      })
-      return
-    }
-
-    onetimeMutation?.mutate({
-      ...(resolvedModalClassFilter && { class_id: parseInt(resolvedModalClassFilter) }),
-      fee_types: [generateFeeType],
-      year: modalYear,
-      month: 0,
-      ...(academicYearId && { academic_year: academicYearId }),
-    })
-  }
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md max-h-[85vh] overflow-y-auto">
-        <div className="p-6">
-          <h3 className="text-lg font-semibold mb-3">Generate Fee Records</h3>
-
-          {/* Fee type tabs */}
-          <div className="flex flex-wrap gap-1.5 mb-4">
-            {FEE_TYPE_TABS.map(ft => (
-              <button
-                key={ft.value}
-                type="button"
-                onClick={() => {
-                  setGenerateFeeType(ft.value)
-                  setShowConfirm(false)
-                  setShowStudentList(false)
-                }}
-                className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-colors ${
-                  generateFeeType === ft.value
-                    ? 'bg-primary-600 text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                {ft.label}
-              </button>
-            ))}
-          </div>
-
-          {isMonthly && (
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Categories (optional)</label>
-              {monthlyCategories.length === 0 ? (
-                <p className="text-xs text-amber-600 bg-amber-50 p-2 rounded">No monthly categories available.</p>
-              ) : (
-                <div className="grid grid-cols-2 gap-2">
-                  {monthlyCategories.map((cat) => (
-                    <label key={cat.id} className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={selectedMonthlyCategories.includes(cat.id)}
-                        onChange={(e) => {
-                          setShowConfirm(false)
-                          if (e.target.checked) setSelectedMonthlyCategories([...selectedMonthlyCategories, cat.id])
-                          else setSelectedMonthlyCategories(selectedMonthlyCategories.filter((id) => id !== cat.id))
-                        }}
-                        className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                      />
-                      <span className="text-sm text-gray-700">{cat.name}</span>
-                    </label>
-                  ))}
-                </div>
-              )}
-              <p className="text-xs text-gray-400 mt-1">Leave all unchecked to generate for all active monthly categories.</p>
-            </div>
-          )}
-
-          {isAnnual && (
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Categories <span className="text-red-500">*</span></label>
-              {annualCategories.length === 0 ? (
-                <p className="text-xs text-amber-600 bg-amber-50 p-2 rounded">No annual categories available.</p>
-              ) : (
-                <div className="grid grid-cols-2 gap-2">
-                  {annualCategories.map((cat) => (
-                    <label key={cat.id} className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={selectedAnnualCategories.includes(cat.id)}
-                        onChange={(e) => {
-                          setShowConfirm(false)
-                          if (e.target.checked) setSelectedAnnualCategories([...selectedAnnualCategories, cat.id])
-                          else setSelectedAnnualCategories(selectedAnnualCategories.filter((id) => id !== cat.id))
-                        }}
-                        className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                      />
-                      <span className="text-sm text-gray-700">{cat.name}</span>
-                    </label>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Class (optional)</label>
-            <ClassSelector
-              value={modalClassFilter}
-              onChange={(e) => {
-                setModalClassFilter(e.target.value)
-                setShowConfirm(false)
-                setShowStudentList(false)
-              }}
-              className="input-field"
-              showAllOption
-              classes={feeModalClassOptions}
-            />
-          </div>
-
-          {/* MONTHLY tab */}
-          {isMonthly && (
-            <>
-              <div className="grid grid-cols-2 gap-3 mb-4">
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Month</label>
-                  <select value={modalMonth} onChange={(e) => setModalMonth(parseInt(e.target.value))} className="input-field text-sm">
-                    {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Year</label>
-                  <select value={modalYear} onChange={(e) => setModalYear(parseInt(e.target.value))} className="input-field text-sm">
-                    {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
-                  </select>
-                </div>
-              </div>
-              <p className="text-sm text-gray-600 mb-2">
-                Create monthly fee records for enrolled students in <strong>{selectedClassLabel}</strong> for <strong>{MONTHS[modalMonth - 1]} {modalYear}</strong>.
-              </p>
-              <p className="text-sm text-gray-500 mb-4">
-                Unpaid balances from the previous month will be automatically carried forward.
-              </p>
-
-              {/* Live preview */}
-              {previewLoading && <p className="text-sm text-gray-400 mb-4">Calculating preview...</p>}
-              {preview && !previewLoading && (
-                <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-1">
-                  <p className="text-sm text-blue-800">
-                    <span className="font-medium">{preview.will_create}</span> new records will be created
-                    {preview.will_create > 0 && <> (total: <span className="font-medium">{Number(preview.total_amount).toLocaleString()}</span>)</>}
-                  </p>
-                  {preview.already_exist > 0 && (
-                    <p className="text-xs text-blue-600">{preview.already_exist} already exist (will skip)</p>
-                  )}
-                  {preview.no_fee_structure > 0 && (
-                    <p className="text-xs text-amber-600">{preview.no_fee_structure} students have no fee structure (will skip)</p>
-                  )}
-                </div>
-              )}
-
-              {preview?.already_exist > 0 && (
-                <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3">
-                  <p className="mb-2 text-sm font-medium text-amber-900">Existing records found. Choose how conflicts should be handled.</p>
-                  <p className="mb-3 text-xs text-amber-700">Only records whose recalculated amounts differ will be updated or replaced. Matching records will still be skipped.</p>
-                  <div className="space-y-2">
-                    <label className="flex items-start gap-2 cursor-pointer">
-                      <input type="radio" name="monthly-conflict-strategy" value="skip" checked={conflictStrategy === 'skip'} onChange={(e) => setConflictStrategy(e.target.value)} className="mt-0.5 border-amber-300 text-amber-600 focus:ring-amber-500" />
-                      <span className="text-sm text-amber-800">Skip conflicting existing records</span>
-                    </label>
-                    <label className="flex items-start gap-2 cursor-pointer">
-                      <input type="radio" name="monthly-conflict-strategy" value="update" checked={conflictStrategy === 'update'} onChange={(e) => setConflictStrategy(e.target.value)} className="mt-0.5 border-amber-300 text-amber-600 focus:ring-amber-500" />
-                      <span className="text-sm text-amber-800">Update existing records to current fee structure</span>
-                    </label>
-                    <label className="flex items-start gap-2 cursor-pointer">
-                      <input type="radio" name="monthly-conflict-strategy" value="delete_recreate" checked={conflictStrategy === 'delete_recreate'} onChange={(e) => setConflictStrategy(e.target.value)} className="mt-0.5 border-amber-300 text-amber-600 focus:ring-amber-500" />
-                      <span className="text-sm text-amber-800">Delete and recreate conflicting records</span>
-                    </label>
-                  </div>
-                  {conflictStrategy === 'delete_recreate' && (
-                    <p className="mt-3 text-xs text-red-700">Delete and recreate will reset the conflicting record and can remove recorded payment history.</p>
-                  )}
-                </div>
-              )}
-              <div className="flex gap-3">
-                <button onClick={handleClose} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">Cancel</button>
-                <button
-                  onClick={handleGenerateMonthly}
-                  disabled={(mutation.isSubmitting ?? mutation.isPending) || !hasPreviewWork}
-                  className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50"
-                >
-                  {(mutation.isSubmitting ?? mutation.isPending) ? 'Starting...' : 'Generate'}
-                </button>
-              </div>
-              {mutation.isSuccess && (
-                <div className="mt-3 text-sm text-green-700 bg-green-50 p-3 rounded">
-                  {(() => {
-                    const payload = mutation.data?.data || {}
-                    const result = payload.result || payload
-                    const created = result.created ?? 0
-                    const updated = result.updated ?? 0
-                    const deletedRecreated = result.deleted_recreated ?? 0
-                    const skipped = result.skipped ?? 0
-                    const noFeeStructure = result.no_fee_structure ?? 0
-                    const protectedConflict = result.protected_conflict ?? 0
-                    return [
-                      `Created ${created} records.`,
-                      updated > 0 ? `Updated ${updated}.` : null,
-                      deletedRecreated > 0 ? `Recreated ${deletedRecreated}.` : null,
-                      skipped > 0 ? `Skipped ${skipped}.` : null,
-                      protectedConflict > 0 ? `${protectedConflict} protected conflict${protectedConflict === 1 ? '' : 's'} left unchanged.` : null,
-                      noFeeStructure > 0 ? `${noFeeStructure} students have no fee structure.` : null,
-                    ].filter(Boolean).join(' ')
-                  })()}
-                </div>
-              )}
-            </>
-          )}
-
-          {/* Non-MONTHLY setup */}
-          {!isMonthly && !showConfirm && (
-            <>
-              <p className="text-sm text-gray-600 mb-4">
-                Generate <strong>{feeLabel}</strong> fee records for enrolled students in <strong>{selectedClassLabel}</strong> for <strong>{modalYear}</strong>.
-              </p>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Year</label>
-                <select value={modalYear} onChange={(e) => setModalYear(parseInt(e.target.value))} className="input-field">
-                  {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
-                </select>
-              </div>
-
-              {/* Live preview for non-monthly */}
-              {isAnnual && selectedAnnualCategories.length === 0 && (
-                <p className="text-xs text-amber-600 bg-amber-50 p-2 rounded mb-4">Select at least one annual category to preview and generate annual records.</p>
-              )}
-              {previewLoading && previewEnabled && <p className="text-sm text-gray-400 mb-4">Calculating preview...</p>}
-              {preview && !previewLoading && (
-                <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-1">
-                  <p className="text-sm text-blue-800">
-                    <span className="font-medium">{preview.will_create}</span> new {feeLabel.toLowerCase()} records
-                    {preview.will_create > 0 && <> (total: <span className="font-medium">{Number(preview.total_amount).toLocaleString()}</span>)</>}
-                  </p>
-                  {preview.already_exist > 0 && (
-                    <p className="text-xs text-blue-600">{preview.already_exist} already exist (will skip)</p>
-                  )}
-                  {preview.no_fee_structure > 0 && (
-                    <p className="text-xs text-amber-600">{preview.no_fee_structure} students have no fee structure (will skip)</p>
-                  )}
-                  {preview.will_create > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setShowStudentList(!showStudentList)}
-                      className="text-xs text-blue-700 hover:text-blue-900 underline mt-1"
-                    >
-                      {showStudentList ? 'Hide' : 'Show'} student details{preview.has_more ? ` (first 50)` : ''}
-                    </button>
-                  )}
-                </div>
-              )}
-
-              {/* Expandable student preview list */}
-              {showStudentList && preview?.students?.length > 0 && (
-                <div className="mb-4 max-h-40 overflow-y-auto border border-gray-200 rounded-lg">
-                  <table className="min-w-full text-xs">
-                    <thead className="bg-gray-50 sticky top-0">
-                      <tr>
-                        <th className="px-2 py-1 text-left text-gray-500">Student</th>
-                        {(isAnnual || preview.students.some((s) => s.category)) && <th className="px-2 py-1 text-left text-gray-500">Category</th>}
-                        <th className="px-2 py-1 text-right text-gray-500">Amount</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {preview.students.map(s => (
-                        <tr key={s.student_id}>
-                          <td className="px-2 py-1 text-gray-700">{s.student_name}</td>
-                          {(isAnnual || preview.students.some((item) => item.category)) && <td className="px-2 py-1 text-gray-600">{s.category || '—'}</td>}
-                          <td className="px-2 py-1 text-right text-gray-900">{Number(s.amount).toLocaleString()}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
-              <div className="flex gap-3">
-                <button onClick={handleClose} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">Cancel</button>
-                <button
-                  onClick={() => setShowConfirm(true)}
-                  disabled={!previewEnabled || !preview || !hasPreviewWork}
-                  className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50"
-                >
-                  Review & Generate
-                </button>
-              </div>
-            </>
-          )}
-
-          {/* Non-MONTHLY confirmation step */}
-          {!isMonthly && showConfirm && (
-            <>
-              {preview?.already_exist > 0 && (
-                <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3">
-                  <p className="mb-2 text-sm font-medium text-amber-900">Existing records found. Choose how conflicts should be handled.</p>
-                  <p className="mb-3 text-xs text-amber-700">Only records whose recalculated amounts differ will be updated or replaced. Matching records will still be skipped.</p>
-                  <div className="space-y-2">
-                    <label className="flex items-start gap-2 cursor-pointer">
-                      <input type="radio" name="annual-conflict-strategy" value="skip" checked={conflictStrategy === 'skip'} onChange={(e) => setConflictStrategy(e.target.value)} className="mt-0.5 border-amber-300 text-amber-600 focus:ring-amber-500" />
-                      <span className="text-sm text-amber-800">Skip conflicting existing records</span>
-                    </label>
-                    <label className="flex items-start gap-2 cursor-pointer">
-                      <input type="radio" name="annual-conflict-strategy" value="update" checked={conflictStrategy === 'update'} onChange={(e) => setConflictStrategy(e.target.value)} className="mt-0.5 border-amber-300 text-amber-600 focus:ring-amber-500" />
-                      <span className="text-sm text-amber-800">Update existing records to current fee structure</span>
-                    </label>
-                    <label className="flex items-start gap-2 cursor-pointer">
-                      <input type="radio" name="annual-conflict-strategy" value="delete_recreate" checked={conflictStrategy === 'delete_recreate'} onChange={(e) => setConflictStrategy(e.target.value)} className="mt-0.5 border-amber-300 text-amber-600 focus:ring-amber-500" />
-                      <span className="text-sm text-amber-800">Delete and recreate conflicting records</span>
-                    </label>
-                  </div>
-                  {conflictStrategy === 'delete_recreate' && (
-                    <p className="mt-3 text-xs text-red-700">Delete and recreate will reset the conflicting record and can remove recorded payment history.</p>
-                  )}
-                </div>
-              )}
-              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-2 mb-4">
-                <p className="text-sm font-medium text-blue-900">Please confirm {feeLabel.toLowerCase()} fee generation:</p>
-                <div className="text-sm text-blue-800 space-y-1">
-                  <p><span className="font-medium">Class:</span> {selectedClassLabel}</p>
-                  <p><span className="font-medium">Fee Type:</span> {feeLabel}</p>
-                  {isAnnual && <p><span className="font-medium">Categories:</span> {selectedAnnualCategoryNames.join(', ')}</p>}
-                  {!isAnnual && isMonthly === false && preview?.students?.some((s) => s.category) === true && (
-                    <p><span className="font-medium">Categories:</span> {selectedMonthlyCategoryNames.join(', ')}</p>
-                  )}
-                  <p><span className="font-medium">Year:</span> {modalYear}</p>
-                  <p><span className="font-medium">Records:</span> {preview?.will_create} new</p>
-                  <p><span className="font-medium">Total Amount:</span> {Number(preview?.total_amount || 0).toLocaleString()}</p>
-                </div>
-              </div>
-              <div className="flex gap-3">
-                <button onClick={() => setShowConfirm(false)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">Back</button>
-                <button
-                  onClick={handleGenerateConfirmed}
-                  disabled={(annualMutation?.isSubmitting ?? annualMutation?.isPending) || (onetimeMutation?.isSubmitting ?? onetimeMutation?.isPending)}
-                  className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50"
-                >
-                  {((annualMutation?.isSubmitting ?? annualMutation?.isPending) || (onetimeMutation?.isSubmitting ?? onetimeMutation?.isPending)) ? 'Generating...' : 'Confirm & Generate'}
-                </button>
-              </div>
-              {(isAnnual ? annualMutation?.isSuccess : onetimeMutation?.isSuccess) && (
-                <div className="mt-3 text-sm text-green-700 bg-green-50 p-3 rounded">
-                  {(() => {
-                    const payload = isAnnual ? annualMutation?.data?.data : onetimeMutation?.data?.data
-                    const result = payload?.result || payload || {}
-                    const created = result.created
-                    const updated = result.updated ?? 0
-                    const deletedRecreated = result.deleted_recreated ?? 0
-                    const skipped = result.skipped ?? 0
-                    const protectedConflict = result.protected_conflict ?? 0
-                    if (created == null) return 'Fee generation started. Track progress in Tasks.'
-                    return [
-                      `Created ${created} records.`,
-                      updated > 0 ? `Updated ${updated}.` : null,
-                      deletedRecreated > 0 ? `Recreated ${deletedRecreated}.` : null,
-                      skipped > 0 ? `Skipped ${skipped}.` : null,
-                      protectedConflict > 0 ? `${protectedConflict} protected conflict${protectedConflict === 1 ? '' : 's'} left unchanged.` : null,
-                    ].filter(Boolean).join(' ')
-                  })()}
-                </div>
-              )}
-              {(isAnnual ? annualMutation?.isError : onetimeMutation?.isError) && (
-                <p className="mt-3 text-sm text-red-600">{getErrorMessage(isAnnual ? annualMutation.error : onetimeMutation.error, 'Failed to generate fees')}</p>
-              )}
-            </>
-          )}
-        </div>
-      </div>
-    </div>
+    <FeeGenerationSurface
+      mode="modal"
+      show={show}
+      onClose={onClose}
+      month={month}
+      year={year}
+      classList={classList}
+      monthlyMutation={mutation}
+      annualMutation={annualMutation}
+      academicYearId={academicYearId}
+      annualCategories={annualCategories}
+      monthlyCategories={monthlyCategories}
+    />
   )
 }
 
@@ -1050,63 +581,106 @@ export function IncomeModal({ show, onClose, form, setForm, onSubmit, isPending,
 
   if (!show) return null
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
-        <div className="p-6">
-          <h3 className="text-lg font-semibold mb-4">Add Other Income</h3>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3 sm:p-4" onClick={onClose}>
+      <div className="w-full max-w-md rounded-xl bg-white shadow-xl" onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4 sm:px-6">
+          <h3 className="text-lg font-semibold text-gray-900">Add Other Income</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="-mr-1 flex h-8 w-8 items-center justify-center rounded-full text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
+            aria-label="Close"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="max-h-[75vh] overflow-y-auto px-5 py-4 sm:px-6">
           <form onSubmit={onSubmit} className="space-y-4">
+            {/* Amount — hero field */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-              <select value={form.category} onChange={(e) => setForm(f => ({ ...f, category: e.target.value }))} className="input-field">
-                <option value="">-- Select Category --</option>
-                {incomeCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-              <div className="flex gap-2 mt-2">
+              <label className="label">Amount</label>
+              <div className="relative">
+                <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-xs font-semibold text-gray-400">PKR</span>
                 <input
-                  type="text"
-                  value={newCategoryName}
-                  onChange={(e) => setNewCategoryName(e.target.value)}
-                  placeholder="New category name..."
-                  className="input-field text-sm flex-1"
-                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (newCategoryName.trim()) addCategoryMutation.mutate({ name: newCategoryName.trim() }) } }}
+                  type="number"
+                  step="0.01"
+                  value={form.amount}
+                  onChange={(e) => setForm(f => ({ ...f, amount: e.target.value }))}
+                  className="input pl-12 text-lg font-semibold"
+                  placeholder="0.00"
+                  required
                 />
-                <button
-                  type="button"
-                  onClick={() => { if (newCategoryName.trim()) addCategoryMutation.mutate({ name: newCategoryName.trim() }) }}
-                  disabled={!newCategoryName.trim() || addCategoryMutation.isPending}
-                  className="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50"
-                >
-                  + Add
-                </button>
               </div>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
-              <input type="number" step="0.01" value={form.amount} onChange={(e) => setForm(f => ({ ...f, amount: e.target.value }))} className="input-field" required />
+
+            {/* Category + Date row */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label className="label">Category</label>
+                <select value={form.category} onChange={(e) => setForm(f => ({ ...f, category: e.target.value }))} className="input">
+                  <option value="">Select category</option>
+                  {incomeCategories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="label">Date</label>
+                <input type="date" value={form.date} onChange={(e) => setForm(f => ({ ...f, date: e.target.value }))} className="input" required />
+              </div>
             </div>
+
+            {/* Quick add category */}
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+                placeholder="New category..."
+                className="input flex-1 !py-1.5 text-sm"
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (newCategoryName.trim()) addCategoryMutation.mutate({ name: newCategoryName.trim() }) } }}
+              />
+              <button
+                type="button"
+                onClick={() => { if (newCategoryName.trim()) addCategoryMutation.mutate({ name: newCategoryName.trim() }) }}
+                disabled={!newCategoryName.trim() || addCategoryMutation.isPending}
+                className="shrink-0 rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-600 transition hover:bg-gray-50 disabled:opacity-40"
+              >
+                + Add
+              </button>
+            </div>
+
+            {/* Account */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Account <span className="text-red-500">*</span></label>
-              <select value={form.account} onChange={(e) => setForm(f => ({ ...f, account: e.target.value }))} className="input-field" required>
-                <option value="">-- Select Account --</option>
+              <label className="label">Account <span className="text-red-500">*</span></label>
+              <select value={form.account} onChange={(e) => setForm(f => ({ ...f, account: e.target.value }))} className="input" required>
+                <option value="">Select account</option>
                 {accountsList.filter(a => a.is_active).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
               </select>
             </div>
+
+            {/* Description */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
-              <input type="date" value={form.date} onChange={(e) => setForm(f => ({ ...f, date: e.target.value }))} className="input-field" required />
+              <label className="label">Description <span className="text-xs font-normal text-gray-400">(optional)</span></label>
+              <textarea value={form.description} onChange={(e) => setForm(f => ({ ...f, description: e.target.value }))} className="input" rows={2} placeholder="e.g., Sold 50 copies" />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Description (optional)</label>
-              <textarea value={form.description} onChange={(e) => setForm(f => ({ ...f, description: e.target.value }))} className="input-field" rows={2} placeholder="e.g., Sold 50 copies" />
-            </div>
-            <div className="flex gap-3 pt-2">
-              <button type="button" onClick={onClose} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">Cancel</button>
-              <button type="submit" disabled={isPending} className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50">
-                {isPending ? 'Saving...' : 'Save'}
-              </button>
-            </div>
+
             {error && <p className="text-sm text-red-600">{getErrorMessage(error, 'Failed to save income')}</p>}
           </form>
+        </div>
+
+        {/* Footer */}
+        <div className="flex flex-col-reverse gap-2 border-t border-gray-100 px-5 py-4 sm:flex-row sm:justify-end sm:gap-3 sm:px-6">
+          <button type="button" onClick={onClose} className="btn btn-secondary w-full sm:w-auto">Cancel</button>
+          <button
+            type="submit"
+            disabled={isPending}
+            className="btn btn-primary w-full sm:w-auto"
+            onClick={onSubmit}
+          >
+            {isPending ? 'Saving...' : 'Add Income'}
+          </button>
         </div>
       </div>
     </div>

@@ -330,7 +330,6 @@ export default function FeeCollectPage() {
         month={month} year={year}
         classList={data.classList}
         mutation={data.generateMutation}
-        onetimeMutation={data.generateOnetimeMutation}
         annualMutation={data.generateAnnualMutation}
         academicYearId={activeAcademicYear?.id}
         annualCategories={data.annualCategories}

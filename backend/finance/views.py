@@ -1046,6 +1046,183 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         })
 
     @action(detail=False, methods=['get'])
+    def fee_summary(self, request):
+        """Canonical fee summary endpoint.
+
+        Returns aggregated totals, status counts, and by-class / by-category
+        breakdowns with deterministic ordering.  Both Fee Overview and Fee
+        Collect pages should consume this single endpoint for stat cards so
+        that class ordering is always consistent.
+
+        Accepted query params (all optional, applied by get_queryset):
+            month, year, fee_type, class_id, session_class_id,
+            academic_year, annual_category, monthly_category, status
+        """
+        from academic_sessions.models import SessionClass, StudentEnrollment
+
+        qs = self.get_queryset()
+
+        # --- Global aggregates ---
+        totals = qs.aggregate(
+            total_due=Sum('amount_due'),
+            total_collected=Sum('amount_paid'),
+        )
+        total_due = totals['total_due'] or Decimal('0')
+        total_collected = totals['total_collected'] or Decimal('0')
+
+        status_counts = qs.values('status').annotate(count=Count('id'))
+        counts = {item['status']: item['count'] for item in status_counts}
+
+        # Count unique students
+        total_students = qs.values('student_id').distinct().count()
+
+        # --- Resolve academic year for session class lookup ---
+        academic_year_id = request.query_params.get('academic_year')
+
+        # Build a mapping: student_id → session_class for the active academic year
+        school_id = _resolve_school_id(request)
+        student_session_map = {}
+        session_class_meta = {}   # session_class_id → {display_name, section, grade_level, label}
+
+        if academic_year_id and school_id:
+            enrollments = (
+                StudentEnrollment.objects
+                .filter(
+                    academic_year_id=academic_year_id,
+                    is_active=True,
+                    session_class__school_id=school_id,
+                    session_class__is_active=True,
+                )
+                .select_related('session_class')
+            )
+            for enrollment in enrollments:
+                sc = enrollment.session_class
+                student_session_map[enrollment.student_id] = sc.id
+                if sc.id not in session_class_meta:
+                    label = f"{sc.display_name} - {sc.section}" if sc.section else sc.display_name
+                    session_class_meta[sc.id] = {
+                        'display_name': sc.display_name,
+                        'section': sc.section,
+                        'grade_level': sc.grade_level,
+                        'label': label,
+                    }
+
+        # --- By-class breakdown (session-class-aware) ---
+        class_buckets = {}  # key → {class_name, grade_level, section, students: set, total_due, total_collected}
+        for payment in qs.values('student_id', 'student__class_obj_id', 'student__class_obj__name',
+                                  'student__class_obj__section', 'student__class_obj__grade_level',
+                                  'amount_due', 'amount_paid'):
+            sid = payment['student_id']
+            sc_id = student_session_map.get(sid)
+
+            if sc_id and sc_id in session_class_meta:
+                meta = session_class_meta[sc_id]
+                key = f"sc:{sc_id}"
+                # class_key must match frontend getPaymentClassKey() format
+                class_key = f"session:{sc_id}"
+                class_name = meta['label']
+                grade_level = meta['grade_level']
+                section = meta['section']
+            else:
+                master_id = payment['student__class_obj_id']
+                master_name = payment['student__class_obj__name'] or 'Unknown'
+                master_section = payment['student__class_obj__section'] or ''
+                grade_level = payment['student__class_obj__grade_level'] or 0
+                key = f"mc:{master_id}" if master_id else f"name:{master_name}"
+                class_key = f"class:{master_name}" if master_name else f"id:{master_id}"
+                class_name = f"{master_name} - {master_section}" if master_section else master_name
+                section = master_section
+
+            if key not in class_buckets:
+                class_buckets[key] = {
+                    'class_key': class_key,
+                    'class_name': class_name,
+                    'grade_level': grade_level,
+                    'section': section,
+                    'students': set(),
+                    'total_due': Decimal('0'),
+                    'total_collected': Decimal('0'),
+                    'record_count': 0,
+                }
+            bucket = class_buckets[key]
+            bucket['students'].add(sid)
+            bucket['total_due'] += payment['amount_due'] or Decimal('0')
+            bucket['total_collected'] += payment['amount_paid'] or Decimal('0')
+            bucket['record_count'] += 1
+
+        def _section_sort_key(s):
+            s = (s or '').strip()
+            if not s:
+                return (-1, '')
+            try:
+                return (int(s), '')
+            except ValueError:
+                return (0, s.upper())
+
+        by_class = sorted(
+            class_buckets.values(),
+            key=lambda b: (b['grade_level'], _section_sort_key(b['section']), b['class_name']),
+        )
+        by_class_response = [
+            {
+                'class_key': b['class_key'],
+                'class_name': b['class_name'],
+                'students': len(b['students']),
+                'count': len(b['students']),
+                'total_due': b['total_due'],
+                'total_collected': b['total_collected'],
+            }
+            for b in by_class
+        ]
+
+        # --- By-category breakdown ---
+        by_category_qs = qs.exclude(
+            monthly_category__isnull=True, annual_category__isnull=True
+        )
+        category_buckets = {}
+        for payment in by_category_qs.values(
+            'monthly_category__id', 'monthly_category__name',
+            'annual_category__id', 'annual_category__name',
+            'amount_due', 'amount_paid',
+        ):
+            cat_id = payment['monthly_category__id'] or payment['annual_category__id']
+            cat_name = payment['monthly_category__name'] or payment['annual_category__name'] or 'Uncategorized'
+            cat_key = cat_id or cat_name
+            if cat_key not in category_buckets:
+                category_buckets[cat_key] = {
+                    'category_id': cat_id,
+                    'category_name': cat_name,
+                    'total_due': Decimal('0'),
+                    'total_collected': Decimal('0'),
+                    'count': 0,
+                }
+            cb = category_buckets[cat_key]
+            cb['total_due'] += payment['amount_due'] or Decimal('0')
+            cb['total_collected'] += payment['amount_paid'] or Decimal('0')
+            cb['count'] += 1
+
+        by_category = sorted(category_buckets.values(), key=lambda c: c['category_name'])
+
+        # --- Month/year from query params (echo back for frontend) ---
+        month_param = request.query_params.get('month')
+        year_param = request.query_params.get('year')
+
+        return Response({
+            'month': int(month_param) if month_param else None,
+            'year': int(year_param) if year_param else None,
+            'total_students': total_students,
+            'total_due': total_due,
+            'total_collected': total_collected,
+            'total_pending': max(Decimal('0'), total_due - total_collected),
+            'paid_count': counts.get('PAID', 0),
+            'partial_count': counts.get('PARTIAL', 0),
+            'unpaid_count': counts.get('UNPAID', 0),
+            'advance_count': counts.get('ADVANCE', 0),
+            'by_class': by_class_response,
+            'by_category': by_category,
+        })
+
+    @action(detail=False, methods=['get'])
     def student_ledger(self, request):
         """Get all payment records for a specific student."""
         student_id = request.query_params.get('student_id')
@@ -1795,6 +1972,20 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         if date_from and date_to and date_from > date_to:
             return Response({'detail': 'date_from cannot be after date_to.'}, status=400)
 
+        ordering = request.query_params.get('ordering', 'asc').lower()
+        if ordering not in ('asc', 'desc'):
+            ordering = 'asc'
+
+        limit_raw = request.query_params.get('limit')
+        limit = None
+        if limit_raw:
+            try:
+                limit = int(limit_raw)
+                if limit < 1:
+                    limit = None
+            except (TypeError, ValueError):
+                pass
+
         from schools.models import School
         if account.school_id is None and account.organization_id:
             scope_ids = list(
@@ -1941,6 +2132,12 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             total_debits += item['debit']
             running += item['amount_delta']
             item['running_balance'] = running
+
+        if ordering == 'desc':
+            entries.reverse()
+
+        if limit:
+            entries = entries[:limit]
 
         return Response({
             'account': {

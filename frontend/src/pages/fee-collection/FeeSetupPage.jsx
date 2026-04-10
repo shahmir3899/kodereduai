@@ -4,7 +4,6 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import { useFeeSetup } from './useFeeSetup'
-import { MONTHS } from './FeeFilters'
 import ClassSelector from '../../components/ClassSelector'
 import { financeApi, discountApi, studentsApi } from '../../services/api'
 import { getErrorMessage } from '../../utils/errorUtils'
@@ -14,13 +13,8 @@ import {
   resolveClassIdToMasterClassId,
 } from '../../utils/classScope'
 import AnnualChargesTab from './AnnualChargesTab'
+import FeeGenerationSurface from './FeeGenerationSurface'
 import MonthlyChargesTab from './MonthlyChargesTab'
-
-// MONTHLY fees are managed here.
-// ANNUAL charges are handled by the dedicated AnnualChargesTab.
-const FEE_TYPE_DESCRIPTIONS = {
-  MONTHLY: 'Set the monthly recurring fee for each class or override per student.',
-}
 
 function calcDiscountOff(discount, scholarship, baseFee) {
   const base = Number(baseFee) || 0
@@ -49,10 +43,6 @@ function formatDiscountLabel(discount, scholarship) {
   return null
 }
 
-// Year options for fee generation selectors – computed once at module load
-const _currentYear = new Date().getFullYear()
-const YEAR_OPTIONS = [_currentYear - 1, _currentYear, _currentYear + 1, _currentYear + 2]
-
 export default function FeeSetupPage() {
   const { activeSchool } = useAuth()
   const { activeAcademicYear } = useAcademicYear()
@@ -62,19 +52,6 @@ export default function FeeSetupPage() {
   // Tab state
   const [activeTab, setActiveTab] = useState('monthly')
   const [feeType] = useState('MONTHLY')
-
-  // Generate state
-  const [genMonth, setGenMonth] = useState(now.getMonth() + 1)
-  const [genYear, setGenYear] = useState(now.getFullYear())
-  const [genClassFilter, setGenClassFilter] = useState('')
-  const [monthlyConflictStrategy, setMonthlyConflictStrategy] = useState('skip')
-  // Annual fee generation state
-  const [genAnnualYear, setGenAnnualYear] = useState(now.getFullYear())
-  const [genAnnualClassFilter, setGenAnnualClassFilter] = useState('')
-  const [selectedAnnualCategories, setSelectedAnnualCategories] = useState([])
-  const [selectedMonthlyCategories, setSelectedMonthlyCategories] = useState([])
-  const [annualConflictStrategy, setAnnualConflictStrategy] = useState('skip')
-  const [annualShowConfirm, setAnnualShowConfirm] = useState(false)
   const [singleStructForm, setSingleStructForm] = useState({
     classId: '',
     studentId: '',
@@ -97,8 +74,6 @@ export default function FeeSetupPage() {
   const [removeConfirm, setRemoveConfirm] = useState(null) // studentDiscount id
 
   const { sessionClasses } = useSessionClasses(activeAcademicYear?.id, activeSchool?.id)
-  const resolvedGenClassFilter = resolveClassIdToMasterClassId(genClassFilter, activeAcademicYear?.id, sessionClasses)
-  const resolvedGenAnnualClassFilter = resolveClassIdToMasterClassId(genAnnualClassFilter, activeAcademicYear?.id, sessionClasses)
   const resolvedSingleStructClassId = resolveClassIdToMasterClassId(singleStructForm.classId, activeAcademicYear?.id, sessionClasses)
   const resolvedDiscClassId = resolveClassIdToMasterClassId(discClassId, activeAcademicYear?.id, sessionClasses)
   const discStudentClassFilterParams = useMemo(() => buildStudentClassFilterParams({
@@ -115,8 +90,8 @@ export default function FeeSetupPage() {
   const data = useFeeSetup({
     academicYearId: activeAcademicYear?.id,
     feeType,
-    month: genMonth,
-    year: genYear,
+    month: now.getMonth() + 1,
+    year: now.getFullYear(),
   })
 
   const feeSetupClassOptions = useMemo(() => {
@@ -305,36 +280,6 @@ export default function FeeSetupPage() {
   })
   const singleStructStructures = singleStructStructuresData?.data?.results || singleStructStructuresData?.data || []
 
-  // Generate preview queries
-  const { data: monthlyPreview, isFetching: monthlyPreviewLoading } = useQuery({
-    queryKey: ['generate-preview', 'MONTHLY', resolvedGenClassFilter, genMonth, genYear, activeAcademicYear?.id],
-    queryFn: () => financeApi.previewGeneration({
-      fee_type: 'MONTHLY', year: genYear, month: genMonth,
-      ...(resolvedGenClassFilter && { class_id: resolvedGenClassFilter }),
-      ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
-    }),
-    enabled: activeTab === 'generate',
-    staleTime: 30_000,
-  })
-
-  // Preview for annual fee categories
-  const { data: annualPreview, isFetching: annualPreviewLoading } = useQuery({
-    queryKey: ['generate-preview', 'ANNUAL', resolvedGenAnnualClassFilter, selectedAnnualCategories, genAnnualYear, activeAcademicYear?.id],
-    queryFn: () => financeApi.previewGeneration({
-      fee_type: 'ANNUAL', year: genAnnualYear, month: 0,
-      ...(resolvedGenAnnualClassFilter && { class_id: resolvedGenAnnualClassFilter }),
-      ...(selectedAnnualCategories.length > 0 && { annual_categories: selectedAnnualCategories.join(',') }),
-      ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
-    }),
-    enabled: activeTab === 'generate' && selectedAnnualCategories.length > 0 && !!resolvedGenAnnualClassFilter,
-    staleTime: 30_000,
-  })
-
-  const mPreview = monthlyPreview?.data
-  const aPreview = annualPreview?.data
-  const hasMonthlyPreviewWork = (mPreview?.will_create || 0) > 0 || (mPreview?.already_exist || 0) > 0
-  const hasAnnualPreviewWork = (aPreview?.will_create || 0) > 0 || (aPreview?.already_exist || 0) > 0
-
   const createSingleStructureMutation = useMutation({
     mutationFn: (payload) => financeApi.createFeeStructure(payload),
     onSuccess: () => {
@@ -367,64 +312,11 @@ export default function FeeSetupPage() {
       }
       return String(fs.monthly_category || '') === String(selectedSingleStructCategoryId)
     }) || null
-  }, [resolvedSingleStructClassId, selectedSingleStructCategoryId, singleStructStructures, singleStructForm.feeType])
-
-  useEffect(() => {
-    if (!resolvedSingleStructClassId || !selectedSingleStructCategoryId) return
-
-    if (matchingSingleStructClassStructure?.monthly_amount != null) {
-      setSingleStructForm(prev => ({
-        ...prev,
-        amount: String(matchingSingleStructClassStructure.monthly_amount),
-      }))
-    }
-  }, [resolvedSingleStructClassId, selectedSingleStructCategoryId, matchingSingleStructClassStructure])
-
-  const handleAssignSubmit = () => {
-    if (!assignModal || !assignSelectedId || !activeAcademicYear?.id) return
-    const payload = {
-      student_id: assignModal.studentId,
-      academic_year_id: activeAcademicYear.id,
-      notes: assignNotes,
-    }
-    if (assignType === 'discount') payload.discount_id = parseInt(assignSelectedId)
-    else payload.scholarship_id = parseInt(assignSelectedId)
-    assignMutation.mutate(payload)
-  }
-
-  const handleBulkAssignSubmit = () => {
-    if (!bulkSelectedId || !resolvedDiscClassId || !activeAcademicYear?.id) return
-    const payload = {
-      class_id: parseInt(resolvedDiscClassId),
-      academic_year_id: activeAcademicYear.id,
-    }
-    if (bulkType === 'discount') payload.discount_id = parseInt(bulkSelectedId)
-    else payload.scholarship_id = parseInt(bulkSelectedId)
-    bulkAssignMutation.mutate(payload)
-  }
-
-  // Annual fee generation uses category selection (no per-class filtering)
-
-  const selectedDiscountClassLabel = useMemo(() => {
-    if (!discClassId) return ''
-    const optionMatch = feeSetupClassOptions.find(c => String(c.id) === String(discClassId))
-    if (optionMatch?.label) return optionMatch.label
-    const masterMatch = data.classList.find(c => String(c.id) === String(discClassId))
-    return masterMatch ? `${masterMatch.name}${masterMatch.section ? ` - ${masterMatch.section}` : ''}` : ''
-  }, [discClassId, feeSetupClassOptions, data.classList])
-
-  const discWithAssignments = discGrid.filter(s => s.assignment).length
+  }, [resolvedSingleStructClassId, selectedSingleStructCategoryId, singleStructForm.feeType, singleStructStructures])
 
   return (
     <div>
-      {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Fee Setup</h1>
-        <p className="text-sm text-gray-600">Configure fee structures and generate fee records</p>
-      </div>
-
-      {/* Top-level tabs: Monthly Structure | Annual Charges | Generate | Discounts */}
-      <div className="flex gap-1 mb-6 bg-gray-100 rounded-lg p-1 w-fit flex-wrap">
+      <div className="mb-6 flex flex-wrap gap-2 rounded-lg bg-gray-100 p-1">
         {[
           { key: 'monthly', label: 'Monthly Structure' },
           { key: 'annual', label: 'Annual Charges' },
@@ -458,308 +350,18 @@ export default function FeeSetupPage() {
       {/* === GENERATE RECORDS TAB === */}
       {activeTab === 'generate' && (
         <div className="card">
-          <p className="text-sm text-gray-500 mb-4">Generate fee payment records for students. <strong>Monthly fees</strong> are recurring; <strong>annual fees</strong> use categories defined in the <strong>Annual Charges</strong> tab.</p>
-
-          {/* MONTHLY generation */}
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Monthly Fee Records</h3>
-              <div className="grid grid-cols-2 gap-3 mb-4">
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Month</label>
-                  <select value={genMonth} onChange={(e) => setGenMonth(parseInt(e.target.value))} className="input-field text-sm">
-                    {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Year</label>
-                  <select value={genYear} onChange={(e) => setGenYear(parseInt(e.target.value))} className="input-field text-sm">
-                    {YEAR_OPTIONS.map(y => <option key={y} value={y}>{y}</option>)}
-                  </select>
-                </div>
-              </div>
-              <p className="text-sm text-gray-600 mb-2">
-                Create monthly fee records for all enrolled students for <strong>{MONTHS[genMonth - 1]} {genYear}</strong>.
-              </p>
-              <p className="text-sm text-gray-500 mb-4">
-                Unpaid balances from the previous month will be automatically carried forward.
-              </p>
-
-              {monthlyPreviewLoading && <p className="text-sm text-gray-400 mb-4">Calculating preview...</p>}
-              {mPreview && !monthlyPreviewLoading && (
-                <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-1">
-                  <p className="text-sm text-blue-800">
-                    <span className="font-medium">{mPreview.will_create}</span> new records will be created
-                    {mPreview.will_create > 0 && <> (total: <span className="font-medium">{Number(mPreview.total_amount).toLocaleString()}</span>)</>}
-                  </p>
-                  {mPreview.already_exist > 0 && <p className="text-xs text-blue-600">{mPreview.already_exist} already exist (will skip)</p>}
-                  {mPreview.no_fee_structure > 0 && <p className="text-xs text-amber-600">{mPreview.no_fee_structure} students have no fee structure (will skip)</p>}
-                </div>
-              )}
-
-              {mPreview?.already_exist > 0 && (
-                <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3">
-                  <p className="mb-2 text-sm font-medium text-amber-900">Existing records found. Choose how conflicts should be handled.</p>
-                  <p className="mb-3 text-xs text-amber-700">Only records whose recalculated amounts differ will be updated or replaced. Matching records will still be skipped.</p>
-                  <div className="space-y-2">
-                    <label className="flex items-start gap-2 cursor-pointer">
-                      <input type="radio" name="page-monthly-conflict-strategy" value="skip" checked={monthlyConflictStrategy === 'skip'} onChange={(e) => setMonthlyConflictStrategy(e.target.value)} className="mt-0.5 border-amber-300 text-amber-600 focus:ring-amber-500" />
-                      <span className="text-sm text-amber-800">Skip conflicting existing records</span>
-                    </label>
-                    <label className="flex items-start gap-2 cursor-pointer">
-                      <input type="radio" name="page-monthly-conflict-strategy" value="update" checked={monthlyConflictStrategy === 'update'} onChange={(e) => setMonthlyConflictStrategy(e.target.value)} className="mt-0.5 border-amber-300 text-amber-600 focus:ring-amber-500" />
-                      <span className="text-sm text-amber-800">Update existing records to current fee structure</span>
-                    </label>
-                    <label className="flex items-start gap-2 cursor-pointer">
-                      <input type="radio" name="page-monthly-conflict-strategy" value="delete_recreate" checked={monthlyConflictStrategy === 'delete_recreate'} onChange={(e) => setMonthlyConflictStrategy(e.target.value)} className="mt-0.5 border-amber-300 text-amber-600 focus:ring-amber-500" />
-                      <span className="text-sm text-amber-800">Delete and recreate conflicting records</span>
-                    </label>
-                  </div>
-                  {monthlyConflictStrategy === 'delete_recreate' && (
-                    <p className="mt-3 text-xs text-red-700">Delete and recreate will reset the conflicting record and can remove recorded payment history.</p>
-                  )}
-                </div>
-              )}
-
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Filter by Class (optional)</label>
-                <ClassSelector
-                  value={genClassFilter}
-                  onChange={(e) => setGenClassFilter(e.target.value)}
-                  className="input-field"
-                  showAllOption
-                  classes={feeSetupClassOptions}
-                />
-              </div>
-
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Categories (optional)</label>
-                {monthlyCategories.length === 0 ? (
-                  <p className="text-xs text-amber-600 bg-amber-50 p-2 rounded">No monthly categories — set up in the <strong>Monthly Structure</strong> tab first.</p>
-                ) : (
-                  <div className="grid grid-cols-2 gap-2">
-                    {monthlyCategories.map(cat => (
-                      <label key={cat.id} className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={selectedMonthlyCategories.includes(cat.id)}
-                          onChange={(e) => {
-                            if (e.target.checked) setSelectedMonthlyCategories([...selectedMonthlyCategories, cat.id])
-                            else setSelectedMonthlyCategories(selectedMonthlyCategories.filter(id => id !== cat.id))
-                          }}
-                          className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                        />
-                        <span className="text-sm text-gray-700">{cat.name}</span>
-                      </label>
-                    ))}
-                  </div>
-                )}
-                <p className="text-xs text-gray-400 mt-1">Leave all unchecked to generate for all active categories.</p>
-              </div>
-
-              <button
-                onClick={() => {
-                  const payload = {
-                    month: genMonth,
-                    year: genYear,
-                    conflict_strategy: monthlyConflictStrategy,
-                    ...(resolvedGenClassFilter && { class_id: parseInt(resolvedGenClassFilter) }),
-                    ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
-                    ...(selectedMonthlyCategories.length > 0 && { monthly_category_ids: selectedMonthlyCategories }),
-                  }
-                  if (data.generateMutation.trigger) data.generateMutation.trigger(payload)
-                  else data.generateMutation.mutate(payload)
-                }}
-                disabled={(data.generateMutation.isSubmitting ?? data.generateMutation.isPending) || !hasMonthlyPreviewWork}
-                className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50"
-              >
-                {(data.generateMutation.isSubmitting ?? data.generateMutation.isPending) ? 'Starting...' : 'Generate Monthly Fees'}
-              </button>
-              {data.generateMutation.isSuccess && (
-                <div className="mt-3 text-sm text-green-700 bg-green-50 p-3 rounded">
-                  {(() => {
-                    const payload = data.generateMutation.data?.data || {}
-                    const result = payload.result || payload
-                    const created = result.created ?? 0
-                    const updated = result.updated ?? 0
-                    const deletedRecreated = result.deleted_recreated ?? 0
-                    const skipped = result.skipped ?? 0
-                    const noFeeStructure = result.no_fee_structure ?? 0
-                    const protectedConflict = result.protected_conflict ?? 0
-                    return [
-                      `Created ${created} records.`,
-                      updated > 0 ? `Updated ${updated}.` : null,
-                      deletedRecreated > 0 ? `Recreated ${deletedRecreated}.` : null,
-                      skipped > 0 ? `Skipped ${skipped}.` : null,
-                      protectedConflict > 0 ? `${protectedConflict} protected conflict${protectedConflict === 1 ? '' : 's'} left unchanged.` : null,
-                      noFeeStructure > 0 ? `${noFeeStructure} students have no fee structure.` : null,
-                    ].filter(Boolean).join(' ')
-                  })()}
-                </div>
-              )}
-            </div>
-
-          {/* === ANNUAL FEE RECORDS === */}
-          <div className="border-t border-gray-200 pt-6 mt-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Annual Fee Records</h3>
-            <p className="text-sm text-gray-600 mb-4">
-              Generate annual fee payment records for students in a class. Select class, categories, and year.
-            </p>
-
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Class <span className="text-red-500">*</span></label>
-              <select value={genAnnualClassFilter} onChange={(e) => { setGenAnnualClassFilter(e.target.value); setAnnualShowConfirm(false) }} className="input-field text-sm">
-                <option value="">— Select class —</option>
-                {feeSetupClassOptions.map(c => <option key={c.id} value={c.id}>{c.label || c.name}{c.section ? ` - ${c.section}` : ''}</option>)}
-              </select>
-            </div>
-
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Categories <span className="text-red-500">*</span></label>
-              {annualCategories.length === 0 ? (
-                <p className="text-sm text-amber-600 bg-amber-50 p-3 rounded-lg">No annual fee categories defined. Set up categories in the <strong>Annual Charges</strong> tab first.</p>
-              ) : (
-                <div className="grid grid-cols-2 gap-2">
-                  {annualCategories.map(cat => (
-                    <label key={cat.id} className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={selectedAnnualCategories.includes(cat.id)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedAnnualCategories([...selectedAnnualCategories, cat.id])
-                          } else {
-                            setSelectedAnnualCategories(selectedAnnualCategories.filter(id => id !== cat.id))
-                          }
-                          setAnnualShowConfirm(false)
-                        }}
-                        className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                      />
-                      <span className="text-sm text-gray-700">{cat.name}</span>
-                    </label>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Year</label>
-              <select value={genAnnualYear} onChange={(e) => { setGenAnnualYear(parseInt(e.target.value)); setAnnualShowConfirm(false) }} className="input-field text-sm">
-                {YEAR_OPTIONS.map(y => <option key={y} value={y}>{y}</option>)}
-              </select>
-            </div>
-
-            {annualPreviewLoading && selectedAnnualCategories.length > 0 && <p className="text-sm text-gray-400 mb-4">Calculating preview...</p>}
-            {aPreview && !annualPreviewLoading && (
-              <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-1">
-                <p className="text-sm text-blue-800">
-                  <span className="font-medium">{aPreview.will_create}</span> new annual fee records
-                  {aPreview.will_create > 0 && <> (total: <span className="font-medium">{Number(aPreview.total_amount).toLocaleString()}</span>)</>}
-                </p>
-                {aPreview.already_exist > 0 && <p className="text-xs text-blue-600">{aPreview.already_exist} already exist (will skip)</p>}
-                {aPreview.no_fee_structure > 0 && <p className="text-xs text-amber-600">{aPreview.no_fee_structure} students have no fee structure for selected categories (will skip)</p>}
-              </div>
-            )}
-
-            {aPreview?.already_exist > 0 && (
-              <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3">
-                <p className="mb-2 text-sm font-medium text-amber-900">Existing records found. Choose how conflicts should be handled.</p>
-                <p className="mb-3 text-xs text-amber-700">Only records whose recalculated amounts differ will be updated or replaced. Matching records will still be skipped.</p>
-                <div className="space-y-2">
-                  <label className="flex items-start gap-2 cursor-pointer">
-                    <input type="radio" name="page-annual-conflict-strategy" value="skip" checked={annualConflictStrategy === 'skip'} onChange={(e) => setAnnualConflictStrategy(e.target.value)} className="mt-0.5 border-amber-300 text-amber-600 focus:ring-amber-500" />
-                    <span className="text-sm text-amber-800">Skip conflicting existing records</span>
-                  </label>
-                  <label className="flex items-start gap-2 cursor-pointer">
-                    <input type="radio" name="page-annual-conflict-strategy" value="update" checked={annualConflictStrategy === 'update'} onChange={(e) => setAnnualConflictStrategy(e.target.value)} className="mt-0.5 border-amber-300 text-amber-600 focus:ring-amber-500" />
-                    <span className="text-sm text-amber-800">Update existing records to current fee structure</span>
-                  </label>
-                  <label className="flex items-start gap-2 cursor-pointer">
-                    <input type="radio" name="page-annual-conflict-strategy" value="delete_recreate" checked={annualConflictStrategy === 'delete_recreate'} onChange={(e) => setAnnualConflictStrategy(e.target.value)} className="mt-0.5 border-amber-300 text-amber-600 focus:ring-amber-500" />
-                    <span className="text-sm text-amber-800">Delete and recreate conflicting records</span>
-                  </label>
-                </div>
-                {annualConflictStrategy === 'delete_recreate' && (
-                  <p className="mt-3 text-xs text-red-700">Delete and recreate will reset the conflicting record and can remove recorded payment history.</p>
-                )}
-              </div>
-            )}
-
-            {!annualShowConfirm ? (
-              <button
-                onClick={() => setAnnualShowConfirm(true)}
-                disabled={!resolvedGenAnnualClassFilter || selectedAnnualCategories.length === 0 || !aPreview || !hasAnnualPreviewWork || annualPreviewLoading}
-                className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50"
-              >
-                Review & Generate
-              </button>
-            ) : (
-              <>
-                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-2 mb-4">
-                  <p className="text-sm font-medium text-blue-900">Please confirm annual fee generation:</p>
-                  <div className="text-sm text-blue-800 space-y-1">
-                    <p><span className="font-medium">Class:</span> {(() => {
-                      const cls = feeSetupClassOptions.find(c => String(c.id) === String(genAnnualClassFilter))
-                      return cls ? (cls.label || cls.name) + (cls.section ? ` - ${cls.section}` : '') : genAnnualClassFilter
-                    })()}</p>
-                    <p><span className="font-medium">Categories:</span> {selectedAnnualCategories.map(id => {
-                      const cat = annualCategories.find(c => c.id === id)
-                      return cat?.name
-                    }).filter(Boolean).join(', ')}</p>
-                    <p><span className="font-medium">Year:</span> {genAnnualYear}</p>
-                    <p><span className="font-medium">Records:</span> {aPreview?.will_create} new</p>
-                    <p><span className="font-medium">Total Amount:</span> {Number(aPreview?.total_amount || 0).toLocaleString()}</p>
-                  </div>
-                </div>
-                <div className="flex gap-3">
-                  <button type="button" onClick={() => setAnnualShowConfirm(false)} className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">Back</button>
-                  <button
-                    onClick={() => {
-                      data.generateAnnualMutation.mutate({
-                        class_id: parseInt(resolvedGenAnnualClassFilter),
-                        annual_category_ids: selectedAnnualCategories,
-                        year: genAnnualYear,
-                        conflict_strategy: annualConflictStrategy,
-                        ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
-                      }, {
-                        onSuccess: () => {
-                          setAnnualShowConfirm(false)
-                          setSelectedAnnualCategories([])
-                        },
-                      })
-                    }}
-                    disabled={data.generateAnnualMutation?.isPending}
-                    className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50"
-                  >
-                    {data.generateAnnualMutation?.isPending ? 'Generating...' : 'Confirm & Generate'}
-                  </button>
-                </div>
-                {data.generateAnnualMutation?.isSuccess && (
-                  <div className="mt-3 text-sm text-green-700 bg-green-50 p-3 rounded">
-                    {(() => {
-                      const payload = data.generateAnnualMutation.data?.data || {}
-                      const result = payload.result || payload
-                      const created = result.created
-                      const updated = result.updated ?? 0
-                      const deletedRecreated = result.deleted_recreated ?? 0
-                      const skipped = result.skipped ?? 0
-                      const protectedConflict = result.protected_conflict ?? 0
-                      if (created == null) return 'Annual fee generation started. Track progress in Tasks.'
-                      return [
-                        `Created ${created} records.`,
-                        updated > 0 ? `Updated ${updated}.` : null,
-                        deletedRecreated > 0 ? `Recreated ${deletedRecreated}.` : null,
-                        skipped > 0 ? `Skipped ${skipped}.` : null,
-                        protectedConflict > 0 ? `${protectedConflict} protected conflict${protectedConflict === 1 ? '' : 's'} left unchanged.` : null,
-                      ].filter(Boolean).join(' ')
-                    })()}
-                  </div>
-                )}
-                {data.generateAnnualMutation?.isError && (
-                  <p className="mt-3 text-sm text-red-600">{getErrorMessage(data.generateAnnualMutation.error, 'Failed to generate annual fees')}</p>
-                )}
-              </>
-            )}
-          </div>
+          <p className="mb-4 text-sm text-gray-500">Generate fee payment records for students. <strong>Monthly fees</strong> are recurring; <strong>annual fees</strong> use categories defined in the <strong>Annual Charges</strong> tab.</p>
+          <FeeGenerationSurface
+            mode="inline"
+            month={now.getMonth() + 1}
+            year={now.getFullYear()}
+            classList={feeSetupClassOptions}
+            monthlyMutation={data.generateMutation}
+            annualMutation={data.generateAnnualMutation}
+            academicYearId={activeAcademicYear?.id}
+            annualCategories={annualCategories}
+            monthlyCategories={monthlyCategories}
+          />
 
           {/* === SINGLE STUDENT FEE STRUCTURE === */}
           <div className="border-t border-gray-200 pt-6 mt-6">

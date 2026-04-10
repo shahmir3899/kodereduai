@@ -38,7 +38,7 @@ The `/dashboard` route uses **DashboardRouter.jsx** to render a role-specific da
 |-------|-----------|-------------|-----------|
 | /dashboard | DashboardRouter.jsx → role-specific | See above | Varies by role |
 | /profile | ProfilePage.jsx | User profile edit | GET/PATCH /api/auth/me/ |
-| /settings | SettingsPage.jsx | Tabs: School Profile (logo/letterhead upload, exam weighted average toggle), Finance Accounts, Users | GET /api/schools/current/, POST upload_asset/, DELETE delete_asset/, PUT /api/schools/exam_config/, GET/POST /api/finance/accounts/, GET/POST /api/users/ |
+| /settings | SettingsPage.jsx | Tabs: School Profile (logo/letterhead upload, exam weighted average toggle), Users | GET /api/schools/current/, POST upload_asset/, DELETE delete_asset/, PUT /api/schools/exam_config/, GET/POST /api/users/ |
 | /notifications | NotificationsPage.jsx | Notification center with 5 tabs (URL-persisted via `?tab=`): **Inbox** (paginated, mark-read, mark-all-read with confirmation, event_type filter, relative timestamps), **Templates** (CRUD with search, pagination, delete confirmation, all 9 event types + 5 channels including PUSH), **Send** (dual-mode: Broadcast to role group via `/broadcast/` or Single recipient via `/send/`, template picker, SMS/WhatsApp character counter), **Analytics** (date range filter: 7d/30d/90d/all, human-readable channel labels), **Settings** (module-gated toggles — hides toggles for disabled modules via `isModuleEnabled()`, 6 trigger toggles: absence, fee reminder, fee overdue, exam results, daily summary, transport notifications, unsaved changes warning with beforeunload) | GET /api/notifications/my/, POST /api/notifications/broadcast/, POST /api/notifications/send/, GET /api/notifications/analytics/, GET/PUT /api/notifications/config/ |
 | /admin | SuperAdminDashboard.jsx | Super admin only — all schools overview | GET /api/admin/schools/, platform_stats/ |
 
@@ -55,8 +55,8 @@ Redirects: /attendance/upload, /attendance/review, /attendance/records → remap
 ## Students & Classes
 | Route | Component | Description | API Calls |
 |-------|-----------|-------------|-----------|
-| /students | StudentsPage.jsx | Student list with search, filter, bulk ops | GET/POST /api/students/ |
-| /students/:id | StudentProfilePage.jsx | Student detail (tabs: profile, attendance, fees, exams, docs) | GET students/{id}/, profile_summary/, attendance_history/ |
+| /students | StudentsPage.jsx | Student list with search, multi-select class chip filter (chips show live counts, sourced from classFilterOptions with session awareness), summary stats (shown/gender) in same card as filters, bulk ops | GET/POST /api/students/ |
+| /students/:id | StudentProfilePage.jsx | Student detail (tabs: overview, attendance, fees, academics, history, documents) with AI risk summary, profile metadata, and promotion correction action | GET students/{id}/, profile_summary/, ai-profile/, attendance_history/, fee_ledger/, exam_results/, enrollment_history/, documents/ |
 | /classes | ClassesGradesPage.jsx | Class management | GET/POST /api/classes/ |
 
 ## Academics
@@ -81,15 +81,15 @@ Redirects: /attendance/upload, /attendance/review, /attendance/records → remap
 ## Finance
 | Route | Component | Description | API Calls |
 |-------|-----------|-------------|-----------|
-| /finance | FinanceDashboardPage.jsx | Finance overview | GET balances/, monthly_summary/ |
-| /finance/fees | FeeCollectionPage.jsx | Fee collection (complex, sub-components). Client-side class/status filtering, client-side summary. Bulk "Pay Full" sets each student's paid = total payable. | GET fee-payments/ (single fetch), fee-structures/, resolve_amount/, preview_generation/, PATCH bulk_update/ (mode=pay_full) |
-| /finance/fees/collect | FeeCollectPage.jsx | Payment recording with inline editing, bulk actions | GET fee-payments/, PATCH bulk_update/ |
-| /finance/fees/setup | FeeSetupPage.jsx | 3-tab page: Fee Structures (by class/student), Generate Records, Student Discounts (assign discounts/scholarships to students with base fee + effective fee view, per-student assign/remove, bulk assign to class) | GET/POST fee-structures/, bulk_set/, students/, discounts/, scholarships/, student-discounts/, bulk_assign/ |
+| /finance | FinanceDashboardPage.jsx | Finance overview. Account names are clickable → opens ledger preview modal (last 10 entries, reverse chronological, Cr/Dr/Balance columns). | GET balances/, monthly_summary/, GET accounts/ledger/?ordering=desc&limit=10 |
+| /finance/fees | FeeCollectionPage.jsx | Fee overview with stat cards and class breakdown. Summary from backend `fee_summary/` endpoint (session-class-aware ordering). Individual payments still fetched for ClassBreakdown student expansion. | GET fee-payments/fee_summary/, GET fee-payments/ (for drill-down), fee-structures/, resolve_amount/, preview_generation/, PATCH bulk_update/ (mode=pay_full) |
+| /finance/fees/collect | FeeCollectPage.jsx | Payment recording with inline editing, bulk actions, and shared fee-generation modal. Stat cards from backend `fee_summary/` endpoint (same source as overview for consistent ordering). | GET fee-payments/fee_summary/, GET fee-payments/, PATCH bulk_update/, preview_generation/, POST generate_monthly/, POST generate_annual_fees/ |
+| /finance/fees/setup | FeeSetupPage.jsx | 3-tab page: Fee Structures (by class/student), shared Generate Records surface, Student Discounts (assign discounts/scholarships to students with base fee + effective fee view, per-student assign/remove, bulk assign to class) | GET/POST fee-structures/, bulk_set/, students/, discounts/, scholarships/, student-discounts/, bulk_assign/, preview_generation/, POST generate_monthly/, POST generate_annual_fees/ |
 | /finance/expenses | ExpensesPage.jsx | Expense tracking | GET/POST expenses/ |
 | /finance/discounts | DiscountsPage.jsx | Discounts & scholarships management (3 tabs: Discount rules, Scholarship programs, Student assignments). For assigning discounts to students, prefer Fee Setup > Student Discounts tab. | GET/POST discounts/, scholarships/, student-discounts/, bulk_assign/ |
 | /finance/payment-gateways | PaymentGatewayPage.jsx | Payment gateway config | GET/POST gateway-config/ |
 | /finance-ai | FinanceAIPage.jsx | Finance AI chat | POST ai-chat/ |
-| /accounts | AccountsPage.jsx | Account management | GET/POST accounts/ |
+| /finance/accounts | AccountsPage.jsx | Account management (Balance Summary, Manage, Transfers, Ledger tabs). Ledger displays entries in reverse chronological order. | GET/POST accounts/, GET accounts/ledger/?ordering=desc, GET/POST transfers/ |
 | /reports | FinancialReportsPage.jsx | Report generation | POST /api/reports/generate/ |
 
 ## HR

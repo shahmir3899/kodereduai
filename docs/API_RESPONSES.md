@@ -1141,6 +1141,55 @@ Request body supports optional `conflict_strategy` with values `skip`, `update`,
 }
 ```
 
+### GET /api/finance/fee-payments/fee_summary/
+Query params: `month`, `year`, `fee_type`, `class_id`, `session_class_id`, `academic_year`, `annual_category`, `monthly_category`, `status`
+
+Canonical summary endpoint — single source of truth for stat cards on both Fee Overview and Fee Collect pages. Class ordering is deterministic: groups by session class (when `academic_year` provided) or master class, sorted by `grade_level → section → class_name`.
+
+```json
+{
+  "month": 4,
+  "year": 2026,
+  "total_students": 240,
+  "total_due": 408000.00,
+  "total_collected": 229500.00,
+  "total_pending": 178500.00,
+  "paid_count": 95,
+  "partial_count": 30,
+  "unpaid_count": 115,
+  "advance_count": 0,
+  "by_class": [
+    {
+      "class_key": "session:10",
+      "class_name": "Playgroup",
+      "students": 32,
+      "count": 32,
+      "total_due": 48600.00,
+      "total_collected": 48600.00
+    },
+    {
+      "class_key": "session:15",
+      "class_name": "Class 2 - A",
+      "students": 21,
+      "count": 21,
+      "total_due": 39550.00,
+      "total_collected": 0
+    }
+  ],
+  "by_category": [
+    {
+      "category_id": 5,
+      "category_name": "Tuition Fee",
+      "total_due": 200000.00,
+      "total_collected": 120000.00,
+      "count": 240
+    }
+  ]
+}
+```
+
+`class_key` format matches frontend `getPaymentClassKey()`: `session:<id>` (with academic_year) or `class:<name>` (without). Used by ClassBreakdown for student expansion drill-down.
+
 ### GET /api/finance/expenses/
 Query params: `category`, `account`, `date_from`, `date_to`, `page_size`
 ```json

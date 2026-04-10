@@ -101,6 +101,7 @@ def generate_monthly_fees_task(
         if class_id:
             student_qs = student_qs.filter(class_obj_id=int(class_id))
         students = list(student_qs.distinct())
+        student_ids = [s.id for s in students]
 
         total = len(students) * len(categories)
         update_task_progress(task_id, current=0, total=total)
@@ -133,6 +134,7 @@ def generate_monthly_fees_task(
                         year=year,
                         fee_type='MONTHLY',
                         monthly_category_id=cat_id,
+                        student_id__in=student_ids,
                     )
                 }
                 existing_ids = set(existing_payments)
@@ -301,6 +303,7 @@ def generate_annual_fees_task(
         if class_id:
             student_qs = student_qs.filter(class_obj_id=class_id)
         students = list(student_qs.distinct())
+        student_ids = [s.id for s in students]
 
         total = len(students) * len(categories)
         update_task_progress(task_id, current=0, total=total)
@@ -325,6 +328,7 @@ def generate_annual_fees_task(
                         year=year,
                         fee_type='ANNUAL',
                         annual_category_id=category.id,
+                        student_id__in=student_ids,
                     )
                 }
                 existing_ids = set(existing_payments)

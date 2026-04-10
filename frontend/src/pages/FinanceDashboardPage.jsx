@@ -36,6 +36,7 @@ export default function FinanceDashboardPage() {
   const isAdmin = !isPrincipal && !isStaffMember
 
   const [showTransferModal, setShowTransferModal] = useState(false)
+  const [ledgerPreviewAccount, setLedgerPreviewAccount] = useState(null)
   const [periodIdx, setPeriodIdx] = useState(0)
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
@@ -191,6 +192,15 @@ export default function FinanceDashboardPage() {
 
   const feeSummaryAllData = feeSummaryAll?.data
   const recentEntries = recentEntriesData?.data || []
+
+  // Ledger preview for clicked account
+  const { data: previewLedgerData, isLoading: previewLedgerLoading } = useQuery({
+    queryKey: ['ledgerPreview', ledgerPreviewAccount?.id],
+    queryFn: () => financeApi.getAccountLedger({ account_id: ledgerPreviewAccount.id, ordering: 'desc', limit: 10 }),
+    enabled: !!ledgerPreviewAccount,
+  })
+  const previewLedgerPayload = previewLedgerData?.data
+  const previewEntries = previewLedgerPayload?.entries || []
 
   const summaryData = summaryReport?.data
   const trendMonths = trendReport?.data?.trend || []
@@ -486,7 +496,12 @@ export default function FinanceDashboardPage() {
                         <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${typeColors[acct.account_type] || 'bg-gray-100'}`}>
                           {acct.account_type}
                         </span>
-                        <span className="text-sm text-gray-900">{acct.name}</span>
+                        <button
+                          onClick={() => setLedgerPreviewAccount(acct)}
+                          className="text-sm text-primary-700 hover:underline text-left"
+                        >
+                          {acct.name}
+                        </button>
                       </div>
                       <span className="text-sm font-semibold text-gray-900">
                         {Number(acct.net_balance).toLocaleString()}
@@ -516,7 +531,12 @@ export default function FinanceDashboardPage() {
                           <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${typeColors[acct.account_type] || 'bg-gray-100'}`}>
                             {acct.account_type}
                           </span>
-                          <span className="text-gray-900">{acct.name}</span>
+                          <button
+                            onClick={() => setLedgerPreviewAccount(acct)}
+                            className="text-primary-700 hover:underline text-left"
+                          >
+                            {acct.name}
+                          </button>
                         </div>
                         <span className="font-medium">{Number(acct.net_balance).toLocaleString()}</span>
                       </div>
@@ -532,7 +552,12 @@ export default function FinanceDashboardPage() {
                     <p className="text-xs font-medium text-purple-600 mb-1">Shared (Organization)</p>
                     {balanceShared.accounts.map((acct, idx) => (
                       <div key={idx} className="flex items-center justify-between py-1 text-sm">
-                        <span className="text-gray-900">{acct.name}</span>
+                        <button
+                          onClick={() => setLedgerPreviewAccount(acct)}
+                          className="text-primary-700 hover:underline text-left"
+                        >
+                          {acct.name}
+                        </button>
                         <span className="font-medium">{Number(acct.net_balance).toLocaleString()}</span>
                       </div>
                     ))}
@@ -758,6 +783,88 @@ export default function FinanceDashboardPage() {
           <Link to="/finance/accounts" className="text-sm text-primary-600 hover:underline">
             Accounts & Ledger &rarr;
           </Link>
+        </div>
+      )}
+
+      {/* Ledger Preview Modal */}
+      {ledgerPreviewAccount && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black bg-opacity-50 p-0 sm:p-4">
+          <div className="bg-white rounded-t-xl sm:rounded-lg shadow-xl w-full max-w-xl max-h-[85vh] sm:max-h-[80vh] flex flex-col">
+            <div className="px-4 sm:px-6 pt-4 sm:pt-5 pb-3 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
+              <div className="min-w-0">
+                <h3 className="text-sm sm:text-base font-semibold text-gray-900 truncate">{ledgerPreviewAccount.name}</h3>
+                <p className="text-[11px] sm:text-xs text-gray-500 mt-0.5">
+                  {ledgerPreviewAccount.account_type} &middot; Last {previewEntries.length} entries
+                </p>
+              </div>
+              <button onClick={() => setLedgerPreviewAccount(null)} className="text-gray-400 hover:text-gray-600 p-1 flex-shrink-0 ml-2">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="px-4 sm:px-6 py-3 sm:py-4 overflow-y-auto flex-1 min-h-0">
+              {previewLedgerLoading ? (
+                <div className="text-center py-8 text-gray-500">Loading...</div>
+              ) : previewEntries.length === 0 ? (
+                <p className="text-center py-6 text-gray-500 text-sm">No transactions yet for this account</p>
+              ) : (
+                <>
+                  {/* Current balance banner */}
+                  <div className="flex items-center justify-between bg-gray-50 rounded-lg px-3 sm:px-4 py-2 sm:py-2.5 mb-3">
+                    <span className="text-xs sm:text-sm text-gray-600">Current Balance</span>
+                    <span className="text-base sm:text-lg font-bold text-gray-900">{Number(previewLedgerPayload?.closing_balance || 0).toLocaleString()}</span>
+                  </div>
+                  {/* Entries table */}
+                  <div className="overflow-x-auto -mx-4 sm:-mx-6 px-4 sm:px-6">
+                    <table className="min-w-full">
+                      <thead className="sticky top-0 bg-white">
+                        <tr className="border-b border-gray-200">
+                          <th className="py-2 pr-2 text-left text-[10px] font-medium text-gray-500 uppercase">Date / Description</th>
+                          <th className="py-2 px-1 sm:px-2 text-right text-[10px] font-medium text-green-600 uppercase w-16 sm:w-20">Cr</th>
+                          <th className="py-2 px-1 sm:px-2 text-right text-[10px] font-medium text-red-600 uppercase w-16 sm:w-20">Dr</th>
+                          <th className="py-2 pl-1 sm:pl-2 text-right text-[10px] font-medium text-gray-500 uppercase w-20 sm:w-24">Bal</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {previewEntries.map((entry, idx) => (
+                          <tr key={idx} className={idx === 0 ? 'bg-blue-50/40' : ''}>
+                            <td className="py-1.5 sm:py-2 pr-2">
+                              <p className="text-xs sm:text-sm text-gray-900 truncate max-w-[140px] sm:max-w-[220px]">{entry.description}</p>
+                              <p className="text-[10px] sm:text-[11px] text-gray-400">{entry.date || '—'}</p>
+                            </td>
+                            <td className="py-1.5 sm:py-2 px-1 sm:px-2 text-right text-xs sm:text-sm text-green-700 tabular-nums">
+                              {entry.credit > 0 ? Number(entry.credit).toLocaleString() : '—'}
+                            </td>
+                            <td className="py-1.5 sm:py-2 px-1 sm:px-2 text-right text-xs sm:text-sm text-red-700 tabular-nums">
+                              {entry.debit > 0 ? Number(entry.debit).toLocaleString() : '—'}
+                            </td>
+                            <td className="py-1.5 sm:py-2 pl-1 sm:pl-2 text-right text-xs sm:text-sm font-semibold text-gray-900 tabular-nums">
+                              {Number(entry.running_balance).toLocaleString()}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </div>
+            <div className="px-4 sm:px-6 pb-4 sm:pb-5 pt-2 border-t border-gray-100 flex gap-3 flex-shrink-0">
+              <button
+                onClick={() => setLedgerPreviewAccount(null)}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm"
+              >
+                Close
+              </button>
+              <Link
+                to="/finance/accounts"
+                className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm text-center"
+              >
+                View Full Ledger &rarr;
+              </Link>
+            </div>
+          </div>
         </div>
       )}
 

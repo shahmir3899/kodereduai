@@ -45,51 +45,62 @@ export default function StudentProfilePage() {
   })
 
   // Core data
-  const { data: studentData, isLoading } = useQuery({
+  const { data: studentData, isLoading, isError: studentIsError, error: studentError } = useQuery({
     queryKey: ['student', id],
     queryFn: () => studentsApi.getStudent(id),
   })
 
-  const { data: summaryData } = useQuery({
+  const { data: summaryData, isLoading: summaryLoading, isError: summaryIsError, error: summaryError } = useQuery({
     queryKey: ['studentProfileSummary', id],
     queryFn: () => studentsApi.getProfileSummary(id),
   })
 
   // AI Profile
-  const { data: aiData, isLoading: aiLoading } = useQuery({
+  const { data: aiData, isLoading: aiLoading, isError: aiIsError, error: aiError } = useQuery({
     queryKey: ['studentAIProfile', id],
     queryFn: () => studentsApi.getAIProfile(id),
   })
 
-  // Tab-specific data
-  const { data: attendanceData } = useQuery({
+  // Tab-specific data — staleTime keeps cached results across tab switches;
+  // gcTime holds data in memory for 10 min so re-visits within the session are instant.
+  const { data: attendanceData, isLoading: attendanceLoading, isError: attendanceIsError, error: attendanceError } = useQuery({
     queryKey: ['studentAttendance', id],
     queryFn: () => studentsApi.getAttendanceHistory(id),
     enabled: tab === 'Attendance',
+    staleTime: 5 * 60_000,
+    gcTime: 10 * 60_000,
   })
 
-  const { data: feeData } = useQuery({
+  const { data: feeData, isLoading: feeLoading, isError: feeIsError, error: feeError } = useQuery({
     queryKey: ['studentFees', id],
     queryFn: () => studentsApi.getFeeLedger(id),
     enabled: tab === 'Fees',
+    staleTime: 5 * 60_000,
+    gcTime: 10 * 60_000,
   })
 
-  const { data: examData } = useQuery({
+  const { data: examData, isLoading: examLoading, isError: examIsError, error: examError } = useQuery({
     queryKey: ['studentExams', id],
     queryFn: () => studentsApi.getExamResults(id),
     enabled: tab === 'Academics',
+    staleTime: 5 * 60_000,
+    gcTime: 10 * 60_000,
   })
 
-  const { data: historyData } = useQuery({
+  const { data: historyData, isLoading: historyLoading, isError: historyIsError, error: historyError } = useQuery({
     queryKey: ['studentHistory', id],
     queryFn: () => studentsApi.getEnrollmentHistory(id),
     enabled: tab === 'History',
+    staleTime: 5 * 60_000,
+    gcTime: 10 * 60_000,
   })
 
-  const { data: docsData, refetch: refetchDocs } = useQuery({
+  const { data: docsData, isLoading: docsLoading, isError: docsIsError, error: docsError, refetch: refetchDocs } = useQuery({
     queryKey: ['studentDocuments', id],
     queryFn: () => studentsApi.getDocuments(id),
     enabled: tab === 'Documents',
+    staleTime: 2 * 60_000,
+    gcTime: 10 * 60_000,
   })
 
   const { data: academicYearsData } = useQuery({
@@ -185,6 +196,14 @@ export default function StudentProfilePage() {
     )
   }
 
+  if (studentIsError) {
+    return (
+      <div className="text-center py-20 text-red-600">
+        Failed to load student profile: {studentError?.message || 'Unknown error'}
+      </div>
+    )
+  }
+
   if (!student) {
     return <div className="text-center py-20 text-gray-500">Student not found</div>
   }
@@ -232,6 +251,35 @@ export default function StudentProfilePage() {
               {student.guardian_phone && <span>Guardian: {student.guardian_phone}<WhatsAppTick phone={student.guardian_phone} /></span>}
               {student.parent_name && <span>{student.parent_name}</span>}
             </div>
+            {/* Quick-action chips */}
+            <div className="flex flex-wrap gap-2 mt-2">
+              {student.emergency_contact && (
+                <a
+                  href={`tel:${student.emergency_contact}`}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-red-50 text-red-700 border border-red-200 hover:bg-red-100"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
+                  Emergency: {student.emergency_contact}
+                </a>
+              )}
+              {student.has_user_account ? (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-200">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                  Portal: {student.user_username}
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-500 border border-gray-200">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                  No portal account
+                </span>
+              )}
+              {student.status && student.status !== 'ACTIVE' && student.status_reason && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200" title={student.status_reason}>
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  {student.status_reason.length > 40 ? student.status_reason.slice(0, 40) + '…' : student.status_reason}
+                </span>
+              )}
+            </div>
           </div>
           <div className="flex flex-wrap gap-2 flex-shrink-0">
             <button
@@ -255,7 +303,19 @@ export default function StudentProfilePage() {
         </div>
       </div>
 
+      <ProfileDetailsSection student={student} />
+
       {/* AI Summary */}
+      {aiLoading && (
+        <div className="bg-white border border-gray-200 rounded-xl p-4 text-sm text-gray-500">
+          Loading AI assessment...
+        </div>
+      )}
+      {aiIsError && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">
+          AI assessment unavailable: {aiError?.message || 'Unable to fetch profile insights'}
+        </div>
+      )}
       {ai?.ai_summary && (
         <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
           <div className="flex items-start gap-2">
@@ -299,12 +359,12 @@ export default function StudentProfilePage() {
       </div>
 
       {/* Tab Content */}
-      {tab === 'Overview' && <OverviewTab summary={summary} ai={ai} />}
-      {tab === 'Attendance' && <AttendanceTab data={attendanceData?.data} />}
-      {tab === 'Fees' && <FeesTab data={feeData?.data} />}
-      {tab === 'Academics' && <AcademicsTab data={examData?.data} />}
-      {tab === 'History' && <HistoryTab data={historyData?.data} />}
-      {tab === 'Documents' && <DocumentsTab studentId={id} data={docsData?.data} refetch={refetchDocs} />}
+      {tab === 'Overview' && <OverviewTab summary={summary} ai={ai} isLoading={summaryLoading} error={summaryIsError ? summaryError : null} />}
+      {tab === 'Attendance' && <AttendanceTab data={attendanceData?.data} isLoading={attendanceLoading} error={attendanceIsError ? attendanceError : null} />}
+      {tab === 'Fees' && <FeesTab data={feeData?.data} isLoading={feeLoading} error={feeIsError ? feeError : null} />}
+      {tab === 'Academics' && <AcademicsTab data={examData?.data} isLoading={examLoading} error={examIsError ? examError : null} />}
+      {tab === 'History' && <HistoryTab data={historyData?.data} isLoading={historyLoading} error={historyIsError ? historyError : null} />}
+      {tab === 'Documents' && <DocumentsTab studentId={id} data={docsData?.data} refetch={refetchDocs} isLoading={docsLoading} error={docsIsError ? docsError : null} />}
 
       {showCorrectionModal && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
@@ -421,6 +481,109 @@ export default function StudentProfilePage() {
   )
 }
 
+function formatDate(value) {
+  if (!value) return null
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleDateString()
+}
+
+function DetailGroup({ title, rows, defaultOpen = true }) {
+  const [open, setOpen] = useState(defaultOpen)
+  const visibleRows = rows.filter((row) => row.value)
+  if (visibleRows.length === 0) return null
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
+        aria-expanded={open}
+      >
+        <span className="text-sm font-semibold text-gray-900">{title}</span>
+        <svg
+          className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+          fill="none" stroke="currentColor" viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      {open && (
+        <dl className="px-4 pb-4 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3 border-t border-gray-100 pt-3">
+          {visibleRows.map((row) => (
+            <div key={row.label}>
+              <dt className="text-xs uppercase tracking-wide text-gray-500">{row.label}</dt>
+              <dd className="text-sm text-gray-900 mt-0.5 break-words">{row.value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+    </div>
+  )
+}
+
+function ProfileDetailsSection({ student }) {
+  // Determine which groups have any data so empty sections stay hidden entirely
+  const hasPersonal = !!(student.date_of_birth || student.blood_group || student.emergency_contact || student.address)
+  const hasAdmission = !!(student.admission_date || student.previous_school)
+  const hasGuardian = !!(student.guardian_name || student.guardian_relation || student.guardian_email || student.guardian_occupation || student.guardian_address)
+  const hasSystem = !!(student.user_username || student.status_date || student.status_reason)
+
+  if (!hasPersonal && !hasAdmission && !hasGuardian && !hasSystem) return null
+
+  return (
+    <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+      {hasPersonal && (
+        <DetailGroup
+          title="Personal"
+          rows={[
+            { label: 'Date of Birth', value: formatDate(student.date_of_birth) },
+            { label: 'Blood Group', value: student.blood_group },
+            { label: 'Emergency Contact', value: student.emergency_contact },
+            { label: 'Address', value: student.address },
+          ]}
+        />
+      )}
+      {hasAdmission && (
+        <DetailGroup
+          title="Admission"
+          rows={[
+            { label: 'Admission Date', value: formatDate(student.admission_date) },
+            { label: 'Previous School', value: student.previous_school },
+            { label: 'School', value: student.school_name },
+            { label: 'Class', value: student.class_name },
+          ]}
+        />
+      )}
+      {hasGuardian && (
+        <DetailGroup
+          title="Guardian"
+          rows={[
+            { label: 'Guardian Name', value: student.guardian_name },
+            { label: 'Relation', value: student.guardian_relation },
+            { label: 'Guardian Email', value: student.guardian_email },
+            { label: 'Occupation', value: student.guardian_occupation },
+            { label: 'Guardian Address', value: student.guardian_address },
+          ]}
+        />
+      )}
+      {hasSystem && (
+        <DetailGroup
+          title="System"
+          defaultOpen={false}
+          rows={[
+            { label: 'Portal Account', value: student.has_user_account ? 'Enabled' : null },
+            { label: 'Username', value: student.user_username },
+            { label: 'Status Date', value: formatDate(student.status_date) },
+            { label: 'Status Reason', value: student.status_reason },
+          ]}
+        />
+      )}
+    </div>
+  )
+}
+
 function StatCard({ label, value, sub, color = 'primary' }) {
   const colors = {
     primary: 'bg-primary-50 text-primary-700',
@@ -437,8 +600,10 @@ function StatCard({ label, value, sub, color = 'primary' }) {
   )
 }
 
-function OverviewTab({ summary, ai }) {
-  if (!summary) return <div className="text-center py-10 text-gray-500">Loading summary...</div>
+function OverviewTab({ summary, ai, isLoading, error }) {
+  if (isLoading) return <div className="text-center py-10 text-gray-500">Loading summary...</div>
+  if (error) return <div className="text-center py-10 text-red-600">Failed to load summary</div>
+  if (!summary) return <div className="text-center py-10 text-gray-500">No summary available</div>
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -476,7 +641,9 @@ function OverviewTab({ summary, ai }) {
   )
 }
 
-function AttendanceTab({ data }) {
+function AttendanceTab({ data, isLoading, error }) {
+  if (isLoading) return <div className="text-center py-10 text-gray-500">Loading attendance...</div>
+  if (error) return <div className="text-center py-10 text-red-600">Failed to load attendance</div>
   const months = data?.months || []
   if (months.length === 0) return <div className="text-center py-10 text-gray-500">No attendance records found</div>
 
@@ -514,7 +681,9 @@ function AttendanceTab({ data }) {
   )
 }
 
-function FeesTab({ data }) {
+function FeesTab({ data, isLoading, error }) {
+  if (isLoading) return <div className="text-center py-10 text-gray-500">Loading fee records...</div>
+  if (error) return <div className="text-center py-10 text-red-600">Failed to load fee records</div>
   const payments = data?.payments || data || []
   if (payments.length === 0) return <div className="text-center py-10 text-gray-500">No fee records found</div>
 
@@ -558,7 +727,9 @@ function FeesTab({ data }) {
   )
 }
 
-function AcademicsTab({ data }) {
+function AcademicsTab({ data, isLoading, error }) {
+  if (isLoading) return <div className="text-center py-10 text-gray-500">Loading exam results...</div>
+  if (error) return <div className="text-center py-10 text-red-600">Failed to load exam results</div>
   const exams = data?.exams || data || []
   if (exams.length === 0) return <div className="text-center py-10 text-gray-500">No exam results found</div>
 
@@ -604,7 +775,9 @@ function AcademicsTab({ data }) {
   )
 }
 
-function HistoryTab({ data }) {
+function HistoryTab({ data, isLoading, error }) {
+  if (isLoading) return <div className="text-center py-10 text-gray-500">Loading enrollment history...</div>
+  if (error) return <div className="text-center py-10 text-red-600">Failed to load enrollment history</div>
   const history = data?.enrollments || data || []
   if (history.length === 0) return <div className="text-center py-10 text-gray-500">No enrollment history found</div>
 
@@ -644,8 +817,9 @@ function HistoryTab({ data }) {
   )
 }
 
-function DocumentsTab({ studentId, data, refetch }) {
+function DocumentsTab({ studentId, data, refetch, isLoading, error }) {
   const [uploading, setUploading] = useState(false)
+  const [deletingId, setDeletingId] = useState(null)
   const { showError, showSuccess } = useToast()
   const docs = data?.documents || data || []
 
@@ -677,6 +851,22 @@ function DocumentsTab({ studentId, data, refetch }) {
     }
   }
 
+  const handleDelete = async (docId) => {
+    setDeletingId(docId)
+    try {
+      await studentsApi.deleteDocument(studentId, docId)
+      showSuccess('Document deleted')
+      refetch()
+    } catch {
+      showError('Failed to delete document')
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
+  if (isLoading) return <div className="text-center py-10 text-gray-500">Loading documents...</div>
+  if (error) return <div className="text-center py-10 text-red-600">Failed to load documents</div>
+
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
@@ -704,6 +894,14 @@ function DocumentsTab({ studentId, data, refetch }) {
                     View
                   </a>
                 )}
+                <button
+                  type="button"
+                  onClick={() => handleDelete(doc.id)}
+                  disabled={deletingId === doc.id}
+                  className="text-xs text-red-600 hover:text-red-800 disabled:opacity-50"
+                >
+                  {deletingId === doc.id ? 'Deleting...' : 'Delete'}
+                </button>
               </div>
             </div>
           ))}

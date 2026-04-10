@@ -34,9 +34,6 @@ export default function StudentsPage() {
   const [isUploading, setIsUploading] = useState(false)
   const [showExportMenu, setShowExportMenu] = useState(false)
   const exportRef = useRef(null)
-  const classFilterRef = useRef(null)
-  const [showClassMenu, setShowClassMenu] = useState(false)
-  const [classSearch, setClassSearch] = useState('')
   const [studentForm, setStudentForm] = useState({
     name: '',
     roll_number: '',
@@ -701,18 +698,7 @@ export default function StudentsPage() {
     }))
   }, [classSelectorScope, sessionClasses, classes])
 
-  const filteredClassOptions = useMemo(() => {
-    const needle = classSearch.trim().toLowerCase()
-    if (!needle) return classFilterOptions
-    return classFilterOptions.filter((option) => option.label.toLowerCase().includes(needle))
-  }, [classFilterOptions, classSearch])
 
-  const selectedClassLabels = useMemo(
-    () => classFilterOptions
-      .filter((option) => selectedClassIds.includes(option.id))
-      .map((option) => option.label),
-    [classFilterOptions, selectedClassIds],
-  )
 
   // Client-side filtering and sorting with useMemo for performance
   const students = useMemo(() => {
@@ -777,24 +763,35 @@ export default function StudentsPage() {
     return { total: students.length, active, inactive, byClass }
   }, [students])
 
-  const summaryByClass = useMemo(() => {
+  const classChipData = useMemo(() => {
+    // Count per class (by master class ID) using search filter only, so all chips are always visible
     const counts = {}
-    students.forEach((s) => {
-      const key = s.class_obj ? String(s.class_obj) : 'unassigned'
-      if (!counts[key]) {
-        counts[key] = {
-          name: s.class_name || 'Unassigned',
-          count: 0,
-          grade: s.class_obj ? (classGradeMap[s.class_obj] ?? 999) : 999,
-        }
+    allStudents.forEach((s) => {
+      if (debouncedSearch) {
+        const searchLower = debouncedSearch.toLowerCase()
+        const matchesName = s.name?.toLowerCase().includes(searchLower)
+        const matchesRoll = s.roll_number?.toLowerCase().includes(searchLower)
+        if (!matchesName && !matchesRoll) return
       }
-      counts[key].count += 1
+      const key = s.class_obj ? String(s.class_obj) : null
+      if (key) counts[key] = (counts[key] || 0) + 1
     })
-    return Object.values(counts).sort((a, b) => {
-      if (a.grade !== b.grade) return a.grade - b.grade
-      return a.name.localeCompare(b.name)
+    // Build session class ID → master class ID map (needed when scope is session)
+    const sessionToMaster = {}
+    sessionClasses.forEach((sc) => {
+      if (sc.class_obj) sessionToMaster[String(sc.id)] = String(sc.class_obj)
     })
-  }, [students, classGradeMap])
+    return classFilterOptions.map((option) => {
+      const masterClassId = classSelectorScope === 'session'
+        ? sessionToMaster[option.id]
+        : option.id
+      return {
+        id: option.id,
+        name: option.label,
+        count: masterClassId ? (counts[masterClassId] || 0) : 0,
+      }
+    })
+  }, [allStudents, debouncedSearch, classFilterOptions, classSelectorScope, sessionClasses])
 
   const summaryByGender = useMemo(() => {
     const counts = { male: 0, female: 0, other: 0, unknown: 0 }
@@ -822,13 +819,10 @@ export default function StudentsPage() {
       if (exportRef.current && !exportRef.current.contains(e.target)) {
         setShowExportMenu(false)
       }
-      if (classFilterRef.current && !classFilterRef.current.contains(e.target)) {
-        setShowClassMenu(false)
-      }
     }
-    if (showExportMenu || showClassMenu) document.addEventListener('mousedown', handleClickOutside)
+    if (showExportMenu) document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [showExportMenu, showClassMenu])
+  }, [showExportMenu])
 
   const getExportInfo = () => {
     const schoolName = activeSchool?.name || schools.find(s => s.id === selectedSchoolId)?.name || ''
@@ -975,9 +969,9 @@ export default function StudentsPage() {
         </div>
       )}
 
-      {/* Filters */}
+      {/* Filters + Summary */}
       <div className="card mb-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+        <div className={`grid grid-cols-1 gap-3 sm:gap-4 ${isSuperAdmin ? 'sm:grid-cols-2' : ''}`}>
           {/* School Selector for Super Admin */}
           {isSuperAdmin && (
             <div>
@@ -999,81 +993,7 @@ export default function StudentsPage() {
               </select>
             </div>
           )}
-          <div>
-            <label className="label">Class</label>
-            <div className="relative" ref={classFilterRef}>
-              <button
-                type="button"
-                className="input w-full text-left min-h-[42px] flex items-center justify-between"
-                disabled={!selectedSchoolId}
-                onClick={() => {
-                  setShowClassMenu((prev) => !prev)
-                  if (!showClassMenu) setClassSearch('')
-                }}
-              >
-                <span className="truncate text-sm text-gray-700">
-                  {selectedClassLabels.length === 0
-                    ? 'All Classes'
-                    : `${selectedClassLabels.length} class${selectedClassLabels.length > 1 ? 'es' : ''} selected`}
-                </span>
-                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-
-              {selectedClassLabels.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {selectedClassLabels.map((label) => (
-                    <span
-                      key={label}
-                      className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-primary-50 text-primary-700 border border-primary-200"
-                    >
-                      {label}
-                    </span>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => setSelectedClassIds([])}
-                    className="text-xs text-gray-500 hover:text-gray-700"
-                  >
-                    Clear
-                  </button>
-                </div>
-              )}
-
-              {showClassMenu && (
-                <div className="absolute z-30 mt-2 w-full bg-white border border-gray-200 rounded-lg shadow-xl p-2">
-                  <input
-                    type="text"
-                    className="input mb-2"
-                    placeholder="Search classes..."
-                    value={classSearch}
-                    onChange={(e) => setClassSearch(e.target.value)}
-                  />
-                  <div className="max-h-56 overflow-y-auto space-y-1">
-                    {filteredClassOptions.length === 0 ? (
-                      <p className="text-xs text-gray-500 px-2 py-1">No classes match.</p>
-                    ) : (
-                      filteredClassOptions.map((option) => (
-                        <label
-                          key={option.id}
-                          className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={selectedClassIds.includes(option.id)}
-                            onChange={() => toggleClassSelection(option.id)}
-                          />
-                          <span className="text-sm text-gray-700">{option.label}</span>
-                        </label>
-                      ))
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-          <div className={isSuperAdmin ? "md:col-span-2" : "md:col-span-2"}>
+          <div className={isSuperAdmin ? '' : 'w-full'}>
             <label className="label">Search</label>
             <input
               type="text"
@@ -1085,39 +1005,62 @@ export default function StudentsPage() {
             />
           </div>
         </div>
+
+        {/* Class chips — always show full list; 0-count chips are dimmed/disabled */}
+        {selectedSchoolId && classChipData.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 mt-4">
+            <button
+              type="button"
+              onClick={() => setSelectedClassIds([])}
+              className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                selectedClassIds.length === 0
+                  ? 'bg-primary-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              All
+            </button>
+            {classChipData.map((item) => {
+              const isActive = selectedClassIds.includes(item.id)
+              const isEmpty = item.count === 0
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => toggleClassSelection(item.id)}
+                  className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                    isActive
+                      ? 'bg-primary-600 text-white'
+                      : isEmpty
+                      ? 'bg-gray-50 text-gray-300 border border-gray-100'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  {item.name}
+                  <span className={isActive ? 'text-primary-200' : isEmpty ? 'text-gray-300' : 'text-gray-400'}>
+                    ({item.count})
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Summary stats */}
+        {selectedSchoolId && !isLoading && students.length > 0 && (
+          <div className="border-t border-gray-100 mt-3 pt-3 flex flex-wrap items-center gap-3 text-sm text-gray-500">
+            <span><strong className="text-gray-900">{students.length}</strong> shown</span>
+            <span>Male: <strong>{summaryByGender.male}</strong></span>
+            <span>Female: <strong>{summaryByGender.female}</strong></span>
+            {summaryByGender.other > 0 && <span>Other: <strong>{summaryByGender.other}</strong></span>}
+            {summaryByGender.unknown > 0 && <span>Unknown: <strong>{summaryByGender.unknown}</strong></span>}
+          </div>
+        )}
       </div>
 
       {!selectedSchoolId && (
         <div className="card text-center py-8 text-gray-500">
           {isSuperAdmin ? 'Please select a school to view students.' : 'No school assigned to your account.'}
-        </div>
-      )}
-
-      {selectedSchoolId && !isLoading && students.length > 0 && (
-        <div className="sticky top-2 z-20 mb-4">
-          <div className="card !p-3 sm:!p-4 bg-white/95 backdrop-blur border border-gray-200 shadow-sm">
-            <div className="flex flex-col gap-3">
-              <div className="flex flex-wrap items-center gap-3 text-sm">
-                <span className="font-semibold text-gray-900">Live Summary</span>
-                <span className="text-gray-500">{students.length} shown</span>
-                <span className="text-gray-600">Male: <strong>{summaryByGender.male}</strong></span>
-                <span className="text-gray-600">Female: <strong>{summaryByGender.female}</strong></span>
-                {summaryByGender.other > 0 && <span className="text-gray-600">Other: <strong>{summaryByGender.other}</strong></span>}
-                {summaryByGender.unknown > 0 && <span className="text-gray-600">Unknown: <strong>{summaryByGender.unknown}</strong></span>}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {summaryByClass.map((item) => (
-                  <span
-                    key={item.name}
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700"
-                  >
-                    {item.name}
-                    <span className="text-gray-500">({item.count})</span>
-                  </span>
-                ))}
-              </div>
-            </div>
-          </div>
         </div>
       )}
 

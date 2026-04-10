@@ -100,6 +100,7 @@ export default function AccountsPage() {
     queryKey: ['accountLedger', ledgerAccountId, ledgerDateFrom, ledgerDateTo],
     queryFn: () => financeApi.getAccountLedger({
       account_id: ledgerAccountId,
+      ordering: 'desc',
       ...(ledgerDateFrom && { date_from: ledgerDateFrom }),
       ...(ledgerDateTo && { date_to: ledgerDateTo }),
     }),

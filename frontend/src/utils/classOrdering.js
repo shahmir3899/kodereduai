@@ -53,11 +53,13 @@ export function sortClassOptions(options = []) {
     const gradeDiff = getComparableGrade(left) - getComparableGrade(right)
     if (gradeDiff !== 0) return gradeDiff
 
+    // Keep frontend ordering in sync with backend fee_summary ordering:
+    // grade_level -> section -> class_name.
+    const sectionDiff = parseSectionOrder(getComparableSection(left)) - parseSectionOrder(getComparableSection(right))
+    if (sectionDiff !== 0) return sectionDiff
+
     const nameDiff = classOptionCollator.compare(getComparableName(left), getComparableName(right))
     if (nameDiff !== 0) return nameDiff
-
-    const sectionDiff = classOptionCollator.compare(getComparableSection(left), getComparableSection(right))
-    if (sectionDiff !== 0) return sectionDiff
 
     return compareClassLabels(left?.label, right?.label)
   })

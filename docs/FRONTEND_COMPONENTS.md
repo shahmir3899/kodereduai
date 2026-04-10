@@ -14,7 +14,7 @@ Main layout wrapper for all authenticated routes. Contains:
 - **Header**: SchoolSwitcher, AcademicYearSwitcher, NotificationBell, TaskDrawer button, user profile menu, logout
 - **Sidebar**: Role-based navigation menu with module availability checks, collapsible sections, active state highlighting
 - **Content**: `<Outlet/>` renders page content
-- Navigation sections: Attendance, Students, Academics, Finance, HR, Sessions, Admissions, Hostel, Transport, Library, Inventory, Messages, Settings
+- Navigation sections: Attendance, Students, Academics, Finance (includes Accounts link at /finance/accounts), HR, Sessions, Admissions, Hostel, Transport, Library, Inventory, Messages, Settings
 
 ### SchoolSwitcher.jsx
 Dropdown for switching active school. Reads from `useAuth().schools`. Calls `POST /api/auth/switch-school/`. Triggers page reload on switch.
@@ -89,17 +89,20 @@ The `/dashboard` route renders **DashboardRouter.jsx** which switches on `effect
 ## Fee Collection Sub-components (src/pages/fee-collection/)
 Complex page broken into:
 - **FeeFilters.jsx** — Filter controls (month, year, class, status). Class/status filters apply client-side (no backend call)
-- **FeeSummaryCards.jsx** — KPI cards (Total Payable, Received, Balance, Collection Rate). Summary computed client-side from cached payment data
+- **FeeSummaryCards.jsx** — KPI cards (Total Students, Total Payable, Received, Balance, Collection Rate) with per-class breakdown lines. Summary from backend `fee_summary/` endpoint (not client-side computed). Also exports **ClassBreakdown** component for detailed class table with expandable student rows
 - **FeeCharts.jsx** — Recharts visualizations (class-wise bar chart, status donut)
 - **FeeTable.jsx** — Table with inline editing, bulk selection, sort by class/roll
-- **FeeModals.jsx** — Multiple modals: CreateSingleFeeModal (auto-fills amount from fee structure via `resolve_amount`, conditional payment fields when amount_paid > 0, duplicate warning, searchable student dropdown), GenerateModal (preview via `preview_generation` before generation, confirmation step, auto-closes on success after 1.5s), FeeStructureModal (per-type fee tabs, confirmation review), PaymentModal, IncomeModal, StudentFeeModal
+- **FeeModals.jsx** — Multiple modals: CreateSingleFeeModal (auto-fills amount from fee structure via `resolve_amount`, conditional payment fields when amount_paid > 0, duplicate warning, searchable student dropdown), GenerateModal (thin modal wrapper around shared fee-generation surface), FeeStructureModal (per-type fee tabs, confirmation review), PaymentModal, IncomeModal, StudentFeeModal
+- **FeeGenerationSurface.jsx** — Shared fee-generation UI used by both Fee Setup and Fee Collect. Handles monthly vs annual switching, preview via `preview_generation`, category selection, conflict strategy, review state, result messaging, and responsive modal/inline presentation.
 - **BulkActionsBar.jsx** — Bulk action toolbar with payment method selector, account picker, "Pay Full" button (sets each student's paid amount = their total payable in one click), confirmation dialogs
 - **FeeSetupPage.jsx** — Dedicated 3-tab fee configuration page:
   - **Tab 1: Fee Structures** — By Class mode (fee amount per class for each fee type) and By Student mode (per-student overrides with blue highlight). Both have confirmation review step before saving.
-  - **Tab 2: Generate Records** — Monthly fee generation (with preview: will_create, already_exist, no_fee_structure counts) and one-time fee generation (Annual, Admission, Books, Fine) with class selection and per-student preview.
+  - **Tab 2: Generate Records** — Uses the shared fee-generation surface for monthly and annual generation, including live preview, category selection, conflict strategy, and confirmation flow.
   - **Tab 3: Student Discounts** — Select class to see students with columns: Roll, Name, Base Fee, Discount/Scholarship (badge), Effective Fee, Action. Per-student assign/remove modals (toggle discount vs scholarship, dropdown selection with value preview). Bulk assign button to apply one discount/scholarship to all students in class. Uses `discountApi` (getDiscounts, getScholarships, getStudentDiscounts, assignDiscount, bulkAssign, removeStudentDiscount).
-- **useFeeSetup.js** — Custom hook for FeeSetupPage: fetches classes, all fee structures, class students, class fee structures. Provides bulkFeeMutation, bulkStudentFeeMutation, generateMutation, generateOnetimeMutation.
-- **useFeeData.js** — Custom hook: single fetch per month/year/feeType, client-side class/status filtering via `useMemo`, client-side summary computation (replaces monthlySummary API call)
+- **useFeeSetup.js** — Custom hook for FeeSetupPage: fetches classes, all fee structures, class students, class fee structures. Provides bulkFeeMutation, bulkStudentFeeMutation, generateMutation, generateAnnualMutation.
+- **useFeeOverview.js** — Custom hook for FeeOverviewPage: fetches backend `fee_summary/` for stat cards + individual fee-payments for ClassBreakdown drill-down. No mutations.
+- **useFeeCollection.js** — Custom hook for FeeCollectPage: fetches backend `fee_summary/` (filter-aware) for stat cards, individual fee-payments for table, all payment mutations (generate, pay, bulk update/delete, create). Invalidates `feeSummary` cache on every mutation.
+- **useFeeData.js** — Legacy hook (deprecated): single fetch per month/year/feeType, client-side class/status filtering via `useMemo`, client-side summary computation. Replaced by useFeeOverview/useFeeCollection + backend fee_summary endpoint
 - **feeExport.js** — PDF/Excel export utilities
 
 ## Reusable Components (src/components/)
@@ -181,7 +184,7 @@ Centralized axios instance with interceptors. Organized into named API modules:
 | schoolsApi | /api/schools/ | getMySchool, getAllSchools, getMarkMappings, getCompletion |
 | studentsApi | /api/students/ | getStudents, createStudent, bulkCreate, getProfileSummary |
 | classesApi | /api/classes/ | getClasses, createClass |
-| financeApi | /api/finance/ | getFeePayments, generateMonthly, resolveFeeAmount, previewGeneration, getAccounts, createExpense, bulkUpdatePayments, bulkDeletePayments, createPayment |
+| financeApi | /api/finance/ | getFeePayments, getFeeSummary, generateMonthly, generateOnetimeFees, generateAnnualFees, resolveFeeAmount, previewGeneration, getAccounts, createExpense, bulkUpdatePayments, bulkDeletePayments, createPayment, recordPayment, deleteFeePayment |
 | hrApi | /api/hr/ | getStaff, getDashboardStats, generatePayslips, createStaffUserAccount, linkStaffUserAccount, unlinkStaffUserAccount, bulkCreateStaffAccounts |
 | academicsApi | /api/academics/ | getSubjects, getTimetableEntries, autoGenerate |
 | sessionsApi | /api/sessions/ | getAcademicYears, getEnrollments, bulkPromote, getHealth |

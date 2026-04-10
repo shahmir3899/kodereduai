@@ -7,7 +7,7 @@ import {
 } from '../classOrdering'
 
 describe('classOrdering utilities', () => {
-  it('sortClassOptions orders by grade_level then name then section', () => {
+  it('sortClassOptions orders by grade_level → section → name (canonical contract)', () => {
     const options = [
       { id: 3, name: 'Class 2', section: 'B', grade_level: 4 },
       { id: 1, name: 'Class 1', section: '', grade_level: 3 },
@@ -22,6 +22,63 @@ describe('classOrdering utilities', () => {
       'Class 1',
       'Class 2 - A',
       'Class 2 - B',
+    ])
+  })
+
+  it('section takes precedence over name at the same grade_level', () => {
+    const options = [
+      { id: 1, name: 'Zebra', section: 'A', grade_level: 3 },
+      { id: 2, name: 'Alpha', section: 'B', grade_level: 3 },
+      { id: 3, name: 'Alpha', section: 'A', grade_level: 3 },
+    ]
+
+    const sorted = sortClassOptions(options)
+
+    // Section A comes before Section B regardless of name
+    expect(sorted.map(o => `${o.name} - ${o.section}`)).toEqual([
+      'Alpha - A',
+      'Zebra - A',
+      'Alpha - B',
+    ])
+  })
+
+  it('classes without sections sort before sectioned classes at the same grade', () => {
+    const options = [
+      { id: 1, name: 'Class 3', section: 'A', grade_level: 5 },
+      { id: 2, name: 'Class 3', section: '', grade_level: 5 },
+    ]
+
+    const sorted = sortClassOptions(options)
+
+    expect(sorted.map(o => `${o.name}${o.section ? ` - ${o.section}` : ''}`)).toEqual([
+      'Class 3',
+      'Class 3 - A',
+    ])
+  })
+
+  it('handles full school class list in canonical order', () => {
+    const options = [
+      { id: 8, name: 'Class 5', section: '', grade_level: 9 },
+      { id: 1, name: 'Playgroup', section: '', grade_level: 0 },
+      { id: 5, name: 'Class 2', section: 'B', grade_level: 6 },
+      { id: 3, name: 'Prep', section: '', grade_level: 2 },
+      { id: 4, name: 'Class 2', section: 'A', grade_level: 6 },
+      { id: 7, name: 'Class 4', section: '', grade_level: 8 },
+      { id: 6, name: 'Class 3', section: '', grade_level: 7 },
+      { id: 2, name: 'Nursery', section: '', grade_level: 1 },
+    ]
+
+    const sorted = sortClassOptions(options)
+
+    expect(sorted.map(o => o.name + (o.section ? ` - ${o.section}` : ''))).toEqual([
+      'Playgroup',
+      'Nursery',
+      'Prep',
+      'Class 2 - A',
+      'Class 2 - B',
+      'Class 3',
+      'Class 4',
+      'Class 5',
     ])
   })
 
