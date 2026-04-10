@@ -5,9 +5,9 @@ import { useAuth } from '../contexts/AuthContext'
 import { useAcademicYear } from '../contexts/AcademicYearContext'
 import { studentsApi, classesApi, schoolsApi } from '../services/api'
 import { useToast } from '../components/Toast'
-import ClassSelector from '../components/ClassSelector'
 import { useSessionClasses } from '../hooks/useSessionClasses'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../utils/classScope'
+import { sortClassOptions } from '../utils/classOrdering'
 import { exportStudentsPDF, exportStudentsPNG } from './studentExport'
 import { useDebounce } from '../hooks/useDebounce'
 import WhatsAppTick from '../components/WhatsAppTick'
@@ -23,7 +23,7 @@ export default function StudentsPage() {
   const fileInputRef = useRef(null)
 
   const [selectedSchoolId, setSelectedSchoolId] = useState(activeSchool?.id || null)
-  const [selectedClass, setSelectedClass] = useState('')
+  const [selectedClassIds, setSelectedClassIds] = useState([])
   const [search, setSearch] = useState('')
   const debouncedSearch = useDebounce(search, 300)
   const [showModal, setShowModal] = useState(false)
@@ -34,6 +34,9 @@ export default function StudentsPage() {
   const [isUploading, setIsUploading] = useState(false)
   const [showExportMenu, setShowExportMenu] = useState(false)
   const exportRef = useRef(null)
+  const classFilterRef = useRef(null)
+  const [showClassMenu, setShowClassMenu] = useState(false)
+  const [classSearch, setClassSearch] = useState('')
   const [studentForm, setStudentForm] = useState({
     name: '',
     roll_number: '',
@@ -60,7 +63,12 @@ export default function StudentsPage() {
   const [isConverting, setIsConverting] = useState(false)
   const { sessionClasses } = useSessionClasses(activeAcademicYear?.id, selectedSchoolId)
   const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
-  const resolvedSelectedClass = getResolvedMasterClassId(selectedClass, activeAcademicYear?.id, sessionClasses)
+  const resolvedSelectedClasses = useMemo(
+    () => selectedClassIds
+      .map((classId) => getResolvedMasterClassId(classId, activeAcademicYear?.id, sessionClasses))
+      .filter(Boolean),
+    [selectedClassIds, activeAcademicYear?.id, sessionClasses],
+  )
   const resolvedStudentFormClassId = getResolvedMasterClassId(studentForm.class_id, activeAcademicYear?.id, sessionClasses)
   const sessionClassIdByMaster = useMemo(() => {
     const map = {}
@@ -233,7 +241,7 @@ export default function StudentsPage() {
       roll_number: '',
       parent_phone: '',
       parent_name: '',
-      class_id: selectedClass || '',
+      class_id: selectedClassIds[0] || '',
     })
     setShowModal(true)
   }
@@ -671,12 +679,50 @@ export default function StudentsPage() {
     return map
   }, [classes])
 
+  const classFilterOptions = useMemo(() => {
+    const baseOptions = classSelectorScope === 'session'
+      ? sessionClasses
+        .filter(sc => !!sc.class_obj)
+        .map(sc => ({
+          id: sc.id,
+          class_obj: sc.class_obj,
+          name: sc.display_name || sc.label || `Class ${sc.class_obj}`,
+          label: sc.display_name || sc.label || `Class ${sc.class_obj}`,
+          grade_level: sc.grade_level,
+          section: sc.section || '',
+        }))
+      : classes
+
+    const sortedOptions = sortClassOptions(baseOptions)
+
+    return sortedOptions.map((cls) => ({
+      id: String(cls.id),
+      label: cls.label || cls.name,
+    }))
+  }, [classSelectorScope, sessionClasses, classes])
+
+  const filteredClassOptions = useMemo(() => {
+    const needle = classSearch.trim().toLowerCase()
+    if (!needle) return classFilterOptions
+    return classFilterOptions.filter((option) => option.label.toLowerCase().includes(needle))
+  }, [classFilterOptions, classSearch])
+
+  const selectedClassLabels = useMemo(
+    () => classFilterOptions
+      .filter((option) => selectedClassIds.includes(option.id))
+      .map((option) => option.label),
+    [classFilterOptions, selectedClassIds],
+  )
+
   // Client-side filtering and sorting with useMemo for performance
   const students = useMemo(() => {
     // First filter
     const filtered = allStudents.filter(student => {
       // Filter by class
-      if (resolvedSelectedClass && student.class_obj?.toString() !== resolvedSelectedClass) {
+      if (
+        resolvedSelectedClasses.length > 0 &&
+        !resolvedSelectedClasses.includes(student.class_obj?.toString())
+      ) {
         return false
       }
       // Filter by search (name or roll number)
@@ -703,7 +749,7 @@ export default function StudentsPage() {
       const rollB = parseInt(b.roll_number) || 0
       return rollA - rollB
     })
-  }, [allStudents, resolvedSelectedClass, debouncedSearch, classGradeMap])
+  }, [allStudents, resolvedSelectedClasses, debouncedSearch, classGradeMap])
 
   // Students without accounts (for bulk select) — must be after `students` useMemo
   const studentsWithoutAccounts = useMemo(() => {
@@ -720,16 +766,55 @@ export default function StudentsPage() {
 
   // Stats computation
   const stats = useMemo(() => {
-    const active = allStudents.filter(s => s.is_active).length
-    const inactive = allStudents.length - active
+    const active = students.filter(s => s.is_active).length
+    const inactive = students.length - active
     const byClass = {}
-    allStudents.forEach(s => {
+    students.forEach(s => {
       const className = s.class_name || 'Unassigned'
       if (!byClass[className]) byClass[className] = 0
       byClass[className]++
     })
-    return { total: allStudents.length, active, inactive, byClass }
-  }, [allStudents])
+    return { total: students.length, active, inactive, byClass }
+  }, [students])
+
+  const summaryByClass = useMemo(() => {
+    const counts = {}
+    students.forEach((s) => {
+      const key = s.class_obj ? String(s.class_obj) : 'unassigned'
+      if (!counts[key]) {
+        counts[key] = {
+          name: s.class_name || 'Unassigned',
+          count: 0,
+          grade: s.class_obj ? (classGradeMap[s.class_obj] ?? 999) : 999,
+        }
+      }
+      counts[key].count += 1
+    })
+    return Object.values(counts).sort((a, b) => {
+      if (a.grade !== b.grade) return a.grade - b.grade
+      return a.name.localeCompare(b.name)
+    })
+  }, [students, classGradeMap])
+
+  const summaryByGender = useMemo(() => {
+    const counts = { male: 0, female: 0, other: 0, unknown: 0 }
+    students.forEach((s) => {
+      const g = (s.gender || '').toString().trim().toLowerCase()
+      if (g === 'male' || g === 'm') counts.male += 1
+      else if (g === 'female' || g === 'f') counts.female += 1
+      else if (g) counts.other += 1
+      else counts.unknown += 1
+    })
+    return counts
+  }, [students])
+
+  const toggleClassSelection = useCallback((classId) => {
+    setSelectedClassIds((prev) => (
+      prev.includes(classId)
+        ? prev.filter((id) => id !== classId)
+        : [...prev, classId]
+    ))
+  }, [])
 
   // Close export menu when clicking outside
   useEffect(() => {
@@ -737,20 +822,24 @@ export default function StudentsPage() {
       if (exportRef.current && !exportRef.current.contains(e.target)) {
         setShowExportMenu(false)
       }
+      if (classFilterRef.current && !classFilterRef.current.contains(e.target)) {
+        setShowClassMenu(false)
+      }
     }
-    if (showExportMenu) document.addEventListener('mousedown', handleClickOutside)
+    if (showExportMenu || showClassMenu) document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [showExportMenu])
+  }, [showExportMenu, showClassMenu])
 
   const getExportInfo = () => {
     const schoolName = activeSchool?.name || schools.find(s => s.id === selectedSchoolId)?.name || ''
-    const selectedClassName = selectedClass
-      ? (classSelectorScope === 'session'
-        ? (sessionClasses.find(sc => String(sc.id) === String(selectedClass))?.display_name || null)
-        : (classes.find(c => c.id === parseInt(selectedClass))?.name || null))
-      : null
+    const selectedClassNames = selectedClassIds.map((classId) => {
+      if (classSelectorScope === 'session') {
+        return sessionClasses.find(sc => String(sc.id) === String(classId))?.display_name || null
+      }
+      return classes.find(c => c.id === parseInt(classId))?.name || null
+    }).filter(Boolean)
     const parts = []
-    if (selectedClassName) parts.push(`Class: ${selectedClassName}`)
+    if (selectedClassNames.length > 0) parts.push(`Classes: ${selectedClassNames.join(', ')}`)
     if (search) parts.push(`Search: "${search}"`)
     return { schoolName, filterInfo: parts.join(' | ') || null }
   }
@@ -898,7 +987,7 @@ export default function StudentsPage() {
                 value={selectedSchoolId || ''}
                 onChange={(e) => {
                   setSelectedSchoolId(e.target.value ? parseInt(e.target.value) : null)
-                  setSelectedClass('')
+                  setSelectedClassIds([])
                 }}
               >
                 <option value="">-- Select School --</option>
@@ -912,16 +1001,77 @@ export default function StudentsPage() {
           )}
           <div>
             <label className="label">Class</label>
-            <ClassSelector
-              className="input"
-              value={selectedClass}
-              onChange={(e) => setSelectedClass(e.target.value)}
-              disabled={!selectedSchoolId}
-              showAllOption
-              scope={classSelectorScope}
-              academicYearId={activeAcademicYear?.id}
-              schoolId={selectedSchoolId}
-            />
+            <div className="relative" ref={classFilterRef}>
+              <button
+                type="button"
+                className="input w-full text-left min-h-[42px] flex items-center justify-between"
+                disabled={!selectedSchoolId}
+                onClick={() => {
+                  setShowClassMenu((prev) => !prev)
+                  if (!showClassMenu) setClassSearch('')
+                }}
+              >
+                <span className="truncate text-sm text-gray-700">
+                  {selectedClassLabels.length === 0
+                    ? 'All Classes'
+                    : `${selectedClassLabels.length} class${selectedClassLabels.length > 1 ? 'es' : ''} selected`}
+                </span>
+                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              {selectedClassLabels.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {selectedClassLabels.map((label) => (
+                    <span
+                      key={label}
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-primary-50 text-primary-700 border border-primary-200"
+                    >
+                      {label}
+                    </span>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setSelectedClassIds([])}
+                    className="text-xs text-gray-500 hover:text-gray-700"
+                  >
+                    Clear
+                  </button>
+                </div>
+              )}
+
+              {showClassMenu && (
+                <div className="absolute z-30 mt-2 w-full bg-white border border-gray-200 rounded-lg shadow-xl p-2">
+                  <input
+                    type="text"
+                    className="input mb-2"
+                    placeholder="Search classes..."
+                    value={classSearch}
+                    onChange={(e) => setClassSearch(e.target.value)}
+                  />
+                  <div className="max-h-56 overflow-y-auto space-y-1">
+                    {filteredClassOptions.length === 0 ? (
+                      <p className="text-xs text-gray-500 px-2 py-1">No classes match.</p>
+                    ) : (
+                      filteredClassOptions.map((option) => (
+                        <label
+                          key={option.id}
+                          className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-50 cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedClassIds.includes(option.id)}
+                            onChange={() => toggleClassSelection(option.id)}
+                          />
+                          <span className="text-sm text-gray-700">{option.label}</span>
+                        </label>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
           <div className={isSuperAdmin ? "md:col-span-2" : "md:col-span-2"}>
             <label className="label">Search</label>
@@ -943,6 +1093,34 @@ export default function StudentsPage() {
         </div>
       )}
 
+      {selectedSchoolId && !isLoading && students.length > 0 && (
+        <div className="sticky top-2 z-20 mb-4">
+          <div className="card !p-3 sm:!p-4 bg-white/95 backdrop-blur border border-gray-200 shadow-sm">
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-wrap items-center gap-3 text-sm">
+                <span className="font-semibold text-gray-900">Live Summary</span>
+                <span className="text-gray-500">{students.length} shown</span>
+                <span className="text-gray-600">Male: <strong>{summaryByGender.male}</strong></span>
+                <span className="text-gray-600">Female: <strong>{summaryByGender.female}</strong></span>
+                {summaryByGender.other > 0 && <span className="text-gray-600">Other: <strong>{summaryByGender.other}</strong></span>}
+                {summaryByGender.unknown > 0 && <span className="text-gray-600">Unknown: <strong>{summaryByGender.unknown}</strong></span>}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {summaryByClass.map((item) => (
+                  <span
+                    key={item.name}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700"
+                  >
+                    {item.name}
+                    <span className="text-gray-500">({item.count})</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Students Table */}
       {selectedSchoolId && (
       <div className="card">
@@ -950,7 +1128,7 @@ export default function StudentsPage() {
         {!isLoading && allStudents.length > 0 && (
           <div className="mb-4 text-sm text-gray-500">
             Showing {students.length} of {allStudents.length} students
-            {(selectedClass || search) && ' (filtered)'}
+            {(selectedClassIds.length > 0 || search) && ' (filtered)'}
           </div>
         )}
 

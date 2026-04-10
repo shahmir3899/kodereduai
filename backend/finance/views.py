@@ -604,6 +604,7 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         class_id = serializer.validated_data.get('class_id')
         academic_year_id = serializer.validated_data.get('academic_year')
         monthly_category_ids = serializer.validated_data.get('monthly_category_ids')
+        conflict_strategy = serializer.validated_data.get('conflict_strategy', 'skip')
 
         school_id = _resolve_school_id(request)
         if not school_id:
@@ -625,6 +626,7 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
             'class_id': class_id,
             'academic_year_id': academic_year_id,
             'monthly_category_ids': monthly_category_ids,
+            'conflict_strategy': conflict_strategy,
         }
         title = f"Generating fees for {month}/{year}"
 
@@ -771,6 +773,7 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         class_id = serializer.validated_data.get('class_id')
         cat_ids = serializer.validated_data['annual_category_ids']
         year = serializer.validated_data['year']
+        conflict_strategy = serializer.validated_data.get('conflict_strategy', 'skip')
 
         school_id = _resolve_school_id(request)
         if not school_id:
@@ -816,6 +819,7 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
             'annual_category_ids': list(valid_cat_ids),
             'class_id': class_id,
             'academic_year_id': academic_year_id,
+            'conflict_strategy': conflict_strategy,
         }
         title = f"Generating annual fees for {year}"
 

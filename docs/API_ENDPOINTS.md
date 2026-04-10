@@ -134,7 +134,7 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | GET/POST | /api/finance/fee-structures/ | class_obj, academic_year, fee_type |
 | POST | /api/finance/fee-structures/bulk_set/ | Body: {items: [{class_id, amount, fee_type?}]}. fee_type per item (default MONTHLY) |
 | GET/POST | /api/finance/fee-payments/ | student, class_obj, month, year, status, academic_year, fee_type |
-| POST | /api/finance/fee-payments/generate_monthly/ | Scoped to MONTHLY fee_type only |
+| POST | /api/finance/fee-payments/generate_monthly/ | Scoped to MONTHLY fee_type only. Body supports `conflict_strategy=skip|update|delete_recreate` |
 | POST | /api/finance/fee-payments/generate_onetime_fees/ | Body: {student_ids, fee_types, year, month}. Generates non-MONTHLY fee records |
 | GET | /api/finance/fee-payments/monthly_summary/ | month, year, fee_type |
 | GET | /api/finance/fee-payments/monthly_summary_all/ | |
@@ -143,6 +143,7 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | POST | /api/finance/fee-payments/bulk_delete/ | |
 | GET | /api/finance/fee-payments/resolve_amount/ | student_id, fee_type. Returns resolved fee amount from fee structure (student override > class default) |
 | GET | /api/finance/fee-payments/preview_generation/ | fee_type, class_id, year, month. Dry-run preview of fee generation (counts, amounts, per-student details) |
+| POST | /api/finance/fee-payments/generate_annual_fees/ | Body: {class_id?, annual_category_ids[], year, academic_year?, conflict_strategy?}. `conflict_strategy` supports `skip`, `update`, `delete_recreate` |
 | GET/POST | /api/finance/expenses/ | category, date range |
 | GET | /api/finance/expenses/category_summary/ | |
 | GET/POST | /api/finance/other-income/ | |
@@ -232,8 +233,12 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | POST | /api/sessions/terms/import-apply/ | Body: {source_academic_year_id, target_academic_year_id, conflict_mode=skip|update, include_inactive=false}. Applies import and returns created/updated/skipped summary |
 | GET/POST | /api/sessions/enrollments/ | academic_year, class_obj, student, status (ACTIVE\|PROMOTED\|RETAINED\|TRANSFERRED\|GRADUATED\|REPEAT) |
 | GET | /api/sessions/enrollments/by_class/ | class_id, academic_year |
-| POST | /api/sessions/enrollments/bulk_promote/ | Body: {enrollment_ids, target_class_id, target_academic_year_id, action}. action: PROMOTE\|GRADUATE\|REPEAT |
-| GET | /api/sessions/promotion-advisor/ | |
+| POST | /api/sessions/enrollments/bulk_promote/ | Body: {source_academic_year, target_academic_year, promotions:[{student_id, target_class_id?, target_session_class_id?, new_roll_number?, action}]}. action: PROMOTE\|GRADUATE\|REPEAT |
+| POST | /api/sessions/enrollments/bulk_reverse_promote/ | Body: {source_academic_year, target_academic_year, student_ids[]} |
+| GET | /api/sessions/enrollments/promotion-history/ | academic_year, source_academic_year, target_academic_year, source_class, source_session_class, student_id, event_type |
+| POST | /api/sessions/enrollments/correct-single/ | Body: {source_academic_year, target_academic_year, student_id, action, target_class_id?, target_session_class_id?, new_roll_number?, reason?, dry_run?} |
+| POST | /api/sessions/enrollments/correct-bulk/ | Body: {source_academic_year, target_academic_year, corrections:[...], dry_run?} |
+| POST | /api/sessions/promotion-advisor/ | Body: {academic_year, class_id} |
 | POST | /api/sessions/setup-wizard/ | |
 | GET | /api/sessions/health/ | |
 | POST | /api/sessions/section-allocator/ | |

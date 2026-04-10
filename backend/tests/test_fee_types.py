@@ -856,6 +856,361 @@ class TestBulkFeeStructure:
         assert other_payment.amount_due == Decimal('15000.00')
 
 
+class TestFeeGenerationConflicts:
+    """Conflict-aware regeneration for monthly and annual fee records."""
+
+    def test_annual_generation_update_conflict_updates_existing_record(self, seed_data, api):
+        from finance.models import AnnualFeeCategory, FeePayment, FeeStructure
+
+        token = seed_data['tokens']['admin']
+        sid = seed_data['SID_A']
+        class_1 = seed_data['classes'][0]
+        student = seed_data['students'][0]
+        academic_year = seed_data['academic_year']
+
+        category = AnnualFeeCategory.objects.create(
+            school=seed_data['school_a'],
+            name=f"{seed_data['prefix']}Annual Conflict Update",
+            description='Annual category for update conflict test',
+            is_active=True,
+        )
+
+        original_structure = FeeStructure.objects.create(
+            school=seed_data['school_a'],
+            class_obj=class_1,
+            academic_year=academic_year,
+            fee_type='ANNUAL',
+            annual_category=category,
+            monthly_amount=Decimal('15000.00'),
+            effective_from=date.today() - timedelta(days=30),
+            is_active=True,
+        )
+
+        first_resp = api.post('/api/finance/fee-payments/generate_annual_fees/', {
+            'class_id': class_1.id,
+            'annual_category_ids': [category.id],
+            'year': 2026,
+            'academic_year': academic_year.id,
+        }, token, sid)
+        assert first_resp.status_code == 200, f"Annual first generation failed: {first_resp.status_code} {first_resp.content[:300]}"
+
+        original_payment = FeePayment.objects.get(
+            school=seed_data['school_a'],
+            student=student,
+            fee_type='ANNUAL',
+            annual_category=category,
+            month=0,
+            year=2026,
+        )
+        original_id = original_payment.id
+
+        original_structure.is_active = False
+        original_structure.save(update_fields=['is_active'])
+        FeeStructure.objects.create(
+            school=seed_data['school_a'],
+            class_obj=class_1,
+            academic_year=academic_year,
+            fee_type='ANNUAL',
+            annual_category=category,
+            monthly_amount=Decimal('18000.00'),
+            effective_from=date.today() - timedelta(days=1),
+            is_active=True,
+        )
+
+        update_resp = api.post('/api/finance/fee-payments/generate_annual_fees/', {
+            'class_id': class_1.id,
+            'annual_category_ids': [category.id],
+            'year': 2026,
+            'academic_year': academic_year.id,
+            'conflict_strategy': 'update',
+        }, token, sid)
+        assert update_resp.status_code == 200, f"Annual update generation failed: {update_resp.status_code} {update_resp.content[:300]}"
+
+        refreshed_payment = FeePayment.objects.get(id=original_id)
+        result = update_resp.json()['result']
+
+        assert refreshed_payment.amount_due == Decimal('18000.00')
+        assert result['updated'] >= 1
+        assert result['deleted_recreated'] == 0
+        assert result['conflicts_detected'] >= 1
+
+    def test_annual_generation_delete_recreate_replaces_record(self, seed_data, api):
+        from finance.models import AnnualFeeCategory, FeePayment, FeeStructure
+
+        token = seed_data['tokens']['admin']
+        sid = seed_data['SID_A']
+        class_1 = seed_data['classes'][0]
+        student = seed_data['students'][0]
+        academic_year = seed_data['academic_year']
+
+        category = AnnualFeeCategory.objects.create(
+            school=seed_data['school_a'],
+            name=f"{seed_data['prefix']}Annual Conflict Replace",
+            description='Annual category for replace conflict test',
+            is_active=True,
+        )
+
+        original_structure = FeeStructure.objects.create(
+            school=seed_data['school_a'],
+            class_obj=class_1,
+            academic_year=academic_year,
+            fee_type='ANNUAL',
+            annual_category=category,
+            monthly_amount=Decimal('9000.00'),
+            effective_from=date.today() - timedelta(days=30),
+            is_active=True,
+        )
+
+        first_resp = api.post('/api/finance/fee-payments/generate_annual_fees/', {
+            'class_id': class_1.id,
+            'annual_category_ids': [category.id],
+            'year': 2026,
+            'academic_year': academic_year.id,
+        }, token, sid)
+        assert first_resp.status_code == 200, f"Annual first generation failed: {first_resp.status_code} {first_resp.content[:300]}"
+
+        original_payment = FeePayment.objects.get(
+            school=seed_data['school_a'],
+            student=student,
+            fee_type='ANNUAL',
+            annual_category=category,
+            month=0,
+            year=2026,
+        )
+        original_payment.amount_paid = Decimal('3000.00')
+        original_payment.save(update_fields=['amount_paid'])
+        original_id = original_payment.id
+
+        original_structure.is_active = False
+        original_structure.save(update_fields=['is_active'])
+        FeeStructure.objects.create(
+            school=seed_data['school_a'],
+            class_obj=class_1,
+            academic_year=academic_year,
+            fee_type='ANNUAL',
+            annual_category=category,
+            monthly_amount=Decimal('12000.00'),
+            effective_from=date.today() - timedelta(days=1),
+            is_active=True,
+        )
+
+        replace_resp = api.post('/api/finance/fee-payments/generate_annual_fees/', {
+            'class_id': class_1.id,
+            'annual_category_ids': [category.id],
+            'year': 2026,
+            'academic_year': academic_year.id,
+            'conflict_strategy': 'delete_recreate',
+        }, token, sid)
+        assert replace_resp.status_code == 200, f"Annual replace generation failed: {replace_resp.status_code} {replace_resp.content[:300]}"
+
+        replacement = FeePayment.objects.get(
+            school=seed_data['school_a'],
+            student=student,
+            fee_type='ANNUAL',
+            annual_category=category,
+            month=0,
+            year=2026,
+        )
+        result = replace_resp.json()['result']
+
+        assert replacement.id != original_id
+        assert replacement.amount_due == Decimal('12000.00')
+        assert replacement.amount_paid == Decimal('0.00')
+        assert result['deleted_recreated'] >= 1
+
+    def test_monthly_generation_update_conflict_updates_existing_record(self, seed_data, api):
+        from finance.models import FeePayment, FeeStructure, MonthlyFeeCategory
+
+        token = seed_data['tokens']['admin']
+        sid = seed_data['SID_A']
+        class_1 = seed_data['classes'][0]
+        student = seed_data['students'][0]
+        academic_year = seed_data['academic_year']
+
+        category = MonthlyFeeCategory.objects.create(
+            school=seed_data['school_a'],
+            name=f"{seed_data['prefix']}Monthly Conflict Update",
+            description='Monthly category for update conflict test',
+            is_active=True,
+        )
+
+        original_structure = FeeStructure.objects.create(
+            school=seed_data['school_a'],
+            class_obj=class_1,
+            academic_year=academic_year,
+            fee_type='MONTHLY',
+            monthly_category=category,
+            monthly_amount=Decimal('1000.00'),
+            effective_from=date.today() - timedelta(days=30),
+            is_active=True,
+        )
+
+        FeePayment.objects.create(
+            school=seed_data['school_a'],
+            student=student,
+            fee_type='MONTHLY',
+            monthly_category=category,
+            month=2,
+            year=2026,
+            previous_balance=Decimal('0.00'),
+            base_monthly_fee=Decimal('1000.00'),
+            amount_due=Decimal('300.00'),
+            amount_paid=Decimal('100.00'),
+            academic_year=academic_year,
+        )
+
+        first_resp = api.post('/api/finance/fee-payments/generate_monthly/', {
+            'class_id': class_1.id,
+            'month': 3,
+            'year': 2026,
+            'academic_year': academic_year.id,
+            'monthly_category_ids': [category.id],
+        }, token, sid)
+        assert first_resp.status_code == 200, f"Monthly first generation failed: {first_resp.status_code} {first_resp.content[:300]}"
+
+        monthly_payment = FeePayment.objects.get(
+            school=seed_data['school_a'],
+            student=student,
+            fee_type='MONTHLY',
+            monthly_category=category,
+            month=3,
+            year=2026,
+        )
+        original_id = monthly_payment.id
+
+        original_structure.is_active = False
+        original_structure.save(update_fields=['is_active'])
+        FeeStructure.objects.create(
+            school=seed_data['school_a'],
+            class_obj=class_1,
+            academic_year=academic_year,
+            fee_type='MONTHLY',
+            monthly_category=category,
+            monthly_amount=Decimal('1400.00'),
+            effective_from=date.today() - timedelta(days=1),
+            is_active=True,
+        )
+
+        update_resp = api.post('/api/finance/fee-payments/generate_monthly/', {
+            'class_id': class_1.id,
+            'month': 3,
+            'year': 2026,
+            'academic_year': academic_year.id,
+            'monthly_category_ids': [category.id],
+            'conflict_strategy': 'update',
+        }, token, sid)
+        assert update_resp.status_code == 200, f"Monthly update generation failed: {update_resp.status_code} {update_resp.content[:300]}"
+
+        refreshed_payment = FeePayment.objects.get(id=original_id)
+        result = update_resp.json()['result']
+
+        assert refreshed_payment.previous_balance == Decimal('200.00')
+        assert refreshed_payment.base_monthly_fee == Decimal('1400.00')
+        assert refreshed_payment.amount_due == Decimal('1600.00')
+        assert result['updated'] >= 1
+        assert result['deleted_recreated'] == 0
+
+    def test_monthly_generation_delete_recreate_replaces_record(self, seed_data, api):
+        from finance.models import FeePayment, FeeStructure, MonthlyFeeCategory
+
+        token = seed_data['tokens']['admin']
+        sid = seed_data['SID_A']
+        class_1 = seed_data['classes'][0]
+        student = seed_data['students'][0]
+        academic_year = seed_data['academic_year']
+
+        category = MonthlyFeeCategory.objects.create(
+            school=seed_data['school_a'],
+            name=f"{seed_data['prefix']}Monthly Conflict Replace",
+            description='Monthly category for replace conflict test',
+            is_active=True,
+        )
+
+        original_structure = FeeStructure.objects.create(
+            school=seed_data['school_a'],
+            class_obj=class_1,
+            academic_year=academic_year,
+            fee_type='MONTHLY',
+            monthly_category=category,
+            monthly_amount=Decimal('800.00'),
+            effective_from=date.today() - timedelta(days=30),
+            is_active=True,
+        )
+
+        FeePayment.objects.create(
+            school=seed_data['school_a'],
+            student=student,
+            fee_type='MONTHLY',
+            monthly_category=category,
+            month=2,
+            year=2026,
+            previous_balance=Decimal('0.00'),
+            base_monthly_fee=Decimal('800.00'),
+            amount_due=Decimal('500.00'),
+            amount_paid=Decimal('100.00'),
+            academic_year=academic_year,
+        )
+
+        first_resp = api.post('/api/finance/fee-payments/generate_monthly/', {
+            'class_id': class_1.id,
+            'month': 3,
+            'year': 2026,
+            'academic_year': academic_year.id,
+            'monthly_category_ids': [category.id],
+        }, token, sid)
+        assert first_resp.status_code == 200, f"Monthly first generation failed: {first_resp.status_code} {first_resp.content[:300]}"
+
+        original_payment = FeePayment.objects.get(
+            school=seed_data['school_a'],
+            student=student,
+            fee_type='MONTHLY',
+            monthly_category=category,
+            month=3,
+            year=2026,
+        )
+        original_payment.amount_paid = Decimal('200.00')
+        original_payment.save(update_fields=['amount_paid'])
+        original_id = original_payment.id
+
+        original_structure.is_active = False
+        original_structure.save(update_fields=['is_active'])
+        FeeStructure.objects.create(
+            school=seed_data['school_a'],
+            class_obj=class_1,
+            academic_year=academic_year,
+            fee_type='MONTHLY',
+            monthly_category=category,
+            monthly_amount=Decimal('1100.00'),
+            effective_from=date.today() - timedelta(days=1),
+            is_active=True,
+        )
+
+        replace_resp = api.post('/api/finance/fee-payments/generate_monthly/', {
+            'class_id': class_1.id,
+            'month': 3,
+            'year': 2026,
+            'academic_year': academic_year.id,
+            'monthly_category_ids': [category.id],
+            'conflict_strategy': 'delete_recreate',
+        }, token, sid)
+        assert replace_resp.status_code == 200, f"Monthly replace generation failed: {replace_resp.status_code} {replace_resp.content[:300]}"
+
+        replacement = FeePayment.objects.get(
+            school=seed_data['school_a'],
+            student=student,
+            fee_type='MONTHLY',
+            monthly_category=category,
+            month=3,
+            year=2026,
+        )
+        result = replace_resp.json()['result']
+
+        assert replacement.id != original_id
+        assert replacement.base_monthly_fee == Decimal('1100.00')
+        assert replacement.amount_paid == Decimal('0.00')
+        assert result['deleted_recreated'] >= 1
+
+
 # ====================================================================
 # LEVEL H: PERMISSIONS & SCHOOL ISOLATION
 # ====================================================================

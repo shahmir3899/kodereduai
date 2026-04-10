@@ -105,7 +105,7 @@ export function GenerateModal({
   monthlyCategories = [],
 }) {
   const { activeSchool } = useAuth()
-  const [confirmed, setConfirmed] = useState(false)
+  const [conflictStrategy, setConflictStrategy] = useState('skip')
   const [generateFeeType, setGenerateFeeType] = useState('MONTHLY')
   const [showConfirm, setShowConfirm] = useState(false)
   const [showStudentList, setShowStudentList] = useState(false)
@@ -161,7 +161,7 @@ export function GenerateModal({
   // Reset state when modal opens
   useEffect(() => {
     if (show) {
-      setConfirmed(false)
+      setConflictStrategy('skip')
       setGenerateFeeType('MONTHLY')
       setShowConfirm(false)
       setShowStudentList(false)
@@ -180,12 +180,13 @@ export function GenerateModal({
 
   const feeLabel = FEE_TYPE_TABS.find(t => t.value === generateFeeType)?.label || 'Fee'
   const preview = previewData?.data
+  const hasPreviewWork = (preview?.will_create || 0) > 0 || (preview?.already_exist || 0) > 0
   const selectedClassLabel = feeModalClassOptions.find(c => String(c.id) === String(modalClassFilter))?.label
     || classList.find(c => String(c.id) === String(modalClassFilter))?.name
     || 'All classes'
 
   const handleClose = () => {
-    setConfirmed(false)
+    setConflictStrategy('skip')
     setGenerateFeeType('MONTHLY')
     setShowConfirm(false)
     setShowStudentList(false)
@@ -201,6 +202,7 @@ export function GenerateModal({
     const data = {
       month: modalMonth,
       year: modalYear,
+      conflict_strategy: conflictStrategy,
       ...(resolvedModalClassFilter && { class_id: parseInt(resolvedModalClassFilter) }),
       ...(academicYearId && { academic_year: academicYearId }),
       ...(selectedMonthlyCategories.length > 0 && { monthly_category_ids: selectedMonthlyCategories }),
@@ -215,6 +217,7 @@ export function GenerateModal({
         ...(resolvedModalClassFilter && { class_id: parseInt(resolvedModalClassFilter) }),
         annual_category_ids: selectedAnnualCategories,
         year: modalYear,
+        conflict_strategy: conflictStrategy,
         ...(academicYearId && { academic_year: academicYearId }),
       })
       return
@@ -369,18 +372,33 @@ export function GenerateModal({
               )}
 
               {preview?.already_exist > 0 && (
-                <div className="mb-4">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} className="rounded border-amber-300 text-amber-600 focus:ring-amber-500" />
-                    <span className="text-sm text-amber-700">I understand existing records won't be overwritten</span>
-                  </label>
+                <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3">
+                  <p className="mb-2 text-sm font-medium text-amber-900">Existing records found. Choose how conflicts should be handled.</p>
+                  <p className="mb-3 text-xs text-amber-700">Only records whose recalculated amounts differ will be updated or replaced. Matching records will still be skipped.</p>
+                  <div className="space-y-2">
+                    <label className="flex items-start gap-2 cursor-pointer">
+                      <input type="radio" name="monthly-conflict-strategy" value="skip" checked={conflictStrategy === 'skip'} onChange={(e) => setConflictStrategy(e.target.value)} className="mt-0.5 border-amber-300 text-amber-600 focus:ring-amber-500" />
+                      <span className="text-sm text-amber-800">Skip conflicting existing records</span>
+                    </label>
+                    <label className="flex items-start gap-2 cursor-pointer">
+                      <input type="radio" name="monthly-conflict-strategy" value="update" checked={conflictStrategy === 'update'} onChange={(e) => setConflictStrategy(e.target.value)} className="mt-0.5 border-amber-300 text-amber-600 focus:ring-amber-500" />
+                      <span className="text-sm text-amber-800">Update existing records to current fee structure</span>
+                    </label>
+                    <label className="flex items-start gap-2 cursor-pointer">
+                      <input type="radio" name="monthly-conflict-strategy" value="delete_recreate" checked={conflictStrategy === 'delete_recreate'} onChange={(e) => setConflictStrategy(e.target.value)} className="mt-0.5 border-amber-300 text-amber-600 focus:ring-amber-500" />
+                      <span className="text-sm text-amber-800">Delete and recreate conflicting records</span>
+                    </label>
+                  </div>
+                  {conflictStrategy === 'delete_recreate' && (
+                    <p className="mt-3 text-xs text-red-700">Delete and recreate will reset the conflicting record and can remove recorded payment history.</p>
+                  )}
                 </div>
               )}
               <div className="flex gap-3">
                 <button onClick={handleClose} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">Cancel</button>
                 <button
                   onClick={handleGenerateMonthly}
-                  disabled={(mutation.isSubmitting ?? mutation.isPending) || (preview?.already_exist > 0 && !confirmed) || preview?.will_create === 0}
+                  disabled={(mutation.isSubmitting ?? mutation.isPending) || !hasPreviewWork}
                   className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50"
                 >
                   {(mutation.isSubmitting ?? mutation.isPending) ? 'Starting...' : 'Generate'}
@@ -388,9 +406,24 @@ export function GenerateModal({
               </div>
               {mutation.isSuccess && (
                 <div className="mt-3 text-sm text-green-700 bg-green-50 p-3 rounded">
-                  Created {mutation.data?.data?.created || mutation.data?.data?.result?.created} records.
-                  {(mutation.data?.data?.skipped || mutation.data?.data?.result?.skipped) > 0 && ` Skipped ${mutation.data.data.skipped || mutation.data.data.result?.skipped} (already exist).`}
-                  {(mutation.data?.data?.no_fee_structure || mutation.data?.data?.result?.no_fee_structure) > 0 && ` ${mutation.data.data.no_fee_structure || mutation.data.data.result?.no_fee_structure} students have no fee structure.`}
+                  {(() => {
+                    const payload = mutation.data?.data || {}
+                    const result = payload.result || payload
+                    const created = result.created ?? 0
+                    const updated = result.updated ?? 0
+                    const deletedRecreated = result.deleted_recreated ?? 0
+                    const skipped = result.skipped ?? 0
+                    const noFeeStructure = result.no_fee_structure ?? 0
+                    const protectedConflict = result.protected_conflict ?? 0
+                    return [
+                      `Created ${created} records.`,
+                      updated > 0 ? `Updated ${updated}.` : null,
+                      deletedRecreated > 0 ? `Recreated ${deletedRecreated}.` : null,
+                      skipped > 0 ? `Skipped ${skipped}.` : null,
+                      protectedConflict > 0 ? `${protectedConflict} protected conflict${protectedConflict === 1 ? '' : 's'} left unchanged.` : null,
+                      noFeeStructure > 0 ? `${noFeeStructure} students have no fee structure.` : null,
+                    ].filter(Boolean).join(' ')
+                  })()}
                 </div>
               )}
             </>
@@ -466,7 +499,7 @@ export function GenerateModal({
                 <button onClick={handleClose} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">Cancel</button>
                 <button
                   onClick={() => setShowConfirm(true)}
-                  disabled={!previewEnabled || !preview || preview.will_create === 0}
+                  disabled={!previewEnabled || !preview || !hasPreviewWork}
                   className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50"
                 >
                   Review & Generate
@@ -478,6 +511,29 @@ export function GenerateModal({
           {/* Non-MONTHLY confirmation step */}
           {!isMonthly && showConfirm && (
             <>
+              {preview?.already_exist > 0 && (
+                <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3">
+                  <p className="mb-2 text-sm font-medium text-amber-900">Existing records found. Choose how conflicts should be handled.</p>
+                  <p className="mb-3 text-xs text-amber-700">Only records whose recalculated amounts differ will be updated or replaced. Matching records will still be skipped.</p>
+                  <div className="space-y-2">
+                    <label className="flex items-start gap-2 cursor-pointer">
+                      <input type="radio" name="annual-conflict-strategy" value="skip" checked={conflictStrategy === 'skip'} onChange={(e) => setConflictStrategy(e.target.value)} className="mt-0.5 border-amber-300 text-amber-600 focus:ring-amber-500" />
+                      <span className="text-sm text-amber-800">Skip conflicting existing records</span>
+                    </label>
+                    <label className="flex items-start gap-2 cursor-pointer">
+                      <input type="radio" name="annual-conflict-strategy" value="update" checked={conflictStrategy === 'update'} onChange={(e) => setConflictStrategy(e.target.value)} className="mt-0.5 border-amber-300 text-amber-600 focus:ring-amber-500" />
+                      <span className="text-sm text-amber-800">Update existing records to current fee structure</span>
+                    </label>
+                    <label className="flex items-start gap-2 cursor-pointer">
+                      <input type="radio" name="annual-conflict-strategy" value="delete_recreate" checked={conflictStrategy === 'delete_recreate'} onChange={(e) => setConflictStrategy(e.target.value)} className="mt-0.5 border-amber-300 text-amber-600 focus:ring-amber-500" />
+                      <span className="text-sm text-amber-800">Delete and recreate conflicting records</span>
+                    </label>
+                  </div>
+                  {conflictStrategy === 'delete_recreate' && (
+                    <p className="mt-3 text-xs text-red-700">Delete and recreate will reset the conflicting record and can remove recorded payment history.</p>
+                  )}
+                </div>
+              )}
               <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-2 mb-4">
                 <p className="text-sm font-medium text-blue-900">Please confirm {feeLabel.toLowerCase()} fee generation:</p>
                 <div className="text-sm text-blue-800 space-y-1">
@@ -506,10 +562,20 @@ export function GenerateModal({
                 <div className="mt-3 text-sm text-green-700 bg-green-50 p-3 rounded">
                   {(() => {
                     const payload = isAnnual ? annualMutation?.data?.data : onetimeMutation?.data?.data
-                    const created = payload?.created ?? payload?.result?.created
-                    const skipped = payload?.skipped ?? payload?.result?.skipped
+                    const result = payload?.result || payload || {}
+                    const created = result.created
+                    const updated = result.updated ?? 0
+                    const deletedRecreated = result.deleted_recreated ?? 0
+                    const skipped = result.skipped ?? 0
+                    const protectedConflict = result.protected_conflict ?? 0
                     if (created == null) return 'Fee generation started. Track progress in Tasks.'
-                    return `Created ${created} records.${skipped > 0 ? ` Skipped ${skipped} (already exist).` : ''}`
+                    return [
+                      `Created ${created} records.`,
+                      updated > 0 ? `Updated ${updated}.` : null,
+                      deletedRecreated > 0 ? `Recreated ${deletedRecreated}.` : null,
+                      skipped > 0 ? `Skipped ${skipped}.` : null,
+                      protectedConflict > 0 ? `${protectedConflict} protected conflict${protectedConflict === 1 ? '' : 's'} left unchanged.` : null,
+                    ].filter(Boolean).join(' ')
                   })()}
                 </div>
               )}

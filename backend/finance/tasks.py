@@ -3,17 +3,58 @@ Background tasks for finance operations.
 """
 
 import logging
+from decimal import Decimal
+
 from celery import shared_task
+from django.utils import timezone
 
 from .generation_planner import plan_scope_records
 
 logger = logging.getLogger(__name__)
 
 
+def _normalize_decimal(value):
+    return value if value is not None else Decimal('0')
+
+
+def _recompute_payment_status(payment):
+    amount_due = _normalize_decimal(payment.amount_due)
+    amount_paid = _normalize_decimal(payment.amount_paid)
+
+    if amount_due == 0 and amount_paid == 0:
+        payment.status = payment.PaymentStatus.PAID
+    elif amount_due <= 0:
+        payment.status = payment.PaymentStatus.ADVANCE
+    elif amount_paid >= amount_due:
+        payment.status = payment.PaymentStatus.PAID
+    elif amount_paid > 0:
+        payment.status = payment.PaymentStatus.PARTIAL
+    else:
+        payment.status = payment.PaymentStatus.UNPAID
+
+    if payment.status == payment.PaymentStatus.UNPAID:
+        payment.payment_date = None
+        payment.account = None
+        payment.receipt_number = ''
+
+
+def _is_annual_conflict(existing_payment, expected_amount_due):
+    return _normalize_decimal(existing_payment.amount_due) != _normalize_decimal(expected_amount_due)
+
+
+def _is_monthly_conflict(existing_payment, expected_previous_balance, expected_base_monthly_fee, expected_amount_due):
+    return any([
+        _normalize_decimal(existing_payment.previous_balance) != _normalize_decimal(expected_previous_balance),
+        _normalize_decimal(existing_payment.base_monthly_fee) != _normalize_decimal(expected_base_monthly_fee),
+        _normalize_decimal(existing_payment.amount_due) != _normalize_decimal(expected_amount_due),
+    ])
+
+
 @shared_task(bind=True, time_limit=600)
 def generate_monthly_fees_task(
     self, school_id, month, year, class_id=None, academic_year_id=None,
     monthly_category_ids=None,
+    conflict_strategy='skip',
 ):
     """Bulk generate fee payment records for a month/year, per monthly category."""
     from core.task_utils import update_task_progress, mark_task_success, mark_task_failed
@@ -22,7 +63,6 @@ def generate_monthly_fees_task(
 
     try:
         from datetime import date
-        from decimal import Decimal
         from django.db import transaction
         from students.models import Student
         from finance.models import FeePayment, MonthlyClosing, MonthlyFeeCategory
@@ -72,45 +112,93 @@ def generate_monthly_fees_task(
             prev_year = year - 1
 
         created_count = 0
+        updated_count = 0
+        deleted_recreated_count = 0
         skipped_count = 0
         no_fee_count = 0
+        unchanged_existing_count = 0
+        protected_conflict_count = 0
+        conflicts_detected = 0
         progress = 0
 
         with transaction.atomic():
             for category in categories:
                 cat_id = category.id
 
-                # Records that already exist for this month+category
-                existing_ids = set(
-                    FeePayment.objects.filter(
-                        school_id=school_id, month=month, year=year,
-                        fee_type='MONTHLY', monthly_category_id=cat_id,
-                    ).values_list('student_id', flat=True)
-                )
+                existing_payments = {
+                    fp.student_id: fp
+                    for fp in FeePayment.objects.filter(
+                        school_id=school_id,
+                        month=month,
+                        year=year,
+                        fee_type='MONTHLY',
+                        monthly_category_id=cat_id,
+                    )
+                }
+                existing_ids = set(existing_payments)
 
                 plan = plan_scope_records(
                     school_id=school_id,
                     students=students,
                     fee_type='MONTHLY',
-                    existing_ids=existing_ids,
+                    existing_ids=set(),
                     monthly_category_id=cat_id,
                 )
-                skipped_count += plan['already_exist']
                 no_fee_count += plan['no_fee_structure']
 
-                # Per-category carry-forward from previous month
                 prev_balances = {}
                 for fp in FeePayment.objects.filter(
-                    school_id=school_id, month=prev_month, year=prev_year,
-                    fee_type='MONTHLY', monthly_category_id=cat_id,
+                    school_id=school_id,
+                    month=prev_month,
+                    year=prev_year,
+                    fee_type='MONTHLY',
+                    monthly_category_id=cat_id,
                 ):
                     prev_balances[fp.student_id] = fp.amount_due - fp.amount_paid
 
                 to_create = []
+                to_update = []
+                delete_ids = []
+                handled_existing_ids = set()
+                now_ts = timezone.now()
+
                 for entry in plan['creatable']:
                     student = entry['student']
                     monthly_fee = entry['amount']
                     prev_balance = prev_balances.get(student.id, Decimal('0'))
+                    amount_due = prev_balance + monthly_fee
+                    existing_payment = existing_payments.get(student.id)
+
+                    if existing_payment:
+                        handled_existing_ids.add(student.id)
+                        if not _is_monthly_conflict(existing_payment, prev_balance, monthly_fee, amount_due):
+                            unchanged_existing_count += 1
+                            skipped_count += 1
+                            continue
+
+                        conflicts_detected += 1
+                        if conflict_strategy == 'skip':
+                            skipped_count += 1
+                            continue
+
+                        if conflict_strategy == 'update':
+                            if _normalize_decimal(existing_payment.amount_paid) > amount_due:
+                                protected_conflict_count += 1
+                                skipped_count += 1
+                                continue
+
+                            existing_payment.previous_balance = prev_balance
+                            existing_payment.base_monthly_fee = monthly_fee
+                            existing_payment.amount_due = amount_due
+                            existing_payment.updated_at = now_ts
+                            _recompute_payment_status(existing_payment)
+                            to_update.append(existing_payment)
+                            updated_count += 1
+                            continue
+
+                        delete_ids.append(existing_payment.id)
+                        deleted_recreated_count += 1
+
                     to_create.append(FeePayment(
                         school_id=school_id,
                         student=student,
@@ -120,31 +208,53 @@ def generate_monthly_fees_task(
                         year=year,
                         previous_balance=prev_balance,
                         base_monthly_fee=monthly_fee,
-                        amount_due=prev_balance + monthly_fee,
+                        amount_due=amount_due,
                         amount_paid=0,
                         academic_year_id=academic_year_id,
                     ))
                     created_count += 1
+
+                remaining_existing_ids = existing_ids - handled_existing_ids
+                if remaining_existing_ids:
+                    unchanged_existing_count += len(remaining_existing_ids)
+                    skipped_count += len(remaining_existing_ids)
 
                 for _ in students:
                     progress += 1
                     if progress % 50 == 0 or progress == total:
                         update_task_progress(task_id, current=progress)
 
+                if delete_ids:
+                    FeePayment.objects.filter(id__in=delete_ids).delete()
                 if to_create:
                     FeePayment.objects.bulk_create(to_create, batch_size=1000)
+                if to_update:
+                    FeePayment.objects.bulk_update(
+                        to_update,
+                        ['previous_balance', 'base_monthly_fee', 'amount_due', 'status', 'payment_date', 'account', 'receipt_number', 'updated_at'],
+                        batch_size=1000,
+                    )
 
         result_data = {
             'created': created_count,
+            'updated': updated_count,
+            'deleted_recreated': deleted_recreated_count,
             'skipped': skipped_count,
             'no_fee_structure': no_fee_count,
+            'unchanged_existing': unchanged_existing_count,
+            'protected_conflict': protected_conflict_count,
+            'conflicts_detected': conflicts_detected,
             'month': month,
             'year': year,
-            'message': f'{created_count} fee record(s) generated, {skipped_count} skipped.',
+            'message': (
+                f'{created_count} fee record(s) generated, '
+                f'{updated_count} updated, '
+                f'{deleted_recreated_count} deleted and recreated, '
+                f'{skipped_count} skipped.'
+            ),
         }
         mark_task_success(task_id, result_data=result_data)
         return result_data
-
     except Exception as e:
         logger.exception(f"Fee generation failed: {e}")
         mark_task_failed(task_id, str(e))
@@ -154,6 +264,7 @@ def generate_monthly_fees_task(
 @shared_task(bind=True, time_limit=900)
 def generate_annual_fees_task(
     self, school_id, year, annual_category_ids, class_id=None, academic_year_id=None,
+    conflict_strategy='skip',
 ):
     """Bulk-generate annual fee records for selected categories."""
     from core.task_utils import update_task_progress, mark_task_success, mark_task_failed
@@ -195,36 +306,77 @@ def generate_annual_fees_task(
         update_task_progress(task_id, current=0, total=total)
 
         created_count = 0
+        updated_count = 0
+        deleted_recreated_count = 0
         skipped_count = 0
         no_fee_count = 0
+        unchanged_existing_count = 0
+        protected_conflict_count = 0
+        conflicts_detected = 0
         progress = 0
 
         with transaction.atomic():
             for category in categories:
-                existing_ids = set(
-                    FeePayment.objects.filter(
+                existing_payments = {
+                    fp.student_id: fp
+                    for fp in FeePayment.objects.filter(
                         school_id=school_id,
                         month=0,
                         year=year,
                         fee_type='ANNUAL',
                         annual_category_id=category.id,
-                    ).values_list('student_id', flat=True)
-                )
+                    )
+                }
+                existing_ids = set(existing_payments)
 
                 plan = plan_scope_records(
                     school_id=school_id,
                     students=students,
                     fee_type='ANNUAL',
-                    existing_ids=existing_ids,
+                    existing_ids=set(),
                     annual_category_id=category.id,
                 )
-                skipped_count += plan['already_exist']
                 no_fee_count += plan['no_fee_structure']
 
                 to_create = []
+                to_update = []
+                delete_ids = []
+                handled_existing_ids = set()
+                now_ts = timezone.now()
+
                 for entry in plan['creatable']:
                     student = entry['student']
                     amount = entry['amount']
+
+                    existing_payment = existing_payments.get(student.id)
+                    if existing_payment:
+                        handled_existing_ids.add(student.id)
+                        if not _is_annual_conflict(existing_payment, amount):
+                            unchanged_existing_count += 1
+                            skipped_count += 1
+                            continue
+
+                        conflicts_detected += 1
+                        if conflict_strategy == 'skip':
+                            skipped_count += 1
+                            continue
+
+                        if conflict_strategy == 'update':
+                            if _normalize_decimal(existing_payment.amount_paid) > amount:
+                                protected_conflict_count += 1
+                                skipped_count += 1
+                                continue
+
+                            existing_payment.amount_due = amount
+                            existing_payment.updated_at = now_ts
+                            _recompute_payment_status(existing_payment)
+                            to_update.append(existing_payment)
+                            updated_count += 1
+                            continue
+
+                        delete_ids.append(existing_payment.id)
+                        deleted_recreated_count += 1
+
                     to_create.append(FeePayment(
                         school_id=school_id,
                         student=student,
@@ -243,15 +395,38 @@ def generate_annual_fees_task(
                     if progress % 50 == 0 or progress == total:
                         update_task_progress(task_id, current=progress)
 
+                remaining_existing_ids = existing_ids - handled_existing_ids
+                if remaining_existing_ids:
+                    unchanged_existing_count += len(remaining_existing_ids)
+                    skipped_count += len(remaining_existing_ids)
+
+                if delete_ids:
+                    FeePayment.objects.filter(id__in=delete_ids).delete()
                 if to_create:
                     FeePayment.objects.bulk_create(to_create, batch_size=1000)
+                if to_update:
+                    FeePayment.objects.bulk_update(
+                        to_update,
+                        ['amount_due', 'status', 'payment_date', 'account', 'receipt_number', 'updated_at'],
+                        batch_size=1000,
+                    )
 
         result_data = {
             'created': created_count,
+            'updated': updated_count,
+            'deleted_recreated': deleted_recreated_count,
             'skipped': skipped_count,
             'no_fee_structure': no_fee_count,
+            'unchanged_existing': unchanged_existing_count,
+            'protected_conflict': protected_conflict_count,
+            'conflicts_detected': conflicts_detected,
             'year': year,
-            'message': f'{created_count} annual fee record(s) generated, {skipped_count} skipped.',
+            'message': (
+                f'{created_count} annual fee record(s) generated, '
+                f'{updated_count} updated, '
+                f'{deleted_recreated_count} deleted and recreated, '
+                f'{skipped_count} skipped.'
+            ),
         }
         mark_task_success(task_id, result_data=result_data)
         return result_data

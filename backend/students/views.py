@@ -194,17 +194,24 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             student = serializer.save()
 
         # Auto-create enrollment for the current academic year
-        from academic_sessions.models import AcademicYear, StudentEnrollment
+        from academic_sessions.models import AcademicYear, StudentEnrollment, SessionClass
         current_year = AcademicYear.objects.filter(
             school_id=student.school_id, is_current=True,
         ).first()
         if current_year:
+            session_class = SessionClass.objects.filter(
+                school_id=student.school_id,
+                academic_year_id=current_year.id,
+                class_obj_id=student.class_obj_id,
+                is_active=True,
+            ).first()
             StudentEnrollment.objects.get_or_create(
                 school_id=student.school_id,
                 student=student,
                 academic_year=current_year,
                 defaults={
                     'class_obj': student.class_obj,
+                    'session_class': session_class,
                     'roll_number': student.roll_number,
                     'status': 'ACTIVE',
                 },

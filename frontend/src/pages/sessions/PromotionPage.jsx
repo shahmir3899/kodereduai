@@ -76,6 +76,13 @@ export default function PromotionPage() {
   // Promotion data
   const [promotions, setPromotions] = useState([])
   const [result, setResult] = useState(null)
+  const [historyYearId, setHistoryYearId] = useState('')
+  const [selectedHistoryIds, setSelectedHistoryIds] = useState([])
+  const [singleCorrectionModal, setSingleCorrectionModal] = useState(null)
+  const [singleCorrectionForm, setSingleCorrectionForm] = useState({ action: 'REPEAT', target_class_id: '', new_roll_number: '', reason: '' })
+  const [bulkCorrectionAction, setBulkCorrectionAction] = useState('REPEAT')
+  const [bulkCorrectionTargetClassId, setBulkCorrectionTargetClassId] = useState('')
+  const [bulkCorrectionReason, setBulkCorrectionReason] = useState('')
   const [showTargetSetupModal, setShowTargetSetupModal] = useState(false)
   const [targetSetupPreview, setTargetSetupPreview] = useState(null)
   const [isTargetSetupLoading, setIsTargetSetupLoading] = useState(false)
@@ -123,6 +130,19 @@ export default function PromotionPage() {
   const targetClassOptions = targetSessionClasses?.length > 0 ? targetSessionClasses : masterClasses
   const enrollments = enrollmentsRes?.data?.results || enrollmentsRes?.data || []
   const recommendations = advisorData?.recommendations || []
+  const resolvedHistoryYearId = historyYearId || targetYearId || sourceYearId
+
+  const { data: promotionHistoryRes, isLoading: historyLoading } = useQuery({
+    queryKey: ['promotion-history', resolvedHistoryYearId],
+    queryFn: () => sessionsApi.getPromotionHistory({
+      academic_year: resolvedHistoryYearId,
+      page_size: 200,
+    }),
+    enabled: step === 4 && !!resolvedHistoryYearId,
+    staleTime: 30_000,
+  })
+
+  const promotionHistory = promotionHistoryRes?.data?.results || promotionHistoryRes?.data || []
   const sourceClass = sourceClassOptions.find(c => String(c.id) === String(sourceClassId))
   const sourceUsesSessionClasses = sourceSessionClasses?.length > 0
   const targetUsesSessionClasses = targetSessionClasses?.length > 0
@@ -316,6 +336,30 @@ export default function PromotionPage() {
     },
   })
 
+  const singleCorrectionMut = useBackgroundTask({
+    mutationFn: (data) => sessionsApi.correctPromotionSingle(data),
+    taskType: 'BULK_PROMOTION',
+    title: 'Correcting promotion',
+    onSuccess: () => {
+      showSuccess('Correction applied successfully.')
+      setSingleCorrectionModal(null)
+      queryClient.invalidateQueries({ queryKey: ['promotion-history'] })
+      queryClient.invalidateQueries({ queryKey: ['enrollmentsByClass'] })
+    },
+  })
+
+  const bulkCorrectionMut = useBackgroundTask({
+    mutationFn: (data) => sessionsApi.correctPromotionBulk(data),
+    taskType: 'BULK_PROMOTION',
+    title: 'Applying bulk promotion corrections',
+    onSuccess: () => {
+      showSuccess('Bulk corrections applied successfully.')
+      setSelectedHistoryIds([])
+      queryClient.invalidateQueries({ queryKey: ['promotion-history'] })
+      queryClient.invalidateQueries({ queryKey: ['enrollmentsByClass'] })
+    },
+  })
+
   const getStudentIdsFromErrors = (errors) => {
     if (!Array.isArray(errors)) return []
     const ids = errors
@@ -352,6 +396,74 @@ export default function PromotionPage() {
       .map(p => Number(p.student_id))
       .filter(id => Number.isInteger(id) && id > 0)
     return [...new Set(ids)]
+  }
+
+  const toggleHistorySelection = (eventId) => {
+    setSelectedHistoryIds(prev => (
+      prev.includes(eventId)
+        ? prev.filter(id => id !== eventId)
+        : [...prev, eventId]
+    ))
+  }
+
+  const selectedHistoryRows = promotionHistory.filter(row => selectedHistoryIds.includes(row.id))
+
+  const openSingleCorrection = (row) => {
+    setSingleCorrectionModal(row)
+    setSingleCorrectionForm({
+      action: row.event_type === 'GRADUATED' ? 'GRADUATE' : (row.event_type === 'REPEATED' ? 'REPEAT' : 'PROMOTE'),
+      target_class_id: row.target_class || '',
+      new_roll_number: row.new_roll_number || row.student_roll_number || '',
+      reason: '',
+    })
+  }
+
+  const submitSingleCorrection = () => {
+    if (!singleCorrectionModal) return
+    if (!singleCorrectionForm.reason?.trim()) {
+      showWarning('Reason is required for correction.')
+      return
+    }
+
+    singleCorrectionMut.trigger({
+      source_academic_year: singleCorrectionModal.source_academic_year || parseInt(sourceYearId),
+      target_academic_year: singleCorrectionModal.target_academic_year || parseInt(targetYearId),
+      student_id: singleCorrectionModal.student,
+      action: singleCorrectionForm.action,
+      target_class_id: singleCorrectionForm.action === 'GRADUATE' ? null : (singleCorrectionForm.target_class_id ? parseInt(singleCorrectionForm.target_class_id) : null),
+      new_roll_number: singleCorrectionForm.new_roll_number,
+      reason: singleCorrectionForm.reason,
+    })
+  }
+
+  const submitBulkCorrection = () => {
+    if (!selectedHistoryRows.length) {
+      showWarning('Select at least one history row for bulk correction.')
+      return
+    }
+    if (!bulkCorrectionReason.trim()) {
+      showWarning('Reason is required for bulk correction.')
+      return
+    }
+    if (bulkCorrectionAction !== 'GRADUATE' && !bulkCorrectionTargetClassId) {
+      showWarning('Target class is required for Promote/Repeat bulk correction.')
+      return
+    }
+
+    const sourceAcademicYear = selectedHistoryRows[0]?.source_academic_year || parseInt(sourceYearId)
+    const targetAcademicYear = selectedHistoryRows[0]?.target_academic_year || parseInt(targetYearId)
+
+    bulkCorrectionMut.trigger({
+      source_academic_year: sourceAcademicYear,
+      target_academic_year: targetAcademicYear,
+      corrections: selectedHistoryRows.map(row => ({
+        student_id: row.student,
+        action: bulkCorrectionAction,
+        target_class_id: bulkCorrectionAction === 'GRADUATE' ? null : parseInt(bulkCorrectionTargetClassId),
+        new_roll_number: row.new_roll_number || row.student_roll_number || '',
+        reason: bulkCorrectionReason,
+      })),
+    })
   }
 
   // Initialize promotions when enrollments load
@@ -542,22 +654,31 @@ export default function PromotionPage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Student Promotion</h1>
-        <p className="text-sm text-gray-600">Promote students from one academic year to the next</p>
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Student Promotion</h1>
+          <p className="text-sm text-gray-600">Promote students from one academic year to the next</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setStep(4)}
+          className="self-start px-4 py-2 text-sm rounded-lg border border-primary-300 text-primary-700 bg-primary-50 hover:bg-primary-100"
+        >
+          History & Corrections
+        </button>
       </div>
 
       {/* Progress Steps */}
       <div className="flex items-center gap-2 mb-6">
-        {[1, 2, 3].map(s => (
+        {[1, 2, 3, 4].map(s => (
           <div key={s} className="flex items-center gap-2">
             <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
               step >= s ? 'bg-primary-600 text-white' : 'bg-gray-200 text-gray-500'
             }`}>{s}</div>
             <span className={`text-sm hidden sm:inline ${step >= s ? 'text-primary-700 font-medium' : 'text-gray-400'}`}>
-              {s === 1 ? 'Select Years' : s === 2 ? 'Select Class' : 'Review & Promote'}
+              {s === 1 ? 'Select Years' : s === 2 ? 'Select Class' : s === 3 ? 'Review & Promote' : 'What Was Done'}
             </span>
-            {s < 3 && <div className="w-8 h-0.5 bg-gray-200"></div>}
+            {s < 4 && <div className="w-8 h-0.5 bg-gray-200"></div>}
           </div>
         ))}
       </div>
@@ -1146,8 +1267,129 @@ export default function PromotionPage() {
         </div>
       )}
 
+      {/* Step 4: What Was Done */}
+      {step === 4 && (
+        <div className="card">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-4">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">What Was Done</h2>
+              <p className="text-sm text-gray-600">Full academic-year promotion history with single and bulk correction options.</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-gray-600">Academic Year</label>
+              <select
+                value={resolvedHistoryYearId || ''}
+                onChange={e => setHistoryYearId(e.target.value)}
+                className="input text-sm py-1"
+              >
+                <option value="">Select year...</option>
+                {years.map(y => <option key={y.id} value={y.id}>{y.name}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div className="mb-4 p-3 rounded-lg border border-gray-200 bg-gray-50">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-gray-600">{selectedHistoryRows.length} selected</span>
+              <select value={bulkCorrectionAction} onChange={e => setBulkCorrectionAction(e.target.value)} className="input text-sm py-1">
+                <option value="PROMOTE">Set Promote</option>
+                <option value="REPEAT">Set Repeat</option>
+                <option value="GRADUATE">Set Graduate</option>
+              </select>
+              <select
+                value={bulkCorrectionTargetClassId}
+                onChange={e => setBulkCorrectionTargetClassId(e.target.value)}
+                className="input text-sm py-1"
+                disabled={bulkCorrectionAction === 'GRADUATE'}
+              >
+                <option value="">Target class...</option>
+                {targetClassOptions.map(c => <option key={c.id} value={c.id}>{getClassOptionLabel(c)}</option>)}
+              </select>
+              <input
+                type="text"
+                value={bulkCorrectionReason}
+                onChange={e => setBulkCorrectionReason(e.target.value)}
+                placeholder="Reason (required)"
+                className="input text-sm py-1 min-w-56"
+              />
+              <button
+                onClick={submitBulkCorrection}
+                disabled={bulkCorrectionMut.isSubmitting || selectedHistoryRows.length === 0}
+                className="px-3 py-1.5 text-sm rounded-lg border border-primary-300 text-primary-700 bg-primary-50 hover:bg-primary-100 disabled:opacity-50"
+              >{bulkCorrectionMut.isSubmitting ? 'Applying...' : 'Apply Bulk Correction'}</button>
+            </div>
+          </div>
+
+          {historyLoading ? (
+            <p className="text-sm text-gray-500">Loading history...</p>
+          ) : promotionHistory.length === 0 ? (
+            <p className="text-sm text-gray-500">No promotion history found for this academic year.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full bg-white rounded-xl shadow-sm border border-gray-200 text-sm">
+                <thead>
+                  <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
+                    <th className="px-3 py-2 text-center">Select</th>
+                    <th className="px-3 py-2 text-left">Student</th>
+                    <th className="px-3 py-2 text-left">Event</th>
+                    <th className="px-3 py-2 text-left">From</th>
+                    <th className="px-3 py-2 text-left">To</th>
+                    <th className="px-3 py-2 text-left">Roll</th>
+                    <th className="px-3 py-2 text-left">When</th>
+                    <th className="px-3 py-2 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {promotionHistory.map(row => {
+                    const canCorrect = ['PROMOTED', 'REPEATED', 'GRADUATED'].includes(row.event_type)
+                    return (
+                      <tr key={row.id} className="hover:bg-gray-50">
+                        <td className="px-3 py-2 text-center">
+                          <input
+                            type="checkbox"
+                            checked={selectedHistoryIds.includes(row.id)}
+                            onChange={() => toggleHistorySelection(row.id)}
+                            className="rounded border-gray-300"
+                          />
+                        </td>
+                        <td className="px-3 py-2 text-gray-900 font-medium">{row.student_name || `Student ${row.student}`}</td>
+                        <td className="px-3 py-2 text-gray-700">{row.event_type}</td>
+                        <td className="px-3 py-2 text-gray-600">{row.source_session_class_label || row.source_class_name || '—'}</td>
+                        <td className="px-3 py-2 text-gray-600">{row.target_session_class_label || row.target_class_name || '—'}</td>
+                        <td className="px-3 py-2 text-gray-600">{row.old_roll_number || row.new_roll_number || '—'} → {row.new_roll_number || '—'}</td>
+                        <td className="px-3 py-2 text-gray-600">{new Date(row.created_at).toLocaleString()}</td>
+                        <td className="px-3 py-2 text-right">
+                          <button
+                            onClick={() => openSingleCorrection(row)}
+                            disabled={!canCorrect || singleCorrectionMut.isSubmitting}
+                            className="px-3 py-1 text-xs rounded-lg border border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100 disabled:opacity-50"
+                          >Edit</button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <div className="mt-4 flex justify-between">
+            <button onClick={() => setStep(3)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Back</button>
+            <button
+              onClick={() => {
+                setResult(null)
+                setStep(1)
+                setPromotions([])
+                setSelectedHistoryIds([])
+              }}
+              className="btn-primary px-6 py-2 text-sm"
+            >Start New Promotion</button>
+          </div>
+        </div>
+      )}
+
       {/* Result */}
-      {result && (
+      {result && step !== 4 && (
         <div className="card max-w-lg">
           {result.error ? (
             <div className="text-center">
@@ -1198,10 +1440,95 @@ export default function PromotionPage() {
             </div>
           )}
           <div className="flex justify-center mt-4">
-            <button
-              onClick={() => { setResult(null); setStep(1); setPromotions([]) }}
-              className="btn-primary px-6 py-2 text-sm"
-            >Start New Promotion</button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  if (!historyYearId) setHistoryYearId(String(targetYearId || sourceYearId || ''))
+                  setStep(4)
+                }}
+                className="px-4 py-2 text-sm rounded-lg border border-primary-300 text-primary-700 bg-primary-50 hover:bg-primary-100"
+              >What Was Done</button>
+              <button
+                onClick={() => { setResult(null); setStep(1); setPromotions([]) }}
+                className="btn-primary px-6 py-2 text-sm"
+              >Start New Promotion</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Single Correction Modal */}
+      {singleCorrectionModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg rounded-xl bg-white shadow-xl border border-gray-200">
+            <div className="px-5 py-4 border-b border-gray-100">
+              <h3 className="text-lg font-semibold text-gray-900">Edit Promotion Result</h3>
+              <p className="text-sm text-gray-600 mt-1">
+                {singleCorrectionModal.student_name || `Student ${singleCorrectionModal.student}`}
+              </p>
+            </div>
+
+            <div className="px-5 py-4 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">Action</label>
+                  <select
+                    value={singleCorrectionForm.action}
+                    onChange={e => setSingleCorrectionForm(prev => ({ ...prev, action: e.target.value }))}
+                    className="input w-full"
+                  >
+                    <option value="PROMOTE">Promote</option>
+                    <option value="REPEAT">Repeat</option>
+                    <option value="GRADUATE">Graduate</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">Target Class</label>
+                  <select
+                    value={singleCorrectionForm.target_class_id}
+                    onChange={e => setSingleCorrectionForm(prev => ({ ...prev, target_class_id: e.target.value }))}
+                    className="input w-full"
+                    disabled={singleCorrectionForm.action === 'GRADUATE'}
+                  >
+                    <option value="">Select target class...</option>
+                    {targetClassOptions.map(c => <option key={c.id} value={c.id}>{getClassOptionLabel(c)}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">New Roll Number (optional)</label>
+                <input
+                  type="text"
+                  value={singleCorrectionForm.new_roll_number}
+                  onChange={e => setSingleCorrectionForm(prev => ({ ...prev, new_roll_number: e.target.value }))}
+                  className="input w-full"
+                  placeholder="Enter roll number"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs text-gray-600 mb-1">Reason</label>
+                <textarea
+                  value={singleCorrectionForm.reason}
+                  onChange={e => setSingleCorrectionForm(prev => ({ ...prev, reason: e.target.value }))}
+                  className="input w-full min-h-24"
+                  placeholder="Why is this correction needed?"
+                />
+              </div>
+            </div>
+
+            <div className="px-5 py-4 border-t border-gray-100 flex justify-end gap-2">
+              <button
+                onClick={() => setSingleCorrectionModal(null)}
+                className="px-4 py-2 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50"
+              >Cancel</button>
+              <button
+                onClick={submitSingleCorrection}
+                disabled={singleCorrectionMut.isSubmitting}
+                className="btn-primary px-4 py-2 text-sm disabled:opacity-50"
+              >{singleCorrectionMut.isSubmitting ? 'Applying...' : 'Apply Correction'}</button>
+            </div>
           </div>
         </div>
       )}

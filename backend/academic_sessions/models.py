@@ -314,3 +314,198 @@ class StudentEnrollment(models.Model):
     def __str__(self):
         class_label = self.session_class.label if self.session_class_id else self.class_obj.name
         return f"{self.student.name} -> {class_label} ({self.academic_year.name})"
+
+
+class PromotionOperation(models.Model):
+    """Batch-level audit record for promotion and correction operations."""
+
+    class OperationType(models.TextChoices):
+        BULK_PROMOTE = 'BULK_PROMOTE', 'Bulk Promote'
+        BULK_REVERSE = 'BULK_REVERSE', 'Bulk Reverse'
+        SINGLE_CORRECTION = 'SINGLE_CORRECTION', 'Single Correction'
+        BULK_CORRECTION = 'BULK_CORRECTION', 'Bulk Correction'
+
+    class OperationStatus(models.TextChoices):
+        SUCCESS = 'SUCCESS', 'Success'
+        PARTIAL = 'PARTIAL', 'Partial'
+        FAILED = 'FAILED', 'Failed'
+
+    school = models.ForeignKey(
+        'schools.School',
+        on_delete=models.CASCADE,
+        related_name='promotion_operations',
+    )
+    source_academic_year = models.ForeignKey(
+        AcademicYear,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='promotion_operations_as_source',
+    )
+    target_academic_year = models.ForeignKey(
+        AcademicYear,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='promotion_operations_as_target',
+    )
+    source_class = models.ForeignKey(
+        'students.Class',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='promotion_operations_as_source',
+    )
+    source_session_class = models.ForeignKey(
+        SessionClass,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='promotion_operations_as_source',
+    )
+    operation_type = models.CharField(
+        max_length=32,
+        choices=OperationType.choices,
+    )
+    status = models.CharField(
+        max_length=16,
+        choices=OperationStatus.choices,
+        default=OperationStatus.SUCCESS,
+    )
+    total_students = models.PositiveIntegerField(default=0)
+    processed_count = models.PositiveIntegerField(default=0)
+    skipped_count = models.PositiveIntegerField(default=0)
+    error_count = models.PositiveIntegerField(default=0)
+    reason = models.TextField(blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    initiated_by = models.ForeignKey(
+        'users.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='initiated_promotion_operations',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at', '-id']
+        indexes = [
+            models.Index(fields=['school', 'created_at']),
+            models.Index(fields=['school', 'operation_type', 'created_at']),
+            models.Index(fields=['school', 'source_academic_year', 'target_academic_year']),
+        ]
+
+    def __str__(self):
+        return f"{self.get_operation_type_display()} ({self.created_at.date()})"
+
+
+class PromotionEvent(models.Model):
+    """Student-level event rows linked to a promotion operation."""
+
+    class EventType(models.TextChoices):
+        PROMOTED = 'PROMOTED', 'Promoted'
+        REPEATED = 'REPEATED', 'Repeated'
+        GRADUATED = 'GRADUATED', 'Graduated'
+        REVERSED = 'REVERSED', 'Reversed'
+        SKIPPED = 'SKIPPED', 'Skipped'
+        FAILED = 'FAILED', 'Failed'
+
+    school = models.ForeignKey(
+        'schools.School',
+        on_delete=models.CASCADE,
+        related_name='promotion_events',
+    )
+    operation = models.ForeignKey(
+        PromotionOperation,
+        on_delete=models.CASCADE,
+        related_name='events',
+    )
+    student = models.ForeignKey(
+        'students.Student',
+        on_delete=models.CASCADE,
+        related_name='promotion_events',
+    )
+    source_enrollment = models.ForeignKey(
+        StudentEnrollment,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='promotion_events_as_source',
+    )
+    target_enrollment = models.ForeignKey(
+        StudentEnrollment,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='promotion_events_as_target',
+    )
+    source_academic_year = models.ForeignKey(
+        AcademicYear,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='promotion_events_as_source',
+    )
+    target_academic_year = models.ForeignKey(
+        AcademicYear,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='promotion_events_as_target',
+    )
+    source_class = models.ForeignKey(
+        'students.Class',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='promotion_events_as_source',
+    )
+    target_class = models.ForeignKey(
+        'students.Class',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='promotion_events_as_target',
+    )
+    source_session_class = models.ForeignKey(
+        SessionClass,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='promotion_events_as_source',
+    )
+    target_session_class = models.ForeignKey(
+        SessionClass,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='promotion_events_as_target',
+    )
+    event_type = models.CharField(max_length=16, choices=EventType.choices)
+    old_status = models.CharField(max_length=20, blank=True, default='')
+    new_status = models.CharField(max_length=20, blank=True, default='')
+    old_roll_number = models.CharField(max_length=20, blank=True, default='')
+    new_roll_number = models.CharField(max_length=20, blank=True, default='')
+    reason = models.TextField(blank=True)
+    details = models.JSONField(default=dict, blank=True)
+    created_by = models.ForeignKey(
+        'users.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='promotion_events_created',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at', '-id']
+        indexes = [
+            models.Index(fields=['school', 'created_at']),
+            models.Index(fields=['school', 'event_type', 'created_at']),
+            models.Index(fields=['school', 'source_academic_year', 'target_academic_year']),
+            models.Index(fields=['school', 'student', 'created_at']),
+        ]
+
+    def __str__(self):
+        return f"{self.student_id} - {self.get_event_type_display()}"

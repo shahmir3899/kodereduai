@@ -534,6 +534,9 @@ export const sessionsApi = {
   getEnrollmentsByClass: (params) => api.get('/api/sessions/enrollments/by_class/', { params }),
   bulkPromote: (data) => api.post('/api/sessions/enrollments/bulk_promote/', data),
   bulkReversePromote: (data) => api.post('/api/sessions/enrollments/bulk_reverse_promote/', data),
+  getPromotionHistory: (params) => api.get('/api/sessions/enrollments/promotion-history/', { params }),
+  correctPromotionSingle: (data) => api.post('/api/sessions/enrollments/correct-single/', data),
+  correctPromotionBulk: (data) => api.post('/api/sessions/enrollments/correct-bulk/', data),
   previewPromotionTargets: (data) => api.post('/api/sessions/enrollments/promotion-targets-preview/', data),
   applyPromotionTargets: (data) => api.post('/api/sessions/enrollments/promotion-targets-apply/', data),
 

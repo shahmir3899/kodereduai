@@ -67,12 +67,13 @@ export default function FeeSetupPage() {
   const [genMonth, setGenMonth] = useState(now.getMonth() + 1)
   const [genYear, setGenYear] = useState(now.getFullYear())
   const [genClassFilter, setGenClassFilter] = useState('')
-  const [confirmed, setConfirmed] = useState(false)
+  const [monthlyConflictStrategy, setMonthlyConflictStrategy] = useState('skip')
   // Annual fee generation state
   const [genAnnualYear, setGenAnnualYear] = useState(now.getFullYear())
   const [genAnnualClassFilter, setGenAnnualClassFilter] = useState('')
   const [selectedAnnualCategories, setSelectedAnnualCategories] = useState([])
   const [selectedMonthlyCategories, setSelectedMonthlyCategories] = useState([])
+  const [annualConflictStrategy, setAnnualConflictStrategy] = useState('skip')
   const [annualShowConfirm, setAnnualShowConfirm] = useState(false)
   const [singleStructForm, setSingleStructForm] = useState({
     classId: '',
@@ -331,6 +332,8 @@ export default function FeeSetupPage() {
 
   const mPreview = monthlyPreview?.data
   const aPreview = annualPreview?.data
+  const hasMonthlyPreviewWork = (mPreview?.will_create || 0) > 0 || (mPreview?.already_exist || 0) > 0
+  const hasAnnualPreviewWork = (aPreview?.will_create || 0) > 0 || (aPreview?.already_exist || 0) > 0
 
   const createSingleStructureMutation = useMutation({
     mutationFn: (payload) => financeApi.createFeeStructure(payload),
@@ -494,11 +497,26 @@ export default function FeeSetupPage() {
               )}
 
               {mPreview?.already_exist > 0 && (
-                <div className="mb-4">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} className="rounded border-amber-300 text-amber-600 focus:ring-amber-500" />
-                    <span className="text-sm text-amber-700">I understand existing records won't be overwritten</span>
-                  </label>
+                <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3">
+                  <p className="mb-2 text-sm font-medium text-amber-900">Existing records found. Choose how conflicts should be handled.</p>
+                  <p className="mb-3 text-xs text-amber-700">Only records whose recalculated amounts differ will be updated or replaced. Matching records will still be skipped.</p>
+                  <div className="space-y-2">
+                    <label className="flex items-start gap-2 cursor-pointer">
+                      <input type="radio" name="page-monthly-conflict-strategy" value="skip" checked={monthlyConflictStrategy === 'skip'} onChange={(e) => setMonthlyConflictStrategy(e.target.value)} className="mt-0.5 border-amber-300 text-amber-600 focus:ring-amber-500" />
+                      <span className="text-sm text-amber-800">Skip conflicting existing records</span>
+                    </label>
+                    <label className="flex items-start gap-2 cursor-pointer">
+                      <input type="radio" name="page-monthly-conflict-strategy" value="update" checked={monthlyConflictStrategy === 'update'} onChange={(e) => setMonthlyConflictStrategy(e.target.value)} className="mt-0.5 border-amber-300 text-amber-600 focus:ring-amber-500" />
+                      <span className="text-sm text-amber-800">Update existing records to current fee structure</span>
+                    </label>
+                    <label className="flex items-start gap-2 cursor-pointer">
+                      <input type="radio" name="page-monthly-conflict-strategy" value="delete_recreate" checked={monthlyConflictStrategy === 'delete_recreate'} onChange={(e) => setMonthlyConflictStrategy(e.target.value)} className="mt-0.5 border-amber-300 text-amber-600 focus:ring-amber-500" />
+                      <span className="text-sm text-amber-800">Delete and recreate conflicting records</span>
+                    </label>
+                  </div>
+                  {monthlyConflictStrategy === 'delete_recreate' && (
+                    <p className="mt-3 text-xs text-red-700">Delete and recreate will reset the conflicting record and can remove recorded payment history.</p>
+                  )}
                 </div>
               )}
 
@@ -541,7 +559,9 @@ export default function FeeSetupPage() {
               <button
                 onClick={() => {
                   const payload = {
-                    month: genMonth, year: genYear,
+                    month: genMonth,
+                    year: genYear,
+                    conflict_strategy: monthlyConflictStrategy,
                     ...(resolvedGenClassFilter && { class_id: parseInt(resolvedGenClassFilter) }),
                     ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
                     ...(selectedMonthlyCategories.length > 0 && { monthly_category_ids: selectedMonthlyCategories }),
@@ -549,15 +569,31 @@ export default function FeeSetupPage() {
                   if (data.generateMutation.trigger) data.generateMutation.trigger(payload)
                   else data.generateMutation.mutate(payload)
                 }}
-                disabled={(data.generateMutation.isSubmitting ?? data.generateMutation.isPending) || (mPreview?.already_exist > 0 && !confirmed) || mPreview?.will_create === 0}
+                disabled={(data.generateMutation.isSubmitting ?? data.generateMutation.isPending) || !hasMonthlyPreviewWork}
                 className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50"
               >
                 {(data.generateMutation.isSubmitting ?? data.generateMutation.isPending) ? 'Starting...' : 'Generate Monthly Fees'}
               </button>
               {data.generateMutation.isSuccess && (
                 <div className="mt-3 text-sm text-green-700 bg-green-50 p-3 rounded">
-                  Created {data.generateMutation.data?.data?.created || data.generateMutation.data?.data?.result?.created} records.
-                  {(data.generateMutation.data?.data?.skipped || data.generateMutation.data?.data?.result?.skipped) > 0 && ` Skipped ${data.generateMutation.data.data.skipped || data.generateMutation.data.data.result?.skipped} (already exist).`}
+                  {(() => {
+                    const payload = data.generateMutation.data?.data || {}
+                    const result = payload.result || payload
+                    const created = result.created ?? 0
+                    const updated = result.updated ?? 0
+                    const deletedRecreated = result.deleted_recreated ?? 0
+                    const skipped = result.skipped ?? 0
+                    const noFeeStructure = result.no_fee_structure ?? 0
+                    const protectedConflict = result.protected_conflict ?? 0
+                    return [
+                      `Created ${created} records.`,
+                      updated > 0 ? `Updated ${updated}.` : null,
+                      deletedRecreated > 0 ? `Recreated ${deletedRecreated}.` : null,
+                      skipped > 0 ? `Skipped ${skipped}.` : null,
+                      protectedConflict > 0 ? `${protectedConflict} protected conflict${protectedConflict === 1 ? '' : 's'} left unchanged.` : null,
+                      noFeeStructure > 0 ? `${noFeeStructure} students have no fee structure.` : null,
+                    ].filter(Boolean).join(' ')
+                  })()}
                 </div>
               )}
             </div>
@@ -624,10 +660,34 @@ export default function FeeSetupPage() {
               </div>
             )}
 
+            {aPreview?.already_exist > 0 && (
+              <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3">
+                <p className="mb-2 text-sm font-medium text-amber-900">Existing records found. Choose how conflicts should be handled.</p>
+                <p className="mb-3 text-xs text-amber-700">Only records whose recalculated amounts differ will be updated or replaced. Matching records will still be skipped.</p>
+                <div className="space-y-2">
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <input type="radio" name="page-annual-conflict-strategy" value="skip" checked={annualConflictStrategy === 'skip'} onChange={(e) => setAnnualConflictStrategy(e.target.value)} className="mt-0.5 border-amber-300 text-amber-600 focus:ring-amber-500" />
+                    <span className="text-sm text-amber-800">Skip conflicting existing records</span>
+                  </label>
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <input type="radio" name="page-annual-conflict-strategy" value="update" checked={annualConflictStrategy === 'update'} onChange={(e) => setAnnualConflictStrategy(e.target.value)} className="mt-0.5 border-amber-300 text-amber-600 focus:ring-amber-500" />
+                    <span className="text-sm text-amber-800">Update existing records to current fee structure</span>
+                  </label>
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <input type="radio" name="page-annual-conflict-strategy" value="delete_recreate" checked={annualConflictStrategy === 'delete_recreate'} onChange={(e) => setAnnualConflictStrategy(e.target.value)} className="mt-0.5 border-amber-300 text-amber-600 focus:ring-amber-500" />
+                    <span className="text-sm text-amber-800">Delete and recreate conflicting records</span>
+                  </label>
+                </div>
+                {annualConflictStrategy === 'delete_recreate' && (
+                  <p className="mt-3 text-xs text-red-700">Delete and recreate will reset the conflicting record and can remove recorded payment history.</p>
+                )}
+              </div>
+            )}
+
             {!annualShowConfirm ? (
               <button
                 onClick={() => setAnnualShowConfirm(true)}
-                disabled={!resolvedGenAnnualClassFilter || selectedAnnualCategories.length === 0 || !aPreview || aPreview.will_create === 0 || annualPreviewLoading}
+                disabled={!resolvedGenAnnualClassFilter || selectedAnnualCategories.length === 0 || !aPreview || !hasAnnualPreviewWork || annualPreviewLoading}
                 className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50"
               >
                 Review & Generate
@@ -658,6 +718,7 @@ export default function FeeSetupPage() {
                         class_id: parseInt(resolvedGenAnnualClassFilter),
                         annual_category_ids: selectedAnnualCategories,
                         year: genAnnualYear,
+                        conflict_strategy: annualConflictStrategy,
                         ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
                       }, {
                         onSuccess: () => {
@@ -675,10 +736,21 @@ export default function FeeSetupPage() {
                 {data.generateAnnualMutation?.isSuccess && (
                   <div className="mt-3 text-sm text-green-700 bg-green-50 p-3 rounded">
                     {(() => {
-                      const created = data.generateAnnualMutation.data?.data?.created ?? data.generateAnnualMutation.data?.data?.result?.created
-                      const skipped = data.generateAnnualMutation.data?.data?.skipped ?? data.generateAnnualMutation.data?.data?.result?.skipped
+                      const payload = data.generateAnnualMutation.data?.data || {}
+                      const result = payload.result || payload
+                      const created = result.created
+                      const updated = result.updated ?? 0
+                      const deletedRecreated = result.deleted_recreated ?? 0
+                      const skipped = result.skipped ?? 0
+                      const protectedConflict = result.protected_conflict ?? 0
                       if (created == null) return 'Annual fee generation started. Track progress in Tasks.'
-                      return `Created ${created} records.${skipped > 0 ? ` Skipped ${skipped} (already exist).` : ''}`
+                      return [
+                        `Created ${created} records.`,
+                        updated > 0 ? `Updated ${updated}.` : null,
+                        deletedRecreated > 0 ? `Recreated ${deletedRecreated}.` : null,
+                        skipped > 0 ? `Skipped ${skipped}.` : null,
+                        protectedConflict > 0 ? `${protectedConflict} protected conflict${protectedConflict === 1 ? '' : 's'} left unchanged.` : null,
+                      ].filter(Boolean).join(' ')
                     })()}
                   </div>
                 )}

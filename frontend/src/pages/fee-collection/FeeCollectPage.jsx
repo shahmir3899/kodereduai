@@ -248,8 +248,9 @@ export default function FeeCollectPage() {
       </div>
 
       {/* Sticky Toolbar: Filters + Export */}
-      <div className="sticky top-0 z-30 bg-white border-b border-gray-200 shadow-sm -mx-4 px-4 py-3 sm:-mx-6 sm:px-6 mb-4">
-        <div className="flex flex-wrap items-end gap-3">
+      <div className="sticky top-0 z-20 mb-4 rounded-xl border border-gray-200 bg-white/95 p-3 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-white/80 sm:p-4">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-end">
+          <div className="min-w-0 flex-1">
           <FeeFilters
             month={month} setMonth={setMonth}
             year={year} setYear={setYear}
@@ -264,11 +265,11 @@ export default function FeeCollectPage() {
             selectorScope={classSelectorScope}
             academicYearId={activeAcademicYear?.id}
           />
-          <div className="flex-1" />
+          </div>
           {data.paymentList.length > 0 && (
             <button
               onClick={handleExportPDF}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm whitespace-nowrap"
+              className="w-full xl:w-auto xl:self-end px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm whitespace-nowrap"
             >
               Export PDF
             </button>

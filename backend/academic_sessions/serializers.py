@@ -1,6 +1,14 @@
 from rest_framework import serializers
 from students.models import Class
-from .models import AcademicYear, Term, StudentEnrollment, SessionClass, SchoolCalendarEntry
+from .models import (
+    AcademicYear,
+    Term,
+    StudentEnrollment,
+    SessionClass,
+    SchoolCalendarEntry,
+    PromotionOperation,
+    PromotionEvent,
+)
 
 
 # ── AcademicYear ──────────────────────────────────────────────
@@ -637,3 +645,164 @@ class PromotionTargetPreviewSerializer(serializers.Serializer):
 class PromotionTargetApplySerializer(PromotionTargetPreviewSerializer):
     create_if_missing = serializers.BooleanField(default=True)
     reactivate_if_inactive = serializers.BooleanField(default=True)
+
+
+class PromotionEventSerializer(serializers.ModelSerializer):
+    student_name = serializers.CharField(source='student.name', read_only=True)
+    student_roll_number = serializers.CharField(source='student.roll_number', read_only=True, default='')
+    source_academic_year_name = serializers.CharField(source='source_academic_year.name', read_only=True, default='')
+    target_academic_year_name = serializers.CharField(source='target_academic_year.name', read_only=True, default='')
+    source_class_name = serializers.CharField(source='source_class.name', read_only=True, default='')
+    target_class_name = serializers.CharField(source='target_class.name', read_only=True, default='')
+    source_session_class_label = serializers.CharField(source='source_session_class.label', read_only=True, default='')
+    target_session_class_label = serializers.CharField(source='target_session_class.label', read_only=True, default='')
+    operation_type = serializers.CharField(source='operation.operation_type', read_only=True)
+    operation_status = serializers.CharField(source='operation.status', read_only=True)
+
+    class Meta:
+        model = PromotionEvent
+        fields = [
+            'id',
+            'operation',
+            'operation_type',
+            'operation_status',
+            'event_type',
+            'student',
+            'student_name',
+            'student_roll_number',
+            'source_academic_year',
+            'source_academic_year_name',
+            'target_academic_year',
+            'target_academic_year_name',
+            'source_class',
+            'source_class_name',
+            'target_class',
+            'target_class_name',
+            'source_session_class',
+            'source_session_class_label',
+            'target_session_class',
+            'target_session_class_label',
+            'old_status',
+            'new_status',
+            'old_roll_number',
+            'new_roll_number',
+            'reason',
+            'details',
+            'created_by',
+            'created_at',
+        ]
+
+
+class PromotionHistoryQuerySerializer(serializers.Serializer):
+    academic_year = serializers.IntegerField(required=False)
+    source_academic_year = serializers.IntegerField(required=False)
+    target_academic_year = serializers.IntegerField(required=False)
+    source_class = serializers.IntegerField(required=False)
+    source_session_class = serializers.IntegerField(required=False)
+    student_id = serializers.IntegerField(required=False)
+    event_type = serializers.ChoiceField(
+        choices=PromotionEvent.EventType.choices,
+        required=False,
+    )
+
+
+class PromotionSingleCorrectionSerializer(serializers.Serializer):
+    source_academic_year = serializers.PrimaryKeyRelatedField(
+        queryset=AcademicYear.objects.all(),
+    )
+    target_academic_year = serializers.PrimaryKeyRelatedField(
+        queryset=AcademicYear.objects.all(),
+    )
+    student_id = serializers.IntegerField(min_value=1)
+    action = serializers.ChoiceField(choices=['PROMOTE', 'REPEAT', 'GRADUATE'])
+    target_class_id = serializers.IntegerField(required=False, allow_null=True)
+    target_session_class_id = serializers.IntegerField(required=False, allow_null=True)
+    new_roll_number = serializers.CharField(required=False, allow_blank=True)
+    reason = serializers.CharField(required=False, allow_blank=True)
+    dry_run = serializers.BooleanField(required=False, default=False)
+
+    def validate(self, attrs):
+        source_year = attrs['source_academic_year']
+        target_year = attrs['target_academic_year']
+        action = attrs['action']
+        school_id = self.context.get('school_id')
+
+        if source_year.id == target_year.id:
+            raise serializers.ValidationError('Source and target academic year must be different.')
+
+        if school_id:
+            school_id = int(school_id)
+            if source_year.school_id != school_id:
+                raise serializers.ValidationError({'source_academic_year': 'Source academic year does not belong to this school.'})
+            if target_year.school_id != school_id:
+                raise serializers.ValidationError({'target_academic_year': 'Target academic year does not belong to this school.'})
+
+        if action != 'GRADUATE' and not attrs.get('target_class_id') and not attrs.get('target_session_class_id'):
+            raise serializers.ValidationError({'target_class_id': 'Target class or target session class is required for Promote/Repeat.'})
+
+        return attrs
+
+
+class PromotionBulkCorrectionSerializer(serializers.Serializer):
+    source_academic_year = serializers.PrimaryKeyRelatedField(
+        queryset=AcademicYear.objects.all(),
+    )
+    target_academic_year = serializers.PrimaryKeyRelatedField(
+        queryset=AcademicYear.objects.all(),
+    )
+    corrections = serializers.ListField(
+        child=serializers.DictField(),
+        allow_empty=False,
+        help_text='List of correction rows with student_id/action/target/new_roll/reason.',
+    )
+    dry_run = serializers.BooleanField(required=False, default=False)
+
+    def validate(self, attrs):
+        school_id = self.context.get('school_id')
+        source_year = attrs['source_academic_year']
+        target_year = attrs['target_academic_year']
+
+        if source_year.id == target_year.id:
+            raise serializers.ValidationError('Source and target academic year must be different.')
+
+        if school_id:
+            school_id = int(school_id)
+            if source_year.school_id != school_id:
+                raise serializers.ValidationError({'source_academic_year': 'Source academic year does not belong to this school.'})
+            if target_year.school_id != school_id:
+                raise serializers.ValidationError({'target_academic_year': 'Target academic year does not belong to this school.'})
+
+        normalized = []
+        seen_students = set()
+        for idx, row in enumerate(attrs['corrections']):
+            student_id = row.get('student_id')
+            action = str(row.get('action', 'PROMOTE')).upper()
+            if action == 'GRADUATED':
+                action = 'GRADUATE'
+
+            if not student_id:
+                raise serializers.ValidationError({'corrections': f'Row {idx + 1} is missing student_id.'})
+            if action not in {'PROMOTE', 'REPEAT', 'GRADUATE'}:
+                raise serializers.ValidationError({'corrections': f'Row {idx + 1} has invalid action.'})
+
+            student_id = int(student_id)
+            if student_id in seen_students:
+                raise serializers.ValidationError({'corrections': f'Student {student_id} appears multiple times in this request.'})
+            seen_students.add(student_id)
+
+            target_class_id = row.get('target_class_id')
+            target_session_class_id = row.get('target_session_class_id')
+            if action != 'GRADUATE' and not target_class_id and not target_session_class_id:
+                raise serializers.ValidationError({'corrections': f'Row {idx + 1} requires a target class or target session class.'})
+
+            normalized.append({
+                'student_id': student_id,
+                'action': action,
+                'target_class_id': int(target_class_id) if target_class_id else None,
+                'target_session_class_id': int(target_session_class_id) if target_session_class_id else None,
+                'new_roll_number': str(row.get('new_roll_number', '') or '').strip(),
+                'reason': str(row.get('reason', '') or '').strip(),
+            })
+
+        attrs['corrections'] = normalized
+        return attrs

@@ -348,6 +348,12 @@ class GenerateMonthlySerializer(serializers.Serializer):
     year = serializers.IntegerField(min_value=2020, max_value=2100)
     class_id = serializers.IntegerField(required=False)
     academic_year = serializers.IntegerField(required=False)
+    conflict_strategy = serializers.ChoiceField(
+        choices=['skip', 'update', 'delete_recreate'],
+        required=False,
+        default='skip',
+        help_text='How to handle existing records when regenerated amounts differ.',
+    )
     monthly_category_ids = serializers.ListField(
         child=serializers.IntegerField(),
         required=False,
@@ -411,6 +417,12 @@ class GenerateAnnualFeesSerializer(serializers.Serializer):
     academic_year = serializers.IntegerField(
         required=False,
         help_text='Academic year ID. Auto-resolved to current if not provided.',
+    )
+    conflict_strategy = serializers.ChoiceField(
+        choices=['skip', 'update', 'delete_recreate'],
+        required=False,
+        default='skip',
+        help_text='How to handle existing records when regenerated amounts differ.',
     )
 
 

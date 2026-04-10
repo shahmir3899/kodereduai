@@ -13,7 +13,15 @@ from rest_framework.views import APIView
 from core.mixins import TenantQuerySetMixin, ensure_tenant_school_id
 from core.permissions import IsSchoolAdminOrReadOnly, HasSchoolAccess
 
-from .models import AcademicYear, Term, StudentEnrollment, SessionClass, SchoolCalendarEntry
+from .models import (
+    AcademicYear,
+    Term,
+    StudentEnrollment,
+    SessionClass,
+    SchoolCalendarEntry,
+    PromotionOperation,
+    PromotionEvent,
+)
 from .serializers import (
     AcademicYearSerializer,
     AcademicYearCreateSerializer,
@@ -31,6 +39,10 @@ from .serializers import (
     BulkReversePromotionSerializer,
     PromotionTargetApplySerializer,
     PromotionTargetPreviewSerializer,
+    PromotionEventSerializer,
+    PromotionHistoryQuerySerializer,
+    PromotionSingleCorrectionSerializer,
+    PromotionBulkCorrectionSerializer,
 )
 from .term_import_service import TermImportService
 
@@ -671,6 +683,241 @@ class StudentEnrollmentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
             'is_active': session_class.is_active,
         }
 
+    @staticmethod
+    def _log_promotion_event(*, operation, school_id, created_by, student_id, event_type,
+                             source_enrollment=None, target_enrollment=None,
+                             source_year_id=None, target_year_id=None,
+                             source_class_id=None, target_class_id=None,
+                             source_session_class_id=None, target_session_class_id=None,
+                             old_status='', new_status='', old_roll='', new_roll='',
+                             reason='', details=None):
+        PromotionEvent.objects.create(
+            operation=operation,
+            school_id=school_id,
+            student_id=student_id,
+            source_enrollment=source_enrollment,
+            target_enrollment=target_enrollment,
+            source_academic_year_id=source_year_id,
+            target_academic_year_id=target_year_id,
+            source_class_id=source_class_id,
+            target_class_id=target_class_id,
+            source_session_class_id=source_session_class_id,
+            target_session_class_id=target_session_class_id,
+            event_type=event_type,
+            old_status=old_status or '',
+            new_status=new_status or '',
+            old_roll_number=old_roll or '',
+            new_roll_number=new_roll or '',
+            reason=reason or '',
+            details=details or {},
+            created_by=created_by,
+        )
+
+    @staticmethod
+    def _update_operation_status(operation, *, processed_count, skipped_count, error_count):
+        if error_count > 0 and processed_count > 0:
+            status_value = PromotionOperation.OperationStatus.PARTIAL
+        elif error_count > 0 and processed_count == 0:
+            status_value = PromotionOperation.OperationStatus.FAILED
+        else:
+            status_value = PromotionOperation.OperationStatus.SUCCESS
+
+        operation.processed_count = processed_count
+        operation.skipped_count = skipped_count
+        operation.error_count = error_count
+        operation.status = status_value
+        operation.save(update_fields=['processed_count', 'skipped_count', 'error_count', 'status', 'updated_at'])
+
+    def _run_single_correction(self, *, school_id, source_year, target_year, correction, operation, request_user, dry_run=False):
+        from students.models import Student
+        from academic_sessions.roll_allocator_service import RollAllocatorService
+
+        student_id = correction['student_id']
+        action = correction['action']
+        target_class_id = correction.get('target_class_id')
+        target_session_class_id = correction.get('target_session_class_id')
+        reason = correction.get('reason', '')
+
+        source_enrollment = StudentEnrollment.objects.filter(
+            school_id=school_id,
+            student_id=student_id,
+            academic_year_id=source_year.id,
+        ).first()
+        if not source_enrollment:
+            return {
+                'ok': False,
+                'student_id': student_id,
+                'reason': 'Source enrollment not found.',
+            }
+
+        target_enrollment = StudentEnrollment.objects.filter(
+            school_id=school_id,
+            student_id=student_id,
+            academic_year_id=target_year.id,
+        ).first()
+        if not target_enrollment:
+            return {
+                'ok': False,
+                'student_id': student_id,
+                'reason': 'Target enrollment not found. Nothing to correct.',
+            }
+
+        resolved_roll = correction.get('new_roll_number') or target_enrollment.roll_number or source_enrollment.roll_number
+        resolved_target_class_id = target_class_id or target_enrollment.class_obj_id
+        resolved_target_session_class_id = target_session_class_id or target_enrollment.session_class_id
+
+        if action != 'GRADUATE' and not resolved_target_class_id:
+            return {
+                'ok': False,
+                'student_id': student_id,
+                'reason': 'Target class is required for Promote/Repeat correction.',
+            }
+
+        if dry_run:
+            return {
+                'ok': True,
+                'student_id': student_id,
+                'preview': {
+                    'action': action,
+                    'target_class_id': resolved_target_class_id,
+                    'target_session_class_id': resolved_target_session_class_id,
+                    'new_roll_number': resolved_roll,
+                },
+            }
+
+        with transaction.atomic():
+            # Reverse existing promotion state first.
+            old_target_snapshot = {
+                'target_class_id': target_enrollment.class_obj_id,
+                'target_session_class_id': target_enrollment.session_class_id,
+                'target_roll': target_enrollment.roll_number,
+                'target_status': target_enrollment.status,
+            }
+
+            target_enrollment.delete()
+            source_enrollment.status = StudentEnrollment.Status.ACTIVE
+            source_enrollment.save(update_fields=['status', 'updated_at'])
+            Student.objects.filter(pk=student_id, school_id=school_id).update(
+                class_obj_id=source_enrollment.class_obj_id,
+                roll_number=source_enrollment.roll_number,
+                status=Student.Status.ACTIVE,
+            )
+
+            self._log_promotion_event(
+                operation=operation,
+                school_id=school_id,
+                created_by=request_user,
+                student_id=student_id,
+                event_type=PromotionEvent.EventType.REVERSED,
+                source_enrollment=source_enrollment,
+                source_year_id=source_year.id,
+                target_year_id=target_year.id,
+                source_class_id=source_enrollment.class_obj_id,
+                source_session_class_id=source_enrollment.session_class_id,
+                old_status=old_target_snapshot['target_status'],
+                new_status=StudentEnrollment.Status.ACTIVE,
+                old_roll=old_target_snapshot['target_roll'],
+                new_roll=source_enrollment.roll_number,
+                reason=reason,
+                details={
+                    'phase': 'reverse',
+                    **old_target_snapshot,
+                },
+            )
+
+            if action == 'GRADUATE':
+                source_enrollment.status = StudentEnrollment.Status.GRADUATED
+                source_enrollment.save(update_fields=['status', 'updated_at'])
+                Student.objects.filter(pk=student_id, school_id=school_id).update(status=Student.Status.GRADUATED)
+
+                self._log_promotion_event(
+                    operation=operation,
+                    school_id=school_id,
+                    created_by=request_user,
+                    student_id=student_id,
+                    event_type=PromotionEvent.EventType.GRADUATED,
+                    source_enrollment=source_enrollment,
+                    source_year_id=source_year.id,
+                    target_year_id=target_year.id,
+                    source_class_id=source_enrollment.class_obj_id,
+                    source_session_class_id=source_enrollment.session_class_id,
+                    old_status=StudentEnrollment.Status.ACTIVE,
+                    new_status=StudentEnrollment.Status.GRADUATED,
+                    old_roll=source_enrollment.roll_number,
+                    new_roll=source_enrollment.roll_number,
+                    reason=reason,
+                    details={'phase': 'reapply', 'action': action},
+                )
+                return {'ok': True, 'student_id': student_id, 'action': action}
+
+            allocator = RollAllocatorService(
+                school_id=school_id,
+                academic_year_id=target_year.id,
+                class_obj_id=resolved_target_class_id,
+            )
+            final_roll = allocator.resolve_roll(
+                preferred_roll=resolved_roll,
+                exclude_student_id=student_id,
+            )
+
+            new_target_enrollment = StudentEnrollment.objects.create(
+                school_id=school_id,
+                student_id=student_id,
+                academic_year_id=target_year.id,
+                class_obj_id=resolved_target_class_id,
+                session_class_id=resolved_target_session_class_id,
+                roll_number=final_roll,
+                status=StudentEnrollment.Status.ACTIVE,
+            )
+
+            source_enrollment.status = (
+                StudentEnrollment.Status.REPEAT
+                if action == 'REPEAT'
+                else StudentEnrollment.Status.PROMOTED
+            )
+            source_enrollment.save(update_fields=['status', 'updated_at'])
+
+            Student.objects.filter(pk=student_id, school_id=school_id).update(
+                class_obj_id=resolved_target_class_id,
+                roll_number=final_roll,
+                status=(Student.Status.REPEAT if action == 'REPEAT' else Student.Status.ACTIVE),
+            )
+
+            self._log_promotion_event(
+                operation=operation,
+                school_id=school_id,
+                created_by=request_user,
+                student_id=student_id,
+                event_type=(
+                    PromotionEvent.EventType.REPEATED
+                    if action == 'REPEAT'
+                    else PromotionEvent.EventType.PROMOTED
+                ),
+                source_enrollment=source_enrollment,
+                target_enrollment=new_target_enrollment,
+                source_year_id=source_year.id,
+                target_year_id=target_year.id,
+                source_class_id=source_enrollment.class_obj_id,
+                target_class_id=resolved_target_class_id,
+                source_session_class_id=source_enrollment.session_class_id,
+                target_session_class_id=resolved_target_session_class_id,
+                old_status=StudentEnrollment.Status.ACTIVE,
+                new_status=source_enrollment.status,
+                old_roll=source_enrollment.roll_number,
+                new_roll=final_roll,
+                reason=reason,
+                details={'phase': 'reapply', 'action': action},
+            )
+
+        return {
+            'ok': True,
+            'student_id': student_id,
+            'action': action,
+            'target_class_id': resolved_target_class_id,
+            'target_session_class_id': resolved_target_session_class_id,
+            'new_roll_number': final_roll,
+        }
+
     def _resolve_target_master_class(self, school_id, target_year, source_class_like, suggested_name, next_grade_level, create_if_missing=False):
         from students.models import Class
 
@@ -1066,11 +1313,23 @@ class StudentEnrollmentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         from core.models import BackgroundTask
         from .tasks import bulk_promote_task
 
+        operation = PromotionOperation.objects.create(
+            school_id=school_id,
+            source_academic_year=source_year,
+            target_academic_year=target_year,
+            operation_type=PromotionOperation.OperationType.BULK_PROMOTE,
+            total_students=len(promotions),
+            initiated_by=request.user,
+            metadata={'source': 'enrollments.bulk_promote'},
+        )
+
         task_kwargs = {
             'school_id': school_id,
             'source_year_id': source_year.id,
             'target_year_id': target_year.id,
             'promotions': promotions,
+            'operation_id': operation.id,
+            'actor_id': request.user.id,
         }
         title = f"Promoting {len(promotions)} students"
 
@@ -1088,6 +1347,7 @@ class StudentEnrollmentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
                 'task_id': bg_task.celery_task_id,
                 'message': bg_task.result_data.get('message', 'Promotion complete.') if bg_task.result_data else 'Promotion complete.',
                 'result': bg_task.result_data,
+                'operation_id': operation.id,
             })
         else:
             from core.task_utils import dispatch_background_task
@@ -1100,6 +1360,7 @@ class StudentEnrollmentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
             return Response({
                 'task_id': bg_task.celery_task_id,
                 'message': 'Bulk promotion started.',
+                'operation_id': operation.id,
             }, status=202)
 
     @action(detail=False, methods=['post'])
@@ -1122,6 +1383,16 @@ class StudentEnrollmentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         target_year = serializer.validated_data['target_academic_year']
         student_ids = serializer.validated_data['student_ids']
 
+        operation = PromotionOperation.objects.create(
+            school_id=school_id,
+            source_academic_year=source_year,
+            target_academic_year=target_year,
+            operation_type=PromotionOperation.OperationType.BULK_REVERSE,
+            total_students=len(student_ids),
+            initiated_by=request.user,
+            metadata={'source': 'enrollments.bulk_reverse_promote'},
+        )
+
         from students.models import Student
 
         reverted = 0
@@ -1142,6 +1413,16 @@ class StudentEnrollmentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
                             'student_id': student_id,
                             'reason': 'No target-year enrollment found to reverse.',
                         })
+                        self._log_promotion_event(
+                            operation=operation,
+                            school_id=school_id,
+                            created_by=request.user,
+                            student_id=student_id,
+                            event_type=PromotionEvent.EventType.SKIPPED,
+                            source_year_id=source_year.id,
+                            target_year_id=target_year.id,
+                            reason='No target-year enrollment found to reverse.',
+                        )
                         continue
 
                     source_enrollment = StudentEnrollment.objects.filter(
@@ -1171,14 +1452,223 @@ class StudentEnrollmentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
                         ).update(status=Student.Status.ACTIVE)
 
                     reverted += 1
+
+                    self._log_promotion_event(
+                        operation=operation,
+                        school_id=school_id,
+                        created_by=request.user,
+                        student_id=student_id,
+                        event_type=PromotionEvent.EventType.REVERSED,
+                        source_enrollment=source_enrollment,
+                        source_year_id=source_year.id,
+                        target_year_id=target_year.id,
+                        source_class_id=(source_enrollment.class_obj_id if source_enrollment else None),
+                        source_session_class_id=(source_enrollment.session_class_id if source_enrollment else None),
+                        old_status=(target_enrollment.status or ''),
+                        new_status=StudentEnrollment.Status.ACTIVE,
+                        old_roll=(target_enrollment.roll_number or ''),
+                        new_roll=(source_enrollment.roll_number if source_enrollment else ''),
+                        reason='Bulk reverse action',
+                        details={'source': 'bulk_reverse_promote'},
+                    )
             except Exception as e:
                 errors.append({'student_id': student_id, 'error': str(e)})
+                self._log_promotion_event(
+                    operation=operation,
+                    school_id=school_id,
+                    created_by=request.user,
+                    student_id=student_id,
+                    event_type=PromotionEvent.EventType.FAILED,
+                    source_year_id=source_year.id,
+                    target_year_id=target_year.id,
+                    reason=str(e),
+                )
+
+        self._update_operation_status(
+            operation,
+            processed_count=reverted,
+            skipped_count=len(skipped),
+            error_count=len(errors),
+        )
 
         return Response({
             'reverted': reverted,
             'skipped': skipped,
             'errors': errors,
             'message': f'{reverted} students reversed successfully. {len(skipped)} skipped, {len(errors)} failed.',
+            'operation_id': operation.id,
+        })
+
+    @action(detail=False, methods=['get'], url_path='promotion-history')
+    def promotion_history(self, request):
+        school_id = _resolve_school_id(request)
+        serializer = PromotionHistoryQuerySerializer(data=request.query_params)
+        serializer.is_valid(raise_exception=True)
+
+        filters = serializer.validated_data
+        events = PromotionEvent.objects.filter(school_id=school_id).select_related(
+            'operation',
+            'student',
+            'source_academic_year',
+            'target_academic_year',
+            'source_class',
+            'target_class',
+            'source_session_class',
+            'target_session_class',
+            'created_by',
+        )
+
+        academic_year = filters.get('academic_year')
+        if academic_year:
+            events = events.filter(
+                Q(source_academic_year_id=academic_year) | Q(target_academic_year_id=academic_year)
+            )
+        if filters.get('source_academic_year'):
+            events = events.filter(source_academic_year_id=filters['source_academic_year'])
+        if filters.get('target_academic_year'):
+            events = events.filter(target_academic_year_id=filters['target_academic_year'])
+        if filters.get('source_class'):
+            events = events.filter(source_class_id=filters['source_class'])
+        if filters.get('source_session_class'):
+            events = events.filter(source_session_class_id=filters['source_session_class'])
+        if filters.get('student_id'):
+            events = events.filter(student_id=filters['student_id'])
+        if filters.get('event_type'):
+            events = events.filter(event_type=filters['event_type'])
+
+        page = self.paginate_queryset(events.order_by('-created_at', '-id'))
+        if page is not None:
+            return self.get_paginated_response(PromotionEventSerializer(page, many=True).data)
+
+        return Response(PromotionEventSerializer(events, many=True).data)
+
+    @action(detail=False, methods=['post'], url_path='correct-single')
+    def correct_single(self, request):
+        school_id = _resolve_school_id(request)
+        serializer = PromotionSingleCorrectionSerializer(
+            data=request.data,
+            context={'school_id': school_id},
+        )
+        serializer.is_valid(raise_exception=True)
+        payload = serializer.validated_data
+
+        operation = PromotionOperation.objects.create(
+            school_id=school_id,
+            source_academic_year=payload['source_academic_year'],
+            target_academic_year=payload['target_academic_year'],
+            operation_type=PromotionOperation.OperationType.SINGLE_CORRECTION,
+            total_students=1,
+            reason=payload.get('reason', ''),
+            initiated_by=request.user,
+            metadata={'source': 'enrollments.correct_single', 'dry_run': payload['dry_run']},
+        )
+
+        result = self._run_single_correction(
+            school_id=school_id,
+            source_year=payload['source_academic_year'],
+            target_year=payload['target_academic_year'],
+            correction={
+                'student_id': payload['student_id'],
+                'action': payload['action'],
+                'target_class_id': payload.get('target_class_id'),
+                'target_session_class_id': payload.get('target_session_class_id'),
+                'new_roll_number': payload.get('new_roll_number', ''),
+                'reason': payload.get('reason', ''),
+            },
+            operation=operation,
+            request_user=request.user,
+            dry_run=payload['dry_run'],
+        )
+
+        self._update_operation_status(
+            operation,
+            processed_count=(1 if result.get('ok') and not payload['dry_run'] else 0),
+            skipped_count=(0 if result.get('ok') else 1),
+            error_count=0,
+        )
+
+        response_status = status.HTTP_200_OK if result.get('ok') else status.HTTP_400_BAD_REQUEST
+        return Response({
+            'operation_id': operation.id,
+            'result': result,
+        }, status=response_status)
+
+    @action(detail=False, methods=['post'], url_path='correct-bulk')
+    def correct_bulk(self, request):
+        school_id = _resolve_school_id(request)
+        serializer = PromotionBulkCorrectionSerializer(
+            data=request.data,
+            context={'school_id': school_id},
+        )
+        serializer.is_valid(raise_exception=True)
+        payload = serializer.validated_data
+
+        operation = PromotionOperation.objects.create(
+            school_id=school_id,
+            source_academic_year=payload['source_academic_year'],
+            target_academic_year=payload['target_academic_year'],
+            operation_type=PromotionOperation.OperationType.BULK_CORRECTION,
+            total_students=len(payload['corrections']),
+            initiated_by=request.user,
+            metadata={'source': 'enrollments.correct_bulk', 'dry_run': payload['dry_run']},
+        )
+
+        corrected = 0
+        skipped = []
+        errors = []
+        previews = []
+
+        for correction in payload['corrections']:
+            try:
+                row_result = self._run_single_correction(
+                    school_id=school_id,
+                    source_year=payload['source_academic_year'],
+                    target_year=payload['target_academic_year'],
+                    correction=correction,
+                    operation=operation,
+                    request_user=request.user,
+                    dry_run=payload['dry_run'],
+                )
+                if row_result.get('ok'):
+                    if payload['dry_run']:
+                        previews.append(row_result)
+                    else:
+                        corrected += 1
+                else:
+                    skipped.append(row_result)
+            except Exception as exc:
+                errors.append({'student_id': correction.get('student_id'), 'error': str(exc)})
+                self._log_promotion_event(
+                    operation=operation,
+                    school_id=school_id,
+                    created_by=request.user,
+                    student_id=correction.get('student_id'),
+                    event_type=PromotionEvent.EventType.FAILED,
+                    source_year_id=payload['source_academic_year'].id,
+                    target_year_id=payload['target_academic_year'].id,
+                    reason=str(exc),
+                    details={'source': 'correct_bulk'},
+                )
+
+        self._update_operation_status(
+            operation,
+            processed_count=corrected,
+            skipped_count=len(skipped),
+            error_count=len(errors),
+        )
+
+        return Response({
+            'operation_id': operation.id,
+            'dry_run': payload['dry_run'],
+            'corrected': corrected,
+            'skipped': skipped,
+            'errors': errors,
+            'previews': previews,
+            'message': (
+                f'{corrected} corrections applied. {len(skipped)} skipped, {len(errors)} failed.'
+                if not payload['dry_run']
+                else f'{len(previews)} corrections previewed. {len(skipped)} skipped, {len(errors)} failed.'
+            ),
         })
 
 

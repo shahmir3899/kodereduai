@@ -165,7 +165,7 @@ class AdmissionEnquiryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
         fee_types_to_generate = serializer.validated_data.get('fee_types', [])
 
         from students.models import Student, Class as StudentClass
-        from academic_sessions.models import StudentEnrollment, AcademicYear
+        from academic_sessions.models import StudentEnrollment, AcademicYear, SessionClass
 
         school_id = _resolve_school_id(request)
 
@@ -184,6 +184,14 @@ class AdmissionEnquiryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
                 {'detail': 'Academic year not found in this school.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        # Resolve session_class for this year + master class (None if not yet configured)
+        session_class = SessionClass.objects.filter(
+            school_id=school_id,
+            academic_year_id=academic_year.id,
+            class_obj_id=class_obj.id,
+            is_active=True,
+        ).first()
 
         enquiries = AdmissionEnquiry.objects.filter(
             id__in=enquiry_ids,
@@ -234,6 +242,7 @@ class AdmissionEnquiryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
                                 student=student,
                                 academic_year=academic_year,
                                 class_obj=class_obj,
+                                session_class=session_class,
                                 roll_number=roll_number,
                                 status='ACTIVE',
                             )

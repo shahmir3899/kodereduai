@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { studentsApi, reportsApi } from '../services/api'
+import { studentsApi, reportsApi, sessionsApi, classesApi } from '../services/api'
 import { useToast } from '../components/Toast'
 import { useBackgroundTask } from '../hooks/useBackgroundTask'
 import WhatsAppTick from '../components/WhatsAppTick'
+import { useAuth } from '../contexts/AuthContext'
 
 const TABS = ['Overview', 'Attendance', 'Fees', 'Academics', 'History', 'Documents']
 
@@ -17,8 +18,18 @@ const riskColors = {
 export default function StudentProfilePage() {
   const { id } = useParams()
   const [tab, setTab] = useState('Overview')
+  const [showCorrectionModal, setShowCorrectionModal] = useState(false)
+  const [correctionForm, setCorrectionForm] = useState({
+    source_academic_year: '',
+    target_academic_year: '',
+    action: 'REPEAT',
+    target_class_id: '',
+    new_roll_number: '',
+    reason: '',
+  })
   const queryClient = useQueryClient()
   const { showError, showSuccess } = useToast()
+  const { activeSchool } = useAuth()
 
   // Report download (background task)
   const reportTask = useBackgroundTask({
@@ -81,9 +92,90 @@ export default function StudentProfilePage() {
     enabled: tab === 'Documents',
   })
 
+  const { data: academicYearsData } = useQuery({
+    queryKey: ['studentCorrectionYears', activeSchool?.id],
+    queryFn: () => sessionsApi.getAcademicYears({ school_id: activeSchool?.id, page_size: 200 }),
+    enabled: showCorrectionModal,
+  })
+
+  const { data: correctionClassesData } = useQuery({
+    queryKey: ['studentCorrectionClasses', activeSchool?.id],
+    queryFn: () => classesApi.getClasses({ school_id: activeSchool?.id, page_size: 9999 }),
+    enabled: showCorrectionModal,
+  })
+
+  const correctionMutation = useMutation({
+    mutationFn: (payload) => sessionsApi.correctPromotionSingle(payload),
+    onSuccess: () => {
+      showSuccess('Promotion correction applied successfully')
+      setShowCorrectionModal(false)
+      setCorrectionForm({
+        source_academic_year: '',
+        target_academic_year: '',
+        action: 'REPEAT',
+        target_class_id: '',
+        new_roll_number: '',
+        reason: '',
+      })
+      queryClient.invalidateQueries({ queryKey: ['student', id] })
+      queryClient.invalidateQueries({ queryKey: ['studentHistory', id] })
+      queryClient.invalidateQueries({ queryKey: ['students'] })
+    },
+    onError: (error) => {
+      const message = error?.response?.data?.result?.reason ||
+        error?.response?.data?.detail ||
+        error?.message ||
+        'Failed to apply correction'
+      showError(message)
+    },
+  })
+
   const student = studentData?.data
   const summary = summaryData?.data
   const ai = aiData?.data
+  const academicYears = academicYearsData?.data?.results || academicYearsData?.data || []
+  const correctionClasses = correctionClassesData?.data?.results || correctionClassesData?.data || []
+
+  const handleOpenCorrectionModal = () => {
+    const currentYearId = academicYears.find((y) => y.is_current)?.id
+    setCorrectionForm((prev) => ({
+      ...prev,
+      target_academic_year: prev.target_academic_year || (currentYearId ? String(currentYearId) : ''),
+    }))
+    setShowCorrectionModal(true)
+  }
+
+  const handleSubmitCorrection = () => {
+    if (!correctionForm.source_academic_year || !correctionForm.target_academic_year) {
+      showError('Please select source and target academic year')
+      return
+    }
+    if (correctionForm.source_academic_year === correctionForm.target_academic_year) {
+      showError('Source and target year cannot be the same')
+      return
+    }
+    if (!correctionForm.reason.trim()) {
+      showError('Reason is required')
+      return
+    }
+    if (correctionForm.action !== 'GRADUATE' && !correctionForm.target_class_id) {
+      showError('Target class is required for Promote/Repeat')
+      return
+    }
+
+    const payload = {
+      student_id: Number(id),
+      source_academic_year: Number(correctionForm.source_academic_year),
+      target_academic_year: Number(correctionForm.target_academic_year),
+      action: correctionForm.action,
+      reason: correctionForm.reason.trim(),
+      dry_run: false,
+      ...(correctionForm.action !== 'GRADUATE' && { target_class_id: Number(correctionForm.target_class_id) }),
+      ...(correctionForm.new_roll_number.trim() && { new_roll_number: correctionForm.new_roll_number.trim() }),
+    }
+
+    correctionMutation.mutate(payload)
+  }
 
   if (isLoading) {
     return (
@@ -141,18 +233,25 @@ export default function StudentProfilePage() {
               {student.parent_name && <span>{student.parent_name}</span>}
             </div>
           </div>
-          {/* Quick download */}
-          <button
-            onClick={() => reportTask.trigger({
-              report_type: 'STUDENT_COMPREHENSIVE',
-              format: 'PDF',
-              parameters: { student_id: parseInt(id) },
-            })}
-            disabled={reportTask.isSubmitting}
-            className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm flex-shrink-0 disabled:opacity-50"
-          >
-            {reportTask.isSubmitting ? 'Starting...' : 'Download Report'}
-          </button>
+          <div className="flex flex-wrap gap-2 flex-shrink-0">
+            <button
+              onClick={handleOpenCorrectionModal}
+              className="px-4 py-2 bg-amber-100 text-amber-800 border border-amber-200 rounded-lg hover:bg-amber-200 text-sm"
+            >
+              Fix Promotion
+            </button>
+            <button
+              onClick={() => reportTask.trigger({
+                report_type: 'STUDENT_COMPREHENSIVE',
+                format: 'PDF',
+                parameters: { student_id: parseInt(id) },
+              })}
+              disabled={reportTask.isSubmitting}
+              className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50"
+            >
+              {reportTask.isSubmitting ? 'Starting...' : 'Download Report'}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -206,6 +305,118 @@ export default function StudentProfilePage() {
       {tab === 'Academics' && <AcademicsTab data={examData?.data} />}
       {tab === 'History' && <HistoryTab data={historyData?.data} />}
       {tab === 'Documents' && <DocumentsTab studentId={id} data={docsData?.data} refetch={refetchDocs} />}
+
+      {showCorrectionModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-2xl">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h2 className="text-lg font-semibold text-gray-900">Fix Promotion</h2>
+              <p className="text-sm text-gray-500 mt-1">Revert and re-apply enrollment state for this student.</p>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Source Year</label>
+                  <select
+                    value={correctionForm.source_academic_year}
+                    onChange={(e) => setCorrectionForm((p) => ({ ...p, source_academic_year: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  >
+                    <option value="">Select source year</option>
+                    {academicYears.map((year) => (
+                      <option key={year.id} value={year.id}>{year.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Target Year</label>
+                  <select
+                    value={correctionForm.target_academic_year}
+                    onChange={(e) => setCorrectionForm((p) => ({ ...p, target_academic_year: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  >
+                    <option value="">Select target year</option>
+                    {academicYears.map((year) => (
+                      <option key={year.id} value={year.id}>{year.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Action</label>
+                  <select
+                    value={correctionForm.action}
+                    onChange={(e) => setCorrectionForm((p) => ({ ...p, action: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  >
+                    <option value="REPEAT">Repeat (move back)</option>
+                    <option value="PROMOTE">Promote</option>
+                    <option value="GRADUATE">Graduate</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Target Class</label>
+                  <select
+                    value={correctionForm.target_class_id}
+                    onChange={(e) => setCorrectionForm((p) => ({ ...p, target_class_id: e.target.value }))}
+                    disabled={correctionForm.action === 'GRADUATE'}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg disabled:bg-gray-100"
+                  >
+                    <option value="">Select class</option>
+                    {correctionClasses.map((cls) => (
+                      <option key={cls.id} value={cls.id}>{cls.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">New Roll Number (optional)</label>
+                <input
+                  type="text"
+                  value={correctionForm.new_roll_number}
+                  onChange={(e) => setCorrectionForm((p) => ({ ...p, new_roll_number: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  placeholder="Leave blank to keep current roll"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Reason</label>
+                <textarea
+                  rows={3}
+                  value={correctionForm.reason}
+                  onChange={(e) => setCorrectionForm((p) => ({ ...p, reason: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  placeholder="Why this correction is required"
+                />
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowCorrectionModal(false)}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSubmitCorrection}
+                disabled={correctionMutation.isPending}
+                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
+              >
+                {correctionMutation.isPending ? 'Applying...' : 'Apply Correction'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

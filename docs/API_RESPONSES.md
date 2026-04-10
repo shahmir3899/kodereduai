@@ -756,57 +756,168 @@ Allowed enrollment `status` values:
 - `REPEAT`
 
 ### POST /api/sessions/enrollments/bulk_promote/
-Supports mixed promotion workflows using `action`.
+Supports mixed promotion workflows using `action` per student row.
 
 ```json
-// Request (promote)
+// Request
 {
-  "enrollment_ids": [247, 248],
-  "target_class_id": 74,
-  "target_academic_year_id": 32,
-  "action": "PROMOTE"
+  "source_academic_year": 31,
+  "target_academic_year": 32,
+  "promotions": [
+    {
+      "student_id": 611,
+      "target_class_id": 74,
+      "new_roll_number": "11",
+      "action": "PROMOTE"
+    },
+    {
+      "student_id": 612,
+      "target_class_id": 73,
+      "new_roll_number": "4",
+      "action": "REPEAT"
+    },
+    {
+      "student_id": 613,
+      "action": "GRADUATE"
+    }
+  ]
 }
 
 // Response
 {
-  "success": true,
-  "message": "2 students promoted successfully",
-  "processed_count": 2,
-  "task_id": "bulk-promote-task-id"
+  "task_id": "2db8f...",
+  "operation_id": 14,
+  "message": "Promotion complete.",
+  "result": {
+    "promoted": 3,
+    "skipped": [],
+    "errors": [],
+    "operation_id": 14,
+    "message": "3 students processed successfully. 0 skipped, 0 failed."
+  }
 }
 ```
 
+### POST /api/sessions/enrollments/bulk_reverse_promote/
 ```json
-// Request (graduate)
+// Request
 {
-  "enrollment_ids": [301, 302],
-  "target_academic_year_id": 32,
-  "action": "GRADUATE"
+  "source_academic_year": 31,
+  "target_academic_year": 32,
+  "student_ids": [611, 612]
 }
 
 // Response
 {
-  "success": true,
-  "message": "2 students graduated successfully",
-  "processed_count": 2,
-  "task_id": "bulk-promote-task-id"
+  "reverted": 2,
+  "skipped": [],
+  "errors": [],
+  "operation_id": 19,
+  "message": "2 students reversed successfully. 0 skipped, 0 failed."
 }
 ```
 
+### GET /api/sessions/enrollments/promotion-history/
+Query params: `academic_year`, `source_academic_year`, `target_academic_year`, `source_class`, `source_session_class`, `student_id`, `event_type`
+
 ```json
-// Request (repeat)
 {
-  "enrollment_ids": [333],
-  "target_academic_year_id": 32,
-  "action": "REPEAT"
+  "count": 2,
+  "results": [
+    {
+      "id": 91,
+      "operation": 19,
+      "operation_type": "BULK_REVERSE",
+      "operation_status": "SUCCESS",
+      "event_type": "REVERSED",
+      "student": 611,
+      "student_name": "SEED_TEST_Ali Hassan",
+      "source_academic_year": 31,
+      "target_academic_year": 32,
+      "source_class": 73,
+      "target_class": 74,
+      "old_status": "ACTIVE",
+      "new_status": "ACTIVE",
+      "old_roll_number": "11",
+      "new_roll_number": "1",
+      "reason": "Bulk reverse action",
+      "details": {"source": "bulk_reverse_promote"},
+      "created_at": "2026-04-10T12:03:11.915Z"
+    }
+  ]
+}
+```
+
+### POST /api/sessions/enrollments/correct-single/
+```json
+// Request
+{
+  "source_academic_year": 31,
+  "target_academic_year": 32,
+  "student_id": 611,
+  "action": "REPEAT",
+  "target_class_id": 73,
+  "new_roll_number": "6",
+  "reason": "Should repeat in Class 1"
 }
 
 // Response
 {
-  "success": true,
-  "message": "1 student marked to repeat successfully",
-  "processed_count": 1,
-  "task_id": "bulk-promote-task-id"
+  "operation_id": 22,
+  "result": {
+    "ok": true,
+    "student_id": 611,
+    "action": "REPEAT",
+    "target_class_id": 73,
+    "new_roll_number": "6"
+  }
+}
+```
+
+### POST /api/sessions/enrollments/correct-bulk/
+```json
+// Request
+{
+  "source_academic_year": 31,
+  "target_academic_year": 32,
+  "dry_run": true,
+  "corrections": [
+    {
+      "student_id": 611,
+      "action": "PROMOTE",
+      "target_class_id": 74,
+      "new_roll_number": "13",
+      "reason": "Move ahead"
+    },
+    {
+      "student_id": 612,
+      "action": "REPEAT",
+      "target_class_id": 73,
+      "new_roll_number": "5",
+      "reason": "Repeat this year"
+    }
+  ]
+}
+
+// Response
+{
+  "operation_id": 23,
+  "dry_run": true,
+  "corrected": 0,
+  "skipped": [],
+  "errors": [],
+  "previews": [
+    {
+      "ok": true,
+      "student_id": 611,
+      "preview": {
+        "action": "PROMOTE",
+        "target_class_id": 74,
+        "new_roll_number": "13"
+      }
+    }
+  ],
+  "message": "2 corrections previewed. 0 skipped, 0 failed."
 }
 ```
 
@@ -986,6 +1097,49 @@ Query params: `fee_type`, `class_id`, `year`, `month`
 }
 ```
 `students` array is capped at 50 entries. `has_more` is true when there are more than 50.
+
+### POST /api/finance/fee-payments/generate_monthly/
+Request body supports optional `conflict_strategy` with values `skip`, `update`, or `delete_recreate`.
+```json
+{
+  "task_id": "f3b4...",
+  "message": "Fees generated.",
+  "result": {
+    "created": 25,
+    "updated": 3,
+    "deleted_recreated": 1,
+    "skipped": 4,
+    "no_fee_structure": 2,
+    "unchanged_existing": 2,
+    "protected_conflict": 1,
+    "conflicts_detected": 4,
+    "month": 4,
+    "year": 2026,
+    "message": "25 fee record(s) generated, 3 updated, 1 deleted and recreated, 4 skipped."
+  }
+}
+```
+
+### POST /api/finance/fee-payments/generate_annual_fees/
+Request body supports optional `conflict_strategy` with values `skip`, `update`, or `delete_recreate`.
+```json
+{
+  "task_id": "d7a1...",
+  "message": "Annual fees generated.",
+  "result": {
+    "created": 18,
+    "updated": 5,
+    "deleted_recreated": 0,
+    "skipped": 7,
+    "no_fee_structure": 1,
+    "unchanged_existing": 4,
+    "protected_conflict": 1,
+    "conflicts_detected": 6,
+    "year": 2026,
+    "message": "18 annual fee record(s) generated, 5 updated, 0 deleted and recreated, 7 skipped."
+  }
+}
+```
 
 ### GET /api/finance/expenses/
 Query params: `category`, `account`, `date_from`, `date_to`, `page_size`
