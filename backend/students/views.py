@@ -24,7 +24,9 @@ from .serializers import (
     ClassCreateSerializer,
     StudentSerializer,
     StudentCreateSerializer,
+    StudentUpdateSerializer,
     StudentBulkCreateSerializer,
+    ReclassifyStudentSerializer,
     StudentDocumentSerializer,
 )
 
@@ -111,6 +113,8 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
     def get_serializer_class(self):
         if self.action == 'create':
             return StudentCreateSerializer
+        if self.action in ('update', 'partial_update'):
+            return StudentUpdateSerializer
         if self.action == 'bulk_create':
             return StudentBulkCreateSerializer
         return StudentSerializer
@@ -171,16 +175,23 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
                 enrollments__academic_year_id=academic_year,
                 enrollments__is_active=True,
             ).distinct()
-            # Annotate with enrollment roll_number for this session
+            # Annotate with enrollment-scoped roll number, class ID, and class name
+            # so the serializer can return historical class info for previous sessions.
             from academic_sessions.models import StudentEnrollment
-            enrollment_roll = StudentEnrollment.objects.filter(
+            enr_qs = StudentEnrollment.objects.filter(
                 student_id=OuterRef('pk'),
                 academic_year_id=academic_year,
-            ).values('roll_number')[:1]
-            queryset = queryset.annotate(
-                _enrollment_roll_number=Subquery(enrollment_roll),
             )
-            return queryset.order_by('class_obj__grade_level', 'class_obj__name', '_enrollment_roll_number', 'name')
+            queryset = queryset.annotate(
+                _enrollment_roll_number=Subquery(enr_qs.values('roll_number')[:1]),
+                _enrollment_class_obj_id=Subquery(enr_qs.values('class_obj_id')[:1]),
+                _enrollment_class_name=Subquery(enr_qs.values('class_obj__name')[:1]),
+                _enrollment_class_grade=Subquery(enr_qs.values('class_obj__grade_level')[:1]),
+            )
+            return queryset.order_by(
+                '_enrollment_class_grade', '_enrollment_class_name',
+                '_enrollment_roll_number', 'name',
+            )
 
         return queryset.order_by('class_obj__grade_level', 'class_obj__name', 'roll_number')
 
@@ -244,6 +255,125 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
                     roll_number=student.roll_number,
                     status='ACTIVE',
                 )
+
+    @action(detail=True, methods=['post'], url_path='reclassify')
+    def reclassify(self, request, pk=None):
+        """Reclassify a student within a selected academic year with audit logging."""
+        student = self.get_object()
+        school_id = _resolve_school_id(request)
+
+        serializer = ReclassifyStudentSerializer(
+            data=request.data,
+            context={'school_id': school_id},
+        )
+        serializer.is_valid(raise_exception=True)
+        payload = serializer.validated_data
+
+        from academic_sessions.models import StudentEnrollment, AcademicYear, PromotionOperation, PromotionEvent
+        from academic_sessions.roll_allocator_service import RollAllocatorService
+
+        academic_year = payload['academic_year_obj']
+        target_class = payload['target_class_obj']
+        target_session_class = payload.get('target_session_class_obj')
+
+        enrollment = StudentEnrollment.objects.filter(
+            school_id=school_id,
+            student=student,
+            academic_year=academic_year,
+            is_active=True,
+        ).first()
+        if not enrollment:
+            return Response(
+                {'detail': 'Student enrollment not found for the selected academic year.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        allocator = RollAllocatorService(
+            school_id=school_id,
+            academic_year_id=academic_year.id,
+            class_obj_id=target_class.id,
+        )
+        preferred_roll = (payload.get('new_roll_number') or enrollment.roll_number or '').strip() or None
+        resolved_roll = allocator.resolve_roll(
+            preferred_roll=preferred_roll,
+            exclude_student_id=student.id,
+        )
+
+        old_class_id = enrollment.class_obj_id
+        old_roll = enrollment.roll_number
+
+        enrollment.class_obj = target_class
+        enrollment.session_class = target_session_class
+        enrollment.roll_number = resolved_roll
+        enrollment.save(update_fields=['class_obj', 'session_class', 'roll_number', 'updated_at'])
+
+        current_year = AcademicYear.objects.filter(
+            school_id=school_id,
+            is_current=True,
+        ).first()
+        if current_year and current_year.id == academic_year.id:
+            student.class_obj = target_class
+            student.roll_number = resolved_roll
+            student.save(update_fields=['class_obj', 'roll_number', 'updated_at'])
+
+        operation = PromotionOperation.objects.create(
+            school_id=school_id,
+            source_academic_year=academic_year,
+            target_academic_year=academic_year,
+            source_class_id=old_class_id,
+            source_session_class_id=(enrollment.session_class_id if old_class_id == target_class.id else None),
+            operation_type=PromotionOperation.OperationType.SINGLE_CORRECTION,
+            total_students=1,
+            processed_count=1,
+            skipped_count=0,
+            error_count=0,
+            status=PromotionOperation.OperationStatus.SUCCESS,
+            reason=payload['reason'],
+            initiated_by=request.user,
+            metadata={'source': 'students.reclassify'},
+        )
+
+        PromotionEvent.objects.create(
+            operation=operation,
+            school_id=school_id,
+            student=student,
+            source_enrollment=enrollment,
+            target_enrollment=enrollment,
+            source_academic_year=academic_year,
+            target_academic_year=academic_year,
+            source_class_id=old_class_id,
+            target_class=target_class,
+            source_session_class_id=None,
+            target_session_class=target_session_class,
+            event_type=(
+                PromotionEvent.EventType.REPEATED
+                if old_class_id == target_class.id
+                else PromotionEvent.EventType.PROMOTED
+            ),
+            old_status=enrollment.status,
+            new_status=enrollment.status,
+            old_roll_number=old_roll or '',
+            new_roll_number=resolved_roll or '',
+            reason=payload['reason'],
+            details={
+                'source': 'students.reclassify',
+                'academic_year_id': academic_year.id,
+                'old_class_id': old_class_id,
+                'new_class_id': target_class.id,
+                'old_roll_number': old_roll,
+                'new_roll_number': resolved_roll,
+            },
+            created_by=request.user,
+        )
+
+        return Response({
+            'message': 'Student reclassified successfully.',
+            'student_id': student.id,
+            'academic_year_id': academic_year.id,
+            'target_class_id': target_class.id,
+            'target_session_class_id': (target_session_class.id if target_session_class else None),
+            'new_roll_number': resolved_roll,
+        })
 
     @action(detail=True, methods=['post'], url_path='create-user-account')
     def create_user_account(self, request, pk=None):

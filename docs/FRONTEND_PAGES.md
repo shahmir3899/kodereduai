@@ -55,7 +55,7 @@ Redirects: /attendance/upload, /attendance/review, /attendance/records → remap
 ## Students & Classes
 | Route | Component | Description | API Calls |
 |-------|-----------|-------------|-----------|
-| /students | StudentsPage.jsx | Student list with search, multi-select class chip filter (chips show live counts, sourced from classFilterOptions with session awareness), summary stats (shown/gender) in same card as filters, bulk ops | GET/POST /api/students/ |
+| /students | StudentsPage.jsx | Student list with search, multi-select class chip filter (chips show live counts, sourced from classFilterOptions with session awareness), summary stats (shown/gender) in same card as filters, bulk ops. When `academic_year` is selected, class chips and class labels now use enrollment-scoped historical class data (not current student snapshot). | GET/POST /api/students/ |
 | /students/:id | StudentProfilePage.jsx | Student detail (tabs: overview, attendance, fees, academics, history, documents) with AI risk summary, profile metadata, and promotion correction action | GET students/{id}/, profile_summary/, ai-profile/, attendance_history/, fee_ledger/, exam_results/, enrollment_history/, documents/ |
 | /classes | ClassesGradesPage.jsx | Class management | GET/POST /api/classes/ |
 
@@ -76,7 +76,7 @@ Redirects: /attendance/upload, /attendance/review, /attendance/records → remap
 | /academics/assignments | AssignmentsPage.jsx | Assignments with SubjectSelector filter | GET/POST assignments/ |
 | /academics/assignments/:id/submissions | SubmissionReviewPage.jsx | Review submissions | GET submissions/ |
 | /academics/sessions | AcademicYearsPage.jsx | Academic year/term management, including Import Terms from a previous academic year with preview and conflict handling | GET/POST academic-years/, terms/, POST terms/import-preview/, POST terms/import-apply/ |
-| /academics/promotion | PromotionPage.jsx | Student promotion | GET promotion-advisor/, POST bulk_promote/ |
+| /academics/promotion | PromotionPage.jsx | Student promotion + history/corrections. History tab reads `promotion-history`; correction actions call single/bulk correction endpoints. Backfilled history rows are supported for legacy transitions. | GET promotion-advisor/, POST bulk_promote/, GET enrollments/promotion-history/, POST enrollments/correct-single/, POST enrollments/correct-bulk/ |
 
 ## Finance
 | Route | Component | Description | API Calls |

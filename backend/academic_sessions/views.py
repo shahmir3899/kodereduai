@@ -755,16 +755,27 @@ class StudentEnrollmentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
             student_id=student_id,
             academic_year_id=target_year.id,
         ).first()
-        if not target_enrollment:
+        allow_reopen_from_graduated = (
+            source_enrollment.status == StudentEnrollment.Status.GRADUATED
+            and not target_enrollment
+            and action in ('PROMOTE', 'REPEAT')
+        )
+        allow_terminal_graduate = (not target_enrollment and action == 'GRADUATE')
+
+        if not target_enrollment and not allow_reopen_from_graduated and not allow_terminal_graduate:
             return {
                 'ok': False,
                 'student_id': student_id,
                 'reason': 'Target enrollment not found. Nothing to correct.',
             }
 
-        resolved_roll = correction.get('new_roll_number') or target_enrollment.roll_number or source_enrollment.roll_number
-        resolved_target_class_id = target_class_id or target_enrollment.class_obj_id
-        resolved_target_session_class_id = target_session_class_id or target_enrollment.session_class_id
+        resolved_roll = (
+            correction.get('new_roll_number')
+            or (target_enrollment.roll_number if target_enrollment else '')
+            or source_enrollment.roll_number
+        )
+        resolved_target_class_id = target_class_id or (target_enrollment.class_obj_id if target_enrollment else None)
+        resolved_target_session_class_id = target_session_class_id or (target_enrollment.session_class_id if target_enrollment else None)
 
         if action != 'GRADUATE' and not resolved_target_class_id:
             return {
@@ -782,48 +793,105 @@ class StudentEnrollmentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
                     'target_class_id': resolved_target_class_id,
                     'target_session_class_id': resolved_target_session_class_id,
                     'new_roll_number': resolved_roll,
+                    'reopen_from_graduated': bool(allow_reopen_from_graduated),
                 },
             }
 
         with transaction.atomic():
-            # Reverse existing promotion state first.
-            old_target_snapshot = {
-                'target_class_id': target_enrollment.class_obj_id,
-                'target_session_class_id': target_enrollment.session_class_id,
-                'target_roll': target_enrollment.roll_number,
-                'target_status': target_enrollment.status,
-            }
+            if target_enrollment:
+                # Reverse existing promotion state first.
+                old_target_snapshot = {
+                    'target_class_id': target_enrollment.class_obj_id,
+                    'target_session_class_id': target_enrollment.session_class_id,
+                    'target_roll': target_enrollment.roll_number,
+                    'target_status': target_enrollment.status,
+                }
 
-            target_enrollment.delete()
-            source_enrollment.status = StudentEnrollment.Status.ACTIVE
-            source_enrollment.save(update_fields=['status', 'updated_at'])
-            Student.objects.filter(pk=student_id, school_id=school_id).update(
-                class_obj_id=source_enrollment.class_obj_id,
-                roll_number=source_enrollment.roll_number,
-                status=Student.Status.ACTIVE,
-            )
+                target_enrollment.delete()
+                source_enrollment.status = StudentEnrollment.Status.ACTIVE
+                source_enrollment.save(update_fields=['status', 'updated_at'])
+                Student.objects.filter(pk=student_id, school_id=school_id).update(
+                    class_obj_id=source_enrollment.class_obj_id,
+                    roll_number=source_enrollment.roll_number,
+                    status=Student.Status.ACTIVE,
+                )
 
-            self._log_promotion_event(
-                operation=operation,
-                school_id=school_id,
-                created_by=request_user,
-                student_id=student_id,
-                event_type=PromotionEvent.EventType.REVERSED,
-                source_enrollment=source_enrollment,
-                source_year_id=source_year.id,
-                target_year_id=target_year.id,
-                source_class_id=source_enrollment.class_obj_id,
-                source_session_class_id=source_enrollment.session_class_id,
-                old_status=old_target_snapshot['target_status'],
-                new_status=StudentEnrollment.Status.ACTIVE,
-                old_roll=old_target_snapshot['target_roll'],
-                new_roll=source_enrollment.roll_number,
-                reason=reason,
-                details={
-                    'phase': 'reverse',
-                    **old_target_snapshot,
-                },
-            )
+                self._log_promotion_event(
+                    operation=operation,
+                    school_id=school_id,
+                    created_by=request_user,
+                    student_id=student_id,
+                    event_type=PromotionEvent.EventType.REVERSED,
+                    source_enrollment=source_enrollment,
+                    source_year_id=source_year.id,
+                    target_year_id=target_year.id,
+                    source_class_id=source_enrollment.class_obj_id,
+                    source_session_class_id=source_enrollment.session_class_id,
+                    old_status=old_target_snapshot['target_status'],
+                    new_status=StudentEnrollment.Status.ACTIVE,
+                    old_roll=old_target_snapshot['target_roll'],
+                    new_roll=source_enrollment.roll_number,
+                    reason=reason,
+                    details={
+                        'phase': 'reverse',
+                        **old_target_snapshot,
+                    },
+                )
+            elif action == 'GRADUATE':
+                # No target enrollment exists; allow terminal graduation state to be confirmed/updated.
+                previous_status = source_enrollment.status
+                source_enrollment.status = StudentEnrollment.Status.GRADUATED
+                source_enrollment.save(update_fields=['status', 'updated_at'])
+                Student.objects.filter(pk=student_id, school_id=school_id).update(status=Student.Status.GRADUATED)
+
+                self._log_promotion_event(
+                    operation=operation,
+                    school_id=school_id,
+                    created_by=request_user,
+                    student_id=student_id,
+                    event_type=PromotionEvent.EventType.GRADUATED,
+                    source_enrollment=source_enrollment,
+                    source_year_id=source_year.id,
+                    target_year_id=target_year.id,
+                    source_class_id=source_enrollment.class_obj_id,
+                    source_session_class_id=source_enrollment.session_class_id,
+                    old_status=previous_status,
+                    new_status=StudentEnrollment.Status.GRADUATED,
+                    old_roll=source_enrollment.roll_number,
+                    new_roll=source_enrollment.roll_number,
+                    reason=reason,
+                    details={'phase': 'reapply_no_target', 'action': action},
+                )
+                return {'ok': True, 'student_id': student_id, 'action': action}
+            else:
+                # Re-open a terminal GRADUATED source row and create a new target enrollment.
+                previous_status = source_enrollment.status
+                source_enrollment.status = StudentEnrollment.Status.ACTIVE
+                source_enrollment.save(update_fields=['status', 'updated_at'])
+                Student.objects.filter(pk=student_id, school_id=school_id).update(
+                    class_obj_id=source_enrollment.class_obj_id,
+                    roll_number=source_enrollment.roll_number,
+                    status=Student.Status.ACTIVE,
+                )
+
+                self._log_promotion_event(
+                    operation=operation,
+                    school_id=school_id,
+                    created_by=request_user,
+                    student_id=student_id,
+                    event_type=PromotionEvent.EventType.REVERSED,
+                    source_enrollment=source_enrollment,
+                    source_year_id=source_year.id,
+                    target_year_id=target_year.id,
+                    source_class_id=source_enrollment.class_obj_id,
+                    source_session_class_id=source_enrollment.session_class_id,
+                    old_status=previous_status,
+                    new_status=StudentEnrollment.Status.ACTIVE,
+                    old_roll=source_enrollment.roll_number,
+                    new_roll=source_enrollment.roll_number,
+                    reason=reason,
+                    details={'phase': 'reopen_without_target', 'action': action},
+                )
 
             if action == 'GRADUATE':
                 source_enrollment.status = StudentEnrollment.Status.GRADUATED

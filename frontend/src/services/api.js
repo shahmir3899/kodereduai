@@ -239,6 +239,7 @@ export const studentsApi = {
   uploadDocument: (id, data) => api.post(`/api/students/${id}/documents/`, data),
   deleteDocument: (id, docId) => api.delete(`/api/students/${id}/documents/${docId}/`),
   getAIProfile: (id) => api.get(`/api/students/${id}/ai-profile/`),
+  reclassifyStudent: (id, data) => api.post(`/api/students/${id}/reclassify/`, data),
   createStudentUserAccount: (id, data) => api.post(`/api/students/${id}/create-user-account/`, data),
   bulkCreateAccounts: (data) => api.post('/api/students/bulk-create-accounts/', data),
 }

@@ -432,7 +432,11 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
             queryset = queryset.filter(academic_year_id=academic_year)
 
         if month:
-            queryset = queryset.filter(month=month)
+            include_annual = self.request.query_params.get('include_annual', '').lower() in ('true', '1')
+            if include_annual:
+                queryset = queryset.filter(Q(month=month) | Q(month=0))
+            else:
+                queryset = queryset.filter(month=month)
         if year:
             queryset = queryset.filter(year=year)
         if class_id:
@@ -616,6 +620,22 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
                 'detail': f'Period {year}/{month:02d} is closed. Reopen it before generating fees.'
             }, status=400)
 
+        requested_category_ids = set(monthly_category_ids or [])
+        valid_monthly_categories = MonthlyFeeCategory.objects.filter(
+            id__in=requested_category_ids,
+            school_id=school_id,
+            is_active=True,
+        )
+        valid_monthly_category_ids = set(valid_monthly_categories.values_list('id', flat=True))
+        missing_category_ids = sorted(requested_category_ids - valid_monthly_category_ids)
+        if missing_category_ids:
+            return Response({
+                'monthly_category_ids': (
+                    'Some monthly categories are invalid, inactive, or from another school: '
+                    f'{missing_category_ids}'
+                )
+            }, status=400)
+
         from core.models import BackgroundTask
         from .tasks import generate_monthly_fees_task
 
@@ -625,7 +645,7 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
             'year': year,
             'class_id': class_id,
             'academic_year_id': academic_year_id,
-            'monthly_category_ids': monthly_category_ids,
+            'monthly_category_ids': list(valid_monthly_category_ids),
             'conflict_strategy': conflict_strategy,
         }
         title = f"Generating fees for {month}/{year}"
@@ -683,6 +703,11 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         school_id = _resolve_school_id(request)
         if not school_id:
             return Response({'detail': 'No school associated.'}, status=400)
+
+        if any(ft in ('MONTHLY', 'ANNUAL') for ft in fee_types):
+            return Response({
+                'fee_types': 'MONTHLY and ANNUAL generation require category selection. Use monthly/annual generation endpoints.'
+            }, status=400)
 
         # Resolve academic year
         from academic_sessions.models import AcademicYear
@@ -794,6 +819,14 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
             id__in=cat_ids, school_id=school_id, is_active=True,
         )
         valid_cat_ids = set(valid_cats.values_list('id', flat=True))
+        missing_cat_ids = sorted(set(cat_ids) - valid_cat_ids)
+        if missing_cat_ids:
+            return Response({
+                'annual_category_ids': (
+                    'Some annual categories are invalid, inactive, or from another school: '
+                    f'{missing_cat_ids}'
+                )
+            }, status=400)
         if not valid_cat_ids:
             return Response({'detail': 'No valid annual categories found.'}, status=400)
 

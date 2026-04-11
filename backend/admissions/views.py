@@ -193,6 +193,31 @@ class AdmissionEnquiryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
             is_active=True,
         ).first()
 
+        monthly_generation_category = None
+        annual_generation_category = None
+        if generate_fees and 'MONTHLY' in fee_types_to_generate:
+            from finance.models import MonthlyFeeCategory
+            monthly_generation_category = MonthlyFeeCategory.objects.filter(
+                school_id=school_id,
+                is_active=True,
+            ).first()
+            if not monthly_generation_category:
+                return Response(
+                    {'fee_types': 'Monthly category is required. Create and activate at least one monthly category first.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        if generate_fees and 'ANNUAL' in fee_types_to_generate:
+            from finance.models import AnnualFeeCategory
+            annual_generation_category = AnnualFeeCategory.objects.filter(
+                school_id=school_id,
+                is_active=True,
+            ).first()
+            if not annual_generation_category:
+                return Response(
+                    {'fee_types': 'Annual category is required. Create and activate at least one annual category first.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
         enquiries = AdmissionEnquiry.objects.filter(
             id__in=enquiry_ids,
             school_id=school_id,
@@ -267,12 +292,26 @@ class AdmissionEnquiryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
                                     m = current_date.month if ft == 'MONTHLY' else 0
                                     y = current_date.year
 
-                                    amount = resolve_fee_amount(student, ft)
+                                    annual_category_id = annual_generation_category.id if ft == 'ANNUAL' and annual_generation_category else None
+                                    monthly_category_id = monthly_generation_category.id if ft == 'MONTHLY' and monthly_generation_category else None
+
+                                    amount = resolve_fee_amount(
+                                        student,
+                                        ft,
+                                        annual_category_id=annual_category_id,
+                                        monthly_category_id=monthly_category_id,
+                                    )
+                                    if amount is None and ft in ('MONTHLY', 'ANNUAL'):
+                                        # Backward compatibility: allow legacy uncategorized structures
+                                        # as source amount, but always create categorized fee records.
+                                        amount = resolve_fee_amount(student, ft)
                                     if amount is not None:
                                         FeePayment.objects.create(
                                             school_id=school_id,
                                             student=student,
                                             fee_type=ft,
+                                            annual_category_id=annual_category_id,
+                                            monthly_category_id=monthly_category_id,
                                             month=m,
                                             year=y,
                                             amount_due=amount,

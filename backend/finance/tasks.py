@@ -189,6 +189,7 @@ def generate_monthly_fees_task(
                                 skipped_count += 1
                                 continue
 
+                            # Keep category immutable on update; only refresh computed amounts/status.
                             existing_payment.previous_balance = prev_balance
                             existing_payment.base_monthly_fee = monthly_fee
                             existing_payment.amount_due = amount_due
@@ -371,6 +372,7 @@ def generate_annual_fees_task(
                                 skipped_count += 1
                                 continue
 
+                            # Keep category immutable on update; only refresh computed amounts/status.
                             existing_payment.amount_due = amount
                             existing_payment.updated_at = now_ts
                             _recompute_payment_status(existing_payment)

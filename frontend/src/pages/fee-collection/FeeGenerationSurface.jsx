@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../../contexts/AuthContext'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import ClassSelector from '../../components/ClassSelector'
+import { useToast } from '../../components/Toast'
 import { MONTHS } from './FeeFilters'
 import { financeApi } from '../../services/api'
 import { getErrorMessage } from '../../utils/errorUtils'
@@ -162,6 +163,7 @@ export default function FeeGenerationSurface({
 }) {
 	const isModal = mode === 'modal'
 	const { activeSchool } = useAuth()
+	const { showWarning, showError } = useToast()
 	const [feeType, setFeeType] = useState('MONTHLY')
 	const [conflictStrategy, setConflictStrategy] = useState('skip')
 	const [showConfirm, setShowConfirm] = useState(false)
@@ -186,7 +188,7 @@ export default function FeeGenerationSurface({
 		|| classList.find((option) => String(option.id) === String(classFilter))?.name
 		|| 'All classes'
 
-	const previewEnabled = show && (!isMonthly ? selectedAnnualCategories.length > 0 : true)
+	const previewEnabled = show && (isMonthly ? selectedMonthlyCategories.length > 0 : selectedAnnualCategories.length > 0)
 	const previewParams = useMemo(() => ({
 		fee_type: feeType,
 		year: selectedYear,
@@ -243,6 +245,15 @@ export default function FeeGenerationSurface({
 	const activeTab = FEE_TYPE_TABS.find((tab) => tab.value === feeType)
 
 	const submitMonthly = () => {
+		if (selectedMonthlyCategories.length === 0) {
+			showWarning('Select at least one monthly category before generating records.')
+			return
+		}
+		if (!preview || !hasPreviewWork) {
+			showWarning('No monthly records available to generate for the selected scope.')
+			return
+		}
+
 		const payload = {
 			month: selectedMonth,
 			year: selectedYear,
@@ -257,6 +268,15 @@ export default function FeeGenerationSurface({
 	}
 
 	const submitAnnual = () => {
+		if (selectedAnnualCategories.length === 0) {
+			showWarning('Select at least one annual category before generating records.')
+			return
+		}
+		if (!preview || !hasPreviewWork) {
+			showWarning('No annual records available to generate for the selected scope.')
+			return
+		}
+
 		annualMutation?.mutate({
 			...(resolvedClassFilter && { class_id: parseInt(resolvedClassFilter) }),
 			annual_category_ids: selectedAnnualCategories,
@@ -270,6 +290,18 @@ export default function FeeGenerationSurface({
 			},
 		})
 	}
+
+	useEffect(() => {
+		if (isMonthly && monthlyMutation?.isError) {
+			showError(getErrorMessage(monthlyMutation.error, 'Failed to generate monthly fees'))
+		}
+	}, [isMonthly, monthlyMutation?.isError, monthlyMutation?.error, showError])
+
+	useEffect(() => {
+		if (!isMonthly && annualMutation?.isError) {
+			showError(getErrorMessage(annualMutation.error, 'Failed to generate annual fees'))
+		}
+	}, [isMonthly, annualMutation?.isError, annualMutation?.error, showError])
 
 	const headerClass = isModal
 		? 'sticky top-0 z-10 -mx-6 mb-5 flex flex-col gap-3 border-b border-gray-200 bg-white px-6 pb-4 pt-6 shadow-sm sm:flex-row sm:items-start sm:justify-between'
@@ -355,15 +387,16 @@ export default function FeeGenerationSurface({
 			{isMonthly ? (
 				<CategoryPicker
 					title="Monthly Categories"
+					required
 					categories={monthlyCategories}
 					selectedIds={selectedMonthlyCategories}
 					onChange={(next) => {
 						setSelectedMonthlyCategories(next)
 						setShowConfirm(false)
 					}}
-					helperText="Optional. Leave empty to generate for all active monthly categories."
-					emptyText="No monthly categories defined yet. Generation can still proceed for all students once structures exist."
-					actionText="Create one in Monthly Structure if you want category-scoped generation."
+					helperText="Required. Choose one or more monthly categories to preview and generate records."
+					emptyText="No monthly categories defined. Set them up in Monthly Structure before generating monthly records."
+					actionText="Monthly generation cannot proceed until at least one active monthly category exists."
 				/>
 			) : (
 				<CategoryPicker
@@ -390,6 +423,9 @@ export default function FeeGenerationSurface({
 
 				{!isMonthly && selectedAnnualCategories.length === 0 && (
 					<p className="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">Select at least one annual category to preview and generate annual records.</p>
+				)}
+				{isMonthly && selectedMonthlyCategories.length === 0 && (
+					<p className="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">Select at least one monthly category to preview and generate monthly records.</p>
 				)}
 
 				{previewLoading && previewEnabled && <p className="mb-4 text-sm text-gray-400">Calculating preview...</p>}
@@ -477,8 +513,18 @@ export default function FeeGenerationSurface({
 					{!isMonthly && !showConfirm ? (
 						<button
 							type="button"
-							onClick={() => setShowConfirm(true)}
-							disabled={!previewEnabled || !preview || !hasPreviewWork || previewLoading}
+							onClick={() => {
+								if (selectedAnnualCategories.length === 0) {
+									showWarning('Select at least one annual category before reviewing generation.')
+									return
+								}
+								if (!preview || !hasPreviewWork) {
+									showWarning('No annual records available to generate for the selected scope.')
+									return
+								}
+								setShowConfirm(true)
+							}}
+							disabled={previewLoading}
 							className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50"
 						>
 							Review & Generate
@@ -487,7 +533,7 @@ export default function FeeGenerationSurface({
 						<button
 							type="button"
 							onClick={submitMonthly}
-							disabled={(monthlyMutation?.isSubmitting ?? monthlyMutation?.isPending) || !hasPreviewWork}
+							disabled={monthlyMutation?.isSubmitting ?? monthlyMutation?.isPending}
 							className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50"
 						>
 							{(monthlyMutation?.isSubmitting ?? monthlyMutation?.isPending) ? 'Starting...' : 'Generate Monthly Fees'}

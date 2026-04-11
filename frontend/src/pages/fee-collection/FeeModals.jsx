@@ -5,6 +5,7 @@ import { useSessionClasses } from '../../hooks/useSessionClasses'
 import { MONTHS } from './FeeFilters'
 import ClassSelector from '../../components/ClassSelector'
 import SearchableSelect from '../../components/SearchableSelect'
+import { useToast } from '../../components/Toast'
 import { studentsApi, financeApi } from '../../services/api'
 import { getErrorMessage } from '../../utils/errorUtils'
 import FeeGenerationSurface from './FeeGenerationSurface'
@@ -720,6 +721,7 @@ export function StudentFeeModal({ student, amount, setAmount, onSubmit, onClose,
 
 export function CreateSingleFeeModal({ show, onClose, onSubmit, isPending, error, isSuccess, classList, activeSchoolId, academicYearId, accountsList = [] }) {
   const { activeSchool } = useAuth()
+  const { showWarning } = useToast()
   const now = new Date()
   const initialForm = {
     classId: '', student: '', fee_type: 'MONTHLY',
@@ -819,6 +821,11 @@ export function CreateSingleFeeModal({ show, onClose, onSubmit, isPending, error
 
   const handleSubmit = (e) => {
     e.preventDefault()
+    if (!selectedCategoryId) {
+      showWarning('Please select a fee category before creating the record.')
+      return
+    }
+
     onSubmit({
       school: activeSchoolId,
       student: parseInt(form.student),

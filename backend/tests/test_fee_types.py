@@ -649,6 +649,13 @@ class TestBatchConvertWithFees:
         class_1 = seed_data['classes'][0]
         ay = seed_data['academic_year']
 
+        cat_resp = api.post('/api/finance/annual-categories/', {
+            'name': 'School Fee',
+            'description': 'Required category for annual generation',
+            'is_active': True,
+        }, token, sid)
+        assert cat_resp.status_code == 201, f"E2 Setup annual category: {cat_resp.status_code} {cat_resp.content[:200]}"
+
         resp = api.post('/api/admissions/enquiries/batch-convert/', {
             'enquiry_ids': [confirmed_enquiries[1]],
             'academic_year_id': ay.id,

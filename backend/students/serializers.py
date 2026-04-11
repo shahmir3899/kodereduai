@@ -48,7 +48,10 @@ class ClassCreateSerializer(serializers.ModelSerializer):
 # ── Student ───────────────────────────────────────────────────
 
 class StudentSerializer(serializers.ModelSerializer):
-    class_name = serializers.CharField(source='class_obj.name', read_only=True)
+    # class_obj and class_name are SerializerMethodFields so they can return
+    # the historical enrollment class when the view annotated it (academic_year param).
+    class_obj = serializers.SerializerMethodField()
+    class_name = serializers.SerializerMethodField()
     school_name = serializers.CharField(source='school.name', read_only=True)
     has_user_account = serializers.SerializerMethodField()
     user_username = serializers.SerializerMethodField()
@@ -71,6 +74,18 @@ class StudentSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def get_class_obj(self, obj):
+        """Return enrollment class ID for historical sessions, else current class."""
+        eid = getattr(obj, '_enrollment_class_obj_id', None)
+        return eid if eid is not None else obj.class_obj_id
+
+    def get_class_name(self, obj):
+        """Return enrollment class name for historical sessions, else current class."""
+        ename = getattr(obj, '_enrollment_class_name', None)
+        if ename is not None:
+            return ename
+        return obj.class_obj.name if obj.class_obj else None
 
     def get_roll_number(self, obj):
         """Return session-scoped roll number when available, else current snapshot."""
@@ -134,6 +149,115 @@ class StudentCreateSerializer(serializers.ModelSerializer):
                     'roll_number': f"Roll number '{roll_number}' already exists in this class for {current_year.name}."
                 })
 
+        return attrs
+
+
+class StudentUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Student
+        fields = [
+            'class_obj', 'roll_number', 'name',
+            'admission_number', 'admission_date', 'date_of_birth',
+            'gender', 'blood_group', 'address', 'previous_school',
+            'parent_phone', 'parent_name',
+            'guardian_name', 'guardian_relation', 'guardian_phone',
+            'guardian_email', 'guardian_occupation', 'guardian_address',
+            'emergency_contact',
+            'is_active', 'status', 'status_date', 'status_reason',
+        ]
+
+    def validate(self, attrs):
+        student = self.instance
+        school = student.school if student else None
+        class_obj = attrs.get('class_obj', student.class_obj if student else None)
+        roll_number = attrs.get('roll_number', student.roll_number if student else None)
+
+        if class_obj and school and class_obj.school_id != school.id:
+            raise serializers.ValidationError({
+                'class_obj': "The selected class does not belong to this school."
+            })
+
+        # Keep roll uniqueness aligned with current academic-year enrollment rules.
+        if student and class_obj and roll_number:
+            from academic_sessions.models import AcademicYear, StudentEnrollment
+
+            current_year = AcademicYear.objects.filter(
+                school=school,
+                is_current=True,
+            ).first()
+
+            if current_year:
+                conflict = StudentEnrollment.objects.filter(
+                    school=school,
+                    academic_year=current_year,
+                    class_obj=class_obj,
+                    roll_number=roll_number,
+                ).exclude(student=student).exists()
+                if conflict:
+                    raise serializers.ValidationError({
+                        'roll_number': f"Roll number '{roll_number}' already exists in this class for {current_year.name}."
+                    })
+
+        return attrs
+
+
+class ReclassifyStudentSerializer(serializers.Serializer):
+    academic_year_id = serializers.IntegerField()
+    target_class_id = serializers.IntegerField(required=False)
+    target_session_class_id = serializers.IntegerField(required=False)
+    new_roll_number = serializers.CharField(required=False, allow_blank=True, max_length=20)
+    reason = serializers.CharField(required=True, allow_blank=False)
+
+    def validate(self, attrs):
+        target_class_id = attrs.get('target_class_id')
+        target_session_class_id = attrs.get('target_session_class_id')
+
+        if not target_class_id and not target_session_class_id:
+            raise serializers.ValidationError('target_class_id or target_session_class_id is required.')
+
+        school_id = self.context.get('school_id')
+        if not school_id:
+            raise serializers.ValidationError('School context not found.')
+
+        from academic_sessions.models import AcademicYear, SessionClass
+
+        academic_year = AcademicYear.objects.filter(
+            id=attrs['academic_year_id'],
+            school_id=school_id,
+        ).first()
+        if not academic_year:
+            raise serializers.ValidationError({'academic_year_id': 'Academic year not found for this school.'})
+
+        resolved_target_class_id = target_class_id
+        resolved_target_session_class = None
+
+        if target_session_class_id:
+            resolved_target_session_class = SessionClass.objects.filter(
+                id=target_session_class_id,
+                school_id=school_id,
+                academic_year_id=academic_year.id,
+                is_active=True,
+            ).first()
+            if not resolved_target_session_class:
+                raise serializers.ValidationError({'target_session_class_id': 'Session class not found for selected year.'})
+            if not resolved_target_session_class.class_obj_id:
+                raise serializers.ValidationError({'target_session_class_id': 'Session class is not linked to a master class.'})
+
+            if target_class_id and target_class_id != resolved_target_session_class.class_obj_id:
+                raise serializers.ValidationError({'target_class_id': 'Target class does not match target session class.'})
+
+            resolved_target_class_id = resolved_target_session_class.class_obj_id
+
+        if not resolved_target_class_id:
+            raise serializers.ValidationError({'target_class_id': 'Target class is required.'})
+
+        target_class = Class.objects.filter(id=resolved_target_class_id, school_id=school_id).first()
+        if not target_class:
+            raise serializers.ValidationError({'target_class_id': 'Target class not found for this school.'})
+
+        attrs['academic_year_obj'] = academic_year
+        attrs['target_class_obj'] = target_class
+        attrs['target_session_class_obj'] = resolved_target_session_class
         return attrs
 
 

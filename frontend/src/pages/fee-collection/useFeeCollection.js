@@ -233,8 +233,9 @@ export function useFeeCollection({ month, year, classFilter, statusFilter, feeTy
       params.fee_type = feeTypeFilter
       params.month = feeTypeFilter === 'MONTHLY' ? month : 0
     } else {
-      // "All Types" — omit fee_type so backend includes everything for month+year
+      // "All Types" — include both monthly (month=N) and annual (month=0) records
       params.month = month
+      params.include_annual = true
     }
     if (classFilter) params.class_id = classFilter
     if (sessionClassId) params.session_class_id = sessionClassId

@@ -251,6 +251,11 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 - `GRADUATE` marks current enrollment as `GRADUATED` (no target class required).
 - `REPEAT` keeps student in same class for the target academic year and marks current enrollment as `REPEAT`.
 
+**Correction behavior notes:**
+- `correct-single` / `correct-bulk` support re-opening graduated source rows.
+- For a graduated source row with no target enrollment, `PROMOTE` or `REPEAT` can create target-year enrollment during correction.
+- `GRADUATE` is allowed without an existing target enrollment (terminal confirmation/update path).
+
 ## Examinations
 | Method | URL | Params | Description |
 |--------|-----|--------|-------------|

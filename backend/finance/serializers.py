@@ -299,16 +299,38 @@ class FeePaymentCreateSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         fee_type = attrs.get('fee_type', 'MONTHLY')
         month = attrs.get('month')
+        annual_category = attrs.get('annual_category')
+        monthly_category = attrs.get('monthly_category')
+
+        school_id = _serializer_school_id(self)
+        if not school_id:
+            school = attrs.get('school')
+            if school:
+                school_id = school.id
+
         if fee_type == 'MONTHLY':
             if month is not None and (month < 1 or month > 12):
                 raise serializers.ValidationError({'month': 'Month must be between 1 and 12 for monthly fees.'})
+            if not monthly_category:
+                raise serializers.ValidationError({'monthly_category': 'Monthly category is required for monthly fees.'})
+            if annual_category:
+                raise serializers.ValidationError({'annual_category': 'Annual category is not allowed for monthly fees.'})
         else:
             # ANNUAL, ADMISSION, BOOKS, FINE use month=0
             if month is not None and month != 0:
                 raise serializers.ValidationError({'month': 'Month should be 0 for non-monthly fee types.'})
+            if fee_type == 'ANNUAL' and not annual_category:
+                raise serializers.ValidationError({'annual_category': 'Annual category is required for annual fees.'})
+            if fee_type == 'ANNUAL' and monthly_category:
+                raise serializers.ValidationError({'monthly_category': 'Monthly category is not allowed for annual fees.'})
+
+        # Validate category belongs to the same school (multi-tenancy)
+        if school_id and annual_category and annual_category.school_id != school_id:
+            raise serializers.ValidationError({'annual_category': 'Annual category does not belong to your school.'})
+        if school_id and monthly_category and monthly_category.school_id != school_id:
+            raise serializers.ValidationError({'monthly_category': 'Monthly category does not belong to your school.'})
 
         # Validate account belongs to the same school (multi-tenancy)
-        school_id = _serializer_school_id(self)
         account = attrs.get('account')
         if school_id and account:
             if account.school_id and account.school_id != school_id:
@@ -356,9 +378,15 @@ class GenerateMonthlySerializer(serializers.Serializer):
     )
     monthly_category_ids = serializers.ListField(
         child=serializers.IntegerField(),
-        required=False,
-        help_text='List of MonthlyFeeCategory IDs to generate. Defaults to all active categories.',
+        min_length=1,
+        required=True,
+        help_text='List of MonthlyFeeCategory IDs to generate.',
     )
+
+    def validate_monthly_category_ids(self, value):
+        if not value:
+            raise serializers.ValidationError('Select at least one monthly category.')
+        return list(dict.fromkeys(value))
 
 
 class GenerateOnetimeFeesSerializer(serializers.Serializer):
@@ -395,9 +423,15 @@ class GenerateOnetimeFeesSerializer(serializers.Serializer):
     def validate(self, attrs):
         student_ids = attrs.get('student_ids') or []
         class_id = attrs.get('class_id')
+        fee_types = attrs.get('fee_types') or []
 
         if student_ids and class_id:
             raise serializers.ValidationError('Provide either student_ids or class_id, not both.')
+
+        if any(ft in ('MONTHLY', 'ANNUAL') for ft in fee_types):
+            raise serializers.ValidationError({
+                'fee_types': 'MONTHLY and ANNUAL generation require category selection. Use dedicated monthly/annual generation endpoints.'
+            })
 
         return attrs
 

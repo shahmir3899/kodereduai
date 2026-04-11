@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { studentsApi, reportsApi, sessionsApi, classesApi } from '../services/api'
+import { studentsApi, reportsApi, classesApi } from '../services/api'
 import { useToast } from '../components/Toast'
 import { useBackgroundTask } from '../hooks/useBackgroundTask'
 import WhatsAppTick from '../components/WhatsAppTick'
@@ -15,14 +15,62 @@ const riskColors = {
   LOW: 'bg-green-100 text-green-800 border-green-200',
 }
 
+function getApiErrorMessage(error, fallback) {
+  const data = error?.response?.data
+  if (!data) return error?.message || fallback
+  if (typeof data === 'string') return data
+  if (typeof data.detail === 'string') return data.detail
+
+  const firstKey = Object.keys(data)[0]
+  if (!firstKey) return fallback
+  const firstValue = data[firstKey]
+
+  if (Array.isArray(firstValue) && firstValue.length > 0) {
+    return `${firstKey}: ${firstValue[0]}`
+  }
+  if (typeof firstValue === 'string') {
+    return `${firstKey}: ${firstValue}`
+  }
+  return fallback
+}
+
+function normalizeGender(gender) {
+  if (!gender) return ''
+  const value = String(gender).trim().toUpperCase()
+  if (value === 'MALE') return 'M'
+  if (value === 'FEMALE') return 'F'
+  if (value === 'OTHER') return 'O'
+  if (value === 'M' || value === 'F' || value === 'O') return value
+  return ''
+}
+
 export default function StudentProfilePage() {
   const { id } = useParams()
   const [tab, setTab] = useState('Overview')
-  const [showCorrectionModal, setShowCorrectionModal] = useState(false)
-  const [correctionForm, setCorrectionForm] = useState({
-    source_academic_year: '',
-    target_academic_year: '',
-    action: 'REPEAT',
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editForm, setEditForm] = useState({
+    name: '',
+    roll_number: '',
+    admission_number: '',
+    admission_date: '',
+    date_of_birth: '',
+    gender: '',
+    blood_group: '',
+    address: '',
+    previous_school: '',
+    parent_phone: '',
+    parent_name: '',
+    guardian_name: '',
+    guardian_relation: '',
+    guardian_phone: '',
+    guardian_email: '',
+    guardian_occupation: '',
+    guardian_address: '',
+    emergency_contact: '',
+  })
+  const [showReclassifyModal, setShowReclassifyModal] = useState(false)
+  const [reclassifyForm, setReclassifyForm] = useState({
+    academic_year_id: '',
     target_class_id: '',
     new_roll_number: '',
     reason: '',
@@ -106,37 +154,43 @@ export default function StudentProfilePage() {
   const { data: academicYearsData } = useQuery({
     queryKey: ['studentCorrectionYears', activeSchool?.id],
     queryFn: () => sessionsApi.getAcademicYears({ school_id: activeSchool?.id, page_size: 200 }),
-    enabled: showCorrectionModal,
+    enabled: showReclassifyModal,
   })
 
   const { data: correctionClassesData } = useQuery({
     queryKey: ['studentCorrectionClasses', activeSchool?.id],
     queryFn: () => classesApi.getClasses({ school_id: activeSchool?.id, page_size: 9999 }),
-    enabled: showCorrectionModal,
+    enabled: showReclassifyModal,
   })
 
-  const correctionMutation = useMutation({
-    mutationFn: (payload) => sessionsApi.correctPromotionSingle(payload),
+  const updateStudentMutation = useMutation({
+    mutationFn: (payload) => studentsApi.updateStudent(id, payload),
     onSuccess: () => {
-      showSuccess('Promotion correction applied successfully')
-      setShowCorrectionModal(false)
-      setCorrectionForm({
-        source_academic_year: '',
-        target_academic_year: '',
-        action: 'REPEAT',
-        target_class_id: '',
-        new_roll_number: '',
-        reason: '',
-      })
+      showSuccess('Student profile updated successfully')
+      setShowEditModal(false)
       queryClient.invalidateQueries({ queryKey: ['student', id] })
-      queryClient.invalidateQueries({ queryKey: ['studentHistory', id] })
+      queryClient.invalidateQueries({ queryKey: ['studentProfileSummary', id] })
       queryClient.invalidateQueries({ queryKey: ['students'] })
     },
     onError: (error) => {
-      const message = error?.response?.data?.result?.reason ||
-        error?.response?.data?.detail ||
-        error?.message ||
-        'Failed to apply correction'
+      const message = getApiErrorMessage(error, 'Failed to update student profile')
+      showError(message)
+    },
+  })
+
+  const reclassifyMutation = useMutation({
+    mutationFn: (payload) => studentsApi.reclassifyStudent(id, payload),
+    onSuccess: () => {
+      showSuccess('Student reclassified successfully')
+      setShowReclassifyModal(false)
+      setReclassifyForm({ academic_year_id: '', target_class_id: '', new_roll_number: '', reason: '' })
+      queryClient.invalidateQueries({ queryKey: ['student', id] })
+      queryClient.invalidateQueries({ queryKey: ['studentHistory', id] })
+      queryClient.invalidateQueries({ queryKey: ['students'] })
+      queryClient.invalidateQueries({ queryKey: ['promotion-history'] })
+    },
+    onError: (error) => {
+      const message = error?.response?.data?.detail || error?.message || 'Failed to reclassify student'
       showError(message)
     },
   })
@@ -147,45 +201,76 @@ export default function StudentProfilePage() {
   const academicYears = academicYearsData?.data?.results || academicYearsData?.data || []
   const correctionClasses = correctionClassesData?.data?.results || correctionClassesData?.data || []
 
-  const handleOpenCorrectionModal = () => {
-    const currentYearId = academicYears.find((y) => y.is_current)?.id
-    setCorrectionForm((prev) => ({
-      ...prev,
-      target_academic_year: prev.target_academic_year || (currentYearId ? String(currentYearId) : ''),
-    }))
-    setShowCorrectionModal(true)
+  const handleOpenEditModal = () => {
+    setEditForm({
+      name: student?.name || '',
+      roll_number: student?.roll_number || '',
+      admission_number: student?.admission_number || '',
+      admission_date: student?.admission_date || '',
+      date_of_birth: student?.date_of_birth || '',
+      gender: normalizeGender(student?.gender),
+      blood_group: student?.blood_group || '',
+      address: student?.address || '',
+      previous_school: student?.previous_school || '',
+      parent_phone: student?.parent_phone || '',
+      parent_name: student?.parent_name || '',
+      guardian_name: student?.guardian_name || '',
+      guardian_relation: student?.guardian_relation || '',
+      guardian_phone: student?.guardian_phone || '',
+      guardian_email: student?.guardian_email || '',
+      guardian_occupation: student?.guardian_occupation || '',
+      guardian_address: student?.guardian_address || '',
+      emergency_contact: student?.emergency_contact || '',
+    })
+    setShowEditModal(true)
   }
 
-  const handleSubmitCorrection = () => {
-    if (!correctionForm.source_academic_year || !correctionForm.target_academic_year) {
-      showError('Please select source and target academic year')
-      return
-    }
-    if (correctionForm.source_academic_year === correctionForm.target_academic_year) {
-      showError('Source and target year cannot be the same')
-      return
-    }
-    if (!correctionForm.reason.trim()) {
-      showError('Reason is required')
-      return
-    }
-    if (correctionForm.action !== 'GRADUATE' && !correctionForm.target_class_id) {
-      showError('Target class is required for Promote/Repeat')
+  const handleSubmitEdit = () => {
+    if (!editForm.name?.trim() || !editForm.roll_number?.trim()) {
+      showError('Name and roll number are required')
       return
     }
 
     const payload = {
-      student_id: Number(id),
-      source_academic_year: Number(correctionForm.source_academic_year),
-      target_academic_year: Number(correctionForm.target_academic_year),
-      action: correctionForm.action,
-      reason: correctionForm.reason.trim(),
-      dry_run: false,
-      ...(correctionForm.action !== 'GRADUATE' && { target_class_id: Number(correctionForm.target_class_id) }),
-      ...(correctionForm.new_roll_number.trim() && { new_roll_number: correctionForm.new_roll_number.trim() }),
+      ...editForm,
+      name: editForm.name.trim(),
+      roll_number: editForm.roll_number.trim(),
+      gender: normalizeGender(editForm.gender),
+      admission_date: editForm.admission_date || null,
+      date_of_birth: editForm.date_of_birth || null,
     }
 
-    correctionMutation.mutate(payload)
+    updateStudentMutation.mutate({
+      ...payload,
+    })
+  }
+
+  const handleOpenReclassifyModal = () => {
+    const currentYearId = academicYears.find((y) => y.is_current)?.id
+    setReclassifyForm({
+      academic_year_id: currentYearId ? String(currentYearId) : '',
+      target_class_id: '',
+      new_roll_number: student?.roll_number || '',
+      reason: '',
+    })
+    setShowReclassifyModal(true)
+  }
+
+  const handleSubmitReclassify = () => {
+    if (!reclassifyForm.academic_year_id || !reclassifyForm.target_class_id) {
+      showError('Academic year and target class are required')
+      return
+    }
+    if (!reclassifyForm.reason.trim()) {
+      showError('Reason is required')
+      return
+    }
+    reclassifyMutation.mutate({
+      academic_year_id: Number(reclassifyForm.academic_year_id),
+      target_class_id: Number(reclassifyForm.target_class_id),
+      ...(reclassifyForm.new_roll_number.trim() && { new_roll_number: reclassifyForm.new_roll_number.trim() }),
+      reason: reclassifyForm.reason.trim(),
+    })
   }
 
   if (isLoading) {
@@ -283,10 +368,16 @@ export default function StudentProfilePage() {
           </div>
           <div className="flex flex-wrap gap-2 flex-shrink-0">
             <button
-              onClick={handleOpenCorrectionModal}
-              className="px-4 py-2 bg-amber-100 text-amber-800 border border-amber-200 rounded-lg hover:bg-amber-200 text-sm"
+              onClick={handleOpenEditModal}
+              className="px-4 py-2 bg-gray-100 text-gray-800 border border-gray-200 rounded-lg hover:bg-gray-200 text-sm"
             >
-              Fix Promotion
+              Edit Profile
+            </button>
+            <button
+              onClick={handleOpenReclassifyModal}
+              className="px-4 py-2 bg-blue-100 text-blue-800 border border-blue-200 rounded-lg hover:bg-blue-200 text-sm"
+            >
+              Reclassify
             </button>
             <button
               onClick={() => reportTask.trigger({
@@ -366,117 +457,164 @@ export default function StudentProfilePage() {
       {tab === 'History' && <HistoryTab data={historyData?.data} isLoading={historyLoading} error={historyIsError ? historyError : null} />}
       {tab === 'Documents' && <DocumentsTab studentId={id} data={docsData?.data} refetch={refetchDocs} isLoading={docsLoading} error={docsIsError ? docsError : null} />}
 
-      {showCorrectionModal && (
+      {showEditModal && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-2xl">
+          <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-4xl max-h-[92vh] overflow-y-auto">
             <div className="px-6 py-4 border-b border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-900">Fix Promotion</h2>
-              <p className="text-sm text-gray-500 mt-1">Revert and re-apply enrollment state for this student.</p>
+              <h2 className="text-lg font-semibold text-gray-900">Edit Student Profile</h2>
+              <p className="text-sm text-gray-500 mt-1">Quick edits stay on Students list. Use this form for full profile fields.</p>
             </div>
 
-            <div className="p-6 space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="p-6 space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Source Year</label>
-                  <select
-                    value={correctionForm.source_academic_year}
-                    onChange={(e) => setCorrectionForm((p) => ({ ...p, source_academic_year: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                  >
-                    <option value="">Select source year</option>
-                    {academicYears.map((year) => (
-                      <option key={year.id} value={year.id}>{year.name}</option>
-                    ))}
-                  </select>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                  <input className="w-full px-3 py-2 border border-gray-300 rounded-lg" value={editForm.name} onChange={(e) => setEditForm((p) => ({ ...p, name: e.target.value }))} />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Target Year</label>
-                  <select
-                    value={correctionForm.target_academic_year}
-                    onChange={(e) => setCorrectionForm((p) => ({ ...p, target_academic_year: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                  >
-                    <option value="">Select target year</option>
-                    {academicYears.map((year) => (
-                      <option key={year.id} value={year.id}>{year.name}</option>
-                    ))}
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Roll Number</label>
+                  <input className="w-full px-3 py-2 border border-gray-300 rounded-lg" value={editForm.roll_number} onChange={(e) => setEditForm((p) => ({ ...p, roll_number: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Admission Number</label>
+                  <input className="w-full px-3 py-2 border border-gray-300 rounded-lg" value={editForm.admission_number} onChange={(e) => setEditForm((p) => ({ ...p, admission_number: e.target.value }))} />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Admission Date</label>
+                  <input type="date" className="w-full px-3 py-2 border border-gray-300 rounded-lg" value={editForm.admission_date || ''} onChange={(e) => setEditForm((p) => ({ ...p, admission_date: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Date of Birth</label>
+                  <input type="date" className="w-full px-3 py-2 border border-gray-300 rounded-lg" value={editForm.date_of_birth || ''} onChange={(e) => setEditForm((p) => ({ ...p, date_of_birth: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Gender</label>
+                  <select className="w-full px-3 py-2 border border-gray-300 rounded-lg" value={editForm.gender} onChange={(e) => setEditForm((p) => ({ ...p, gender: e.target.value }))}>
+                    <option value="">Select</option>
+                    <option value="M">Male</option>
+                    <option value="F">Female</option>
+                    <option value="O">Other</option>
                   </select>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Action</label>
-                  <select
-                    value={correctionForm.action}
-                    onChange={(e) => setCorrectionForm((p) => ({ ...p, action: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                  >
-                    <option value="REPEAT">Repeat (move back)</option>
-                    <option value="PROMOTE">Promote</option>
-                    <option value="GRADUATE">Graduate</option>
-                  </select>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Blood Group</label>
+                  <input className="w-full px-3 py-2 border border-gray-300 rounded-lg" value={editForm.blood_group} onChange={(e) => setEditForm((p) => ({ ...p, blood_group: e.target.value }))} />
                 </div>
-
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Target Class</label>
-                  <select
-                    value={correctionForm.target_class_id}
-                    onChange={(e) => setCorrectionForm((p) => ({ ...p, target_class_id: e.target.value }))}
-                    disabled={correctionForm.action === 'GRADUATE'}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg disabled:bg-gray-100"
-                  >
-                    <option value="">Select class</option>
-                    {correctionClasses.map((cls) => (
-                      <option key={cls.id} value={cls.id}>{cls.name}</option>
-                    ))}
-                  </select>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Parent Phone</label>
+                  <input className="w-full px-3 py-2 border border-gray-300 rounded-lg" value={editForm.parent_phone} onChange={(e) => setEditForm((p) => ({ ...p, parent_phone: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Parent Name</label>
+                  <input className="w-full px-3 py-2 border border-gray-300 rounded-lg" value={editForm.parent_name} onChange={(e) => setEditForm((p) => ({ ...p, parent_name: e.target.value }))} />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Guardian Name</label>
+                  <input className="w-full px-3 py-2 border border-gray-300 rounded-lg" value={editForm.guardian_name} onChange={(e) => setEditForm((p) => ({ ...p, guardian_name: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Guardian Relation</label>
+                  <input className="w-full px-3 py-2 border border-gray-300 rounded-lg" value={editForm.guardian_relation} onChange={(e) => setEditForm((p) => ({ ...p, guardian_relation: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Guardian Phone</label>
+                  <input className="w-full px-3 py-2 border border-gray-300 rounded-lg" value={editForm.guardian_phone} onChange={(e) => setEditForm((p) => ({ ...p, guardian_phone: e.target.value }))} />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Guardian Email</label>
+                  <input type="email" className="w-full px-3 py-2 border border-gray-300 rounded-lg" value={editForm.guardian_email} onChange={(e) => setEditForm((p) => ({ ...p, guardian_email: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Guardian Occupation</label>
+                  <input className="w-full px-3 py-2 border border-gray-300 rounded-lg" value={editForm.guardian_occupation} onChange={(e) => setEditForm((p) => ({ ...p, guardian_occupation: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Emergency Contact</label>
+                  <input className="w-full px-3 py-2 border border-gray-300 rounded-lg" value={editForm.emergency_contact} onChange={(e) => setEditForm((p) => ({ ...p, emergency_contact: e.target.value }))} />
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">New Roll Number (optional)</label>
-                <input
-                  type="text"
-                  value={correctionForm.new_roll_number}
-                  onChange={(e) => setCorrectionForm((p) => ({ ...p, new_roll_number: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                  placeholder="Leave blank to keep current roll"
-                />
+                <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                <textarea rows={2} className="w-full px-3 py-2 border border-gray-300 rounded-lg" value={editForm.address} onChange={(e) => setEditForm((p) => ({ ...p, address: e.target.value }))} />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Reason</label>
-                <textarea
-                  rows={3}
-                  value={correctionForm.reason}
-                  onChange={(e) => setCorrectionForm((p) => ({ ...p, reason: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                  placeholder="Why this correction is required"
-                />
+                <label className="block text-sm font-medium text-gray-700 mb-1">Previous School</label>
+                <input className="w-full px-3 py-2 border border-gray-300 rounded-lg" value={editForm.previous_school} onChange={(e) => setEditForm((p) => ({ ...p, previous_school: e.target.value }))} />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Guardian Address</label>
+                <textarea rows={2} className="w-full px-3 py-2 border border-gray-300 rounded-lg" value={editForm.guardian_address} onChange={(e) => setEditForm((p) => ({ ...p, guardian_address: e.target.value }))} />
               </div>
             </div>
 
             <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setShowCorrectionModal(false)}
-                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleSubmitCorrection}
-                disabled={correctionMutation.isPending}
-                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
-              >
-                {correctionMutation.isPending ? 'Applying...' : 'Apply Correction'}
+              <button type="button" onClick={() => setShowEditModal(false)} className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">Cancel</button>
+              <button type="button" onClick={handleSubmitEdit} disabled={updateStudentMutation.isPending} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50">
+                {updateStudentMutation.isPending ? 'Saving...' : 'Save Changes'}
               </button>
             </div>
           </div>
         </div>
       )}
+
+      {showReclassifyModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-xl">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h2 className="text-lg font-semibold text-gray-900">Reclassify Student</h2>
+              <p className="text-sm text-gray-500 mt-1">Use this for single-student correction. For year-end transitions, use Promotion page.</p>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Academic Year</label>
+                <select className="w-full px-3 py-2 border border-gray-300 rounded-lg" value={reclassifyForm.academic_year_id} onChange={(e) => setReclassifyForm((p) => ({ ...p, academic_year_id: e.target.value }))}>
+                  <option value="">Select year</option>
+                  {academicYears.map((year) => <option key={year.id} value={year.id}>{year.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Target Class</label>
+                <select className="w-full px-3 py-2 border border-gray-300 rounded-lg" value={reclassifyForm.target_class_id} onChange={(e) => setReclassifyForm((p) => ({ ...p, target_class_id: e.target.value }))}>
+                  <option value="">Select class</option>
+                  {correctionClasses.map((cls) => <option key={cls.id} value={cls.id}>{cls.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">New Roll Number (optional)</label>
+                <input className="w-full px-3 py-2 border border-gray-300 rounded-lg" value={reclassifyForm.new_roll_number} onChange={(e) => setReclassifyForm((p) => ({ ...p, new_roll_number: e.target.value }))} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Reason</label>
+                <textarea rows={3} className="w-full px-3 py-2 border border-gray-300 rounded-lg" value={reclassifyForm.reason} onChange={(e) => setReclassifyForm((p) => ({ ...p, reason: e.target.value }))} placeholder="Why this correction is required" />
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
+              <button type="button" onClick={() => setShowReclassifyModal(false)} className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">Cancel</button>
+              <button type="button" onClick={handleSubmitReclassify} disabled={reclassifyMutation.isPending} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                {reclassifyMutation.isPending ? 'Applying...' : 'Apply Reclassification'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }
