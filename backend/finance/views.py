@@ -114,6 +114,20 @@ def _get_staff_visible_accounts(school_id):
     )
 
 
+def _filter_students_by_scope(queryset, class_id=None, academic_year_id=None):
+    """Apply class/year scope consistently for student selections in finance flows."""
+    if academic_year_id:
+        queryset = queryset.filter(
+            enrollments__academic_year_id=academic_year_id,
+            enrollments__is_active=True,
+        )
+        if class_id:
+            queryset = queryset.filter(enrollments__class_obj_id=class_id)
+    elif class_id:
+        queryset = queryset.filter(class_obj_id=class_id)
+    return queryset.distinct()
+
+
 class FeeStructureViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     """CRUD for fee structures (class-level and student-level)."""
     required_module = 'finance'
@@ -563,15 +577,11 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         if not school_id:
             return Response({'detail': 'No school context.'}, status=400)
 
-        students = Student.objects.filter(school_id=school_id, is_active=True)
-        if academic_year_id:
-            students = students.filter(
-                enrollments__academic_year_id=academic_year_id,
-                enrollments__is_active=True,
-            )
-        if class_id:
-            students = students.filter(class_obj_id=class_id)
-        students = students.select_related('class_obj').distinct()
+        students = _filter_students_by_scope(
+            Student.objects.filter(school_id=school_id, is_active=True),
+            class_id=class_id,
+            academic_year_id=academic_year_id,
+        ).select_related('class_obj')
 
         month = int(month_param) if fee_type == 'MONTHLY' else 0
         year = int(year_param)
@@ -594,6 +604,7 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
             month=month,
             annual_category_ids=cat_ids,
             monthly_category_ids=monthly_cat_ids,
+            academic_year_id=academic_year_id,
         )
         return Response(preview)
 
@@ -650,15 +661,11 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         }
         title = f"Generating fees for {month}/{year}"
 
-        student_qs = Student.objects.filter(school_id=school_id, is_active=True)
-        if academic_year_id:
-            student_qs = student_qs.filter(
-                enrollments__academic_year_id=academic_year_id,
-                enrollments__is_active=True,
-            )
-        if class_id:
-            student_qs = student_qs.filter(class_obj_id=class_id)
-        student_qs = student_qs.distinct()
+        student_qs = _filter_students_by_scope(
+            Student.objects.filter(school_id=school_id, is_active=True),
+            class_id=class_id,
+            academic_year_id=academic_year_id,
+        )
         student_count = student_qs.count()
 
         if student_count < 100:
@@ -725,14 +732,11 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         )
         if student_ids:
             students = students.filter(id__in=student_ids)
-        elif class_id:
-            students = students.filter(class_obj_id=class_id)
-        if academic_year_id:
-            students = students.filter(
-                enrollments__academic_year_id=academic_year_id,
-                enrollments__is_active=True,
-            )
-        students = students.distinct()
+        students = _filter_students_by_scope(
+            students,
+            class_id=None if student_ids else class_id,
+            academic_year_id=academic_year_id,
+        )
 
         from core.models import BackgroundTask
         from .tasks import generate_onetime_fees_task
@@ -834,14 +838,11 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
             school_id=school_id,
             is_active=True,
         )
-        if class_id:
-            students = students.filter(class_obj_id=class_id)
-        if academic_year_id:
-            students = students.filter(
-                enrollments__academic_year_id=academic_year_id,
-                enrollments__is_active=True,
-            )
-        students = students.distinct()
+        students = _filter_students_by_scope(
+            students,
+            class_id=class_id,
+            academic_year_id=academic_year_id,
+        )
 
         from core.models import BackgroundTask
         from .tasks import generate_annual_fees_task

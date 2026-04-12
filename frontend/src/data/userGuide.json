@@ -3,7 +3,7 @@
     "title": "KoderEduAI",
     "subtitle": "School Administration Guide",
     "version": "3.1 - Session Class Standardization",
-    "generatedAt": "2026-03-30T06:17:30.125762+00:00",
+    "generatedAt": "2026-04-12T17:39:32.105011+00:00",
     "totalChapters": 21,
     "modules": [
       "Dashboard | Classes & Students | Attendance (AI-Powered)",
@@ -1236,36 +1236,76 @@
             {
               "type": "step",
               "number": 1,
-              "text": "Select the source academic year and source class."
+              "text": "Select the source academic year and source class/session class."
             },
             {
               "type": "step",
               "number": 2,
-              "text": "Select the target academic year and target class."
+              "text": "Select the target academic year."
             },
             {
               "type": "step",
               "number": 3,
-              "text": "Review the list of students eligible for promotion."
+              "text": "Review each student row and choose an action: PROMOTE, REPEAT, or GRADUATE."
             },
             {
               "type": "step",
               "number": 4,
-              "text": "Optionally edit each student's new roll number for the target year."
+              "text": "For PROMOTE/REPEAT, confirm the target class or target session class and set roll numbers as needed."
             },
             {
               "type": "step",
               "number": 5,
-              "text": "Select students to promote (or select all)."
+              "text": "Use preview helpers where available, then run bulk promotion."
             },
             {
               "type": "step",
               "number": 6,
-              "text": "Click 'Promote' to move them to the new class/year."
+              "text": "After execution, open the Promotion History tab to verify generated event rows."
+            },
+            {
+              "type": "sub_section",
+              "title": "Action Meanings"
+            },
+            {
+              "type": "bullet",
+              "text": "PROMOTE: Student moves to next class in the target academic year; source enrollment becomes PROMOTED."
+            },
+            {
+              "type": "bullet",
+              "text": "REPEAT: Student remains at same grade intent in the target academic year; source enrollment becomes REPEAT."
+            },
+            {
+              "type": "bullet",
+              "text": "GRADUATE: Student is marked terminal graduate in source context; no target class is required."
+            },
+            {
+              "type": "sub_section",
+              "title": "Corrections (Single/Bulk)"
+            },
+            {
+              "type": "step",
+              "number": 7,
+              "text": "If a promotion result is wrong, use Correct Single or Correct Bulk from Promotion History."
+            },
+            {
+              "type": "step",
+              "number": 8,
+              "text": "Provide source/target years and the correction action."
+            },
+            {
+              "type": "step",
+              "number": 9,
+              "text": "For REPEAT corrections, the system now normalizes stale promoted targets to same-grade repeat targets automatically."
+            },
+            {
+              "type": "step",
+              "number": 10,
+              "text": "When session-class IDs differ across years, correction resolves target-year session class mapping safely."
             },
             {
               "type": "warning_box",
-              "text": "Promotion is a bulk operation. Ensure the target academic year and classes exist before promoting."
+              "text": "Promotion and correction are audited operations. Always verify source year, target year, and class mappings before confirming."
             },
             {
               "type": "info_box",
@@ -2799,6 +2839,11 @@
               "type": "info_box",
               "title": "Session-Scoped Admissions",
               "text": "You can admit students into any academic year, including a future session. Roll numbers start from 1 for each session-class combination, independent of other sessions. This means admissions work even before running promotion for the current year."
+            },
+            {
+              "type": "info_box",
+              "title": "Admissions and Promotion Relationship",
+              "text": "Admissions create enrollment in the selected academic year directly. Promotion manages existing enrolled students between years. If you admit future-year students before promotion, that is valid and expected because roll numbers are scoped per academic year and class/session class."
             }
           ]
         },

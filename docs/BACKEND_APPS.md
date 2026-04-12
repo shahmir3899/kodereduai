@@ -149,8 +149,13 @@ id, name, created_at
 | parent_phone, parent_name | CharField | |
 | guardian_name, guardian_relation, guardian_phone, guardian_email | Various | |
 | is_active | BooleanField | |
-| status | CharField | ACTIVE, INACTIVE, GRADUATED, TRANSFERRED, EXPELLED |
+| status | CharField | ACTIVE, SUSPENDED, WITHDRAWN, TRANSFERRED, GRADUATED |
 | user | FK → User | Nullable — linked portal account |
+
+**Student status semantics (important):**
+- `Student.is_active` controls record activity.
+- `Student.status` is a snapshot lifecycle (for operational states like graduated/withdrawn/transferred/suspended).
+- Repeat decisions are tracked in `StudentEnrollment.status` and promotion history events (`REPEATED`), not on `Student.status`.
 
 ### StudyHelperMessage
 student(FK), role (user/assistant), content, created_at — AI chat history
@@ -212,7 +217,7 @@ school(FK), academic_year(FK), name, term_type (TERM/SEMESTER/QUARTER), order, s
 | academic_year | FK → AcademicYear | |
 | class_obj | FK → Class | |
 | roll_number | CharField | **Session-scoped** roll number |
-| status | CharField | ACTIVE, PROMOTED, RETAINED, TRANSFERRED |
+| status | CharField | ACTIVE, PROMOTED, REPEAT, TRANSFERRED, WITHDRAWN, GRADUATED |
 
 **Key concept:** Roll numbers are session-scoped via enrollment, not on Student directly.
 

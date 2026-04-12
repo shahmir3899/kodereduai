@@ -27,6 +27,21 @@ from reports.models import GeneratedReport
 class TestAttendanceReports:
     """Generate attendance reports in PDF and XLSX formats."""
 
+    def _assert_async_pdf_started(self, resp):
+        assert resp.status_code == 202, f"Expected 202, got {resp.status_code}"
+        body = resp.json()
+        assert body.get('task_id'), f"Missing task_id in async response: {body}"
+        assert body.get('message'), f"Missing message in async response: {body}"
+
+    def _assert_sync_xlsx_and_get_report_id(self, resp):
+        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
+        body = resp.json()
+        assert body.get('task_id'), f"Missing task_id in sync response: {body}"
+        result = body.get('result') or {}
+        report_id = result.get('report_id')
+        assert report_id, f"Missing report_id in sync XLSX response: {body}"
+        return report_id
+
     def test_daily_attendance_pdf(self, seed_data, api):
         """A1: Daily attendance report (PDF)."""
         resp = api.post('/api/reports/generate/', {
@@ -34,18 +49,16 @@ class TestAttendanceReports:
             'format': 'PDF',
             'parameters': {'date': str(date.today())},
         }, seed_data['tokens']['admin'], seed_data['SID_A'])
-        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
+        self._assert_async_pdf_started(resp)
 
-    def test_daily_attendance_pdf_has_content_disposition(self, seed_data, api):
-        """A1b: Daily attendance PDF has Content-Disposition attachment header."""
+    def test_daily_attendance_pdf_returns_async_task_payload(self, seed_data, api):
+        """A1b: Daily attendance PDF returns async task payload."""
         resp = api.post('/api/reports/generate/', {
             'report_type': 'ATTENDANCE_DAILY',
             'format': 'PDF',
             'parameters': {'date': str(date.today())},
         }, seed_data['tokens']['admin'], seed_data['SID_A'])
-        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
-        assert 'attachment' in resp.get('Content-Disposition', ''), \
-            f"Content-Disposition missing attachment: {resp.get('Content-Disposition', '')}"
+        self._assert_async_pdf_started(resp)
 
     def test_daily_attendance_with_class_filter(self, seed_data, api):
         """A2: Daily attendance with class filter."""
@@ -55,7 +68,7 @@ class TestAttendanceReports:
             'format': 'PDF',
             'parameters': {'date': str(date.today()), 'class_id': class_1.id},
         }, seed_data['tokens']['admin'], seed_data['SID_A'])
-        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
+        self._assert_async_pdf_started(resp)
 
     def test_monthly_attendance_pdf(self, seed_data, api):
         """A3: Monthly attendance report (PDF)."""
@@ -64,7 +77,7 @@ class TestAttendanceReports:
             'format': 'PDF',
             'parameters': {'month': 1, 'year': 2025},
         }, seed_data['tokens']['admin'], seed_data['SID_A'])
-        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
+        self._assert_async_pdf_started(resp)
 
     def test_daily_attendance_xlsx(self, seed_data, api):
         """A4: Daily attendance as XLSX."""
@@ -73,17 +86,24 @@ class TestAttendanceReports:
             'format': 'XLSX',
             'parameters': {'date': str(date.today())},
         }, seed_data['tokens']['admin'], seed_data['SID_A'])
-        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
+        self._assert_sync_xlsx_and_get_report_id(resp)
 
     def test_daily_attendance_xlsx_content_type(self, seed_data, api):
-        """A4b: XLSX response has correct spreadsheet content type."""
+        """A4b: XLSX report is downloadable with spreadsheet content type."""
         resp = api.post('/api/reports/generate/', {
             'report_type': 'ATTENDANCE_DAILY',
             'format': 'XLSX',
             'parameters': {'date': str(date.today())},
         }, seed_data['tokens']['admin'], seed_data['SID_A'])
-        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
-        ct = resp.get('Content-Type', '')
+        report_id = self._assert_sync_xlsx_and_get_report_id(resp)
+
+        download_resp = api.get(
+            f'/api/reports/{report_id}/download/',
+            seed_data['tokens']['admin'],
+            seed_data['SID_A'],
+        )
+        assert download_resp.status_code == 200, f"Expected 200, got {download_resp.status_code}"
+        ct = download_resp.get('Content-Type', '')
         assert 'spreadsheet' in ct or 'openxml' in ct, \
             f"Expected spreadsheet content type, got: {ct}"
 
@@ -94,7 +114,7 @@ class TestAttendanceReports:
             'format': 'PDF',
             'parameters': {},
         }, seed_data['tokens']['principal'], seed_data['SID_A'])
-        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
+        self._assert_async_pdf_started(resp)
 
 
 # =====================================================================
@@ -107,6 +127,11 @@ class TestAttendanceReports:
 class TestFeeReports:
     """Generate fee-related reports in PDF and XLSX formats."""
 
+    def _assert_async_pdf_started(self, resp):
+        assert resp.status_code == 202, f"Expected 202, got {resp.status_code}"
+        body = resp.json()
+        assert body.get('task_id'), f"Missing task_id in async response: {body}"
+
     def test_fee_collection_pdf(self, seed_data, api):
         """B1: Fee collection summary PDF."""
         resp = api.post('/api/reports/generate/', {
@@ -114,7 +139,7 @@ class TestFeeReports:
             'format': 'PDF',
             'parameters': {'month': 1, 'year': 2025},
         }, seed_data['tokens']['admin'], seed_data['SID_A'])
-        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
+        self._assert_async_pdf_started(resp)
 
     def test_fee_defaulters_pdf(self, seed_data, api):
         """B2: Fee defaulters list PDF."""
@@ -123,7 +148,7 @@ class TestFeeReports:
             'format': 'PDF',
             'parameters': {'month': 1, 'year': 2025},
         }, seed_data['tokens']['admin'], seed_data['SID_A'])
-        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
+        self._assert_async_pdf_started(resp)
 
     def test_fee_collection_xlsx(self, seed_data, api):
         """B3: Fee collection as XLSX."""
@@ -133,6 +158,8 @@ class TestFeeReports:
             'parameters': {'month': 1, 'year': 2025},
         }, seed_data['tokens']['admin'], seed_data['SID_A'])
         assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
+        body = resp.json()
+        assert body.get('result', {}).get('report_id'), f"Missing report_id in XLSX response: {body}"
 
 
 # =====================================================================
@@ -145,6 +172,11 @@ class TestFeeReports:
 class TestAcademicReports:
     """Generate academic/student reports in PDF and XLSX formats."""
 
+    def _assert_async_pdf_started(self, resp):
+        assert resp.status_code == 202, f"Expected 202, got {resp.status_code}"
+        body = resp.json()
+        assert body.get('task_id'), f"Missing task_id in async response: {body}"
+
     def test_student_progress_pdf(self, seed_data, api):
         """C1: Student progress report PDF."""
         student_1 = seed_data['students'][0]
@@ -153,7 +185,7 @@ class TestAcademicReports:
             'format': 'PDF',
             'parameters': {'student_id': student_1.id},
         }, seed_data['tokens']['admin'], seed_data['SID_A'])
-        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
+        self._assert_async_pdf_started(resp)
 
     def test_student_comprehensive_pdf(self, seed_data, api):
         """C2: Student comprehensive report PDF."""
@@ -163,7 +195,7 @@ class TestAcademicReports:
             'format': 'PDF',
             'parameters': {'student_id': student_1.id},
         }, seed_data['tokens']['admin'], seed_data['SID_A'])
-        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
+        self._assert_async_pdf_started(resp)
 
     def test_class_result_pdf_no_exam_data(self, seed_data, api):
         """C3: Class result PDF with nonexistent exam (should handle gracefully)."""
@@ -172,7 +204,7 @@ class TestAcademicReports:
             'format': 'PDF',
             'parameters': {'exam_id': 0},
         }, seed_data['tokens']['admin'], seed_data['SID_A'])
-        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
+        self._assert_async_pdf_started(resp)
 
     def test_student_comprehensive_xlsx(self, seed_data, api):
         """C4: Student comprehensive as XLSX."""
@@ -196,12 +228,13 @@ class TestReportList:
     """List generated reports and verify structure."""
 
     def _generate_a_report(self, seed_data, api):
-        """Helper: generate a report so the list endpoint has data."""
-        api.post('/api/reports/generate/', {
+        """Helper: generate a synchronous XLSX report so list endpoint has data immediately."""
+        resp = api.post('/api/reports/generate/', {
             'report_type': 'ATTENDANCE_DAILY',
-            'format': 'PDF',
+            'format': 'XLSX',
             'parameters': {'date': str(date.today())},
         }, seed_data['tokens']['admin'], seed_data['SID_A'])
+        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
 
     def test_list_reports_admin(self, seed_data, api):
         """D1: Admin can list generated reports (at least 1)."""
@@ -323,11 +356,12 @@ class TestCrossCuttingAndSecurity:
     def test_school_b_cannot_see_school_a_reports(self, seed_data, api):
         """F3: School B admin cannot see School A reports (isolation)."""
         # First generate a report for School A
-        api.post('/api/reports/generate/', {
+        resp = api.post('/api/reports/generate/', {
             'report_type': 'ATTENDANCE_DAILY',
-            'format': 'PDF',
+            'format': 'XLSX',
             'parameters': {'date': str(date.today())},
         }, seed_data['tokens']['admin'], seed_data['SID_A'])
+        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
 
         # School B admin lists reports -- should see none from School A
         resp = api.get('/api/reports/list/', seed_data['tokens']['admin_b'], seed_data['SID_B'])
@@ -342,16 +376,19 @@ class TestCrossCuttingAndSecurity:
             'format': 'PDF',
             'parameters': {},
         }, seed_data['tokens']['admin_b'], seed_data['SID_B'])
-        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
+        assert resp.status_code == 202, f"Expected 202, got {resp.status_code}"
+        body = resp.json()
+        assert body.get('task_id'), f"Missing task_id in async response: {body}"
 
     def test_school_b_list_has_own_report(self, seed_data, api):
         """F5: After generating, School B list has at least 1 report."""
         # Generate a report for School B
-        api.post('/api/reports/generate/', {
+        create_resp = api.post('/api/reports/generate/', {
             'report_type': 'ATTENDANCE_DAILY',
-            'format': 'PDF',
+            'format': 'XLSX',
             'parameters': {},
         }, seed_data['tokens']['admin_b'], seed_data['SID_B'])
+        assert create_resp.status_code == 200, f"Expected 200, got {create_resp.status_code}"
 
         # List should include it
         resp = api.get('/api/reports/list/', seed_data['tokens']['admin_b'], seed_data['SID_B'])

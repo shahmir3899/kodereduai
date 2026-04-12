@@ -219,7 +219,11 @@ FormData: `file` (image) + `asset_type` ('logo' or 'letterhead'). Admin only.
 ## Students
 
 ### GET /api/students/
-Query params: `class_obj`, `search`, `status`, `is_active`, `page_size`
+Query params: `class_obj`, `session_class_id`, `academic_year`, `search`, `status`, `is_active`, `page_size`
+
+Notes:
+- When `academic_year` is provided, class and roll fields are enrollment-scoped for that year.
+- Repeat is treated as enrollment/history context (`StudentEnrollment.status` + promotion events), while `Student.status` remains operational snapshot state.
 ```json
 {
   "count": 382,
@@ -260,6 +264,35 @@ Query params: `class_obj`, `search`, `status`, `is_active`, `page_size`
   ]
 }
 ```
+
+### GET /api/students/{id}/enrollment_history/
+```json
+[
+  {
+    "academic_year": "Academic Year 2026-27",
+    "academic_year_name": "Academic Year 2026-27",
+    "class_name": "Class 1",
+    "section": "A",
+    "roll_number": "54",
+    "status": "ACTIVE",
+    "is_active": true
+  },
+  {
+    "academic_year": "Academic Year 2025-26",
+    "academic_year_name": "Academic Year 2025-26",
+    "class_name": "Class 1",
+    "section": "A",
+    "roll_number": "1",
+    "status": "REPEAT",
+    "is_active": true
+  }
+]
+```
+
+Notes:
+- History rows come from `StudentEnrollment` and are ordered newest academic year first.
+- `class_name` prefers session class display name, then falls back to master class name.
+- This endpoint is the source for the Student Profile History tab.
 
 ---
 

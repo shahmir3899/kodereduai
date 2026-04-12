@@ -56,6 +56,7 @@ class StudentSerializer(serializers.ModelSerializer):
     has_user_account = serializers.SerializerMethodField()
     user_username = serializers.SerializerMethodField()
     roll_number = serializers.SerializerMethodField()
+    status = serializers.SerializerMethodField()
 
     class Meta:
         model = Student
@@ -93,6 +94,13 @@ class StudentSerializer(serializers.ModelSerializer):
         if enrollment_roll is not None:
             return enrollment_roll
         return obj.roll_number
+
+    def get_status(self, obj):
+        """Return enrollment status for academic-year scope, else current snapshot status."""
+        enrollment_status = getattr(obj, '_enrollment_status', None)
+        if enrollment_status is not None:
+            return enrollment_status
+        return obj.status
 
     def get_has_user_account(self, obj):
         return hasattr(obj, 'user_profile') and obj.user_profile is not None

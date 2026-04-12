@@ -122,6 +122,8 @@ def plan_scope_records(
     monthly_category_id=None,
     row_limit=0,
     category_name=None,
+    class_obj_id_getter=None,
+    class_name_getter=None,
 ):
     """Plan creatable fee records for one scope using shared fee-resolution logic.
 
@@ -146,6 +148,11 @@ def plan_scope_records(
     no_fee_structure = 0
     total_amount = Decimal('0')
 
+    class_obj_id_getter = class_obj_id_getter or (lambda student: student.class_obj_id)
+    class_name_getter = class_name_getter or (
+        lambda student: student.class_obj.name if student.class_obj else ''
+    )
+
     for student in students:
         if student.id in existing_ids:
             already_exist += 1
@@ -153,7 +160,7 @@ def plan_scope_records(
 
         amount = student_fees.get(student.id)
         if amount is None:
-            amount = class_fees.get(student.class_obj_id)
+            amount = class_fees.get(class_obj_id_getter(student))
 
         if amount is None:
             no_fee_structure += 1
@@ -167,7 +174,7 @@ def plan_scope_records(
             row = {
                 'student_id': student.id,
                 'student_name': student.name,
-                'class_name': student.class_obj.name if student.class_obj else '',
+                'class_name': class_name_getter(student),
                 'amount': str(amount),
             }
             if category_name is not None:
@@ -193,6 +200,7 @@ def build_preview_plan(
     month,
     annual_category_ids=None,
     monthly_category_ids=None,
+    academic_year_id=None,
 ):
     """Build fee-generation preview output for monthly/annual/default flows."""
     students = list(students)
@@ -209,6 +217,33 @@ def build_preview_plan(
         }
 
     today = date.today()
+
+    enrollment_by_student = {}
+    if academic_year_id:
+        from academic_sessions.models import StudentEnrollment
+
+        enrollment_qs = StudentEnrollment.objects.filter(
+            school_id=school_id,
+            academic_year_id=academic_year_id,
+            is_active=True,
+            student_id__in=[s.id for s in students],
+        ).select_related('class_obj', 'session_class')
+        enrollment_by_student = {e.student_id: e for e in enrollment_qs}
+
+    def _class_obj_id_getter(student):
+        enrollment = enrollment_by_student.get(student.id)
+        if enrollment and enrollment.class_obj_id:
+            return enrollment.class_obj_id
+        return student.class_obj_id
+
+    def _class_name_getter(student):
+        enrollment = enrollment_by_student.get(student.id)
+        if enrollment:
+            if enrollment.session_class_id and enrollment.session_class:
+                return enrollment.session_class.display_name
+            if enrollment.class_obj_id and enrollment.class_obj:
+                return enrollment.class_obj.name
+        return student.class_obj.name if student.class_obj else ''
 
     # ANNUAL per-category preview
     if fee_type == 'ANNUAL' and annual_category_ids:
@@ -245,6 +280,8 @@ def build_preview_plan(
                 annual_category_id=category_id,
                 category_name=category_name,
                 row_limit=max(row_limit - len(totals['students']), 0),
+                class_obj_id_getter=_class_obj_id_getter,
+                class_name_getter=_class_name_getter,
             )
             totals['will_create'] += summary['will_create']
             totals['already_exist'] += summary['already_exist']
@@ -297,6 +334,8 @@ def build_preview_plan(
                 monthly_category_id=category_id,
                 category_name=category_name,
                 row_limit=max(row_limit - len(totals['students']), 0),
+                class_obj_id_getter=_class_obj_id_getter,
+                class_name_getter=_class_name_getter,
             )
             totals['will_create'] += summary['will_create']
             totals['already_exist'] += summary['already_exist']
@@ -329,6 +368,8 @@ def build_preview_plan(
         fee_type=fee_type,
         existing_ids=existing_ids,
         row_limit=row_limit,
+        class_obj_id_getter=_class_obj_id_getter,
+        class_name_getter=_class_name_getter,
     )
 
     return {

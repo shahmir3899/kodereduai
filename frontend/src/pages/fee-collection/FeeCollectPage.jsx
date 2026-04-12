@@ -231,7 +231,10 @@ export default function FeeCollectPage() {
           {canWrite && (
             <>
               <button
-                onClick={() => setShowCreateFeeModal(true)}
+                onClick={() => {
+                  data.createFeePaymentMutation.reset()
+                  setShowCreateFeeModal(true)
+                }}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
               >
                 Create Fee
@@ -338,10 +341,18 @@ export default function FeeCollectPage() {
 
       <CreateSingleFeeModal
         show={showCreateFeeModal}
-        onClose={() => setShowCreateFeeModal(false)}
+        onClose={() => {
+          setShowCreateFeeModal(false)
+          data.createFeePaymentMutation.reset()
+        }}
         onSubmit={(payload) => {
           data.createFeePaymentMutation.mutate(payload, {
-            onSuccess: () => setShowCreateFeeModal(false),
+            onSuccess: () => {
+              window.setTimeout(() => {
+                setShowCreateFeeModal(false)
+                data.createFeePaymentMutation.reset()
+              }, 1200)
+            },
           })
         }}
         isPending={data.createFeePaymentMutation.isPending}

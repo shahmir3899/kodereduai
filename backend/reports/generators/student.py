@@ -18,6 +18,8 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
             return {'title': 'Student Report', 'subtitle': 'No student specified',
                     'summary': {}, 'table_headers': [], 'table_rows': []}
 
+        academic_year_id = self._academic_year_id()
+
         from students.models import Student
 
         try:
@@ -29,6 +31,8 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
         # --- Attendance ---
         from attendance.models import AttendanceRecord
         att_qs = AttendanceRecord.objects.filter(student=student)
+        if academic_year_id:
+            att_qs = att_qs.filter(academic_year_id=academic_year_id)
         total_days = att_qs.count()
         present = att_qs.filter(status='PRESENT').count()
         absent = att_qs.filter(status='ABSENT').count()
@@ -36,7 +40,10 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
 
         # --- Fees ---
         from finance.models import FeePayment
-        fee_agg = FeePayment.objects.filter(student=student).aggregate(
+        fee_qs = FeePayment.objects.filter(student=student)
+        if academic_year_id:
+            fee_qs = fee_qs.filter(academic_year_id=academic_year_id)
+        fee_agg = fee_qs.aggregate(
             total_due=Sum('amount_due'),
             total_paid=Sum('amount_paid'),
         )
@@ -49,7 +56,10 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
             from examinations.models import StudentMark
             marks = StudentMark.objects.filter(
                 student=student
-            ).select_related('exam_subject__exam', 'exam_subject__subject')
+            )
+            if academic_year_id:
+                marks = marks.filter(enrollment__academic_year_id=academic_year_id)
+            marks = marks.select_related('exam_subject__exam', 'exam_subject__subject')
             for m in marks:
                 obtained = float(m.marks_obtained or 0)
                 total = float(m.exam_subject.total_marks or 0)
@@ -63,10 +73,14 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
         except Exception:
             pass
 
+        enrollment_map = self._get_enrollment_map([student.id])
+        class_name = self._resolve_class_name(student, enrollment_map)
+        roll_number = self._resolve_roll_number(student, enrollment_map)
+
         summary = {
             'Student Name': student.name,
-            'Class': student.class_obj.name,
-            'Roll Number': student.roll_number,
+            'Class': class_name,
+            'Roll Number': roll_number,
             'Admission #': student.admission_number or '-',
             'Parent/Guardian': student.parent_name or student.guardian_name or '-',
             'Contact': student.parent_phone or student.guardian_phone or '-',
@@ -80,9 +94,11 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
             'Outstanding': f"PKR {fee_due - fee_paid:,.0f}",
         }
 
+        subtitle_period = f" | Academic Year ID: {academic_year_id}" if academic_year_id else ''
+
         return {
             'title': f"Comprehensive Report - {student.name}",
-            'subtitle': f"Class: {student.class_obj.name} | Generated: {date.today().strftime('%d %B %Y')}",
+            'subtitle': f"Class: {class_name} | Generated: {date.today().strftime('%d %B %Y')}{subtitle_period}",
             'summary': summary,
             'table_headers': ['Exam', 'Subject', 'Marks', 'Percentage'] if exam_rows else [],
             'table_rows': exam_rows,

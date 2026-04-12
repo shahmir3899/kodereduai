@@ -706,6 +706,39 @@ class PromotionHistoryQuerySerializer(serializers.Serializer):
     )
 
 
+def _validate_correction_targets(*, action, target_class_id, target_session_class_id, target_year, school_id):
+    if action == 'GRADUATE':
+        return
+
+    if not target_class_id and not target_session_class_id:
+        raise serializers.ValidationError({'target_class_id': 'Target class or target session class is required for Promote/Repeat.'})
+
+    effective_school_id = int(school_id) if school_id else target_year.school_id
+
+    if target_class_id:
+        class_exists = Class.objects.filter(
+            pk=target_class_id,
+            school_id=effective_school_id,
+        ).exists()
+        if not class_exists:
+            raise serializers.ValidationError({'target_class_id': 'Target class does not belong to this school.'})
+
+    if target_session_class_id:
+        session_class = SessionClass.objects.filter(
+            pk=target_session_class_id,
+            school_id=effective_school_id,
+            academic_year_id=target_year.id,
+        ).first()
+        if not session_class:
+            raise serializers.ValidationError({'target_session_class_id': 'Target session class must belong to this school and target academic year.'})
+
+        if target_class_id and session_class.class_obj_id != target_class_id:
+            raise serializers.ValidationError({
+                'target_class_id': 'Target class does not match target session class.',
+                'target_session_class_id': 'Target session class does not match target class.',
+            })
+
+
 class PromotionSingleCorrectionSerializer(serializers.Serializer):
     source_academic_year = serializers.PrimaryKeyRelatedField(
         queryset=AcademicYear.objects.all(),
@@ -737,8 +770,15 @@ class PromotionSingleCorrectionSerializer(serializers.Serializer):
             if target_year.school_id != school_id:
                 raise serializers.ValidationError({'target_academic_year': 'Target academic year does not belong to this school.'})
 
-        if action != 'GRADUATE' and not attrs.get('target_class_id') and not attrs.get('target_session_class_id'):
-            raise serializers.ValidationError({'target_class_id': 'Target class or target session class is required for Promote/Repeat.'})
+        target_class_id = attrs.get('target_class_id')
+        target_session_class_id = attrs.get('target_session_class_id')
+        _validate_correction_targets(
+            action=action,
+            target_class_id=target_class_id,
+            target_session_class_id=target_session_class_id,
+            target_year=target_year,
+            school_id=school_id,
+        )
 
         return attrs
 
@@ -792,14 +832,36 @@ class PromotionBulkCorrectionSerializer(serializers.Serializer):
 
             target_class_id = row.get('target_class_id')
             target_session_class_id = row.get('target_session_class_id')
-            if action != 'GRADUATE' and not target_class_id and not target_session_class_id:
-                raise serializers.ValidationError({'corrections': f'Row {idx + 1} requires a target class or target session class.'})
+
+            try:
+                parsed_target_class_id = int(target_class_id) if target_class_id else None
+                parsed_target_session_class_id = int(target_session_class_id) if target_session_class_id else None
+            except (TypeError, ValueError):
+                raise serializers.ValidationError({'corrections': f'Row {idx + 1} has invalid target class/session class ID.'})
+
+            try:
+                _validate_correction_targets(
+                    action=action,
+                    target_class_id=parsed_target_class_id,
+                    target_session_class_id=parsed_target_session_class_id,
+                    target_year=target_year,
+                    school_id=school_id,
+                )
+            except serializers.ValidationError as exc:
+                detail = exc.detail
+                if isinstance(detail, dict):
+                    message = '; '.join(
+                        f"{field}: {', '.join(str(v) for v in (values if isinstance(values, (list, tuple)) else [values]))}"
+                        for field, values in detail.items()
+                    )
+                    raise serializers.ValidationError({'corrections': f'Row {idx + 1} validation failed - {message}'})
+                raise serializers.ValidationError({'corrections': f'Row {idx + 1} validation failed.'})
 
             normalized.append({
                 'student_id': student_id,
                 'action': action,
-                'target_class_id': int(target_class_id) if target_class_id else None,
-                'target_session_class_id': int(target_session_class_id) if target_session_class_id else None,
+                'target_class_id': parsed_target_class_id,
+                'target_session_class_id': parsed_target_session_class_id,
                 'new_roll_number': str(row.get('new_roll_number', '') or '').strip(),
                 'reason': str(row.get('reason', '') or '').strip(),
             })

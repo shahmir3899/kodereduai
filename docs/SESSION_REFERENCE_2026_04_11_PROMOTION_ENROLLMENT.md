@@ -47,3 +47,37 @@ School data repair and behavior alignment for Branch 2 and Branch 1.
 - Promotion History tab reads `PromotionEvent`; legacy transitions without events appear empty until backfilled.
 - Graduated rows are terminal by default, but now correction flow can re-open them when needed.
 - Fee summary and student enrollment may diverge if fee rows exist for students without target-year enrollments.
+
+---
+
+## Continuation - 2026-04-12 (Historical Scope + Repeat Correction Hardening)
+
+### Additional Bugs Removed
+1. Fixed `students/{id}/enrollment_history` endpoint returning empty data due to invalid relation usage.
+2. Fixed Students page ordering so single-class filtered views prioritize roll ordering.
+3. Fixed repeat correction drift where REPEAT could still land in promoted target class/session when stale target payloads were reused.
+4. Fixed repeat correction for cross-year class-id drift cases by resolving target-year session class identity safely.
+
+### Production Data Corrections Applied (via correction flow with audit)
+- Student ID 41 (Branch 1): corrected to repeat in target-year Junior 1 session mapping.
+- Student ID 186 (Branch 1): corrected to repeat in target-year Class 1 session mapping.
+
+### Backend Behavior Alignment Implemented
+- REPEAT correction now enforces same-grade repeat intent and normalizes stale promoted targets.
+- If a target session class is resolved, correction aligns target class from that session class.
+- Repeat session mapping now supports fallback matching by session-class identity (display name/section/grade) when master class IDs drift between years.
+- Student snapshot status remains operational (`ACTIVE` after repeat), while repeat semantics remain in enrollment/history.
+
+### Added Regression Coverage
+- `backend/tests/test_historical_scope_regressions.py`
+  - Enrollment-scoped student status/active behavior under academic year filter.
+  - Attendance class filtering correctness for historical year scope.
+  - Enrollment history endpoint shape validation.
+- `backend/tests/test_roll_allocation.py`
+  - REPEAT correction ignores stale promoted target class.
+  - REPEAT correction handles target session mapping when class IDs drift across years.
+
+### Documentation/UX Alignment
+- Updated Students API docs for enrollment-scoped behavior under `academic_year`.
+- Added enrollment history response documentation and source-of-truth note for Student Profile History tab.
+- Promotion correction notes now explicitly describe REPEAT normalization behavior.

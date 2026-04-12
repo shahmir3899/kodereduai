@@ -66,6 +66,7 @@ def generate_monthly_fees_task(
         from django.db import transaction
         from students.models import Student
         from finance.models import FeePayment, MonthlyClosing, MonthlyFeeCategory
+        from academic_sessions.models import StudentEnrollment
 
         # Block if period closed
         if MonthlyClosing.objects.filter(school_id=school_id, year=year, month=month).exists():
@@ -99,9 +100,41 @@ def generate_monthly_fees_task(
                 enrollments__is_active=True,
             )
         if class_id:
-            student_qs = student_qs.filter(class_obj_id=int(class_id))
+            if academic_year_id:
+                student_qs = student_qs.filter(
+                    enrollments__academic_year_id=academic_year_id,
+                    enrollments__class_obj_id=int(class_id),
+                    enrollments__is_active=True,
+                )
+            else:
+                student_qs = student_qs.filter(class_obj_id=int(class_id))
         students = list(student_qs.distinct())
         student_ids = [s.id for s in students]
+
+        enrollment_by_student = {}
+        if academic_year_id and student_ids:
+            enrollment_qs = StudentEnrollment.objects.filter(
+                school_id=school_id,
+                academic_year_id=academic_year_id,
+                is_active=True,
+                student_id__in=student_ids,
+            ).select_related('class_obj', 'session_class')
+            enrollment_by_student = {e.student_id: e for e in enrollment_qs}
+
+        def _class_obj_id_getter(student):
+            enrollment = enrollment_by_student.get(student.id)
+            if enrollment and enrollment.class_obj_id:
+                return enrollment.class_obj_id
+            return student.class_obj_id
+
+        def _class_name_getter(student):
+            enrollment = enrollment_by_student.get(student.id)
+            if enrollment:
+                if enrollment.session_class_id and enrollment.session_class:
+                    return enrollment.session_class.display_name
+                if enrollment.class_obj_id and enrollment.class_obj:
+                    return enrollment.class_obj.name
+            return student.class_obj.name if student.class_obj else ''
 
         total = len(students) * len(categories)
         update_task_progress(task_id, current=0, total=total)
@@ -145,6 +178,8 @@ def generate_monthly_fees_task(
                     fee_type='MONTHLY',
                     existing_ids=set(),
                     monthly_category_id=cat_id,
+                    class_obj_id_getter=_class_obj_id_getter,
+                    class_name_getter=_class_name_getter,
                 )
                 no_fee_count += plan['no_fee_structure']
 
@@ -278,6 +313,7 @@ def generate_annual_fees_task(
         from django.db import transaction
         from students.models import Student
         from finance.models import AnnualFeeCategory, FeePayment
+        from academic_sessions.models import StudentEnrollment
 
         categories = list(AnnualFeeCategory.objects.filter(
             id__in=annual_category_ids,
@@ -302,9 +338,41 @@ def generate_annual_fees_task(
                 enrollments__is_active=True,
             )
         if class_id:
-            student_qs = student_qs.filter(class_obj_id=class_id)
+            if academic_year_id:
+                student_qs = student_qs.filter(
+                    enrollments__academic_year_id=academic_year_id,
+                    enrollments__class_obj_id=class_id,
+                    enrollments__is_active=True,
+                )
+            else:
+                student_qs = student_qs.filter(class_obj_id=class_id)
         students = list(student_qs.distinct())
         student_ids = [s.id for s in students]
+
+        enrollment_by_student = {}
+        if academic_year_id and student_ids:
+            enrollment_qs = StudentEnrollment.objects.filter(
+                school_id=school_id,
+                academic_year_id=academic_year_id,
+                is_active=True,
+                student_id__in=student_ids,
+            ).select_related('class_obj', 'session_class')
+            enrollment_by_student = {e.student_id: e for e in enrollment_qs}
+
+        def _class_obj_id_getter(student):
+            enrollment = enrollment_by_student.get(student.id)
+            if enrollment and enrollment.class_obj_id:
+                return enrollment.class_obj_id
+            return student.class_obj_id
+
+        def _class_name_getter(student):
+            enrollment = enrollment_by_student.get(student.id)
+            if enrollment:
+                if enrollment.session_class_id and enrollment.session_class:
+                    return enrollment.session_class.display_name
+                if enrollment.class_obj_id and enrollment.class_obj:
+                    return enrollment.class_obj.name
+            return student.class_obj.name if student.class_obj else ''
 
         total = len(students) * len(categories)
         update_task_progress(task_id, current=0, total=total)
@@ -340,6 +408,8 @@ def generate_annual_fees_task(
                     fee_type='ANNUAL',
                     existing_ids=set(),
                     annual_category_id=category.id,
+                    class_obj_id_getter=_class_obj_id_getter,
+                    class_name_getter=_class_name_getter,
                 )
                 no_fee_count += plan['no_fee_structure']
 

@@ -412,7 +412,11 @@ export default function PromotionPage() {
     setSingleCorrectionModal(row)
     setSingleCorrectionForm({
       action: row.event_type === 'GRADUATED' ? 'GRADUATE' : (row.event_type === 'REPEATED' ? 'REPEAT' : 'PROMOTE'),
-      target_class_id: row.target_class || '',
+      target_class_id: String(
+        targetUsesSessionClasses
+          ? (row.target_session_class || '')
+          : (row.target_class || '')
+      ),
       new_roll_number: row.new_roll_number || row.student_roll_number || '',
       reason: '',
     })
@@ -425,12 +429,21 @@ export default function PromotionPage() {
       return
     }
 
+    const parsedTargetClassId = singleCorrectionForm.target_class_id
+      ? parseInt(singleCorrectionForm.target_class_id)
+      : null
+
     singleCorrectionMut.trigger({
       source_academic_year: singleCorrectionModal.source_academic_year || parseInt(sourceYearId),
       target_academic_year: singleCorrectionModal.target_academic_year || parseInt(targetYearId),
       student_id: singleCorrectionModal.student,
       action: singleCorrectionForm.action,
-      target_class_id: singleCorrectionForm.action === 'GRADUATE' ? null : (singleCorrectionForm.target_class_id ? parseInt(singleCorrectionForm.target_class_id) : null),
+      target_class_id: (
+        singleCorrectionForm.action === 'GRADUATE' || targetUsesSessionClasses
+      ) ? null : parsedTargetClassId,
+      target_session_class_id: (
+        singleCorrectionForm.action === 'GRADUATE' || !targetUsesSessionClasses
+      ) ? null : parsedTargetClassId,
       new_roll_number: singleCorrectionForm.new_roll_number,
       reason: singleCorrectionForm.reason,
     })
@@ -453,13 +466,22 @@ export default function PromotionPage() {
     const sourceAcademicYear = selectedHistoryRows[0]?.source_academic_year || parseInt(sourceYearId)
     const targetAcademicYear = selectedHistoryRows[0]?.target_academic_year || parseInt(targetYearId)
 
+    const parsedBulkTargetClassId = bulkCorrectionTargetClassId
+      ? parseInt(bulkCorrectionTargetClassId)
+      : null
+
     bulkCorrectionMut.trigger({
       source_academic_year: sourceAcademicYear,
       target_academic_year: targetAcademicYear,
       corrections: selectedHistoryRows.map(row => ({
         student_id: row.student,
         action: bulkCorrectionAction,
-        target_class_id: bulkCorrectionAction === 'GRADUATE' ? null : parseInt(bulkCorrectionTargetClassId),
+        target_class_id: (
+          bulkCorrectionAction === 'GRADUATE' || targetUsesSessionClasses
+        ) ? null : parsedBulkTargetClassId,
+        target_session_class_id: (
+          bulkCorrectionAction === 'GRADUATE' || !targetUsesSessionClasses
+        ) ? null : parsedBulkTargetClassId,
         new_roll_number: row.new_roll_number || row.student_roll_number || '',
         reason: bulkCorrectionReason,
       })),

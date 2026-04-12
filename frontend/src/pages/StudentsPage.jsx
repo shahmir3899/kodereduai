@@ -8,12 +8,35 @@ import { useToast } from '../components/Toast'
 import { useSessionClasses } from '../hooks/useSessionClasses'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../utils/classScope'
 import { sortClassOptions } from '../utils/classOrdering'
+import { getNextAvailableRoll } from '../utils/rollSuggestion'
 import ClassSelector from '../components/ClassSelector'
 import { exportStudentsPDF, exportStudentsPNG } from './studentExport'
 import { useDebounce } from '../hooks/useDebounce'
 import WhatsAppTick from '../components/WhatsAppTick'
 
 // Phone format: +92XXXXXXXXXX (E.164) — Excel export forces text format to preserve + prefix
+
+const LIFECYCLE_LABELS = {
+  ACTIVE: 'Active',
+  REPEAT: 'Repeat',
+  TRANSFERRED: 'Transferred',
+  WITHDRAWN: 'Withdrawn',
+  GRADUATED: 'Graduated',
+  SUSPENDED: 'Suspended',
+}
+
+const LIFECYCLE_STYLES = {
+  ACTIVE: 'bg-emerald-100 text-emerald-800',
+  REPEAT: 'bg-amber-100 text-amber-800',
+  TRANSFERRED: 'bg-sky-100 text-sky-800',
+  WITHDRAWN: 'bg-rose-100 text-rose-800',
+  GRADUATED: 'bg-indigo-100 text-indigo-800',
+  SUSPENDED: 'bg-red-100 text-red-800',
+}
+
+const getLifecycleLabel = (status) => LIFECYCLE_LABELS[status] || status || 'Unknown'
+const getLifecycleStyle = (status) => LIFECYCLE_STYLES[status] || 'bg-gray-100 text-gray-700'
+const normalizeClassText = (value) => String(value || '').trim().toLowerCase().replace(/\s+/g, ' ')
 
 export default function StudentsPage() {
   const { user, activeSchool } = useAuth()
@@ -42,6 +65,8 @@ export default function StudentsPage() {
     parent_name: '',
     class_id: '',
   })
+  const [recommendedRoll, setRecommendedRoll] = useState('')
+  const [rollManuallyEdited, setRollManuallyEdited] = useState(false)
   const [createUserAccount, setCreateUserAccount] = useState(false)
   const [studentUserForm, setStudentUserForm] = useState({
     username: '', email: '', password: '', confirm_password: '',
@@ -135,7 +160,10 @@ export default function StudentsPage() {
       showSuccess('Student updated successfully!')
     },
     onError: (error) => {
-      const message = error.response?.data?.roll_number?.[0] ||
+      const rollError = parseRollError(error)
+      const message = (rollError && recommendedRoll)
+        ? `${rollError} Suggested next roll: ${recommendedRoll}.`
+        : error.response?.data?.roll_number?.[0] ||
                       error.response?.data?.detail ||
                       error.message ||
                       'Failed to update student'
@@ -234,6 +262,7 @@ export default function StudentsPage() {
   // Modal handlers
   const openAddModal = () => {
     setEditingStudent(null)
+    setRollManuallyEdited(false)
     setStudentForm({
       name: '',
       roll_number: '',
@@ -250,6 +279,7 @@ export default function StudentsPage() {
       : (student.class_obj?.toString() || '')
 
     setEditingStudent(student)
+    setRollManuallyEdited(true)
     setStudentForm({
       name: student.name,
       roll_number: student.roll_number,
@@ -263,6 +293,8 @@ export default function StudentsPage() {
   const closeModal = () => {
     setShowModal(false)
     setEditingStudent(null)
+    setRecommendedRoll('')
+    setRollManuallyEdited(false)
     setStudentForm({
       name: '',
       roll_number: '',
@@ -273,6 +305,26 @@ export default function StudentsPage() {
     setCreateUserAccount(false)
     setStudentUserForm({ username: '', email: '', password: '', confirm_password: '' })
     setStudentUserError('')
+  }
+
+  const parseRollError = (error) => {
+    const rollError = error?.response?.data?.roll_number
+    if (Array.isArray(rollError) && rollError.length > 0) return rollError[0]
+    if (typeof rollError === 'string') return rollError
+    return null
+  }
+
+  const applyRecommendedRoll = () => {
+    if (!recommendedRoll) return
+    setStudentForm((prev) => ({ ...prev, roll_number: recommendedRoll }))
+    setRollManuallyEdited(true)
+  }
+
+  const handleClassSelectionChange = (value) => {
+    if (!studentForm.roll_number?.trim()) {
+      setRollManuallyEdited(false)
+    }
+    setStudentForm((prev) => ({ ...prev, class_id: value }))
   }
 
   const handleSubmit = async () => {
@@ -345,6 +397,7 @@ export default function StudentsPage() {
         closeModal()
       } catch (err) {
         const errData = err?.response?.data
+        const rollError = parseRollError(err)
         let msg = 'Failed to add student'
         if (errData) {
           if (typeof errData === 'string') msg = errData
@@ -358,6 +411,9 @@ export default function StudentsPage() {
             }
             if (msgs.length > 0) msg = msgs.join('; ')
           }
+        }
+        if (rollError && recommendedRoll) {
+          msg = `${rollError} Suggested next roll: ${recommendedRoll}.`
         }
         showError(msg)
       }
@@ -668,6 +724,43 @@ export default function StudentsPage() {
   const schools = schoolsData?.data?.results || schoolsData?.data || []
   const classes = classesData?.data?.results || classesData?.data || []
 
+  const occupiedRollsForSelectedClass = useMemo(() => {
+    if (!resolvedStudentFormClassId) return []
+
+    return allStudents
+      .filter((student) => {
+        if (String(student.class_obj) !== String(resolvedStudentFormClassId)) return false
+        if (editingStudent && student.id === editingStudent.id) return false
+        return true
+      })
+      .map((student) => student.roll_number)
+  }, [allStudents, resolvedStudentFormClassId, editingStudent])
+
+  useEffect(() => {
+    if (!showModal) return
+    if (!resolvedStudentFormClassId) {
+      setRecommendedRoll('')
+      return
+    }
+
+    const nextRoll = getNextAvailableRoll(occupiedRollsForSelectedClass)
+    setRecommendedRoll(nextRoll)
+
+    if (!rollManuallyEdited && !studentForm.roll_number?.trim()) {
+      setStudentForm((prev) => (
+        prev.roll_number === nextRoll
+          ? prev
+          : { ...prev, roll_number: nextRoll }
+      ))
+    }
+  }, [
+    showModal,
+    resolvedStudentFormClassId,
+    occupiedRollsForSelectedClass,
+    rollManuallyEdited,
+    studentForm.roll_number,
+  ])
+
   // Create a map of class_id to grade_level for proper sorting
   const classGradeMap = useMemo(() => {
     const map = {}
@@ -684,8 +777,8 @@ export default function StudentsPage() {
         .map(sc => ({
           id: sc.id,
           class_obj: sc.class_obj,
-          name: sc.display_name || sc.label || `Class ${sc.class_obj}`,
-          label: sc.display_name || sc.label || `Class ${sc.class_obj}`,
+          name: sc.display_name || `Class ${sc.class_obj}`,
+          label: sc.label || (sc.section ? `${sc.display_name || `Class ${sc.class_obj}`} - ${sc.section}` : (sc.display_name || `Class ${sc.class_obj}`)),
           grade_level: sc.grade_level,
           section: sc.section || '',
         }))
@@ -703,14 +796,37 @@ export default function StudentsPage() {
 
   // Client-side filtering and sorting with useMemo for performance
   const students = useMemo(() => {
+    const sessionClassMap = new Map((sessionClasses || []).map(sc => [String(sc.id), sc]))
+    const selectedSessionMatchers = selectedClassIds
+      .map((selectedId) => {
+        const sc = sessionClassMap.get(String(selectedId))
+        if (!sc) return null
+        const baseName = sc.display_name || `Class ${sc.class_obj || ''}`
+        const withSection = sc.section ? `${baseName} - ${sc.section}` : ''
+        return {
+          masterClassId: sc.class_obj ? String(sc.class_obj) : '',
+          baseNameNorm: normalizeClassText(baseName),
+          withSectionNorm: normalizeClassText(withSection),
+        }
+      })
+      .filter(Boolean)
+
     // First filter
     const filtered = allStudents.filter(student => {
       // Filter by class
-      if (
-        resolvedSelectedClasses.length > 0 &&
-        !resolvedSelectedClasses.includes(student.class_obj?.toString())
-      ) {
-        return false
+      if (resolvedSelectedClasses.length > 0) {
+        if (classSelectorScope === 'session') {
+          const studentClassId = String(student.class_obj || '')
+          const studentClassNameNorm = normalizeClassText(student.class_name)
+          const matchesAnySelectedSession = selectedSessionMatchers.some((matcher) => (
+            (matcher.masterClassId && studentClassId === matcher.masterClassId) ||
+            (matcher.baseNameNorm && studentClassNameNorm === matcher.baseNameNorm) ||
+            (matcher.withSectionNorm && studentClassNameNorm === matcher.withSectionNorm)
+          ))
+          if (!matchesAnySelectedSession) return false
+        } else if (!resolvedSelectedClasses.includes(student.class_obj?.toString())) {
+          return false
+        }
       }
       // Filter by search (name or roll number)
       if (debouncedSearch) {
@@ -724,19 +840,58 @@ export default function StudentsPage() {
       return true
     })
 
-    // Then sort by class grade level, then by roll number (numeric)
+    const compareRollNumbers = (leftRoll, rightRoll) => {
+      const leftRaw = String(leftRoll || '').trim()
+      const rightRaw = String(rightRoll || '').trim()
+      const leftParsed = Number.parseInt(leftRaw, 10)
+      const rightParsed = Number.parseInt(rightRaw, 10)
+      const leftIsNumeric = Number.isFinite(leftParsed)
+      const rightIsNumeric = Number.isFinite(rightParsed)
+
+      if (leftIsNumeric && rightIsNumeric) return leftParsed - rightParsed
+      if (leftIsNumeric) return -1
+      if (rightIsNumeric) return 1
+
+      return leftRaw.localeCompare(rightRaw, undefined, {
+        numeric: true,
+        sensitivity: 'base',
+      })
+    }
+
+    const isSingleClassFilter = selectedClassIds.length === 1 || resolvedSelectedClasses.length === 1
+
+    // Sort by roll number when focused on one class; otherwise keep class-grouped ordering.
     return filtered.sort((a, b) => {
+      if (isSingleClassFilter) {
+        const singleClassRollCompare = compareRollNumbers(a.roll_number, b.roll_number)
+        if (singleClassRollCompare !== 0) return singleClassRollCompare
+        return String(a.name || '').localeCompare(String(b.name || ''), undefined, {
+          numeric: true,
+          sensitivity: 'base',
+        })
+      }
+
       // First sort by class grade level
       const gradeA = classGradeMap[a.class_obj] ?? 999
       const gradeB = classGradeMap[b.class_obj] ?? 999
       if (gradeA !== gradeB) return gradeA - gradeB
 
-      // Then sort by roll number (handle numeric sorting)
-      const rollA = parseInt(a.roll_number) || 0
-      const rollB = parseInt(b.roll_number) || 0
-      return rollA - rollB
+      const classNameCompare = String(a.class_name || '').localeCompare(String(b.class_name || ''), undefined, {
+        numeric: true,
+        sensitivity: 'base',
+      })
+      if (classNameCompare !== 0) return classNameCompare
+
+      // Then sort by roll number
+      const rollCompare = compareRollNumbers(a.roll_number, b.roll_number)
+      if (rollCompare !== 0) return rollCompare
+
+      return String(a.name || '').localeCompare(String(b.name || ''), undefined, {
+        numeric: true,
+        sensitivity: 'base',
+      })
     })
-  }, [allStudents, resolvedSelectedClasses, debouncedSearch, classGradeMap])
+  }, [allStudents, resolvedSelectedClasses, debouncedSearch, classGradeMap, classSelectorScope, selectedClassIds, sessionClasses])
 
   // Students without accounts (for bulk select) — must be after `students` useMemo
   const studentsWithoutAccounts = useMemo(() => {
@@ -778,18 +933,43 @@ export default function StudentsPage() {
       if (key) counts[key] = (counts[key] || 0) + 1
     })
     // Build session class ID → master class ID map (needed when scope is session)
-    const sessionToMaster = {}
+    const sessionById = {}
     sessionClasses.forEach((sc) => {
-      if (sc.class_obj) sessionToMaster[String(sc.id)] = String(sc.class_obj)
+      sessionById[String(sc.id)] = sc
     })
     return classFilterOptions.map((option) => {
+      const sessionClass = classSelectorScope === 'session'
+        ? sessionById[String(option.id)]
+        : null
+
       const masterClassId = classSelectorScope === 'session'
-        ? sessionToMaster[option.id]
+        ? (sessionClass?.class_obj ? String(sessionClass.class_obj) : '')
         : option.id
+
+      const baseNameNorm = classSelectorScope === 'session'
+        ? normalizeClassText(sessionClass?.display_name || option.label)
+        : ''
+
+      const withSectionNorm = classSelectorScope === 'session' && sessionClass?.section
+        ? normalizeClassText(`${sessionClass.display_name || option.label} - ${sessionClass.section}`)
+        : ''
+
+      const count = classSelectorScope === 'session'
+        ? allStudents.filter((s) => {
+          const studentClassId = String(s.class_obj || '')
+          const studentClassNameNorm = normalizeClassText(s.class_name)
+          return (
+            (masterClassId && studentClassId === masterClassId) ||
+            (baseNameNorm && studentClassNameNorm === baseNameNorm) ||
+            (withSectionNorm && studentClassNameNorm === withSectionNorm)
+          )
+        }).length
+        : (masterClassId ? (counts[masterClassId] || 0) : 0)
+
       return {
         id: option.id,
         name: option.label,
-        count: masterClassId ? (counts[masterClassId] || 0) : 0,
+        count,
       }
     })
   }, [allStudents, debouncedSearch, classFilterOptions, classSelectorScope, sessionClasses])
@@ -1117,9 +1297,14 @@ export default function StudentsPage() {
                       <span className="px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-500">No Account</span>
                     )}
                     <span className={`px-2 py-0.5 rounded-full text-xs ${
+                      getLifecycleStyle(student.status)
+                    }`}>
+                      {getLifecycleLabel(student.status)}
+                    </span>
+                    <span className={`px-2 py-0.5 rounded-full text-xs ${
                       student.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
                     }`}>
-                      {student.is_active ? 'Active' : 'Inactive'}
+                      {student.is_active ? 'Record Active' : 'Record Inactive'}
                     </span>
                   </div>
                 </div>
@@ -1155,7 +1340,8 @@ export default function StudentsPage() {
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Class</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Parent Phone</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Account</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Lifecycle</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Record State</th>
                   <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
                 </tr>
               </thead>
@@ -1189,11 +1375,18 @@ export default function StudentsPage() {
                     </td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        getLifecycleStyle(student.status)
+                      }`}>
+                        {getLifecycleLabel(student.status)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                         student.is_active
                           ? 'bg-green-100 text-green-800'
                           : 'bg-gray-100 text-gray-800'
                       }`}>
-                        {student.is_active ? 'Active' : 'Inactive'}
+                        {student.is_active ? 'Record Active' : 'Record Inactive'}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right whitespace-nowrap">
@@ -1248,7 +1441,7 @@ export default function StudentsPage() {
                 <ClassSelector
                   className="input"
                   value={studentForm.class_id}
-                  onChange={(e) => setStudentForm({ ...studentForm, class_id: e.target.value })}
+                  onChange={(e) => handleClassSelectionChange(e.target.value)}
                   disabled={!!editingStudent}
                   required
                   placeholder="Select a class"
@@ -1262,14 +1455,33 @@ export default function StudentsPage() {
               </div>
 
               <div>
-                <label className="label">Roll Number</label>
+                <div className="flex items-center justify-between">
+                  <label className="label">Roll Number</label>
+                  {recommendedRoll && (
+                    <button
+                      type="button"
+                      onClick={applyRecommendedRoll}
+                      className="text-xs font-medium text-primary-600 hover:text-primary-700"
+                    >
+                      Suggest {recommendedRoll}
+                    </button>
+                  )}
+                </div>
                 <input
                   type="text"
                   className="input"
                   value={studentForm.roll_number}
-                  onChange={(e) => setStudentForm({ ...studentForm, roll_number: e.target.value })}
+                  onChange={(e) => {
+                    setRollManuallyEdited(true)
+                    setStudentForm({ ...studentForm, roll_number: e.target.value })
+                  }}
                   required
                 />
+                {recommendedRoll && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Next available roll in this class: {recommendedRoll}
+                  </p>
+                )}
               </div>
 
               <div>

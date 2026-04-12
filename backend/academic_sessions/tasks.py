@@ -191,7 +191,7 @@ def bulk_promote_task(self, school_id, source_year_id, target_year_id, promotion
                                 Student.objects.filter(pk=student_id).update(
                                     class_obj_id=target_class_id,
                                     roll_number=resolved_roll_number,
-                                    status=Student.Status.REPEAT if action == 'REPEAT' else Student.Status.ACTIVE,
+                                    status=Student.Status.ACTIVE,
                                 )
 
                                 if operation:

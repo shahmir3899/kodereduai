@@ -164,11 +164,17 @@ class AttendanceUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
         if school_id:
             queryset = queryset.filter(school_id=school_id)
 
-        # Filter by class
+        # Resolve scope first so class filtering can remain year-consistent.
+        academic_year_id = self.request.query_params.get('academic_year')
         class_id = self.request.query_params.get('class_id')
         session_class_obj_id, session_class_year_id = _resolve_session_class_filter(self.request)
         if session_class_obj_id:
             class_id = session_class_obj_id
+        if not academic_year_id and session_class_year_id:
+            academic_year_id = session_class_year_id
+        if academic_year_id and session_class_year_id and str(academic_year_id) != str(session_class_year_id):
+            return queryset.none()
+
         if class_id:
             queryset = queryset.filter(class_obj_id=class_id)
 
@@ -178,9 +184,6 @@ class AttendanceUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
             queryset = queryset.filter(status=upload_status)
 
         # Filter by academic year
-        academic_year_id = self.request.query_params.get('academic_year')
-        if not academic_year_id and session_class_year_id:
-            academic_year_id = session_class_year_id
         if academic_year_id:
             queryset = queryset.filter(academic_year_id=academic_year_id)
 
@@ -672,13 +675,26 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
         if school_id:
             queryset = queryset.filter(school_id=school_id)
 
-        # Filter by class
+        # Resolve scope first so class filtering can remain year-consistent.
+        academic_year_id = self.request.query_params.get('academic_year')
         class_id = self.request.query_params.get('class_id')
         session_class_obj_id, session_class_year_id = _resolve_session_class_filter(self.request)
         if session_class_obj_id:
             class_id = session_class_obj_id
+        if not academic_year_id and session_class_year_id:
+            academic_year_id = session_class_year_id
+        if academic_year_id and session_class_year_id and str(academic_year_id) != str(session_class_year_id):
+            return queryset.none()
+
         if class_id:
-            queryset = queryset.filter(student__class_obj_id=class_id)
+            if academic_year_id:
+                queryset = queryset.filter(
+                    student__enrollments__academic_year_id=academic_year_id,
+                    student__enrollments__class_obj_id=class_id,
+                    student__enrollments__is_active=True,
+                )
+            else:
+                queryset = queryset.filter(student__class_obj_id=class_id)
 
         # Filter by date (exact or range)
         date = self.request.query_params.get('date')
@@ -694,9 +710,6 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
             queryset = queryset.filter(date__lte=date_to)
 
         # Filter by academic year
-        academic_year_id = self.request.query_params.get('academic_year')
-        if not academic_year_id and session_class_year_id:
-            academic_year_id = session_class_year_id
         if academic_year_id:
             queryset = queryset.filter(academic_year_id=academic_year_id)
 
@@ -724,6 +737,9 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
         if not academic_year_id and session_class_year_id:
             academic_year_id = session_class_year_id
 
+        if academic_year_id and session_class_year_id and str(academic_year_id) != str(session_class_year_id):
+            return Response([])
+
         if not class_id or not date_from or not date_to:
             return Response(
                 {'detail': 'class_id (or session_class_id), date_from, and date_to are required.'},
@@ -738,14 +754,20 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
             AttendanceRecord.objects
             .filter(
                 school_id=active_school_id,
-                student__class_obj_id=class_id,
                 date__gte=date_from,
                 date__lte=date_to,
             )
             .values('student_id', 'date', 'status')
         )
         if academic_year_id:
-            records = records.filter(academic_year_id=academic_year_id)
+            records = records.filter(
+                student__enrollments__academic_year_id=academic_year_id,
+                student__enrollments__class_obj_id=class_id,
+                student__enrollments__is_active=True,
+                academic_year_id=academic_year_id,
+            )
+        else:
+            records = records.filter(student__class_obj_id=class_id)
         return Response(list(records))
 
     @action(detail=False, methods=['get'])

@@ -12,6 +12,8 @@ from rest_framework.views import APIView
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from django.db.models import Sum, Avg
+from django.db.models import OuterRef, Subquery, CharField
+from django.db.models.functions import Coalesce
 
 from core.permissions import (
     IsSchoolAdmin, IsSchoolAdminOrReadOnly, HasSchoolAccess, ModuleAccessMixin,
@@ -156,9 +158,20 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         elif class_id:
             queryset = queryset.filter(class_obj_id=class_id)
 
+        academic_year = self.request.query_params.get('academic_year')
+        enrollment_active_filter = True
+
         is_active = self.request.query_params.get('is_active')
         if is_active is not None:
-            queryset = queryset.filter(is_active=is_active.lower() == 'true')
+            is_active_bool = is_active.lower() == 'true'
+            if academic_year:
+                enrollment_active_filter = is_active_bool
+                queryset = queryset.filter(
+                    enrollments__academic_year_id=academic_year,
+                    enrollments__is_active=is_active_bool,
+                )
+            else:
+                queryset = queryset.filter(is_active=is_active_bool)
 
         search = self.request.query_params.get('search')
         if search:
@@ -167,13 +180,11 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
                 db_models.Q(roll_number__icontains=search)
             )
 
-        academic_year = self.request.query_params.get('academic_year')
         if academic_year:
-            from django.db.models import Subquery, OuterRef
             # Use a JOIN to filter enrolled students (much faster than IN subquery)
             queryset = queryset.filter(
                 enrollments__academic_year_id=academic_year,
-                enrollments__is_active=True,
+                enrollments__is_active=enrollment_active_filter,
             ).distinct()
             # Annotate with enrollment-scoped roll number, class ID, and class name
             # so the serializer can return historical class info for previous sessions.
@@ -185,8 +196,13 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             queryset = queryset.annotate(
                 _enrollment_roll_number=Subquery(enr_qs.values('roll_number')[:1]),
                 _enrollment_class_obj_id=Subquery(enr_qs.values('class_obj_id')[:1]),
-                _enrollment_class_name=Subquery(enr_qs.values('class_obj__name')[:1]),
+                _enrollment_class_name=Coalesce(
+                    Subquery(enr_qs.values('session_class__display_name')[:1]),
+                    Subquery(enr_qs.values('class_obj__name')[:1]),
+                    output_field=CharField(),
+                ),
                 _enrollment_class_grade=Subquery(enr_qs.values('class_obj__grade_level')[:1]),
+                _enrollment_status=Subquery(enr_qs.values('status')[:1]),
             )
             return queryset.order_by(
                 '_enrollment_class_grade', '_enrollment_class_name',
@@ -721,23 +737,36 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
     def enrollment_history(self, request, pk=None):
         """Enrollment records across academic years."""
         student = self.get_object()
-        try:
-            from academic_sessions.models import StudentEnrollment
-            enrollments = StudentEnrollment.objects.filter(
-                student=student
-            ).select_related('academic_year', 'class_enrolled').order_by('-academic_year__start_date')
+        from academic_sessions.models import StudentEnrollment
 
-            result = []
-            for e in enrollments:
-                result.append({
-                    'academic_year': str(e.academic_year),
-                    'class_name': e.class_enrolled.name if e.class_enrolled else None,
-                    'roll_number': e.roll_number,
-                    'status': e.status,
-                })
-            return Response(result)
-        except Exception:
-            return Response([])
+        enrollments = StudentEnrollment.objects.filter(
+            student=student
+        ).select_related(
+            'academic_year', 'session_class', 'class_obj'
+        ).order_by('-academic_year__start_date', '-academic_year__id', '-id')
+
+        result = []
+        for e in enrollments:
+            class_name = (
+                (e.session_class.display_name if e.session_class_id else None)
+                or (e.class_obj.name if e.class_obj_id else None)
+            )
+            section = (
+                (e.session_class.section if e.session_class_id else None)
+                or (e.class_obj.section if e.class_obj_id else None)
+            )
+
+            result.append({
+                'academic_year': str(e.academic_year),
+                'academic_year_name': getattr(e.academic_year, 'name', str(e.academic_year)),
+                'class_name': class_name,
+                'section': section,
+                'roll_number': e.roll_number,
+                'status': e.status,
+                'is_active': e.is_active,
+            })
+
+        return Response(result)
 
     @action(detail=True, methods=['get', 'post'], url_path='documents')
     def documents(self, request, pk=None):

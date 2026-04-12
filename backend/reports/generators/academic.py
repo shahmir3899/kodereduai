@@ -2,7 +2,6 @@
 Academic/Examination report generators.
 """
 
-from django.db.models import Avg, Count, Q
 from .base import BaseReportGenerator
 
 
@@ -19,11 +18,17 @@ class ClassResultReportGenerator(BaseReportGenerator):
             from examinations.models import Exam, StudentMark, ExamSubject
 
             exam = Exam.objects.get(id=exam_id)
+            academic_year_id = self._academic_year_id()
             marks = StudentMark.objects.filter(
                 exam_subject__exam=exam,
                 student__school=self.school,
-            ).select_related(
-                'student', 'student__class_obj', 'exam_subject', 'exam_subject__subject'
+            )
+            if academic_year_id:
+                marks = marks.filter(enrollment__academic_year_id=academic_year_id)
+
+            marks = marks.select_related(
+                'student', 'student__class_obj', 'enrollment', 'enrollment__class_obj',
+                'enrollment__session_class', 'exam_subject', 'exam_subject__subject'
             ).order_by('student__class_obj__name', 'student__roll_number')
 
             # Aggregate per student
@@ -31,10 +36,22 @@ class ClassResultReportGenerator(BaseReportGenerator):
             for mark in marks:
                 sid = mark.student_id
                 if sid not in student_totals:
+                    if mark.enrollment_id:
+                        if mark.enrollment.session_class_id and mark.enrollment.session_class:
+                            class_name = mark.enrollment.session_class.display_name
+                        elif mark.enrollment.class_obj_id and mark.enrollment.class_obj:
+                            class_name = mark.enrollment.class_obj.name
+                        else:
+                            class_name = mark.student.class_obj.name
+                        roll_number = mark.enrollment.roll_number or mark.student.roll_number
+                    else:
+                        class_name = mark.student.class_obj.name
+                        roll_number = mark.student.roll_number
+
                     student_totals[sid] = {
                         'name': mark.student.name,
-                        'roll': mark.student.roll_number,
-                        'class': mark.student.class_obj.name,
+                        'roll': roll_number,
+                        'class': class_name,
                         'obtained': 0,
                         'total': 0,
                         'subjects': 0,
@@ -92,12 +109,21 @@ class StudentProgressReportGenerator(BaseReportGenerator):
             from examinations.models import StudentMark
 
             student = Student.objects.select_related('class_obj').get(id=student_id)
+            academic_year_id = self._academic_year_id()
 
             marks = StudentMark.objects.filter(
                 student=student
-            ).select_related(
+            )
+            if academic_year_id:
+                marks = marks.filter(enrollment__academic_year_id=academic_year_id)
+
+            marks = marks.select_related(
                 'exam_subject', 'exam_subject__exam', 'exam_subject__subject'
-            ).order_by('exam_subject__exam__date', 'exam_subject__subject__name')
+            ).order_by('exam_subject__exam__start_date', 'exam_subject__subject__name')
+
+            enrollment_map = self._get_enrollment_map([student.id])
+            class_name = self._resolve_class_name(student, enrollment_map)
+            roll_number = self._resolve_roll_number(student, enrollment_map)
 
             rows = []
             for m in marks:
@@ -115,11 +141,11 @@ class StudentProgressReportGenerator(BaseReportGenerator):
 
             return {
                 'title': f"Student Progress Report - {student.name}",
-                'subtitle': f"Class: {student.class_obj.name} | Roll #: {student.roll_number}",
+                'subtitle': f"Class: {class_name} | Roll #: {roll_number}",
                 'summary': {
                     'Student': student.name,
-                    'Class': student.class_obj.name,
-                    'Roll Number': student.roll_number,
+                    'Class': class_name,
+                    'Roll Number': roll_number,
                 },
                 'table_headers': ['Exam', 'Subject', 'Obtained', 'Total', 'Percentage', 'Grade'],
                 'table_rows': rows,

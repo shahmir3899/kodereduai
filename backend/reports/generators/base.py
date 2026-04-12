@@ -24,6 +24,45 @@ class BaseReportGenerator:
         self.school = school
         self.parameters = parameters or {}
 
+    def _academic_year_id(self):
+        academic_year_id = self.parameters.get('academic_year')
+        if academic_year_id in (None, ''):
+            return None
+        try:
+            return int(academic_year_id)
+        except (TypeError, ValueError):
+            return None
+
+    def _get_enrollment_map(self, student_ids):
+        academic_year_id = self._academic_year_id()
+        if not academic_year_id or not student_ids:
+            return {}
+
+        from academic_sessions.models import StudentEnrollment
+
+        enrollment_qs = StudentEnrollment.objects.filter(
+            school_id=self.school.id,
+            academic_year_id=academic_year_id,
+            is_active=True,
+            student_id__in=student_ids,
+        ).select_related('class_obj', 'session_class')
+        return {enrollment.student_id: enrollment for enrollment in enrollment_qs}
+
+    def _resolve_class_name(self, student, enrollment_map):
+        enrollment = enrollment_map.get(student.id)
+        if enrollment:
+            if enrollment.session_class_id and enrollment.session_class:
+                return enrollment.session_class.display_name
+            if enrollment.class_obj_id and enrollment.class_obj:
+                return enrollment.class_obj.name
+        return student.class_obj.name if student.class_obj else 'Unknown'
+
+    def _resolve_roll_number(self, student, enrollment_map):
+        enrollment = enrollment_map.get(student.id)
+        if enrollment and enrollment.roll_number:
+            return enrollment.roll_number
+        return student.roll_number
+
     def get_data(self) -> dict:
         raise NotImplementedError
 

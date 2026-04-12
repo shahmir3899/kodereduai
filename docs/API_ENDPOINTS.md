@@ -59,7 +59,7 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 ## Students
 | Method | URL | Params |
 |--------|-----|--------|
-| GET/POST | /api/students/ | class_obj, search, status, is_active |
+| GET/POST | /api/students/ | class_obj, session_class_id, academic_year, search, status, is_active |
 | GET/PUT/DELETE | /api/students/{id}/ | |
 | POST | /api/students/bulk_create/ | Body: [{name, class_obj, roll_number}] |
 | POST | /api/students/bulk-create-accounts/ | Create user accounts for students |
@@ -73,6 +73,10 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | GET/POST | /api/students/{id}/documents/ | |
 | DELETE | /api/students/{id}/documents/{doc_id}/ | |
 | POST | /api/students/{id}/create-user-account/ | |
+
+**Students list behavior notes:**
+- When `academic_year` is provided, `class_name`, `class_obj`, `roll_number`, and `status` are resolved from `StudentEnrollment` for that academic year.
+- `Student.status` is operational snapshot lifecycle; repeat/promotion context is tracked in enrollment and promotion history.
 
 ### Student Portal
 | Method | URL | Description |
@@ -233,7 +237,7 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | GET/POST | /api/sessions/terms/ | academic_year, is_active |
 | POST | /api/sessions/terms/import-preview/ | Body: {source_academic_year_id, target_academic_year_id, conflict_mode=skip|update, include_inactive=false}. Returns per-term action preview + counts |
 | POST | /api/sessions/terms/import-apply/ | Body: {source_academic_year_id, target_academic_year_id, conflict_mode=skip|update, include_inactive=false}. Applies import and returns created/updated/skipped summary |
-| GET/POST | /api/sessions/enrollments/ | academic_year, class_obj, student, status (ACTIVE\|PROMOTED\|RETAINED\|TRANSFERRED\|GRADUATED\|REPEAT) |
+| GET/POST | /api/sessions/enrollments/ | academic_year, class_obj, student, status (ACTIVE\|PROMOTED\|REPEAT\|TRANSFERRED\|WITHDRAWN\|GRADUATED) |
 | GET | /api/sessions/enrollments/by_class/ | class_id, academic_year |
 | POST | /api/sessions/enrollments/bulk_promote/ | Body: {source_academic_year, target_academic_year, promotions:[{student_id, target_class_id?, target_session_class_id?, new_roll_number?, action}]}. action: PROMOTE\|GRADUATE\|REPEAT |
 | POST | /api/sessions/enrollments/bulk_reverse_promote/ | Body: {source_academic_year, target_academic_year, student_ids[]} |
@@ -255,6 +259,7 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 - `correct-single` / `correct-bulk` support re-opening graduated source rows.
 - For a graduated source row with no target enrollment, `PROMOTE` or `REPEAT` can create target-year enrollment during correction.
 - `GRADUATE` is allowed without an existing target enrollment (terminal confirmation/update path).
+- For `REPEAT`, correction logic normalizes stale promoted targets to same-grade repeat targets and resolves the matching target-year session class where possible.
 
 ## Examinations
 | Method | URL | Params | Description |

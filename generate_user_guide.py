@@ -80,7 +80,7 @@ class UserGuidePDF(FPDF):
         self.set_font("Helvetica", "", 12)
         self.set_text_color(100, 100, 100)
         self.cell(0, 8, "School Management System", align="C", new_x="LMARGIN", new_y="NEXT")
-        self.cell(0, 8, "Version 3.1 - Session Class Standardization", align="C", new_x="LMARGIN", new_y="NEXT")
+        self.cell(0, 8, "Version 3.2 - Historical Scope and Promotion Corrections", align="C", new_x="LMARGIN", new_y="NEXT")
         self.ln(40)
         self.set_font("Helvetica", "", 10)
         self.cell(0, 6, "Modules Covered:", align="C", new_x="LMARGIN", new_y="NEXT")
@@ -747,14 +747,25 @@ def build_guide():
 
     pdf.section_title("Student Promotion")
     pdf.nav_path("Sidebar > Academics > Promotion")
-    pdf.step("Select the source academic year and source class.")
-    pdf.step("Select the target academic year and target class.")
-    pdf.step("Review the list of students eligible for promotion.")
-    pdf.step("Optionally edit each student's new roll number for the target year.")
-    pdf.step("Select students to promote (or select all).")
-    pdf.step("Click 'Promote' to move them to the new class/year.")
+    pdf.step("Select the source academic year and source class/session class.")
+    pdf.step("Select the target academic year.")
+    pdf.step("Review each student row and choose an action: PROMOTE, REPEAT, or GRADUATE.")
+    pdf.step("For PROMOTE/REPEAT, confirm the target class or target session class and set roll numbers as needed.")
+    pdf.step("Use preview helpers where available, then run bulk promotion.")
+    pdf.step("After execution, open the Promotion History tab to verify generated event rows.")
 
-    pdf.warning_box("Promotion is a bulk operation. Ensure the target academic year and classes exist before promoting.")
+    pdf.sub_section("Action Meanings")
+    pdf.bullet("PROMOTE: Student moves to next class in the target academic year; source enrollment becomes PROMOTED.")
+    pdf.bullet("REPEAT: Student remains at same grade intent in the target academic year; source enrollment becomes REPEAT.")
+    pdf.bullet("GRADUATE: Student is marked terminal graduate in source context; no target class is required.")
+
+    pdf.sub_section("Corrections (Single/Bulk)")
+    pdf.step("If a promotion result is wrong, use Correct Single or Correct Bulk from Promotion History.")
+    pdf.step("Provide source/target years and the correction action.")
+    pdf.step("For REPEAT corrections, the system now normalizes stale promoted targets to same-grade repeat targets automatically.")
+    pdf.step("When session-class IDs differ across years, correction resolves target-year session class mapping safely.")
+
+    pdf.warning_box("Promotion and correction are audited operations. Always verify source year, target year, and class mappings before confirming.")
     pdf.info_box("Promotion & New Admissions",
                  "New admissions can happen in a future session before promotion is run for the current "
                  "session. For example, you can admit students to Playgroup for 2026-27 while 2025-26 "
@@ -1260,6 +1271,10 @@ def build_guide():
                  "Roll numbers start from 1 for each session-class combination, independent "
                  "of other sessions. This means admissions work even before running promotion "
                  "for the current year.")
+    pdf.info_box("Admissions and Promotion Relationship",
+                 "Admissions create enrollment in the selected academic year directly. Promotion manages "
+                 "existing enrolled students between years. If you admit future-year students before promotion, "
+                 "that is valid and expected because roll numbers are scoped per academic year and class/session class.")
 
     pdf.section_title("Admission Analytics")
     pdf.body_text("The enquiries page provides at-a-glance analytics:")

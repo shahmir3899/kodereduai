@@ -729,7 +729,7 @@ class StudentEnrollmentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         operation.save(update_fields=['processed_count', 'skipped_count', 'error_count', 'status', 'updated_at'])
 
     def _run_single_correction(self, *, school_id, source_year, target_year, correction, operation, request_user, dry_run=False):
-        from students.models import Student
+        from students.models import Student, Class
         from academic_sessions.roll_allocator_service import RollAllocatorService
 
         student_id = correction['student_id']
@@ -774,8 +774,58 @@ class StudentEnrollmentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
             or (target_enrollment.roll_number if target_enrollment else '')
             or source_enrollment.roll_number
         )
+
         resolved_target_class_id = target_class_id or (target_enrollment.class_obj_id if target_enrollment else None)
         resolved_target_session_class_id = target_session_class_id or (target_enrollment.session_class_id if target_enrollment else None)
+
+        if resolved_target_session_class_id:
+            resolved_session_class = SessionClass.objects.filter(
+                id=resolved_target_session_class_id,
+                school_id=school_id,
+                academic_year_id=target_year.id,
+            ).only('id', 'class_obj_id').first()
+            if resolved_session_class and resolved_session_class.class_obj_id:
+                resolved_target_class_id = resolved_session_class.class_obj_id
+
+        if action == 'REPEAT':
+            source_class_id = source_enrollment.class_obj_id
+            source_class_grade = Class.objects.filter(
+                id=source_class_id,
+                school_id=school_id,
+            ).values_list('grade_level', flat=True).first()
+            target_class_grade = None
+            if resolved_target_class_id:
+                target_class_grade = Class.objects.filter(
+                    id=resolved_target_class_id,
+                    school_id=school_id,
+                ).values_list('grade_level', flat=True).first()
+
+            # REPEAT must remain in the same class level; avoid reusing stale promoted targets.
+            if (
+                not resolved_target_class_id
+                or source_class_grade is None
+                or target_class_grade is None
+                or target_class_grade != source_class_grade
+            ):
+                resolved_target_class_id = source_class_id
+
+            resolved_repeat_session_class = self._resolve_repeat_target_session_class(
+                school_id=school_id,
+                target_year=target_year,
+                source_enrollment=source_enrollment,
+                target_class_id=resolved_target_class_id,
+            )
+            if resolved_repeat_session_class:
+                resolved_target_session_class_id = resolved_repeat_session_class.id
+                if resolved_repeat_session_class.class_obj_id:
+                    resolved_target_class_id = resolved_repeat_session_class.class_obj_id
+            elif not target_session_class_id:
+                resolved_target_session_class_id = self._resolve_repeat_target_session_class_id(
+                    school_id=school_id,
+                    target_year=target_year,
+                    source_enrollment=source_enrollment,
+                    target_class_id=resolved_target_class_id,
+                )
 
         if action != 'GRADUATE' and not resolved_target_class_id:
             return {
@@ -948,7 +998,7 @@ class StudentEnrollmentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
             Student.objects.filter(pk=student_id, school_id=school_id).update(
                 class_obj_id=resolved_target_class_id,
                 roll_number=final_roll,
-                status=(Student.Status.REPEAT if action == 'REPEAT' else Student.Status.ACTIVE),
+                status=Student.Status.ACTIVE,
             )
 
             self._log_promotion_event(
@@ -985,6 +1035,79 @@ class StudentEnrollmentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
             'target_session_class_id': resolved_target_session_class_id,
             'new_roll_number': final_roll,
         }
+
+    def _resolve_repeat_target_session_class_id(self, *, school_id, target_year, source_enrollment, target_class_id):
+        resolved = self._resolve_repeat_target_session_class(
+            school_id=school_id,
+            target_year=target_year,
+            source_enrollment=source_enrollment,
+            target_class_id=target_class_id,
+        )
+        return resolved.id if resolved else None
+
+    def _resolve_repeat_target_session_class(self, *, school_id, target_year, source_enrollment, target_class_id):
+        if not source_enrollment.session_class_id:
+            return None
+
+        source_session_class = SessionClass.objects.filter(
+            id=source_enrollment.session_class_id,
+            school_id=school_id,
+        ).only('display_name', 'section', 'grade_level').first()
+
+        if not source_session_class:
+            return None
+
+        section = source_session_class.section or ''
+        display_name = source_session_class.display_name or ''
+
+        base_qs = SessionClass.objects.filter(
+            school_id=school_id,
+            academic_year_id=target_year.id,
+            class_obj_id=target_class_id,
+        )
+
+        exact_match = base_qs.filter(
+            display_name=display_name,
+            section=section,
+        ).order_by('id').first()
+        if exact_match:
+            return exact_match
+
+        section_match = base_qs.filter(section=section).order_by('id').first()
+        if section_match:
+            return section_match
+
+        any_match = base_qs.order_by('id').first()
+        if any_match:
+            return any_match
+
+        # Fallback: if class ids drifted across years, match by session-class identity.
+        target_year_qs = SessionClass.objects.filter(
+            school_id=school_id,
+            academic_year_id=target_year.id,
+        )
+
+        by_name_and_section = target_year_qs.filter(
+            display_name=display_name,
+            section=section,
+        ).order_by('id').first()
+        if by_name_and_section:
+            return by_name_and_section
+
+        by_name = target_year_qs.filter(
+            display_name=display_name,
+        ).order_by('id').first()
+        if by_name:
+            return by_name
+
+        if source_session_class.grade_level is not None:
+            by_grade = target_year_qs.filter(
+                grade_level=source_session_class.grade_level,
+            ).order_by('id').first()
+            if by_grade:
+                return by_grade
+
+        return None
 
     def _resolve_target_master_class(self, school_id, target_year, source_class_like, suggested_name, next_grade_level, create_if_missing=False):
         from students.models import Class

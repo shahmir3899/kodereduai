@@ -4,6 +4,7 @@ from datetime import date
 from academic_sessions.models import (
     AcademicYear,
     StudentEnrollment,
+    SessionClass,
     PromotionOperation,
     PromotionEvent,
 )
@@ -118,14 +119,68 @@ class TestRollAllocation:
 
         promoted_student.refresh_from_db()
         assert promoted_student.class_obj_id == class_2.id
-        assert promoted_student.roll_number == '4'
+
+    def test_bulk_promote_repeat_keeps_student_snapshot_active(self, seed_data, api):
+        from students.models import Student
+
+        token = seed_data['tokens']['admin']
+        sid = seed_data['SID_A']
+        source_year = seed_data['academic_year']
+        class_1 = seed_data['classes'][0]
+
+        repeat_student = seed_data['students'][0]
+
+        StudentEnrollment.objects.create(
+            school=seed_data['school_a'],
+            student=repeat_student,
+            academic_year=source_year,
+            class_obj=class_1,
+            roll_number=repeat_student.roll_number,
+            status=StudentEnrollment.Status.ACTIVE,
+            is_active=True,
+        )
+
+        target_year = AcademicYear.objects.create(
+            school=seed_data['school_a'],
+            name=f"{seed_data['prefix']}2026-2027-repeat-active",
+            start_date=date(2026, 4, 1),
+            end_date=date(2027, 3, 31),
+            is_current=False,
+            is_active=True,
+        )
+
+        resp = api.post('/api/sessions/enrollments/bulk_promote/', {
+            'source_academic_year': source_year.id,
+            'target_academic_year': target_year.id,
+            'promotions': [{
+                'student_id': repeat_student.id,
+                'target_class_id': class_1.id,
+                'new_roll_number': '77',
+                'action': 'REPEAT',
+            }],
+        }, token, sid)
+
+        assert resp.status_code == 200, resp.content[:300]
+        data = resp.json().get('result', {})
+        assert data.get('promoted') == 1
+        assert data.get('errors') == []
+
+        repeat_student.refresh_from_db()
+        assert repeat_student.status == Student.Status.ACTIVE
+
+        source_enrollment = StudentEnrollment.objects.get(
+            school=seed_data['school_a'],
+            student=repeat_student,
+            academic_year=source_year,
+        )
+        assert source_enrollment.status == StudentEnrollment.Status.REPEAT
 
         target_enrollment = StudentEnrollment.objects.get(
             school=seed_data['school_a'],
-            student=promoted_student,
+            student=repeat_student,
             academic_year=target_year,
         )
-        assert target_enrollment.roll_number == '4'
+        assert target_enrollment.roll_number == '77'
 
     def test_bulk_promote_rejects_duplicate_target_rolls_in_payload(self, seed_data, api):
         token = seed_data['tokens']['admin']
@@ -280,6 +335,8 @@ class TestPromotionHistoryAndCorrections:
         assert any(r.get('operation_type') == 'BULK_PROMOTE' for r in rows)
 
     def test_correct_single_reapplys_repeat_and_logs_operation(self, seed_data, api):
+        from students.models import Student
+
         token = seed_data['tokens']['admin']
         sid = seed_data['SID_A']
         source_year = seed_data['academic_year']
@@ -333,11 +390,190 @@ class TestPromotionHistoryAndCorrections:
         assert source_enrollment.status == StudentEnrollment.Status.REPEAT
         assert target_enrollment.class_obj_id == class_1.id
 
+        student.refresh_from_db()
+        assert student.status == Student.Status.ACTIVE
+
         operation = PromotionOperation.objects.get(pk=payload['operation_id'])
         assert operation.operation_type == PromotionOperation.OperationType.SINGLE_CORRECTION
         event_types = list(operation.events.values_list('event_type', flat=True))
         assert 'REVERSED' in event_types
         assert 'REPEATED' in event_types
+
+    def test_correct_single_repeat_ignores_stale_promoted_target_class(self, seed_data, api):
+        token = seed_data['tokens']['admin']
+        sid = seed_data['SID_A']
+        source_year = seed_data['academic_year']
+        target_year = AcademicYear.objects.create(
+            school=seed_data['school_a'],
+            name=f"{seed_data['prefix']}2026-2027-csingle-repeat-stale-target",
+            start_date=date(2026, 4, 1),
+            end_date=date(2027, 3, 31),
+            is_current=False,
+            is_active=True,
+        )
+        student = seed_data['students'][2]
+        source_class = seed_data['classes'][0]
+        promoted_target_class = seed_data['classes'][1]
+
+        self._build_source_target_state(
+            seed_data,
+            student,
+            source_year,
+            target_year,
+            source_class,
+            promoted_target_class,
+            source_roll='5',
+            target_roll='25',
+        )
+
+        # Simulate stale UI payload carrying promoted target for a REPEAT correction.
+        resp = api.post('/api/sessions/enrollments/correct-single/', {
+            'source_academic_year': source_year.id,
+            'target_academic_year': target_year.id,
+            'student_id': student.id,
+            'action': 'REPEAT',
+            'target_class_id': promoted_target_class.id,
+            'new_roll_number': '26',
+            'reason': 'Repeat should not stay in promoted class',
+        }, token, sid)
+
+        assert resp.status_code == 200, resp.content[:300]
+
+        source_enrollment = StudentEnrollment.objects.get(
+            school=seed_data['school_a'],
+            student=student,
+            academic_year=source_year,
+        )
+        target_enrollment = StudentEnrollment.objects.get(
+            school=seed_data['school_a'],
+            student=student,
+            academic_year=target_year,
+        )
+
+        assert source_enrollment.status == StudentEnrollment.Status.REPEAT
+        assert target_enrollment.class_obj_id == source_class.id
+
+    def test_correct_single_repeat_maps_target_session_when_class_ids_drift(self, seed_data, api):
+        from students.models import Student, Class
+
+        token = seed_data['tokens']['admin']
+        sid = seed_data['SID_A']
+        school = seed_data['school_a']
+
+        source_year = AcademicYear.objects.create(
+            school=school,
+            name=f"{seed_data['prefix']}2025-2026-repeat-drift-src",
+            start_date=date(2025, 4, 1),
+            end_date=date(2026, 3, 31),
+            is_current=False,
+            is_active=True,
+        )
+        target_year = AcademicYear.objects.create(
+            school=school,
+            name=f"{seed_data['prefix']}2026-2027-repeat-drift-tgt",
+            start_date=date(2026, 4, 1),
+            end_date=date(2027, 3, 31),
+            is_current=False,
+            is_active=True,
+        )
+
+        source_class = Class.objects.create(
+            school=school,
+            name='Class 1',
+            section='A',
+            grade_level=3,
+            is_active=True,
+        )
+        target_repeat_class = Class.objects.create(
+            school=school,
+            name='Class 1',
+            section='',
+            grade_level=3,
+            is_active=True,
+        )
+        promoted_class = Class.objects.create(
+            school=school,
+            name='Class 2',
+            section='A',
+            grade_level=4,
+            is_active=True,
+        )
+
+        source_session = SessionClass.objects.create(
+            school=school,
+            academic_year=source_year,
+            class_obj=source_class,
+            display_name='Class 1',
+            section='A',
+            grade_level=3,
+            is_active=True,
+        )
+        target_repeat_session = SessionClass.objects.create(
+            school=school,
+            academic_year=target_year,
+            class_obj=target_repeat_class,
+            display_name='Class 1',
+            section='',
+            grade_level=3,
+            is_active=True,
+        )
+        target_promoted_session = SessionClass.objects.create(
+            school=school,
+            academic_year=target_year,
+            class_obj=promoted_class,
+            display_name='Class 2',
+            section='A',
+            grade_level=4,
+            is_active=True,
+        )
+
+        student = seed_data['students'][5]
+
+        StudentEnrollment.objects.create(
+            school=school,
+            student=student,
+            academic_year=source_year,
+            class_obj=source_class,
+            session_class=source_session,
+            roll_number='1',
+            status=StudentEnrollment.Status.PROMOTED,
+            is_active=True,
+        )
+        StudentEnrollment.objects.create(
+            school=school,
+            student=student,
+            academic_year=target_year,
+            class_obj=promoted_class,
+            session_class=target_promoted_session,
+            roll_number='9',
+            status=StudentEnrollment.Status.ACTIVE,
+            is_active=True,
+        )
+        Student.objects.filter(pk=student.id).update(
+            class_obj_id=promoted_class.id,
+            roll_number='9',
+            status=Student.Status.ACTIVE,
+        )
+
+        resp = api.post('/api/sessions/enrollments/correct-single/', {
+            'source_academic_year': source_year.id,
+            'target_academic_year': target_year.id,
+            'student_id': student.id,
+            'action': 'REPEAT',
+            'target_class_id': promoted_class.id,
+            'new_roll_number': '9',
+            'reason': 'Repeat should resolve to target year Class 1 mapping',
+        }, token, sid)
+
+        assert resp.status_code == 200, resp.content[:300]
+
+        target_enrollment = StudentEnrollment.objects.get(
+            school=school,
+            student=student,
+            academic_year=target_year,
+        )
+        assert target_enrollment.class_obj_id == target_repeat_class.id
+        assert target_enrollment.session_class_id == target_repeat_session.id
 
     def test_correct_bulk_dry_run_returns_previews_without_mutation(self, seed_data, api):
         token = seed_data['tokens']['admin']

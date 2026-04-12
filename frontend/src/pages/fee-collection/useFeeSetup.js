@@ -74,6 +74,11 @@ export function useFeeSetup({ academicYearId, feeType, studentClassId, structure
     mutationFn: (data) => financeApi.generateMonthly(data),
     taskType: 'FEE_GENERATION',
     title: `Generating fees for ${month}/${year}`,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['feePayments'] })
+      queryClient.invalidateQueries({ queryKey: ['feeSummary'] })
+      queryClient.invalidateQueries({ queryKey: ['generate-preview'] })
+    },
   })
 
   const generateOnetimeMutation = useBackgroundTask({
@@ -82,6 +87,7 @@ export function useFeeSetup({ academicYearId, feeType, studentClassId, structure
     title: `Generating one-time fees for ${year}`,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['feePayments'] })
+      queryClient.invalidateQueries({ queryKey: ['feeSummary'] })
       queryClient.invalidateQueries({ queryKey: ['generate-preview'] })
     },
   })
@@ -92,6 +98,7 @@ export function useFeeSetup({ academicYearId, feeType, studentClassId, structure
     title: `Generating annual fees for ${year}`,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['feePayments'] })
+      queryClient.invalidateQueries({ queryKey: ['feeSummary'] })
       queryClient.invalidateQueries({ queryKey: ['generate-preview'] })
     },
   })
