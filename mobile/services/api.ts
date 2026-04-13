@@ -1,4 +1,5 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
+import Constants from 'expo-constants';
 import {
   getAccessToken,
   getRefreshToken,
@@ -7,11 +8,16 @@ import {
   clearTokens,
 } from './auth';
 
-// TODO: Change this to your backend URL
-// For local dev with Android emulator: http://10.0.2.2:8000
-// For local dev with iOS simulator: http://localhost:8000
-// For production: https://your-backend-url.com
-const API_URL = 'http://10.0.2.2:8000';
+const extra = (Constants.expoConfig?.extra ?? {}) as Record<string, unknown>;
+
+const APP_ENV = String(extra.appEnv ?? process.env.EXPO_PUBLIC_APP_ENV ?? 'development');
+const ALLOW_INSECURE_HTTP =
+  String(extra.allowInsecureHttp ?? process.env.EXPO_PUBLIC_ALLOW_INSECURE_HTTP ?? 'false').toLowerCase() === 'true';
+const API_URL = String(extra.apiUrl ?? process.env.EXPO_PUBLIC_API_URL ?? 'http://10.0.2.2:8000');
+
+if (APP_ENV === 'production' && API_URL.startsWith('http://') && !ALLOW_INSECURE_HTTP) {
+  throw new Error('Insecure API URL is blocked in production. Configure an HTTPS API URL.');
+}
 
 const api = axios.create({
   baseURL: API_URL,

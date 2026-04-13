@@ -5,6 +5,7 @@ import { useToast } from '../../components/Toast'
 import LoginPage from '../../pages/LoginPage'
 import App from '../../App'
 import LoadingSpinner from '../../components/LoadingSpinner'
+import { clearAuthState } from '../../services/authStorage'
 
 /**
  * Super Admin Portal
@@ -57,10 +58,8 @@ export default function Portal() {
       }
       
       // Clear auth tokens and state
+      clearAuthState()
       localStorage.removeItem('token')
-      localStorage.removeItem('refresh_token')
-      localStorage.removeItem('access_token')
-      localStorage.removeItem('active_school_id')
       localStorage.removeItem('active_school_name')
       localStorage.removeItem('isPortalMode')
       // Don't clear dev_subdomain on localhost - we need it!

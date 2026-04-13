@@ -103,7 +103,7 @@ Complex page broken into:
 - **useFeeOverview.js** — Custom hook for FeeOverviewPage: fetches backend `fee_summary/` for stat cards + individual fee-payments for ClassBreakdown drill-down. No mutations.
 - **useFeeCollection.js** — Custom hook for FeeCollectPage: fetches backend `fee_summary/` (filter-aware) for stat cards, individual fee-payments for table, all payment mutations (generate, pay, bulk update/delete, create). Invalidates `feeSummary` cache on every mutation.
 - **useFeeData.js** — Legacy hook (deprecated): single fetch per month/year/feeType, client-side class/status filtering via `useMemo`, client-side summary computation. Replaced by useFeeOverview/useFeeCollection + backend fee_summary endpoint
-- **feeExport.js** — PDF/Excel export utilities
+- **feeExport.js** — Fee Collection PDF export utility. Generates branded report with school logo/header, summary + class summary tables, class-sectioned student detail tables (Roll, Student, Fee Breakdown, Total Payable, Received, Balance, Remarks), per-class subtotal rows, class-teacher signature area after each class section, principal signature at final footer, and footer metadata (prepared date + page number).
 
 ## Reusable Components (src/components/)
 - **ClassSelector.jsx** — Reusable class dropdown. Uses `useClasses()` hook for data fetching/caching. Props: value, onChange, placeholder, showAllOption, allOptionLabel, className, disabled, required, classes (external override), schoolId. Displays `name - section` format

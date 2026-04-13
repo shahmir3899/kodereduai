@@ -32,6 +32,14 @@
 |----------|----------|---------|---------|
 | VITE_API_URL | Prod only | - | Backend API URL. Dev uses proxy to localhost:8000 |
 
+### Mobile Build Environment (EAS)
+
+| Variable | Used In | Purpose |
+|----------|---------|---------|
+| EXPO_PUBLIC_API_URL | development/preview/production | Mobile backend API base URL |
+| EXPO_PUBLIC_APP_ENV | development/internal/production | Runtime profile guard |
+| EXPO_PUBLIC_ALLOW_INSECURE_HTTP | development/internal | Allow HTTP API URL when explicitly needed |
+
 ## Deployment Architecture (Render.com)
 
 ### Services (render.yaml blueprint)
@@ -151,6 +159,8 @@ On-demand background tasks use a smart sync/async pattern via `run_task_sync()` 
 - SESSION_COOKIE_SECURE: True
 - CSRF_COOKIE_SECURE: True
 - X_FRAME_OPTIONS: DENY
+- Web login persistence: Remember me controls storage mode
+- Browser-close logout: works when Remember me is unchecked (session-scoped storage)
 
 ### Logging
 
@@ -160,9 +170,20 @@ On-demand background tasks use a smart sync/async pattern via `run_task_sync()` 
 
 ### CORS
 
-- Allowed origins from env
+- Production: HTTPS-only allowed origins and regex patterns
+- Local: localhost HTTP origins allowed for development
 - Credentials: allowed
 - Custom headers: x-school-id, x-csrftoken
+
+## Apache Build Hosting Hardening (.htaccess)
+
+If you deploy frontend by uploading build files to Apache/cPanel:
+
+1. Keep `.htaccess` in site root (same folder as `index.html`).
+2. Force HTTP to HTTPS redirect.
+3. Keep SPA fallback rewrite to `/index.html`.
+4. Add baseline security headers: HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy.
+5. Re-upload `.htaccess` whenever frontend build files are refreshed.
 
 ## Database
 
@@ -212,6 +233,12 @@ npx expo start
 2. Set all env vars in Render dashboard
 3. Ensure Redis (Upstash) is configured
 4. Set VITE_API_URL in frontend service
-5. Add frontend URL to CORS_ALLOWED_ORIGINS
-6. Verify Celery worker is running (check Render logs)
-7. Test login at frontend URL
+5. Set `CORS_ALLOWED_ORIGINS` to explicit HTTPS frontend URLs
+6. If hosting frontend on Apache/cPanel, verify HTTP requests redirect to HTTPS
+7. Confirm web login behavior:
+	- Remember me unchecked: login ends on browser close
+	- Remember me checked: login persists until token expiry
+8. Confirm inactivity logout still triggers after 30 minutes idle
+9. For mobile EAS builds, set profile env vars for API URL and HTTP policy
+10. Verify Celery worker is running (check Render logs)
+11. Test login at frontend URL

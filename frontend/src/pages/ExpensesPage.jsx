@@ -34,6 +34,7 @@ export default function ExpensesPage() {
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
+  const [accountFilter, setAccountFilter] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [editingExpense, setEditingExpense] = useState(null)
   const [form, setForm] = useState({
@@ -46,6 +47,66 @@ export default function ExpensesPage() {
   const [tfrDateFrom, setTfrDateFrom] = useState('')
   const [tfrDateTo, setTfrDateTo] = useState('')
   const [showTransferModal, setShowTransferModal] = useState(false)
+
+  const toDateInputValue = (date) => date.toISOString().split('T')[0]
+
+  const applyExpenseDatePreset = (preset) => {
+    const today = new Date()
+    const todayStr = toDateInputValue(today)
+
+    if (preset === 'today') {
+      setDateFrom(todayStr)
+      setDateTo(todayStr)
+      return
+    }
+
+    if (preset === 'thisMonth') {
+      const monthStart = new Date(today.getFullYear(), today.getMonth(), 1)
+      setDateFrom(toDateInputValue(monthStart))
+      setDateTo(todayStr)
+      return
+    }
+
+    if (preset === 'last30') {
+      const last30 = new Date(today)
+      last30.setDate(last30.getDate() - 29)
+      setDateFrom(toDateInputValue(last30))
+      setDateTo(todayStr)
+      return
+    }
+
+    setDateFrom('')
+    setDateTo('')
+  }
+
+  const applyTransferDatePreset = (preset) => {
+    const today = new Date()
+    const todayStr = toDateInputValue(today)
+
+    if (preset === 'today') {
+      setTfrDateFrom(todayStr)
+      setTfrDateTo(todayStr)
+      return
+    }
+
+    if (preset === 'thisMonth') {
+      const monthStart = new Date(today.getFullYear(), today.getMonth(), 1)
+      setTfrDateFrom(toDateInputValue(monthStart))
+      setTfrDateTo(todayStr)
+      return
+    }
+
+    if (preset === 'last30') {
+      const last30 = new Date(today)
+      last30.setDate(last30.getDate() - 29)
+      setTfrDateFrom(toDateInputValue(last30))
+      setTfrDateTo(todayStr)
+      return
+    }
+
+    setTfrDateFrom('')
+    setTfrDateTo('')
+  }
 
   const handleTabChange = (tab) => {
     setActiveTab(tab)
@@ -85,11 +146,12 @@ export default function ExpensesPage() {
   })
 
   const { data: expenses, isLoading } = useQuery({
-    queryKey: ['expenses', dateFrom, dateTo, categoryFilter],
+    queryKey: ['expenses', dateFrom, dateTo, categoryFilter, accountFilter],
     queryFn: () => financeApi.getExpenses({
       ...(dateFrom && { date_from: dateFrom }),
       ...(dateTo && { date_to: dateTo }),
       ...(categoryFilter && { category: categoryFilter }),
+      ...(accountFilter && { account: accountFilter }),
       page_size: 9999,
     }),
   })
@@ -255,14 +317,14 @@ export default function ExpensesPage() {
         <>
           {/* Filters */}
           <div className="card mb-6">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">From Date</label>
-                <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="input-field text-sm" />
+                <input type="date" value={dateFrom} max={dateTo || undefined} onChange={(e) => setDateFrom(e.target.value)} className="input-field text-sm" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">To Date</label>
-                <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="input-field text-sm" />
+                <input type="date" value={dateTo} min={dateFrom || undefined} onChange={(e) => setDateTo(e.target.value)} className="input-field text-sm" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">Category</label>
@@ -271,6 +333,19 @@ export default function ExpensesPage() {
                   {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Account</label>
+                <select value={accountFilter} onChange={(e) => setAccountFilter(e.target.value)} className="input-field text-sm">
+                  <option value="">All Accounts</option>
+                  {accountsList.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button type="button" onClick={() => applyExpenseDatePreset('today')} className="px-3 py-1.5 text-xs border border-gray-300 rounded-md hover:bg-gray-50">Today</button>
+              <button type="button" onClick={() => applyExpenseDatePreset('thisMonth')} className="px-3 py-1.5 text-xs border border-gray-300 rounded-md hover:bg-gray-50">This Month</button>
+              <button type="button" onClick={() => applyExpenseDatePreset('last30')} className="px-3 py-1.5 text-xs border border-gray-300 rounded-md hover:bg-gray-50">Last 30 Days</button>
+              <button type="button" onClick={() => applyExpenseDatePreset('clear')} className="px-3 py-1.5 text-xs border border-gray-300 rounded-md hover:bg-gray-50">Clear Dates</button>
             </div>
           </div>
 
@@ -324,6 +399,7 @@ export default function ExpensesPage() {
                         <span className="text-sm text-gray-500">{expense.date}</span>
                       </div>
                       <p className="text-lg font-bold text-gray-900">{Number(expense.amount).toLocaleString()}</p>
+                      <p className="text-sm text-gray-600 mt-1">Account: {expense.account_name || '-'}</p>
                       {expense.description && <p className="text-sm text-gray-600 mt-1">{expense.description}</p>}
                       <div className="mt-2 pt-2 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
                         <span>By: {expense.recorded_by_name || '-'}</span>
@@ -347,6 +423,7 @@ export default function ExpensesPage() {
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
                         <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Amount</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Account</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Recorded By</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created At</th>
@@ -361,6 +438,7 @@ export default function ExpensesPage() {
                             <span className={`px-2 py-0.5 rounded text-xs font-medium ${getCategoryColor(expense.category)}`}>{expense.category_name || 'Uncategorized'}</span>
                           </td>
                           <td className="px-4 py-3 text-sm font-medium text-gray-900 text-right">{Number(expense.amount).toLocaleString()}</td>
+                          <td className="px-4 py-3 text-sm text-gray-900">{expense.account_name || '-'}</td>
                           <td className="px-4 py-3 text-sm text-gray-600 max-w-xs truncate">{expense.description || '-'}</td>
                           <td className="px-4 py-3 text-sm text-gray-500">{expense.recorded_by_name || '-'}</td>
                           <td className="px-4 py-3 text-xs text-gray-400">
@@ -398,12 +476,18 @@ export default function ExpensesPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">From Date</label>
-                <input type="date" value={tfrDateFrom} onChange={(e) => setTfrDateFrom(e.target.value)} className="input-field text-sm" />
+                <input type="date" value={tfrDateFrom} max={tfrDateTo || undefined} onChange={(e) => setTfrDateFrom(e.target.value)} className="input-field text-sm" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">To Date</label>
-                <input type="date" value={tfrDateTo} onChange={(e) => setTfrDateTo(e.target.value)} className="input-field text-sm" />
+                <input type="date" value={tfrDateTo} min={tfrDateFrom || undefined} onChange={(e) => setTfrDateTo(e.target.value)} className="input-field text-sm" />
               </div>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button type="button" onClick={() => applyTransferDatePreset('today')} className="px-3 py-1.5 text-xs border border-gray-300 rounded-md hover:bg-gray-50">Today</button>
+              <button type="button" onClick={() => applyTransferDatePreset('thisMonth')} className="px-3 py-1.5 text-xs border border-gray-300 rounded-md hover:bg-gray-50">This Month</button>
+              <button type="button" onClick={() => applyTransferDatePreset('last30')} className="px-3 py-1.5 text-xs border border-gray-300 rounded-md hover:bg-gray-50">Last 30 Days</button>
+              <button type="button" onClick={() => applyTransferDatePreset('clear')} className="px-3 py-1.5 text-xs border border-gray-300 rounded-md hover:bg-gray-50">Clear Dates</button>
             </div>
           </div>
 

@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext'
 export default function LoginPage() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [rememberMe, setRememberMe] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [subdomainSchool, setSubdomainSchool] = useState(null)
@@ -37,7 +38,7 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      const userData = await login(username, password)
+      const userData = await login(username, password, rememberMe)
       
       // Portal mode: require SUPER_ADMIN role
       if (isPortalMode) {
@@ -146,6 +147,19 @@ export default function LoginPage() {
                 placeholder="Enter your password"
                 required
               />
+            </div>
+
+            <div className="mb-6 flex items-center gap-2">
+              <input
+                id="remember_me"
+                type="checkbox"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              />
+              <label htmlFor="remember_me" className="text-sm text-gray-700">
+                Remember me on this device
+              </label>
             </div>
 
             <button

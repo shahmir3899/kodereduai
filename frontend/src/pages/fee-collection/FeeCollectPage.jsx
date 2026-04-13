@@ -208,11 +208,14 @@ export default function FeeCollectPage() {
     if (ok) data.deleteFeePaymentMutation.mutate(id)
   }
 
-  const handleExportPDF = () => {
-    exportFeePDF({
+  const handleExportPDF = async () => {
+    await exportFeePDF({
       paymentList: data.paymentList,
       month, year,
       schoolName: activeSchool?.name || user?.school_name,
+      schoolLogo: activeSchool?.logo || activeSchool?.logo_url,
+      schoolAddress: activeSchool?.address,
+      schoolContact: [activeSchool?.contact_email, activeSchool?.contact_phone].filter(Boolean).join(' | '),
       selectedClassLabel,
       feeTypeFilter,
       statusFilter,
@@ -251,7 +254,7 @@ export default function FeeCollectPage() {
       </div>
 
       {/* Sticky Toolbar: Filters + Export */}
-      <div className="sticky top-0 z-20 mb-4 rounded-xl border border-gray-200 bg-white/95 p-3 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-white/80 sm:p-4">
+      <div className="mb-4 rounded-xl border border-gray-200 bg-white/95 p-2 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-white/80 sm:p-3 lg:sticky lg:top-0 lg:z-20">
         <div className="flex flex-col gap-3 xl:flex-row xl:items-end">
           <div className="min-w-0 flex-1">
           <FeeFilters

@@ -40,6 +40,7 @@ export default function FeeTable({
   const isAllTypes = !feeTypeFilter
   const isMonthly = feeTypeFilter === 'MONTHLY'
   const isAnnual = feeTypeFilter === 'ANNUAL'
+  const shouldGroupByStudent = isAllTypes || isAnnual
   const showPrevBal = isMonthly || isAllTypes
   const feeColumnLabel = isAllTypes ? 'Fee Amount' : (FEE_TYPE_LABEL[feeTypeFilter] || 'Fee Amount')
   const headerCheckboxRef = useRef(null)
@@ -54,24 +55,90 @@ export default function FeeTable({
   // Use paymentList directly - sorting is handled by useFeeCollection hook
   const sortedList = paymentList
 
+  const groupedMobileList = useMemo(() => {
+    if (!shouldGroupByStudent) return []
+    const groups = []
+    const byKey = new Map()
+
+    sortedList.forEach((payment) => {
+      const studentKey = payment.student || payment.student_id || `${payment.class_name || ''}::${payment.student_roll || ''}::${payment.student_name || ''}`
+      const key = String(studentKey)
+      const prevBal = Number(payment.previous_balance || 0)
+      const monthlyFee = payment.base_monthly_fee !== null && payment.base_monthly_fee !== undefined
+        ? Number(payment.base_monthly_fee)
+        : (Number(payment.amount_due) - prevBal)
+      const balance = Number(payment.amount_due) - Number(payment.amount_paid)
+
+      if (!byKey.has(key)) {
+        const group = {
+          key,
+          student_name: payment.student_name,
+          class_name: payment.class_name,
+          student_roll: payment.student_roll,
+          items: [],
+          statuses: new Set(),
+          feeAmount: 0,
+          due: 0,
+          paid: 0,
+          balance: 0,
+        }
+        byKey.set(key, group)
+        groups.push(group)
+      }
+
+      const group = byKey.get(key)
+      group.items.push({ payment, prevBal, monthlyFee, balance })
+      group.statuses.add(payment.status)
+      group.feeAmount += monthlyFee
+      group.due += Number(payment.amount_due || 0)
+      group.paid += Number(payment.amount_paid || 0)
+      group.balance += balance
+    })
+
+    return groups
+  }, [sortedList, shouldGroupByStudent])
+
+  const groupedTotalsByKey = useMemo(() => {
+    const map = new Map()
+    groupedMobileList.forEach((group) => {
+      map.set(group.key, {
+        studentName: group.student_name,
+        feeAmount: group.feeAmount,
+        due: group.due,
+        paid: group.paid,
+        balance: group.balance,
+      })
+    })
+    return map
+  }, [groupedMobileList])
+
   // Pre-compute rowSpan for student grouping in "All Types" mode
   const studentGroups = useMemo(() => {
-    if (!isAllTypes) return null
-    const map = new Map() // paymentId → { isFirst, rowSpan }
+    if (!shouldGroupByStudent) return null
+    const map = new Map() // paymentId → { isFirst, isLast, rowSpan }
     let i = 0
     while (i < sortedList.length) {
       const studentId = sortedList[i].student || sortedList[i].student_id
       let j = i + 1
       while (j < sortedList.length && (sortedList[j].student || sortedList[j].student_id) === studentId) j++
       const span = j - i
-      map.set(sortedList[i].id, { isFirst: true, rowSpan: span })
+      map.set(sortedList[i].id, { isFirst: true, isLast: span === 1, rowSpan: span })
       for (let k = i + 1; k < j; k++) {
-        map.set(sortedList[k].id, { isFirst: false, rowSpan: 0 })
+        map.set(sortedList[k].id, { isFirst: false, isLast: k === j - 1, rowSpan: 0 })
       }
       i = j
     }
     return map
-  }, [isAllTypes, sortedList])
+  }, [shouldGroupByStudent, sortedList])
+
+  const footerLabelColSpan =
+    (canWrite ? 1 : 0) + // checkbox
+    3 + // roll, student, class
+    (isAllTypes ? 1 : 0) + // type
+    ((isAnnual || isAllTypes) ? 1 : 0) + // category
+    (showPrevBal ? 1 : 0) // prev balance
+
+  const footerTrailingColSpan = 4 + (canWrite ? 1 : 0)
 
   if (isLoading) {
     return <div className="card"><div className="text-center py-8 text-gray-500">Loading...</div></div>
@@ -109,8 +176,146 @@ export default function FeeTable({
   return (
     <div className="card">
       {/* Mobile card view */}
-      <div className="sm:hidden space-y-3">
-        {sortedList.map((payment) => {
+      <div className="sm:hidden space-y-2">
+        {shouldGroupByStudent ? groupedMobileList.map((group) => {
+          const statusLabel = group.statuses.size === 1 ? [...group.statuses][0] : 'MIXED'
+          return (
+            <div key={group.key} className="border rounded-lg p-2 bg-white">
+              <div className="flex items-start justify-between gap-2 mb-1.5">
+                <div>
+                  <p className="font-medium text-gray-900">{group.student_name}</p>
+                  <p className="text-xs text-gray-500">{group.class_name} - Roll #{group.student_roll}</p>
+                </div>
+                {statusLabel === 'MIXED' ? (
+                  <span className="px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">MIXED</span>
+                ) : statusBadge(statusLabel)}
+              </div>
+
+              <div className="grid grid-cols-3 gap-1.5 text-xs mb-1.5">
+                <div>
+                  <p className="text-gray-500">Payable</p>
+                  <p className="font-semibold text-gray-900">{group.due.toLocaleString()}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Received</p>
+                  <p className="font-semibold text-green-700">{group.paid.toLocaleString()}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Balance</p>
+                  <p className={`font-semibold ${group.balance > 0 ? 'text-orange-700' : group.balance < 0 ? 'text-blue-700' : 'text-green-700'}`}>{group.balance.toLocaleString()}</p>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                {group.items.map(({ payment, prevBal, monthlyFee, balance }) => {
+                  const isSelected = selectedIds.has(payment.id)
+                  return (
+                    <div key={payment.id} className={`rounded-md border p-1.5 ${isSelected ? 'border-primary-400 bg-primary-50' : 'border-gray-200 bg-gray-50'}`}>
+                      <div className="flex items-start gap-2">
+                        {canWrite && onToggleSelect && (
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => onToggleSelect(payment.id)}
+                            className="mt-1 rounded border-gray-300"
+                          />
+                        )}
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1">
+                              {isAllTypes && (
+                                <span className={`px-1.5 py-0.5 text-xs rounded ${payment.fee_type === 'MONTHLY' ? 'bg-green-100 text-green-700' : FEE_TYPE_BADGE[payment.fee_type] || 'bg-gray-100 text-gray-700'}`}>
+                                  {payment.fee_type_display || payment.fee_type}
+                                </span>
+                              )}
+                              {(isAnnual || isAllTypes) && (payment.annual_category_name || payment.monthly_category_name) && (
+                                <span className="px-1.5 py-0.5 text-xs bg-gray-100 text-gray-600 rounded">{payment.annual_category_name || payment.monthly_category_name}</span>
+                              )}
+                            </div>
+                            {statusBadge(payment.status)}
+                          </div>
+
+                          <div className="grid grid-cols-3 gap-1.5 text-xs mt-1.5">
+                            <div>
+                              <p className="text-gray-500">{feeColumnLabel}</p>
+                              <p className="font-medium text-gray-900">{monthlyFee.toLocaleString()}</p>
+                            </div>
+                            <div
+                              className={canWrite ? 'cursor-pointer' : ''}
+                              onClick={() => canWrite && handleCellClick(payment.id, 'amount_due', Number(payment.amount_due))}
+                            >
+                              <p className="text-gray-500">Total Payable</p>
+                              {editingCell?.id === payment.id && editingCell?.field === 'amount_due' ? (
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  autoFocus
+                                  value={editValue}
+                                  onChange={(e) => setEditValue(e.target.value)}
+                                  onBlur={() => onInlineUpdate(payment.id, 'amount_due', editValue)}
+                                  onKeyDown={(e) => handleKeyDown(e, payment.id, 'amount_due')}
+                                  className="w-full input-field text-sm py-0.5 px-1"
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                              ) : (
+                                <p className={`font-medium ${Number(payment.amount_due) < 0 ? 'text-blue-700' : 'text-gray-900'}`}>{Number(payment.amount_due).toLocaleString()}</p>
+                              )}
+                            </div>
+                            <div>
+                              <p className="text-gray-500">Balance</p>
+                              <p className={`font-medium ${balance > 0 ? 'text-orange-700' : balance < 0 ? 'text-blue-700' : 'text-green-700'}`}>{balance.toLocaleString()}</p>
+                            </div>
+                          </div>
+
+                          {prevBal > 0 && (
+                            <p className="text-xs text-orange-600 mt-1">
+                              Prev balance: {prevBal.toLocaleString()} + Fee: {monthlyFee.toLocaleString()}
+                            </p>
+                          )}
+                          {prevBal < 0 && (
+                            <p className="text-xs text-blue-600 mt-1">
+                              Advance credit: {Math.abs(prevBal).toLocaleString()}
+                            </p>
+                          )}
+
+                          <div className="mt-1.5 pt-1.5 border-t border-gray-200 space-y-0.5">
+                            <p className="text-xs text-gray-600">Account: {payment.account_name || '-'}</p>
+                            <div className="flex items-center justify-between text-xs text-gray-500">
+                              <span>Collected by: {payment.collected_by_name || '-'}</span>
+                              <span>{payment.created_at ? new Date(payment.created_at).toLocaleDateString() : '-'}</span>
+                            </div>
+                          </div>
+
+                          {canWrite && payment.status !== 'ADVANCE' && (
+                            <div className="flex gap-1.5 mt-1.5">
+                              {payment.status !== 'PAID' && onRecordPayment && (
+                                <button
+                                  onClick={() => onRecordPayment(payment, Math.max(0, balance))}
+                                  className="text-xs px-3 py-1.5 bg-primary-600 text-white rounded hover:bg-primary-700"
+                                >
+                                  Record Payment
+                                </button>
+                              )}
+                              {onDelete && (
+                                <button
+                                  onClick={() => onDelete(payment.id)}
+                                  className="text-xs px-2 py-1.5 text-red-600 border border-red-300 rounded hover:bg-red-50"
+                                >
+                                  Del
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+            </div>
+          )
+        }) : sortedList.map((payment) => {
           const prevBal = Number(payment.previous_balance || 0)
           const monthlyFee = payment.base_monthly_fee !== null && payment.base_monthly_fee !== undefined ? Number(payment.base_monthly_fee) : (Number(payment.amount_due) - prevBal)
           const balance = Number(payment.amount_due) - Number(payment.amount_paid)
@@ -228,7 +433,7 @@ export default function FeeTable({
           <thead className="bg-gray-50">
             <tr>
               {canWrite && (
-                <th className="px-3 py-3 text-center w-10">
+                <th className="px-3 py-2 text-center w-10">
                   <input
                     ref={headerCheckboxRef}
                     type="checkbox"
@@ -238,21 +443,21 @@ export default function FeeTable({
                   />
                 </th>
               )}
-              <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase">Roll#</th>
-              <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Student</th>
-              <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Class</th>
-              {isAllTypes && <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>}
-              {(isAnnual || isAllTypes) && <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>}
-              {showPrevBal && <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">Prev Bal</th>}
-              <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">{feeColumnLabel}</th>
-              <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">Total Payable</th>
-              <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">Received</th>
-              <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">Balance</th>
-              <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase">Status</th>
-              <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Account</th>
-              <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Collected By</th>
-              <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Collected At</th>
-              {canWrite && <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase">Action</th>}
+              <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">Roll#</th>
+              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Student</th>
+              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Class</th>
+              {isAllTypes && <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Type</th>}
+              {(isAnnual || isAllTypes) && <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Category</th>}
+              {showPrevBal && <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Prev Bal</th>}
+              <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">{feeColumnLabel}</th>
+              <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Total Payable</th>
+              <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Received</th>
+              <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Balance</th>
+              <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">Status</th>
+              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Account</th>
+              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Collected By</th>
+              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Collected At</th>
+              {canWrite && <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase">Action</th>}
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
@@ -260,131 +465,149 @@ export default function FeeTable({
               const prevBal = Number(payment.previous_balance || 0)
               const monthlyFee = payment.base_monthly_fee !== null && payment.base_monthly_fee !== undefined ? Number(payment.base_monthly_fee) : (Number(payment.amount_due) - prevBal)
               const balance = Number(payment.amount_due) - Number(payment.amount_paid)
+              const studentKey = String(payment.student || payment.student_id || `${payment.class_name || ''}::${payment.student_roll || ''}::${payment.student_name || ''}`)
               const isSelected = selectedIds.has(payment.id)
               const isEditingReceived = editingCell?.id === payment.id && editingCell?.field === 'amount_paid'
               const isEditingAmountDue = editingCell?.id === payment.id && editingCell?.field === 'amount_due'
               const group = studentGroups?.get(payment.id)
-              const showStudentCols = !isAllTypes || !group || group.isFirst
+              const showStudentCols = !shouldGroupByStudent || !group || group.isFirst
+              const studentTotal = groupedTotalsByKey.get(studentKey)
               return (
-                <tr key={payment.id} className={`${isSelected ? 'bg-primary-50' : ''} ${isAllTypes && group && !group.isFirst ? 'border-t border-dashed border-gray-100' : ''}`}>
-                  {canWrite && (
-                    <td className="px-3 py-3 text-center">
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => onToggleSelect(payment.id)}
-                        className="rounded border-gray-300"
-                      />
-                    </td>
-                  )}
-                  {showStudentCols && (
-                    <td className="px-3 py-3 text-sm text-gray-500 text-center" rowSpan={group?.rowSpan || 1}>{payment.student_roll}</td>
-                  )}
-                  {showStudentCols && (
-                    <td className="px-3 py-3 text-sm text-gray-900" rowSpan={group?.rowSpan || 1}>
-                      {payment.student_name}
-                    </td>
-                  )}
-                  {showStudentCols && (
-                    <td className="px-3 py-3 text-sm text-gray-500" rowSpan={group?.rowSpan || 1}>{payment.class_name}</td>
-                  )}
-                  {isAllTypes && (
-                    <td className="px-3 py-3 text-sm">
-                      <span className={`px-1.5 py-0.5 text-xs rounded ${payment.fee_type === 'MONTHLY' ? 'bg-green-100 text-green-700' : FEE_TYPE_BADGE[payment.fee_type] || 'bg-gray-100 text-gray-700'}`}>
-                        {payment.fee_type_display || payment.fee_type}
-                      </span>
-                    </td>
-                  )}
-                  {(isAnnual || isAllTypes) && (
-                    <td className="px-3 py-3 text-sm text-gray-600">
-                      {payment.annual_category_name || payment.monthly_category_name || '—'}
-                    </td>
-                  )}
-                  {showPrevBal && (
-                    <td className={`px-3 py-3 text-sm text-right ${prevBal > 0 ? 'text-orange-700 font-medium' : prevBal < 0 ? 'text-blue-700 font-medium' : 'text-gray-400'}`}>
-                      {prevBal > 0 ? prevBal.toLocaleString() : prevBal < 0 ? `-${Math.abs(prevBal).toLocaleString()}` : '\u2014'}
-                    </td>
-                  )}
-                  <td className={`px-3 py-3 text-sm text-gray-900 text-right`}>
-                    {monthlyFee.toLocaleString()}
-                  </td>
-                  <td
-                    className={`px-3 py-3 text-sm font-medium text-right ${canWrite ? 'cursor-pointer hover:bg-blue-50' : ''} transition-colors ${Number(payment.amount_due) < 0 ? 'text-blue-700' : 'text-gray-900'}`}
-                    onClick={() => canWrite && !isEditingAmountDue && handleCellClick(payment.id, 'amount_due', Number(payment.amount_due))}
-                    title={canWrite ? 'Click to override total payable amount' : undefined}
-                  >
-                    {isEditingAmountDue ? (
-                      <input
-                        type="number"
-                        step="0.01"
-                        autoFocus
-                        value={editValue}
-                        onChange={(e) => setEditValue(e.target.value)}
-                        onBlur={() => onInlineUpdate(payment.id, 'amount_due', editValue)}
-                        onKeyDown={(e) => handleKeyDown(e, payment.id, 'amount_due')}
-                        className="w-24 text-right input-field text-sm py-0.5 px-1"
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                    ) : (
-                      Number(payment.amount_due).toLocaleString()
+                <>
+                  <tr key={payment.id} className={`${isSelected ? 'bg-primary-50' : ''} ${shouldGroupByStudent && group && !group.isFirst ? 'border-t border-dashed border-gray-100' : ''}`}>
+                    {canWrite && (
+                      <td className="px-3 py-2 text-center">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => onToggleSelect(payment.id)}
+                          className="rounded border-gray-300"
+                        />
+                      </td>
                     )}
-                  </td>
-                  <td
-                    className={`px-3 py-3 text-sm text-green-700 text-right ${canWrite && payment.status !== 'ADVANCE' ? 'cursor-pointer hover:bg-green-50' : ''} transition-colors`}
-                    onClick={() => canWrite && payment.status !== 'ADVANCE' && !isEditingReceived && handleCellClick(payment.id, 'amount_paid', payment.amount_paid)}
-                    title={canWrite && payment.status !== 'ADVANCE' ? 'Click to edit' : undefined}
-                  >
-                    {isEditingReceived ? (
-                      <input
-                        type="number"
-                        step="0.01"
-                        autoFocus
-                        value={editValue}
-                        onChange={(e) => setEditValue(e.target.value)}
-                        onBlur={() => onInlineUpdate(payment.id, 'amount_paid', editValue)}
-                        onKeyDown={(e) => handleKeyDown(e, payment.id, 'amount_paid')}
-                        className="w-20 text-right input-field text-sm py-0.5 px-1"
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                    ) : (
-                      Number(payment.amount_paid).toLocaleString()
+                    {showStudentCols && (
+                      <td className="px-3 py-2 text-sm text-gray-500 text-center" rowSpan={group?.rowSpan || 1}>{payment.student_roll}</td>
                     )}
-                  </td>
-                  <td className={`px-3 py-3 text-sm font-medium text-right ${balance > 0 ? 'text-orange-700' : balance < 0 ? 'text-blue-700' : 'text-green-700'}`}>
-                    {balance.toLocaleString()}
-                  </td>
-                  <td className="px-3 py-3 text-center">{statusBadge(payment.status)}</td>
-                  <td className="px-3 py-3 text-xs text-gray-600">{payment.account_name || '-'}</td>
-                  <td className="px-3 py-3 text-xs text-gray-600">{payment.collected_by_name || '-'}</td>
-                  <td className="px-3 py-3 text-xs text-gray-400">
-                    {payment.created_at ? new Date(payment.created_at).toLocaleString('en-US', {
-                      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
-                    }) : '-'}
-                  </td>
-                  {canWrite && (
-                    <td className="px-3 py-3 text-center">
-                      <div className="flex items-center justify-center gap-1">
-                        {payment.status !== 'PAID' && payment.status !== 'ADVANCE' && onRecordPayment && (
-                          <button
-                            onClick={() => onRecordPayment(payment, Math.max(0, balance))}
-                            className="text-sm px-3 py-1 bg-primary-600 text-white rounded hover:bg-primary-700"
-                          >
-                            Pay
-                          </button>
-                        )}
-                        {onDelete && (
-                          <button
-                            onClick={() => onDelete(payment.id)}
-                            title="Delete fee record"
-                            className="text-xs px-2 py-1 text-red-600 border border-red-300 rounded hover:bg-red-50"
-                          >
-                            Del
-                          </button>
-                        )}
-                      </div>
+                    {showStudentCols && (
+                      <td className="px-3 py-2 text-sm text-gray-900" rowSpan={group?.rowSpan || 1}>
+                        {payment.student_name}
+                      </td>
+                    )}
+                    {showStudentCols && (
+                      <td className="px-3 py-2 text-sm text-gray-500" rowSpan={group?.rowSpan || 1}>{payment.class_name}</td>
+                    )}
+                    {isAllTypes && (
+                      <td className="px-3 py-2 text-sm">
+                        <span className={`px-1.5 py-0.5 text-xs rounded ${payment.fee_type === 'MONTHLY' ? 'bg-green-100 text-green-700' : FEE_TYPE_BADGE[payment.fee_type] || 'bg-gray-100 text-gray-700'}`}>
+                          {payment.fee_type_display || payment.fee_type}
+                        </span>
+                      </td>
+                    )}
+                    {(isAnnual || isAllTypes) && (
+                      <td className="px-3 py-2 text-sm text-gray-600">
+                        {payment.annual_category_name || payment.monthly_category_name || '—'}
+                      </td>
+                    )}
+                    {showPrevBal && (
+                      <td className={`px-3 py-2 text-sm text-right ${prevBal > 0 ? 'text-orange-700 font-medium' : prevBal < 0 ? 'text-blue-700 font-medium' : 'text-gray-400'}`}>
+                        {prevBal > 0 ? prevBal.toLocaleString() : prevBal < 0 ? `-${Math.abs(prevBal).toLocaleString()}` : '\u2014'}
+                      </td>
+                    )}
+                    <td className={`px-3 py-2 text-sm text-gray-900 text-right`}>
+                      {monthlyFee.toLocaleString()}
                     </td>
+                    <td
+                      className={`px-3 py-2 text-sm font-medium text-right ${canWrite ? 'cursor-pointer hover:bg-blue-50' : ''} transition-colors ${Number(payment.amount_due) < 0 ? 'text-blue-700' : 'text-gray-900'}`}
+                      onClick={() => canWrite && !isEditingAmountDue && handleCellClick(payment.id, 'amount_due', Number(payment.amount_due))}
+                      title={canWrite ? 'Click to override total payable amount' : undefined}
+                    >
+                      {isEditingAmountDue ? (
+                        <input
+                          type="number"
+                          step="0.01"
+                          autoFocus
+                          value={editValue}
+                          onChange={(e) => setEditValue(e.target.value)}
+                          onBlur={() => onInlineUpdate(payment.id, 'amount_due', editValue)}
+                          onKeyDown={(e) => handleKeyDown(e, payment.id, 'amount_due')}
+                          className="w-24 text-right input-field text-sm py-0.5 px-1"
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      ) : (
+                        Number(payment.amount_due).toLocaleString()
+                      )}
+                    </td>
+                    <td
+                      className={`px-3 py-2 text-sm text-green-700 text-right ${canWrite && payment.status !== 'ADVANCE' ? 'cursor-pointer hover:bg-green-50' : ''} transition-colors`}
+                      onClick={() => canWrite && payment.status !== 'ADVANCE' && !isEditingReceived && handleCellClick(payment.id, 'amount_paid', payment.amount_paid)}
+                      title={canWrite && payment.status !== 'ADVANCE' ? 'Click to edit' : undefined}
+                    >
+                      {isEditingReceived ? (
+                        <input
+                          type="number"
+                          step="0.01"
+                          autoFocus
+                          value={editValue}
+                          onChange={(e) => setEditValue(e.target.value)}
+                          onBlur={() => onInlineUpdate(payment.id, 'amount_paid', editValue)}
+                          onKeyDown={(e) => handleKeyDown(e, payment.id, 'amount_paid')}
+                          className="w-20 text-right input-field text-sm py-0.5 px-1"
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      ) : (
+                        Number(payment.amount_paid).toLocaleString()
+                      )}
+                    </td>
+                    <td className={`px-3 py-2 text-sm font-medium text-right ${balance > 0 ? 'text-orange-700' : balance < 0 ? 'text-blue-700' : 'text-green-700'}`}>
+                      {balance.toLocaleString()}
+                    </td>
+                    <td className="px-3 py-2 text-center">{statusBadge(payment.status)}</td>
+                    <td className="px-3 py-2 text-xs text-gray-600">{payment.account_name || '-'}</td>
+                    <td className="px-3 py-2 text-xs text-gray-600">{payment.collected_by_name || '-'}</td>
+                    <td className="px-3 py-2 text-xs text-gray-400">
+                      {payment.created_at ? new Date(payment.created_at).toLocaleString('en-US', {
+                        month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                      }) : '-'}
+                    </td>
+                    {canWrite && (
+                      <td className="px-3 py-2 text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          {payment.status !== 'PAID' && payment.status !== 'ADVANCE' && onRecordPayment && (
+                            <button
+                              onClick={() => onRecordPayment(payment, Math.max(0, balance))}
+                              className="text-sm px-3 py-1 bg-primary-600 text-white rounded hover:bg-primary-700"
+                            >
+                              Pay
+                            </button>
+                          )}
+                          {onDelete && (
+                            <button
+                              onClick={() => onDelete(payment.id)}
+                              title="Delete fee record"
+                              className="text-xs px-2 py-1 text-red-600 border border-red-300 rounded hover:bg-red-50"
+                            >
+                              Del
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                  {shouldGroupByStudent && group?.isLast && studentTotal && (
+                    <tr className="bg-blue-50/60 border-t border-blue-100">
+                      <td colSpan={footerLabelColSpan} className="px-3 py-2 text-xs font-semibold text-blue-900 text-center">
+                        Sub Total ({studentTotal.studentName || payment.student_name})
+                      </td>
+                      <td className="px-3 py-2 text-xs font-bold text-blue-900 text-right">{studentTotal.feeAmount.toLocaleString()}</td>
+                      <td className="px-3 py-2 text-xs font-bold text-blue-900 text-right">{studentTotal.due.toLocaleString()}</td>
+                      <td className="px-3 py-2 text-xs font-bold text-green-700 text-right">{studentTotal.paid.toLocaleString()}</td>
+                      <td className={`px-3 py-2 text-xs font-bold text-right ${studentTotal.balance > 0 ? 'text-orange-700' : studentTotal.balance < 0 ? 'text-blue-700' : 'text-green-700'}`}>
+                        {studentTotal.balance.toLocaleString()}
+                      </td>
+                      <td colSpan={footerTrailingColSpan} className="px-3 py-2" />
+                    </tr>
                   )}
-                </tr>
+                </>
               )
             })}
           </tbody>

@@ -6,8 +6,36 @@ const MONTH_NAMES = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ]
 
+const COLORS = {
+  title: [29, 78, 216],
+  section: [59, 130, 246],
+  darkHead: [31, 41, 55],
+  subtotalBg: [232, 240, 254],
+}
+
+const MARGIN = { left: 36, right: 36, top: 28, bottom: 28 }
+
 function asMoney(value) {
   return (Number(value) || 0).toLocaleString()
+}
+
+function loadImage(url) {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => resolve(img)
+    img.onerror = reject
+    img.src = url
+  })
+}
+
+function ensureSpace(doc, currentY, neededHeight) {
+  const pageHeight = doc.internal.pageSize.getHeight()
+  if (currentY + neededHeight > pageHeight - MARGIN.bottom) {
+    doc.addPage()
+    return MARGIN.top
+  }
+  return currentY
 }
 
 function cleanToken(value) {
@@ -161,7 +189,7 @@ function groupedStudentRows(paymentList, selectedClassLabel) {
       if (rollA !== rollB) return rollA - rollB
       return (a.studentName || '').localeCompare(b.studentName || '')
     })
-    .map((row, idx) => {
+    .map((row) => {
       const balance = Math.max(0, row.due - row.paid)
       const typeOrder = ['MONTHLY', 'ANNUAL', 'ADMISSION', 'BOOKS', 'FINE', 'OTHER']
       const sortedBreakdown = [...row.feeBreakdown.entries()]
@@ -195,29 +223,91 @@ function groupedStudentRows(paymentList, selectedClassLabel) {
         : 'Yearly: -'
       const breakdown = `${monthlyLine}\n${yearlyLine}`
 
-      return [
-        idx + 1,
-        row.className,
-        row.roll,
-        row.studentName,
-        breakdown || '-',
-        asMoney(row.due),
-        asMoney(row.paid),
-        asMoney(balance),
-      ]
+      return {
+        className: row.className,
+        roll: row.roll,
+        studentName: row.studentName,
+        breakdown: breakdown || '-',
+        due: row.due,
+        paid: row.paid,
+        balance,
+      }
     })
 }
 
-export function exportFeePDF({
+function classSectionData(paymentList, selectedClassLabel) {
+  const rows = groupedStudentRows(paymentList, selectedClassLabel)
+  const byClass = new Map()
+
+  rows.forEach((row) => {
+    if (!byClass.has(row.className)) {
+      byClass.set(row.className, {
+        className: row.className,
+        items: [],
+        totalDue: 0,
+        totalPaid: 0,
+        totalBalance: 0,
+      })
+    }
+    const bucket = byClass.get(row.className)
+    bucket.items.push(row)
+    bucket.totalDue += Number(row.due || 0)
+    bucket.totalPaid += Number(row.paid || 0)
+    bucket.totalBalance += Number(row.balance || 0)
+  })
+
+  return [...byClass.values()].sort((a, b) => a.className.localeCompare(b.className))
+}
+
+function classTeacherNameMap(paymentList, selectedClassLabel) {
+  const teacherByClass = new Map()
+  const teacherFields = [
+    'class_teacher_name',
+    'class_teacher',
+    'class_teacher_full_name',
+    'teacher_name',
+    'class_incharge_name',
+    'incharge_name',
+    'homeroom_teacher_name',
+    'advisor_name',
+  ]
+
+  paymentList.forEach((row) => {
+    const className = getDisplayClassName(row, selectedClassLabel)
+    if (!className || teacherByClass.has(className)) return
+
+    for (const field of teacherFields) {
+      const value = row?.[field]
+      if (typeof value === 'string' && value.trim()) {
+        teacherByClass.set(className, value.trim())
+        return
+      }
+      if (value && typeof value === 'object' && typeof value.name === 'string' && value.name.trim()) {
+        teacherByClass.set(className, value.name.trim())
+        return
+      }
+    }
+  })
+
+  return teacherByClass
+}
+
+export async function exportFeePDF({
   paymentList,
   month,
   year,
   schoolName,
+  schoolLogo,
+  schoolAddress,
+  schoolContact,
   selectedClassLabel = 'All Classes',
   feeTypeFilter = '',
   statusFilter = '',
 }) {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' })
+  const pageWidth = doc.internal.pageSize.getWidth()
+  const centerX = pageWidth / 2
+  const usableWidth = pageWidth - MARGIN.left - MARGIN.right
 
   const totalDue = paymentList.reduce((sum, p) => sum + Math.max(0, Number(p.amount_due)), 0)
   const totalCollected = paymentList.reduce((sum, p) => sum + Number(p.amount_paid), 0)
@@ -237,20 +327,67 @@ export function exportFeePDF({
     statusFilter,
   })
 
-  doc.setFontSize(16)
-  doc.text('Fee Collection Report', 40, 42)
-  doc.setFontSize(10)
-  doc.text(`Period: ${periodLabel}`, 40, 62)
-  doc.text(`Class: ${selectedClassLabel || 'All Classes'}`, 210, 62)
-  doc.text(`Fee Type: ${feeTypeFilter || 'All Types'}`, 40, 78)
-  doc.text(`Status: ${statusFilter || 'All Status'}`, 210, 78)
-  if (schoolName) {
-    doc.text(`School: ${schoolName}`, 40, 94)
+  let y = MARGIN.top
+  const teacherByClass = classTeacherNameMap(paymentList, selectedClassLabel)
+  let logoSize = 0
+
+  if (schoolLogo) {
+    try {
+      const img = await loadImage(schoolLogo)
+      logoSize = 45
+      doc.addImage(img, 'PNG', MARGIN.left, y, logoSize, logoSize)
+    } catch {
+      // Skip logo if loading fails
+    }
   }
-  doc.text(`Exported: ${exportedAt}`, 40, 110)
+
+  doc.setFontSize(16)
+  doc.setFont(undefined, 'bold')
+  doc.setTextColor(...COLORS.title)
+  doc.text(schoolName || 'School Fee Report', centerX, y + 14, { align: 'center' })
+
+  doc.setFontSize(12)
+  doc.text('Fee Collection Report', centerX, y + 32, { align: 'center' })
+
+  const headerBlockHeight = Math.max(logoSize, 36)
+  y += headerBlockHeight + 8
+
+  doc.setDrawColor(...COLORS.title)
+  doc.setLineWidth(0.8)
+  doc.line(MARGIN.left, y, pageWidth - MARGIN.right, y)
+  y += 12
+
+  doc.setFont(undefined, 'normal')
+  doc.setTextColor(70)
+  doc.setFontSize(9)
+  doc.setFont(undefined, 'bold')
+  doc.text('Period:', MARGIN.left, y)
+  doc.setFont(undefined, 'normal')
+  doc.text(`${periodLabel}`, MARGIN.left + 34, y)
+
+  doc.setFont(undefined, 'bold')
+  doc.text('Class:', MARGIN.left + 170, y)
+  doc.setFont(undefined, 'normal')
+  doc.text(`${selectedClassLabel || 'All Classes'}`, MARGIN.left + 200, y)
+  y += 12
+  if (schoolAddress) {
+    doc.setFont(undefined, 'bold')
+    doc.text('Address:', MARGIN.left, y)
+    doc.setFont(undefined, 'normal')
+    doc.text(`${schoolAddress}`, MARGIN.left + 40, y)
+    y += 12
+  }
+  if (schoolContact) {
+    doc.setFont(undefined, 'normal')
+    doc.text(`Contact: ${schoolContact}`, MARGIN.left, y)
+    y += 12
+  }
+  y += 2
+  doc.setTextColor(0)
 
   autoTable(doc, {
-    startY: 124,
+    startY: y,
+    margin: { left: MARGIN.left, right: MARGIN.right },
     head: [['Students', 'Classes', 'Total Due', 'Collected', 'Pending', 'Collection Rate']],
     body: [[
       uniqueStudents,
@@ -261,49 +398,104 @@ export function exportFeePDF({
       totalDue > 0 ? `${((totalCollected / totalDue) * 100).toFixed(1)}%` : '0.0%',
     ]],
     theme: 'grid',
-    styles: { fontSize: 9, cellPadding: 6 },
-    headStyles: { fillColor: [31, 41, 55] },
+    styles: { fontSize: 9, cellPadding: 6, halign: 'center' },
+    headStyles: { fillColor: COLORS.darkHead },
   })
 
+  y = doc.lastAutoTable.finalY + 12
+
   autoTable(doc, {
-    startY: doc.lastAutoTable.finalY + 18,
+    startY: y,
+    margin: { left: MARGIN.left, right: MARGIN.right },
     head: [['Class', 'Students', 'Total Due', 'Collected', 'Pending', 'Collection %']],
     body: classSummaryRows(paymentList, selectedClassLabel),
     theme: 'grid',
-    styles: { fontSize: 8, cellPadding: 4 },
-    headStyles: { fillColor: [29, 78, 216] },
-    columnStyles: {
-      1: { halign: 'right' },
-      2: { halign: 'right' },
-      3: { halign: 'right' },
-      4: { halign: 'right' },
-      5: { halign: 'right' },
-    },
+    styles: { fontSize: 8, cellPadding: 4, halign: 'center' },
+    headStyles: { fillColor: COLORS.title },
   })
 
-  autoTable(doc, {
-    startY: doc.lastAutoTable.finalY + 18,
-    head: [['#', 'Class', 'Roll', 'Student', 'Fee Breakdown', 'Due', 'Paid', 'Balance']],
-    body: groupedStudentRows(paymentList, selectedClassLabel),
-    theme: 'grid',
-    styles: { fontSize: 7, cellPadding: 3 },
-    headStyles: { fillColor: [79, 70, 229], fontSize: 7 },
-    columnStyles: {
-      0: { cellWidth: 16, halign: 'right' },
-      1: { cellWidth: 46 },
-      2: { cellWidth: 24, halign: 'right' },
-      3: { cellWidth: 76 },
-      4: { cellWidth: 180, overflow: 'linebreak' },
-      5: { cellWidth: 48, halign: 'right' },
-      6: { cellWidth: 48, halign: 'right' },
-      7: { cellWidth: 48, halign: 'right' },
-    },
-    didDrawPage: (data) => {
-      const page = doc.getNumberOfPages()
-      doc.setFontSize(8)
-      doc.text(`Page ${page}`, data.settings.margin.left, doc.internal.pageSize.getHeight() - 14)
-    },
+  y = doc.lastAutoTable.finalY + 16
+
+  const sections = classSectionData(paymentList, selectedClassLabel)
+
+  sections.forEach((section) => {
+    y = ensureSpace(doc, y, 26)
+
+    doc.setFillColor(239, 246, 255)
+    doc.roundedRect(MARGIN.left, y, usableWidth, 18, 2, 2, 'F')
+    doc.setTextColor(...COLORS.section)
+    doc.setFont(undefined, 'bold')
+    doc.setFontSize(10)
+    doc.text(section.className, centerX, y + 12, { align: 'center' })
+    doc.setTextColor(0)
+    doc.setFont(undefined, 'normal')
+    y += 22
+
+    const detailRows = section.items.map((row) => [
+      row.roll,
+      row.studentName,
+      row.breakdown,
+      asMoney(row.due),
+      asMoney(row.paid),
+      asMoney(row.balance),
+      '',
+    ])
+
+    autoTable(doc, {
+      startY: y,
+      margin: { left: MARGIN.left, right: MARGIN.right },
+      head: [['Roll', 'Student', 'Fee Breakdown', 'Total Payable', 'Received', 'Balance', 'Remarks']],
+      body: detailRows,
+      foot: [[
+        { content: `Sub Total (${section.className})`, colSpan: 3, styles: { halign: 'center', fontStyle: 'bold' } },
+        { content: asMoney(section.totalDue), styles: { halign: 'center', fontStyle: 'bold' } },
+        { content: asMoney(section.totalPaid), styles: { halign: 'center', fontStyle: 'bold' } },
+        { content: asMoney(section.totalBalance), styles: { halign: 'center', fontStyle: 'bold' } },
+        { content: '', styles: { halign: 'center' } },
+      ]],
+      theme: 'grid',
+      styles: { fontSize: 7, cellPadding: 3 },
+      headStyles: { fillColor: COLORS.title, fontSize: 7 },
+      footStyles: { fillColor: COLORS.subtotalBg, textColor: [30, 64, 175], fontStyle: 'bold' },
+      columnStyles: {
+        0: { cellWidth: 30, halign: 'center' },
+        1: { cellWidth: 84 },
+        2: { cellWidth: 155, overflow: 'linebreak' },
+        3: { cellWidth: 62, halign: 'center' },
+        4: { cellWidth: 58, halign: 'center' },
+        5: { cellWidth: 58, halign: 'center' },
+        6: { cellWidth: 76 },
+      },
+    })
+
+    y = doc.lastAutoTable.finalY + 28
+    y = ensureSpace(doc, y, 54)
+    const classTeacherName = teacherByClass.get(section.className)
+    doc.setFontSize(9)
+    doc.setTextColor(60)
+    doc.text(`Class Teacher${classTeacherName ? ` (${classTeacherName})` : ''} Signature:`, MARGIN.left, y)
+    doc.line(MARGIN.left + 170, y + 1, MARGIN.left + 340, y + 1)
+    doc.setTextColor(0)
+    y += 34
   })
+
+  y = ensureSpace(doc, y + 22, 70)
+  const principalX = pageWidth - MARGIN.right - 200
+  doc.setFontSize(10)
+  doc.setFont(undefined, 'bold')
+  doc.setTextColor(0)
+  doc.text('Principal Signature:', principalX, y)
+  doc.setFont(undefined, 'normal')
+  doc.line(principalX + 95, y + 1, pageWidth - MARGIN.right, y + 1)
+
+  const pageCount = doc.internal.getNumberOfPages()
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i)
+    doc.setFontSize(8)
+    doc.setTextColor(140)
+    doc.text(`Prepared for School Records on ${exportedAt}`, MARGIN.left, doc.internal.pageSize.getHeight() - 12)
+    doc.text(`Page ${i} of ${pageCount}`, pageWidth - MARGIN.right - 50, doc.internal.pageSize.getHeight() - 12)
+  }
 
   doc.save(filename)
 }

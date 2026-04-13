@@ -1,4 +1,11 @@
 import axios from 'axios'
+import {
+  clearAuthState,
+  getAccessToken,
+  getActiveSchoolId,
+  getRefreshToken,
+  setAccessToken,
+} from './authStorage'
 
 // Auto-detect environment:
 // - DEV mode (npm run dev): Use empty string to leverage Vite proxy → localhost:8000
@@ -15,11 +22,11 @@ const api = axios.create({
 // Request interceptor - add auth token + active school header
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('access_token')
+    const token = getAccessToken()
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
-    const schoolId = localStorage.getItem('active_school_id')
+    const schoolId = getActiveSchoolId()
     if (schoolId) {
       config.headers['X-School-ID'] = schoolId
     }
@@ -40,7 +47,7 @@ api.interceptors.response.use(
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true
 
-      const refreshToken = localStorage.getItem('refresh_token')
+      const refreshToken = getRefreshToken()
 
       if (refreshToken) {
         try {
@@ -49,15 +56,14 @@ api.interceptors.response.use(
           })
 
           const { access } = response.data
-          localStorage.setItem('access_token', access)
+          setAccessToken(access)
 
           // Retry original request with new token
           originalRequest.headers.Authorization = `Bearer ${access}`
           return api(originalRequest)
         } catch (refreshError) {
           // Refresh failed - clear tokens and redirect to login
-          localStorage.removeItem('access_token')
-          localStorage.removeItem('refresh_token')
+          clearAuthState()
           window.location.href = '/login'
           return Promise.reject(refreshError)
         }

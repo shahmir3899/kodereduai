@@ -222,22 +222,38 @@ SIMPLE_JWT = {
 # CORS Settings
 # =============================================================================
 
-# Allow exact origins
-CORS_ALLOWED_ORIGINS = [
-    'http://localhost:3000',   # Dev frontend
-    'http://localhost:8000',   # Dev backend
-    'http://127.0.0.1:3000',
-    'http://127.0.0.1:8000',
-]
+# Comma-separated explicit origins from env (useful on Render dashboard)
+_env_cors_origins = [o.strip() for o in os.getenv('CORS_ALLOWED_ORIGINS', '').split(',') if o.strip()]
 
-# Allow regex patterns for subdomains and production URLs
-CORS_ALLOWED_ORIGIN_REGEXES = [
-    r'^https?://.*\.kodereduai\.pk$',      # Any subdomain (*.kodereduai.pk)
-    r'^https?://kodereduai\.pk$',           # Root domain
-    r'^https?://www\.kodereduai\.pk$',     # www subdomain
-    r'^https?://portal\.kodereduai\.pk$',  # Portal subdomain
-    r'^https?://.*\.onrender\.com$',       # Any Render app URL (migration support)
-]
+if IS_PRODUCTION:
+    # Production must only trust explicit HTTPS origins.
+    CORS_ALLOWED_ORIGINS = [o for o in _env_cors_origins if o.startswith('https://')]
+
+    # Allow HTTPS regex patterns for multi-subdomain and migration paths.
+    CORS_ALLOWED_ORIGIN_REGEXES = [
+        r'^https://.*\.kodereduai\.pk$',      # Any subdomain (*.kodereduai.pk)
+        r'^https://kodereduai\.pk$',           # Root domain
+        r'^https://www\.kodereduai\.pk$',     # www subdomain
+        r'^https://portal\.kodereduai\.pk$',  # Portal subdomain
+        r'^https://.*\.onrender\.com$',       # Any Render app URL (migration support)
+    ]
+else:
+    # Local development supports HTTP localhost clients.
+    CORS_ALLOWED_ORIGINS = [
+        'http://localhost:3000',
+        'http://localhost:8000',
+        'http://127.0.0.1:3000',
+        'http://127.0.0.1:8000',
+        *_env_cors_origins,
+    ]
+
+    CORS_ALLOWED_ORIGIN_REGEXES = [
+        r'^https?://.*\.kodereduai\.pk$',
+        r'^https?://kodereduai\.pk$',
+        r'^https?://www\.kodereduai\.pk$',
+        r'^https?://portal\.kodereduai\.pk$',
+        r'^https?://.*\.onrender\.com$',
+    ]
 
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_HEADERS = [

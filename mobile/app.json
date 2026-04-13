@@ -80,6 +80,9 @@
       ]
     ],
     "extra": {
+      "apiUrl": "https://kodereduai-api.onrender.com",
+      "appEnv": "production",
+      "allowInsecureHttp": false,
       "router": {
         "origin": "https://kodereduai.com"
       },

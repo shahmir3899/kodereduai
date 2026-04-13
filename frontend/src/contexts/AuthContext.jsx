@@ -1,6 +1,14 @@
 import { createContext, useContext, useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import api, { authApi } from '../services/api'
+import {
+  clearAuthState,
+  getAccessToken,
+  getActiveSchoolId,
+  setAccessToken,
+  setActiveSchoolId,
+  setAuthTokens,
+} from '../services/authStorage'
 
 const AuthContext = createContext(null)
 
@@ -11,7 +19,7 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const token = localStorage.getItem('access_token')
+    const token = getAccessToken()
     if (token) {
       fetchCurrentUser()
     } else {
@@ -21,7 +29,7 @@ export function AuthProvider({ children }) {
 
   const resolveActiveSchool = (userData) => {
     const schools = userData.schools || []
-    const savedId = localStorage.getItem('active_school_id')
+    const savedId = getActiveSchoolId()
 
     // Try saved school first
     if (savedId) {
@@ -65,13 +73,11 @@ export function AuthProvider({ children }) {
       const school = resolveActiveSchool(userData)
       setActiveSchool(school)
       if (school) {
-        localStorage.setItem('active_school_id', school.id)
+        setActiveSchoolId(String(school.id))
       }
     } catch (error) {
       console.error('Failed to fetch user:', error)
-      localStorage.removeItem('access_token')
-      localStorage.removeItem('refresh_token')
-      localStorage.removeItem('active_school_id')
+      clearAuthState()
     } finally {
       setLoading(false)
     }
@@ -95,7 +101,7 @@ export function AuthProvider({ children }) {
     }
   }
 
-  const login = async (username, password) => {
+  const login = async (username, password, rememberMe = false) => {
     const response = await api.post('/api/auth/login/', {
       username,
       password,
@@ -115,33 +121,35 @@ export function AuthProvider({ children }) {
       userData.school_name = userData.school_details.name
     }
 
-    localStorage.setItem('access_token', access)
-    localStorage.setItem('refresh_token', refresh)
+    setAuthTokens(access, refresh, rememberMe)
     setUser(userData)
 
     const school = resolveActiveSchool(userData)
     setActiveSchool(school)
     if (school) {
-      localStorage.setItem('active_school_id', school.id)
+      setActiveSchoolId(String(school.id))
     }
 
     return userData
   }
 
   const logout = useCallback(() => {
-    localStorage.removeItem('access_token')
-    localStorage.removeItem('refresh_token')
-    localStorage.removeItem('active_school_id')
+    clearAuthState()
 
-    // Clear academic year preferences for all schools
-    const keysToRemove = []
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i)
-      if (key && key.startsWith('active_academic_year_')) {
-        keysToRemove.push(key)
+    // Clear academic year preferences for all schools in both storage scopes.
+    const clearAcademicYearKeys = (storage) => {
+      const keysToRemove = []
+      for (let i = 0; i < storage.length; i++) {
+        const key = storage.key(i)
+        if (key && key.startsWith('active_academic_year_')) {
+          keysToRemove.push(key)
+        }
       }
+      keysToRemove.forEach(key => storage.removeItem(key))
     }
-    keysToRemove.forEach(key => localStorage.removeItem(key))
+
+    clearAcademicYearKeys(window.localStorage)
+    clearAcademicYearKeys(window.sessionStorage)
 
     // Clear React Query cache to prevent data leakage between users
     queryClient.clear()
@@ -182,7 +190,7 @@ export function AuthProvider({ children }) {
 
       const newSchool = { id: school_id, name: school_name, role }
       setActiveSchool(newSchool)
-      localStorage.setItem('active_school_id', school_id)
+      setActiveSchoolId(String(school_id))
 
       // Reload to refresh all data for the new school context
       window.location.reload()
@@ -240,7 +248,7 @@ export function AuthProvider({ children }) {
     enabledModules,
     isModuleEnabled,
     getAllowableRoles,
-  }), [user, activeSchool, loading, effectiveRole, enabledModules, isModuleEnabled, getAllowableRoles, login, logout, switchSchool, refreshUser, isSchoolAdmin, isParent, isStudent, isStaffLevel])
+  }), [user, activeSchool, loading, effectiveRole, enabledModules, isModuleEnabled, getAllowableRoles, logout, switchSchool, refreshUser, isSchoolAdmin, isParent, isStudent, isStaffLevel])
 
   return (
     <AuthContext.Provider value={value}>

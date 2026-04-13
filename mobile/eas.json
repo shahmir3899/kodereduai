@@ -6,17 +6,32 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "http://10.0.2.2:8000",
+        "EXPO_PUBLIC_APP_ENV": "development",
+        "EXPO_PUBLIC_ALLOW_INSECURE_HTTP": "true"
+      },
       "ios": {
         "simulator": true
       }
     },
     "preview": {
       "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://kodereduai-api.onrender.com",
+        "EXPO_PUBLIC_APP_ENV": "internal",
+        "EXPO_PUBLIC_ALLOW_INSECURE_HTTP": "true"
+      },
       "android": {
         "buildType": "apk"
       }
     },
     "production": {
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://kodereduai-api.onrender.com",
+        "EXPO_PUBLIC_APP_ENV": "production",
+        "EXPO_PUBLIC_ALLOW_INSECURE_HTTP": "false"
+      },
       "autoIncrement": true
     }
   },
