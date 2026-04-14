@@ -52,6 +52,7 @@ class StudentSerializer(serializers.ModelSerializer):
     # the historical enrollment class when the view annotated it (academic_year param).
     class_obj = serializers.SerializerMethodField()
     class_name = serializers.SerializerMethodField()
+    session_class_obj = serializers.SerializerMethodField()
     school_name = serializers.CharField(source='school.name', read_only=True)
     has_user_account = serializers.SerializerMethodField()
     user_username = serializers.SerializerMethodField()
@@ -62,7 +63,7 @@ class StudentSerializer(serializers.ModelSerializer):
         model = Student
         fields = [
             'id', 'school', 'school_name',
-            'class_obj', 'class_name',
+            'class_obj', 'class_name', 'session_class_obj',
             'roll_number', 'name',
             'admission_number', 'admission_date', 'date_of_birth',
             'gender', 'blood_group', 'address', 'previous_school',
@@ -80,6 +81,10 @@ class StudentSerializer(serializers.ModelSerializer):
         """Return enrollment class ID for historical sessions, else current class."""
         eid = getattr(obj, '_enrollment_class_obj_id', None)
         return eid if eid is not None else obj.class_obj_id
+
+    def get_session_class_obj(self, obj):
+        """Return the session class ID from enrollment annotation (when academic_year scoped)."""
+        return getattr(obj, '_enrollment_session_class_id', None)
 
     def get_class_name(self, obj):
         """Return enrollment class name for historical sessions, else current class."""
@@ -195,12 +200,28 @@ class StudentUpdateSerializer(serializers.ModelSerializer):
             ).first()
 
             if current_year:
-                conflict = StudentEnrollment.objects.filter(
+                current_enrollment = StudentEnrollment.objects.filter(
+                    school=school,
+                    student=student,
+                    academic_year=current_year,
+                ).first()
+
+                conflict_qs = StudentEnrollment.objects.filter(
                     school=school,
                     academic_year=current_year,
-                    class_obj=class_obj,
                     roll_number=roll_number,
-                ).exclude(student=student).exists()
+                )
+
+                if (
+                    current_enrollment
+                    and current_enrollment.session_class_id
+                    and current_enrollment.class_obj_id == class_obj.id
+                ):
+                    conflict_qs = conflict_qs.filter(session_class_id=current_enrollment.session_class_id)
+                else:
+                    conflict_qs = conflict_qs.filter(class_obj=class_obj)
+
+                conflict = conflict_qs.exclude(student=student).exists()
                 if conflict:
                     raise serializers.ValidationError({
                         'roll_number': f"Roll number '{roll_number}' already exists in this class for {current_year.name}."

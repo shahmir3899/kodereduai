@@ -4,7 +4,7 @@ LMS views for lesson plans, assignments, submissions, and curriculum management.
 
 import logging
 from django.utils import timezone
-from django.db.models import Count
+from django.db.models import Count, Q
 from rest_framework import viewsets, status
 from rest_framework.decorators import action, api_view, permission_classes as perm_classes
 from rest_framework.parsers import MultiPartParser, FormParser
@@ -14,8 +14,10 @@ from rest_framework.permissions import IsAuthenticated
 from core.permissions import (
     IsSchoolAdminOrReadOnly, HasSchoolAccess, ModuleAccessMixin,
     get_effective_role, ADMIN_ROLES, STAFF_LEVEL_ROLES,
+    get_teacher_combined_scope,
 )
 from core.mixins import TenantQuerySetMixin, ensure_tenant_school_id
+from core.class_scope import resolve_class_scope
 from .models import Book, Chapter, Topic, LessonPlan, Assignment, AssignmentSubmission
 from .serializers import (
     BookReadSerializer, BookCreateSerializer,
@@ -27,6 +29,40 @@ from .serializers import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _apply_teacher_dual_scope(queryset, request, class_field='class_obj_id', subject_field='subject_id', school_id=None):
+    """Apply union of class-teacher full scope and subject-teacher scoped visibility.
+    Uses section-class scope for true isolation when teacher has session assignments."""
+    role = get_effective_role(request)
+    if role != 'TEACHER':
+        return queryset
+
+    school_id = school_id or ensure_tenant_school_id(request) or request.user.school_id
+    scope = get_teacher_combined_scope(request, school_id=school_id)
+    full_class_ids = scope['full_class_ids']
+    session_ids = scope.get('full_session_class_ids', set())
+    class_subject_map = scope['class_subject_map']
+
+    predicates = Q()
+
+    if session_ids:
+        # Section-level: only items belonging to teacher's assigned session classes
+        # Session class here resolves to master class for LMS (lesson plans don't store session_class)
+        # So we match on master class IDs that correspond to assigned session classes
+        if full_class_ids:
+            predicates |= Q(**{f'{class_field}__in': full_class_ids})
+    elif full_class_ids:
+        predicates |= Q(**{f'{class_field}__in': full_class_ids})
+
+    for class_id, subject_ids in class_subject_map.items():
+        if subject_ids:
+            predicates |= Q(**{class_field: class_id, f'{subject_field}__in': list(subject_ids)})
+
+    if not predicates:
+        return queryset.none()
+
+    return queryset.filter(predicates)
 
 
 # ---------------------------------------------------------------------------
@@ -57,7 +93,13 @@ class BookViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
             'school', 'class_obj', 'subject',
         ).prefetch_related('chapters__topics')
 
-        class_id = self.request.query_params.get('class_id')
+        queryset = _apply_teacher_dual_scope(queryset, self.request)
+
+        scope = resolve_class_scope(self.request, class_param_names=('class_id', 'class_obj'))
+        if scope['invalid']:
+            return queryset.none()
+
+        class_id = scope['class_obj_id']
         if class_id:
             queryset = queryset.filter(class_obj_id=class_id)
 
@@ -155,7 +197,14 @@ class BookViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
         Get all books for a class+subject combination with full tree.
         GET /api/lms/books/for_class_subject/?class_id=5&subject_id=3
         """
-        class_id = request.query_params.get('class_id')
+        scope = resolve_class_scope(request, class_param_names=('class_id', 'class_obj'))
+        if scope['invalid']:
+            return Response(
+                {'error': scope['error']},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        class_id = scope['class_obj_id']
         subject_id = request.query_params.get('subject_id')
         if not class_id or not subject_id:
             return Response(
@@ -175,7 +224,14 @@ class BookViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
         Returns per-topic coverage based on published lesson plans.
         GET /api/lms/books/syllabus_progress/?class_id=5&subject_id=3
         """
-        class_id = request.query_params.get('class_id')
+        scope = resolve_class_scope(request, class_param_names=('class_id', 'class_obj'))
+        if scope['invalid']:
+            return Response(
+                {'error': scope['error']},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        class_id = scope['class_obj_id']
         subject_id = request.query_params.get('subject_id')
         if not class_id or not subject_id:
             return Response(
@@ -264,6 +320,13 @@ class TopicViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet
             'chapter', 'chapter__book'
         ).prefetch_related('lesson_plans', 'test_questions')
 
+        queryset = _apply_teacher_dual_scope(
+            queryset,
+            self.request,
+            class_field='chapter__book__class_obj_id',
+            subject_field='chapter__book__subject_id',
+        )
+
         chapter_id = self.request.query_params.get('chapter_id')
         if chapter_id:
             queryset = queryset.filter(chapter_id=chapter_id)
@@ -273,7 +336,11 @@ class TopicViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet
             queryset = queryset.filter(chapter__book_id=book_id)
         
         # Filter by class
-        class_id = self.request.query_params.get('class_id')
+        scope = resolve_class_scope(self.request, class_param_names=('class_id', 'class_obj'))
+        if scope['invalid']:
+            return queryset.none()
+
+        class_id = scope['class_obj_id']
         if class_id:
             queryset = queryset.filter(chapter__book__class_obj_id=class_id)
         
@@ -397,8 +464,14 @@ class LessonPlanViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
             'school', 'academic_year', 'class_obj', 'subject', 'teacher',
         ).prefetch_related('attachments', 'planned_topics')
 
+        queryset = _apply_teacher_dual_scope(queryset, self.request)
+
         # Filter by class
-        class_id = self.request.query_params.get('class_id')
+        scope = resolve_class_scope(self.request, class_param_names=('class_id', 'class_obj'))
+        if scope['invalid']:
+            return queryset.none()
+
+        class_id = scope['class_obj_id']
         if class_id:
             queryset = queryset.filter(class_obj_id=class_id)
 
@@ -418,7 +491,7 @@ class LessonPlanViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
             queryset = queryset.filter(status=plan_status)
 
         # Filter by academic year
-        academic_year_id = self.request.query_params.get('academic_year')
+        academic_year_id = scope['academic_year_id'] or self.request.query_params.get('academic_year')
         if academic_year_id:
             queryset = queryset.filter(academic_year_id=academic_year_id)
 
@@ -456,7 +529,14 @@ class LessonPlanViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
 
         GET /api/lms/lesson-plans/by_class/?class_id=5
         """
-        class_id = request.query_params.get('class_id')
+        scope = resolve_class_scope(request, class_param_names=('class_id', 'class_obj'))
+        if scope['invalid']:
+            return Response(
+                {'error': scope['error']},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        class_id = scope['class_obj_id']
         if not class_id:
             return Response(
                 {'error': 'class_id query parameter is required.'},
@@ -530,8 +610,14 @@ class AssignmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
             submission_count=Count('submissions'),
         ).order_by('-due_date', '-id')
 
+        queryset = _apply_teacher_dual_scope(queryset, self.request)
+
         # Filter by class
-        class_id = self.request.query_params.get('class_id')
+        scope = resolve_class_scope(self.request, class_param_names=('class_id', 'class_obj'))
+        if scope['invalid']:
+            return queryset.none()
+
+        class_id = scope['class_obj_id']
         if class_id:
             queryset = queryset.filter(class_obj_id=class_id)
 
@@ -551,7 +637,7 @@ class AssignmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
             queryset = queryset.filter(status=assignment_status)
 
         # Filter by academic year
-        academic_year_id = self.request.query_params.get('academic_year')
+        academic_year_id = scope['academic_year_id'] or self.request.query_params.get('academic_year')
         if academic_year_id:
             queryset = queryset.filter(academic_year_id=academic_year_id)
 
@@ -670,6 +756,13 @@ class AssignmentSubmissionViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewse
     def get_queryset(self):
         queryset = super().get_queryset().select_related(
             'assignment', 'student', 'school', 'graded_by',
+        )
+
+        queryset = _apply_teacher_dual_scope(
+            queryset,
+            self.request,
+            class_field='assignment__class_obj_id',
+            subject_field='assignment__subject_id',
         )
 
         # Nested route: filter by assignment_id from URL

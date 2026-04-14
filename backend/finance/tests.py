@@ -6,7 +6,7 @@ from decimal import Decimal
 
 from django.test import TestCase, override_settings
 
-from academic_sessions.models import AcademicYear, StudentEnrollment
+from academic_sessions.models import AcademicYear, SessionClass, StudentEnrollment
 from finance.models import (
     AnnualFeeCategory,
     FeePayment,
@@ -15,6 +15,7 @@ from finance.models import (
 )
 from finance.generation_planner import build_preview_plan
 from finance.tasks import generate_annual_fees_task, generate_monthly_fees_task
+from finance.views import _filter_students_by_scope
 from schools.models import Organization, School
 from students.models import Class, Student
 
@@ -310,3 +311,166 @@ class TestFeeGenerationHistoricalYearScoping(TestCase):
 
         self.assertEqual(preview['will_create'], 1)
         self.assertEqual(Decimal(preview['students'][0]['amount']), Decimal('1200'))
+
+
+@override_settings(CELERY_TASK_ALWAYS_EAGER=True)
+class TestFeeGenerationSessionClassScoping(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.school = _make_school()
+        cls.academic_year = AcademicYear.objects.create(
+            school=cls.school,
+            name='2026-2027',
+            start_date=date(2026, 4, 1),
+            end_date=date(2027, 3, 31),
+            is_current=True,
+            is_active=True,
+        )
+        cls.playgroup = Class.objects.create(school=cls.school, name='Playgroup', grade_level=0)
+        cls.session_a = SessionClass.objects.create(
+            school=cls.school,
+            academic_year=cls.academic_year,
+            class_obj=cls.playgroup,
+            display_name='Playgroup',
+            section='A',
+            grade_level=0,
+            is_active=True,
+        )
+        cls.session_b = SessionClass.objects.create(
+            school=cls.school,
+            academic_year=cls.academic_year,
+            class_obj=cls.playgroup,
+            display_name='Playgroup',
+            section='B',
+            grade_level=0,
+            is_active=True,
+        )
+        cls.student_a = Student.objects.create(
+            school=cls.school,
+            class_obj=cls.playgroup,
+            name='Alpha Student',
+            roll_number='1',
+        )
+        cls.student_b = Student.objects.create(
+            school=cls.school,
+            class_obj=cls.playgroup,
+            name='Beta Student',
+            roll_number='2',
+        )
+        StudentEnrollment.objects.create(
+            school=cls.school,
+            student=cls.student_a,
+            academic_year=cls.academic_year,
+            class_obj=cls.playgroup,
+            session_class=cls.session_a,
+            status='ACTIVE',
+            is_active=True,
+        )
+        StudentEnrollment.objects.create(
+            school=cls.school,
+            student=cls.student_b,
+            academic_year=cls.academic_year,
+            class_obj=cls.playgroup,
+            session_class=cls.session_b,
+            status='ACTIVE',
+            is_active=True,
+        )
+        cls.monthly_cat = MonthlyFeeCategory.objects.create(
+            school=cls.school,
+            name='Tuition Fee',
+            is_active=True,
+        )
+        cls.annual_cat = AnnualFeeCategory.objects.create(
+            school=cls.school,
+            name='Admission Fee',
+            is_active=True,
+        )
+        effective = date(2026, 1, 1)
+        FeeStructure.objects.create(
+            school=cls.school,
+            class_obj=cls.playgroup,
+            fee_type='MONTHLY',
+            monthly_category=cls.monthly_cat,
+            monthly_amount=Decimal('1500'),
+            effective_from=effective,
+        )
+        FeeStructure.objects.create(
+            school=cls.school,
+            class_obj=cls.playgroup,
+            fee_type='ANNUAL',
+            annual_category=cls.annual_cat,
+            monthly_amount=Decimal('6000'),
+            effective_from=effective,
+        )
+
+    def test_preview_scope_prefers_session_class(self):
+        students = list(_filter_students_by_scope(
+            Student.objects.filter(school=self.school, is_active=True),
+            class_id=self.playgroup.id,
+            academic_year_id=self.academic_year.id,
+            session_class_id=self.session_a.id,
+        ))
+
+        self.assertEqual([student.id for student in students], [self.student_a.id])
+
+        preview = build_preview_plan(
+            school_id=self.school.id,
+            students=students,
+            fee_type='MONTHLY',
+            year=2026,
+            month=5,
+            monthly_category_ids=[self.monthly_cat.id],
+            academic_year_id=self.academic_year.id,
+        )
+
+        self.assertEqual(preview['will_create'], 1)
+        self.assertEqual(preview['students'][0]['student_id'], self.student_a.id)
+
+    def test_generate_monthly_session_class_overrides_master_class_scope(self):
+        result = generate_monthly_fees_task.apply(kwargs={
+            'school_id': self.school.id,
+            'month': 5,
+            'year': 2026,
+            'class_id': self.playgroup.id,
+            'session_class_id': self.session_a.id,
+            'academic_year_id': self.academic_year.id,
+            'monthly_category_ids': [self.monthly_cat.id],
+        }).get()
+
+        self.assertEqual(result['created'], 1)
+        self.assertEqual(
+            FeePayment.objects.filter(
+                school=self.school,
+                month=5,
+                year=2026,
+                fee_type='MONTHLY',
+                monthly_category=self.monthly_cat,
+            ).count(),
+            1,
+        )
+        self.assertTrue(FeePayment.objects.filter(student=self.student_a).exists())
+        self.assertFalse(FeePayment.objects.filter(student=self.student_b).exists())
+
+    def test_generate_annual_session_class_overrides_master_class_scope(self):
+        result = generate_annual_fees_task.apply(kwargs={
+            'school_id': self.school.id,
+            'year': 2026,
+            'annual_category_ids': [self.annual_cat.id],
+            'class_id': self.playgroup.id,
+            'session_class_id': self.session_a.id,
+            'academic_year_id': self.academic_year.id,
+        }).get()
+
+        self.assertEqual(result['created'], 1)
+        self.assertEqual(
+            FeePayment.objects.filter(
+                school=self.school,
+                month=0,
+                year=2026,
+                fee_type='ANNUAL',
+                annual_category=self.annual_cat,
+            ).count(),
+            1,
+        )
+        self.assertTrue(FeePayment.objects.filter(student=self.student_a).exists())
+        self.assertFalse(FeePayment.objects.filter(student=self.student_b).exists())

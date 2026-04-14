@@ -52,7 +52,7 @@ def _is_monthly_conflict(existing_payment, expected_previous_balance, expected_b
 
 @shared_task(bind=True, time_limit=600)
 def generate_monthly_fees_task(
-    self, school_id, month, year, class_id=None, academic_year_id=None,
+    self, school_id, month, year, class_id=None, session_class_id=None, academic_year_id=None,
     monthly_category_ids=None,
     conflict_strategy='skip',
 ):
@@ -94,20 +94,22 @@ def generate_monthly_fees_task(
 
         # Fetch students (filtered by enrollment if academic year provided)
         student_qs = Student.objects.filter(school_id=school_id, is_active=True)
-        if academic_year_id:
+        if session_class_id:
+            student_qs = student_qs.filter(
+                enrollments__session_class_id=int(session_class_id),
+                enrollments__is_active=True,
+            )
+            if academic_year_id:
+                student_qs = student_qs.filter(enrollments__academic_year_id=academic_year_id)
+        elif academic_year_id:
             student_qs = student_qs.filter(
                 enrollments__academic_year_id=academic_year_id,
                 enrollments__is_active=True,
             )
-        if class_id:
-            if academic_year_id:
-                student_qs = student_qs.filter(
-                    enrollments__academic_year_id=academic_year_id,
-                    enrollments__class_obj_id=int(class_id),
-                    enrollments__is_active=True,
-                )
-            else:
-                student_qs = student_qs.filter(class_obj_id=int(class_id))
+            if class_id:
+                student_qs = student_qs.filter(enrollments__class_obj_id=int(class_id))
+        elif class_id:
+            student_qs = student_qs.filter(class_obj_id=int(class_id))
         students = list(student_qs.distinct())
         student_ids = [s.id for s in students]
 
@@ -301,7 +303,7 @@ def generate_monthly_fees_task(
 
 @shared_task(bind=True, time_limit=900)
 def generate_annual_fees_task(
-    self, school_id, year, annual_category_ids, class_id=None, academic_year_id=None,
+    self, school_id, year, annual_category_ids, class_id=None, session_class_id=None, academic_year_id=None,
     conflict_strategy='skip',
 ):
     """Bulk-generate annual fee records for selected categories."""
@@ -332,20 +334,22 @@ def generate_annual_fees_task(
             return result_data
 
         student_qs = Student.objects.filter(school_id=school_id, is_active=True)
-        if academic_year_id:
+        if session_class_id:
+            student_qs = student_qs.filter(
+                enrollments__session_class_id=int(session_class_id),
+                enrollments__is_active=True,
+            )
+            if academic_year_id:
+                student_qs = student_qs.filter(enrollments__academic_year_id=academic_year_id)
+        elif academic_year_id:
             student_qs = student_qs.filter(
                 enrollments__academic_year_id=academic_year_id,
                 enrollments__is_active=True,
             )
-        if class_id:
-            if academic_year_id:
-                student_qs = student_qs.filter(
-                    enrollments__academic_year_id=academic_year_id,
-                    enrollments__class_obj_id=class_id,
-                    enrollments__is_active=True,
-                )
-            else:
-                student_qs = student_qs.filter(class_obj_id=class_id)
+            if class_id:
+                student_qs = student_qs.filter(enrollments__class_obj_id=class_id)
+        elif class_id:
+            student_qs = student_qs.filter(class_obj_id=class_id)
         students = list(student_qs.distinct())
         student_ids = [s.id for s in students]
 

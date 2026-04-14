@@ -804,9 +804,11 @@ export default function StudentsPage() {
         const baseName = sc.display_name || `Class ${sc.class_obj || ''}`
         const withSection = sc.section ? `${baseName} - ${sc.section}` : ''
         return {
+          sessionClassId: String(sc.id),
           masterClassId: sc.class_obj ? String(sc.class_obj) : '',
           baseNameNorm: normalizeClassText(baseName),
           withSectionNorm: normalizeClassText(withSection),
+          hasSection: !!sc.section,
         }
       })
       .filter(Boolean)
@@ -816,13 +818,18 @@ export default function StudentsPage() {
       // Filter by class
       if (resolvedSelectedClasses.length > 0) {
         if (classSelectorScope === 'session') {
-          const studentClassId = String(student.class_obj || '')
-          const studentClassNameNorm = normalizeClassText(student.class_name)
-          const matchesAnySelectedSession = selectedSessionMatchers.some((matcher) => (
-            (matcher.masterClassId && studentClassId === matcher.masterClassId) ||
-            (matcher.baseNameNorm && studentClassNameNorm === matcher.baseNameNorm) ||
-            (matcher.withSectionNorm && studentClassNameNorm === matcher.withSectionNorm)
-          ))
+          const matchesAnySelectedSession = selectedSessionMatchers.some((matcher) => {
+            const studentSessionClassId = String(student.session_class_obj || '')
+            // Prefer exact session_class_obj match (most reliable — handles shared master class)
+            if (studentSessionClassId && matcher.sessionClassId) {
+              return studentSessionClassId === matcher.sessionClassId
+            }
+            // Fallback: match by master class ID (only safe when no section)
+            if (!matcher.hasSection && matcher.masterClassId) {
+              return String(student.class_obj || '') === matcher.masterClassId
+            }
+            return false
+          })
           if (!matchesAnySelectedSession) return false
         } else if (!resolvedSelectedClasses.includes(student.class_obj?.toString())) {
           return false
@@ -956,13 +963,14 @@ export default function StudentsPage() {
 
       const count = classSelectorScope === 'session'
         ? allStudents.filter((s) => {
+          const studentSessionClassId = String(s.session_class_obj || '')
+          // Prefer exact session_class_obj match
+          if (studentSessionClassId && option.id) {
+            return studentSessionClassId === String(option.id)
+          }
+          // Fallback for students without session_class_obj annotation (non-academic-year scope)
           const studentClassId = String(s.class_obj || '')
-          const studentClassNameNorm = normalizeClassText(s.class_name)
-          return (
-            (masterClassId && studentClassId === masterClassId) ||
-            (baseNameNorm && studentClassNameNorm === baseNameNorm) ||
-            (withSectionNorm && studentClassNameNorm === withSectionNorm)
-          )
+          return masterClassId ? studentClassId === masterClassId : false
         }).length
         : (masterClassId ? (counts[masterClassId] || 0) : 0)
 

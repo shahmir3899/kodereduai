@@ -694,12 +694,21 @@ class PromotionEventSerializer(serializers.ModelSerializer):
 
 
 class PromotionHistoryQuerySerializer(serializers.Serializer):
+    # Legacy broad filter (kept for backward compat) — matches source OR target year.
     academic_year = serializers.IntegerField(required=False)
+    # Pair-based strict filter — when both provided, legacy academic_year is ignored.
     source_academic_year = serializers.IntegerField(required=False)
     target_academic_year = serializers.IntegerField(required=False)
+    # Source class filters
     source_class = serializers.IntegerField(required=False)
     source_session_class = serializers.IntegerField(required=False)
+    # Target class filters
+    target_class = serializers.IntegerField(required=False)
+    target_session_class = serializers.IntegerField(required=False)
+    # Student filters
     student_id = serializers.IntegerField(required=False)
+    student_search = serializers.CharField(required=False, allow_blank=True)
+    # Status filter
     event_type = serializers.ChoiceField(
         choices=PromotionEvent.EventType.choices,
         required=False,
@@ -751,7 +760,7 @@ class PromotionSingleCorrectionSerializer(serializers.Serializer):
     target_class_id = serializers.IntegerField(required=False, allow_null=True)
     target_session_class_id = serializers.IntegerField(required=False, allow_null=True)
     new_roll_number = serializers.CharField(required=False, allow_blank=True)
-    reason = serializers.CharField(required=False, allow_blank=True)
+    reason = serializers.CharField(required=True, allow_blank=False, error_messages={'blank': 'Reason is required for correction.', 'required': 'Reason is required for correction.'})
     dry_run = serializers.BooleanField(required=False, default=False)
 
     def validate(self, attrs):
@@ -832,6 +841,10 @@ class PromotionBulkCorrectionSerializer(serializers.Serializer):
 
             target_class_id = row.get('target_class_id')
             target_session_class_id = row.get('target_session_class_id')
+
+            reason = str(row.get('reason', '') or '').strip()
+            if not reason:
+                raise serializers.ValidationError({'corrections': f'Row {idx + 1} is missing a required reason.'})
 
             try:
                 parsed_target_class_id = int(target_class_id) if target_class_id else None

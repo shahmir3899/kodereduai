@@ -209,6 +209,7 @@ export default function FeeTable({
               <div className="space-y-1.5">
                 {group.items.map(({ payment, prevBal, monthlyFee, balance }) => {
                   const isSelected = selectedIds.has(payment.id)
+                  const isEditingReceived = editingCell?.id === payment.id && editingCell?.field === 'amount_paid'
                   return (
                     <div key={payment.id} className={`rounded-md border p-1.5 ${isSelected ? 'border-primary-400 bg-primary-50' : 'border-gray-200 bg-gray-50'}`}>
                       <div className="flex items-start gap-2">
@@ -235,7 +236,7 @@ export default function FeeTable({
                             {statusBadge(payment.status)}
                           </div>
 
-                          <div className="grid grid-cols-3 gap-1.5 text-xs mt-1.5">
+                          <div className="grid grid-cols-4 gap-1.5 text-xs mt-1.5">
                             <div>
                               <p className="text-gray-500">{feeColumnLabel}</p>
                               <p className="font-medium text-gray-900">{monthlyFee.toLocaleString()}</p>
@@ -244,7 +245,7 @@ export default function FeeTable({
                               className={canWrite ? 'cursor-pointer' : ''}
                               onClick={() => canWrite && handleCellClick(payment.id, 'amount_due', Number(payment.amount_due))}
                             >
-                              <p className="text-gray-500">Total Payable</p>
+                              <p className="text-gray-500">Payable</p>
                               {editingCell?.id === payment.id && editingCell?.field === 'amount_due' ? (
                                 <input
                                   type="number"
@@ -259,6 +260,27 @@ export default function FeeTable({
                                 />
                               ) : (
                                 <p className={`font-medium ${Number(payment.amount_due) < 0 ? 'text-blue-700' : 'text-gray-900'}`}>{Number(payment.amount_due).toLocaleString()}</p>
+                              )}
+                            </div>
+                            <div
+                              className={canWrite && payment.status !== 'ADVANCE' ? 'cursor-pointer' : ''}
+                              onClick={() => canWrite && payment.status !== 'ADVANCE' && handleCellClick(payment.id, 'amount_paid', Number(payment.amount_paid))}
+                            >
+                              <p className="text-gray-500">Received</p>
+                              {isEditingReceived ? (
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  autoFocus
+                                  value={editValue}
+                                  onChange={(e) => setEditValue(e.target.value)}
+                                  onBlur={() => onInlineUpdate(payment.id, 'amount_paid', editValue)}
+                                  onKeyDown={(e) => handleKeyDown(e, payment.id, 'amount_paid')}
+                                  className="w-full input-field text-sm py-0.5 px-1"
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                              ) : (
+                                <p className="font-medium text-green-700">{Number(payment.amount_paid).toLocaleString()}</p>
                               )}
                             </div>
                             <div>
@@ -320,6 +342,7 @@ export default function FeeTable({
           const monthlyFee = payment.base_monthly_fee !== null && payment.base_monthly_fee !== undefined ? Number(payment.base_monthly_fee) : (Number(payment.amount_due) - prevBal)
           const balance = Number(payment.amount_due) - Number(payment.amount_paid)
           const isSelected = selectedIds.has(payment.id)
+          const isEditingReceived = editingCell?.id === payment.id && editingCell?.field === 'amount_paid'
           return (
             <div key={payment.id} className={`border rounded-lg p-3 ${isSelected ? 'border-primary-400 bg-primary-50' : ''}`}>
               <div className="flex items-start gap-2 mb-2">
@@ -354,7 +377,7 @@ export default function FeeTable({
                   </div>
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-2 text-sm mb-2">
+              <div className="grid grid-cols-4 gap-2 text-sm mb-2">
                 <div>
                   <p className="text-xs text-gray-500">{feeColumnLabel}</p>
                   <p className="font-medium">{monthlyFee.toLocaleString()}</p>
@@ -363,7 +386,7 @@ export default function FeeTable({
                   className={canWrite ? 'cursor-pointer' : ''}
                   onClick={() => canWrite && handleCellClick(payment.id, 'amount_due', Number(payment.amount_due))}
                 >
-                  <p className="text-xs text-gray-500">Total Payable {canWrite && <span className="text-blue-500">edit</span>}</p>
+                  <p className="text-xs text-gray-500">Payable {canWrite && <span className="text-blue-500">edit</span>}</p>
                   {editingCell?.id === payment.id && editingCell?.field === 'amount_due' ? (
                     <input
                       type="number"
@@ -378,6 +401,27 @@ export default function FeeTable({
                     />
                   ) : (
                     <p className={`font-medium ${Number(payment.amount_due) < 0 ? 'text-blue-700' : ''}`}>{Number(payment.amount_due).toLocaleString()}</p>
+                  )}
+                </div>
+                <div
+                  className={canWrite && payment.status !== 'ADVANCE' ? 'cursor-pointer' : ''}
+                  onClick={() => canWrite && payment.status !== 'ADVANCE' && handleCellClick(payment.id, 'amount_paid', Number(payment.amount_paid))}
+                >
+                  <p className="text-xs text-gray-500">Received {canWrite && payment.status !== 'ADVANCE' && <span className="text-green-500">edit</span>}</p>
+                  {isEditingReceived ? (
+                    <input
+                      type="number"
+                      step="0.01"
+                      autoFocus
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      onBlur={() => onInlineUpdate(payment.id, 'amount_paid', editValue)}
+                      onKeyDown={(e) => handleKeyDown(e, payment.id, 'amount_paid')}
+                      className="w-full input-field text-sm py-0.5 px-1"
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  ) : (
+                    <p className="font-medium text-green-700">{Number(payment.amount_paid).toLocaleString()}</p>
                   )}
                 </div>
                 <div>

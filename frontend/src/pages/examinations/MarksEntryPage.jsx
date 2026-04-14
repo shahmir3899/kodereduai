@@ -3,6 +3,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { examinationsApi, sessionsApi, studentsApi } from '../../services/api'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import ClassSelector from '../../components/ClassSelector'
+import TeacherScopeSummary from '../../components/teacher/TeacherScopeSummary'
+import TeacherScopeBadge, { TeacherScopeHint, useTeacherScopeLookup } from '../../components/teacher/TeacherScopeBadge'
 import * as XLSX from 'xlsx'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
@@ -21,6 +23,7 @@ export default function MarksEntryPage() {
   const { sessionClasses } = useSessionClasses(yearFilter)
   const classSelectorScope = getClassSelectorScope(yearFilter)
   const resolvedClassFilter = getResolvedMasterClassId(classFilter, yearFilter, sessionClasses)
+  const { classifyScope } = useTeacherScopeLookup({ academicYearId: yearFilter || undefined })
 
   // Sync year filter with global session switcher
   useEffect(() => {
@@ -264,6 +267,10 @@ export default function MarksEntryPage() {
         <p className="text-sm text-gray-600">Enter marks for students in a spreadsheet-style grid</p>
       </div>
 
+      <div className="mb-4">
+        <TeacherScopeSummary compact />
+      </div>
+
       {/* Selection Bar */}
       <div className="card mb-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -300,6 +307,13 @@ export default function MarksEntryPage() {
             </select>
           </div>
         </div>
+        <TeacherScopeHint
+          className="mt-3"
+          classId={resolvedClassFilter || selectedExam?.class_obj}
+          subjectId={selectedSubject?.subject}
+          academicYearId={yearFilter || undefined}
+          fallbackText="Choose a class and subject to confirm whether marks entry is available through class-wide or subject-only access."
+        />
         {selectedExamId && examSubjects.length === 0 && !examSubjectsLoading && (
           <div className="mt-3 flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
             <svg className="w-4 h-4 text-amber-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -312,6 +326,7 @@ export default function MarksEntryPage() {
         )}
         {selectedSubject && (
           <div className="mt-3 pt-3 border-t border-gray-200 flex flex-wrap items-center gap-4 text-xs text-gray-600">
+            <TeacherScopeBadge scope={classifyScope({ classId: selectedExam?.class_obj, subjectId: selectedSubject?.subject })} />
             <span>Total Marks: <strong>{selectedSubject.total_marks}</strong></span>
             <span>Passing: <strong>{selectedSubject.passing_marks}</strong></span>
             {selectedSubject.exam_date && <span>Date: <strong>{selectedSubject.exam_date}</strong></span>}
@@ -434,7 +449,10 @@ export default function MarksEntryPage() {
         <>
           {/* Save bar */}
           <div className="flex items-center justify-between mb-3">
-            <p className="text-sm text-gray-600">{marksData.length} students</p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="text-sm text-gray-600">{marksData.length} students</p>
+              <TeacherScopeBadge scope={classifyScope({ classId: selectedExam?.class_obj, subjectId: selectedSubject?.subject })} />
+            </div>
             <div className="flex items-center gap-3">
               {saveMsg && (
                 <span className={`text-sm ${saveMsg.startsWith('Error') ? 'text-red-600' : 'text-green-600'}`}>{saveMsg}</span>

@@ -82,6 +82,67 @@ class ClassSubject(models.Model):
         return f"{self.class_obj.name} - {self.subject.name} ({teacher_name})"
 
 
+class ClassTeacherAssignment(models.Model):
+    """Assign class teacher(s) to a session class (specific section) for a specific academic year.
+    
+    Supports multi-section granularity: same teacher can teach multiple sections,
+    or different teachers can teach different sections of the same master class.
+    """
+    school = models.ForeignKey(
+        'schools.School',
+        on_delete=models.CASCADE,
+        related_name='class_teacher_assignments',
+    )
+    academic_year = models.ForeignKey(
+        'academic_sessions.AcademicYear',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='class_teacher_assignments',
+        help_text='Academic year for this class-teacher assignment',
+    )
+    session_class = models.ForeignKey(
+        'academic_sessions.SessionClass',
+        on_delete=models.CASCADE,
+        related_name='class_teacher_assignments',
+        null=True,
+        blank=True,
+        help_text='Specific session class (with section). Enables section-level teacher assignment.',
+    )
+    class_obj = models.ForeignKey(
+        'students.Class',
+        on_delete=models.CASCADE,
+        related_name='class_teacher_assignments',
+        verbose_name='Class',
+        help_text='Master class (for backward compat + quick access). Section level tracked via session_class.',
+    )
+    teacher = models.ForeignKey(
+        'hr.StaffMember',
+        on_delete=models.CASCADE,
+        related_name='class_teacher_assignments',
+    )
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        # Unique on session_class ensures no duplicate teacher per session class
+        # Allows same teacher to teach multiple sections (different session_class records)
+        unique_together = ('school', 'academic_year', 'session_class', 'teacher')
+        ordering = ['class_obj__grade_level', 'class_obj__name', 'session_class__section', 'teacher__first_name']
+        indexes = [
+            models.Index(fields=['school', 'academic_year', 'is_active']),
+            models.Index(fields=['teacher', 'academic_year', 'is_active']),
+            models.Index(fields=['class_obj', 'academic_year', 'is_active']),
+            models.Index(fields=['session_class', 'academic_year', 'is_active']),
+        ]
+
+    def __str__(self):
+        year = self.academic_year.name if self.academic_year else 'All Years'
+        section = f" - {self.session_class.section}" if self.session_class and self.session_class.section else ""
+        return f"{self.class_obj.name}{section} ({self.teacher.full_name}, {year})"
+
+
 class TimetableSlot(models.Model):
     """Defines the daily schedule structure (school-wide)."""
     class SlotType(models.TextChoices):

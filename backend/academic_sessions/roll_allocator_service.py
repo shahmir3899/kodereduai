@@ -8,10 +8,11 @@ Provides deterministic roll allocation for enrollment buckets:
 class RollAllocatorService:
     """Allocate roll numbers with conflict-safe checks."""
 
-    def __init__(self, school_id: int, academic_year_id: int, class_obj_id: int):
+    def __init__(self, school_id: int, academic_year_id: int, class_obj_id: int, session_class_id: int = None):
         self.school_id = int(school_id)
         self.academic_year_id = int(academic_year_id)
         self.class_obj_id = int(class_obj_id)
+        self.session_class_id = int(session_class_id) if session_class_id else None
 
     @staticmethod
     def _to_int(roll_value):
@@ -26,16 +27,26 @@ class RollAllocatorService:
 
         max_roll = 0
 
-        enrollment_rolls = StudentEnrollment.objects.filter(
+        enrollment_qs = StudentEnrollment.objects.filter(
             school_id=self.school_id,
             academic_year_id=self.academic_year_id,
-            class_obj_id=self.class_obj_id,
             is_active=True,
-        ).values_list('roll_number', flat=True)
+        )
+        if self.session_class_id:
+            enrollment_qs = enrollment_qs.filter(session_class_id=self.session_class_id)
+        else:
+            enrollment_qs = enrollment_qs.filter(class_obj_id=self.class_obj_id)
+
+        enrollment_rolls = enrollment_qs.values_list('roll_number', flat=True)
         for roll in enrollment_rolls:
             value = self._to_int(roll)
             if value is not None:
                 max_roll = max(max_roll, value)
+
+        # For session-class-aware allocation, rely on enrollment bucket only.
+        # Student snapshot rows are class-wide and can span multiple sections.
+        if self.session_class_id:
+            return max_roll
 
         student_qs = Student.objects.filter(
             school_id=self.school_id,
@@ -63,12 +74,19 @@ class RollAllocatorService:
         enrollment_taken = StudentEnrollment.objects.filter(
             school_id=self.school_id,
             academic_year_id=self.academic_year_id,
-            class_obj_id=self.class_obj_id,
             is_active=True,
             roll_number=normalized_roll,
         )
+        if self.session_class_id:
+            enrollment_taken = enrollment_taken.filter(session_class_id=self.session_class_id)
+        else:
+            enrollment_taken = enrollment_taken.filter(class_obj_id=self.class_obj_id)
+
         if exclude_student_id:
             enrollment_taken = enrollment_taken.exclude(student_id=exclude_student_id)
+
+        if self.session_class_id:
+            return enrollment_taken.exists()
 
         student_taken = Student.objects.filter(
             school_id=self.school_id,

@@ -1,11 +1,14 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { studentsApi, reportsApi, classesApi } from '../services/api'
+import { studentsApi, reportsApi } from '../services/api'
 import { useToast } from '../components/Toast'
 import { useBackgroundTask } from '../hooks/useBackgroundTask'
 import WhatsAppTick from '../components/WhatsAppTick'
+import { useAcademicYear } from '../contexts/AcademicYearContext'
 import { useAuth } from '../contexts/AuthContext'
+import { useSessionClasses } from '../hooks/useSessionClasses'
+import { getNextAvailableRoll } from '../utils/rollSuggestion'
 
 const TABS = ['Overview', 'Attendance', 'Fees', 'Academics', 'History', 'Documents']
 
@@ -68,16 +71,24 @@ export default function StudentProfilePage() {
     guardian_address: '',
     emergency_contact: '',
   })
+  const [editRollManuallyEdited, setEditRollManuallyEdited] = useState(false)
+  const [recommendedEditRoll, setRecommendedEditRoll] = useState('')
   const [showReclassifyModal, setShowReclassifyModal] = useState(false)
   const [reclassifyForm, setReclassifyForm] = useState({
-    academic_year_id: '',
-    target_class_id: '',
+    target_session_class_id: '',
     new_roll_number: '',
     reason: '',
   })
+  const [reclassifyRollManuallyEdited, setReclassifyRollManuallyEdited] = useState(false)
+  const [recommendedReclassifyRoll, setRecommendedReclassifyRoll] = useState('')
   const queryClient = useQueryClient()
   const { showError, showSuccess } = useToast()
   const { activeSchool } = useAuth()
+  const { activeAcademicYear } = useAcademicYear()
+  const {
+    sessionClasses: correctionSessionClasses,
+    isLoading: correctionClassesLoading,
+  } = useSessionClasses(activeAcademicYear?.id)
 
   // Report download (background task)
   const reportTask = useBackgroundTask({
@@ -151,16 +162,26 @@ export default function StudentProfilePage() {
     gcTime: 10 * 60_000,
   })
 
-  const { data: academicYearsData } = useQuery({
-    queryKey: ['studentCorrectionYears', activeSchool?.id],
-    queryFn: () => sessionsApi.getAcademicYears({ school_id: activeSchool?.id, page_size: 200 }),
-    enabled: showReclassifyModal,
+  const { data: reclassifyStudentsData } = useQuery({
+    queryKey: ['studentReclassifyStudents', activeSchool?.id, activeAcademicYear?.id],
+    queryFn: () => studentsApi.getStudents({
+      school_id: activeSchool?.id,
+      academic_year: activeAcademicYear?.id,
+      page_size: 9999,
+    }),
+    enabled: showReclassifyModal && !!activeAcademicYear?.id,
+    staleTime: 60_000,
   })
 
-  const { data: correctionClassesData } = useQuery({
-    queryKey: ['studentCorrectionClasses', activeSchool?.id],
-    queryFn: () => classesApi.getClasses({ school_id: activeSchool?.id, page_size: 9999 }),
-    enabled: showReclassifyModal,
+  const { data: editStudentsData } = useQuery({
+    queryKey: ['studentEditRollStudents', activeSchool?.id, activeAcademicYear?.id],
+    queryFn: () => studentsApi.getStudents({
+      school_id: activeSchool?.id,
+      ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
+      page_size: 9999,
+    }),
+    enabled: showEditModal && !!activeSchool?.id,
+    staleTime: 60_000,
   })
 
   const updateStudentMutation = useMutation({
@@ -183,7 +204,7 @@ export default function StudentProfilePage() {
     onSuccess: () => {
       showSuccess('Student reclassified successfully')
       setShowReclassifyModal(false)
-      setReclassifyForm({ academic_year_id: '', target_class_id: '', new_roll_number: '', reason: '' })
+      setReclassifyForm({ target_session_class_id: '', new_roll_number: '', reason: '' })
       queryClient.invalidateQueries({ queryKey: ['student', id] })
       queryClient.invalidateQueries({ queryKey: ['studentHistory', id] })
       queryClient.invalidateQueries({ queryKey: ['students'] })
@@ -198,8 +219,77 @@ export default function StudentProfilePage() {
   const student = studentData?.data
   const summary = summaryData?.data
   const ai = aiData?.data
-  const academicYears = academicYearsData?.data?.results || academicYearsData?.data || []
-  const correctionClasses = correctionClassesData?.data?.results || correctionClassesData?.data || []
+  const reclassifyStudents = reclassifyStudentsData?.data?.results || reclassifyStudentsData?.data || []
+  const editStudents = editStudentsData?.data?.results || editStudentsData?.data || []
+
+  const occupiedRollsForEditClass = useMemo(() => {
+    if (!student?.class_obj) return []
+
+    return editStudents
+      .filter((s) => {
+        if (String(s.id) === String(id)) return false
+        return String(s.class_obj || '') === String(student.class_obj)
+      })
+      .map((s) => s.roll_number)
+  }, [editStudents, student?.class_obj, id])
+
+  useEffect(() => {
+    if (!showEditModal || !student?.class_obj) {
+      setRecommendedEditRoll('')
+      return
+    }
+
+    const nextRoll = getNextAvailableRoll(occupiedRollsForEditClass)
+    setRecommendedEditRoll(nextRoll)
+
+    if (!editRollManuallyEdited && !editForm.roll_number?.trim()) {
+      setEditForm((prev) => ({ ...prev, roll_number: nextRoll }))
+    }
+  }, [
+    showEditModal,
+    student?.class_obj,
+    occupiedRollsForEditClass,
+    editRollManuallyEdited,
+    editForm.roll_number,
+  ])
+
+  const occupiedRollsForReclassifyClass = useMemo(() => {
+    if (!reclassifyForm.target_session_class_id) return []
+
+    return reclassifyStudents
+      .filter((s) => {
+        if (String(s.id) === String(id)) return false
+        if (String(s.session_class_obj || '') === String(reclassifyForm.target_session_class_id)) return true
+
+        // Fallback for payloads without session_class_obj annotation
+        const selectedSessionClass = correctionSessionClasses.find(
+          (sc) => String(sc.id) === String(reclassifyForm.target_session_class_id),
+        )
+        if (!selectedSessionClass?.class_obj) return false
+        return String(s.class_obj || '') === String(selectedSessionClass.class_obj)
+      })
+      .map((s) => s.roll_number)
+  }, [reclassifyStudents, correctionSessionClasses, reclassifyForm.target_session_class_id, id])
+
+  useEffect(() => {
+    if (!showReclassifyModal || !reclassifyForm.target_session_class_id) {
+      setRecommendedReclassifyRoll('')
+      return
+    }
+
+    const nextRoll = getNextAvailableRoll(occupiedRollsForReclassifyClass)
+    setRecommendedReclassifyRoll(nextRoll)
+
+    if (!reclassifyRollManuallyEdited && !reclassifyForm.new_roll_number?.trim()) {
+      setReclassifyForm((prev) => ({ ...prev, new_roll_number: nextRoll }))
+    }
+  }, [
+    showReclassifyModal,
+    reclassifyForm.target_session_class_id,
+    occupiedRollsForReclassifyClass,
+    reclassifyRollManuallyEdited,
+    reclassifyForm.new_roll_number,
+  ])
 
   const handleOpenEditModal = () => {
     setEditForm({
@@ -222,7 +312,15 @@ export default function StudentProfilePage() {
       guardian_address: student?.guardian_address || '',
       emergency_contact: student?.emergency_contact || '',
     })
+    setEditRollManuallyEdited(false)
+    setRecommendedEditRoll('')
     setShowEditModal(true)
+  }
+
+  const applyRecommendedEditRoll = () => {
+    if (!recommendedEditRoll) return
+    setEditForm((prev) => ({ ...prev, roll_number: recommendedEditRoll }))
+    setEditRollManuallyEdited(true)
   }
 
   const handleSubmitEdit = () => {
@@ -246,28 +344,55 @@ export default function StudentProfilePage() {
   }
 
   const handleOpenReclassifyModal = () => {
-    const currentYearId = academicYears.find((y) => y.is_current)?.id
+    if (!activeAcademicYear?.id) {
+      showError('Select an academic year from the top switcher first')
+      return
+    }
     setReclassifyForm({
-      academic_year_id: currentYearId ? String(currentYearId) : '',
-      target_class_id: '',
+      target_session_class_id: '',
       new_roll_number: student?.roll_number || '',
       reason: '',
     })
+    setReclassifyRollManuallyEdited(false)
+    setRecommendedReclassifyRoll('')
     setShowReclassifyModal(true)
   }
 
+  const handleReclassifyClassChange = (value) => {
+    if (!reclassifyForm.new_roll_number?.trim()) {
+      setReclassifyRollManuallyEdited(false)
+    }
+    setReclassifyForm((prev) => ({
+      ...prev,
+      target_session_class_id: value,
+      new_roll_number: reclassifyRollManuallyEdited ? prev.new_roll_number : '',
+    }))
+  }
+
+  const applyRecommendedReclassifyRoll = () => {
+    if (!recommendedReclassifyRoll) return
+    setReclassifyForm((prev) => ({ ...prev, new_roll_number: recommendedReclassifyRoll }))
+    setReclassifyRollManuallyEdited(true)
+  }
+
   const handleSubmitReclassify = () => {
-    if (!reclassifyForm.academic_year_id || !reclassifyForm.target_class_id) {
-      showError('Academic year and target class are required')
+    if (!activeAcademicYear?.id || !reclassifyForm.target_session_class_id) {
+      showError('Selected academic year and target class are required')
       return
     }
     if (!reclassifyForm.reason.trim()) {
       showError('Reason is required')
       return
     }
+
+    const selectedSessionClass = correctionSessionClasses.find(
+      (sc) => String(sc.id) === String(reclassifyForm.target_session_class_id),
+    )
+
     reclassifyMutation.mutate({
-      academic_year_id: Number(reclassifyForm.academic_year_id),
-      target_class_id: Number(reclassifyForm.target_class_id),
+      academic_year_id: Number(activeAcademicYear.id),
+      target_session_class_id: Number(reclassifyForm.target_session_class_id),
+      ...(selectedSessionClass?.class_obj && { target_class_id: Number(selectedSessionClass.class_obj) }),
       ...(reclassifyForm.new_roll_number.trim() && { new_roll_number: reclassifyForm.new_roll_number.trim() }),
       reason: reclassifyForm.reason.trim(),
     })
@@ -472,8 +597,29 @@ export default function StudentProfilePage() {
                   <input className="w-full px-3 py-2 border border-gray-300 rounded-lg" value={editForm.name} onChange={(e) => setEditForm((p) => ({ ...p, name: e.target.value }))} />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Roll Number</label>
-                  <input className="w-full px-3 py-2 border border-gray-300 rounded-lg" value={editForm.roll_number} onChange={(e) => setEditForm((p) => ({ ...p, roll_number: e.target.value }))} />
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-sm font-medium text-gray-700">Roll Number</label>
+                    {recommendedEditRoll && (
+                      <button
+                        type="button"
+                        className="text-xs font-medium text-primary-600 hover:text-primary-700"
+                        onClick={applyRecommendedEditRoll}
+                      >
+                        Suggest {recommendedEditRoll}
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                    value={editForm.roll_number}
+                    onChange={(e) => {
+                      setEditRollManuallyEdited(true)
+                      setEditForm((p) => ({ ...p, roll_number: e.target.value }))
+                    }}
+                  />
+                  {recommendedEditRoll && (
+                    <p className="text-xs text-gray-500 mt-1">Next available roll in this class: {recommendedEditRoll}</p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Admission Number</label>
@@ -583,21 +729,54 @@ export default function StudentProfilePage() {
             <div className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Academic Year</label>
-                <select className="w-full px-3 py-2 border border-gray-300 rounded-lg" value={reclassifyForm.academic_year_id} onChange={(e) => setReclassifyForm((p) => ({ ...p, academic_year_id: e.target.value }))}>
-                  <option value="">Select year</option>
-                  {academicYears.map((year) => <option key={year.id} value={year.id}>{year.name}</option>)}
-                </select>
+                <div className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-700">
+                  {activeAcademicYear?.name || 'No academic year selected'}
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Target Class</label>
-                <select className="w-full px-3 py-2 border border-gray-300 rounded-lg" value={reclassifyForm.target_class_id} onChange={(e) => setReclassifyForm((p) => ({ ...p, target_class_id: e.target.value }))}>
+                <select
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  value={reclassifyForm.target_session_class_id}
+                  onChange={(e) => handleReclassifyClassChange(e.target.value)}
+                  disabled={!activeAcademicYear?.id || correctionClassesLoading}
+                >
                   <option value="">Select class</option>
-                  {correctionClasses.map((cls) => <option key={cls.id} value={cls.id}>{cls.name}</option>)}
+                  {correctionSessionClasses.map((sc) => {
+                    const label = sc.label || (sc.section ? `${sc.display_name || sc.name} - ${sc.section}` : (sc.display_name || sc.name))
+                    return (
+                      <option key={sc.id} value={sc.id}>{label}</option>
+                    )
+                  })}
                 </select>
+                {!activeAcademicYear?.id && (
+                  <p className="text-xs text-amber-600 mt-1">Pick an academic year from the top switcher to load session classes.</p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">New Roll Number (optional)</label>
-                <input className="w-full px-3 py-2 border border-gray-300 rounded-lg" value={reclassifyForm.new_roll_number} onChange={(e) => setReclassifyForm((p) => ({ ...p, new_roll_number: e.target.value }))} />
+                <input
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  value={reclassifyForm.new_roll_number}
+                  onChange={(e) => {
+                    setReclassifyRollManuallyEdited(true)
+                    setReclassifyForm((p) => ({ ...p, new_roll_number: e.target.value }))
+                  }}
+                />
+                {recommendedReclassifyRoll && reclassifyForm.target_session_class_id && (
+                  <div className="mt-1 flex items-center gap-2 text-xs text-gray-500">
+                    <span>Suggested next roll: {recommendedReclassifyRoll}</span>
+                    {String(reclassifyForm.new_roll_number || '').trim() !== String(recommendedReclassifyRoll) && (
+                      <button
+                        type="button"
+                        className="text-primary-600 hover:text-primary-700 font-medium"
+                        onClick={applyRecommendedReclassifyRoll}
+                      >
+                        Use suggested
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Reason</label>

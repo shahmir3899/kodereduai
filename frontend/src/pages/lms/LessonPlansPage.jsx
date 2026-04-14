@@ -9,6 +9,8 @@ import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 import { useToast } from '../../components/Toast'
+import TeacherScopeSummary from '../../components/teacher/TeacherScopeSummary'
+import TeacherScopeBadge, { TeacherScopeHint, useTeacherScopeLookup } from '../../components/teacher/TeacherScopeBadge'
 import LessonPlanWizard from './LessonPlanWizard'
 
 const STATUS_BADGES = {
@@ -56,6 +58,7 @@ export default function LessonPlansPage() {
     })
     return map
   }, [sessionClasses])
+  const { classifyScope } = useTeacherScopeLookup({ academicYearId: activeAcademicYear?.id })
 
   // -- Data fetching --
 
@@ -235,6 +238,10 @@ export default function LessonPlansPage() {
         </button>
       </div>
 
+      <div className="mb-6">
+        <TeacherScopeSummary compact />
+      </div>
+
       {/* Filters */}
       <div className="card mb-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
@@ -269,6 +276,13 @@ export default function LessonPlansPage() {
             />
           </div>
         </div>
+        <TeacherScopeHint
+          className="mt-3"
+          classId={resolvedFilterClass}
+          subjectId={filterSubject}
+          academicYearId={activeAcademicYear?.id}
+          fallbackText="Filter by class and subject to confirm whether the table is showing class-wide or subject-only access."
+        />
       </div>
 
       {/* Table */}
@@ -330,6 +344,7 @@ export default function LessonPlansPage() {
                       <p className="text-xs text-gray-500 mt-0.5">
                         {plan.class_name || 'N/A'} | {plan.subject_name || 'N/A'}
                       </p>
+                      <TeacherScopeBadge scope={classifyScope({ classId: plan.class_obj, subjectId: plan.subject })} className="mt-1" />
                       <p className="text-xs text-gray-500">
                         {formatDate(plan.lesson_date)} | {plan.duration_minutes || '--'} min
                       </p>
@@ -444,6 +459,9 @@ export default function LessonPlansPage() {
                             AI
                           </span>
                         )}
+                        <div className="mt-1">
+                          <TeacherScopeBadge scope={classifyScope({ classId: plan.class_obj, subjectId: plan.subject })} />
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-500">
                         {plan.class_name || '--'}
@@ -550,6 +568,13 @@ export default function LessonPlansPage() {
                   />
                 </div>
               </div>
+
+              <TeacherScopeHint
+                classId={resolvedFormClassObj}
+                subjectId={form.subject}
+                academicYearId={activeAcademicYear?.id}
+                fallbackText="Select both class and subject to confirm whether this lesson plan is using class-wide or subject-only access."
+              />
 
               {/* Teacher & Date row */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

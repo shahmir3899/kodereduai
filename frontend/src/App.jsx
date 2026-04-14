@@ -12,7 +12,7 @@ import LoginPage from './pages/LoginPage'
 // Lazy-loaded pages
 const DashboardRouter = lazy(() => import('./pages/DashboardRouter'))
 const CaptureReviewPage = lazy(() => import('./pages/CaptureReviewPage'))
-const RegisterPage = lazy(() => import('./pages/RegisterPage'))
+const AttendanceRecordsPage = lazy(() => import('./pages/AttendanceRecordsPage'))
 const ManualEntryPage = lazy(() => import('./pages/ManualEntryPage'))
 const AnomaliesPage = lazy(() => import('./pages/attendance/AnomaliesPage'))
 const StudentsPage = lazy(() => import('./pages/StudentsPage'))
@@ -266,7 +266,7 @@ function App() {
             {/* Attendance — consolidated into 2 pages */}
             <Route path="attendance" element={<SchoolRoute><ModuleRoute module="attendance"><CaptureReviewPage /></ModuleRoute></SchoolRoute>} />
             <Route path="attendance/review/:id" element={<SchoolRoute><ModuleRoute module="attendance"><CaptureReviewPage /></ModuleRoute></SchoolRoute>} />
-            <Route path="attendance/register" element={<SchoolRoute><ModuleRoute module="attendance"><RegisterPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="attendance/register" element={<SchoolRoute><ModuleRoute module="attendance"><AttendanceRecordsPage /></ModuleRoute></SchoolRoute>} />
             <Route path="attendance/manual-entry" element={<SchoolRoute><ModuleRoute module="attendance"><ManualEntryPage /></ModuleRoute></SchoolRoute>} />
             <Route path="attendance/anomalies" element={<SchoolRoute><ModuleRoute module="attendance"><AnomaliesPage /></ModuleRoute></SchoolRoute>} />
 
@@ -281,7 +281,7 @@ function App() {
             <Route path="attendance/records" element={<Navigate to="/attendance/register" replace />} />
             <Route path="settings" element={<SchoolRoute><SettingsPage /></SchoolRoute>} />
             <Route path="school-setup" element={<SchoolRoute><SchoolSetupPage /></SchoolRoute>} />
-            <Route path="accuracy" element={<Navigate to="/attendance/register?tab=analytics" replace />} />
+            <Route path="accuracy" element={<Navigate to="/attendance?tab=analytics" replace />} />
 
             <Route path="students" element={<SchoolRoute><ModuleRoute module="students"><StudentsPage /></ModuleRoute></SchoolRoute>} />
             <Route path="students/:id" element={<SchoolRoute><ModuleRoute module="students"><StudentProfilePage /></ModuleRoute></SchoolRoute>} />

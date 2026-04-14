@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { academicsApi, hrApi } from '../../services/api'
 import { useClasses } from '../../hooks/useClasses'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
+import { useAuth } from '../../contexts/AuthContext'
 import ClassSelector from '../../components/ClassSelector'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useDebounce } from '../../hooks/useDebounce'
@@ -10,6 +11,7 @@ import { useToast } from '../../components/Toast'
 import { useConfirmModal } from '../../components/ConfirmModal'
 import {
   buildSessionLabeledMasterClassOptions,
+  buildSessionClassOptions,
   getClassSelectorScope,
   resolveClassIdToMasterClassId,
 } from '../../utils/classScope'
@@ -63,6 +65,7 @@ export default function SubjectsPage() {
   const queryClient = useQueryClient()
   const { activeAcademicYear } = useAcademicYear()
   const { showSuccess, showError } = useToast()
+  const { isSchoolAdmin } = useAuth()
   const [tab, setTab] = useState('subjects')
 
   // Subject state
@@ -83,6 +86,12 @@ export default function SubjectsPage() {
   const [assignForm, setAssignForm] = useState(EMPTY_ASSIGNMENT)
   const [assignErrors, setAssignErrors] = useState({})
   const [expandedClasses, setExpandedClasses] = useState(new Set())
+  const [classTeacherFilter, setClassTeacherFilter] = useState('')
+  const [showClassTeacherModal, setShowClassTeacherModal] = useState(false)
+  const [editClassTeacherId, setEditClassTeacherId] = useState(null)
+  const [classTeacherForm, setClassTeacherForm] = useState({ session_class: '', teacher: '' })
+  const [classTeacherErrors, setClassTeacherErrors] = useState({})
+  const [expandedTeacherClasses, setExpandedTeacherClasses] = useState(new Set())
   const { confirm, ConfirmModalRoot } = useConfirmModal()
   const { sessionClasses } = useSessionClasses(activeAcademicYear?.id)
   const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
@@ -103,6 +112,16 @@ export default function SubjectsPage() {
     enabled: tab === 'assignments',
   })
 
+  const { data: classTeacherRes, isLoading: classTeacherLoading, isError: classTeacherError, error: classTeacherFetchError, isFetching: classTeacherFetching } = useQuery({
+    queryKey: ['classTeacherAssignments', classTeacherFilter, activeAcademicYear?.id],
+    queryFn: () => academicsApi.getClassTeachers({
+      session_class: classTeacherFilter || undefined,
+      academic_year: activeAcademicYear?.id || undefined,
+      page_size: 9999,
+    }),
+    enabled: tab === 'classTeachers',
+  })
+
   const { classes } = useClasses()
   const assignmentClassOptions = useMemo(() => {
     if (!activeAcademicYear?.id) return classes
@@ -113,9 +132,27 @@ export default function SubjectsPage() {
     })
   }, [activeAcademicYear?.id, classes, sessionClasses])
 
+  const classTeacherClassOptions = useMemo(() => {
+    if (!activeAcademicYear?.id) return classes
+    return buildSessionClassOptions(sessionClasses)
+  }, [activeAcademicYear?.id, classes, sessionClasses])
+
   const { data: staffData } = useQuery({
     queryKey: ['hrStaffActive'],
     queryFn: () => hrApi.getStaff({ employment_status: 'ACTIVE', page_size: 500 }),
+  })
+
+  const { data: teacherStaffData, isLoading: teacherStaffLoading } = useQuery({
+    queryKey: ['hrTeacherStaffActive'],
+    queryFn: async () => {
+      // Try role-filtered first; some backends don't support role param so fall back to all active staff
+      try {
+        const res = await hrApi.getStaff({ role: 'TEACHER', employment_status: 'ACTIVE', page_size: 500 })
+        const list = Array.isArray(res?.data) ? res.data : res?.data?.results ?? []
+        if (list.length > 0) return res
+      } catch (_) { /* fall through */ }
+      return hrApi.getStaff({ employment_status: 'ACTIVE', page_size: 500 })
+    },
   })
 
   // AI Insights queries
@@ -142,7 +179,9 @@ export default function SubjectsPage() {
 
   const subjects = extractList(subjectRes)
   const assignments = extractList(assignRes)
+  const classTeacherAssignments = extractList(classTeacherRes)
   const staffList = extractList(staffData)
+  const teacherStaffList = extractList(teacherStaffData)
   const workloadData = workloadRes?.data || {}
   const gapData = gapRes?.data || {}
 
@@ -175,7 +214,30 @@ export default function SubjectsPage() {
     return [...map.values()].sort((a, b) => (a.gradeLevel - b.gradeLevel) || (a.section || '').localeCompare(b.section || ''))
   }, [assignments])
 
+  const groupedClassTeacherAssignments = useMemo(() => {
+    const map = new Map()
+    for (const assignment of classTeacherAssignments) {
+      if (!map.has(assignment.class_obj)) {
+        map.set(assignment.class_obj, {
+          id: assignment.class_obj,
+          name: assignment.class_name,
+          section: assignment.class_section || '',
+          gradeLevel: assignment.class_grade_level ?? 0,
+          items: [],
+        })
+      }
+      map.get(assignment.class_obj).items.push(assignment)
+    }
+    return [...map.values()].sort((a, b) => (a.gradeLevel - b.gradeLevel) || (a.section || '').localeCompare(b.section || ''))
+  }, [classTeacherAssignments])
+
   const toggleClass = (classId) => setExpandedClasses(prev => {
+    const next = new Set(prev)
+    next.has(classId) ? next.delete(classId) : next.add(classId)
+    return next
+  })
+
+  const toggleTeacherClass = (classId) => setExpandedTeacherClasses(prev => {
     const next = new Set(prev)
     next.has(classId) ? next.delete(classId) : next.add(classId)
     return next
@@ -250,6 +312,25 @@ export default function SubjectsPage() {
     onSuccess: () => refetchAssignments(),
   })
 
+  const refetchClassTeachers = () => queryClient.refetchQueries({ queryKey: ['classTeacherAssignments'] })
+
+  const createClassTeacherMut = useMutation({
+    mutationFn: (data) => academicsApi.createClassTeacher(data),
+    onSuccess: async () => { await refetchClassTeachers(); closeClassTeacherModal() },
+    onError: (err) => setClassTeacherErrors(err.response?.data || { detail: 'Failed to create class teacher assignment' }),
+  })
+
+  const updateClassTeacherMut = useMutation({
+    mutationFn: ({ id, data }) => academicsApi.updateClassTeacher(id, data),
+    onSuccess: async () => { await refetchClassTeachers(); closeClassTeacherModal() },
+    onError: (err) => setClassTeacherErrors(err.response?.data || { detail: 'Failed to update class teacher assignment' }),
+  })
+
+  const deleteClassTeacherMut = useMutation({
+    mutationFn: (id) => academicsApi.deleteClassTeacher(id),
+    onSuccess: () => refetchClassTeachers(),
+  })
+
   // Subject modal helpers
   const openCreateSubject = () => { setSubjectForm(EMPTY_SUBJECT); setEditSubjectId(null); setSubjectErrors({}); setShowSubjectModal(true) }
   const openEditSubject = (s) => {
@@ -316,6 +397,43 @@ export default function SubjectsPage() {
     setEditAssignId(a.id); setAssignErrors({}); setShowAssignModal(true)
   }
   const closeAssignModal = () => { setShowAssignModal(false); setEditAssignId(null); setAssignForm(EMPTY_ASSIGNMENT); setAssignErrors({}) }
+
+  const openCreateClassTeacher = () => {
+    setClassTeacherForm({ session_class: '', teacher: '' })
+    setEditClassTeacherId(null)
+    setClassTeacherErrors({})
+    setShowClassTeacherModal(true)
+  }
+
+  const openEditClassTeacher = (assignment) => {
+    setClassTeacherForm({
+      session_class: assignment.session_class || '',
+      teacher: assignment.teacher,
+    })
+    setEditClassTeacherId(assignment.id)
+    setClassTeacherErrors({})
+    setShowClassTeacherModal(true)
+  }
+
+  const closeClassTeacherModal = () => {
+    setShowClassTeacherModal(false)
+    setEditClassTeacherId(null)
+    setClassTeacherForm({ session_class: '', teacher: '' })
+    setClassTeacherErrors({})
+  }
+
+  const handleClassTeacherSubmit = (e) => {
+    e.preventDefault()
+
+    const payload = {
+      session_class: parseInt(classTeacherForm.session_class) || classTeacherForm.session_class,
+      teacher: classTeacherForm.teacher,
+      ...(activeAcademicYear?.id ? { academic_year: activeAcademicYear.id } : {}),
+      is_active: true,
+    }
+    if (editClassTeacherId) updateClassTeacherMut.mutate({ id: editClassTeacherId, data: payload })
+    else createClassTeacherMut.mutate(payload)
+  }
 
   // Matrix helpers: pre-fill modal for a specific class + subject cell
   const openCreateAssignFor = (classId, subjectId) => {
@@ -384,7 +502,7 @@ export default function SubjectsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Subjects</h1>
-          <p className="text-sm text-gray-600">Manage subjects and class assignments</p>
+          <p className="text-sm text-gray-600">Manage subjects, subject teachers, and class teachers</p>
         </div>
       </div>
 
@@ -401,6 +519,12 @@ export default function SubjectsPage() {
           className={`px-4 py-2 text-sm rounded-md transition-colors ${tab === 'assignments' ? 'bg-white shadow text-primary-700 font-medium' : 'text-gray-600 hover:text-gray-800'}`}
         >
           Class Assignments{assignments.length > 0 && <span className="ml-1.5 text-xs bg-primary-100 text-primary-700 px-1.5 py-0.5 rounded-full">{assignments.length}</span>}
+        </button>
+        <button
+          onClick={() => setTab('classTeachers')}
+          className={`px-4 py-2 text-sm rounded-md transition-colors ${tab === 'classTeachers' ? 'bg-white shadow text-primary-700 font-medium' : 'text-gray-600 hover:text-gray-800'}`}
+        >
+          Class Teachers{classTeacherAssignments.length > 0 && <span className="ml-1.5 text-xs bg-primary-100 text-primary-700 px-1.5 py-0.5 rounded-full">{classTeacherAssignments.length}</span>}
         </button>
         <button
           onClick={() => setTab('insights')}
@@ -937,6 +1061,171 @@ export default function SubjectsPage() {
                       <button type="button" onClick={closeAssignModal} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>
                       <button type="submit" disabled={createAssignMut.isPending || updateAssignMut.isPending} className="btn-primary px-4 py-2 text-sm disabled:opacity-50">
                         {createAssignMut.isPending || updateAssignMut.isPending ? 'Saving...' : editAssignId ? 'Update' : `Assign${assignForm.subjects.length > 1 ? ` (${assignForm.subjects.length})` : ''}`}
+                      </button>
+                    </div>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ─── Class Teachers Tab ─── */}
+      {tab === 'classTeachers' && (
+        <>
+          <div className="flex flex-col sm:flex-row gap-3 mb-4">
+            <ClassSelector
+              value={classTeacherFilter}
+              onChange={e => setClassTeacherFilter(e.target.value)}
+              className="input w-full sm:w-52"
+              showAllOption
+              scope={classSelectorScope}
+              academicYearId={activeAcademicYear?.id}
+              classes={classTeacherClassOptions}
+            />
+            {isSchoolAdmin && (
+              <button onClick={openCreateClassTeacher} className="btn-primary text-sm px-4 py-2 whitespace-nowrap">
+                + Assign Class Teacher
+              </button>
+            )}
+          </div>
+
+          {activeAcademicYear && (
+            <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+              Managing class-teacher assignments for <span className="font-semibold">{activeAcademicYear.name}</span>.
+            </div>
+          )}
+
+          {classTeacherLoading ? (
+            <div className="text-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+            </div>
+          ) : classTeacherError ? (
+            <div className="card text-center py-8">
+              <p className="text-red-600 text-sm mb-2">Failed to load class teachers{classTeacherFetchError?.response?.status ? ` (${classTeacherFetchError.response.status})` : ''}</p>
+              <button onClick={() => queryClient.refetchQueries({ queryKey: ['classTeacherAssignments'] })} className="text-xs text-primary-600 hover:underline">Retry</button>
+            </div>
+          ) : classTeacherAssignments.length === 0 ? (
+            <div className="card p-6 text-center">
+              <p className="text-gray-600 text-sm">No class teachers assigned yet for the selected scope.</p>
+              <p className="text-xs text-gray-500 mt-2">Class Teachers get full visibility for their assigned class across attendance, finance, students, LMS, and exams.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {classTeacherFetching && (
+                <div className="h-0.5 bg-primary-100 rounded overflow-hidden">
+                  <div className="h-full bg-primary-500 rounded animate-pulse w-1/2"></div>
+                </div>
+              )}
+              {groupedClassTeacherAssignments.map(group => {
+                const isExpanded = expandedTeacherClasses.has(group.id)
+                return (
+                  <div key={group.id} className="card p-0 overflow-hidden">
+                    <button
+                      onClick={() => toggleTeacherClass(group.id)}
+                      className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
+                    >
+                      <div className="flex items-center gap-2">
+                        <svg className={`w-4 h-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                        <span className="font-semibold text-sm text-gray-900">{group.name}{group.section ? ` - ${group.section}` : ''}</span>
+                      </div>
+                      <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+                        {group.items.length} class teacher{group.items.length !== 1 ? 's' : ''}
+                      </span>
+                    </button>
+                    {isExpanded && (
+                      <div className="border-t border-gray-100">
+                        {group.items.map(assignment => (
+                          <div key={assignment.id} className="flex items-center gap-3 px-4 py-3 border-b border-gray-50 last:border-b-0">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium text-gray-900 truncate">{assignment.teacher_name}</p>
+                              <p className="text-xs text-gray-500">Full class access enabled</p>
+                            </div>
+                            {isSchoolAdmin ? (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); openEditClassTeacher(assignment) }}
+                                className="text-xs text-primary-600 hover:underline shrink-0"
+                              >
+                                Edit
+                              </button>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {showClassTeacherModal && (
+            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={closeClassTeacherModal}>
+              <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-semibold text-gray-900">{editClassTeacherId ? 'Edit Class Teacher' : 'Assign Class Teacher'}</h2>
+                  <button onClick={closeClassTeacherModal} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+                </div>
+
+                {(classTeacherErrors.detail || classTeacherErrors.non_field_errors) && (
+                  <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">
+                    {typeof classTeacherErrors.detail === 'string' ? classTeacherErrors.detail : classTeacherErrors.non_field_errors || JSON.stringify(classTeacherErrors.detail)}
+                  </div>
+                )}
+
+                <form onSubmit={handleClassTeacherSubmit} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Class Section *</label>
+                    <ClassSelector
+                      value={classTeacherForm.session_class}
+                      onChange={e => setClassTeacherForm(p => ({ ...p, session_class: e.target.value }))}
+                      className="input w-full"
+                      required
+                      classes={classTeacherClassOptions}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Select the specific class section. Different teachers can be assigned to different sections of the same class.
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Teacher *</label>
+                    <select
+                      value={classTeacherForm.teacher}
+                      onChange={e => setClassTeacherForm(p => ({ ...p, teacher: e.target.value }))}
+                      className="input w-full"
+                      required
+                      disabled={teacherStaffLoading}
+                    >
+                      <option value="">{teacherStaffLoading ? 'Loading teachers...' : `Select teacher... (${teacherStaffList.length})`}</option>
+                      {teacherStaffList.map(teacher => (
+                        <option key={teacher.id} value={teacher.id}>{teacher.full_name} {teacher.employee_id ? `(${teacher.employee_id})` : ''}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-700">
+                    <strong>Section-Scoped Access:</strong> This teacher will have full access only to the selected class section in attendance, students, and other modules.
+                  </div>
+                  <div className="flex items-center pt-2">
+                    {editClassTeacherId && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const ok = await confirm({ title: 'Remove Class Teacher', message: 'Remove this class-teacher assignment?', confirmLabel: 'Remove', pendingLabel: 'Removing...' })
+                          if (ok) deleteClassTeacherMut.mutate(editClassTeacherId, { onSuccess: closeClassTeacherModal })
+                        }}
+                        disabled={deleteClassTeacherMut.isPending}
+                        className="text-sm text-red-600 hover:text-red-800 hover:underline disabled:opacity-50"
+                      >
+                        {deleteClassTeacherMut.isPending ? 'Removing...' : 'Remove'}
+                      </button>
+                    )}
+                    <div className="flex gap-3 ml-auto">
+                      <button type="button" onClick={closeClassTeacherModal} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>
+                      <button type="submit" disabled={createClassTeacherMut.isPending || updateClassTeacherMut.isPending} className="btn-primary px-4 py-2 text-sm disabled:opacity-50">
+                        {createClassTeacherMut.isPending || updateClassTeacherMut.isPending ? 'Saving...' : editClassTeacherId ? 'Update' : 'Assign'}
                       </button>
                     </div>
                   </div>

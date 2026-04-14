@@ -198,8 +198,11 @@ export default function DiscountsPage() {
   })
 
   const { data: studentsData } = useQuery({
-    queryKey: ['students'],
-    queryFn: () => studentsApi.getStudents({ page_size: 9999 }),
+    queryKey: ['students', activeAcademicYear?.id],
+    queryFn: () => studentsApi.getStudents({
+      page_size: 9999,
+      ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
+    }),
   })
 
   const { data: sessionsData } = useQuery({

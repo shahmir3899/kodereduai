@@ -12,11 +12,10 @@
 
 | Page | Route | Purpose |
 |------|-------|---------|
-| Upload | `/attendance/upload` | Upload register photos |
-| Review | `/attendance/review` | Review & confirm AI results |
-| Records | `/attendance/records` | Monthly attendance register |
-| AI Accuracy | `/accuracy` | AI accuracy metrics |
-| Settings | `/settings` | Mark mappings & register layout config |
+| Capture & Review | `/attendance` | OCR upload/review workflow + attendance analytics/config tabs |
+| Attendance Records | `/attendance/register` | Consolidated monthly register table from AttendanceRecord |
+| Manual Entry | `/attendance/manual-entry` | Manual attendance capture flow |
+| Face Attendance | `/face-attendance` | Camera-based attendance capture and confirmation |
 
 ---
 
@@ -87,113 +86,42 @@ Give users a toggle between "Grid" (week-paginated table) and "Cards" (student c
 
 ---
 
-## Part 2: Move Settings into Attendance Section
+## Part 2: Implemented Architecture (April 2026)
 
-The Settings page has two tabs, both purely attendance-related:
-- **Mark Mappings** — Symbol-to-status mapping for OCR
-- **Register Layout** — Row/column configuration for register parsing
-
-### Plan
-
-1. **Remove** the standalone `/settings` route and nav item
-2. **Embed** settings as a tab/section within the consolidated Attendance page (see Part 3)
-3. Keep the same UI components — just relocate them into the Attendance section
-
----
-
-## Part 3: Compress Attendance to 2-3 Pages
-
-### Current: 5 Separate Pages
+### Attendance Navigation
 
 ```
 Attendance
-  ├── Upload          (photo upload + crop/rotate)
-  ├── Review          (AI results + manual corrections)
-  ├── Records         (monthly register view)
-  ├── AI Accuracy     (accuracy metrics + suggestions)
-  └── Settings*       (mark mappings + register layout)
+  ├── Register Image (OCR)   → /attendance
+  ├── Manual Entry           → /attendance/manual-entry
+  ├── Face Recognition       → /face-attendance
+  └── Attendance Records     → /attendance/register
 ```
 
-### Proposed: 2 Pages with Tabs
+### Attendance Page Behavior
 
-```
-Attendance
-  ├── Capture & Review    (combined upload + review workflow)
-  └── Register            (records + analytics + config)
-```
+#### Page 1: Capture & Review (`/attendance`)
+
+Tabs currently in production:
+- Upload
+- Pending Review
+- Analytics
+- Configuration
+
+#### Page 2: Attendance Records (`/attendance/register`)
+
+Standalone monthly records register page (no tabs), backed by AttendanceRecord query endpoints.
+
+### Attendance Data Sources (Unified)
+
+The records page is populated by one unified AttendanceRecord table from three source flows:
+- OCR upload/review confirmations (`source = IMAGE_AI`)
+- Manual attendance entry (`source = MANUAL`)
+- Face attendance confirmations (`source = FACE_CAMERA`)
 
 ---
 
-#### Page 1: "Capture & Review" (`/attendance`)
-
-Combines Upload + Review into a **single workflow page** with steps/tabs:
-
-```
-┌─────────────────────────────────────────┐
-│  Capture & Review                       │
-│                                         │
-│  [Upload]  [Pending Review]  [History]  │
-│  ─────────────────────────────────────  │
-│                                         │
-│  Upload Tab:                            │
-│    Same upload UI (drop zone, camera,   │
-│    crop/rotate, multi-page)             │
-│                                         │
-│  Pending Review Tab:                    │
-│    List of unconfirmed uploads          │
-│    Click to expand inline review        │
-│    (AI results, P/A toggles, confirm)   │
-│                                         │
-│  History Tab:                           │
-│    Past confirmed uploads with status   │
-│    Quick stats (date, class, accuracy)  │
-└─────────────────────────────────────────┘
-```
-
-**Key changes:**
-- Upload and Review are steps in one workflow, not separate pages
-- The review detail view opens **inline** (expandable card or slide-over panel) instead of navigating away
-- History replaces the old review list view
-- Route: `/attendance` (default tab: Pending Review if items exist, else Upload)
-
-#### Page 2: "Register & Analytics" (`/attendance/register`)
-
-Combines Records + AI Accuracy + Settings into a **single dashboard page** with tabs:
-
-```
-┌──────────────────────────────────────────────┐
-│  Register & Analytics                        │
-│                                              │
-│  [Register]  [Analytics]  [Configuration]    │
-│  ──────────────────────────────────────────  │
-│                                              │
-│  Register Tab:                               │
-│    Class selector + month nav                │
-│    Summary cards (students, days, P, A)      │
-│    Attendance table (with mobile fixes)      │
-│    Grid/Card toggle for mobile               │
-│                                              │
-│  Analytics Tab:                              │
-│    AI Accuracy metrics                       │
-│    Weekly trends                             │
-│    Common errors + suggestions               │
-│    Quick link to Configuration tab           │
-│                                              │
-│  Configuration Tab:                          │
-│    Mark Mappings (existing settings tab 1)   │
-│    Register Layout (existing settings tab 2) │
-└──────────────────────────────────────────────┘
-```
-
-**Key changes:**
-- Records, AI Accuracy, and Settings merged into one page with tabs
-- Configuration (old Settings) is naturally discoverable alongside Analytics
-- All "view & analyze" attendance data lives in one place
-- Route: `/attendance/register` (default tab: Register)
-
----
-
-## Part 4: Updated Navigation
+## Part 3: Updated Navigation
 
 ### Before
 ```
@@ -214,34 +142,35 @@ Sidebar:
 Sidebar:
   Dashboard
   ▼ Attendance
-      Capture & Review     → /attendance
-      Register & Analytics → /attendance/register
+      Register Image (OCR) → /attendance
+      Manual Entry         → /attendance/manual-entry
+      Face Recognition     → /face-attendance
+      Attendance Records   → /attendance/register
   ▼ Finance
       ...
 ```
 
 **Benefits:**
-- Attendance section goes from 4+1 items → 2 items
-- Settings disappears as standalone (moves into Configuration tab)
-- Cleaner sidebar, room for future sections
-- Fewer clicks to navigate
+- Source-based capture options are explicit in navigation
+- Records are separated as a dedicated reporting destination
+- Analytics/config are available in-context on OCR attendance page
 
 ---
 
-## Part 5: Updated Routes
+## Part 4: Updated Routes
 
 | Old Route | New Route | Notes |
 |-----------|-----------|-------|
 | `/attendance/upload` | `/attendance` (Upload tab) | Combined page |
 | `/attendance/review` | `/attendance` (Pending Review tab) | Combined page |
 | `/attendance/review/:id` | `/attendance?review=:id` | Query param opens review panel |
-| `/attendance/records` | `/attendance/register` | Register tab |
-| `/accuracy` | `/attendance/register` (Analytics tab) | Merged in |
-| `/settings` | `/attendance/register` (Configuration tab) | Merged in |
+| `/attendance/records` | `/attendance/register` | Standalone records page |
+| `/accuracy` | `/attendance?tab=analytics` | Analytics tab on OCR page |
+| `/settings` | `/settings` | Remains global settings route |
 
 ---
 
-## Implementation Steps
+## Implementation Steps (Status)
 
 ### Phase 1: Mobile-Friendly Register Table
 1. Create `WeekTabs` component for week-based pagination
@@ -258,6 +187,8 @@ Sidebar:
 5. Wire up new route `/attendance/register`
 6. Remove old routes: `/attendance/records`, `/accuracy`, `/settings`
 
+Status: superseded by current architecture. Final implementation keeps `/attendance/register` as a standalone records page and hosts analytics/configuration on `/attendance`.
+
 ### Phase 3: Consolidate "Capture & Review" Page
 1. Create new `CaptureReviewPage.jsx` with 3 tabs: Upload, Pending Review, History
 2. Move `AttendanceUploadPage` content → Upload tab
@@ -271,6 +202,8 @@ Sidebar:
 2. Add redirects from old routes → new routes (for bookmarks/links)
 3. Remove old page files or keep as sub-components
 4. Test all flows end-to-end on mobile and desktop
+
+Status: applied with a source-first attendance sidebar (OCR, Manual Entry, Face Recognition, Attendance Records).
 
 ---
 

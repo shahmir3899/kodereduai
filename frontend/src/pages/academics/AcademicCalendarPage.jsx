@@ -2,7 +2,10 @@ import { useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { classesApi, sessionsApi, examinationsApi } from '../../services/api'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
+import { useAuth } from '../../contexts/AuthContext'
 import { useToast } from '../../components/Toast'
+import { useSessionClasses } from '../../hooks/useSessionClasses'
+import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -48,7 +51,10 @@ function getMonthMeta(year, month) {
 export default function AcademicCalendarPage() {
   const queryClient = useQueryClient()
   const { activeAcademicYear, terms } = useAcademicYear()
+  const { activeSchool } = useAuth()
   const { showSuccess, showError } = useToast()
+  const { sessionClasses } = useSessionClasses(activeAcademicYear?.id, activeSchool?.id)
+  const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
 
   const today = new Date()
   const [year, setYear] = useState(today.getFullYear())
@@ -77,6 +83,14 @@ export default function AcademicCalendarPage() {
   })
 
   const classes = classesRes?.data?.results || classesRes?.data || []
+  // When a year is active, show session classes in dropdowns; else show master classes
+  const displayClasses = classSelectorScope === 'session' ? sessionClasses : classes
+  // Build class filter params for API calls
+  const classFilterParams = selectedClassId
+    ? (classSelectorScope === 'session'
+        ? { session_class_id: selectedClassId }
+        : { class_id: selectedClassId })
+    : {}
 
   const { data: monthViewRes, isLoading: monthLoading } = useQuery({
     queryKey: ['calendarMonthView', activeAcademicYear?.id, year, month, selectedClassId],
@@ -84,7 +98,7 @@ export default function AcademicCalendarPage() {
       academic_year: activeAcademicYear?.id,
       year,
       month,
-      class_id: selectedClassId || undefined,
+      ...classFilterParams,
     }),
     enabled: !!activeAcademicYear?.id,
   })
@@ -95,7 +109,7 @@ export default function AcademicCalendarPage() {
       academic_year: activeAcademicYear?.id,
       date_from: monthStart,
       date_to: monthEnd,
-      class_id: selectedClassId || undefined,
+      ...classFilterParams,
       is_active: true,
       page_size: 200,
     }),
@@ -313,7 +327,12 @@ export default function AcademicCalendarPage() {
       start_date: form.start_date,
       end_date: form.end_date,
       color: form.color,
-      class_ids: form.scope === 'CLASS' ? form.class_ids.map((id) => Number(id)) : [],
+      class_ids: form.scope === 'CLASS'
+        ? form.class_ids.map((id) => {
+            const masterClassId = getResolvedMasterClassId(id, activeAcademicYear?.id, sessionClasses)
+            return Number(masterClassId || id)
+          })
+        : [],
       is_active: true,
     }
 
@@ -429,8 +448,8 @@ export default function AcademicCalendarPage() {
               className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm"
             >
               <option value="">Whole School</option>
-              {classes.map((cls) => (
-                <option key={cls.id} value={cls.id}>{cls.section ? `${cls.name} - ${cls.section}` : cls.name}</option>
+              {displayClasses.map((cls) => (
+                <option key={cls.id} value={cls.id}>{cls.display_name || (cls.section ? `${cls.name} - ${cls.section}` : cls.name)}</option>
               ))}
             </select>
           </div>
@@ -677,14 +696,14 @@ export default function AcademicCalendarPage() {
                 <div>
                   <label className="text-xs font-medium text-gray-600">Select Classes</label>
                   <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-2 border border-gray-200 rounded-lg p-3 max-h-44 overflow-auto">
-                    {classes.length === 0 && <p className="text-xs text-gray-500">No classes available</p>}
-                    {classes.map((cls) => {
+                    {displayClasses.length === 0 && <p className="text-xs text-gray-500">No classes available</p>}
+                    {displayClasses.map((cls) => {
                       const id = String(cls.id)
                       const checked = form.class_ids.includes(id)
                       return (
                         <label key={cls.id} className="inline-flex items-center gap-2 text-xs text-gray-700">
                           <input type="checkbox" checked={checked} onChange={() => toggleClassId(id)} />
-                          <span>{cls.section ? `${cls.name} - ${cls.section}` : cls.name}</span>
+                          <span>{cls.display_name || (cls.section ? `${cls.name} - ${cls.section}` : cls.name)}</span>
                         </label>
                       )
                     })}

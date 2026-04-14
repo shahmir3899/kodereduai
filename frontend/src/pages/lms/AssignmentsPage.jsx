@@ -9,6 +9,8 @@ import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 import { useToast } from '../../components/Toast'
+import TeacherScopeSummary from '../../components/teacher/TeacherScopeSummary'
+import TeacherScopeBadge, { TeacherScopeHint, useTeacherScopeLookup } from '../../components/teacher/TeacherScopeBadge'
 
 const STATUS_BADGES = {
   DRAFT: 'bg-gray-100 text-gray-800',
@@ -67,6 +69,7 @@ export default function AssignmentsPage() {
     })
     return map
   }, [sessionClasses])
+  const { classifyScope } = useTeacherScopeLookup({ academicYearId: activeAcademicYear?.id })
 
   // -- Data fetching --
 
@@ -266,6 +269,10 @@ export default function AssignmentsPage() {
         </button>
       </div>
 
+      <div className="mb-6">
+        <TeacherScopeSummary compact />
+      </div>
+
       {/* Filters */}
       <div className="card mb-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 sm:gap-4">
@@ -330,6 +337,13 @@ export default function AssignmentsPage() {
             />
           </div>
         </div>
+        <TeacherScopeHint
+          className="mt-3"
+          classId={resolvedFilterClass}
+          subjectId={filterSubject}
+          academicYearId={activeAcademicYear?.id}
+          fallbackText="Filter by class and subject to confirm whether the table is showing class-wide or subject-only access."
+        />
       </div>
 
       {/* Table */}
@@ -387,6 +401,7 @@ export default function AssignmentsPage() {
                       <p className="text-xs text-gray-500 mt-0.5">
                         {a.class_name || 'N/A'} | {a.subject_name || 'N/A'}
                       </p>
+                      <TeacherScopeBadge scope={classifyScope({ classId: a.class_obj, subjectId: a.subject })} className="mt-1" />
                     </div>
                     <div className="flex flex-col items-end gap-1 flex-shrink-0">
                       <span
@@ -491,7 +506,10 @@ export default function AssignmentsPage() {
                   {assignments.map((a) => (
                     <tr key={a.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3 text-sm font-medium text-gray-900 max-w-[180px] truncate">
-                        {a.title}
+                        <div className="truncate">{a.title}</div>
+                        <div className="mt-1">
+                          <TeacherScopeBadge scope={classifyScope({ classId: a.class_obj, subjectId: a.subject })} />
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-500">
                         {a.class_name || '--'}
@@ -621,6 +639,13 @@ export default function AssignmentsPage() {
                   />
                 </div>
               </div>
+
+              <TeacherScopeHint
+                classId={resolvedFormClassObj}
+                subjectId={form.subject}
+                academicYearId={activeAcademicYear?.id}
+                fallbackText="Select both class and subject to confirm whether this assignment is using class-wide or subject-only access."
+              />
 
               {/* Teacher & Type */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

@@ -15,10 +15,12 @@ from rest_framework.views import APIView
 
 from core.permissions import HasSchoolAccess, IsSchoolAdminOrReadOnly, ModuleAccessMixin
 from core.mixins import TenantQuerySetMixin, ensure_tenant_schools, ensure_tenant_school_id
-from .models import Subject, ClassSubject, TimetableSlot, TimetableEntry
+from core.class_scope import resolve_class_scope
+from .models import Subject, ClassSubject, ClassTeacherAssignment, TimetableSlot, TimetableEntry
 from .serializers import (
     SubjectSerializer, SubjectCreateSerializer, SubjectBulkCreateSerializer,
     ClassSubjectSerializer, ClassSubjectCreateSerializer,
+    ClassTeacherAssignmentSerializer, ClassTeacherAssignmentCreateSerializer,
     TimetableSlotSerializer, TimetableSlotCreateSerializer,
     TimetableEntrySerializer, TimetableEntryCreateSerializer,
     AutoGenerateRequestSerializer, SubstituteRequestSerializer,
@@ -202,7 +204,10 @@ class ClassSubjectViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Model
             else:
                 return queryset.none()
 
-        class_obj = self.request.query_params.get('class_obj')
+        scope = resolve_class_scope(self.request, school_id=school_id)
+        if scope['invalid']:
+            return queryset.none()
+        class_obj = scope['class_obj_id'] or None
         if class_obj:
             queryset = queryset.filter(class_obj_id=class_obj)
 
@@ -293,6 +298,21 @@ class ClassSubjectViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Model
         return Response(serializer.data)
 
     @action(detail=False, methods=['get'])
+    def my_subject_assignments(self, request):
+        """Return subject-teacher assignments for the logged-in teacher."""
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response([], status=status.HTTP_200_OK)
+
+        qs = self.get_queryset().filter(
+            school_id=school_id,
+            teacher__user=request.user,
+            is_active=True,
+        )
+        serializer = ClassSubjectSerializer(qs, many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['get'])
     def workload_analysis(self, request):
         """AI: Analyze teacher workload distribution."""
         school_id = _resolve_school_id(request)
@@ -301,6 +321,108 @@ class ClassSubjectViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Model
         from .ai_engine import WorkloadAnalyzer
         analyzer = WorkloadAnalyzer(school_id)
         return Response(analyzer.analyze())
+
+
+class ClassTeacherAssignmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
+    """CRUD for class teacher assignments with section-level granularity.
+    
+    Supports assigning teachers to specific session classes (including sections).
+    Multiple teachers can teach different sections, or one teacher can teach multiple sections.
+    """
+    required_module = 'academics'
+    queryset = ClassTeacherAssignment.objects.all()
+    permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['school_id'] = _resolve_school_id(self.request)
+        return context
+
+    def get_serializer_class(self):
+        if self.action in ('create', 'update', 'partial_update'):
+            return ClassTeacherAssignmentCreateSerializer
+        return ClassTeacherAssignmentSerializer
+
+    def get_queryset(self):
+        queryset = ClassTeacherAssignment.objects.select_related(
+            'school', 'class_obj', 'session_class', 'teacher', 'teacher__user', 'academic_year',
+        )
+        if _is_school_header_rejected(self.request):
+            return queryset.none()
+
+        school_id = _resolve_school_id(self.request)
+        if school_id:
+            queryset = queryset.filter(school_id=school_id)
+        elif not self.request.user.is_super_admin:
+            tenant_schools = ensure_tenant_schools(self.request)
+            if tenant_schools:
+                queryset = queryset.filter(school_id__in=tenant_schools)
+            else:
+                return queryset.none()
+
+        # Support filtering by master class (backward compat)
+        class_obj = self.request.query_params.get('class_obj')
+        if class_obj:
+            queryset = queryset.filter(class_obj_id=class_obj)
+
+        # Support filtering by session class (section-specific)
+        session_class = self.request.query_params.get('session_class')
+        if session_class:
+            queryset = queryset.filter(session_class_id=session_class)
+
+        teacher = self.request.query_params.get('teacher')
+        if teacher:
+            queryset = queryset.filter(teacher_id=teacher)
+
+        academic_year = self.request.query_params.get('academic_year')
+        if academic_year:
+            queryset = queryset.filter(academic_year_id=academic_year)
+
+        is_active = self.request.query_params.get('is_active')
+        if is_active is not None:
+            queryset = queryset.filter(is_active=is_active.lower() == 'true')
+
+        return queryset
+
+    def perform_create(self, serializer):
+        school_id = _resolve_school_id(self.request)
+        if not school_id:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({'detail': 'No school associated with your account.'})
+
+        academic_year = serializer.validated_data.get('academic_year')
+        if not academic_year:
+            from academic_sessions.models import AcademicYear
+            sid = ensure_tenant_school_id(self.request) or self.request.user.school_id
+            academic_year = AcademicYear.objects.filter(
+                school_id=sid, is_current=True, is_active=True,
+            ).first()
+
+        # Extract master class from session_class for backward compat field
+        session_class = serializer.validated_data.get('session_class')
+        class_obj = session_class.class_obj if session_class else None
+
+        serializer.save(school_id=school_id, academic_year=academic_year, class_obj=class_obj)
+
+    @action(detail=False, methods=['get'])
+    def my_classes(self, request):
+        """Return session class assignments for the logged-in teacher.
+        
+        Returns section-level granularity if assigned to specific sections,
+        or master class if assigned at class level.
+        """
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response([], status=status.HTTP_200_OK)
+
+        qs = self.get_queryset().filter(
+            school_id=school_id,
+            teacher__user=request.user,
+            is_active=True,
+        ).order_by('session_class__class_obj__grade_level', 'session_class__section')
+
+        serializer = ClassTeacherAssignmentSerializer(qs, many=True)
+        return Response(serializer.data)
 
 
 # ── TimetableSlot ViewSet ────────────────────────────────────────────────────
@@ -485,7 +607,10 @@ class TimetableEntryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
             else:
                 return queryset.none()
 
-        class_obj = self.request.query_params.get('class_obj')
+        scope = resolve_class_scope(self.request, school_id=school_id)
+        if scope['invalid']:
+            return queryset.none()
+        class_obj = scope['class_obj_id'] or None
         if class_obj:
             queryset = queryset.filter(class_obj_id=class_obj)
 

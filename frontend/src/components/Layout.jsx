@@ -370,7 +370,19 @@ export default function Layout() {
     prefix => location.pathname === prefix || location.pathname.startsWith(prefix + '/')
   )
 
-  const isActive = (href) => location.pathname === href || location.pathname.startsWith(href + '/')
+  const isActive = (href) => {
+    if (!href.includes('?')) {
+      return location.pathname === href || location.pathname.startsWith(href + '/')
+    }
+    const [hrefPath, hrefQuery] = href.split('?')
+    if (location.pathname !== hrefPath) return false
+    const currentParams = new URLSearchParams(location.search)
+    const hrefParams = new URLSearchParams(hrefQuery)
+    for (const [key, value] of hrefParams.entries()) {
+      if (currentParams.get(key) !== value) return false
+    }
+    return true
+  }
 
   // Navigation structure: memoized to avoid re-creating on every render
   const navigationGroups = useMemo(() => [
@@ -383,13 +395,13 @@ export default function Layout() {
       name: 'Attendance',
       icon: ClipboardIcon,
       children: [
-        { type: 'divider', label: 'Take Attendance' },
-        { name: 'Register Image (OCR)', href: '/attendance', icon: UploadIcon },
-        { name: 'Manual Entry', href: '/attendance/manual-entry', icon: PencilIcon },
-        { name: 'Face Recognition', href: '/face-attendance', icon: CameraIcon },
-        { type: 'divider', label: 'Review & Reports' },
-        { name: 'Pending Review', href: '/attendance?tab=review', icon: ClipboardCheckIcon },
-        { name: 'Register & Analytics', href: '/attendance/register', icon: TableIcon },
+        { type: 'divider', label: 'Choose Attendance Source' },
+        { name: '1. Register Image', href: '/attendance', icon: UploadIcon },
+        
+        { name: '2. Manual Entry', href: '/attendance/manual-entry', icon: PencilIcon },
+        { name: '3. Face Recognition', href: '/face-attendance', icon: CameraIcon },
+        { type: 'divider', label: 'Attendance Records' },
+        { name: 'Attendance Records', href: '/attendance/register', icon: TableIcon },
       ],
     }] : []),
 

@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Subject, ClassSubject, TimetableSlot, TimetableEntry
+from .models import Subject, ClassSubject, ClassTeacherAssignment, TimetableSlot, TimetableEntry
 
 
 # ── Subject ──────────────────────────────────────────────────────────────────
@@ -99,7 +99,89 @@ class ClassSubjectBulkAssignSerializer(serializers.Serializer):
     periods_per_week = serializers.IntegerField(default=1, min_value=1, max_value=20)
 
 
-# ── TimetableSlot ────────────────────────────────────────────────────────────
+# ── ClassTeacherAssignment ──────────────────────────────────────────────────
+
+class ClassTeacherAssignmentSerializer(serializers.ModelSerializer):
+    class_name = serializers.CharField(source='class_obj.name', read_only=True)
+    # Derive section from session_class if available, else from master class
+    class_section = serializers.SerializerMethodField()
+    class_grade_level = serializers.IntegerField(source='class_obj.grade_level', read_only=True, default=0)
+    teacher_name = serializers.SerializerMethodField()
+    academic_year_name = serializers.CharField(
+        source='academic_year.name', read_only=True, default=None,
+    )
+    session_class_display = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ClassTeacherAssignment
+        fields = [
+            'id', 'school', 'class_obj', 'session_class',
+            'class_name', 'class_section', 'class_grade_level',
+            'teacher', 'teacher_name',
+            'academic_year', 'academic_year_name',
+            'session_class_display',
+            'is_active', 'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'school', 'created_at', 'updated_at']
+
+    def get_class_section(self, obj):
+        """Get section from session_class, fall back to master class section."""
+        if obj.session_class and obj.session_class.section:
+            return obj.session_class.section
+        return obj.class_obj.section or ''
+
+    def get_teacher_name(self, obj):
+        return obj.teacher.full_name if obj.teacher else None
+
+    def get_session_class_display(self, obj):
+        """Display name of session class (helpful for UI)."""
+        if obj.session_class:
+            return f"{obj.session_class.display_name} ({obj.session_class.section})" if obj.session_class.section else obj.session_class.display_name
+        return obj.class_obj.name
+
+
+class ClassTeacherAssignmentCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ClassTeacherAssignment
+        fields = ['session_class', 'teacher', 'academic_year', 'is_active']
+
+    def validate(self, data):
+        school_id = self.context.get('school_id')
+        session_class = data.get('session_class')
+        teacher = data.get('teacher')
+        academic_year = data.get('academic_year')
+
+        if not session_class:
+            raise serializers.ValidationError({'session_class': 'SessionClass is required.'})
+
+        if school_id and session_class.school_id != school_id:
+            raise serializers.ValidationError({'session_class': 'SessionClass does not belong to the active school.'})
+
+        if academic_year and session_class.academic_year_id != academic_year.id:
+            raise serializers.ValidationError(
+                {'session_class': 'SessionClass must belong to the selected academic year.'}
+            )
+
+        if school_id and teacher and teacher.school_id != school_id:
+            raise serializers.ValidationError({'teacher': 'Teacher does not belong to the active school.'})
+
+        # Check for duplicate assignment to same session class
+        qs = ClassTeacherAssignment.objects.filter(
+            school_id=school_id,
+            session_class=session_class,
+            teacher=teacher,
+            academic_year=academic_year,
+        )
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError(
+                'This teacher is already assigned to this class section for the selected academic year. '
+                'One teacher can be assigned to multiple sections, but not the same section twice.'
+            )
+
+        return data
+
 
 class TimetableSlotSerializer(serializers.ModelSerializer):
     slot_type_display = serializers.CharField(

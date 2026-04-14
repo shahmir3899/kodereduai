@@ -45,12 +45,14 @@ The `/dashboard` route uses **DashboardRouter.jsx** to render a role-specific da
 ## Attendance
 | Route | Component | Description | API Calls |
 |-------|-----------|-------------|-----------|
-| /attendance | CaptureReviewPage.jsx | Upload images & review pending. Class dropdown is role-aware (teachers see assigned classes only via my_classes/) | POST upload-image/, GET/POST uploads/, POST confirm/, GET my_classes/ |
-| /attendance/register | RegisterPage.jsx | Attendance records, analytics & manual entry | GET records/, daily_report/, my_classes/, POST bulk_entry/ |
-| /attendance/review/:id | CaptureReviewPage.jsx | Review specific upload. Includes AI Threshold Config, Pipeline Config, and Drift Monitor cards in accuracy dashboard | GET uploads/{id}/, POST confirm/, GET threshold_status/, GET drift_history/ |
+| /attendance | CaptureReviewPage.jsx | Unified attendance operations page with tabs: Upload, Pending Review, Analytics, Configuration. Upload/Review drive OCR confirmation workflow; Analytics and Configuration are embedded in-page tabs. | POST upload-image/, GET/POST uploads/, POST confirm/, GET pending_review/, GET accuracy_stats/, GET mapping_suggestions/, GET/PUT register_config/, GET/PUT mark_mappings/, GET my_classes/ |
+| /attendance/register | AttendanceRecordsPage.jsx | Standalone attendance records register (monthly table view) populated from the unified AttendanceRecord store across OCR, Manual Entry, and Face Attendance sources. | GET records/ |
+| /attendance/review/:id | CaptureReviewPage.jsx | Deep-link into review detail for a specific OCR upload ID. | GET uploads/{id}/, POST confirm/ |
+| /attendance/manual-entry | ManualEntryPage.jsx | Manual attendance entry flow (class/date + status grid) writing to AttendanceRecord with source MANUAL. | GET my_classes/, GET students/, POST records/bulk_entry/ |
+| /face-attendance | FaceAttendancePage.jsx | Camera-based face attendance flow; confirmed sessions write to AttendanceRecord with source FACE_CAMERA. | GET/POST face-attendance sessions/detections/review/confirm endpoints |
 | /attendance/anomalies | AnomaliesPage.jsx | Attendance anomaly detection - bulk absence, student streaks, unusual days. Filterable, resolvable | GET anomalies/, POST anomalies/{id}/resolve/ |
 
-Redirects: /attendance/upload, /attendance/review, /attendance/records → remapped to above routes
+Redirects: /attendance/upload, /attendance/review, /attendance/records, /accuracy → remapped to above routes/tabs
 
 ## Students & Classes
 | Route | Component | Description | API Calls |

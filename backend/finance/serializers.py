@@ -369,6 +369,7 @@ class GenerateMonthlySerializer(serializers.Serializer):
     month = serializers.IntegerField(min_value=1, max_value=12)
     year = serializers.IntegerField(min_value=2020, max_value=2100)
     class_id = serializers.IntegerField(required=False)
+    session_class_id = serializers.IntegerField(required=False)
     academic_year = serializers.IntegerField(required=False)
     conflict_strategy = serializers.ChoiceField(
         choices=['skip', 'update', 'delete_recreate'],
@@ -441,6 +442,10 @@ class GenerateAnnualFeesSerializer(serializers.Serializer):
     class_id = serializers.IntegerField(
         required=False,
         help_text='Optional class ID to generate annual fees for. Omit for all classes.',
+    )
+    session_class_id = serializers.IntegerField(
+        required=False,
+        help_text='Optional session class ID to generate annual fees for. Takes precedence over class_id.',
     )
     annual_category_ids = serializers.ListField(
         child=serializers.IntegerField(),

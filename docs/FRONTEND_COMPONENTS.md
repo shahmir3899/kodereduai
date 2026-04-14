@@ -80,7 +80,13 @@ The `/dashboard` route renders **DashboardRouter.jsx** which switches on `effect
 - **ParentDashboard.jsx** (src/pages/parent/) — Per-child cards with `getChildOverview()` data: attendance rate, fees due (PKR amount), last exam %, today's status (Present/Absent/Late). Per-child action buttons (Attendance, Fees, Results, Timetable, Apply Leave). Shared QuickActionGrid + NotificationsFeed. Loading skeletons per child card.
 
 ### Attendance Components
-- **ManualEntryTab** (in RegisterPage.jsx) — Manual attendance entry with class/date selectors and P/A toggle grid. Tab within RegisterPage at `/attendance/register?tab=manual`. Calls `attendanceApi.getMyAttendanceClasses()`, `studentsApi.getStudents()`, `attendanceApi.getRecords()`, `attendanceApi.bulkEntryAttendance()`. Visible to Admin, Principal, Teacher only. Follows MarksEntryPage.jsx spreadsheet-style entry pattern.
+- **CaptureReviewPage.jsx** — Main OCR attendance operations page at `/attendance` with tabs: Upload, Pending Review, Analytics, Configuration.
+- **UploadTab** (in CaptureReviewPage.jsx) — Register image OCR upload flow with class/date and image pipeline controls.
+- **PendingReviewTab** (in CaptureReviewPage.jsx) — Lists pending uploads and opens inline review details for confirmation.
+- **AnalyticsTab** (src/components/attendance/AnalyticsTab.jsx) — AI accuracy metrics, trend table, and OCR error insights from `accuracy_stats/`.
+- **ConfigurationTab** (src/components/attendance/ConfigurationTab.jsx) — Mark mapping + register layout configuration from school settings APIs.
+- **ManualEntryPage.jsx** — Separate route at `/attendance/manual-entry` for manual attendance capture; writes to AttendanceRecord source MANUAL.
+- **AttendanceRecordsPage.jsx** — Separate route at `/attendance/register` showing the consolidated register table from AttendanceRecord.
 
 ### Modals
 - **BatchConvertModal.jsx** — Batch convert admission enquiries to students. Calls `POST /api/admissions/enquiries/batch-convert/`

@@ -127,9 +127,15 @@ export default function TransportAssignmentsPage() {
   // Filter students for search + class filter in modal
   const filteredStudents = useMemo(() => {
     let result = allStudents
-    // Filter by class
+    // Filter by class — use session_class_obj for exact section match when available
     if (resolvedModalClassFilter) {
-      result = result.filter((s) => String(s.class_obj) === String(resolvedModalClassFilter))
+      const isSessionScope = classSelectorScope === 'session' && modalClassFilter
+      result = result.filter((s) => {
+        if (isSessionScope && s.session_class_obj) {
+          return String(s.session_class_obj.id) === String(modalClassFilter)
+        }
+        return String(s.class_obj) === String(resolvedModalClassFilter)
+      })
     }
     // Filter by search
     if (studentSearch.trim()) {

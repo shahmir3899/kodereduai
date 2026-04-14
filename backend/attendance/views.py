@@ -13,7 +13,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.db.models import Count, Q
 
-from core.permissions import IsSchoolAdmin, HasSchoolAccess, CanConfirmAttendance, CanUploadAttendance, CanManualAttendance, ModuleAccessMixin, get_effective_role, ADMIN_ROLES
+from core.permissions import IsSchoolAdmin, HasSchoolAccess, CanConfirmAttendance, CanUploadAttendance, CanManualAttendance, ModuleAccessMixin, get_effective_role, ADMIN_ROLES, get_teacher_class_scope, get_teacher_session_class_scope, _get_session_class_student_ids
 from core.mixins import TenantQuerySetMixin, ensure_tenant_schools, ensure_tenant_school_id
 from academic_sessions.calendar_rules import is_off_day_for_date, off_day_types_for_date, build_off_day_date_set
 from .models import AttendanceUpload, AttendanceRecord
@@ -195,45 +195,42 @@ class AttendanceUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
         if date_to:
             queryset = queryset.filter(date__lte=date_to)
 
-        # Teacher: only see uploads for their assigned classes
+        # Teacher: only see uploads for their assigned classes (section-scoped)
         role = get_effective_role(self.request)
         if role == 'TEACHER':
-            teacher_class_ids = self._get_teacher_class_ids()
-            queryset = queryset.filter(class_obj_id__in=teacher_class_ids)
+            session_class_ids = get_teacher_session_class_scope(self.request)
+            if session_class_ids:
+                # Section-level: filter uploads where session_class is assigned
+                queryset = queryset.filter(
+                    Q(session_class_id__in=session_class_ids) |
+                    Q(session_class__isnull=True, class_obj_id__in=get_teacher_class_scope(self.request))
+                )
+            else:
+                teacher_class_ids = get_teacher_class_scope(self.request)
+                queryset = queryset.filter(class_obj_id__in=teacher_class_ids)
 
         return queryset.order_by('-created_at')
 
-    def _get_teacher_class_ids(self):
-        """Return class IDs assigned to the current teacher via ClassSubject."""
-        from academics.models import ClassSubject
-        school_id = ensure_tenant_school_id(self.request) or self.request.user.school_id
-        return set(
-            ClassSubject.objects.filter(
-                school_id=school_id,
-                teacher__user=self.request.user,
-                is_active=True,
-            ).values_list('class_obj_id', flat=True).distinct()
-        )
-
     def perform_create(self, serializer):
         """Create upload and trigger processing task."""
-        # Teacher: verify class assignment via ClassSubject
+        # Teacher: verify class-teacher assignment (section-scoped if applicable)
         role = get_effective_role(self.request)
         if role == 'TEACHER':
-            from academics.models import ClassSubject
-            school_id = ensure_tenant_school_id(self.request) or self.request.user.school_id
             class_obj_id = serializer.validated_data.get('class_obj') and serializer.validated_data['class_obj'].id
             if not class_obj_id:
                 class_obj_id = self.request.data.get('class_obj')
-            has_assignment = ClassSubject.objects.filter(
-                school_id=school_id,
-                class_obj_id=class_obj_id,
-                teacher__user=self.request.user,
-                is_active=True,
-            ).exists()
-            if not has_assignment:
-                from rest_framework.exceptions import PermissionDenied
-                raise PermissionDenied('You are not assigned to this class.')
+            # Check session_class assignment if provided
+            session_class_id = self.request.data.get('session_class_id') or self.request.data.get('session_class')
+            session_class_ids = get_teacher_session_class_scope(self.request)
+            if session_class_id and session_class_ids:
+                if int(session_class_id) not in session_class_ids:
+                    from rest_framework.exceptions import PermissionDenied
+                    raise PermissionDenied('You are not assigned as class teacher for this class section.')
+            else:
+                teacher_class_ids = get_teacher_class_scope(self.request)
+                if int(class_obj_id) not in teacher_class_ids:
+                    from rest_framework.exceptions import PermissionDenied
+                    raise PermissionDenied('You are not assigned as class teacher for this class.')
 
         # Auto-resolve academic year if not provided
         academic_year = serializer.validated_data.get('academic_year')
@@ -340,15 +337,23 @@ class AttendanceUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
         """
         upload = self.get_object()
 
-        # Teacher: verify class assignment for this upload's class
+        # Teacher: verify class assignment (section-scoped if applicable)
         role = get_effective_role(request)
         if role == 'TEACHER':
-            teacher_class_ids = self._get_teacher_class_ids()
-            if upload.class_obj_id not in teacher_class_ids:
-                return Response(
-                    {'error': 'You are not assigned to this class.'},
-                    status=status.HTTP_403_FORBIDDEN,
-                )
+            session_class_ids = get_teacher_session_class_scope(request)
+            if session_class_ids and upload.session_class_id:
+                if upload.session_class_id not in session_class_ids:
+                    return Response(
+                        {'error': 'You are not assigned as class teacher for this class section.'},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+            else:
+                teacher_class_ids = get_teacher_class_scope(request)
+                if upload.class_obj_id not in teacher_class_ids:
+                    return Response(
+                        {'error': 'You are not assigned as class teacher for this class.'},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
 
         # Validate upload can be confirmed
         if upload.status == AttendanceUpload.Status.CONFIRMED:
@@ -1078,12 +1083,8 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
         if role in ADMIN_ROLES:
             classes = Class.objects.filter(school_id=school_id, is_active=True)
         elif role == 'TEACHER':
-            from academics.models import ClassSubject
-            class_ids = ClassSubject.objects.filter(
-                school_id=school_id,
-                teacher__user=request.user,
-                is_active=True,
-            ).values_list('class_obj_id', flat=True).distinct()
+            # Use master class IDs for the class list (still shows assigned master classes)
+            class_ids = get_teacher_class_scope(request, school_id=school_id)
             classes = Class.objects.filter(id__in=class_ids, is_active=True)
         else:
             classes = Class.objects.none()
@@ -1140,21 +1141,25 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        # Teacher: verify class assignment via ClassSubject
+        # Teacher: verify class-teacher assignment (section-scoped)
         role = get_effective_role(request)
         if role == 'TEACHER':
-            from academics.models import ClassSubject
-            has_assignment = ClassSubject.objects.filter(
-                school_id=school_id,
-                class_obj_id=class_id,
-                teacher__user=request.user,
-                is_active=True,
-            ).exists()
-            if not has_assignment:
-                return Response(
-                    {'detail': 'You are not assigned to this class.'},
-                    status=status.HTTP_403_FORBIDDEN,
-                )
+            session_class_ids = get_teacher_session_class_scope(request, school_id=school_id)
+            if session_class and session_class_ids:
+                # Session class provided — verify teacher is assigned to this specific section
+                if session_class.id not in session_class_ids:
+                    return Response(
+                        {'detail': 'You are not assigned as class teacher for this class section.'},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+            else:
+                # Fall back to master class scope
+                class_scope = get_teacher_class_scope(request, school_id=school_id)
+                if class_id not in class_scope:
+                    return Response(
+                        {'detail': 'You are not assigned as class teacher for this class.'},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
 
         # Resolve academic year: session class -> requested year -> current year
         academic_year = None

@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useMemo, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../../contexts/AuthContext'
@@ -9,7 +9,7 @@ import { faceAttendanceApi, studentsApi } from '../../services/api'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import ClassSelector from '../../components/ClassSelector'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
-import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
+import { getClassSelectorScope, getResolvedMasterClassId, resolveSessionClassId } from '../../utils/classScope'
 
 export default function FaceEnrollmentPage() {
   const { activeSchool } = useAuth()
@@ -27,12 +27,14 @@ export default function FaceEnrollmentPage() {
   const { sessionClasses } = useSessionClasses(activeAcademicYear?.id, activeSchool?.id)
   const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
   const resolvedSelectedClass = getResolvedMasterClassId(selectedClass, activeAcademicYear?.id, sessionClasses)
+  const resolvedSelectedSessionClass = resolveSessionClassId(selectedClass, activeAcademicYear?.id, sessionClasses)
 
   // Load students for selected class
   const { data: studentsData } = useQuery({
-    queryKey: ['students', resolvedSelectedClass, activeAcademicYear?.id],
+    queryKey: ['students', resolvedSelectedClass, resolvedSelectedSessionClass, activeAcademicYear?.id],
     queryFn: () => studentsApi.getStudents({
-      class_obj: resolvedSelectedClass,
+      class_id: resolvedSelectedClass,
+      ...(resolvedSelectedSessionClass && { session_class_id: resolvedSelectedSessionClass }),
       page_size: 100,
       is_active: true,
       ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
@@ -50,6 +52,27 @@ export default function FaceEnrollmentPage() {
     enabled: !!activeSchool,
   })
   const enrollments = enrollmentsData?.data?.results || enrollmentsData?.data || []
+
+  const parseRollForSort = (rollValue) => {
+    const parsed = Number.parseInt(String(rollValue ?? '').trim(), 10)
+    return Number.isNaN(parsed) ? Number.MAX_SAFE_INTEGER : parsed
+  }
+
+  const sortedStudents = useMemo(() => {
+    return [...students].sort((a, b) => {
+      const rollCmp = parseRollForSort(a.roll_number) - parseRollForSort(b.roll_number)
+      if (rollCmp !== 0) return rollCmp
+      return String(a.name || '').localeCompare(String(b.name || ''))
+    })
+  }, [students])
+
+  const sortedEnrollments = useMemo(() => {
+    return [...enrollments].sort((a, b) => {
+      const rollCmp = parseRollForSort(a.student_roll) - parseRollForSort(b.student_roll)
+      if (rollCmp !== 0) return rollCmp
+      return String(a.student_name || '').localeCompare(String(b.student_name || ''))
+    })
+  }, [enrollments])
 
   // Enroll mutation
   const enrollMutation = useMutation({
@@ -116,6 +139,7 @@ export default function FaceEnrollmentPage() {
 
   // Build enrollment status for students
   const enrolledStudentIds = new Set(enrollments.map((e) => e.student))
+  const enrolledVisibleCount = sortedStudents.filter((s) => enrolledStudentIds.has(s.id)).length
 
   return (
     <div className="max-w-6xl mx-auto">
@@ -160,9 +184,9 @@ export default function FaceEnrollmentPage() {
                 disabled={!selectedClass}
               >
                 <option value="">Select student...</option>
-                {students.map((s) => (
+                {sortedStudents.map((s) => (
                   <option key={s.id} value={s.id}>
-                    {s.name} (#{s.roll_number})
+                    {`${s.roll_number || '-'} - ${s.name}`}
                     {enrolledStudentIds.has(s.id) ? ' [enrolled]' : ''}
                   </option>
                 ))}
@@ -205,13 +229,13 @@ export default function FaceEnrollmentPage() {
           <div className="p-4 border-b">
             <h2 className="text-lg font-semibold">
               Enrolled Faces
-              {selectedClass && ` (${enrollments.length})`}
+              {selectedClass && ` (${sortedEnrollments.length})`}
             </h2>
           </div>
 
           {enrollmentsLoading ? (
             <div className="p-8"><LoadingSpinner /></div>
-          ) : enrollments.length === 0 ? (
+          ) : sortedEnrollments.length === 0 ? (
             <div className="p-8 text-center text-gray-500 text-sm">
               {selectedClass
                 ? 'No students enrolled in this class yet.'
@@ -219,7 +243,7 @@ export default function FaceEnrollmentPage() {
             </div>
           ) : (
             <div className="divide-y max-h-[500px] overflow-y-auto">
-              {enrollments.map((enrollment) => (
+              {sortedEnrollments.map((enrollment) => (
                 <div key={enrollment.id} className="p-3 flex items-center justify-between">
                   <div>
                     <div className="text-sm font-medium">{enrollment.student_name}</div>
@@ -243,12 +267,12 @@ export default function FaceEnrollmentPage() {
           )}
 
           {/* Summary for selected class */}
-          {selectedClass && students.length > 0 && (
+          {selectedClass && sortedStudents.length > 0 && (
             <div className="p-3 border-t bg-gray-50 text-xs text-gray-600">
-              {enrolledStudentIds.size} of {students.length} students enrolled
-              {students.length - enrolledStudentIds.size > 0 && (
+              {enrolledVisibleCount} of {sortedStudents.length} students enrolled
+              {sortedStudents.length - enrolledVisibleCount > 0 && (
                 <span className="text-orange-600 ml-1">
-                  ({students.length - enrolledStudentIds.size} missing)
+                  ({sortedStudents.length - enrolledVisibleCount} missing)
                 </span>
               )}
             </div>

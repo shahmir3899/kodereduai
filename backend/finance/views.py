@@ -21,8 +21,9 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from django.http import FileResponse
 
-from core.permissions import IsSchoolAdmin, IsSchoolAdminOrStaffReadOnly, HasSchoolAccess, get_effective_role, ModuleAccessMixin, ADMIN_ROLES, _is_data_restricted_user
+from core.permissions import IsSchoolAdmin, IsSchoolAdminOrStaffReadOnly, HasSchoolAccess, get_effective_role, ModuleAccessMixin, ADMIN_ROLES, _is_data_restricted_user, get_teacher_class_scope, get_teacher_session_class_scope, _get_session_class_student_ids
 from core.mixins import TenantQuerySetMixin, ensure_tenant_schools, ensure_tenant_school_id
+from core.class_scope import resolve_class_scope
 from students.models import Student, Class
 from django.utils import timezone
 from .models import (
@@ -114,9 +115,13 @@ def _get_staff_visible_accounts(school_id):
     )
 
 
-def _filter_students_by_scope(queryset, class_id=None, academic_year_id=None):
+def _filter_students_by_scope(queryset, class_id=None, academic_year_id=None, session_class_id=None):
     """Apply class/year scope consistently for student selections in finance flows."""
-    if academic_year_id:
+    if session_class_id:
+        queryset = queryset.filter(enrollments__session_class_id=session_class_id, enrollments__is_active=True)
+        if academic_year_id:
+            queryset = queryset.filter(enrollments__academic_year_id=academic_year_id)
+    elif academic_year_id:
         queryset = queryset.filter(
             enrollments__academic_year_id=academic_year_id,
             enrollments__is_active=True,
@@ -163,6 +168,12 @@ class FeeStructureViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Model
             queryset = queryset.filter(Q(academic_year_id=academic_year) | Q(academic_year__isnull=True))
 
         class_id = self.request.query_params.get('class_id')
+        session_class_id = self.request.query_params.get('session_class_id')
+        if session_class_id:
+            scope = resolve_class_scope(self.request, school_id=school_id)
+            if scope['invalid']:
+                return queryset.none()
+            class_id = scope['class_obj_id'] or class_id
         if class_id:
             queryset = queryset.filter(Q(class_obj_id=class_id) | Q(student__class_obj_id=class_id))
 
@@ -417,21 +428,23 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
                     Q(account_id__in=visible_accounts) | Q(account__isnull=True)
                 )
 
-        # TEACHER: restrict to fees for students in their assigned classes
+        # TEACHER: restrict to fees for students in teacher's assigned class sections
         role = get_effective_role(self.request)
         if role == 'TEACHER':
-            from academics.models import ClassSubject
             school_id = school_id or _resolve_school_id(self.request)
             if school_id:
-                # Get all classes where this teacher is assigned
-                teacher_classes = ClassSubject.objects.filter(
-                    teacher__user=self.request.user,
-                    school_id=school_id,
-                    is_active=True
-                ).values_list('class_obj_id', flat=True).distinct()
-                
-                # Filter fees to only those classes
-                queryset = queryset.filter(student__class_obj_id__in=teacher_classes)
+                session_ids = get_teacher_session_class_scope(self.request, school_id=school_id)
+                if session_ids:
+                    # Section-scoped: only students enrolled in assigned sessions
+                    enrolled_ids = _get_session_class_student_ids(session_ids)
+                    teacher_classes = get_teacher_class_scope(self.request, school_id=school_id)
+                    queryset = queryset.filter(
+                        Q(student_id__in=enrolled_ids) |
+                        Q(student__class_obj_id__in=teacher_classes)
+                    )
+                else:
+                    teacher_classes = get_teacher_class_scope(self.request, school_id=school_id)
+                    queryset = queryset.filter(student__class_obj_id__in=teacher_classes)
 
         # Filters
         academic_year = self.request.query_params.get('academic_year')
@@ -567,6 +580,7 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         """Dry-run preview: shows what generate would create without making changes."""
         fee_type = request.query_params.get('fee_type', 'MONTHLY')
         class_id = request.query_params.get('class_id')
+        session_class_id = request.query_params.get('session_class_id')
         year_param = request.query_params.get('year', date.today().year)
         month_param = request.query_params.get('month', date.today().month)
         academic_year_id = request.query_params.get('academic_year')
@@ -581,6 +595,7 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
             Student.objects.filter(school_id=school_id, is_active=True),
             class_id=class_id,
             academic_year_id=academic_year_id,
+            session_class_id=session_class_id,
         ).select_related('class_obj')
 
         month = int(month_param) if fee_type == 'MONTHLY' else 0
@@ -617,6 +632,7 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         month = serializer.validated_data['month']
         year = serializer.validated_data['year']
         class_id = serializer.validated_data.get('class_id')
+        session_class_id = serializer.validated_data.get('session_class_id')
         academic_year_id = serializer.validated_data.get('academic_year')
         monthly_category_ids = serializer.validated_data.get('monthly_category_ids')
         conflict_strategy = serializer.validated_data.get('conflict_strategy', 'skip')
@@ -655,6 +671,7 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
             'month': month,
             'year': year,
             'class_id': class_id,
+            'session_class_id': session_class_id,
             'academic_year_id': academic_year_id,
             'monthly_category_ids': list(valid_monthly_category_ids),
             'conflict_strategy': conflict_strategy,
@@ -665,6 +682,7 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
             Student.objects.filter(school_id=school_id, is_active=True),
             class_id=class_id,
             academic_year_id=academic_year_id,
+            session_class_id=session_class_id,
         )
         student_count = student_qs.count()
 
@@ -800,6 +818,7 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         serializer.is_valid(raise_exception=True)
 
         class_id = serializer.validated_data.get('class_id')
+        session_class_id = serializer.validated_data.get('session_class_id')
         cat_ids = serializer.validated_data['annual_category_ids']
         year = serializer.validated_data['year']
         conflict_strategy = serializer.validated_data.get('conflict_strategy', 'skip')
@@ -842,6 +861,7 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
             students,
             class_id=class_id,
             academic_year_id=academic_year_id,
+            session_class_id=session_class_id,
         )
 
         from core.models import BackgroundTask
@@ -852,6 +872,7 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
             'year': year,
             'annual_category_ids': list(valid_cat_ids),
             'class_id': class_id,
+            'session_class_id': session_class_id,
             'academic_year_id': academic_year_id,
             'conflict_strategy': conflict_strategy,
         }

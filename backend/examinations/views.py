@@ -9,7 +9,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core.mixins import TenantQuerySetMixin, ensure_tenant_school_id
-from core.permissions import IsSchoolAdmin, IsSchoolAdminOrReadOnly, HasSchoolAccess, ModuleAccessMixin
+from core.permissions import IsSchoolAdmin, IsSchoolAdminOrReadOnly, HasSchoolAccess, ModuleAccessMixin, get_effective_role, get_teacher_combined_scope
+from core.class_scope import resolve_class_scope
 
 from .models import (
     ExamType, ExamGroup, Exam, ExamSubject, StudentMark, GradeScale,
@@ -49,6 +50,43 @@ def _resolve_school_id(request):
     if request.user.school_id:
         return request.user.school_id
     return None
+
+
+def _apply_teacher_exam_scope(qs, request, class_field='class_obj_id', subject_field=None):
+    """Apply dual-layer teacher scope for exam-related querysets.
+    Uses section-class scope when teacher has session assignments."""
+    if get_effective_role(request) != 'TEACHER':
+        return qs
+
+    school_id = _resolve_school_id(request)
+    scope = get_teacher_combined_scope(request, school_id=school_id)
+    all_class_ids = scope['all_class_ids']
+    full_class_ids = scope['full_class_ids']
+    session_ids = scope.get('full_session_class_ids', set())
+
+    # For class-level entities (Exam), visibility is union of full class scope and subject assignment classes.
+    if not subject_field:
+        if all_class_ids:
+            return qs.filter(**{f'{class_field}__in': all_class_ids})
+        return qs.none()
+
+    predicates = Q()
+
+    if session_ids:
+        # Section-scoped: teacher's class-teacher assignment is section-level
+        # Access exams only for those specific master class IDs
+        if full_class_ids:
+            predicates |= Q(**{f'{class_field}__in': full_class_ids})
+    elif full_class_ids:
+        predicates |= Q(**{f'{class_field}__in': full_class_ids})
+
+    for class_id, subject_ids in scope['class_subject_map'].items():
+        if subject_ids:
+            predicates |= Q(**{class_field: class_id, f'{subject_field}__in': list(subject_ids)})
+
+    if not predicates:
+        return qs.none()
+    return qs.filter(predicates)
 
 
 class ExamTypeViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
@@ -451,13 +489,22 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
         ).annotate(
             subjects_count=Count('exam_subjects', filter=Q(exam_subjects__is_active=True)),
         )
-        academic_year = self.request.query_params.get('academic_year')
+        qs = _apply_teacher_exam_scope(qs, self.request, class_field='class_obj_id')
+        scope = resolve_class_scope(
+            self.request,
+            school_id=_resolve_school_id(self.request),
+            class_param_names=('class_obj', 'class_id'),
+        )
+        if scope['invalid']:
+            return qs.none()
+
+        academic_year = scope['academic_year_id'] or self.request.query_params.get('academic_year')
         if academic_year:
             qs = qs.filter(academic_year_id=academic_year)
         term = self.request.query_params.get('term')
         if term:
             qs = qs.filter(term_id=term)
-        class_obj = self.request.query_params.get('class_obj')
+        class_obj = scope['class_obj_id']
         if class_obj:
             qs = qs.filter(class_obj_id=class_obj)
         exam_type = self.request.query_params.get('exam_type')
@@ -727,12 +774,29 @@ class ExamSubjectViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
 
     def get_queryset(self):
         qs = super().get_queryset().select_related('school', 'exam', 'subject')
+        qs = _apply_teacher_exam_scope(
+            qs,
+            self.request,
+            class_field='exam__class_obj_id',
+            subject_field='subject_id',
+        )
+        scope = resolve_class_scope(
+            self.request,
+            school_id=_resolve_school_id(self.request),
+            class_param_names=('class_obj', 'class_id'),
+        )
+        if scope['invalid']:
+            return qs.none()
+
         exam = self.request.query_params.get('exam')
         if exam:
             qs = qs.filter(exam_id=exam)
-        class_obj = self.request.query_params.get('class_obj')
+        class_obj = scope['class_obj_id']
         if class_obj:
             qs = qs.filter(exam__class_obj_id=class_obj)
+        academic_year = scope['academic_year_id'] or self.request.query_params.get('academic_year')
+        if academic_year:
+            qs = qs.filter(exam__academic_year_id=academic_year)
         is_active = self.request.query_params.get('is_active')
         if is_active is not None:
             qs = qs.filter(is_active=is_active.lower() == 'true')
@@ -765,13 +829,31 @@ class StudentMarkViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
             'school', 'exam_subject', 'exam_subject__subject',
             'exam_subject__exam', 'student',
         )
+        qs = _apply_teacher_exam_scope(
+            qs,
+            self.request,
+            class_field='exam_subject__exam__class_obj_id',
+            subject_field='exam_subject__subject_id',
+        )
+        scope = resolve_class_scope(
+            self.request,
+            school_id=_resolve_school_id(self.request),
+            class_param_names=('class_obj', 'class_id'),
+        )
+        if scope['invalid']:
+            return qs.none()
+
         exam_subject = self.request.query_params.get('exam_subject')
         if exam_subject:
             qs = qs.filter(exam_subject_id=exam_subject)
         student = self.request.query_params.get('student')
         if student:
             qs = qs.filter(student_id=student)
-        academic_year = self.request.query_params.get('academic_year')
+        class_obj = scope['class_obj_id']
+        if class_obj:
+            qs = qs.filter(exam_subject__exam__class_obj_id=class_obj)
+
+        academic_year = scope['academic_year_id'] or self.request.query_params.get('academic_year')
         if academic_year:
             qs = qs.filter(exam_subject__exam__academic_year_id=academic_year)
         return qs

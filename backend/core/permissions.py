@@ -3,6 +3,7 @@ Custom permission classes for role-based and tenant-based access control.
 """
 
 from rest_framework import permissions
+from django.db.models import Q
 from core.mixins import ensure_tenant_schools, ensure_tenant_school_id
 
 # Roles that have admin-level access (full read + write).
@@ -21,6 +22,170 @@ ROLE_HIERARCHY = {
     'SCHOOL_ADMIN': ['PRINCIPAL', 'HR_MANAGER', 'ACCOUNTANT', 'TEACHER', 'STAFF', 'DRIVER'],
     'PRINCIPAL': ['HR_MANAGER', 'ACCOUNTANT', 'TEACHER', 'STAFF', 'DRIVER'],
 }
+
+
+def _resolve_scope_academic_year_id(request, school_id):
+    """Resolve academic year for teacher scope checks.
+
+    Priority: query param academic_year -> current school year -> None.
+    """
+    academic_year_id = request.query_params.get('academic_year')
+    if academic_year_id:
+        return int(academic_year_id)
+
+    from academic_sessions.models import AcademicYear
+    current_year = AcademicYear.objects.filter(
+        school_id=school_id,
+        is_current=True,
+        is_active=True,
+    ).only('id').first()
+    return current_year.id if current_year else None
+
+
+def get_teacher_class_scope(request, school_id=None, academic_year_id=None):
+    """Return master class IDs where current teacher is assigned as class teacher.
+    
+    This resolves SessionClass assignments to master Class IDs for backward compatibility.
+    For section-aware filtering, use get_teacher_session_class_scope() instead.
+    """
+    user = request.user
+    if not user.is_authenticated:
+        return set()
+
+    school_id = school_id or ensure_tenant_school_id(request) or user.school_id
+    if not school_id:
+        return set()
+
+    academic_year_id = academic_year_id or _resolve_scope_academic_year_id(request, school_id)
+
+    from academics.models import ClassTeacherAssignment
+    queryset = ClassTeacherAssignment.objects.filter(
+        school_id=school_id,
+        teacher__user=user,
+        is_active=True,
+    )
+    if academic_year_id:
+        queryset = queryset.filter(
+            Q(academic_year_id=academic_year_id) | Q(academic_year__isnull=True)
+        )
+
+    # Resolve SessionClass to master Class, deduplicate
+    return set(queryset.values_list('class_obj_id', flat=True).distinct())
+
+
+def get_teacher_session_class_scope(request, school_id=None, academic_year_id=None):
+    """Return SessionClass IDs where current teacher is assigned.
+    
+    Returns section-level granularity: if teacher assigned to Class 2-A and Class 2-B,
+    returns both session class IDs (not just master class 2).
+    
+    Use this for true section-scoped access control.
+    """
+    user = request.user
+    if not user.is_authenticated:
+        return set()
+
+    school_id = school_id or ensure_tenant_school_id(request) or user.school_id
+    if not school_id:
+        return set()
+
+    academic_year_id = academic_year_id or _resolve_scope_academic_year_id(request, school_id)
+
+    from academics.models import ClassTeacherAssignment
+    queryset = ClassTeacherAssignment.objects.filter(
+        school_id=school_id,
+        teacher__user=user,
+        is_active=True,
+        session_class__isnull=False,  # Only return assignments with session_class
+    )
+    if academic_year_id:
+        queryset = queryset.filter(
+            Q(academic_year_id=academic_year_id) | Q(academic_year__isnull=True)
+        )
+
+    return set(queryset.values_list('session_class_id', flat=True).distinct())
+
+
+
+def get_teacher_subject_scope(request, school_id=None, academic_year_id=None):
+    """Return subject-teacher scope as class_ids and class->subject map."""
+    user = request.user
+    if not user.is_authenticated:
+        return {'class_ids': set(), 'class_subject_map': {}}
+
+    school_id = school_id or ensure_tenant_school_id(request) or user.school_id
+    if not school_id:
+        return {'class_ids': set(), 'class_subject_map': {}}
+
+    academic_year_id = academic_year_id or _resolve_scope_academic_year_id(request, school_id)
+
+    from academics.models import ClassSubject
+    queryset = ClassSubject.objects.filter(
+        school_id=school_id,
+        teacher__user=user,
+        is_active=True,
+    )
+    if academic_year_id:
+        queryset = queryset.filter(
+            Q(academic_year_id=academic_year_id) | Q(academic_year__isnull=True)
+        )
+
+    class_subject_map = {}
+    for class_id, subject_id in queryset.values_list('class_obj_id', 'subject_id'):
+        class_subject_map.setdefault(class_id, set()).add(subject_id)
+
+    return {
+        'class_ids': set(class_subject_map.keys()),
+        'class_subject_map': class_subject_map,
+    }
+
+def _get_session_class_student_ids(session_class_ids, academic_year_id=None):
+    """
+    Given a set of session_class IDs, return the set of student IDs enrolled
+    in those sessions. Used by multiple modules for section-scoped filtering.
+    """
+    from academic_sessions.models import StudentEnrollment
+    qs = StudentEnrollment.objects.filter(
+        session_class_id__in=session_class_ids,
+        is_active=True,
+    )
+    if academic_year_id:
+        qs = qs.filter(academic_year_id=academic_year_id)
+    return set(qs.values_list('student_id', flat=True).distinct())
+
+def get_teacher_combined_scope(request, school_id=None, academic_year_id=None):
+    """Return combined class-teacher and subject-teacher scope.
+    
+    Returns both master class level (backward compat) and session class level (section-scoped).
+    This allows endpoints to choose the granularity they need.
+    """
+    class_teacher_class_ids = get_teacher_class_scope(
+        request,
+        school_id=school_id,
+        academic_year_id=academic_year_id,
+    )
+    class_teacher_session_class_ids = get_teacher_session_class_scope(
+        request,
+        school_id=school_id,
+        academic_year_id=academic_year_id,
+    )
+    subject_scope = get_teacher_subject_scope(
+        request,
+        school_id=school_id,
+        academic_year_id=academic_year_id,
+    )
+
+    return {
+        # Master class level (for backward compatibility)
+        'full_class_ids': class_teacher_class_ids,
+        # Session class level (for section-scoped filtering)
+        'full_session_class_ids': class_teacher_session_class_ids,
+        # Subject-teacher scope (master class level)
+        'subject_class_ids': subject_scope['class_ids'],
+        'class_subject_map': subject_scope['class_subject_map'],
+        # Combined master class level
+        'all_class_ids': class_teacher_class_ids.union(subject_scope['class_ids']),
+    }
 
 
 def _is_data_restricted_user(request):

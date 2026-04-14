@@ -8,7 +8,7 @@ import { faceAttendanceApi } from '../../services/api'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import ClassSelector from '../../components/ClassSelector'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
-import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
+import { getClassSelectorScope, getResolvedMasterClassId, resolveSessionClassId } from '../../utils/classScope'
 
 export default function FaceAttendancePage() {
   const { activeSchool } = useAuth()
@@ -26,6 +26,7 @@ export default function FaceAttendancePage() {
   const { sessionClasses } = useSessionClasses(activeAcademicYear?.id, activeSchool?.id)
   const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
   const resolvedSelectedClass = getResolvedMasterClassId(selectedClass, activeAcademicYear?.id, sessionClasses)
+  const resolvedSelectedSessionClass = resolveSessionClassId(selectedClass, activeAcademicYear?.id, sessionClasses)
 
   // Load face recognition status
   const { data: statusData } = useQuery({
@@ -66,6 +67,9 @@ export default function FaceAttendancePage() {
         class_obj: parseInt(resolvedSelectedClass),
         date: selectedDate,
         image_url: imageUrl,
+      }, {
+        ...(resolvedSelectedSessionClass && { session_class_id: resolvedSelectedSessionClass }),
+        ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
       })
       return sessionRes.data
     },

@@ -10,6 +10,7 @@ import { getErrorMessage } from '../../utils/errorUtils'
 import {
 	buildSessionClassOptions,
 	resolveClassIdToMasterClassId,
+	resolveSessionClassId,
 } from '../../utils/classScope'
 
 const FEE_TYPE_TABS = [
@@ -183,6 +184,7 @@ export default function FeeGenerationSurface({
 		return buildSessionClassOptions(sessionClasses)
 	}, [academicYearId, classList, sessionClasses])
 	const resolvedClassFilter = resolveClassIdToMasterClassId(classFilter, academicYearId, sessionClasses)
+	const resolvedSessionClassFilter = resolveSessionClassId(classFilter, academicYearId, sessionClasses)
 
 	const selectedClassLabel = classOptions.find((option) => String(option.id) === String(classFilter))?.label
 		|| classList.find((option) => String(option.id) === String(classFilter))?.name
@@ -194,13 +196,14 @@ export default function FeeGenerationSurface({
 		year: selectedYear,
 		month: isMonthly ? selectedMonth : 0,
 		...(resolvedClassFilter && { class_id: resolvedClassFilter }),
+		...(resolvedSessionClassFilter && { session_class_id: resolvedSessionClassFilter }),
 		...(academicYearId && { academic_year: academicYearId }),
 		...(isMonthly && selectedMonthlyCategories.length > 0 && { monthly_categories: selectedMonthlyCategories.join(',') }),
 		...(!isMonthly && selectedAnnualCategories.length > 0 && { annual_categories: selectedAnnualCategories.join(',') }),
-	}), [academicYearId, feeType, isMonthly, resolvedClassFilter, selectedAnnualCategories, selectedMonth, selectedMonthlyCategories, selectedYear])
+	}), [academicYearId, feeType, isMonthly, resolvedClassFilter, resolvedSessionClassFilter, selectedAnnualCategories, selectedMonth, selectedMonthlyCategories, selectedYear])
 
 	const { data: previewData, isFetching: previewLoading } = useQuery({
-		queryKey: ['generate-preview', feeType, resolvedClassFilter, selectedMonth, selectedYear, academicYearId, selectedAnnualCategories, selectedMonthlyCategories],
+		queryKey: ['generate-preview', feeType, resolvedClassFilter, resolvedSessionClassFilter, selectedMonth, selectedYear, academicYearId, selectedAnnualCategories, selectedMonthlyCategories],
 		queryFn: () => financeApi.previewGeneration(previewParams),
 		enabled: previewEnabled,
 		staleTime: 30_000,
@@ -240,10 +243,6 @@ export default function FeeGenerationSurface({
 		return () => clearTimeout(timer)
 	}, [annualMutation?.isSuccess, isModal, monthlyMutation?.submittedTaskId, onClose, show])
 
-	if (!show) return null
-
-	const activeTab = FEE_TYPE_TABS.find((tab) => tab.value === feeType)
-
 	const submitMonthly = () => {
 		if (selectedMonthlyCategories.length === 0) {
 			showWarning('Select at least one monthly category before generating records.')
@@ -259,6 +258,7 @@ export default function FeeGenerationSurface({
 			year: selectedYear,
 			conflict_strategy: conflictStrategy,
 			...(resolvedClassFilter && { class_id: parseInt(resolvedClassFilter) }),
+			...(resolvedSessionClassFilter && { session_class_id: parseInt(resolvedSessionClassFilter) }),
 			...(academicYearId && { academic_year: academicYearId }),
 			...(selectedMonthlyCategories.length > 0 && { monthly_category_ids: selectedMonthlyCategories }),
 		}
@@ -279,6 +279,7 @@ export default function FeeGenerationSurface({
 
 		annualMutation?.mutate({
 			...(resolvedClassFilter && { class_id: parseInt(resolvedClassFilter) }),
+			...(resolvedSessionClassFilter && { session_class_id: parseInt(resolvedSessionClassFilter) }),
 			annual_category_ids: selectedAnnualCategories,
 			year: selectedYear,
 			conflict_strategy: conflictStrategy,
@@ -303,6 +304,9 @@ export default function FeeGenerationSurface({
 		}
 	}, [isMonthly, annualMutation?.isError, annualMutation?.error, showError])
 
+	if (!show) return null
+
+	const activeTab = FEE_TYPE_TABS.find((tab) => tab.value === feeType)
 	const headerClass = isModal
 		? 'sticky top-0 z-10 -mx-6 mb-5 flex flex-col gap-3 border-b border-gray-200 bg-white px-6 pb-4 pt-6 shadow-sm sm:flex-row sm:items-start sm:justify-between'
 		: 'mb-5 flex flex-col gap-3 border-b border-gray-200 pb-4 sm:flex-row sm:items-start sm:justify-between'

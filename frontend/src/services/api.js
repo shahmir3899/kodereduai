@@ -465,6 +465,14 @@ export const academicsApi = {
   deleteClassSubject: (id) => api.delete(`/api/academics/class-subjects/${id}/`),
   getClassSubjectsByClass: (classId) =>
     api.get('/api/academics/class-subjects/by_class/', { params: { class_id: classId } }),
+  getMySubjectAssignments: (params) => api.get('/api/academics/class-subjects/my_subject_assignments/', { params }),
+
+  // Class-Teacher Assignments
+  getClassTeachers: (params) => api.get('/api/academics/class-teachers/', { params }),
+  createClassTeacher: (data) => api.post('/api/academics/class-teachers/', data),
+  updateClassTeacher: (id, data) => api.patch(`/api/academics/class-teachers/${id}/`, data),
+  deleteClassTeacher: (id) => api.delete(`/api/academics/class-teachers/${id}/`),
+  getMyClassTeacherAssignments: () => api.get('/api/academics/class-teachers/my_classes/'),
 
   // Timetable Slots
   getTimetableSlots: (params) => api.get('/api/academics/timetable-slots/', { params }),
@@ -542,6 +550,7 @@ export const sessionsApi = {
   getEnrollmentsByClass: (params) => api.get('/api/sessions/enrollments/by_class/', { params }),
   bulkPromote: (data) => api.post('/api/sessions/enrollments/bulk_promote/', data),
   bulkReversePromote: (data) => api.post('/api/sessions/enrollments/bulk_reverse_promote/', data),
+  getPromotionHistoryPairs: (params) => api.get('/api/sessions/enrollments/promotion-history-pairs/', { params }),
   getPromotionHistory: (params) => api.get('/api/sessions/enrollments/promotion-history/', { params }),
   correctPromotionSingle: (data) => api.post('/api/sessions/enrollments/correct-single/', data),
   correctPromotionBulk: (data) => api.post('/api/sessions/enrollments/correct-bulk/', data),
@@ -1110,7 +1119,8 @@ export const faceAttendanceApi = {
   },
 
   // Create face attendance session (triggers async processing)
-  createSession: (data) => api.post('/api/face-attendance/sessions/', data),
+  // Optional params support session_class_id/academic_year scoping.
+  createSession: (data, params) => api.post('/api/face-attendance/sessions/', data, { params }),
 
   // List sessions
   getSessions: (params) => api.get('/api/face-attendance/sessions/', { params }),

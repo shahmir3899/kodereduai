@@ -96,6 +96,22 @@ export default function TeacherDashboard() {
   })
   const myClasses = myClassesRes?.data || []
 
+  const { data: classTeacherScopeRes } = useQuery({
+    queryKey: ['myClassTeacherAssignments', activeAcademicYear?.id],
+    queryFn: () => academicsApi.getMyClassTeacherAssignments(),
+    enabled: isModuleEnabled('academics'),
+  })
+  const classTeacherAssignments = classTeacherScopeRes?.data || []
+
+  const { data: subjectTeacherScopeRes } = useQuery({
+    queryKey: ['mySubjectAssignments', activeAcademicYear?.id],
+    queryFn: () => academicsApi.getMySubjectAssignments(
+      activeAcademicYear?.id ? { academic_year: activeAcademicYear.id } : undefined,
+    ),
+    enabled: isModuleEnabled('academics'),
+  })
+  const subjectTeacherAssignments = subjectTeacherScopeRes?.data || []
+
   // Submissions needing grading
   const { data: submissionsRes } = useQuery({
     queryKey: ['pendingSubmissions'],
@@ -160,6 +176,30 @@ export default function TeacherDashboard() {
     return { total, completed, published }
   }, [weekPlans])
 
+  const scopeSummary = useMemo(() => {
+    const classTeacherClasses = classTeacherAssignments.map(item => ({
+      id: item.id,
+      label: `${item.class_name}${item.class_section ? ` - ${item.class_section}` : ''}`,
+    }))
+
+    const subjectTeacherClasses = new Map()
+    subjectTeacherAssignments.forEach(item => {
+      const key = `${item.class_obj}`
+      if (!subjectTeacherClasses.has(key)) {
+        subjectTeacherClasses.set(key, {
+          classLabel: `${item.class_name}${item.class_section ? ` - ${item.class_section}` : ''}`,
+          subjects: [],
+        })
+      }
+      subjectTeacherClasses.get(key).subjects.push(item.subject_code || item.subject_name)
+    })
+
+    return {
+      classTeacherClasses,
+      subjectTeacherClasses: [...subjectTeacherClasses.values()],
+    }
+  }, [classTeacherAssignments, subjectTeacherAssignments])
+
   // ─── Quick Actions ──────────────────────────────────────────────────────────
 
   const quickActions = [
@@ -221,6 +261,49 @@ export default function TeacherDashboard() {
           href="/academics/exams"
         />
       </div>
+
+      {isModuleEnabled('academics') && (
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-6">
+          <div className="card">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-semibold text-gray-900">Class Teacher Scope</h2>
+              <Link to="/academics/subjects" className="text-xs text-sky-600 hover:text-sky-700 font-medium">Manage</Link>
+            </div>
+            {scopeSummary.classTeacherClasses.length === 0 ? (
+              <p className="text-sm text-gray-400">No class-teacher assignments in the current academic year.</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {scopeSummary.classTeacherClasses.map(item => (
+                  <span key={item.id} className="inline-flex items-center rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 border border-emerald-200">
+                    {item.label}
+                  </span>
+                ))}
+              </div>
+            )}
+            <p className="mt-3 text-xs text-gray-500">Class Teacher access is class-wide across attendance, students, finance, LMS, and exams.</p>
+          </div>
+
+          <div className="card">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-semibold text-gray-900">Subject Teacher Scope</h2>
+              <Link to="/academics/subjects" className="text-xs text-sky-600 hover:text-sky-700 font-medium">Assignments</Link>
+            </div>
+            {scopeSummary.subjectTeacherClasses.length === 0 ? (
+              <p className="text-sm text-gray-400">No subject-teacher assignments in the current academic year.</p>
+            ) : (
+              <div className="space-y-2">
+                {scopeSummary.subjectTeacherClasses.slice(0, 6).map(item => (
+                  <div key={item.classLabel} className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                    <p className="text-sm font-medium text-amber-800">{item.classLabel}</p>
+                    <p className="mt-1 text-xs text-amber-700">{item.subjects.join(', ')}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+            <p className="mt-3 text-xs text-gray-500">Subject Teacher access remains limited to the assigned subjects in each class.</p>
+          </div>
+        </div>
+      )}
 
       {/* Two-Column Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">

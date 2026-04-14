@@ -29,6 +29,43 @@ function loadImage(url) {
   })
 }
 
+function compressImageForPdf(img, { maxDimension = 480, quality = 0.72 } = {}) {
+  try {
+    const srcW = img.naturalWidth || img.width
+    const srcH = img.naturalHeight || img.height
+    if (!srcW || !srcH) return null
+
+    const scale = Math.min(1, maxDimension / Math.max(srcW, srcH))
+    const outW = Math.max(1, Math.round(srcW * scale))
+    const outH = Math.max(1, Math.round(srcH * scale))
+
+    const canvas = document.createElement('canvas')
+    canvas.width = outW
+    canvas.height = outH
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return null
+
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, 0, outW, outH)
+    ctx.drawImage(img, 0, 0, outW, outH)
+
+    const dataUrl = canvas.toDataURL('image/jpeg', quality)
+    // Sanity-check: a blank/failed canvas produces a tiny stub string
+    if (!dataUrl || dataUrl.length < 200) return null
+    return dataUrl
+  } catch {
+    return null
+  }
+}
+
+// Natural sort: "Class 2" before "Class 10", then alphabetical for equal numbers
+function naturalClassSort(a, b) {
+  const numA = parseInt((String(a).match(/\d+/) || ['0'])[0], 10)
+  const numB = parseInt((String(b).match(/\d+/) || ['0'])[0], 10)
+  if (numA !== numB) return numA - numB
+  return String(a).localeCompare(String(b))
+}
+
 function ensureSpace(doc, currentY, neededHeight) {
   const pageHeight = doc.internal.pageSize.getHeight()
   if (currentY + neededHeight > pageHeight - MARGIN.bottom) {
@@ -129,7 +166,7 @@ function classSummaryRows(paymentList, selectedClassLabel) {
   })
 
   return [...byClass.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
+    .sort(([a], [b]) => naturalClassSort(a, b))
     .map(([className, stat]) => {
       const rate = stat.due > 0 ? ((stat.paid / stat.due) * 100) : 0
       return [
@@ -182,7 +219,7 @@ function groupedStudentRows(paymentList, selectedClassLabel) {
 
   return [...byStudent.values()]
     .sort((a, b) => {
-      const classCmp = (a.className || '').localeCompare(b.className || '')
+      const classCmp = naturalClassSort(a.className || '', b.className || '')
       if (classCmp !== 0) return classCmp
       const rollA = parseInt(a.roll) || 9999
       const rollB = parseInt(b.roll) || 9999
@@ -215,13 +252,14 @@ function groupedStudentRows(paymentList, selectedClassLabel) {
         }
       })
 
-      const monthlyLine = monthlyParts.length > 0
-        ? `Monthly: ${monthlyParts.join(', ')}`
-        : 'Monthly: -'
-      const yearlyLine = yearlyParts.length > 0
-        ? `Yearly: ${yearlyParts.join(', ')}`
-        : 'Yearly: -'
-      const breakdown = `${monthlyLine}\n${yearlyLine}`
+      const lines = []
+      if (monthlyParts.length > 0 || yearlyParts.length > 0) {
+        if (monthlyParts.length > 0) lines.push(`Monthly: ${monthlyParts.join(', ')}`)
+        if (yearlyParts.length > 0) lines.push(`Yearly: ${yearlyParts.join(', ')}`)
+      } else {
+        lines.push('Monthly: -')
+      }
+      const breakdown = lines.join('\n')
 
       return {
         className: row.className,
@@ -256,7 +294,7 @@ function classSectionData(paymentList, selectedClassLabel) {
     bucket.totalBalance += Number(row.balance || 0)
   })
 
-  return [...byClass.values()].sort((a, b) => a.className.localeCompare(b.className))
+  return [...byClass.values()].sort((a, b) => naturalClassSort(a.className, b.className))
 }
 
 function classTeacherNameMap(paymentList, selectedClassLabel) {
@@ -335,7 +373,12 @@ export async function exportFeePDF({
     try {
       const img = await loadImage(schoolLogo)
       logoSize = 45
-      doc.addImage(img, 'PNG', MARGIN.left, y, logoSize, logoSize)
+      const compressedLogo = compressImageForPdf(img)
+      if (compressedLogo) {
+        doc.addImage(compressedLogo, 'JPEG', MARGIN.left, y, logoSize, logoSize)
+      } else {
+        doc.addImage(img, 'PNG', MARGIN.left, y, logoSize, logoSize)
+      }
     } catch {
       // Skip logo if loading fails
     }
@@ -419,7 +462,8 @@ export async function exportFeePDF({
   const sections = classSectionData(paymentList, selectedClassLabel)
 
   sections.forEach((section) => {
-    y = ensureSpace(doc, y, 26)
+    doc.addPage()
+    y = MARGIN.top
 
     doc.setFillColor(239, 246, 255)
     doc.roundedRect(MARGIN.left, y, usableWidth, 18, 2, 2, 'F')

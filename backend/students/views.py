@@ -18,6 +18,7 @@ from django.db.models.functions import Coalesce
 from core.permissions import (
     IsSchoolAdmin, IsSchoolAdminOrReadOnly, HasSchoolAccess, ModuleAccessMixin,
     IsStudent, IsStudentOrAdmin, get_effective_role, ADMIN_ROLES, ROLE_HIERARCHY,
+    get_teacher_combined_scope, get_teacher_session_class_scope, _get_session_class_student_ids,
 )
 from core.mixins import TenantQuerySetMixin, ensure_tenant_schools, ensure_tenant_school_id
 from .models import Class, Student, StudentDocument, StudentProfile, StudentInvite
@@ -54,7 +55,7 @@ def _resolve_school_id(request):
 class ClassViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     required_module = 'students'
     queryset = Class.objects.all()
-    permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
 
 
     def get_serializer_class(self):
@@ -91,6 +92,16 @@ class ClassViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet
         if is_active is not None:
             queryset = queryset.filter(is_active=is_active.lower() == 'true')
 
+        role = get_effective_role(self.request)
+        if role == 'TEACHER':
+            scope = get_teacher_combined_scope(self.request, school_id=active_school_id)
+            session_ids = scope.get('full_session_class_ids', set())
+            if session_ids:
+                # Section-scoped: only classes whose session classes match teacher's assignments
+                queryset = queryset.filter(id__in=scope['all_class_ids'])
+            else:
+                queryset = queryset.filter(id__in=scope['all_class_ids'])
+
         return queryset.order_by('grade_level', 'section', 'name')
 
     def perform_create(self, serializer):
@@ -109,7 +120,7 @@ from django.db import models as db_models
 class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     required_module = 'students'
     queryset = Student.objects.all()
-    permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
 
 
     def get_serializer_class(self):
@@ -139,6 +150,21 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         school_id = self.request.query_params.get('school_id')
         if school_id:
             queryset = queryset.filter(school_id=school_id)
+
+        role = get_effective_role(self.request)
+        if role == 'TEACHER':
+            scope = get_teacher_combined_scope(self.request, school_id=active_school_id)
+            session_ids = scope.get('full_session_class_ids', set())
+            if session_ids:
+                # Section-scoped: filter students by those enrolled in teacher's assigned sessions
+                enrolled_student_ids = _get_session_class_student_ids(session_ids)
+                queryset = queryset.filter(
+                    Q(id__in=enrolled_student_ids) |
+                    Q(class_obj_id__in=scope['full_class_ids'])  # Fallback: full class access
+                )
+            else:
+                # No session assignments: use master class scope
+                queryset = queryset.filter(class_obj_id__in=scope['full_class_ids'])
 
         class_id = self.request.query_params.get('class_id')
         session_class_id = self.request.query_params.get('session_class_id')
@@ -196,6 +222,7 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             queryset = queryset.annotate(
                 _enrollment_roll_number=Subquery(enr_qs.values('roll_number')[:1]),
                 _enrollment_class_obj_id=Subquery(enr_qs.values('class_obj_id')[:1]),
+                _enrollment_session_class_id=Subquery(enr_qs.values('session_class_id')[:1]),
                 _enrollment_class_name=Coalesce(
                     Subquery(enr_qs.values('session_class__display_name')[:1]),
                     Subquery(enr_qs.values('class_obj__name')[:1]),
@@ -308,6 +335,7 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             school_id=school_id,
             academic_year_id=academic_year.id,
             class_obj_id=target_class.id,
+            session_class_id=(target_session_class.id if target_session_class else None),
         )
         preferred_roll = (payload.get('new_roll_number') or enrollment.roll_number or '').strip() or None
         resolved_roll = allocator.resolve_roll(

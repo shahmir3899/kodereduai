@@ -8,6 +8,7 @@ import { useDropzone } from 'react-dropzone'
 import { useAuth } from '../contexts/AuthContext'
 import { useAcademicYear } from '../contexts/AcademicYearContext'
 import { attendanceApi, studentsApi } from '../services/api'
+import { AnalyticsTab, ConfigurationTab } from '../components/attendance'
 import { useSessionClasses } from '../hooks/useSessionClasses'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../utils/classScope'
 import { sortClassOptions } from '../utils/classOrdering'
@@ -1002,8 +1003,10 @@ export default function CaptureReviewPage() {
   const reviewIdFromQuery = searchParams.get('review')
   const { activeAcademicYear } = useAcademicYear()
 
-  // Default tab: if there's a review ID, go to review tab, else upload
-  const initialTab = (id || reviewIdFromQuery) ? 'review' : (searchParams.get('tab') || 'upload')
+  // Default tab: if there's a review ID, go to review tab, else honour ?tab param
+  const VALID_TABS = ['upload', 'review', 'analytics', 'config']
+  const paramTab = searchParams.get('tab')
+  const initialTab = (id || reviewIdFromQuery) ? 'review' : (VALID_TABS.includes(paramTab) ? paramTab : 'upload')
   const [activeTab, setActiveTab] = useState(initialTab)
 
   // Fetch pending count for badge
@@ -1037,11 +1040,15 @@ export default function CaptureReviewPage() {
         <nav className="flex space-x-1 sm:space-x-2 min-w-max">
           <TabButton active={activeTab === 'upload'} onClick={() => switchTab('upload')}>Upload</TabButton>
           <TabButton active={activeTab === 'review'} onClick={() => switchTab('review')} badge={pendingCount}>Pending Review</TabButton>
+          <TabButton active={activeTab === 'analytics'} onClick={() => switchTab('analytics')}>Analytics</TabButton>
+          <TabButton active={activeTab === 'config'} onClick={() => switchTab('config')}>Configuration</TabButton>
         </nav>
       </div>
 
       {activeTab === 'upload' && <UploadTab onUploadSuccess={handleUploadSuccess} />}
       {activeTab === 'review' && <PendingReviewTab initialReviewId={id || reviewIdFromQuery} />}
+      {activeTab === 'analytics' && <AnalyticsTab onGoToConfig={() => switchTab('config')} />}
+      {activeTab === 'config' && <ConfigurationTab />}
     </div>
   )
 }

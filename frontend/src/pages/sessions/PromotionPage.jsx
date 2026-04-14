@@ -76,7 +76,9 @@ export default function PromotionPage() {
   // Promotion data
   const [promotions, setPromotions] = useState([])
   const [result, setResult] = useState(null)
-  const [historyYearId, setHistoryYearId] = useState('')
+  // History tab: pair-based selection + row-level filters
+  const [historyPair, setHistoryPair] = useState({ source: '', target: '' })
+  const [historyFilters, setHistoryFilters] = useState({ event_type: '', source_class: '', target_class: '', student_search: '' })
   const [selectedHistoryIds, setSelectedHistoryIds] = useState([])
   const [singleCorrectionModal, setSingleCorrectionModal] = useState(null)
   const [singleCorrectionForm, setSingleCorrectionForm] = useState({ action: 'REPEAT', target_class_id: '', new_roll_number: '', reason: '' })
@@ -130,15 +132,36 @@ export default function PromotionPage() {
   const targetClassOptions = targetSessionClasses?.length > 0 ? targetSessionClasses : masterClasses
   const enrollments = enrollmentsRes?.data?.results || enrollmentsRes?.data || []
   const recommendations = advisorData?.recommendations || []
-  const resolvedHistoryYearId = historyYearId || targetYearId || sourceYearId
+
+  // History tab — pair options
+  const { data: historyPairsRes, isLoading: historyPairsLoading } = useQuery({
+    queryKey: ['promotion-history-pairs'],
+    queryFn: () => sessionsApi.getPromotionHistoryPairs(),
+    enabled: step === 4,
+    staleTime: 60_000,
+  })
+  const historyPairs = historyPairsRes?.data || []
+  const historyPairSelected = !!historyPair.source && !!historyPair.target
+
+  // Session classes scoped to the selected history pair (filters + correction modal)
+  const { sessionClasses: historySourceSessionClasses } = useSessionClasses(historyPair.source || '')
+  const { sessionClasses: historyTargetSessionClasses } = useSessionClasses(historyPair.target || '')
+  const historySourceClassOptions = historySourceSessionClasses?.length > 0 ? historySourceSessionClasses : masterClasses
+  const historyTargetClassOptions = historyTargetSessionClasses?.length > 0 ? historyTargetSessionClasses : masterClasses
+  const historyTargetUsesSessionClasses = historyTargetSessionClasses?.length > 0
 
   const { data: promotionHistoryRes, isLoading: historyLoading } = useQuery({
-    queryKey: ['promotion-history', resolvedHistoryYearId],
+    queryKey: ['promotion-history', historyPair.source, historyPair.target, historyFilters],
     queryFn: () => sessionsApi.getPromotionHistory({
-      academic_year: resolvedHistoryYearId,
+      source_academic_year: historyPair.source,
+      target_academic_year: historyPair.target,
+      ...(historyFilters.event_type ? { event_type: historyFilters.event_type } : {}),
+      ...(historyFilters.source_class ? { source_class: historyFilters.source_class } : {}),
+      ...(historyFilters.target_class ? { target_class: historyFilters.target_class } : {}),
+      ...(historyFilters.student_search ? { student_search: historyFilters.student_search } : {}),
       page_size: 200,
     }),
-    enabled: step === 4 && !!resolvedHistoryYearId,
+    enabled: step === 4 && historyPairSelected,
     staleTime: 30_000,
   })
 
@@ -413,7 +436,7 @@ export default function PromotionPage() {
     setSingleCorrectionForm({
       action: row.event_type === 'GRADUATED' ? 'GRADUATE' : (row.event_type === 'REPEATED' ? 'REPEAT' : 'PROMOTE'),
       target_class_id: String(
-        targetUsesSessionClasses
+        historyTargetUsesSessionClasses
           ? (row.target_session_class || '')
           : (row.target_class || '')
       ),
@@ -439,10 +462,10 @@ export default function PromotionPage() {
       student_id: singleCorrectionModal.student,
       action: singleCorrectionForm.action,
       target_class_id: (
-        singleCorrectionForm.action === 'GRADUATE' || targetUsesSessionClasses
+        singleCorrectionForm.action === 'GRADUATE' || historyTargetUsesSessionClasses
       ) ? null : parsedTargetClassId,
       target_session_class_id: (
-        singleCorrectionForm.action === 'GRADUATE' || !targetUsesSessionClasses
+        singleCorrectionForm.action === 'GRADUATE' || !historyTargetUsesSessionClasses
       ) ? null : parsedTargetClassId,
       new_roll_number: singleCorrectionForm.new_roll_number,
       reason: singleCorrectionForm.reason,
@@ -463,8 +486,18 @@ export default function PromotionPage() {
       return
     }
 
-    const sourceAcademicYear = selectedHistoryRows[0]?.source_academic_year || parseInt(sourceYearId)
-    const targetAcademicYear = selectedHistoryRows[0]?.target_academic_year || parseInt(targetYearId)
+    const firstSource = selectedHistoryRows[0]?.source_academic_year
+    const firstTarget = selectedHistoryRows[0]?.target_academic_year
+    const mixedPair = selectedHistoryRows.some(
+      row => row.source_academic_year !== firstSource || row.target_academic_year !== firstTarget
+    )
+    if (mixedPair) {
+      showWarning('All selected rows must belong to the same promotion pair. Use the pair filter to narrow down before applying bulk correction.')
+      return
+    }
+
+    const sourceAcademicYear = firstSource || parseInt(sourceYearId)
+    const targetAcademicYear = firstTarget || parseInt(targetYearId)
 
     const parsedBulkTargetClassId = bulkCorrectionTargetClassId
       ? parseInt(bulkCorrectionTargetClassId)
@@ -477,10 +510,10 @@ export default function PromotionPage() {
         student_id: row.student,
         action: bulkCorrectionAction,
         target_class_id: (
-          bulkCorrectionAction === 'GRADUATE' || targetUsesSessionClasses
+          bulkCorrectionAction === 'GRADUATE' || historyTargetUsesSessionClasses
         ) ? null : parsedBulkTargetClassId,
         target_session_class_id: (
-          bulkCorrectionAction === 'GRADUATE' || !targetUsesSessionClasses
+          bulkCorrectionAction === 'GRADUATE' || !historyTargetUsesSessionClasses
         ) ? null : parsedBulkTargetClassId,
         new_roll_number: row.new_roll_number || row.student_roll_number || '',
         reason: bulkCorrectionReason,
@@ -1289,102 +1322,175 @@ export default function PromotionPage() {
         </div>
       )}
 
-      {/* Step 4: What Was Done */}
+      {/* Step 4: Promotion History */}
       {step === 4 && (
         <div className="card">
-          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-4">
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-4">
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">What Was Done</h2>
-              <p className="text-sm text-gray-600">Full academic-year promotion history with single and bulk correction options.</p>
+              <h2 className="text-lg font-semibold text-gray-900">Promotion History</h2>
+              <p className="text-sm text-gray-600">Explore what happened, then correct individual or multiple rows if needed.</p>
             </div>
             <div className="flex items-center gap-2">
-              <label className="text-xs text-gray-600">Academic Year</label>
+              <label className="text-xs text-gray-600 whitespace-nowrap">Promotion Pair</label>
               <select
-                value={resolvedHistoryYearId || ''}
-                onChange={e => setHistoryYearId(e.target.value)}
-                className="input text-sm py-1"
+                value={historyPair.source && historyPair.target ? `${historyPair.source}__${historyPair.target}` : ''}
+                onChange={e => {
+                  const val = e.target.value
+                  if (!val) {
+                    setHistoryPair({ source: '', target: '' })
+                    setSelectedHistoryIds([])
+                    setHistoryFilters({ event_type: '', source_class: '', target_class: '', student_search: '' })
+                    return
+                  }
+                  const [src, tgt] = val.split('__')
+                  setHistoryPair({ source: src, target: tgt })
+                  setSelectedHistoryIds([])
+                  setHistoryFilters({ event_type: '', source_class: '', target_class: '', student_search: '' })
+                }}
+                className="input text-sm py-1 min-w-72"
               >
-                <option value="">Select year...</option>
-                {years.map(y => <option key={y.id} value={y.id}>{y.name}</option>)}
+                <option value="">Select a promotion pair...</option>
+                {historyPairsLoading && <option disabled>Loading pairs...</option>}
+                {historyPairs.length === 0 && !historyPairsLoading && <option disabled>No promotions found</option>}
+                {historyPairs.map(p => (
+                  <option key={`${p.source_academic_year}__${p.target_academic_year}`} value={`${p.source_academic_year}__${p.target_academic_year}`}>
+                    {p.source_academic_year_name} → {p.target_academic_year_name} ({p.event_count} events)
+                  </option>
+                ))}
               </select>
             </div>
           </div>
 
-          <div className="mb-4 p-3 rounded-lg border border-gray-200 bg-gray-50">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs text-gray-600">{selectedHistoryRows.length} selected</span>
-              <select value={bulkCorrectionAction} onChange={e => setBulkCorrectionAction(e.target.value)} className="input text-sm py-1">
-                <option value="PROMOTE">Set Promote</option>
-                <option value="REPEAT">Set Repeat</option>
-                <option value="GRADUATE">Set Graduate</option>
+          {/* Filter bar — visible only after pair is selected */}
+          {historyPairSelected && (
+            <div className="mb-4 flex flex-wrap items-center gap-2 p-3 rounded-lg border border-gray-200 bg-gray-50">
+              <select
+                value={historyFilters.event_type}
+                onChange={e => { setHistoryFilters(f => ({ ...f, event_type: e.target.value })); setSelectedHistoryIds([]) }}
+                className="input text-sm py-1"
+              >
+                <option value="">All statuses</option>
+                <option value="PROMOTED">Promoted</option>
+                <option value="REPEATED">Repeated</option>
+                <option value="GRADUATED">Graduated</option>
+                <option value="REVERSED">Reversed</option>
+                <option value="SKIPPED">Skipped</option>
+                <option value="FAILED">Failed</option>
               </select>
               <select
-                value={bulkCorrectionTargetClassId}
-                onChange={e => setBulkCorrectionTargetClassId(e.target.value)}
+                value={historyFilters.source_class}
+                onChange={e => { setHistoryFilters(f => ({ ...f, source_class: e.target.value })); setSelectedHistoryIds([]) }}
                 className="input text-sm py-1"
-                disabled={bulkCorrectionAction === 'GRADUATE'}
               >
-                <option value="">Target class...</option>
-                {targetClassOptions.map(c => <option key={c.id} value={c.id}>{getClassOptionLabel(c)}</option>)}
+                <option value="">All from-classes</option>
+                {masterClasses.map(c => <option key={c.id} value={c.id}>{getClassOptionLabel(c)}</option>)}
+              </select>
+              <select
+                value={historyFilters.target_class}
+                onChange={e => { setHistoryFilters(f => ({ ...f, target_class: e.target.value })); setSelectedHistoryIds([]) }}
+                className="input text-sm py-1"
+              >
+                <option value="">All to-classes</option>
+                {masterClasses.map(c => <option key={c.id} value={c.id}>{getClassOptionLabel(c)}</option>)}
               </select>
               <input
                 type="text"
-                value={bulkCorrectionReason}
-                onChange={e => setBulkCorrectionReason(e.target.value)}
-                placeholder="Reason (required)"
-                className="input text-sm py-1 min-w-56"
+                value={historyFilters.student_search}
+                onChange={e => { setHistoryFilters(f => ({ ...f, student_search: e.target.value })); setSelectedHistoryIds([]) }}
+                placeholder="Search student..."
+                className="input text-sm py-1 min-w-36"
               />
-              <button
-                onClick={submitBulkCorrection}
-                disabled={bulkCorrectionMut.isSubmitting || selectedHistoryRows.length === 0}
-                className="px-3 py-1.5 text-sm rounded-lg border border-primary-300 text-primary-700 bg-primary-50 hover:bg-primary-100 disabled:opacity-50"
-              >{bulkCorrectionMut.isSubmitting ? 'Applying...' : 'Apply Bulk Correction'}</button>
+              {(historyFilters.event_type || historyFilters.source_class || historyFilters.target_class || historyFilters.student_search) && (
+                <button
+                  onClick={() => { setHistoryFilters({ event_type: '', source_class: '', target_class: '', student_search: '' }); setSelectedHistoryIds([]) }}
+                  className="text-xs text-gray-500 hover:text-gray-700 underline"
+                >Clear filters</button>
+              )}
             </div>
-          </div>
+          )}
 
-          {historyLoading ? (
-            <p className="text-sm text-gray-500">Loading history...</p>
+          {/* Table */}
+          {!historyPairSelected ? (
+            <div className="py-14 text-center">
+              <p className="text-sm text-gray-500">Select a promotion pair above to view history.</p>
+              {historyPairs.length === 0 && !historyPairsLoading && (
+                <p className="text-xs mt-1 text-gray-400">No promotions have been run for this school yet.</p>
+              )}
+            </div>
+          ) : historyLoading ? (
+            <p className="text-sm text-gray-500 py-4">Loading history...</p>
           ) : promotionHistory.length === 0 ? (
-            <p className="text-sm text-gray-500">No promotion history found for this academic year.</p>
+            <p className="text-sm text-gray-500 py-4">No records match the current filters.</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full bg-white rounded-xl shadow-sm border border-gray-200 text-sm">
                 <thead>
                   <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
-                    <th className="px-3 py-2 text-center">Select</th>
+                    <th className="px-3 py-2 text-center">
+                      <input
+                        type="checkbox"
+                        checked={
+                          selectedHistoryIds.length > 0 &&
+                          selectedHistoryIds.length === promotionHistory.filter(r =>
+                            ['PROMOTED', 'REPEATED', 'GRADUATED'].includes(r.event_type)
+                          ).length
+                        }
+                        onChange={e => {
+                          const ids = promotionHistory
+                            .filter(r => ['PROMOTED', 'REPEATED', 'GRADUATED'].includes(r.event_type))
+                            .map(r => r.id)
+                          setSelectedHistoryIds(e.target.checked ? ids : [])
+                        }}
+                        className="rounded border-gray-300"
+                      />
+                    </th>
                     <th className="px-3 py-2 text-left">Student</th>
-                    <th className="px-3 py-2 text-left">Event</th>
-                    <th className="px-3 py-2 text-left">From</th>
-                    <th className="px-3 py-2 text-left">To</th>
+                    <th className="px-3 py-2 text-left">Status</th>
+                    <th className="px-3 py-2 text-left">From Class</th>
+                    <th className="px-3 py-2 text-left">To Class</th>
                     <th className="px-3 py-2 text-left">Roll</th>
                     <th className="px-3 py-2 text-left">When</th>
-                    <th className="px-3 py-2 text-right">Action</th>
+                    <th className="px-3 py-2 text-right">Correct</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {promotionHistory.map(row => {
                     const canCorrect = ['PROMOTED', 'REPEATED', 'GRADUATED'].includes(row.event_type)
+                    const eventStyle = {
+                      PROMOTED: 'bg-green-100 text-green-800',
+                      REPEATED: 'bg-purple-100 text-purple-800',
+                      GRADUATED: 'bg-blue-100 text-blue-800',
+                      REVERSED: 'bg-amber-100 text-amber-800',
+                      SKIPPED: 'bg-gray-100 text-gray-600',
+                      FAILED: 'bg-red-100 text-red-800',
+                    }[row.event_type] || 'bg-gray-100 text-gray-600'
                     return (
-                      <tr key={row.id} className="hover:bg-gray-50">
+                      <tr key={row.id} className={`hover:bg-gray-50 ${selectedHistoryIds.includes(row.id) ? 'bg-primary-50/40' : ''}`}>
                         <td className="px-3 py-2 text-center">
                           <input
                             type="checkbox"
                             checked={selectedHistoryIds.includes(row.id)}
                             onChange={() => toggleHistorySelection(row.id)}
-                            className="rounded border-gray-300"
+                            disabled={!canCorrect}
+                            className="rounded border-gray-300 disabled:opacity-40"
                           />
                         </td>
                         <td className="px-3 py-2 text-gray-900 font-medium">{row.student_name || `Student ${row.student}`}</td>
-                        <td className="px-3 py-2 text-gray-700">{row.event_type}</td>
+                        <td className="px-3 py-2">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${eventStyle}`}>
+                            {row.event_type}
+                          </span>
+                        </td>
                         <td className="px-3 py-2 text-gray-600">{row.source_session_class_label || row.source_class_name || '—'}</td>
                         <td className="px-3 py-2 text-gray-600">{row.target_session_class_label || row.target_class_name || '—'}</td>
-                        <td className="px-3 py-2 text-gray-600">{row.old_roll_number || row.new_roll_number || '—'} → {row.new_roll_number || '—'}</td>
-                        <td className="px-3 py-2 text-gray-600">{new Date(row.created_at).toLocaleString()}</td>
+                        <td className="px-3 py-2 text-gray-600">{row.old_roll_number || '—'} → {row.new_roll_number || '—'}</td>
+                        <td className="px-3 py-2 text-gray-500 text-xs">{new Date(row.created_at).toLocaleString()}</td>
                         <td className="px-3 py-2 text-right">
                           <button
                             onClick={() => openSingleCorrection(row)}
                             disabled={!canCorrect || singleCorrectionMut.isSubmitting}
-                            className="px-3 py-1 text-xs rounded-lg border border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100 disabled:opacity-50"
+                            className="px-3 py-1 text-xs rounded-lg border border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100 disabled:opacity-40"
                           >Edit</button>
                         </td>
                       </tr>
@@ -1392,6 +1498,45 @@ export default function PromotionPage() {
                   })}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {/* Bulk Correction Panel — shown only when rows are selected */}
+          {selectedHistoryIds.length > 0 && (
+            <div className="mt-4 p-3 rounded-lg border border-amber-200 bg-amber-50">
+              <p className="text-xs font-semibold text-amber-800 mb-2">{selectedHistoryIds.length} row(s) selected — Bulk Correction</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <select value={bulkCorrectionAction} onChange={e => setBulkCorrectionAction(e.target.value)} className="input text-sm py-1">
+                  <option value="PROMOTE">Set Promote</option>
+                  <option value="REPEAT">Set Repeat</option>
+                  <option value="GRADUATE">Set Graduate</option>
+                </select>
+                <select
+                  value={bulkCorrectionTargetClassId}
+                  onChange={e => setBulkCorrectionTargetClassId(e.target.value)}
+                  className="input text-sm py-1"
+                  disabled={bulkCorrectionAction === 'GRADUATE'}
+                >
+                  <option value="">Target class...</option>
+                  {historyTargetClassOptions.map(c => <option key={c.id} value={c.id}>{getClassOptionLabel(c)}</option>)}
+                </select>
+                <input
+                  type="text"
+                  value={bulkCorrectionReason}
+                  onChange={e => setBulkCorrectionReason(e.target.value)}
+                  placeholder="Reason (required)"
+                  className="input text-sm py-1 min-w-56"
+                />
+                <button
+                  onClick={submitBulkCorrection}
+                  disabled={bulkCorrectionMut.isSubmitting}
+                  className="px-3 py-1.5 text-sm rounded-lg border border-amber-400 text-amber-900 bg-amber-100 hover:bg-amber-200 disabled:opacity-50"
+                >{bulkCorrectionMut.isSubmitting ? 'Applying...' : 'Apply Bulk Correction'}</button>
+                <button
+                  onClick={() => setSelectedHistoryIds([])}
+                  className="text-xs text-gray-500 hover:text-gray-700 underline"
+                >Clear selection</button>
+              </div>
             </div>
           )}
 
@@ -1403,6 +1548,8 @@ export default function PromotionPage() {
                 setStep(1)
                 setPromotions([])
                 setSelectedHistoryIds([])
+                setHistoryPair({ source: '', target: '' })
+                setHistoryFilters({ event_type: '', source_class: '', target_class: '', student_search: '' })
               }}
               className="btn-primary px-6 py-2 text-sm"
             >Start New Promotion</button>
@@ -1465,7 +1612,9 @@ export default function PromotionPage() {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => {
-                  if (!historyYearId) setHistoryYearId(String(targetYearId || sourceYearId || ''))
+                  if (!historyPair.source && sourceYearId) {
+                    setHistoryPair({ source: String(sourceYearId), target: String(targetYearId || '') })
+                  }
                   setStep(4)
                 }}
                 className="px-4 py-2 text-sm rounded-lg border border-primary-300 text-primary-700 bg-primary-50 hover:bg-primary-100"
@@ -1513,7 +1662,7 @@ export default function PromotionPage() {
                     disabled={singleCorrectionForm.action === 'GRADUATE'}
                   >
                     <option value="">Select target class...</option>
-                    {targetClassOptions.map(c => <option key={c.id} value={c.id}>{getClassOptionLabel(c)}</option>)}
+                    {historyTargetClassOptions.map(c => <option key={c.id} value={c.id}>{getClassOptionLabel(c)}</option>)}
                   </select>
                 </div>
               </div>

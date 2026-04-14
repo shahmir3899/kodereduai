@@ -12,6 +12,7 @@ from rest_framework.views import APIView
 
 from core.mixins import TenantQuerySetMixin, ensure_tenant_school_id
 from core.permissions import IsSchoolAdminOrReadOnly, HasSchoolAccess
+from core.class_scope import resolve_class_scope
 
 from .models import (
     AcademicYear,
@@ -273,6 +274,11 @@ class SchoolCalendarEntryViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
                 qs = qs.filter(is_active=parsed)
 
         class_id = self.request.query_params.get('class_id')
+        session_class_id = self.request.query_params.get('session_class_id')
+        if session_class_id:
+            scope = resolve_class_scope(self.request)
+            if not scope['invalid'] and scope['class_obj_id']:
+                class_id = scope['class_obj_id']
         if class_id:
             qs = qs.filter(
                 Q(scope=SchoolCalendarEntry.Scope.SCHOOL)
@@ -1690,6 +1696,37 @@ class StudentEnrollmentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
             'operation_id': operation.id,
         })
 
+    @action(detail=False, methods=['get'], url_path='promotion-history-pairs')
+    def promotion_history_pairs(self, request):
+        """Return distinct source→target academic year pairs that have promotion events."""
+        school_id = _resolve_school_id(request)
+        pairs = (
+            PromotionEvent.objects
+            .filter(
+                school_id=school_id,
+                source_academic_year__isnull=False,
+                target_academic_year__isnull=False,
+            )
+            .values(
+                'source_academic_year_id',
+                'target_academic_year_id',
+                'source_academic_year__name',
+                'target_academic_year__name',
+            )
+            .annotate(event_count=Count('id'))
+            .order_by('-target_academic_year_id', '-source_academic_year_id')
+        )
+        return Response([
+            {
+                'source_academic_year': p['source_academic_year_id'],
+                'source_academic_year_name': p['source_academic_year__name'],
+                'target_academic_year': p['target_academic_year_id'],
+                'target_academic_year_name': p['target_academic_year__name'],
+                'event_count': p['event_count'],
+            }
+            for p in pairs
+        ])
+
     @action(detail=False, methods=['get'], url_path='promotion-history')
     def promotion_history(self, request):
         school_id = _resolve_school_id(request)
@@ -1709,21 +1746,38 @@ class StudentEnrollmentViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
             'created_by',
         )
 
+        source_year = filters.get('source_academic_year')
+        target_year = filters.get('target_academic_year')
         academic_year = filters.get('academic_year')
-        if academic_year:
+
+        if source_year and target_year:
+            # Strict pair filter — most precise, used by the History tab pair selector.
+            events = events.filter(
+                source_academic_year_id=source_year,
+                target_academic_year_id=target_year,
+            )
+        elif source_year:
+            events = events.filter(source_academic_year_id=source_year)
+        elif target_year:
+            events = events.filter(target_academic_year_id=target_year)
+        elif academic_year:
+            # Legacy broad filter — kept for backward compatibility with existing callers.
             events = events.filter(
                 Q(source_academic_year_id=academic_year) | Q(target_academic_year_id=academic_year)
             )
-        if filters.get('source_academic_year'):
-            events = events.filter(source_academic_year_id=filters['source_academic_year'])
-        if filters.get('target_academic_year'):
-            events = events.filter(target_academic_year_id=filters['target_academic_year'])
+
         if filters.get('source_class'):
             events = events.filter(source_class_id=filters['source_class'])
         if filters.get('source_session_class'):
             events = events.filter(source_session_class_id=filters['source_session_class'])
+        if filters.get('target_class'):
+            events = events.filter(target_class_id=filters['target_class'])
+        if filters.get('target_session_class'):
+            events = events.filter(target_session_class_id=filters['target_session_class'])
         if filters.get('student_id'):
             events = events.filter(student_id=filters['student_id'])
+        if filters.get('student_search'):
+            events = events.filter(student__name__icontains=filters['student_search'])
         if filters.get('event_type'):
             events = events.filter(event_type=filters['event_type'])
 

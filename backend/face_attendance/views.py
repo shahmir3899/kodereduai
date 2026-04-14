@@ -14,6 +14,7 @@ from django.db import models as db_models
 
 from core.permissions import IsSchoolAdmin, CanConfirmAttendance, ModuleAccessMixin
 from core.mixins import TenantQuerySetMixin, ensure_tenant_school_id
+from core.class_scope import resolve_class_scope
 from students.models import Student
 from attendance.models import AttendanceRecord
 
@@ -109,9 +110,21 @@ class FaceAttendanceSessionViewSet(ModuleAccessMixin, TenantQuerySetMixin, views
             qs = qs.filter(school_id=school_id)
 
         # Filtering
-        class_obj = self.request.query_params.get('class_obj')
+        scope = resolve_class_scope(
+            self.request,
+            school_id=school_id,
+            class_param_names=('class_obj', 'class_id'),
+        )
+        if scope['invalid']:
+            return qs.none()
+
+        class_obj = scope['class_obj_id']
         if class_obj:
             qs = qs.filter(class_obj_id=class_obj)
+
+        academic_year_id = scope['academic_year_id'] or self.request.query_params.get('academic_year')
+        if academic_year_id:
+            qs = qs.filter(academic_year_id=academic_year_id)
 
         status_filter = self.request.query_params.get('status')
         if status_filter:
@@ -146,15 +159,41 @@ class FaceAttendanceSessionViewSet(ModuleAccessMixin, TenantQuerySetMixin, views
         serializer.is_valid(raise_exception=True)
 
         school_id = ensure_tenant_school_id(request) or request.user.school_id
+        scope = resolve_class_scope(
+            request,
+            school_id=school_id,
+            include_body=True,
+            class_param_names=('class_obj', 'class_id'),
+        )
+        if scope['invalid']:
+            return Response({'error': scope['error']}, status=status.HTTP_400_BAD_REQUEST)
+
         class_obj = serializer.validated_data['class_obj']
+        if scope['class_obj_id'] and str(class_obj.id) != str(scope['class_obj_id']):
+            return Response(
+                {'error': 'class_obj does not match session_class_id.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         date = serializer.validated_data['date']
         image_url = serializer.validated_data['image_url']
 
         # Resolve academic year
         from academic_sessions.models import AcademicYear
-        academic_year = AcademicYear.objects.filter(
-            school_id=school_id, is_current=True
-        ).first()
+        if scope['academic_year_id']:
+            academic_year = AcademicYear.objects.filter(
+                school_id=school_id,
+                id=scope['academic_year_id'],
+                is_active=True,
+            ).first()
+            if not academic_year:
+                return Response(
+                    {'error': 'Invalid academic_year/session_class context.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        else:
+            academic_year = AcademicYear.objects.filter(
+                school_id=school_id, is_current=True
+            ).first()
 
         # Create session
         session = FaceAttendanceSession.objects.create(
@@ -384,7 +423,15 @@ class FaceEnrollmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
             qs = qs.filter(school_id=school_id)
 
         # Filter by class
-        class_obj = self.request.query_params.get('class_obj')
+        scope = resolve_class_scope(
+            self.request,
+            school_id=school_id,
+            class_param_names=('class_obj', 'class_id'),
+        )
+        if scope['invalid']:
+            return qs.none()
+
+        class_obj = scope['class_obj_id']
         if class_obj:
             qs = qs.filter(student__class_obj_id=class_obj)
 
