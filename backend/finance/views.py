@@ -1740,8 +1740,10 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         return AccountSerializer
 
     def get_queryset(self):
-        queryset = Account.objects.filter(is_active=True)
         user = self.request.user
+        # Allow admin to fetch inactive accounts via ?include_inactive=true (for gateway config)
+        include_inactive = self.request.query_params.get('include_inactive', 'false').lower() == 'true'
+        queryset = Account.objects.all() if include_inactive else Account.objects.filter(is_active=True)
 
         # Filter by active school + org-level shared accounts
         school_id = _resolve_school_id(self.request)
@@ -3905,6 +3907,12 @@ class JazzCashCallbackView(APIView):
                 fee_payment.amount_paid = fee_payment.amount_paid + online_payment.amount
                 fee_payment.payment_date = tz.now().date()
                 fee_payment.payment_method = 'ONLINE'
+                
+                # Extract account_id from gateway config
+                account_id = gateway_config.config.get('account_id') if gateway_config.config else None
+                if account_id:
+                    fee_payment.account_id = account_id
+                
                 fee_payment.save()
             elif result['status'] == 'PENDING':
                 online_payment.status = 'PENDING'
@@ -3967,6 +3975,12 @@ class EasypaisaCallbackView(APIView):
                 fee_payment.amount_paid = fee_payment.amount_paid + online_payment.amount
                 fee_payment.payment_date = tz.now().date()
                 fee_payment.payment_method = 'ONLINE'
+                
+                # Extract account_id from gateway config
+                account_id = gateway_config.config.get('account_id') if gateway_config.config else None
+                if account_id:
+                    fee_payment.account_id = account_id
+                
                 fee_payment.save()
             elif result['status'] == 'PENDING':
                 online_payment.status = 'PENDING'

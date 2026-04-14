@@ -150,7 +150,13 @@ export default function PaymentGatewayPage() {
     queryFn: () => paymentApi.getGatewayConfigs({ page_size: 9999 }),
   })
 
+  const { data: accountsData, isLoading: accountsLoading, error: accountsError } = useQuery({
+    queryKey: ['accounts'],
+    queryFn: () => paymentApi.getAccounts({ page_size: 9999, include_inactive: true }),
+  })
+
   const gateways = gatewayData?.data?.results || gatewayData?.data || []
+  const accounts = accountsData?.data?.results || accountsData?.data || []
 
   // Compute which gateway types are still available to add
   const configuredTypes = useMemo(
@@ -257,7 +263,8 @@ export default function PaymentGatewayPage() {
       is_active: gw.is_active,
       is_default: gw.is_default,
       currency: gw.currency || 'PKR',
-      config: {},
+      config: gw.config || {},
+      account_id: gw.config?.account_id || '',
     })
     setShowModal(true)
   }
@@ -265,7 +272,7 @@ export default function PaymentGatewayPage() {
   const closeModal = () => {
     setShowModal(false)
     setEditingGateway(null)
-    setForm(EMPTY_FORM)
+    setForm({ ...EMPTY_FORM, account_id: '' })
   }
 
   const updateConfigField = (key, value) => {
@@ -308,8 +315,18 @@ export default function PaymentGatewayPage() {
       }
     }
 
+    // Add account_id to config if selected
+    if (form.account_id) {
+      configPayload.account_id = form.account_id
+    }
+
     if (Object.keys(configPayload).length > 0 || !editingGateway) {
       payload.config = configPayload
+    }
+
+    if (!form.account_id) {
+      showError('Please select a default account for deposits')
+      return
     }
 
     if (editingGateway) {
@@ -413,7 +430,7 @@ export default function PaymentGatewayPage() {
                     <span className="text-gray-500">Currency</span>
                     <span className="font-medium text-gray-900">{gw.currency}</span>
                   </div>
-                  {configFields.slice(0, 3).map(field => (
+                  {configFields.slice(0, 2).map(field => (
                     <div key={field.key} className="flex items-center justify-between text-sm">
                       <span className="text-gray-500">{field.label}</span>
                       <span className="font-mono text-xs text-gray-600 truncate max-w-[140px]">
@@ -421,8 +438,16 @@ export default function PaymentGatewayPage() {
                       </span>
                     </div>
                   ))}
-                  {configFields.length > 3 && (
-                    <p className="text-xs text-gray-400">+{configFields.length - 3} more field{configFields.length - 3 > 1 ? 's' : ''} configured</p>
+                  {maskedConfig.account_id && (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-500">Default Account</span>
+                      <span className="font-medium text-xs text-gray-900">
+                        {accounts.find(a => a.id === maskedConfig.account_id)?.name || 'Account ' + maskedConfig.account_id}
+                      </span>
+                    </div>
+                  )}
+                  {configFields.length > 2 && (
+                    <p className="text-xs text-gray-400">+{configFields.length - 2} more field{configFields.length - 2 > 1 ? 's' : ''} configured</p>
                   )}
                   <div className="pt-1 border-t border-gray-100">
                     <span className="text-gray-400 text-xs">
@@ -578,6 +603,37 @@ export default function PaymentGatewayPage() {
                   </div>
                 </div>
               )}
+
+              {/* Default Account for Deposits */}
+              <div>
+                <label className="label">Default Account for Deposits *</label>
+                {accountsLoading ? (
+                  <div className="input bg-gray-50 text-gray-500 flex items-center justify-center py-2">
+                    Loading accounts...
+                  </div>
+                ) : accountsError || accounts.length === 0 ? (
+                  <div className="input bg-red-50 border-red-300 text-red-700 py-2 px-3 rounded">
+                    {accountsError ? 'Error loading accounts' : 'No accounts available. Please create an account first.'}
+                  </div>
+                ) : (
+                  <select
+                    className="input"
+                    value={form.account_id || ''}
+                    onChange={(e) => setForm({ ...form, account_id: e.target.value })}
+                    required
+                  >
+                    <option value="">-- Select Account --</option>
+                    {accounts.map(acc => (
+                      <option key={acc.id} value={acc.id}>
+                        {acc.name} ({acc.account_type})
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <p className="mt-1 text-xs text-gray-500">
+                  Payments via this gateway will be deposited to this account.
+                </p>
+              </div>
 
               {/* Currency & Test Connection */}
               <div className="grid grid-cols-2 gap-3">
