@@ -366,7 +366,10 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | GET/POST | /api/lms/books/ | Books. Params: class_id, subject_id, language |
 | GET | /api/lms/books/{id}/tree/ | Full curriculum tree (book + chapters + topics) |
 | POST | /api/lms/books/{id}/bulk_toc/ | Bulk create chapters/topics from pasted TOC. Body: {toc_text} |
-| POST | /api/lms/books/{id}/ocr_toc/ | OCR a TOC page image → extracted text. FormData: image (JPEG/PNG/WebP). Returns {text, language} |
+| POST | /api/lms/books/{id}/ocr_toc/ | **NEW (Phase 2)** OCR a TOC page image → extracted text + structured lines. FormData: image (JPEG/PNG/WebP). Returns {text, lines: [{id, line_number, text, confidence, mappedAs}], language} |
+| POST | /api/lms/books/{id}/parse_toc/ | **NEW (Phase 1)** Parse and preview TOC text. Body: {toc_text}. Returns preview structure with parsed chapters/topics and validation warnings |
+| POST | /api/lms/books/{id}/suggest_toc/ | **NEW (Phase 1)** AI suggest TOC structure from raw text. Body: {raw_text}. Returns {suggestions: [{text, type, confidence, reason}]} via Groq LLM with rule-based fallback |
+| POST | /api/lms/books/{id}/apply_toc/ | **NEW (Phase 1)** Apply final TOC structure to book (create/update chapters/topics). Body: {chapters: [{title, topics: [{title, ...}]}]}. Returns {created_chapters, updated_chapters, created_topics, status} |
 | GET | /api/lms/books/for_class_subject/ | Books for class+subject. Params: class_id, subject_id |
 | GET | /api/lms/books/syllabus_progress/ | Topic coverage progress. Params: class_id, subject_id |
 | GET/POST | /api/lms/chapters/ | Chapters. Params: book_id |

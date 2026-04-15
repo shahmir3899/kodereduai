@@ -1,16 +1,29 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { financeApi } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 import { getErrorMessage } from '../utils/errorUtils'
 
-export default function TransferModal({ isOpen, onClose, onSuccess }) {
+const buildInitialForm = (transfer = null) => ({
+  from_account: transfer?.from_account ? String(transfer.from_account) : '',
+  to_account: transfer?.to_account ? String(transfer.to_account) : '',
+  amount: transfer?.amount ?? '',
+  date: transfer?.date || new Date().toISOString().split('T')[0],
+  description: transfer?.description || '',
+})
+
+export default function TransferModal({ isOpen, onClose, onSuccess, initialData = null }) {
   const queryClient = useQueryClient()
   const { isPrincipal } = useAuth()
-  const [form, setForm] = useState({
-    from_account: '', to_account: '', amount: '',
-    date: new Date().toISOString().split('T')[0], description: ''
-  })
+  const isEditing = Boolean(initialData?.id)
+  const [form, setForm] = useState(buildInitialForm(initialData))
+
+  useEffect(() => {
+    if (!isOpen) {
+      return
+    }
+    setForm(buildInitialForm(initialData))
+  }, [initialData, isOpen])
 
   const { data: accountsData } = useQuery({
     queryKey: ['accounts'],
@@ -23,16 +36,17 @@ export default function TransferModal({ isOpen, onClose, onSuccess }) {
     ? accountListAll.filter(a => a.school !== null)
     : accountListAll
 
-  const createTransferMutation = useMutation({
-    mutationFn: (data) => financeApi.createTransfer(data),
+  const transferMutation = useMutation({
+    mutationFn: (data) => (
+      isEditing
+        ? financeApi.updateTransfer(initialData.id, data)
+        : financeApi.createTransfer(data)
+    ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transfers'] })
       queryClient.invalidateQueries({ queryKey: ['accountBalances'] })
       queryClient.invalidateQueries({ queryKey: ['accountBalancesAll'] })
-      setForm({
-        from_account: '', to_account: '', amount: '',
-        date: new Date().toISOString().split('T')[0], description: ''
-      })
+      setForm(buildInitialForm())
       onSuccess?.()
       onClose()
     },
@@ -40,7 +54,7 @@ export default function TransferModal({ isOpen, onClose, onSuccess }) {
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    createTransferMutation.mutate({
+    transferMutation.mutate({
       ...form,
       from_account: parseInt(form.from_account),
       to_account: parseInt(form.to_account),
@@ -54,7 +68,7 @@ export default function TransferModal({ isOpen, onClose, onSuccess }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
         <div className="p-6">
-          <h3 className="text-lg font-semibold mb-4">Record Transfer</h3>
+          <h3 className="text-lg font-semibold mb-4">{isEditing ? 'Edit Transfer' : 'Record Transfer'}</h3>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">From Account</label>
@@ -117,14 +131,16 @@ export default function TransferModal({ isOpen, onClose, onSuccess }) {
               </button>
               <button
                 type="submit"
-                disabled={createTransferMutation.isPending}
+                disabled={transferMutation.isPending}
                 className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50"
               >
-                {createTransferMutation.isPending ? 'Saving...' : 'Record Transfer'}
+                {transferMutation.isPending ? 'Saving...' : isEditing ? 'Update Transfer' : 'Record Transfer'}
               </button>
             </div>
-            {createTransferMutation.isError && (
-              <p className="text-sm text-red-600">{getErrorMessage(createTransferMutation.error, 'Failed to record transfer')}</p>
+            {transferMutation.isError && (
+              <p className="text-sm text-red-600">
+                {getErrorMessage(transferMutation.error, isEditing ? 'Failed to update transfer' : 'Failed to record transfer')}
+              </p>
             )}
           </form>
         </div>

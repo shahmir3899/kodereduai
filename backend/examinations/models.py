@@ -304,6 +304,7 @@ class QuestionType(models.TextChoices):
     """Question types for exam papers."""
     MCQ = 'MCQ', 'Multiple Choice'
     SHORT = 'SHORT', 'Short Answer'
+    LONG = 'LONG', 'Long Answer'
     ESSAY = 'ESSAY', 'Essay'
     TRUE_FALSE = 'TRUE_FALSE', 'True/False'
     MATCHING = 'MATCHING', 'Matching'
@@ -373,6 +374,16 @@ class Question(models.Model):
         blank=True,
         help_text="For MCQ: A/B/C/D. For others: answer key text"
     )
+    answer_text = models.TextField(
+        blank=True,
+        default='',
+        help_text='Long-form expected answer/model answer for subjective questions',
+    )
+    type_data = models.JSONField(
+        blank=True,
+        default=dict,
+        help_text='Type-specific payload, e.g. matching pairs, blanks, rubrics',
+    )
     # Curriculum links
     tested_topics = models.ManyToManyField(
         'lms.Topic',
@@ -400,6 +411,8 @@ class Question(models.Model):
             models.Index(fields=['school', 'is_active']),
             models.Index(fields=['difficulty_level']),
             models.Index(fields=['question_type']),
+            models.Index(fields=['school', 'subject', 'question_type', 'difficulty_level']),
+            models.Index(fields=['school', 'subject', 'is_active']),
         ]
 
     def __str__(self):

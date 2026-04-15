@@ -337,6 +337,7 @@ export const financeApi = {
   // Transfers
   getTransfers: (params) => api.get('/api/finance/transfers/', { params }),
   createTransfer: (data) => api.post('/api/finance/transfers/', data),
+  updateTransfer: (id, data) => api.patch(`/api/finance/transfers/${id}/`, data),
   deleteTransfer: (id) => api.delete(`/api/finance/transfers/${id}/`),
 
   // Expenses
@@ -926,6 +927,9 @@ export const lmsApi = {
   deleteBook: (id) => api.delete(`/api/lms/books/${id}/`),
   getBookTree: (id) => api.get(`/api/lms/books/${id}/tree/`),
   bulkTOC: (id, data) => api.post(`/api/lms/books/${id}/bulk_toc/`, data),
+  parseTOC: (id, data) => api.post(`/api/lms/books/${id}/parse_toc/`, data),
+  suggestTOC: (id, data) => api.post(`/api/lms/books/${id}/suggest_toc/`, data),
+  applyTOC: (id, data) => api.post(`/api/lms/books/${id}/apply_toc/`, data),
   ocrTOC: (bookId, imageFile) => {
     const formData = new FormData()
     formData.append('image', imageFile)

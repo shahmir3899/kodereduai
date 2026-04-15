@@ -62,6 +62,7 @@ const ReportCardPage = lazy(() => import('./pages/examinations/ReportCardPage'))
 const GradeScalePage = lazy(() => import('./pages/examinations/GradeScalePage'))
 const QuestionPaperBuilderPage = lazy(() => import('./pages/examinations/QuestionPaperBuilderPage'))
 const CurriculumCoveragePage = lazy(() => import('./pages/examinations/CurriculumCoveragePage'))
+const QuestionsPage = lazy(() => import('./pages/examinations/QuestionsPage'))
 
 // Parent Portal pages
 const ParentDashboard = lazy(() => import('./pages/parent/ParentDashboard'))
@@ -316,6 +317,7 @@ function App() {
             <Route path="academics/grade-scale" element={<SchoolRoute><ModuleRoute module="examinations"><GradeScalePage /></ModuleRoute></SchoolRoute>} />
             <Route path="academics/paper-builder" element={<SchoolRoute><ModuleRoute module="examinations"><QuestionPaperBuilderPage /></ModuleRoute></SchoolRoute>} />
             <Route path="academics/curriculum-coverage" element={<SchoolRoute><ModuleRoute module="examinations"><CurriculumCoveragePage /></ModuleRoute></SchoolRoute>} />
+            <Route path="academics/questions" element={<SchoolRoute><ModuleRoute module="examinations"><QuestionsPage /></ModuleRoute></SchoolRoute>} />
 
             {/* Classes (legacy /grades redirects) */}
             <Route path="grades" element={<Navigate to="/classes" replace />} />

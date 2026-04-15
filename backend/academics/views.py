@@ -13,7 +13,13 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
-from core.permissions import HasSchoolAccess, IsSchoolAdminOrReadOnly, ModuleAccessMixin
+from core.permissions import (
+    HasSchoolAccess,
+    IsSchoolAdminOrReadOnly,
+    ModuleAccessMixin,
+    get_effective_role,
+    get_teacher_combined_scope,
+)
 from core.mixins import TenantQuerySetMixin, ensure_tenant_schools, ensure_tenant_school_id
 from core.class_scope import resolve_class_scope
 from .models import Subject, ClassSubject, ClassTeacherAssignment, TimetableSlot, TimetableEntry
@@ -28,6 +34,26 @@ from .serializers import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _apply_teacher_class_subject_scope(queryset, request, school_id=None):
+    """Restrict class-subject reads to teacher-assigned class-subject pairs."""
+    if get_effective_role(request) != 'TEACHER':
+        return queryset
+
+    school_id = school_id or _resolve_school_id(request)
+    scope = get_teacher_combined_scope(request, school_id=school_id)
+    class_subject_map = scope.get('class_subject_map', {})
+    if not class_subject_map:
+        return queryset.none()
+
+    predicates = Q()
+    for class_id, subject_ids in class_subject_map.items():
+        if not subject_ids:
+            continue
+        predicates |= Q(class_obj_id=class_id, subject_id__in=list(subject_ids))
+
+    return queryset.filter(predicates) if predicates else queryset.none()
 
 
 def _resolve_school_id(request):
@@ -203,6 +229,12 @@ class ClassSubjectViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Model
                 queryset = queryset.filter(school_id__in=tenant_schools)
             else:
                 return queryset.none()
+
+        queryset = _apply_teacher_class_subject_scope(
+            queryset,
+            self.request,
+            school_id=school_id,
+        )
 
         scope = resolve_class_scope(self.request, school_id=school_id)
         if scope['invalid']:

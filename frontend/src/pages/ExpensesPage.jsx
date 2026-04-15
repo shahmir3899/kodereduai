@@ -47,6 +47,7 @@ export default function ExpensesPage() {
   const [tfrDateFrom, setTfrDateFrom] = useState('')
   const [tfrDateTo, setTfrDateTo] = useState('')
   const [showTransferModal, setShowTransferModal] = useState(false)
+  const [editingTransfer, setEditingTransfer] = useState(null)
 
   const toDateInputValue = (date) => date.toISOString().split('T')[0]
 
@@ -219,6 +220,11 @@ export default function ExpensesPage() {
     setNewCategoryName('')
   }
 
+  const closeTransferModal = () => {
+    setShowTransferModal(false)
+    setEditingTransfer(null)
+  }
+
   const openEdit = (expense) => {
     setEditingExpense(expense)
     setForm({
@@ -230,6 +236,11 @@ export default function ExpensesPage() {
       is_sensitive: expense.is_sensitive || false,
     })
     setShowModal(true)
+  }
+
+  const openEditTransfer = (transfer) => {
+    setEditingTransfer(transfer)
+    setShowTransferModal(true)
   }
 
   const handleSubmit = (e) => {
@@ -285,7 +296,7 @@ export default function ExpensesPage() {
             </>
           )}
           {canWrite && activeTab === 'transfers' && (
-            <button onClick={() => setShowTransferModal(true)} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm">
+            <button onClick={() => { setEditingTransfer(null); setShowTransferModal(true) }} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm">
               Record Transfer
             </button>
           )}
@@ -515,12 +526,15 @@ export default function ExpensesPage() {
                         <span>{tfr.created_at ? new Date(tfr.created_at).toLocaleDateString() : '-'}</span>
                       </div>
                       {canWrite && canEditTransfer(tfr) && (
-                        <button
-                          onClick={async () => { const ok = await confirm({ title: 'Delete Transfer', message: 'Delete this transfer? This cannot be undone.' }); if (ok) deleteTransferMutation.mutate(tfr.id) }}
-                          className="mt-2 text-xs text-red-600 hover:text-red-800"
-                        >
-                          Delete
-                        </button>
+                        <div className="mt-2 flex gap-2">
+                          <button onClick={() => openEditTransfer(tfr)} className="text-xs text-primary-600 hover:underline">Edit</button>
+                          <button
+                            onClick={async () => { const ok = await confirm({ title: 'Delete Transfer', message: 'Delete this transfer? This cannot be undone.' }); if (ok) deleteTransferMutation.mutate(tfr.id) }}
+                            className="text-xs text-red-600 hover:text-red-800"
+                          >
+                            Delete
+                          </button>
+                        </div>
                       )}
                     </div>
                   ))}
@@ -558,7 +572,10 @@ export default function ExpensesPage() {
                           {canWrite && (
                             <td className="px-4 py-3 text-center">
                               {canEditTransfer(tfr) ? (
-                                <button onClick={async () => { const ok = await confirm({ title: 'Delete Transfer', message: 'Delete this transfer? This cannot be undone.' }); if (ok) deleteTransferMutation.mutate(tfr.id) }} className="text-sm text-red-600 hover:underline">Delete</button>
+                                <>
+                                  <button onClick={() => openEditTransfer(tfr)} className="text-sm text-primary-600 hover:underline mr-3">Edit</button>
+                                  <button onClick={async () => { const ok = await confirm({ title: 'Delete Transfer', message: 'Delete this transfer? This cannot be undone.' }); if (ok) deleteTransferMutation.mutate(tfr.id) }} className="text-sm text-red-600 hover:underline">Delete</button>
+                                </>
                               ) : (
                                 <span className="text-xs text-gray-400">No access</span>
                               )}
@@ -698,8 +715,12 @@ export default function ExpensesPage() {
       {/* Transfer Modal (reusable component) */}
       <TransferModal
         isOpen={showTransferModal}
-        onClose={() => setShowTransferModal(false)}
-        onSuccess={() => queryClient.invalidateQueries({ queryKey: ['transfers'] })}
+        onClose={closeTransferModal}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ['transfers'] })
+          queryClient.invalidateQueries({ queryKey: ['accountBalances'] })
+        }}
+        initialData={editingTransfer}
       />
 
       <ConfirmModalRoot />

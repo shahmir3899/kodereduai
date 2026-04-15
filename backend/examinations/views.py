@@ -4,6 +4,7 @@ from django.db.models import Count, Q
 from django.http import HttpResponse
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -87,6 +88,39 @@ def _apply_teacher_exam_scope(qs, request, class_field='class_obj_id', subject_f
     if not predicates:
         return qs.none()
     return qs.filter(predicates)
+
+
+def _get_teacher_class_subject_map(request, school_id=None):
+    """Return {class_id: set(subject_ids)} for teacher-assigned subject scope."""
+    if get_effective_role(request) != 'TEACHER':
+        return {}
+    school_id = school_id or _resolve_school_id(request)
+    scope = get_teacher_combined_scope(request, school_id=school_id)
+    return scope.get('class_subject_map', {})
+
+
+def _get_teacher_allowed_subject_ids(request, school_id=None):
+    """Flatten teacher class-subject assignments into a subject ID set."""
+    class_subject_map = _get_teacher_class_subject_map(request, school_id=school_id)
+    allowed = set()
+    for subject_ids in class_subject_map.values():
+        allowed.update(subject_ids)
+    return allowed
+
+
+def _is_teacher_allowed_for_class_subject(request, class_id, subject_id, school_id=None):
+    """Check strict teacher assignment for a class-subject pair."""
+    if get_effective_role(request) != 'TEACHER':
+        return True
+    if class_id is None or subject_id is None:
+        return False
+    class_subject_map = _get_teacher_class_subject_map(request, school_id=school_id)
+    try:
+        class_id = int(class_id)
+        subject_id = int(subject_id)
+    except (TypeError, ValueError):
+        return False
+    return subject_id in class_subject_map.get(class_id, set())
 
 
 class ExamTypeViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
@@ -1380,11 +1414,46 @@ class QuestionViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelView
 
     def get_queryset(self):
         qs = super().get_queryset()
+
+        scope = resolve_class_scope(
+            self.request,
+            school_id=_resolve_school_id(self.request),
+            class_param_names=('class_obj', 'class_id'),
+        )
+        if scope['invalid']:
+            return qs.none()
+
+        class_id = scope['class_obj_id']
+        chapter_id = self.request.query_params.get('chapter_id')
+        book_id = self.request.query_params.get('book_id')
+
+        if get_effective_role(self.request) == 'TEACHER':
+            school_id = _resolve_school_id(self.request)
+            class_subject_map = _get_teacher_class_subject_map(self.request, school_id=school_id)
+            if class_id:
+                allowed_subject_ids = class_subject_map.get(class_id, set())
+            else:
+                allowed_subject_ids = _get_teacher_allowed_subject_ids(self.request, school_id=school_id)
+            if not allowed_subject_ids:
+                return qs.none()
+            qs = qs.filter(subject_id__in=allowed_subject_ids)
+
+            if class_id and class_id not in class_subject_map:
+                return qs.none()
+
+        if class_id:
+            qs = qs.filter(tested_topics__chapter__book__class_obj_id=class_id)
         
         # Filter by subject
         subject_id = self.request.query_params.get('subject')
         if subject_id:
             qs = qs.filter(subject_id=subject_id)
+
+        if book_id:
+            qs = qs.filter(tested_topics__chapter__book_id=book_id)
+
+        if chapter_id:
+            qs = qs.filter(tested_topics__chapter_id=chapter_id)
         
         # Filter by exam type
         exam_type_id = self.request.query_params.get('exam_type')
@@ -1397,7 +1466,7 @@ class QuestionViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelView
             qs = qs.filter(question_type=question_type)
         
         # Filter by difficulty
-        difficulty = self.request.query_params.get('difficulty')
+        difficulty = self.request.query_params.get('difficulty') or self.request.query_params.get('difficulty_level')
         if difficulty:
             qs = qs.filter(difficulty_level=difficulty)
         
@@ -1412,12 +1481,33 @@ class QuestionViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelView
         search = self.request.query_params.get('search')
         if search:
             qs = qs.filter(question_text__icontains=search)
-        
+
+        topic_id = self.request.query_params.get('topic_id')
+        if topic_id:
+            qs = qs.filter(tested_topics__id=topic_id).distinct()
+
+        if class_id or book_id or chapter_id:
+            qs = qs.distinct()
+
         return qs.select_related('subject', 'exam_type', 'created_by')
 
     def perform_create(self, serializer):
         school_id = _resolve_school_id(self.request)
+        if get_effective_role(self.request) == 'TEACHER':
+            subject = serializer.validated_data.get('subject')
+            allowed_subject_ids = _get_teacher_allowed_subject_ids(self.request, school_id=school_id)
+            if not subject or subject.id not in allowed_subject_ids:
+                raise PermissionDenied('You can only create questions for your assigned subjects.')
         serializer.save(school_id=school_id, created_by=self.request.user)
+
+    def perform_update(self, serializer):
+        school_id = _resolve_school_id(self.request)
+        if get_effective_role(self.request) == 'TEACHER':
+            subject = serializer.validated_data.get('subject', serializer.instance.subject)
+            allowed_subject_ids = _get_teacher_allowed_subject_ids(self.request, school_id=school_id)
+            if not subject or subject.id not in allowed_subject_ids:
+                raise PermissionDenied('You can only edit questions for your assigned subjects.')
+        serializer.save()
 
     def perform_destroy(self, instance):
         instance.is_active = False
@@ -1472,6 +1562,18 @@ class QuestionViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelView
             return Response(
                 {'error': 'Lesson plan not found'},
                 status=status.HTTP_404_NOT_FOUND
+            )
+
+        school_id = _resolve_school_id(request)
+        if not _is_teacher_allowed_for_class_subject(
+            request,
+            lesson.class_obj_id,
+            lesson.subject_id,
+            school_id=school_id,
+        ):
+            return Response(
+                {'error': 'You can only generate questions for your assigned class-subjects.'},
+                status=status.HTTP_403_FORBIDDEN,
             )
         
         # Get topics
@@ -1634,6 +1736,18 @@ Respond with ONLY a JSON array, no extra text:
                 {'error': 'Lesson plan not found'},
                 status=status.HTTP_404_NOT_FOUND
             )
+
+        school_id = _resolve_school_id(request)
+        if not _is_teacher_allowed_for_class_subject(
+            request,
+            lesson.class_obj_id,
+            lesson.subject_id,
+            school_id=school_id,
+        ):
+            return Response(
+                {'error': 'You can only access questions for your assigned class-subjects.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         
         topic_ids = lesson.planned_topics.values_list('id', flat=True)
         qs = self.get_queryset().filter(tested_topics__id__in=topic_ids).distinct()
@@ -1660,6 +1774,17 @@ class ExamPaperViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
 
     def get_queryset(self):
         qs = super().get_queryset()
+
+        if get_effective_role(self.request) == 'TEACHER':
+            school_id = _resolve_school_id(self.request)
+            class_subject_map = _get_teacher_class_subject_map(self.request, school_id=school_id)
+            predicates = Q()
+            for class_id, subject_ids in class_subject_map.items():
+                if subject_ids:
+                    predicates |= Q(class_obj_id=class_id, subject_id__in=list(subject_ids))
+            if not predicates:
+                return qs.none()
+            qs = qs.filter(predicates)
         
         # Filter by class
         class_id = self.request.query_params.get('class_obj')
@@ -1699,7 +1824,31 @@ class ExamPaperViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
 
     def perform_create(self, serializer):
         school_id = _resolve_school_id(self.request)
+        if get_effective_role(self.request) == 'TEACHER':
+            class_obj = serializer.validated_data.get('class_obj')
+            subject = serializer.validated_data.get('subject')
+            if not _is_teacher_allowed_for_class_subject(
+                self.request,
+                getattr(class_obj, 'id', None),
+                getattr(subject, 'id', None),
+                school_id=school_id,
+            ):
+                raise PermissionDenied('You can only create exam papers for your assigned class-subjects.')
         serializer.save(school_id=school_id, generated_by=self.request.user)
+
+    def perform_update(self, serializer):
+        school_id = _resolve_school_id(self.request)
+        if get_effective_role(self.request) == 'TEACHER':
+            class_obj = serializer.validated_data.get('class_obj', serializer.instance.class_obj)
+            subject = serializer.validated_data.get('subject', serializer.instance.subject)
+            if not _is_teacher_allowed_for_class_subject(
+                self.request,
+                getattr(class_obj, 'id', None),
+                getattr(subject, 'id', None),
+                school_id=school_id,
+            ):
+                raise PermissionDenied('You can only edit exam papers for your assigned class-subjects.')
+        serializer.save()
 
     def perform_destroy(self, instance):
         instance.is_active = False
@@ -1820,6 +1969,18 @@ class ExamPaperViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
             return Response(
                 {'error': 'Missing required fields'},
                 status=status.HTTP_400_BAD_REQUEST
+            )
+
+        school_id = _resolve_school_id(request)
+        if not _is_teacher_allowed_for_class_subject(
+            request,
+            class_id,
+            subject_id,
+            school_id=school_id,
+        ):
+            return Response(
+                {'error': 'You can only create exam papers for your assigned class-subjects.'},
+                status=status.HTTP_403_FORBIDDEN,
             )
         
         # Fetch lesson plans

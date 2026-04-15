@@ -4,9 +4,9 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { questionPaperApi, examinationsApi } from '../../services/api'
 import Toast from '../../components/Toast'
 import ClassSelector from '../../components/ClassSelector'
-import SubjectSelector from '../../components/SubjectSelector'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
+import { useClassSubjects } from '../../hooks/useClassSubjects'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 import ImageCapturePaperTab from './ImageCapturePaperTab'
 import ManualEntryPaperTab from './ManualEntryPaperTab'
@@ -32,6 +32,7 @@ export default function QuestionPaperBuilderPage() {
   const { sessionClasses } = useSessionClasses(activeAcademicYear?.id)
   const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
   const resolvedClassObj = getResolvedMasterClassId(paperMetadata.class_obj, activeAcademicYear?.id, sessionClasses)
+  const { subjects: classSubjects, isLoading: classSubjectsLoading } = useClassSubjects(resolvedClassObj)
 
   // Fetch exams
   const { data: examsData, isLoading: examsLoading } = useQuery({
@@ -121,7 +122,7 @@ export default function QuestionPaperBuilderPage() {
               <ClassSelector
                 value={paperMetadata.class_obj}
                 onChange={(e) =>
-                  setPaperMetadata({ ...paperMetadata, class_obj: e.target.value })
+                  setPaperMetadata({ ...paperMetadata, class_obj: e.target.value, subject: '' })
                 }
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 scope={classSelectorScope}
@@ -134,14 +135,30 @@ export default function QuestionPaperBuilderPage() {
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Subject *
               </label>
-              <SubjectSelector
+              <select
                 value={paperMetadata.subject}
                 onChange={(e) =>
                   setPaperMetadata({ ...paperMetadata, subject: e.target.value })
                 }
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                disabled={!resolvedClassObj || classSubjectsLoading}
                 required
-              />
+              >
+                <option value="">
+                  {!resolvedClassObj
+                    ? 'Select class first'
+                    : classSubjectsLoading
+                      ? 'Loading subjects...'
+                      : classSubjects.length > 0
+                        ? 'Select subject'
+                        : 'No subjects assigned to this class'}
+                </option>
+                {classSubjects.map((subject) => (
+                  <option key={subject.id} value={subject.id}>
+                    {subject.code ? `${subject.code} - ` : ''}{subject.name}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div>

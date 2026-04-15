@@ -1,4 +1,7 @@
 from rest_framework import serializers
+from core.mixins import ensure_tenant_school_id
+from core.permissions import get_effective_role, get_teacher_combined_scope
+from lms.models import Topic
 from .models import (
     ExamType, ExamGroup, Exam, ExamSubject, StudentMark, GradeScale,
     Question, ExamPaper, PaperQuestion, PaperUpload, PaperFeedback
@@ -373,6 +376,7 @@ class QuestionSerializer(serializers.ModelSerializer):
     subject_name = serializers.CharField(source='subject.name', read_only=True)
     exam_type_name = serializers.CharField(source='exam_type.name', read_only=True, allow_null=True)
     created_by_name = serializers.CharField(source='created_by.username', read_only=True, allow_null=True)
+    tested_topics = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
     
     # NEW: Curriculum topics - read-only expanded details + write support via list of IDs
     tested_topics_details = serializers.SerializerMethodField()
@@ -397,6 +401,7 @@ class QuestionSerializer(serializers.ModelSerializer):
             'id', 'school', 'subject', 'subject_name', 'exam_type', 'exam_type_name',
             'question_text', 'question_image_url', 'question_type', 'difficulty_level',
             'marks', 'option_a', 'option_b', 'option_c', 'option_d', 'correct_answer',
+            'answer_text', 'type_data', 'tested_topics',
             'tested_topics_details',
             'created_by', 'created_by_name', 'is_active', 'created_at', 'updated_at',
         ]
@@ -405,6 +410,11 @@ class QuestionSerializer(serializers.ModelSerializer):
 
 class QuestionCreateUpdateSerializer(serializers.ModelSerializer):
     """Serializer for creating/updating questions."""
+    tested_topics = serializers.PrimaryKeyRelatedField(
+        many=True,
+        required=False,
+        queryset=Topic.objects.filter(is_active=True).select_related('chapter__book'),
+    )
 
     class Meta:
         model = Question
@@ -412,15 +422,91 @@ class QuestionCreateUpdateSerializer(serializers.ModelSerializer):
             'subject', 'exam_type', 'question_text', 'question_image_url',
             'question_type', 'difficulty_level', 'marks',
             'option_a', 'option_b', 'option_c', 'option_d', 'correct_answer',
+            'answer_text', 'type_data', 'tested_topics',
         ]
 
     def validate(self, data):
-        # If MCQ, ensure options are provided
-        if data.get('question_type') == 'MCQ':
-            if not all([data.get('option_a'), data.get('option_b')]):
-                raise serializers.ValidationError(
-                    'MCQ questions must have at least options A and B.'
+        errors = {}
+
+        question_type = str(
+            data.get('question_type') or getattr(self.instance, 'question_type', 'SHORT')
+        ).upper()
+        subject = data.get('subject') or getattr(self.instance, 'subject', None)
+        type_data = data.get('type_data', getattr(self.instance, 'type_data', {})) or {}
+        answer_text = data.get('answer_text', getattr(self.instance, 'answer_text', ''))
+        correct_answer = data.get('correct_answer', getattr(self.instance, 'correct_answer', ''))
+
+        if not isinstance(type_data, dict):
+            errors['type_data'] = 'type_data must be a JSON object.'
+
+        if question_type == 'MCQ':
+            option_a = data.get('option_a', getattr(self.instance, 'option_a', ''))
+            option_b = data.get('option_b', getattr(self.instance, 'option_b', ''))
+            option_c = data.get('option_c', getattr(self.instance, 'option_c', ''))
+            option_d = data.get('option_d', getattr(self.instance, 'option_d', ''))
+            if not (str(option_a).strip() and str(option_b).strip()):
+                errors['option_a'] = 'MCQ requires at least options A and B.'
+            if str(correct_answer).strip() and str(correct_answer).strip().upper() not in {'A', 'B', 'C', 'D'}:
+                errors['correct_answer'] = 'MCQ correct_answer must be one of A/B/C/D.'
+            answer_key = str(correct_answer).strip().upper()
+            option_map = {'A': option_a, 'B': option_b, 'C': option_c, 'D': option_d}
+            if answer_key in option_map and not str(option_map[answer_key]).strip():
+                errors['correct_answer'] = f'MCQ correct_answer {answer_key} requires option {answer_key} text.'
+
+        elif question_type == 'TRUE_FALSE':
+            if str(correct_answer).strip().lower() not in {'true', 'false'}:
+                errors['correct_answer'] = 'TRUE_FALSE correct_answer must be TRUE or FALSE.'
+
+        elif question_type == 'FILL_BLANK':
+            accepted_answers = type_data.get('accepted_answers') if isinstance(type_data, dict) else None
+            has_answers = isinstance(accepted_answers, list) and len(accepted_answers) > 0
+            if not has_answers and not str(correct_answer).strip() and not str(answer_text).strip():
+                errors['type_data'] = 'FILL_BLANK requires type_data.accepted_answers or correct_answer/answer_text.'
+
+        elif question_type in {'SHORT', 'LONG', 'ESSAY'}:
+            if not str(answer_text).strip() and not str(correct_answer).strip():
+                errors['answer_text'] = f'{question_type} requires answer_text or correct_answer.'
+
+        elif question_type == 'MATCHING':
+            left_items = type_data.get('left_items') if isinstance(type_data, dict) else None
+            right_items = type_data.get('right_items') if isinstance(type_data, dict) else None
+            pairs = type_data.get('pairs') if isinstance(type_data, dict) else None
+            if not isinstance(left_items, list) or len(left_items) < 2:
+                errors['type_data'] = 'MATCHING requires type_data.left_items with at least two entries.'
+            elif not isinstance(right_items, list) or len(right_items) < 2:
+                errors['type_data'] = 'MATCHING requires type_data.right_items with at least two entries.'
+            elif not isinstance(pairs, list) or len(pairs) < 2:
+                errors['type_data'] = 'MATCHING requires type_data.pairs with at least two mappings.'
+
+        topics = data.get('tested_topics', None)
+        if topics is None and self.instance:
+            topics = self.instance.tested_topics.select_related('chapter__book').all()
+        if subject and topics:
+            invalid_topic_ids = [
+                topic.id for topic in topics
+                if topic.chapter.book.subject_id != subject.id
+            ]
+            if invalid_topic_ids:
+                errors['tested_topics'] = (
+                    'All tested_topics must belong to the same subject as the question. '
+                    f'Invalid topic IDs: {invalid_topic_ids}'
                 )
+
+        request = self.context.get('request')
+        if request and get_effective_role(request) == 'TEACHER' and subject:
+            school_id = ensure_tenant_school_id(request) or request.user.school_id
+            scope = get_teacher_combined_scope(request, school_id=school_id)
+            allowed_subject_ids = {
+                subj_id
+                for subj_ids in scope.get('class_subject_map', {}).values()
+                for subj_id in subj_ids
+            }
+            if subject.id not in allowed_subject_ids:
+                errors['subject'] = 'You can only create or edit questions for your assigned subjects.'
+
+        if errors:
+            raise serializers.ValidationError(errors)
+
         return data
 
 

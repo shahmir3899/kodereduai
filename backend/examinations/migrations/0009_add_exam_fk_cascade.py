@@ -3,13 +3,24 @@
 from django.db import migrations
 
 
+CONSTRAINT_NAME = 'examinations_examsub_exam_id_1f9d7189_fk_examinati'
+
+
 def add_exam_fk_cascade(apps, schema_editor):
     if schema_editor.connection.vendor != 'postgresql':
         return
 
+    with schema_editor.connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT 1 FROM pg_constraint WHERE conname = %s",
+            [CONSTRAINT_NAME],
+        )
+        if cursor.fetchone():
+            return
+
     schema_editor.execute(
         'ALTER TABLE examinations_examsubject '
-        'ADD CONSTRAINT examinations_examsub_exam_id_1f9d7189_fk_examinati '
+        f'ADD CONSTRAINT {CONSTRAINT_NAME} '
         'FOREIGN KEY (exam_id) REFERENCES examinations_exam(id) ON DELETE CASCADE;'
     )
 

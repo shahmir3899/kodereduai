@@ -26,6 +26,142 @@ TOPIC_SUBNUMBER_PATTERN = re.compile(
 )
 
 
+def parse_toc_preview(toc_text):
+    """
+    Parse TOC text and return a structured preview without DB writes.
+
+    Returns:
+        dict: {
+            chapters: [
+                {
+                    chapter_number: int,
+                    title: str,
+                    topics: [{topic_number: int, title: str}],
+                }
+            ],
+            warnings: [str],
+        }
+    """
+    lines = [line.rstrip() for line in toc_text.strip().split('\n') if line.strip()]
+
+    chapters = []
+    warnings = []
+    current_chapter = None
+
+    for line in lines:
+        stripped = line.strip()
+        is_indented = line != line.lstrip()
+        ch_match = CHAPTER_PATTERN.match(stripped)
+
+        if ch_match and not is_indented:
+            title = ch_match.group(2).strip()
+            if not title:
+                warnings.append('Skipped an empty chapter title line.')
+                current_chapter = None
+                continue
+
+            current_chapter = {
+                'chapter_number': len(chapters) + 1,
+                'title': title,
+                'topics': [],
+            }
+            chapters.append(current_chapter)
+            continue
+
+        if current_chapter and is_indented:
+            sub_match = TOPIC_SUBNUMBER_PATTERN.match(line)
+            if sub_match:
+                title = sub_match.group(2).strip()
+            else:
+                title = re.sub(r'^[-\*\u2022\u25CF\u25CB\u2023\u2043]\s*', '', stripped)
+
+            if not title:
+                warnings.append('Skipped an empty topic line.')
+                continue
+
+            current_chapter['topics'].append({
+                'topic_number': len(current_chapter['topics']) + 1,
+                'title': title,
+            })
+            continue
+
+        if not is_indented and not ch_match:
+            # Fallback: treat unknown top-level lines as chapter titles.
+            current_chapter = {
+                'chapter_number': len(chapters) + 1,
+                'title': stripped,
+                'topics': [],
+            }
+            chapters.append(current_chapter)
+            warnings.append(
+                f"Interpreted as chapter title: '{stripped[:60]}'"
+            )
+            continue
+
+        warnings.append(
+            f"Could not classify line: '{stripped[:60]}'"
+        )
+
+    return {
+        'chapters': chapters,
+        'warnings': warnings,
+    }
+
+
+def apply_toc_structure(book, chapters):
+    """
+    Create Chapter + Topic rows from a reviewed structured payload.
+
+    Chapter/topic numbers are normalized sequentially to avoid collisions and
+    keep ordering deterministic.
+    """
+    chapters_created = 0
+    topics_created = 0
+    errors = []
+
+    chapter_number = Chapter.objects.filter(book=book).count()
+
+    for chapter_payload in chapters or []:
+        title = (chapter_payload.get('title') or '').strip()
+        if not title:
+            errors.append('Skipped chapter with empty title.')
+            continue
+
+        chapter_number += 1
+        try:
+            chapter = Chapter.objects.create(
+                book=book,
+                chapter_number=chapter_number,
+                title=title,
+            )
+            chapters_created += 1
+        except Exception as e:
+            errors.append(f"Chapter '{title}': {str(e)}")
+            continue
+
+        topic_number = 0
+        for topic_payload in chapter_payload.get('topics', []):
+            topic_title = (topic_payload.get('title') or '').strip()
+            if not topic_title:
+                continue
+            topic_number += 1
+            try:
+                Topic.objects.create(
+                    chapter=chapter,
+                    topic_number=topic_number,
+                    title=topic_title,
+                )
+                topics_created += 1
+            except Exception as e:
+                errors.append(f"Topic '{topic_title}': {str(e)}")
+
+    return {
+        'chapters_created': chapters_created,
+        'topics_created': topics_created,
+        'errors': errors,
+    }
+
+
 def parse_toc_text(toc_text, book):
     """
     Parse TOC text and create Chapter + Topic records for the given book.
@@ -46,83 +182,8 @@ def parse_toc_text(toc_text, book):
     Returns:
         dict: { chapters_created, topics_created, errors }
     """
-    lines = [line.rstrip() for line in toc_text.strip().split('\n') if line.strip()]
-
-    chapters_created = 0
-    topics_created = 0
-    errors = []
-    current_chapter = None
-
-    # Start chapter numbering after existing chapters in this book
-    max_chapter = Chapter.objects.filter(book=book).count()
-    chapter_number = max_chapter
-    topic_number = 0
-
-    for line in lines:
-        stripped = line.strip()
-        is_indented = line != line.lstrip()
-
-        # Try matching as a chapter (non-indented, starts with a number)
-        ch_match = CHAPTER_PATTERN.match(stripped)
-
-        if ch_match and not is_indented:
-            # It's a chapter line
-            chapter_number += 1
-            title = ch_match.group(2).strip()
-            try:
-                current_chapter = Chapter.objects.create(
-                    book=book,
-                    chapter_number=chapter_number,
-                    title=title,
-                )
-                chapters_created += 1
-                topic_number = 0
-            except Exception as e:
-                errors.append(f"Chapter '{title}': {str(e)}")
-
-        elif current_chapter and is_indented:
-            # It's a topic line (indented under current chapter)
-            topic_number += 1
-
-            # Try to extract title from sub-number format
-            sub_match = TOPIC_SUBNUMBER_PATTERN.match(line)
-            if sub_match:
-                title = sub_match.group(2).strip()
-            else:
-                title = stripped
-                # Remove leading bullets/dashes
-                title = re.sub(r'^[-\*\u2022\u25CF\u25CB\u2023\u2043]\s*', '', title)
-
-            if not title:
-                continue
-
-            try:
-                Topic.objects.create(
-                    chapter=current_chapter,
-                    topic_number=topic_number,
-                    title=title,
-                )
-                topics_created += 1
-            except Exception as e:
-                errors.append(f"Topic '{title}': {str(e)}")
-
-        elif not is_indented and not ch_match:
-            # Non-indented line that doesn't match chapter pattern —
-            # treat as a chapter with no number prefix
-            chapter_number += 1
-            try:
-                current_chapter = Chapter.objects.create(
-                    book=book,
-                    chapter_number=chapter_number,
-                    title=stripped,
-                )
-                chapters_created += 1
-                topic_number = 0
-            except Exception as e:
-                errors.append(f"Line '{stripped}': {str(e)}")
-
-    return {
-        'chapters_created': chapters_created,
-        'topics_created': topics_created,
-        'errors': errors,
-    }
+    preview = parse_toc_preview(toc_text)
+    result = apply_toc_structure(book, preview['chapters'])
+    if preview['warnings']:
+        result['warnings'] = preview['warnings']
+    return result

@@ -4,6 +4,7 @@ LMS views for lesson plans, assignments, submissions, and curriculum management.
 
 import logging
 from django.utils import timezone
+from django.db import transaction
 from django.db.models import Count, Q
 from rest_framework import viewsets, status
 from rest_framework.decorators import action, api_view, permission_classes as perm_classes
@@ -142,6 +143,74 @@ class BookViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
         results = parse_toc_text(toc_text, book)
         return Response(results, status=status.HTTP_201_CREATED)
 
+    @action(detail=True, methods=['post'], url_path='parse_toc')
+    def parse_toc(self, request, pk=None):
+        """
+        Parse TOC text and return a structured preview without DB writes.
+        POST /api/lms/books/{id}/parse_toc/
+        Body: { "toc_text": "1. Chapter\n  1.1 Topic" }
+        """
+        book = self.get_object()
+        toc_text = request.data.get('toc_text', '')
+        if not toc_text.strip():
+            return Response(
+                {'error': 'toc_text is required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        from .toc_parser import parse_toc_preview
+        preview = parse_toc_preview(toc_text)
+
+        return Response({
+            'book_id': book.id,
+            'chapters': preview['chapters'],
+            'warnings': preview['warnings'],
+            'chapter_count': len(preview['chapters']),
+            'topic_count': sum(len(ch.get('topics', [])) for ch in preview['chapters']),
+        })
+
+    @action(detail=True, methods=['post'], url_path='apply_toc')
+    def apply_toc(self, request, pk=None):
+        """
+        Apply reviewed chapter/topic payload and create DB rows.
+        POST /api/lms/books/{id}/apply_toc/
+        Body: { "chapters": [{"title": "...", "topics": [{"title": "..."}]}] }
+        """
+        book = self.get_object()
+        chapters = request.data.get('chapters', [])
+
+        if not isinstance(chapters, list) or not chapters:
+            return Response(
+                {'error': 'chapters must be a non-empty list.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        from .toc_parser import apply_toc_structure
+        with transaction.atomic():
+            result = apply_toc_structure(book, chapters)
+
+        return Response(result, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'], url_path='suggest_toc')
+    def suggest_toc(self, request, pk=None):
+        """
+        Suggest TOC structure using AI with rule-based fallback.
+        POST /api/lms/books/{id}/suggest_toc/
+        Body: { "raw_text": "..." }
+        """
+        book = self.get_object()
+        raw_text = request.data.get('raw_text') or request.data.get('toc_text') or ''
+
+        if not str(raw_text).strip():
+            return Response(
+                {'error': 'raw_text is required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        from .toc_ai_suggester import suggest_toc_structure
+        result = suggest_toc_structure(str(raw_text), language=book.language)
+        return Response(result)
+
     @action(detail=True, methods=['post'], url_path='ocr_toc',
             parser_classes=[MultiPartParser, FormParser])
     def ocr_toc(self, request, pk=None):
@@ -177,8 +246,8 @@ class BookViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
 
         image_bytes = image.read()
 
-        from .toc_ocr import extract_toc_text
-        extracted_text, error = extract_toc_text(image_bytes, language=book.language)
+        from .toc_ocr import extract_toc_payload
+        extracted_payload, error = extract_toc_payload(image_bytes, language=book.language)
 
         if error:
             return Response(
@@ -187,7 +256,8 @@ class BookViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
             )
 
         return Response({
-            'text': extracted_text,
+            'text': extracted_payload.get('text', '') if extracted_payload else '',
+            'lines': extracted_payload.get('lines', []) if extracted_payload else [],
             'language': book.language,
         })
 

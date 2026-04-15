@@ -449,6 +449,7 @@ export default function Layout() {
           { name: 'Results', href: '/academics/results', icon: ChartIcon },
           { name: 'Report Cards', href: '/academics/report-cards', icon: ReportIcon },
           { type: 'divider', label: 'Paper & Coverage' },
+          { name: 'Question Bank', href: '/academics/questions', icon: PencilIcon },
           { name: 'Paper Builder', href: '/academics/paper-builder', icon: PencilIcon },
           { name: 'Curriculum Coverage', href: '/academics/curriculum-coverage', icon: ChartIcon },
         ] : []),

@@ -487,6 +487,88 @@ class TestTocParser:
         assert body["chapters_created"] == 2
         assert body["topics_created"] == 2
 
+    def test_parse_toc_preview_endpoint(self, seed_data, api):
+        from lms.models import Book
+        token = seed_data["tokens"]["admin"]
+        sid = seed_data["SID_A"]
+        book = Book.objects.create(
+            school=seed_data["school_a"],
+            class_obj=seed_data["classes"][0],
+            subject=seed_data["subjects"][0],
+            title=f"{P16}Parse Preview",
+            language="en",
+        )
+
+        resp = api.post(f"/api/lms/books/{book.id}/parse_toc/", {
+            "toc_text": "1. Intro\n  1.1 Topic A\n2. Next\n  2.1 Topic B",
+        }, token, sid)
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["chapter_count"] == 2
+        assert body["topic_count"] == 2
+        assert len(body.get("chapters", [])) == 2
+
+    def test_apply_toc_endpoint(self, seed_data, api):
+        from lms.models import Book, Chapter, Topic
+        token = seed_data["tokens"]["admin"]
+        sid = seed_data["SID_A"]
+        book = Book.objects.create(
+            school=seed_data["school_a"],
+            class_obj=seed_data["classes"][0],
+            subject=seed_data["subjects"][0],
+            title=f"{P16}Apply TOC",
+            language="en",
+        )
+
+        resp = api.post(f"/api/lms/books/{book.id}/apply_toc/", {
+            "chapters": [
+                {
+                    "title": "Chapter A",
+                    "topics": [
+                        {"title": "Topic 1"},
+                        {"title": "Topic 2"},
+                    ],
+                },
+                {
+                    "title": "Chapter B",
+                    "topics": [
+                        {"title": "Topic 3"},
+                    ],
+                },
+            ]
+        }, token, sid)
+
+        assert resp.status_code == 201
+        body = resp.json()
+        assert body["chapters_created"] == 2
+        assert body["topics_created"] == 3
+        assert Chapter.objects.filter(book=book).count() == 2
+        assert Topic.objects.filter(chapter__book=book).count() == 3
+
+    def test_suggest_toc_endpoint_fallback(self, seed_data, api):
+        from lms.models import Book
+        token = seed_data["tokens"]["admin"]
+        sid = seed_data["SID_A"]
+        book = Book.objects.create(
+            school=seed_data["school_a"],
+            class_obj=seed_data["classes"][0],
+            subject=seed_data["subjects"][0],
+            title=f"{P16}Suggest TOC",
+            language="en",
+        )
+
+        with patch("lms.toc_ai_suggester.settings") as mock_settings:
+            mock_settings.GROQ_API_KEY = None
+            resp = api.post(f"/api/lms/books/{book.id}/suggest_toc/", {
+                "raw_text": "1. Intro\n  1.1 Topic A\n2. Next",
+            }, token, sid)
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["success"] is True
+        assert body["source"] == "rule_based"
+        assert len(body.get("chapters", [])) >= 1
+
     def test_bulk_toc_empty_text(self, seed_data, api, lms_book):
         token = seed_data["tokens"]["admin"]
         sid = seed_data["SID_A"]

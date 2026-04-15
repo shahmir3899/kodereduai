@@ -25,6 +25,28 @@ LANGUAGE_HINT_MAP = {
 }
 
 
+def extract_toc_payload(image_bytes: bytes, language: str = 'en') -> Tuple[Optional[dict], Optional[str]]:
+    """
+    Run Google Vision OCR and return text with line metadata.
+
+    Returns:
+        (payload, error_message)
+        payload shape: {
+            "text": str,
+            "lines": [{"id": str, "text": str, "line_number": int, "confidence": float}],
+        }
+    """
+    api_key = getattr(settings, 'GOOGLE_VISION_API_KEY', None)
+    credentials_path = getattr(settings, 'GOOGLE_APPLICATION_CREDENTIALS', None)
+
+    if api_key:
+        return _call_with_api_key(api_key, image_bytes, language)
+    if credentials_path:
+        return _call_with_service_account(image_bytes, language)
+
+    return None, "Google Vision not configured. Set GOOGLE_VISION_API_KEY or GOOGLE_APPLICATION_CREDENTIALS in .env"
+
+
 def extract_toc_text(image_bytes: bytes, language: str = 'en') -> Tuple[Optional[str], Optional[str]]:
     """
     Run Google Vision DOCUMENT_TEXT_DETECTION on an image and return the full text.
@@ -36,15 +58,10 @@ def extract_toc_text(image_bytes: bytes, language: str = 'en') -> Tuple[Optional
     Returns:
         (extracted_text, error_message) — one will be None
     """
-    api_key = getattr(settings, 'GOOGLE_VISION_API_KEY', None)
-    credentials_path = getattr(settings, 'GOOGLE_APPLICATION_CREDENTIALS', None)
-
-    if api_key:
-        return _call_with_api_key(api_key, image_bytes, language)
-    if credentials_path:
-        return _call_with_service_account(image_bytes, language)
-
-    return None, "Google Vision not configured. Set GOOGLE_VISION_API_KEY or GOOGLE_APPLICATION_CREDENTIALS in .env"
+    payload, error = extract_toc_payload(image_bytes, language)
+    if error:
+        return None, error
+    return payload.get('text', '') if payload else '', None
 
 
 def _build_language_hints(language: str) -> list:
@@ -77,7 +94,23 @@ def _extract_text_from_response(result: dict) -> Tuple[Optional[str], Optional[s
     return full_text.strip(), None
 
 
-def _call_with_api_key(api_key: str, image_bytes: bytes, language: str) -> Tuple[Optional[str], Optional[str]]:
+def _build_lines_from_text(full_text: str, confidence: float = 0.0) -> list:
+    """Build a normalized line list from OCR text for line-level UI mapping."""
+    lines = []
+    for idx, raw_line in enumerate((full_text or '').splitlines(), start=1):
+        line_text = (raw_line or '').strip()
+        if not line_text:
+            continue
+        lines.append({
+            'id': f'line-{idx}',
+            'line_number': idx,
+            'text': line_text,
+            'confidence': confidence,
+        })
+    return lines
+
+
+def _call_with_api_key(api_key: str, image_bytes: bytes, language: str) -> Tuple[Optional[dict], Optional[str]]:
     """Call Vision API using API key."""
     url = f"https://vision.googleapis.com/v1/images:annotate?key={api_key}"
     image_base64 = base64.b64encode(image_bytes).decode('utf-8')
@@ -107,7 +140,15 @@ def _call_with_api_key(api_key: str, image_bytes: bytes, language: str) -> Tuple
             logger.error(f"[TOC-OCR] Vision API error: {error_message}")
             return None, f"OCR failed: {error_message}"
 
-        return _extract_text_from_response(result)
+        full_text, error = _extract_text_from_response(result)
+        if error:
+            return None, error
+
+        payload = {
+            'text': full_text,
+            'lines': _build_lines_from_text(full_text, confidence=0.0),
+        }
+        return payload, None
 
     except requests.Timeout:
         logger.error("[TOC-OCR] Vision API timed out")
@@ -117,7 +158,7 @@ def _call_with_api_key(api_key: str, image_bytes: bytes, language: str) -> Tuple
         return None, f"OCR request failed: {str(e)}"
 
 
-def _call_with_service_account(image_bytes: bytes, language: str) -> Tuple[Optional[str], Optional[str]]:
+def _call_with_service_account(image_bytes: bytes, language: str) -> Tuple[Optional[dict], Optional[str]]:
     """Call Vision API using service account credentials."""
     try:
         from google.cloud import vision
@@ -142,7 +183,20 @@ def _call_with_service_account(image_bytes: bytes, language: str) -> Tuple[Optio
         if not full_text.strip():
             return None, "No text detected in the image. Please ensure the image is clear and well-lit."
 
-        return full_text.strip(), None
+        confidence = 0.0
+        try:
+            pages = response.full_text_annotation.pages if response.full_text_annotation else []
+            page_confidences = [float(getattr(page, 'confidence', 0.0)) for page in pages]
+            if page_confidences:
+                confidence = sum(page_confidences) / len(page_confidences)
+        except Exception:
+            confidence = 0.0
+
+        payload = {
+            'text': full_text.strip(),
+            'lines': _build_lines_from_text(full_text.strip(), confidence=confidence),
+        }
+        return payload, None
 
     except ImportError:
         return None, "google-cloud-vision package not installed for service account auth."

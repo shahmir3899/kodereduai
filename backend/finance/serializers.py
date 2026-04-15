@@ -89,9 +89,14 @@ class TransferCreateSerializer(serializers.ModelSerializer):
         return fields
 
     def validate(self, attrs):
-        if attrs['from_account'] == attrs['to_account']:
+        instance = getattr(self, 'instance', None)
+        from_account = attrs.get('from_account', getattr(instance, 'from_account', None))
+        to_account = attrs.get('to_account', getattr(instance, 'to_account', None))
+        amount = attrs.get('amount', getattr(instance, 'amount', None))
+
+        if from_account and to_account and from_account == to_account:
             raise serializers.ValidationError("Cannot transfer to the same account.")
-        if attrs['amount'] <= 0:
+        if amount is not None and amount <= 0:
             raise serializers.ValidationError({"amount": "Amount must be positive."})
         return attrs
 

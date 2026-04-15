@@ -2701,9 +2701,43 @@ class TransferViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelView
 
 
     def get_serializer_class(self):
-        if self.action == 'create':
+        if self.action in {'create', 'update', 'partial_update'}:
             return TransferCreateSerializer
         return TransferSerializer
+
+    def _validate_sensitive_write(self, serializer):
+        if 'is_sensitive' not in serializer.validated_data and 'is_sensitive' not in self.request.data:
+            return
+
+        user_role = get_effective_role(self.request)
+        if user_role not in ADMIN_ROLES:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied(
+                "Only administrators can change the sensitive flag for transfers."
+            )
+
+    def _validate_account_access(self, serializer, school_id):
+        from rest_framework.exceptions import ValidationError
+        from schools.models import School
+
+        try:
+            org_id = School.objects.values_list('organization_id', flat=True).get(id=school_id)
+        except School.DoesNotExist:
+            org_id = None
+
+        accessible_q = Q(school_id=school_id, is_active=True)
+        if org_id:
+            accessible_q |= Q(school__isnull=True, organization_id=org_id, is_active=True)
+        accessible_ids = set(Account.objects.filter(accessible_q).values_list('id', flat=True))
+
+        instance = getattr(serializer, 'instance', None)
+        from_account = serializer.validated_data.get('from_account', getattr(instance, 'from_account', None))
+        to_account = serializer.validated_data.get('to_account', getattr(instance, 'to_account', None))
+
+        if from_account and from_account.id not in accessible_ids:
+            raise ValidationError({'from_account': 'This account is not accessible for your school.'})
+        if to_account and to_account.id not in accessible_ids:
+            raise ValidationError({'to_account': 'This account is not accessible for your school.'})
 
     def get_queryset(self):
         queryset = Transfer.objects.select_related(
@@ -2747,37 +2781,13 @@ class TransferViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelView
         return queryset
 
     def perform_create(self, serializer):
-        from rest_framework.exceptions import ValidationError, PermissionDenied
+        from rest_framework.exceptions import ValidationError
         school_id = _resolve_school_id(self.request)
         if not school_id:
             raise ValidationError({'detail': 'No school associated with your account.'})
 
-        # Plan 2: Only ADMIN_ROLES can mark transfers as sensitive
-        if 'is_sensitive' in self.request.data and self.request.data.get('is_sensitive'):
-            user_role = get_effective_role(self.request)
-            if user_role not in ADMIN_ROLES:
-                raise PermissionDenied(
-                    "Only administrators can mark transfers as sensitive."
-                )
-
-        # Validate that from_account and to_account are accessible
-        from schools.models import School
-        try:
-            org_id = School.objects.values_list('organization_id', flat=True).get(id=school_id)
-        except School.DoesNotExist:
-            org_id = None
-
-        accessible_q = Q(school_id=school_id, is_active=True)
-        if org_id:
-            accessible_q |= Q(school__isnull=True, organization_id=org_id, is_active=True)
-        accessible_ids = set(Account.objects.filter(accessible_q).values_list('id', flat=True))
-
-        from_id = serializer.validated_data['from_account'].id
-        to_id = serializer.validated_data['to_account'].id
-        if from_id not in accessible_ids:
-            raise ValidationError({'from_account': 'This account is not accessible for your school.'})
-        if to_id not in accessible_ids:
-            raise ValidationError({'to_account': 'This account is not accessible for your school.'})
+        self._validate_sensitive_write(serializer)
+        self._validate_account_access(serializer, school_id)
 
         serializer.save(school_id=school_id, recorded_by=self.request.user)
 
@@ -2789,6 +2799,9 @@ class TransferViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelView
             raise PermissionDenied(
                 'You can only edit transfers you recorded. Contact an admin to modify this entry.'
             )
+
+        self._validate_sensitive_write(serializer)
+        self._validate_account_access(serializer, instance.school_id)
         serializer.save()
 
     def perform_destroy(self, instance):
