@@ -9,6 +9,10 @@ import LoadingSpinner from './components/LoadingSpinner'
 // Login kept eager (first page users see)
 import LoginPage from './pages/LoginPage'
 
+// Password reset pages
+import ForgotPasswordPage from './pages/ForgotPasswordPage'
+import ResetPasswordPage from './pages/ResetPasswordPage'
+
 // Lazy-loaded pages
 const DashboardRouter = lazy(() => import('./pages/DashboardRouter'))
 const CaptureReviewPage = lazy(() => import('./pages/CaptureReviewPage'))
@@ -250,6 +254,10 @@ function App() {
         <Routes>
           {/* Public routes */}
           <Route path="/login" element={<LoginPage />} />
+
+          {/* Password reset public routes */}
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
 
           {/* Protected routes */}
           <Route

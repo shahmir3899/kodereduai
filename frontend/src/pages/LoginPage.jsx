@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { PasswordInput } from '../components'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -138,8 +139,7 @@ export default function LoginPage() {
               <label className="label" htmlFor="password">
                 Password
               </label>
-              <input
-                type="password"
+              <PasswordInput
                 id="password"
                 className="input"
                 value={password}

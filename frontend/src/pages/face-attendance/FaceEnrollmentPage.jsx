@@ -5,6 +5,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useToast } from '../../components/Toast'
 import { useConfirmModal } from '../../components/ConfirmModal'
+import { useBackgroundTasks } from '../../contexts/BackgroundTaskContext'
 import { faceAttendanceApi, studentsApi } from '../../services/api'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import ClassSelector from '../../components/ClassSelector'
@@ -16,6 +17,7 @@ export default function FaceEnrollmentPage() {
   const { activeAcademicYear } = useAcademicYear()
   const { showError, showSuccess } = useToast()
   const { confirm, ConfirmModalRoot } = useConfirmModal()
+  const { addTask } = useBackgroundTasks()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const fileInputRef = useRef(null)
@@ -90,12 +92,29 @@ export default function FaceEnrollmentPage() {
         image_url: imageUrl,
       })
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       setUploading(false)
       setPreviewUrl(null)
       setSelectedStudent('')
       if (fileInputRef.current) fileInputRef.current.value = ''
-      showSuccess('Face enrollment started! Processing...')
+      
+      // Register task with background task context for monitoring
+      const taskId = data.data?.task_id || data.task_id
+      const studentName = data.data?.student_name || data.student_name || 'Student'
+      
+      if (taskId) {
+        addTask(
+          taskId,
+          `Enroll face: ${studentName}`,
+          'FACE_ATTENDANCE',
+          (result) => {
+            // Task completed (success or already handled by context)
+            queryClient.invalidateQueries({ queryKey: ['faceEnrollments'] })
+          }
+        )
+      }
+      
+      showSuccess('Processing enrollment...')
       queryClient.invalidateQueries({ queryKey: ['faceEnrollments'] })
     },
     onError: (err) => {
@@ -162,6 +181,47 @@ export default function FaceEnrollmentPage() {
         {/* Enrollment form */}
         <div className="bg-white rounded-lg border p-6">
           <h2 className="text-lg font-semibold mb-4">Enroll Student Face</h2>
+
+          {/* Photo Requirements Card */}
+          <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <h3 className="text-sm font-semibold text-blue-900 mb-3">Photo Requirements</h3>
+            <div className="space-y-2 text-sm text-blue-800">
+              <div className="flex gap-2">
+                <span className="text-green-600 font-semibold">✓</span>
+                <span>Clear portrait crop (head and shoulders)</span>
+              </div>
+              <div className="flex gap-2">
+                <span className="text-green-600 font-semibold">✓</span>
+                <span>Exactly one face visible</span>
+              </div>
+              <div className="flex gap-2">
+                <span className="text-green-600 font-semibold">✓</span>
+                <span>Front-facing angle (minimal side angle)</span>
+              </div>
+              <div className="flex gap-2">
+                <span className="text-green-600 font-semibold">✓</span>
+                <span>Good lighting (no harsh shadows)</span>
+              </div>
+              <div className="flex gap-2">
+                <span className="text-green-600 font-semibold">✓</span>
+                <span>Sharp focus (no motion blur)</span>
+              </div>
+              <div className="flex gap-2">
+                <span className="text-green-600 font-semibold">✓</span>
+                <span>JPG or PNG format, high resolution</span>
+              </div>
+              <div className="mt-3 pt-3 border-t border-blue-200">
+                <div className="flex gap-2">
+                  <span className="text-red-600 font-semibold">✗</span>
+                  <span>No masks, sunglasses, or heavy accessories</span>
+                </div>
+                <div className="flex gap-2">
+                  <span className="text-red-600 font-semibold">✗</span>
+                  <span>Avoid compressed/blurry images</span>
+                </div>
+              </div>
+            </div>
+          </div>
 
           <div className="space-y-4">
             <div>

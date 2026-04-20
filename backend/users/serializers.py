@@ -179,6 +179,63 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
         model = User
         fields = ['first_name', 'last_name', 'email', 'phone', 'profile_photo_url']
 
+
+# =============================
+# Password Reset Serializers
+# =============================
+from django.contrib.auth.tokens import default_token_generator
+from django.utils.http import urlsafe_base64_decode
+from django.contrib.auth import get_user_model
+User = get_user_model()
+
+class PasswordResetRequestSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+    def validate_email(self, value):
+        # Always accept, never reveal if user exists
+        return value
+
+
+class PasswordResetTokenValidateSerializer(serializers.Serializer):
+    uid = serializers.CharField()
+    token = serializers.CharField()
+
+    def validate(self, attrs):
+        uid = attrs.get('uid')
+        token = attrs.get('token')
+        try:
+            uid_int = urlsafe_base64_decode(uid).decode()
+            user = User.objects.get(pk=uid_int)
+        except Exception:
+            raise serializers.ValidationError({'uid': 'Invalid user ID'})
+        if not default_token_generator.check_token(user, token):
+            raise serializers.ValidationError({'token': 'Invalid or expired token'})
+        attrs['user'] = user
+        return attrs
+
+
+class PasswordResetConfirmSerializer(serializers.Serializer):
+    uid = serializers.CharField()
+    token = serializers.CharField()
+    new_password = serializers.CharField(min_length=8)
+    confirm_password = serializers.CharField()
+
+    def validate(self, attrs):
+        if attrs['new_password'] != attrs['confirm_password']:
+            raise serializers.ValidationError({'confirm_password': "Passwords don't match."})
+        # Validate token
+        uid = attrs.get('uid')
+        token = attrs.get('token')
+        try:
+            uid_int = urlsafe_base64_decode(uid).decode()
+            user = User.objects.get(pk=uid_int)
+        except Exception:
+            raise serializers.ValidationError({'uid': 'Invalid user ID'})
+        if not default_token_generator.check_token(user, token):
+            raise serializers.ValidationError({'token': 'Invalid or expired token'})
+        attrs['user'] = user
+        return attrs
+
     def validate_email(self, value):
         user = self.context['request'].user
         if value and User.objects.filter(email=value).exclude(pk=user.pk).exists():

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { PasswordInput } from '../components'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { schoolsApi, usersApi } from '../services/api'
@@ -561,11 +562,11 @@ export default function SettingsPage() {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Password *</label>
-                      <input type="password" value={userForm.password} onChange={(e) => setUserForm(f => ({ ...f, password: e.target.value }))} className="input-field" required placeholder="Min 8 characters" />
+                      <PasswordInput value={userForm.password} onChange={(e) => setUserForm(f => ({ ...f, password: e.target.value }))} className="input-field" required placeholder="Min 8 characters" />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Confirm Password *</label>
-                      <input type="password" value={userForm.confirm_password} onChange={(e) => setUserForm(f => ({ ...f, confirm_password: e.target.value }))} className="input-field" required placeholder="Confirm" />
+                      <PasswordInput value={userForm.confirm_password} onChange={(e) => setUserForm(f => ({ ...f, confirm_password: e.target.value }))} className="input-field" required placeholder="Confirm" />
                     </div>
                   </div>
                 )}

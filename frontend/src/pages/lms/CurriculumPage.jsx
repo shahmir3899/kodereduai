@@ -1,6 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import ReactCrop from 'react-image-crop'
+import 'react-image-crop/dist/ReactCrop.css'
 import { lmsApi, academicsApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
@@ -53,9 +55,17 @@ const parseOcrLinesFromText = (text) => {
       text: (line || '').trim(),
       confidence: 0,
       mappedAs: null,
+      mappedNumber: null,
     }))
     .filter((line) => !!line.text)
 }
+
+const createDefaultPerspectiveCorners = () => ({
+  tl: { x: 0.08, y: 0.08 },
+  tr: { x: 0.92, y: 0.08 },
+  br: { x: 0.92, y: 0.92 },
+  bl: { x: 0.08, y: 0.92 },
+})
 
 export default function CurriculumPage() {
   const { activeSchool } = useAuth()
@@ -102,10 +112,27 @@ export default function CurriculumPage() {
   const [tocSuggestionMeta, setTocSuggestionMeta] = useState(null)
   const [tocImageFile, setTocImageFile] = useState(null)
   const [tocImagePreview, setTocImagePreview] = useState(null)
+  const [tocImageRotation, setTocImageRotation] = useState(0)
+  const [tocImageSkewX, setTocImageSkewX] = useState(0)
+  const [tocImageSkewY, setTocImageSkewY] = useState(0)
+  const [tocImageWizardStep, setTocImageWizardStep] = useState(1)
+  const [tocCropAspect, setTocCropAspect] = useState('free')
+  const [tocPerspectiveCorners, setTocPerspectiveCorners] = useState(createDefaultPerspectiveCorners)
+  const [tocDraggingCornerKey, setTocDraggingCornerKey] = useState(null)
+  const [tocCropModalOpen, setTocCropModalOpen] = useState(false)
+  // react-image-crop state
+  const [tocCrop, setTocCrop] = useState(undefined)
+  const [tocCompletedCrop, setTocCompletedCrop] = useState(null)
+  const tocCropImageRef = useRef(null)
+  const [tocImageProcessing, setTocImageProcessing] = useState(false)
+  const [tocFinalPreviewUrl, setTocFinalPreviewUrl] = useState(null)
+  const [tocFinalPreviewLoading, setTocFinalPreviewLoading] = useState(false)
+  const tocPreviewImageRef = useRef(null)
   const [ocrLoading, setOcrLoading] = useState(false)
   const [tocOcrLines, setTocOcrLines] = useState([])
   const [selectedOcrLineId, setSelectedOcrLineId] = useState(null)
   const [targetChapterIndex, setTargetChapterIndex] = useState(0)
+  const [showAdvancedOcrMapping, setShowAdvancedOcrMapping] = useState(false)
   const [editingLineId, setEditingLineId] = useState(null)
   const [editingLineText, setEditingLineText] = useState('')
 
@@ -176,6 +203,18 @@ export default function CurriculumPage() {
     setEditingLineText(text)
   }
 
+  const linesToRawText = (lines) => lines
+    .map((line) => (line.text || '').trim())
+    .filter(Boolean)
+    .join('\n')
+
+  const clearTocSuggestionState = () => {
+    if (tocSuggestionItems.length > 0 || tocSuggestionMeta) {
+      setTocSuggestionItems([])
+      setTocSuggestionMeta(null)
+    }
+  }
+
   const saveLine = (lineId) => {
     const normalized = normalizeText(editingLineText)
     if (!normalized) {
@@ -184,11 +223,12 @@ export default function CurriculumPage() {
     }
 
     pushToUndoStack(tocOcrLines, tocChapters)
-    setTocOcrLines((prev) =>
-      prev.map((line) =>
-        line.id === lineId ? { ...line, text: normalized } : line
-      )
-    )
+    const nextLines = tocOcrLines.map((line) => (
+      line.id === lineId ? { ...line, text: normalized } : line
+    ))
+    setTocOcrLines(nextLines)
+    setTocText(linesToRawText(nextLines))
+    clearTocSuggestionState()
     setEditingLineId(null)
     setEditingLineText('')
     showSuccess('Line saved.')
@@ -203,19 +243,28 @@ export default function CurriculumPage() {
 
     pushToUndoStack(tocOcrLines, tocChapters)
     const merged = `${tocOcrLines[index].text} ${tocOcrLines[index + 1].text}`
-    setTocOcrLines((prev) => [
-      ...prev.slice(0, index),
-      { ...prev[index], text: normalizeText(merged) },
-      ...prev.slice(index + 2),
-    ])
+    const nextLines = [
+      ...tocOcrLines.slice(0, index),
+      { ...tocOcrLines[index], text: normalizeText(merged) },
+      ...tocOcrLines.slice(index + 2),
+    ]
+    setTocOcrLines(nextLines)
+    setTocText(linesToRawText(nextLines))
+    clearTocSuggestionState()
     showSuccess('Lines merged.')
   }
+
+  const selectedOcrLine = tocOcrLines.find((line) => line.id === selectedOcrLineId)
 
   // ---- Keyboard Shortcuts for OCR Lines (Phase 2/3) ----
   useEffect(() => {
     if (!showTocModal || tocOcrLines.length === 0) return
 
     const handleKeyDown = (e) => {
+      // If focus is inside the raw textarea, do NOT handle shortcuts
+      const active = document.activeElement
+      if (active && active.getAttribute && active.getAttribute('data-rawarea') === 'true') return
+
       // Only handle shortcuts when modal is open and OCR lines are visible
       const key = e.key.toLowerCase()
       const selectedIndex = tocOcrLines.findIndex((line) => line.id === selectedOcrLineId)
@@ -244,6 +293,11 @@ export default function CurriculumPage() {
       else if (key === 'e' && !editingLineId && selectedOcrLine) {
         e.preventDefault()
         startEditingLine(selectedOcrLine.id, selectedOcrLine.text)
+      }
+      // Delete: Remove selected OCR line (undo supported)
+      else if ((e.key === 'Delete' || e.key === 'Backspace') && !editingLineId && selectedOcrLine) {
+        e.preventDefault()
+        handleDeleteOcrLine(selectedOcrLine.id)
       }
       // Arrow Up: Select previous line
       else if (e.key === 'ArrowUp' && !editingLineId) {
@@ -609,6 +663,20 @@ export default function CurriculumPage() {
     setTocSuggestionMeta(null)
     setTocImageFile(null)
     setTocImagePreview(null)
+    setTocImageRotation(0)
+    setTocImageSkewX(0)
+    setTocImageSkewY(0)
+    setTocImageWizardStep(1)
+    setTocCropAspect('free')
+    setTocPerspectiveCorners(createDefaultPerspectiveCorners())
+    setTocDraggingCornerKey(null)
+    setTocCropModalOpen(false)
+    setTocCrop(undefined)
+    setTocCompletedCrop(null)
+    setTocImageProcessing(false)
+    if (tocFinalPreviewUrl) URL.revokeObjectURL(tocFinalPreviewUrl)
+    setTocFinalPreviewUrl(null)
+    setTocFinalPreviewLoading(false)
     setOcrLoading(false)
     setShowTocModal(true)
   }
@@ -625,6 +693,20 @@ export default function CurriculumPage() {
     setTocImageFile(null)
     if (tocImagePreview) URL.revokeObjectURL(tocImagePreview)
     setTocImagePreview(null)
+    setTocImageRotation(0)
+    setTocImageSkewX(0)
+    setTocImageSkewY(0)
+    setTocImageWizardStep(1)
+    setTocCropAspect('free')
+    setTocPerspectiveCorners(createDefaultPerspectiveCorners())
+    setTocDraggingCornerKey(null)
+    setTocCropModalOpen(false)
+    setTocCrop(undefined)
+    setTocCompletedCrop(null)
+    setTocImageProcessing(false)
+    if (tocFinalPreviewUrl) URL.revokeObjectURL(tocFinalPreviewUrl)
+    setTocFinalPreviewUrl(null)
+    setTocFinalPreviewLoading(false)
     setOcrLoading(false)
   }
 
@@ -721,13 +803,17 @@ export default function CurriculumPage() {
   }
 
   const handleSuggestToc = () => {
-    if (!tocText.trim()) {
+    const cleanedRawText = tocMode === 'upload' && tocOcrLines.length > 0
+      ? linesToRawText(tocOcrLines)
+      : tocText
+
+    if (!cleanedRawText.trim()) {
       showError('Please provide Table of Contents text before requesting AI suggestion.')
       return
     }
     suggestTocMutation.mutate({
       id: selectedBookId,
-      data: { raw_text: tocText },
+      data: { raw_text: cleanedRawText },
     })
   }
 
@@ -737,14 +823,14 @@ export default function CurriculumPage() {
     )))
   }
 
-  const addChapterFromSuggestion = (title) => {
+  const addChapterFromSuggestion = (title, sourceMeta = null) => {
     const cleanTitle = (title || '').trim()
     if (!cleanTitle) return
 
-    setTocChapters((prev) => [...prev, { title: cleanTitle, topics: [] }])
+    setTocChapters((prev) => [...prev, { title: cleanTitle, topics: [], ...(sourceMeta || {}) }])
   }
 
-  const addTopicFromSuggestion = (title, chapterTitle) => {
+  const addTopicFromSuggestion = (title, chapterTitle, sourceMeta = null) => {
     const cleanTitle = (title || '').trim()
     if (!cleanTitle) return
 
@@ -771,9 +857,34 @@ export default function CurriculumPage() {
         targetIndex = next.length - 1
       }
 
-      next[targetIndex].topics.push({ title: cleanTitle })
+      next[targetIndex].topics.push({ title: cleanTitle, ...(sourceMeta || {}) })
       return next
     })
+  }
+
+  const syncTocStructureWithRawLines = (nextLines) => {
+    const normalizedTextSet = new Set(nextLines.map((line) => (line.text || '').trim().toLowerCase()))
+
+    setTocChapters((prev) => prev
+      .map((chapter) => {
+        const chapterIsOcr = chapter?.source === 'ocr'
+        const chapterSourceText = (chapter?.sourceText || chapter?.title || '').trim().toLowerCase()
+
+        if (chapterIsOcr && chapterSourceText && !normalizedTextSet.has(chapterSourceText)) {
+          return null
+        }
+
+        const nextTopics = (chapter.topics || []).filter((topic) => {
+          const topicIsOcr = topic?.source === 'ocr'
+          if (!topicIsOcr) return true
+          const topicSourceText = (topic?.sourceText || topic?.title || '').trim().toLowerCase()
+          return topicSourceText ? normalizedTextSet.has(topicSourceText) : true
+        })
+
+        return { ...chapter, topics: nextTopics }
+      })
+      .filter(Boolean)
+    )
   }
 
   const handleUseSuggestion = (item) => {
@@ -812,12 +923,94 @@ export default function CurriculumPage() {
     showSuccess(`Applied ${toApply.length} high-confidence suggestions.`)
   }
 
-  const selectedOcrLine = tocOcrLines.find((line) => line.id === selectedOcrLineId)
-
   const markOcrLineMapped = (lineId, mappedAs) => {
     setTocOcrLines((prev) => prev.map((line) => (
       line.id === lineId ? { ...line, mappedAs } : line
     )))
+  }
+
+  const mapOcrLineAsChapter = (line) => {
+    if (!line || !line.text) return
+    const chapterNumber = tocChapters.length + 1
+
+    pushToUndoStack(tocOcrLines, tocChapters)
+    addChapterFromSuggestion(line.text, {
+      source: 'ocr',
+      sourceLineId: line.id,
+      sourceText: line.text,
+    })
+    setTocOcrLines((prev) => prev.map((item) => (
+      item.id === line.id
+        ? { ...item, mappedAs: 'chapter', mappedNumber: chapterNumber }
+        : item
+    )))
+    // When a new chapter is created from OCR, make it the default target for next topic mappings.
+    setTargetChapterIndex(chapterNumber - 1)
+  }
+
+  const mapOcrLineAsTopic = (line, requestedChapterIndex = targetChapterIndex) => {
+    if (!line || !line.text) return
+    if (tocChapters.length === 0) {
+      showError('Add a chapter first, then map this line as a topic.')
+      return
+    }
+
+    const safeTargetIndex = Math.min(Math.max(requestedChapterIndex, 0), tocChapters.length - 1)
+    const chapterTitle = tocChapters[safeTargetIndex]?.title || ''
+    const nextTopicNumber = (tocChapters[safeTargetIndex]?.topics?.length || 0) + 1
+    const topicNumberLabel = `${safeTargetIndex + 1}.${nextTopicNumber}`
+
+    pushToUndoStack(tocOcrLines, tocChapters)
+    addTopicFromSuggestion(line.text, chapterTitle, {
+      source: 'ocr',
+      sourceLineId: line.id,
+      sourceText: line.text,
+    })
+    setTocOcrLines((prev) => prev.map((item) => (
+      item.id === line.id
+        ? { ...item, mappedAs: `topic:${safeTargetIndex}`, mappedNumber: topicNumberLabel }
+        : item
+    )))
+  }
+
+  const handleDeleteOcrLine = (lineId) => {
+    const lineToDelete = tocOcrLines.find((line) => line.id === lineId)
+    if (!lineToDelete) return
+
+    pushToUndoStack(tocOcrLines, tocChapters)
+
+    const nextLines = tocOcrLines.filter((line) => line.id !== lineId)
+    setTocOcrLines(nextLines)
+    setTocText(linesToRawText(nextLines))
+    clearTocSuggestionState()
+    if (selectedOcrLineId === lineId) {
+      setSelectedOcrLineId(nextLines[0]?.id || null)
+    }
+
+    // If a mapped OCR line is deleted, rollback corresponding chapter/topic placeholder content.
+    if (lineToDelete.mappedAs === 'chapter') {
+      setTocChapters((prev) => {
+        const removeIndex = prev.findIndex((chapter) => (chapter.title || '').trim() === (lineToDelete.text || '').trim())
+        if (removeIndex === -1) return prev
+        return prev.filter((_, index) => index !== removeIndex)
+      })
+    } else if ((lineToDelete.mappedAs || '').startsWith('topic:')) {
+      const targetIndex = parseInt((lineToDelete.mappedAs || '').split(':')[1], 10)
+      setTocChapters((prev) => prev.map((chapter, chapterIndex) => {
+        if (chapterIndex !== targetIndex) return chapter
+        let removed = false
+        const nextTopics = (chapter.topics || []).filter((topic) => {
+          if (!removed && (topic.title || '').trim() === (lineToDelete.text || '').trim()) {
+            removed = true
+            return false
+          }
+          return true
+        })
+        return { ...chapter, topics: nextTopics }
+      }))
+    }
+
+    showSuccess('OCR line deleted. You can undo this action.')
   }
 
   const handleMapSelectedLineAsChapter = () => {
@@ -826,8 +1019,7 @@ export default function CurriculumPage() {
       return
     }
 
-    addChapterFromSuggestion(selectedOcrLine.text)
-    markOcrLineMapped(selectedOcrLine.id, 'chapter')
+    mapOcrLineAsChapter(selectedOcrLine)
     showSuccess('OCR line mapped as chapter.')
   }
 
@@ -842,11 +1034,7 @@ export default function CurriculumPage() {
       return
     }
 
-    const safeTargetIndex = Math.min(Math.max(targetChapterIndex, 0), tocChapters.length - 1)
-    const chapterTitle = tocChapters[safeTargetIndex]?.title || ''
-
-    addTopicFromSuggestion(selectedOcrLine.text, chapterTitle)
-    markOcrLineMapped(selectedOcrLine.id, `topic:${safeTargetIndex}`)
+    mapOcrLineAsTopic(selectedOcrLine, targetChapterIndex)
     showSuccess('OCR line mapped as topic.')
   }
 
@@ -896,6 +1084,303 @@ export default function CurriculumPage() {
     }))
   }
 
+  const readFileAsDataUrl = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result)
+      reader.onerror = reject
+      reader.readAsDataURL(file)
+    })
+  }
+
+  const createImageElement = (url) => {
+    return new Promise((resolve, reject) => {
+      const img = new Image()
+      img.onload = () => resolve(img)
+      img.onerror = reject
+      img.src = url
+    })
+  }
+
+  const replaceTocImageFile = (file) => {
+    if (tocImagePreview) URL.revokeObjectURL(tocImagePreview)
+    setTocImageFile(file)
+    setTocImagePreview(URL.createObjectURL(file))
+    setTocPerspectiveCorners(createDefaultPerspectiveCorners())
+    setTocDraggingCornerKey(null)
+  }
+
+  const resetTocPerspectiveCorners = () => {
+    setTocPerspectiveCorners(createDefaultPerspectiveCorners())
+    setTocDraggingCornerKey(null)
+  }
+
+  const updatePerspectiveCornerFromClient = (cornerKey, clientX, clientY) => {
+    const rect = tocPreviewImageRef.current?.getBoundingClientRect()
+    if (!rect || rect.width <= 0 || rect.height <= 0) return
+
+    let x = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width))
+    let y = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height))
+
+    // Snap-to-edge helper: when a handle is close to image bounds, lock it to the edge.
+    const snapPx = 16
+    const snapX = snapPx / rect.width
+    const snapY = snapPx / rect.height
+
+    if (x <= snapX) x = 0
+    else if (x >= 1 - snapX) x = 1
+
+    if (y <= snapY) y = 0
+    else if (y >= 1 - snapY) y = 1
+
+    setTocPerspectiveCorners((prev) => ({
+      ...prev,
+      [cornerKey]: { x, y },
+    }))
+  }
+
+  const isPerspectiveQuadValid = (corners, width, height) => {
+    const points = [corners.tl, corners.tr, corners.br, corners.bl]
+    const inBounds = points.every((p) => p.x >= 0 && p.x <= width && p.y >= 0 && p.y <= height)
+    if (!inBounds) return false
+
+    const edgeLengths = [
+      Math.hypot(corners.tr.x - corners.tl.x, corners.tr.y - corners.tl.y),
+      Math.hypot(corners.br.x - corners.tr.x, corners.br.y - corners.tr.y),
+      Math.hypot(corners.bl.x - corners.br.x, corners.bl.y - corners.br.y),
+      Math.hypot(corners.tl.x - corners.bl.x, corners.tl.y - corners.bl.y),
+    ]
+    if (edgeLengths.some((edge) => edge < 20)) return false
+
+    const area = Math.abs(
+      points.reduce((acc, p, i) => {
+        const n = points[(i + 1) % points.length]
+        return acc + (p.x * n.y - n.x * p.y)
+      }, 0) / 2,
+    )
+    return area > 800
+  }
+
+  const solveAffineTransform = (src, dst) => {
+    const [s0, s1, s2] = src
+    const [d0, d1, d2] = dst
+
+    const det = s0.x * (s1.y - s2.y) + s1.x * (s2.y - s0.y) + s2.x * (s0.y - s1.y)
+    if (Math.abs(det) < 1e-6) return null
+
+    const a = (d0.x * (s1.y - s2.y) + d1.x * (s2.y - s0.y) + d2.x * (s0.y - s1.y)) / det
+    const c = (d0.x * (s2.x - s1.x) + d1.x * (s0.x - s2.x) + d2.x * (s1.x - s0.x)) / det
+    const e = (d0.x * (s1.x * s2.y - s2.x * s1.y) + d1.x * (s2.x * s0.y - s0.x * s2.y) + d2.x * (s0.x * s1.y - s1.x * s0.y)) / det
+
+    const b = (d0.y * (s1.y - s2.y) + d1.y * (s2.y - s0.y) + d2.y * (s0.y - s1.y)) / det
+    const d = (d0.y * (s2.x - s1.x) + d1.y * (s0.x - s2.x) + d2.y * (s1.x - s0.x)) / det
+    const f = (d0.y * (s1.x * s2.y - s2.x * s1.y) + d1.y * (s2.x * s0.y - s0.x * s2.y) + d2.y * (s0.x * s1.y - s1.x * s0.y)) / det
+
+    return { a, b, c, d, e, f }
+  }
+
+  const drawImageTriangle = (ctx, img, srcTri, dstTri) => {
+    const matrix = solveAffineTransform(srcTri, dstTri)
+    if (!matrix) return
+
+    ctx.save()
+    ctx.beginPath()
+    ctx.moveTo(dstTri[0].x, dstTri[0].y)
+    ctx.lineTo(dstTri[1].x, dstTri[1].y)
+    ctx.lineTo(dstTri[2].x, dstTri[2].y)
+    ctx.closePath()
+    ctx.clip()
+    ctx.setTransform(matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f)
+    ctx.drawImage(img, 0, 0)
+    ctx.restore()
+  }
+
+  const getPerspectiveCorrectedImageFile = async (file, normalizedCorners) => {
+    const imageUrl = await readFileAsDataUrl(file)
+    const img = await createImageElement(imageUrl)
+
+    const sourceCorners = {
+      tl: { x: normalizedCorners.tl.x * img.width, y: normalizedCorners.tl.y * img.height },
+      tr: { x: normalizedCorners.tr.x * img.width, y: normalizedCorners.tr.y * img.height },
+      br: { x: normalizedCorners.br.x * img.width, y: normalizedCorners.br.y * img.height },
+      bl: { x: normalizedCorners.bl.x * img.width, y: normalizedCorners.bl.y * img.height },
+    }
+
+    if (!isPerspectiveQuadValid(sourceCorners, img.width, img.height)) {
+      throw new Error('Invalid corners')
+    }
+
+    const topWidth = Math.hypot(sourceCorners.tr.x - sourceCorners.tl.x, sourceCorners.tr.y - sourceCorners.tl.y)
+    const bottomWidth = Math.hypot(sourceCorners.br.x - sourceCorners.bl.x, sourceCorners.br.y - sourceCorners.bl.y)
+    const leftHeight = Math.hypot(sourceCorners.bl.x - sourceCorners.tl.x, sourceCorners.bl.y - sourceCorners.tl.y)
+    const rightHeight = Math.hypot(sourceCorners.br.x - sourceCorners.tr.x, sourceCorners.br.y - sourceCorners.tr.y)
+
+    const outWidth = Math.max(1, Math.round(Math.max(topWidth, bottomWidth)))
+    const outHeight = Math.max(1, Math.round(Math.max(leftHeight, rightHeight)))
+
+    const canvas = document.createElement('canvas')
+    const ctx = canvas.getContext('2d')
+    canvas.width = outWidth
+    canvas.height = outHeight
+    ctx.imageSmoothingEnabled = true
+    ctx.imageSmoothingQuality = 'high'
+
+    drawImageTriangle(
+      ctx,
+      img,
+      [sourceCorners.tl, sourceCorners.tr, sourceCorners.bl],
+      [{ x: 0, y: 0 }, { x: outWidth, y: 0 }, { x: 0, y: outHeight }],
+    )
+    drawImageTriangle(
+      ctx,
+      img,
+      [sourceCorners.tr, sourceCorners.br, sourceCorners.bl],
+      [{ x: outWidth, y: 0 }, { x: outWidth, y: outHeight }, { x: 0, y: outHeight }],
+    )
+
+    const blob = await new Promise((resolve) => {
+      canvas.toBlob(resolve, 'image/jpeg', 0.92)
+    })
+
+    return new File([blob], file.name.replace(/\.[^/.]+$/, '.jpg'), { type: 'image/jpeg' })
+  }
+
+  const getRotatedImageFile = async (file, rotation) => {
+    if (!rotation) return file
+
+    const imageUrl = await readFileAsDataUrl(file)
+    const img = await createImageElement(imageUrl)
+    const canvas = document.createElement('canvas')
+    const ctx = canvas.getContext('2d')
+    const normalizedRotation = ((rotation % 360) + 360) % 360
+
+    if (normalizedRotation === 90 || normalizedRotation === 270) {
+      canvas.width = img.height
+      canvas.height = img.width
+    } else {
+      canvas.width = img.width
+      canvas.height = img.height
+    }
+
+    ctx.translate(canvas.width / 2, canvas.height / 2)
+    ctx.rotate((normalizedRotation * Math.PI) / 180)
+    ctx.drawImage(img, -img.width / 2, -img.height / 2)
+
+    const blob = await new Promise((resolve) => {
+      canvas.toBlob(resolve, 'image/jpeg', 0.92)
+    })
+
+    return new File([blob], file.name.replace(/\.[^/.]+$/, '.jpg'), { type: 'image/jpeg' })
+  }
+
+  const getSkewedImageFile = async (file, skewXDeg, skewYDeg) => {
+    if (!skewXDeg && !skewYDeg) return file
+
+    const imageUrl = await readFileAsDataUrl(file)
+    const img = await createImageElement(imageUrl)
+    const canvas = document.createElement('canvas')
+    const ctx = canvas.getContext('2d')
+
+    const skewXRad = (skewXDeg * Math.PI) / 180
+    const skewYRad = (skewYDeg * Math.PI) / 180
+    const skewXFactor = Math.tan(skewXRad)
+    const skewYFactor = Math.tan(skewYRad)
+
+    const outWidth = Math.ceil(img.width + Math.abs(skewXFactor * img.height))
+    const outHeight = Math.ceil(img.height + Math.abs(skewYFactor * img.width))
+
+    canvas.width = outWidth
+    canvas.height = outHeight
+
+    const offsetX = skewXFactor < 0 ? Math.abs(skewXFactor * img.height) : 0
+    const offsetY = skewYFactor < 0 ? Math.abs(skewYFactor * img.width) : 0
+
+    ctx.setTransform(1, skewYFactor, skewXFactor, 1, offsetX, offsetY)
+    ctx.drawImage(img, 0, 0)
+
+    const blob = await new Promise((resolve) => {
+      canvas.toBlob(resolve, 'image/jpeg', 0.92)
+    })
+
+    return new File([blob], file.name.replace(/\.[^/.]+$/, '.jpg'), { type: 'image/jpeg' })
+  }
+
+  const getCroppedImageFile = async (imageSrc, pixelCrop, rotation = 0, originalName = 'toc-image.jpg') => {
+    const image = await createImageElement(imageSrc)
+    const canvas = document.createElement('canvas')
+    const ctx = canvas.getContext('2d')
+
+    const rotRad = (rotation * Math.PI) / 180
+    const sin = Math.abs(Math.sin(rotRad))
+    const cos = Math.abs(Math.cos(rotRad))
+    const bBoxWidth = image.width * cos + image.height * sin
+    const bBoxHeight = image.width * sin + image.height * cos
+
+    canvas.width = bBoxWidth
+    canvas.height = bBoxHeight
+    ctx.translate(bBoxWidth / 2, bBoxHeight / 2)
+    ctx.rotate(rotRad)
+    ctx.translate(-image.width / 2, -image.height / 2)
+    ctx.drawImage(image, 0, 0)
+
+    const croppedData = ctx.getImageData(pixelCrop.x, pixelCrop.y, pixelCrop.width, pixelCrop.height)
+    canvas.width = pixelCrop.width
+    canvas.height = pixelCrop.height
+    ctx.putImageData(croppedData, 0, 0)
+
+    const blob = await new Promise((resolve) => {
+      canvas.toBlob(resolve, 'image/jpeg', 0.92)
+    })
+
+    return new File([blob], originalName.replace(/\.[^/.]+$/, '.jpg'), { type: 'image/jpeg' })
+  }
+
+  const handleSaveTocCrop = async () => {
+    if (!tocCompletedCrop || !tocCropImageRef.current || !tocImageFile) {
+      showError('Select a crop area first.')
+      return
+    }
+
+    setTocImageProcessing(true)
+    try {
+      const img = tocCropImageRef.current
+      const scaleX = img.naturalWidth / img.width
+      const scaleY = img.naturalHeight / img.height
+      const canvas = document.createElement('canvas')
+      const pixelCrop = {
+        x: tocCompletedCrop.x * scaleX,
+        y: tocCompletedCrop.y * scaleY,
+        width: tocCompletedCrop.width * scaleX,
+        height: tocCompletedCrop.height * scaleY,
+      }
+      canvas.width = pixelCrop.width
+      canvas.height = pixelCrop.height
+      const ctx = canvas.getContext('2d')
+      ctx.drawImage(
+        img,
+        pixelCrop.x, pixelCrop.y,
+        pixelCrop.width, pixelCrop.height,
+        0, 0,
+        pixelCrop.width, pixelCrop.height,
+      )
+      const blob = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', 0.95))
+      const croppedFile = new File(
+        [blob],
+        tocImageFile.name.replace(/\.[^/.]+$/, '.jpg'),
+        { type: 'image/jpeg' },
+      )
+      replaceTocImageFile(croppedFile)
+      setTocCropModalOpen(false)
+      setTocCrop(undefined)
+      setTocCompletedCrop(null)
+      showSuccess('Crop applied.')
+    } catch (error) {
+      showError('Failed to apply crop.')
+    } finally {
+      setTocImageProcessing(false)
+    }
+  }
+
   const handleTocImageSelect = (e) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -908,10 +1393,152 @@ export default function CurriculumPage() {
       showError('Image too large. Maximum size is 10MB.')
       return
     }
-    setTocImageFile(file)
-    if (tocImagePreview) URL.revokeObjectURL(tocImagePreview)
-    setTocImagePreview(URL.createObjectURL(file))
+    replaceTocImageFile(file)
+    setTocImageRotation(0)
+    setTocImageSkewX(0)
+    setTocImageSkewY(0)
+    setTocImageWizardStep(1)
+    setTocCropAspect('free')
+    if (tocFinalPreviewUrl) URL.revokeObjectURL(tocFinalPreviewUrl)
+    setTocFinalPreviewUrl(null)
+    setTocFinalPreviewLoading(false)
+    resetTocPerspectiveCorners()
+    setTocCrop(undefined)
+    setTocCompletedCrop(null)
+    setTocCropModalOpen(false)
   }
+
+  const handleRotateTocImage = (direction) => {
+    setTocImageRotation((prev) => {
+      if (direction === 'left') return (prev - 90 + 360) % 360
+      return (prev + 90) % 360
+    })
+  }
+
+  const bakeRotationAndAdvance = async (nextStep) => {
+    if (!tocImageRotation || !tocImageFile) {
+      setTocImageWizardStep(nextStep)
+      return
+    }
+    setTocImageProcessing(true)
+    try {
+      const baked = await getRotatedImageFile(tocImageFile, tocImageRotation)
+      replaceTocImageFile(baked)
+      setTocImageRotation(0)
+    } catch {
+      // proceed even if bake fails
+    } finally {
+      setTocImageProcessing(false)
+    }
+    setTocImageWizardStep(nextStep)
+  }
+
+  const handleApplyTocSkew = async () => {
+    if (!tocImageFile) return
+    if (!tocImageSkewX && !tocImageSkewY) {
+      showError('Adjust skew sliders first.')
+      return
+    }
+
+    setTocImageProcessing(true)
+    try {
+      const processedFile = await getSkewedImageFile(tocImageFile, tocImageSkewX, tocImageSkewY)
+      replaceTocImageFile(processedFile)
+      setTocImageSkewX(0)
+      setTocImageSkewY(0)
+      showSuccess('Skew correction applied.')
+    } catch (error) {
+      showError('Failed to apply skew correction.')
+    } finally {
+      setTocImageProcessing(false)
+    }
+  }
+
+  const handleApplyTocPerspective = async () => {
+    if (!tocImageFile) return
+    if (tocImageRotation || tocImageSkewX || tocImageSkewY) {
+      showError('Apply or reset rotate/skew first, then apply perspective correction.')
+      return
+    }
+
+    setTocImageProcessing(true)
+    try {
+      const perspectiveFile = await getPerspectiveCorrectedImageFile(tocImageFile, tocPerspectiveCorners)
+      replaceTocImageFile(perspectiveFile)
+      showSuccess('Perspective correction applied.')
+    } catch (error) {
+      showError('Unable to apply perspective correction. Keep corners inside the page area.')
+    } finally {
+      setTocImageProcessing(false)
+    }
+  }
+
+  const buildProcessedTocImageFile = async (baseFile) => {
+    let processedFile = baseFile
+    if (tocImageRotation) {
+      processedFile = await getRotatedImageFile(processedFile, tocImageRotation)
+    }
+    if (tocImageSkewX || tocImageSkewY) {
+      processedFile = await getSkewedImageFile(processedFile, tocImageSkewX, tocImageSkewY)
+    }
+    if (tocPerspectiveCorners) {
+      try {
+        processedFile = await getPerspectiveCorrectedImageFile(processedFile, tocPerspectiveCorners)
+      } catch (error) {
+        // Keep non-perspective processed output if perspective corners are invalid.
+      }
+    }
+    return processedFile
+  }
+
+  useEffect(() => {
+    if (tocImageWizardStep !== 4 || !tocImageFile) return
+
+    let active = true
+    const renderFinalPreview = async () => {
+      setTocFinalPreviewLoading(true)
+      try {
+        const processed = await buildProcessedTocImageFile(tocImageFile)
+        if (!active) return
+        if (tocFinalPreviewUrl) URL.revokeObjectURL(tocFinalPreviewUrl)
+        setTocFinalPreviewUrl(URL.createObjectURL(processed))
+      } finally {
+        if (active) setTocFinalPreviewLoading(false)
+      }
+    }
+
+    renderFinalPreview()
+    return () => {
+      active = false
+    }
+  }, [tocImageWizardStep, tocImageFile, tocImageRotation, tocImageSkewX, tocImageSkewY, tocPerspectiveCorners])
+
+  useEffect(() => {
+    if (!tocDraggingCornerKey) return
+
+    const handlePointerMove = (e) => {
+      const point = e.touches?.[0] || e
+      if (!point) return
+      if (e.cancelable) e.preventDefault()
+      updatePerspectiveCornerFromClient(tocDraggingCornerKey, point.clientX, point.clientY)
+    }
+
+    const handlePointerUp = () => {
+      setTocDraggingCornerKey(null)
+    }
+
+    window.addEventListener('mousemove', handlePointerMove)
+    window.addEventListener('mouseup', handlePointerUp)
+    window.addEventListener('touchmove', handlePointerMove, { passive: false })
+    window.addEventListener('touchend', handlePointerUp)
+
+    return () => {
+      window.removeEventListener('mousemove', handlePointerMove)
+      window.removeEventListener('mouseup', handlePointerUp)
+      window.removeEventListener('touchmove', handlePointerMove)
+      window.removeEventListener('touchend', handlePointerUp)
+    }
+  }, [tocDraggingCornerKey])
 
   const handleOcrExtract = async () => {
     if (!tocImageFile) {
@@ -920,7 +1547,15 @@ export default function CurriculumPage() {
     }
     setOcrLoading(true)
     try {
-      const response = await lmsApi.ocrTOC(selectedBookId, tocImageFile)
+      const processedFile = await buildProcessedTocImageFile(tocImageFile)
+      if (processedFile !== tocImageFile) {
+        replaceTocImageFile(processedFile)
+        setTocImageRotation(0)
+        setTocImageSkewX(0)
+        setTocImageSkewY(0)
+      }
+
+      const response = await lmsApi.ocrTOC(selectedBookId, processedFile)
       setTocText(response.data.text)
       const responseLines = Array.isArray(response?.data?.lines)
         ? response.data.lines
@@ -930,6 +1565,7 @@ export default function CurriculumPage() {
             text: (line.text || '').trim(),
             confidence: typeof line.confidence === 'number' ? line.confidence : 0,
             mappedAs: null,
+            mappedNumber: null,
           }))
           .filter((line) => !!line.text)
         : parseOcrLinesFromText(response.data.text)
@@ -937,6 +1573,7 @@ export default function CurriculumPage() {
       setSelectedOcrLineId(responseLines[0]?.id || null)
       setTocMode('upload')
       setTocStep('input')
+      setTocImageWizardStep(4)
       setTocSuggestionItems([])
       setTocSuggestionMeta(null)
       showSuccess('Text extracted! Review and edit before importing Table of Contents.')
@@ -986,6 +1623,14 @@ export default function CurriculumPage() {
   const isRTL = (code) => isRTLLanguage(code)
 
   const pendingSuggestionCount = tocSuggestionItems.filter((item) => item.status === 'pending').length
+  const hasPendingLinearTransforms = tocImageRotation !== 0 || tocImageSkewX !== 0 || tocImageSkewY !== 0
+  const tocDisplayPreviewUrl = tocImageWizardStep === 4 && tocFinalPreviewUrl ? tocFinalPreviewUrl : tocImagePreview
+  const tocDisplayPreviewAlt = tocImageWizardStep === 4 && tocFinalPreviewUrl
+    ? 'Final processed TOC preview'
+    : 'TOC page preview'
+  const tocDisplayPreviewStyle = tocImageWizardStep === 4 && tocFinalPreviewUrl
+    ? undefined
+    : { transform: `rotate(${tocImageRotation}deg) skew(${tocImageSkewX}deg, ${tocImageSkewY}deg)` }
 
   const bookMutationPending = createBookMutation.isPending || updateBookMutation.isPending
   const chapterMutationPending = createChapterMutation.isPending || updateChapterMutation.isPending
@@ -1686,16 +2331,131 @@ export default function CurriculumPage() {
                     ) : (
                       <div className="space-y-3">
                         <div className="relative rounded-lg overflow-hidden border border-gray-200">
-                          <img
-                            src={tocImagePreview}
-                            alt="TOC page preview"
-                            className="w-full max-h-64 object-contain bg-gray-50"
-                          />
+                          <div className="w-full flex justify-center bg-gray-50 py-2">
+                            <div className="relative inline-block">
+                              {tocImageWizardStep === 2 ? (
+                                <ReactCrop
+                                  crop={tocCrop}
+                                  onChange={(c) => setTocCrop(c)}
+                                  onComplete={(c) => setTocCompletedCrop(c)}
+                                  aspect={tocCropAspect === 'free' ? undefined : Number(tocCropAspect)}
+                                  minWidth={20}
+                                  minHeight={20}
+                                  ruleOfThirds
+                                >
+                                  <img
+                                    ref={tocCropImageRef}
+                                    src={tocImagePreview}
+                                    alt="Crop TOC"
+                                    className="max-h-80 w-auto object-contain block"
+                                  />
+                                </ReactCrop>
+                              ) : (
+                                <img
+                                  ref={tocPreviewImageRef}
+                                  src={tocDisplayPreviewUrl}
+                                  alt={tocDisplayPreviewAlt}
+                                  className="max-h-64 w-auto object-contain transition-transform duration-150"
+                                  style={tocDisplayPreviewStyle}
+                                />
+                              )}
+
+                              {tocImageWizardStep === 1 && (
+                                <>
+                                  {/* Rotate Left — left edge */}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRotateTocImage('left')}
+                                    disabled={ocrLoading || tocImageProcessing}
+                                    className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 w-9 h-9 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center shadow-lg transition-colors"
+                                    title="Rotate Left 90°"
+                                  >
+                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                                    </svg>
+                                  </button>
+                                  {/* Rotate Right — right edge */}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRotateTocImage('right')}
+                                    disabled={ocrLoading || tocImageProcessing}
+                                    className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 w-9 h-9 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center shadow-lg transition-colors"
+                                    title="Rotate Right 90°"
+                                  >
+                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                                    </svg>
+                                  </button>
+                                </>
+                              )}
+
+                              {tocImageWizardStep === 3 && !hasPendingLinearTransforms && (
+                                <>
+                                  <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
+                                    <polyline
+                                      points={`${tocPerspectiveCorners.tl.x * 100},${tocPerspectiveCorners.tl.y * 100} ${tocPerspectiveCorners.tr.x * 100},${tocPerspectiveCorners.tr.y * 100} ${tocPerspectiveCorners.br.x * 100},${tocPerspectiveCorners.br.y * 100} ${tocPerspectiveCorners.bl.x * 100},${tocPerspectiveCorners.bl.y * 100} ${tocPerspectiveCorners.tl.x * 100},${tocPerspectiveCorners.tl.y * 100}`}
+                                      fill="rgba(14, 165, 233, 0.12)"
+                                      stroke="rgba(2, 132, 199, 0.9)"
+                                      strokeWidth="1.5"
+                                    />
+                                  </svg>
+
+                                  {Object.entries(tocPerspectiveCorners).map(([key, corner]) => (
+                                    <div
+                                      key={key}
+                                      className="absolute"
+                                      style={{
+                                        left: `${corner.x * 100}%`,
+                                        top: `${corner.y * 100}%`,
+                                        transform: 'translate(-50%, -50%)',
+                                      }}
+                                    >
+                                      <button
+                                        type="button"
+                                        onMouseDown={(e) => {
+                                          e.preventDefault()
+                                          setTocDraggingCornerKey(key)
+                                        }}
+                                        onTouchStart={(e) => {
+                                          e.preventDefault()
+                                          setTocDraggingCornerKey(key)
+                                        }}
+                                        className="w-4 h-4 rounded-full border-2 border-white bg-blue-600 shadow cursor-move touch-none"
+                                        title={`Drag ${key.toUpperCase()} corner`}
+                                      />
+                                      <span
+                                        className={`absolute text-[10px] font-semibold text-blue-900 bg-white/90 border border-blue-200 rounded px-1 py-0.5 pointer-events-none whitespace-nowrap ${
+                                          key === 'tl'
+                                            ? '-top-6 -left-1'
+                                            : key === 'tr'
+                                              ? '-top-6 -right-1'
+                                              : key === 'br'
+                                                ? 'top-3 -right-1'
+                                                : 'top-3 -left-1'
+                                        }`}
+                                      >
+                                        {key.toUpperCase()}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </>
+                              )}
+                            </div>
+                          </div>
                           <button
                             onClick={() => {
                               setTocImageFile(null)
                               if (tocImagePreview) URL.revokeObjectURL(tocImagePreview)
                               setTocImagePreview(null)
+                              setTocImageRotation(0)
+                              setTocImageSkewX(0)
+                              setTocImageSkewY(0)
+                              setTocImageWizardStep(1)
+                              if (tocFinalPreviewUrl) URL.revokeObjectURL(tocFinalPreviewUrl)
+                              setTocFinalPreviewUrl(null)
+                              setTocFinalPreviewLoading(false)
+                              resetTocPerspectiveCorners()
+                              setTocCropModalOpen(false)
                             }}
                             className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
                             title="Remove image"
@@ -1705,21 +2465,180 @@ export default function CurriculumPage() {
                             </svg>
                           </button>
                         </div>
-                        <button
-                          onClick={handleOcrExtract}
-                          disabled={ocrLoading}
-                          className="btn btn-primary w-full"
-                        >
-                          {ocrLoading ? (
-                            <span className="flex items-center justify-center gap-2">
-                              <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                              </svg>
-                              Extracting text...
-                            </span>
-                          ) : 'Extract Text from Image'}
-                        </button>
+
+                        <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-3">
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                            {[1, 2, 3, 4].map((step) => (
+                              <button
+                                key={`wiz-step-${step}`}
+                                type="button"
+                                onClick={() => setTocImageWizardStep(step)}
+                                className={`text-xs px-2 py-1 rounded border ${
+                                  tocImageWizardStep === step
+                                    ? 'bg-blue-600 text-white border-blue-600'
+                                    : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-100'
+                                }`}
+                              >
+                                {step === 1 ? '1. Rotate' : step === 2 ? '2. Crop' : step === 3 ? '3. Skew' : '4. OCR'}
+                              </button>
+                            ))}
+                          </div>
+
+                          {tocImageWizardStep === 1 && (
+                            <div className="space-y-2">
+                              <p className="text-xs font-medium text-gray-700">Step 1: Rotate / Align</p>
+                              <p className="text-xs text-gray-500">Use the arrow buttons on the image to rotate.</p>
+                              <div className="flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => bakeRotationAndAdvance(2)}
+                                  disabled={ocrLoading || tocImageProcessing}
+                                  className="btn btn-primary text-sm"
+                                >
+                                  {tocImageProcessing ? 'Processing...' : 'Next: Crop'}
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+                          {tocImageWizardStep === 2 && (
+                            <div className="space-y-2">
+                              <p className="text-xs font-medium text-gray-700">Step 2: Crop</p>
+                              <p className="text-xs text-gray-500">Draw a rectangle on the image above. Drag handles to resize, drag inside to move.</p>
+                              <div className="flex gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => { setTocCrop(undefined); setTocCompletedCrop(null) }}
+                                  disabled={ocrLoading || tocImageProcessing}
+                                  className="btn btn-secondary text-xs"
+                                >
+                                  Clear Selection
+                                </button>
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                <button type="button" onClick={() => setTocImageWizardStep(1)} className="btn btn-secondary text-sm">Back</button>
+                                <button
+                                  type="button"
+                                  onClick={handleSaveTocCrop}
+                                  disabled={ocrLoading || tocImageProcessing || !tocCompletedCrop}
+                                  className="btn btn-secondary text-sm"
+                                >
+                                  {tocImageProcessing ? 'Applying...' : 'Apply Crop'}
+                                </button>
+                                <button type="button" onClick={() => setTocImageWizardStep(3)} className="btn btn-primary text-sm">Next: Skew</button>
+                              </div>
+                            </div>
+                          )}
+
+                          {tocImageWizardStep === 3 && (
+                            <div className="space-y-2">
+                              <p className="text-xs font-medium text-gray-700">Step 3: Perspective / Skew</p>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <label className="text-xs text-gray-600 space-y-1 block">
+                                  <span>Corner Skew X ({tocImageSkewX}deg)</span>
+                                  <input
+                                    type="range"
+                                    min={-20}
+                                    max={20}
+                                    step={1}
+                                    value={tocImageSkewX}
+                                    onChange={(e) => setTocImageSkewX(parseInt(e.target.value, 10) || 0)}
+                                    className="w-full"
+                                    disabled={ocrLoading || tocImageProcessing}
+                                  />
+                                </label>
+                                <label className="text-xs text-gray-600 space-y-1 block">
+                                  <span>Corner Skew Y ({tocImageSkewY}deg)</span>
+                                  <input
+                                    type="range"
+                                    min={-20}
+                                    max={20}
+                                    step={1}
+                                    value={tocImageSkewY}
+                                    onChange={(e) => setTocImageSkewY(parseInt(e.target.value, 10) || 0)}
+                                    className="w-full"
+                                    disabled={ocrLoading || tocImageProcessing}
+                                  />
+                                </label>
+                              </div>
+
+                              <div className="flex flex-wrap gap-2">
+                                <button type="button" onClick={handleApplyTocSkew} disabled={ocrLoading || tocImageProcessing} className="btn btn-secondary text-sm">
+                                  Apply Skew Correction
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleApplyTocPerspective}
+                                  disabled={ocrLoading || tocImageProcessing || hasPendingLinearTransforms}
+                                  className="btn btn-secondary text-sm"
+                                  title={hasPendingLinearTransforms ? 'Apply/reset rotate-skew first, then perspective.' : 'Apply 4-corner perspective correction'}
+                                >
+                                  Apply Perspective
+                                </button>
+                                <button type="button" onClick={resetTocPerspectiveCorners} disabled={ocrLoading || tocImageProcessing} className="btn btn-secondary text-sm">
+                                  Reset Corners
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setTocImageRotation(0)
+                                    setTocImageSkewX(0)
+                                    setTocImageSkewY(0)
+                                  }}
+                                  disabled={ocrLoading || tocImageProcessing}
+                                  className="btn btn-secondary text-sm"
+                                >
+                                  Reset Transforms
+                                </button>
+                              </div>
+
+                              <p className="text-xs text-gray-500">
+                                Perspective: drag the 4 blue handles to page corners, then apply perspective correction.
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                Handles snap to edges when close to image bounds for easier alignment.
+                              </p>
+                              {hasPendingLinearTransforms && (
+                                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                                  Apply or reset rotate/skew before applying perspective correction.
+                                </p>
+                              )}
+                              <div className="flex flex-wrap gap-2">
+                                <button type="button" onClick={() => setTocImageWizardStep(2)} className="btn btn-secondary text-sm">Back</button>
+                                <button type="button" onClick={() => setTocImageWizardStep(4)} className="btn btn-primary text-sm">Next: OCR</button>
+                              </div>
+                            </div>
+                          )}
+
+                          {tocImageWizardStep === 4 && (
+                            <div className="space-y-2">
+                              <p className="text-xs font-medium text-gray-700">Step 4: Run OCR</p>
+                              <p className="text-xs text-gray-500">
+                                The preview above is the final processed area that will be sent to OCR, not the full original photo.
+                              </p>
+                              <button
+                                onClick={handleOcrExtract}
+                                disabled={ocrLoading || tocImageProcessing}
+                                className="btn btn-primary w-full"
+                              >
+                                {ocrLoading ? (
+                                  <span className="flex items-center justify-center gap-2">
+                                    <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                    </svg>
+                                    Extracting text...
+                                  </span>
+                                ) : tocImageProcessing ? (
+                                  'Processing image...'
+                                ) : 'Extract Text from Image'}
+                              </button>
+                              <div className="flex flex-wrap gap-2">
+                                <button type="button" onClick={() => setTocImageWizardStep(3)} className="btn btn-secondary text-sm">Back</button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -1788,9 +2707,10 @@ export default function CurriculumPage() {
 
                 {tocMode === 'upload' && tocText.trim() && (
                   <div className="mt-4">
-                    <label className="label">Extracted Text (editable)</label>
+                    <label className="label">Extracted Text (clean up here)</label>
                     <textarea
                       className="input font-mono text-sm"
+                      data-rawarea="true"
                       rows={10}
                       dir={isRTLLanguage(bookTree?.language) ? 'rtl' : 'ltr'}
                       placeholder="OCR output will appear here..."
@@ -1798,190 +2718,260 @@ export default function CurriculumPage() {
                       onChange={(e) => {
                         const nextText = e.target.value
                         setTocText(nextText)
-                        const nextLines = parseOcrLinesFromText(nextText)
-                        setTocOcrLines(nextLines)
-                        if (selectedOcrLineId && !nextLines.some((line) => line.id === selectedOcrLineId)) {
-                          setSelectedOcrLineId(nextLines[0]?.id || null)
+                        setTocOcrLines(parseOcrLinesFromText(nextText))
+                        clearTocSuggestionState()
+                        if (selectedOcrLineId && !parseOcrLinesFromText(nextText).some((line) => line.id === selectedOcrLineId)) {
+                          setSelectedOcrLineId(null)
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        // Only handle merge logic, let all other keys act as normal
+                        if (e.key === 'Backspace') {
+                          const textarea = e.target
+                          const value = textarea.value
+                          const selectionStart = textarea.selectionStart
+                          const selectionEnd = textarea.selectionEnd
+                          // Only at start of a line, no selection
+                          if (selectionStart === selectionEnd && selectionStart > 0) {
+                            // Find previous newline
+                            const before = value.slice(0, selectionStart)
+                            const lastNewline = before.lastIndexOf('\n')
+                            if (lastNewline >= 0 && selectionStart === lastNewline + 1) {
+                              // Prevent default backspace
+                              e.preventDefault()
+                              // Merge this line with previous
+                              const after = value.slice(selectionEnd)
+                              const merged = value.slice(0, lastNewline) + after
+                              setTocText(merged)
+                              setTocOcrLines(parseOcrLinesFromText(merged))
+                              clearTocSuggestionState()
+                              // Move caret to end of previous line
+                              setTimeout(() => {
+                                textarea.selectionStart = textarea.selectionEnd = lastNewline
+                              }, 0)
+                            }
+                          }
                         }
                       }}
                     />
                     <p className="text-xs text-gray-500 mt-1">
-                      Review OCR text, then use AI Suggest or Next: Review.
+                      Clean up the text above, then click <b>Build Structure from Text</b> to extract chapters/topics.
                     </p>
+                    <button
+                      onClick={handleSuggestToc}
+                      disabled={suggestTocMutation.isPending || !tocText.trim()}
+                      className="btn btn-secondary mt-2"
+                    >
+                      {suggestTocMutation.isPending ? 'Building Structure...' : 'Build Structure from Text'}
+                    </button>
                   </div>
                 )}
 
                 {tocMode === 'upload' && tocOcrLines.length > 0 && (
-                  <div className="mt-4 rounded-lg border border-gray-200 p-3 bg-gray-50 space-y-3">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                      <div>
-                        <p className="text-sm font-semibold text-gray-900">OCR Lines (Phase 3)</p>
-                        <p className="text-xs text-gray-500">
-                          C=Chapter | T=Topic | E=Edit | Ctrl+Z/Y=Undo/Redo | ↑↓=Navigate
-                        </p>
-                      </div>
-                      <div className="flex gap-1">
-                        <button
-                          type="button"
-                          onClick={handleUndo}
-                          disabled={undoStackLines.length === 0}
-                          className="btn btn-sm text-xs"
-                          title="Undo (Ctrl+Z)"
-                        >
-                          ↶ Undo
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleRedo}
-                          disabled={redoStackLines.length === 0}
-                          className="btn btn-sm text-xs"
-                          title="Redo (Ctrl+Y)"
-                        >
-                          ↷ Redo
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="max-h-72 overflow-y-auto space-y-2 border border-gray-200 rounded-md bg-white p-2">
-                      {tocOcrLines.map((line) => {
-                        const isEditing = editingLineId === line.id
-                        return (
-                          <div
-                            key={line.id}
-                            className={`px-2 py-2 rounded border transition-colors ${
-                              selectedOcrLineId === line.id
-                                ? 'bg-blue-50 border-blue-300'
-                                : 'bg-white border-gray-200 hover:bg-gray-50'
-                            }`}
-                          >
-                            {isEditing ? (
-                              <div className="space-y-2">
-                                <input
-                                  type="text"
-                                  autoFocus
-                                  value={editingLineText}
-                                  onChange={(e) => setEditingLineText(e.target.value)}
-                                  className="input input-sm w-full"
-                                  placeholder="Edit line text..."
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') {
-                                      saveLine(line.id)
-                                    } else if (e.key === 'Escape') {
-                                      setEditingLineId(null)
-                                      setEditingLineText('')
-                                    }
-                                  }}
-                                />
-                                <div className="flex gap-1">
-                                  <button
-                                    type="button"
-                                    onClick={() => saveLine(line.id)}
-                                    className="btn btn-primary btn-sm text-xs flex-1"
-                                  >
-                                    Save
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setEditingLineId(null)
-                                      setEditingLineText('')
-                                    }}
-                                    className="btn btn-secondary btn-sm text-xs flex-1"
-                                  >
-                                    Cancel
-                                  </button>
-                                </div>
-                              </div>
-                            ) : (
+                  <div className="mt-4">
+                    <button
+                      type="button"
+                      onClick={() => setShowAdvancedOcrMapping((prev) => !prev)}
+                      className="btn btn-sm btn-secondary"
+                    >
+                      {showAdvancedOcrMapping ? 'Hide' : 'Show'} Advanced OCR Lines Panel
+                    </button>
+                    {showAdvancedOcrMapping && (
+                      <div className="mt-2 rounded-lg border border-gray-200 p-3 bg-gray-50 space-y-3">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                          <div>
+                            <p className="text-sm font-semibold text-gray-900">OCR Lines (Advanced)</p>
+                            <p className="text-xs text-gray-500">
+                              C=Chapter | T=Topic | E=Edit | Delete=Remove line | Ctrl+Z/Y=Undo/Redo | ↑↓=Navigate
+                            </p>
+                            <p className="text-xs text-gray-500 mt-1">
+                              Use per-line mapping only if you want fine control. Most users can ignore this panel.
+                            </p>
+                          </div>
+                          <div className="flex gap-1">
+                            <button
+                              type="button"
+                              onClick={handleUndo}
+                              disabled={undoStackLines.length === 0}
+                              className="btn btn-sm text-xs"
+                              title="Undo (Ctrl+Z)"
+                            >
+                              ↶ Undo
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleRedo}
+                              disabled={redoStackLines.length === 0}
+                              className="btn btn-sm text-xs"
+                              title="Redo (Ctrl+Y)"
+                            >
+                              ↷ Redo
+                            </button>
+                          </div>
+                        </div>
+                        {/* ...existing OCR lines panel code here, unchanged... */}
+                        <div className="max-h-72 overflow-y-auto space-y-2 border border-gray-200 rounded-md bg-white p-2">
+                          {tocOcrLines.map((line) => {
+                            const isEditing = editingLineId === line.id
+                            return (
                               <div
-                                className="cursor-pointer hover:opacity-75 transition-opacity"
-                                onClick={() => setSelectedOcrLineId(line.id)}
+                                key={line.id}
+                                className={`px-2 py-2 rounded border transition-colors ${
+                                  selectedOcrLineId === line.id
+                                    ? 'bg-blue-50 border-blue-300'
+                                    : 'bg-white border-gray-200 hover:bg-gray-50'
+                                }`}
                               >
-                                <div className="flex items-start gap-2">
-                                  <span className="text-xs text-gray-500 mt-0.5 min-w-fit">
-                                    {line.line_number}.
-                                  </span>
-                                  <span className="text-sm flex-1">{line.text}</span>
-                                  {line.mappedAs && (
-                                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-green-100 text-green-700 whitespace-nowrap">
-                                      {line.mappedAs === 'chapter'
-                                        ? 'Mapped: Chapter'
-                                        : 'Mapped: Topic'}
-                                    </span>
-                                  )}
-                                </div>
-                                {selectedOcrLineId === line.id && (
-                                  <div className="flex gap-1 mt-2">
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        startEditingLine(line.id, line.text)
+                                {isEditing ? (
+                                  <div className="space-y-2">
+                                    <input
+                                      type="text"
+                                      autoFocus
+                                      value={editingLineText}
+                                      onChange={(e) => setEditingLineText(e.target.value)}
+                                      className="input input-sm w-full"
+                                      placeholder="Edit line text..."
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                          saveLine(line.id)
+                                        } else if (e.key === 'Escape') {
+                                          setEditingLineId(null)
+                                          setEditingLineText('')
+                                        }
                                       }}
-                                      className="text-xs text-blue-600 hover:text-blue-800 font-medium"
-                                      title="Edit (E)"
-                                    >
-                                      ✎ Edit
-                                    </button>
-                                    {tocOcrLines.findIndex((l) => l.id === line.id) <
-                                      tocOcrLines.length - 1 && (
+                                    />
+                                    <div className="flex gap-1">
                                       <button
                                         type="button"
-                                        onClick={(e) => {
-                                          e.stopPropagation()
-                                          mergeWithNext(line.id)
-                                        }}
-                                        className="text-xs text-orange-600 hover:text-orange-800 font-medium"
-                                        title="Merge with next line"
+                                        onClick={() => saveLine(line.id)}
+                                        className="btn btn-primary btn-sm text-xs flex-1"
                                       >
-                                        ⤵ Merge
+                                        Save
                                       </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setEditingLineId(null)
+                                          setEditingLineText('')
+                                        }}
+                                        className="btn btn-secondary btn-sm text-xs flex-1"
+                                      >
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div
+                                    className="cursor-pointer hover:opacity-75 transition-opacity"
+                                    onClick={() => setSelectedOcrLineId(line.id)}
+                                  >
+                                    <div className="flex items-start gap-2">
+                                      <span className="text-xs text-gray-500 mt-0.5 min-w-fit">
+                                        {line.line_number}.
+                                      </span>
+                                      <span className="text-sm flex-1">{line.text}</span>
+                                      {line.mappedAs && (
+                                        <span className="text-[11px] px-2 py-0.5 rounded-full bg-green-100 text-green-700 whitespace-nowrap">
+                                          {line.mappedAs === 'chapter'
+                                            ? 'Mapped: Chapter'
+                                            : 'Mapped: Topic'}
+                                        </span>
+                                      )}
+                                    </div>
+                                    {selectedOcrLineId === line.id && (
+                                      <div className="space-y-2 mt-2">
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                          <div className={`rounded border px-2 py-1 text-xs ${
+                                            line.mappedAs === 'chapter'
+                                              ? 'border-blue-300 bg-blue-50 text-blue-800'
+                                              : 'border-gray-200 bg-white text-gray-400'
+                                          }`}>
+                                            <span className="font-semibold">Chapter Placeholder:</span>{' '}
+                                            {line.mappedAs === 'chapter'
+                                              ? `${line.mappedNumber ? `Ch ${line.mappedNumber}` : 'Chapter'} - ${line.text}`
+                                              : 'Empty'}
+                                          </div>
+                                          <div className={`rounded border px-2 py-1 text-xs ml-4 sm:ml-6 ${
+                                            (line.mappedAs || '').startsWith('topic:')
+                                              ? 'border-emerald-300 bg-emerald-50 text-emerald-800'
+                                              : 'border-gray-200 bg-white text-gray-400'
+                                          }`}>
+                                            <span className="font-semibold">Topic Placeholder:</span>{' '}
+                                            {(line.mappedAs || '').startsWith('topic:')
+                                              ? `${line.mappedNumber ? `T ${line.mappedNumber}` : 'Topic'} - ${line.text}`
+                                              : 'Empty'}
+                                          </div>
+                                        </div>
+                                        <div className="flex flex-wrap gap-1">
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              mapOcrLineAsChapter(line)
+                                            }}
+                                            className="text-xs text-blue-700 hover:text-blue-900 font-medium"
+                                            title="Place in Chapter placeholder"
+                                          >
+                                            ⇢ Place as Chapter
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              mapOcrLineAsTopic(line, targetChapterIndex)
+                                            }}
+                                            className="text-xs text-emerald-700 hover:text-emerald-900 font-medium"
+                                            title="Place in Topic placeholder"
+                                          >
+                                            ⇢ Place as Topic
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              startEditingLine(line.id, line.text)
+                                            }}
+                                            className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                                            title="Edit (E)"
+                                          >
+                                            ✎ Edit
+                                          </button>
+                                          {tocOcrLines.findIndex((l) => l.id === line.id) <
+                                            tocOcrLines.length - 1 && (
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation()
+                                                mergeWithNext(line.id)
+                                              }}
+                                              className="text-xs text-orange-600 hover:text-orange-800 font-medium"
+                                              title="Merge with next line"
+                                            >
+                                              ⤵ Merge
+                                            </button>
+                                          )}
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              handleDeleteOcrLine(line.id)
+                                            }}
+                                            className="text-xs text-red-600 hover:text-red-800 font-medium"
+                                            title="Delete line (undo supported)"
+                                          >
+                                            🗑 Delete
+                                          </button>
+                                        </div>
+                                      </div>
                                     )}
                                   </div>
                                 )}
                               </div>
-                            )}
-                          </div>
-                        )
-                      })}
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                      <button
-                        type="button"
-                        onClick={handleMapSelectedLineAsChapter}
-                        disabled={!selectedOcrLine}
-                        className="btn btn-secondary text-sm"
-                      >
-                        Use Selected as Chapter
-                      </button>
-
-                      <select
-                        value={targetChapterIndex}
-                        onChange={(e) => setTargetChapterIndex(parseInt(e.target.value, 10) || 0)}
-                        className="input text-sm"
-                        disabled={tocChapters.length === 0}
-                      >
-                        {tocChapters.length === 0 ? (
-                          <option value={0}>No chapter available</option>
-                        ) : (
-                          tocChapters.map((chapter, chapterIndex) => (
-                            <option key={`map-ch-${chapterIndex}`} value={chapterIndex}>
-                              {`Chapter ${chapterIndex + 1}: ${chapter.title || '(Untitled)'}`}
-                            </option>
-                          ))
-                        )}
-                      </select>
-
-                      <button
-                        type="button"
-                        onClick={handleMapSelectedLineAsTopic}
-                        disabled={!selectedOcrLine || tocChapters.length === 0}
-                        className="btn btn-primary text-sm"
-                      >
-                        Use Selected as Topic
-                      </button>
-                    </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -2178,13 +3168,6 @@ export default function CurriculumPage() {
               {tocStep === 'input' && tocMode === 'upload' && !!tocText.trim() && (
                 <>
                   <button
-                    onClick={handleSuggestToc}
-                    disabled={suggestTocMutation.isPending || !tocText.trim()}
-                    className="btn btn-secondary"
-                  >
-                    {suggestTocMutation.isPending ? 'Suggesting...' : 'AI Suggest'}
-                  </button>
-                  <button
                     onClick={handleTocSubmit}
                     disabled={parseTocMutation.isPending || !tocText.trim()}
                     className="btn btn-primary"
@@ -2214,6 +3197,8 @@ export default function CurriculumPage() {
               )}
             </div>
           </div>
+
+
         </div>
       )}
 

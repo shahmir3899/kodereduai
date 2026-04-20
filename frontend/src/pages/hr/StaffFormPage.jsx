@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { PasswordInput } from '../../components'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { hrApi } from '../../services/api'
@@ -499,8 +500,7 @@ export default function StaffFormPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="label">Password *</label>
-                    <input
-                      type="password"
+                    <PasswordInput
                       className="input"
                       value={staffUserForm.password}
                       onChange={(e) => setStaffUserForm(f => ({ ...f, password: e.target.value }))}
@@ -510,8 +510,7 @@ export default function StaffFormPage() {
                   </div>
                   <div>
                     <label className="label">Confirm Password *</label>
-                    <input
-                      type="password"
+                    <PasswordInput
                       className="input"
                       value={staffUserForm.confirm_password}
                       onChange={(e) => setStaffUserForm(f => ({ ...f, confirm_password: e.target.value }))}

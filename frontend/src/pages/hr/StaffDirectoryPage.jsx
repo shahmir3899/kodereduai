@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useCallback } from 'react'
+import { PasswordInput } from '../../components'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { hrApi, usersApi } from '../../services/api'
@@ -1079,11 +1080,11 @@ export default function StaffDirectoryPage() {
                     <div className="grid grid-cols-2 gap-2">
                       <div>
                         <label className="block text-xs font-medium text-gray-700 mb-1">Password *</label>
-                        <input type="password" className="input text-sm" value={quickUserForm.password} onChange={e => setQuickUserForm(f => ({ ...f, password: e.target.value }))} placeholder="Min 8 chars" required />
+                        <PasswordInput className="input text-sm" value={quickUserForm.password} onChange={e => setQuickUserForm(f => ({ ...f, password: e.target.value }))} placeholder="Min 8 chars" required />
                       </div>
                       <div>
                         <label className="block text-xs font-medium text-gray-700 mb-1">Confirm *</label>
-                        <input type="password" className="input text-sm" value={quickUserForm.confirm_password} onChange={e => setQuickUserForm(f => ({ ...f, confirm_password: e.target.value }))} placeholder="Confirm" required />
+                        <PasswordInput className="input text-sm" value={quickUserForm.confirm_password} onChange={e => setQuickUserForm(f => ({ ...f, confirm_password: e.target.value }))} placeholder="Confirm" required />
                       </div>
                     </div>
                   </div>
@@ -1160,8 +1161,7 @@ export default function StaffDirectoryPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Password *</label>
-                  <input
-                    type="password"
+                  <PasswordInput
                     className="input"
                     value={convertForm.password}
                     onChange={(e) => setConvertForm(f => ({ ...f, password: e.target.value }))}
@@ -1170,8 +1170,7 @@ export default function StaffDirectoryPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Confirm *</label>
-                  <input
-                    type="password"
+                  <PasswordInput
                     className="input"
                     value={convertForm.confirm_password}
                     onChange={(e) => setConvertForm(f => ({ ...f, confirm_password: e.target.value }))}
@@ -1296,8 +1295,7 @@ export default function StaffDirectoryPage() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Default Password *</label>
-                    <input
-                      type="password"
+                    <PasswordInput
                       className="input"
                       value={bulkConvertPassword}
                       onChange={(e) => setBulkConvertPassword(e.target.value)}

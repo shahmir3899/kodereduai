@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import { PasswordInput } from '../components'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
@@ -1582,8 +1583,7 @@ export default function StudentsPage() {
                       <div className="grid grid-cols-2 gap-2">
                         <div>
                           <label className="block text-xs font-medium text-gray-700 mb-1">Password *</label>
-                          <input
-                            type="password"
+                          <PasswordInput
                             className="input text-sm"
                             value={studentUserForm.password}
                             onChange={(e) => setStudentUserForm(f => ({ ...f, password: e.target.value }))}
@@ -1593,8 +1593,7 @@ export default function StudentsPage() {
                         </div>
                         <div>
                           <label className="block text-xs font-medium text-gray-700 mb-1">Confirm *</label>
-                          <input
-                            type="password"
+                          <PasswordInput
                             className="input text-sm"
                             value={studentUserForm.confirm_password}
                             onChange={(e) => setStudentUserForm(f => ({ ...f, confirm_password: e.target.value }))}
@@ -1765,8 +1764,7 @@ export default function StudentsPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Password *</label>
-                  <input
-                    type="password"
+                  <PasswordInput
                     className="input"
                     value={convertForm.password}
                     onChange={(e) => setConvertForm(f => ({ ...f, password: e.target.value }))}
@@ -1775,8 +1773,7 @@ export default function StudentsPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Confirm *</label>
-                  <input
-                    type="password"
+                  <PasswordInput
                     className="input"
                     value={convertForm.confirm_password}
                     onChange={(e) => setConvertForm(f => ({ ...f, confirm_password: e.target.value }))}
@@ -1824,8 +1821,7 @@ export default function StudentsPage() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Default Password *</label>
-                  <input
-                    type="password"
+                  <PasswordInput
                     className="input"
                     value={bulkConvertPassword}
                     onChange={(e) => setBulkConvertPassword(e.target.value)}

@@ -75,6 +75,68 @@ class ChangePasswordView(APIView):
         return Response({'message': 'Password changed successfully.'})
 
 
+# =============================
+# Password Reset APIViews
+# =============================
+from rest_framework.permissions import AllowAny
+from .serializers import (
+    PasswordResetRequestSerializer,
+    PasswordResetTokenValidateSerializer,
+    PasswordResetConfirmSerializer,
+)
+from django.contrib.auth.tokens import default_token_generator
+from django.utils.http import urlsafe_base64_encode
+from django.utils.encoding import force_bytes
+from django.conf import settings
+from django.contrib.auth import get_user_model
+User = get_user_model()
+
+class PasswordResetRequestView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = PasswordResetRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        email = serializer.validated_data['email']
+        # Always return success, never reveal if user exists
+        users = User.objects.filter(email__iexact=email, is_active=True)
+        for user in users:
+            uid = urlsafe_base64_encode(force_bytes(user.pk))
+            token = default_token_generator.make_token(user)
+            reset_url = f"{getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')}/reset-password?uid={uid}&token={token}"
+            # Send email (or WhatsApp/SMS if desired)
+            from django.core.mail import send_mail
+            send_mail(
+                subject="Password Reset Request",
+                message=f"Click the link to reset your password: {reset_url}",
+                from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@example.com'),
+                recipient_list=[user.email],
+                fail_silently=True,
+            )
+        return Response({'message': 'If an account exists for this email, a reset link has been sent.'})
+
+
+class PasswordResetTokenValidateView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = PasswordResetTokenValidateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        return Response({'valid': True})
+
+
+class PasswordResetConfirmView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        serializer = PasswordResetConfirmSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.validated_data['user']
+        user.set_password(serializer.validated_data['new_password'])
+        user.save()
+        return Response({'message': 'Password has been reset successfully.'})
+
+
 class UserViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
     """
     ViewSet for managing users within a school.

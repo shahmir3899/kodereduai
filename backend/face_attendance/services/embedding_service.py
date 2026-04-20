@@ -60,11 +60,16 @@ class EmbeddingService:
         face_locations = self._fr.face_locations(image_array, model='hog')
 
         if len(face_locations) == 0:
-            raise ValueError('No face detected in the enrollment image.')
+            raise ValueError(
+                'No face detected in the enrollment image. '
+                'Please ensure the photo shows one clear front-facing face with good lighting, '
+                'no blur, and retry with a clearer portrait photo.'
+            )
         if len(face_locations) > 1:
             raise ValueError(
                 f'Multiple faces detected ({len(face_locations)}). '
-                'Enrollment requires exactly one face.'
+                'Enrollment requires exactly one face per photo. '
+                'Please retry with a photo containing only the student.'
             )
 
         encodings = self._fr.face_encodings(

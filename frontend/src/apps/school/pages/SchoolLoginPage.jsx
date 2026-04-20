@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { PasswordInput } from '../../../components'
 import { useAuth } from '../../../contexts/AuthContext'
 import { useToast } from '../../../components/Toast'
 import LoadingSpinner from '../../../components/LoadingSpinner'
@@ -111,27 +112,28 @@ export default function SchoolLoginPage({ school }) {
               <label className="label" htmlFor="username">
                 Username
               </label>
-              <input
-                type="text"
-                id="username"
-                className="input"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Enter your username"
-                required
-                disabled={loading}
-                autoFocus
-              />
+              <div className="relative w-full">
+                <input
+                  type="text"
+                  id="username"
+                  className="input bg-blue-100"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="Enter your username"
+                  required
+                  disabled={loading}
+                  autoFocus
+                />
+              </div>
             </div>
 
             <div className="mb-6">
               <label className="label" htmlFor="password">
                 Password
               </label>
-              <input
-                type="password"
+              <PasswordInput
                 id="password"
-                className="input"
+                className="input bg-blue-100"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Enter your password"

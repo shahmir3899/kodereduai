@@ -1,9 +1,11 @@
 import { useState } from 'react'
+import { PasswordInput } from '../components'
 import { useMutation } from '@tanstack/react-query'
 import { useAuth } from '../contexts/AuthContext'
 import { authApi } from '../services/api'
 import { useToast } from '../components/Toast'
 import WhatsAppTick from '../components/WhatsAppTick'
+import FieldMatchTick from '../components/FieldMatchTick'
 
 // ---- Profile Tab ----
 function ProfileTab() {
@@ -162,9 +164,8 @@ function SecurityTab() {
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label className="label" htmlFor="old_password">Current Password</label>
-          <input
+          <PasswordInput
             id="old_password"
-            type="password"
             className="input"
             value={form.old_password}
             onChange={handleChange('old_password')}
@@ -174,9 +175,8 @@ function SecurityTab() {
         </div>
         <div>
           <label className="label" htmlFor="new_password">New Password</label>
-          <input
+          <PasswordInput
             id="new_password"
-            type="password"
             className="input"
             value={form.new_password}
             onChange={handleChange('new_password')}
@@ -184,16 +184,16 @@ function SecurityTab() {
             required
           />
         </div>
-        <div>
+        <div className="relative">
           <label className="label" htmlFor="confirm_password">Confirm New Password</label>
-          <input
+          <PasswordInput
             id="confirm_password"
-            type="password"
             className="input"
             value={form.confirm_password}
             onChange={handleChange('confirm_password')}
             placeholder="Confirm new password"
             required
+            matchTick={<FieldMatchTick show={!!form.confirm_password && form.new_password === form.confirm_password} />}
           />
         </div>
         <div className="flex justify-end pt-2">
@@ -215,8 +215,7 @@ function AccountInfoSection() {
   const { user } = useAuth()
 
   const infoItems = [
-    { label: 'Username', value: user?.username },
-    { label: 'Role', value: user?.role_display },
+    { label: 'Name', value: user?.first_name || user?.last_name ? `${user?.first_name || ''} ${user?.last_name || ''}`.trim() : user?.username },
     { label: 'Organization', value: user?.organization_name || 'N/A' },
     {
       label: 'School(s)',

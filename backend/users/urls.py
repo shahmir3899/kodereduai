@@ -15,6 +15,9 @@ from .views import (
     SwitchSchoolView,
     RegisterPushTokenView,
     UnregisterPushTokenView,
+    PasswordResetRequestView,
+    PasswordResetTokenValidateView,
+    PasswordResetConfirmView,
 )
 
 router = DefaultRouter()
@@ -36,6 +39,11 @@ urlpatterns = [
 
     # Super Admin user creation
     path('admin/users/create/', SuperAdminUserCreateView.as_view(), name='admin_user_create'),
+
+    # Password reset endpoints
+    path('auth/password-reset/', PasswordResetRequestView.as_view(), name='password_reset_request'),
+    path('auth/password-reset/validate-token/', PasswordResetTokenValidateView.as_view(), name='password_reset_validate_token'),
+    path('auth/password-reset/confirm/', PasswordResetConfirmView.as_view(), name='password_reset_confirm'),
 
     # User management (via router)
     path('', include(router.urls)),
