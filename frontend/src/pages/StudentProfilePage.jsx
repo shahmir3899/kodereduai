@@ -73,6 +73,8 @@ export default function StudentProfilePage() {
   })
   const [editRollManuallyEdited, setEditRollManuallyEdited] = useState(false)
   const [recommendedEditRoll, setRecommendedEditRoll] = useState('')
+  const [showStatusModal, setShowStatusModal] = useState(false)
+  const [statusForm, setStatusForm] = useState({ status: '', status_date: '', status_reason: '' })
   const [showReclassifyModal, setShowReclassifyModal] = useState(false)
   const [reclassifyForm, setReclassifyForm] = useState({
     target_session_class_id: '',
@@ -216,6 +218,19 @@ export default function StudentProfilePage() {
     },
   })
 
+  const updateStatusMutation = useMutation({
+    mutationFn: (payload) => studentsApi.updateStudent(id, payload),
+    onSuccess: () => {
+      showSuccess('Student status updated successfully')
+      setShowStatusModal(false)
+      queryClient.invalidateQueries({ queryKey: ['student', id] })
+      queryClient.invalidateQueries({ queryKey: ['students'] })
+    },
+    onError: (error) => {
+      showError(getApiErrorMessage(error, 'Failed to update student status'))
+    },
+  })
+
   const student = studentData?.data
   const summary = summaryData?.data
   const ai = aiData?.data
@@ -340,6 +355,27 @@ export default function StudentProfilePage() {
 
     updateStudentMutation.mutate({
       ...payload,
+    })
+  }
+
+  const handleOpenStatusModal = () => {
+    setStatusForm({
+      status: student?.status || 'ACTIVE',
+      status_date: student?.status_date || '',
+      status_reason: student?.status_reason || '',
+    })
+    setShowStatusModal(true)
+  }
+
+  const handleSubmitStatus = () => {
+    if (!statusForm.status) {
+      showError('Status is required')
+      return
+    }
+    updateStatusMutation.mutate({
+      status: statusForm.status,
+      status_date: statusForm.status_date || null,
+      status_reason: statusForm.status_reason,
     })
   }
 
@@ -497,6 +533,12 @@ export default function StudentProfilePage() {
               className="px-4 py-2 bg-gray-100 text-gray-800 border border-gray-200 rounded-lg hover:bg-gray-200 text-sm"
             >
               Edit Profile
+            </button>
+            <button
+              onClick={handleOpenStatusModal}
+              className="px-4 py-2 bg-amber-100 text-amber-800 border border-amber-200 rounded-lg hover:bg-amber-200 text-sm"
+            >
+              Update Status
             </button>
             <button
               onClick={handleOpenReclassifyModal}
@@ -712,6 +754,61 @@ export default function StudentProfilePage() {
               <button type="button" onClick={() => setShowEditModal(false)} className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">Cancel</button>
               <button type="button" onClick={handleSubmitEdit} disabled={updateStudentMutation.isPending} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50">
                 {updateStudentMutation.isPending ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showStatusModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-md">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h2 className="text-lg font-semibold text-gray-900">Update Student Status</h2>
+              <p className="text-sm text-gray-500 mt-1">Use this for mid-session status changes (e.g. student left, transferred, suspended).</p>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                <select
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  value={statusForm.status}
+                  onChange={(e) => setStatusForm((p) => ({ ...p, status: e.target.value }))}
+                >
+                  <option value="ACTIVE">Active</option>
+                  <option value="WITHDRAWN">Withdrawn (Left school)</option>
+                  <option value="TRANSFERRED">Transferred (Moved to another school)</option>
+                  <option value="SUSPENDED">Suspended</option>
+                  <option value="GRADUATED">Graduated</option>
+                  <option value="REPEAT">Repeat</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Effective Date</label>
+                <input
+                  type="date"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  value={statusForm.status_date}
+                  onChange={(e) => setStatusForm((p) => ({ ...p, status_date: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Reason</label>
+                <textarea
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  value={statusForm.status_reason}
+                  onChange={(e) => setStatusForm((p) => ({ ...p, status_reason: e.target.value }))}
+                  placeholder="Brief reason for status change"
+                />
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
+              <button type="button" onClick={() => setShowStatusModal(false)} className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">Cancel</button>
+              <button type="button" onClick={handleSubmitStatus} disabled={updateStatusMutation.isPending} className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50">
+                {updateStatusMutation.isPending ? 'Saving...' : 'Save Status'}
               </button>
             </div>
           </div>

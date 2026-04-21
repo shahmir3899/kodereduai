@@ -165,6 +165,10 @@ export const attendanceApi = {
   // Drift detection
   getDriftHistory: (params) => api.get('/api/attendance/records/drift_history/', { params }),
 
+  // Download register as PDF
+  downloadRegisterPdf: (params) =>
+    api.get('/api/attendance/records/download_register_pdf/', { params, responseType: 'blob' }),
+
   // Anomaly detection
   getAnomalies: (params) => api.get('/api/attendance/anomalies/', { params }),
   getAnomaly: (id) => api.get(`/api/attendance/anomalies/${id}/`),
@@ -327,6 +331,7 @@ export const financeApi = {
   getAccountBalancesAll: (params) => api.get('/api/finance/accounts/balances_all/', { params }),
   getAccountLedger: (params) => api.get('/api/finance/accounts/ledger/', { params }),
   exportLedger: (params) => api.get('/api/finance/accounts/export-ledger/', { params, responseType: 'blob' }),
+  exportLedgerPdf: (params) => api.get('/api/finance/accounts/export-ledger-pdf/', { params, responseType: 'blob' }),
   getRecentEntries: (params) => api.get('/api/finance/accounts/recent_entries/', { params }),
 
   // Monthly Closings
@@ -375,6 +380,7 @@ export const hrApi = {
   createStaffUserAccount: (id, data) => api.post(`/api/hr/staff/${id}/create-user-account/`, data),
   linkStaffUserAccount: (id, data) => api.post(`/api/hr/staff/${id}/link-user-account/`, data),
   unlinkStaffUserAccount: (id) => api.post(`/api/hr/staff/${id}/unlink-user-account/`),
+  updateStaffUserRole: (id, data) => api.post(`/api/hr/staff/${id}/update-user-role/`, data),
   bulkCreateStaffAccounts: (data) => api.post('/api/hr/staff/bulk-create-accounts/', data),
 
   // Departments
@@ -928,6 +934,7 @@ export const lmsApi = {
   getBookTree: (id) => api.get(`/api/lms/books/${id}/tree/`),
   bulkTOC: (id, data) => api.post(`/api/lms/books/${id}/bulk_toc/`, data),
   parseTOC: (id, data) => api.post(`/api/lms/books/${id}/parse_toc/`, data),
+  parseTOCStream: (id, data) => api.post(`/api/lms/books/${id}/parse_toc_stream/`, data),
   suggestTOC: (id, data) => api.post(`/api/lms/books/${id}/suggest_toc/`, data),
   applyTOC: (id, data) => api.post(`/api/lms/books/${id}/apply_toc/`, data),
   ocrTOC: (bookId, imageFile) => {

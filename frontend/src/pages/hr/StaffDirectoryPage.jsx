@@ -26,6 +26,13 @@ const typeBadge = {
 
 const QUICK_ROLE_LABELS = { HR_MANAGER: 'HR Manager', ACCOUNTANT: 'Accountant', TEACHER: 'Teacher', STAFF: 'Staff' }
 
+const TEACHING_DESIGNATION_PATTERN = /(teacher|lecturer|instructor|professor|tutor|faculty)/i
+
+const isTeachingMember = (member) => {
+  const designation = member?.designation_name || ''
+  return TEACHING_DESIGNATION_PATTERN.test(designation)
+}
+
 export default function StaffDirectoryPage() {
   const queryClient = useQueryClient()
   const { showError, showSuccess } = useToast()
@@ -35,6 +42,7 @@ export default function StaffDirectoryPage() {
   const debouncedSearch = useDebounce(search, 300)
   const [departmentFilter, setDepartmentFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('ACTIVE')
+  const [staffCategoryFilter, setStaffCategoryFilter] = useState('ALL')
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [viewMember, setViewMember] = useState(null)
 
@@ -424,6 +432,15 @@ export default function StaffDirectoryPage() {
   const allStaff = staffData?.data?.results || staffData?.data || []
   const departments = deptData?.data?.results || deptData?.data || []
   const designations = desigData?.data?.results || desigData?.data || []
+  const activeStaff = useMemo(
+    () => allStaff.filter((m) => m.is_active && m.employment_status === 'ACTIVE'),
+    [allStaff]
+  )
+  const teachingStaffCount = useMemo(
+    () => activeStaff.filter((m) => isTeachingMember(m)).length,
+    [activeStaff]
+  )
+  const nonTeachingStaffCount = activeStaff.length - teachingStaffCount
 
   // Client-side filtering
   const filteredStaff = useMemo(() => {
@@ -448,8 +465,16 @@ export default function StaffDirectoryPage() {
       result = result.filter((m) => m.employment_status === statusFilter)
     }
 
+    if (staffCategoryFilter === 'TEACHING') {
+      result = result.filter((m) => isTeachingMember(m))
+    }
+
+    if (staffCategoryFilter === 'NON_TEACHING') {
+      result = result.filter((m) => !isTeachingMember(m))
+    }
+
     return result
-  }, [allStaff, debouncedSearch, departmentFilter, statusFilter])
+  }, [allStaff, debouncedSearch, departmentFilter, statusFilter, staffCategoryFilter])
 
   // Staff without accounts (for bulk select)
   const staffWithoutAccounts = useMemo(() => {
@@ -465,7 +490,7 @@ export default function StaffDirectoryPage() {
   }, [staffWithoutAccounts, selectedStaff.size])
 
   // Stats
-  const totalActive = allStaff.filter((m) => m.is_active && m.employment_status === 'ACTIVE').length
+  const totalActive = activeStaff.length
 
   return (
     <div>
@@ -493,6 +518,36 @@ export default function StaffDirectoryPage() {
             Full Form
           </Link>
         </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+        <button
+          type="button"
+          onClick={() => setStaffCategoryFilter('ALL')}
+          className={`card text-left border-l-4 transition ${staffCategoryFilter === 'ALL' ? 'border-l-blue-500 ring-2 ring-blue-100' : 'border-l-transparent hover:border-l-blue-300'}`}
+        >
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">All Members</p>
+          <p className="text-2xl font-bold text-gray-900 mt-1">{totalActive}</p>
+          <p className="text-xs text-gray-500 mt-1">Active staff in this school</p>
+        </button>
+        <button
+          type="button"
+          onClick={() => setStaffCategoryFilter('TEACHING')}
+          className={`card text-left border-l-4 transition ${staffCategoryFilter === 'TEACHING' ? 'border-l-green-500 ring-2 ring-green-100' : 'border-l-transparent hover:border-l-green-300'}`}
+        >
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Teaching</p>
+          <p className="text-2xl font-bold text-green-700 mt-1">{teachingStaffCount}</p>
+          <p className="text-xs text-gray-500 mt-1">Teacher designations</p>
+        </button>
+        <button
+          type="button"
+          onClick={() => setStaffCategoryFilter('NON_TEACHING')}
+          className={`card text-left border-l-4 transition ${staffCategoryFilter === 'NON_TEACHING' ? 'border-l-orange-500 ring-2 ring-orange-100' : 'border-l-transparent hover:border-l-orange-300'}`}
+        >
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Non-Teaching</p>
+          <p className="text-2xl font-bold text-orange-700 mt-1">{nonTeachingStaffCount}</p>
+          <p className="text-xs text-gray-500 mt-1">Operations and support staff</p>
+        </button>
       </div>
 
       {/* Filters */}

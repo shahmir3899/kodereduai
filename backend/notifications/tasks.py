@@ -75,67 +75,81 @@ def send_fee_overdue_alerts():
 @shared_task
 def send_daily_absence_summary():
     """
-    Daily summary of absent students sent to school admins.
-    Runs at the configured time (default: 5 PM).
+    Daily comprehensive school report sent to SCHOOL_ADMIN and PRINCIPAL users.
+    Covers: attendance, lesson plans submitted today, pending fees, staff leave.
+    Runs at 5 PM daily (see CELERY_BEAT_SCHEDULE).
+    Replaces the old absence-only summary; uses trigger_daily_school_report().
     """
     from schools.models import School
-    from attendance.models import AttendanceRecord
-    from users.models import User
-    from .engine import NotificationEngine
+    from .triggers import trigger_daily_school_report
 
     today = timezone.now().date()
     schools = School.objects.filter(is_active=True)
 
     for school in schools:
         try:
-            absent_count = AttendanceRecord.objects.filter(
-                school=school,
-                date=today,
-                status='ABSENT',
-            ).count()
-
-            present_count = AttendanceRecord.objects.filter(
-                school=school,
-                date=today,
-                status='PRESENT',
-            ).count()
-
-            total = absent_count + present_count
-            if total == 0:
-                continue
-
-            engine = NotificationEngine(school)
-            admins = User.objects.filter(
-                school=school,
-                role__in=['SCHOOL_ADMIN', 'PRINCIPAL'],
-            )
-
-            title = f"Daily Attendance Summary - {today.strftime('%d %B %Y')}"
-            body = (
-                f"Attendance Summary for {school.name}:\n"
-                f"Present: {present_count}\n"
-                f"Absent: {absent_count}\n"
-                f"Total: {total}\n"
-                f"Attendance Rate: {round(present_count / total * 100, 1)}%"
-            )
-
-            for admin_user in admins:
-                engine.send(
-                    event_type='GENERAL',
-                    channel='IN_APP',
-                    context={},
-                    recipient_identifier=str(admin_user.id),
-                    recipient_type='ADMIN',
-                    recipient_user=admin_user,
-                    title=title,
-                    body=body,
-                )
-
+            trigger_daily_school_report(school, today)
         except Exception as e:
-            logger.error(f"Daily summary failed for {school.name}: {e}")
+            logger.error(f"Daily report failed for {school.name}: {e}")
 
-    logger.info("Daily absence summaries sent")
+    logger.info("Daily school reports sent")
     return {'date': str(today)}
+
+
+@shared_task
+def send_class_teacher_fee_reminders():
+    """
+    Send consolidated fee-pending notifications to class teachers.
+    Each teacher gets a single in-app message listing unpaid students in
+    their class for the current month.
+    Runs on the 10th and 15th of each month (see CELERY_BEAT_SCHEDULE).
+    """
+    from schools.models import School
+    from .triggers import trigger_class_teacher_fee_pending
+
+    now = timezone.now()
+    month = now.month
+    year = now.year
+
+    schools = School.objects.filter(is_active=True)
+    total_sent = 0
+
+    for school in schools:
+        try:
+            sent = trigger_class_teacher_fee_pending(school, month, year)
+            total_sent += sent
+        except Exception as e:
+            logger.error(f"Class-teacher fee reminder failed for {school.name}: {e}")
+
+    logger.info(f"Class-teacher fee reminders complete: {total_sent} teachers notified")
+    return {'total_sent': total_sent}
+
+
+@shared_task
+def send_class_teacher_attendance_reminders():
+    """
+    Send class-teacher reminders at 11:00 when attendance is still unmarked.
+
+    Conditions per assignment:
+    - Day is not OFF day for that class
+    - Teacher is marked PRESENT in staff attendance
+    - Student attendance is not yet marked for class/date
+    """
+    from schools.models import School
+    from .triggers import trigger_class_teacher_attendance_pending
+
+    today = timezone.localdate()
+    schools = School.objects.filter(is_active=True)
+    total_sent = 0
+
+    for school in schools:
+        try:
+            total_sent += trigger_class_teacher_attendance_pending(school, today)
+        except Exception as e:
+            logger.error(f"Class-teacher attendance reminder failed for {school.name}: {e}")
+
+    logger.info(f"Class-teacher attendance reminders complete: {total_sent} teachers notified")
+    return {'total_sent': total_sent, 'date': str(today)}
 
 
 @shared_task

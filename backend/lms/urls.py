@@ -8,7 +8,7 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     BookViewSet, ChapterViewSet, TopicViewSet,
     LessonPlanViewSet, AssignmentViewSet, AssignmentSubmissionViewSet,
-    generate_lesson_plan_ai,
+    generate_lesson_plan_ai, generate_exam_questions_ai,
 )
 
 router = DefaultRouter()
@@ -28,5 +28,7 @@ urlpatterns = [
     ),
     # AI lesson plan generation
     path('generate-lesson-plan/', generate_lesson_plan_ai, name='generate-lesson-plan'),
+    # Phase 6: AI exam question generation
+    path('generate-exam-questions/', generate_exam_questions_ai, name='generate-exam-questions'),
     path('', include(router.urls)),
 ]

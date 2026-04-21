@@ -2338,6 +2338,95 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             logger.error(f"Error exporting ledger: {str(e)}")
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+    @action(detail=False, methods=['get'], url_path='export-ledger-pdf')
+    def export_ledger_pdf(self, request):
+        """Export account ledger as PDF file."""
+        try:
+            account_id = request.query_params.get('account_id')
+            if not account_id:
+                return Response({'error': 'account_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+            account = Account.objects.get(id=account_id)
+
+            # Reuse ledger endpoint data so filters and permissions stay consistent.
+            ledger_response = self.ledger(request)
+            if getattr(ledger_response, 'status_code', status.HTTP_200_OK) >= 400:
+                return ledger_response
+            ledger_data = ledger_response.data
+
+            from fpdf import FPDF
+
+            def safe_text(value):
+                return str(value or '').encode('latin-1', 'replace').decode('latin-1')
+
+            def format_amount(value):
+                return f"{float(value or 0):,.2f}"
+
+            type_labels = {
+                'fee_payment': 'Fee Payment',
+                'other_income': 'Other Income',
+                'expense': 'Expense',
+                'transfer_in': 'Transfer In',
+                'transfer_out': 'Transfer Out',
+            }
+
+            pdf = FPDF(orientation='L', unit='mm', format='A4')
+            pdf.set_auto_page_break(auto=True, margin=10)
+            pdf.add_page()
+
+            pdf.set_font('Helvetica', 'B', 14)
+            pdf.cell(0, 8, safe_text(f"Account Ledger - {account.name}"), ln=1)
+            pdf.set_font('Helvetica', '', 10)
+            pdf.cell(0, 6, safe_text(f"Generated: {date.today().isoformat()}"), ln=1)
+            pdf.ln(2)
+
+            pdf.set_font('Helvetica', '', 10)
+            pdf.cell(70, 6, safe_text(f"Opening Balance: {format_amount(ledger_data.get('opening_balance'))}"))
+            pdf.cell(60, 6, safe_text(f"Total Credits: {format_amount(ledger_data.get('total_credits'))}"))
+            pdf.cell(60, 6, safe_text(f"Total Debits: {format_amount(ledger_data.get('total_debits'))}"))
+            pdf.cell(0, 6, safe_text(f"Closing Balance: {format_amount(ledger_data.get('closing_balance'))}"), ln=1)
+            pdf.ln(3)
+
+            headers = ['Account', 'Date', 'Type', 'Description', 'School', 'Credit', 'Debit', 'Running']
+            col_widths = [32, 22, 24, 72, 52, 20, 20, 25]
+
+            pdf.set_font('Helvetica', 'B', 9)
+            for header, width in zip(headers, col_widths):
+                pdf.cell(width, 7, safe_text(header), border=1)
+            pdf.ln()
+
+            pdf.set_font('Helvetica', '', 8)
+            for entry in ledger_data.get('entries', []):
+                row = [
+                    account.name,
+                    entry.get('date') or '-',
+                    type_labels.get(entry.get('type'), entry.get('type') or '-'),
+                    (entry.get('description') or '-')[:55],
+                    (entry.get('school_name') or '-')[:32],
+                    format_amount(entry.get('credit')),
+                    format_amount(entry.get('debit')),
+                    format_amount(entry.get('running_balance')),
+                ]
+                for idx, (value, width) in enumerate(zip(row, col_widths)):
+                    align = 'R' if idx >= 5 else 'L'
+                    pdf.cell(width, 6, safe_text(value), border=1, align=align)
+                pdf.ln()
+
+            output = BytesIO()
+            output.write(pdf.output(dest='S'))
+            output.seek(0)
+
+            filename = f"Ledger_{account.name}_{date.today().strftime('%Y%m%d')}.pdf"
+            response = FileResponse(output, content_type='application/pdf')
+            response['Content-Disposition'] = f'attachment; filename="{filename}"'
+            return response
+
+        except Account.DoesNotExist:
+            return Response({'error': 'Account not found'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Error exporting ledger PDF: {str(e)}")
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
     @action(detail=False, methods=['get'], url_path='balances_all')
     def balances_all(self, request):
         """Get account balances across ALL accessible schools, grouped by school.

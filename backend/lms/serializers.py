@@ -10,6 +10,34 @@ from .models import (
     Assignment, AssignmentAttachment, AssignmentSubmission,
 )
 
+ALLOWED_CONTENT_BLOCK_TYPES = {'paragraph', 'list', 'note', 'exercise'}
+
+
+def _validate_page_range(page_start, page_end):
+    if page_start and page_end and page_start > page_end:
+        raise serializers.ValidationError('page_start cannot be greater than page_end.')
+
+
+def _validate_content_blocks(content_blocks):
+    if content_blocks in (None, ''):
+        return
+    if not isinstance(content_blocks, list):
+        raise serializers.ValidationError('content_blocks must be a list.')
+    for idx, block in enumerate(content_blocks):
+        if not isinstance(block, dict):
+            raise serializers.ValidationError(f'content_blocks[{idx}] must be an object.')
+        block_type = (block.get('type') or '').strip().lower()
+        if block_type not in ALLOWED_CONTENT_BLOCK_TYPES:
+            raise serializers.ValidationError(
+                f"content_blocks[{idx}].type must be one of: {', '.join(sorted(ALLOWED_CONTENT_BLOCK_TYPES))}."
+            )
+        text = block.get('text', '')
+        if text is not None and not isinstance(text, str):
+            raise serializers.ValidationError(f'content_blocks[{idx}].text must be a string.')
+        items = block.get('items')
+        if items is not None and not isinstance(items, list):
+            raise serializers.ValidationError(f'content_blocks[{idx}].items must be a list when provided.')
+
 
 # ---------------------------------------------------------------------------
 # Curriculum: Book → Chapter → Topic
@@ -21,7 +49,10 @@ class TopicSerializer(serializers.ModelSerializer):
     class Meta:
         model = Topic
         fields = [
-            'id', 'chapter', 'title', 'topic_number', 'description',
+            'id', 'chapter', 'title', 'topic_number',
+            'page_start', 'page_end', 'content_kind',
+            'description', 'content_blocks', 'content_text',
+            'content_blocks_schema_version', 'content_version', 'needs_migration',
             'estimated_periods', 'is_active', 'is_covered',
             'created_at', 'updated_at',
         ]
@@ -30,6 +61,15 @@ class TopicSerializer(serializers.ModelSerializer):
     def get_is_covered(self, obj):
         """Check if this topic has been used in any published lesson plan."""
         return obj.lesson_plans.filter(status='PUBLISHED').exists()
+
+    def validate(self, attrs):
+        instance = getattr(self, 'instance', None)
+        page_start = attrs.get('page_start', getattr(instance, 'page_start', None))
+        page_end = attrs.get('page_end', getattr(instance, 'page_end', None))
+        content_blocks = attrs.get('content_blocks', getattr(instance, 'content_blocks', []))
+        _validate_page_range(page_start, page_end)
+        _validate_content_blocks(content_blocks)
+        return attrs
 
 
 class TopicDetailedSerializer(serializers.ModelSerializer):
@@ -66,7 +106,10 @@ class TopicDetailedSerializer(serializers.ModelSerializer):
     class Meta:
         model = Topic
         fields = [
-            'id', 'title', 'topic_number', 'description',
+            'id', 'title', 'topic_number',
+            'page_start', 'page_end', 'content_kind',
+            'description', 'content_blocks', 'content_text',
+            'content_blocks_schema_version', 'content_version', 'needs_migration',
             'estimated_periods', 'is_active',
             'is_covered',          # NEW
             'is_tested',           # NEW
@@ -90,7 +133,10 @@ class ChapterReadSerializer(serializers.ModelSerializer):
     class Meta:
         model = Chapter
         fields = [
-            'id', 'book', 'title', 'chapter_number', 'description',
+            'id', 'book', 'title', 'chapter_number',
+            'page_start', 'page_end',
+            'description', 'content_blocks', 'content_text',
+            'content_blocks_schema_version', 'content_version', 'needs_migration',
             'is_active', 'topics', 'topic_count',
             'created_at', 'updated_at',
         ]
@@ -105,9 +151,107 @@ class ChapterCreateSerializer(serializers.ModelSerializer):
         model = Chapter
         fields = [
             'id', 'book', 'title', 'chapter_number',
-            'description', 'is_active',
+            'page_start', 'page_end',
+            'description', 'content_blocks', 'content_text',
+            'content_blocks_schema_version', 'content_version', 'needs_migration',
+            'is_active',
         ]
         read_only_fields = ['id']
+
+    def validate(self, attrs):
+        instance = getattr(self, 'instance', None)
+        page_start = attrs.get('page_start', getattr(instance, 'page_start', None))
+        page_end = attrs.get('page_end', getattr(instance, 'page_end', None))
+        content_blocks = attrs.get('content_blocks', getattr(instance, 'content_blocks', []))
+        _validate_page_range(page_start, page_end)
+        _validate_content_blocks(content_blocks)
+        return attrs
+
+
+class ChapterSummarySerializer(serializers.ModelSerializer):
+    topic_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Chapter
+        fields = [
+            'id', 'title', 'chapter_number',
+            'page_start', 'page_end',
+            'topic_count',
+        ]
+
+    def get_topic_count(self, obj):
+        return obj.topics.count()
+
+
+class BookChapterOnlyReadSerializer(serializers.ModelSerializer):
+    class_name = serializers.CharField(source='class_obj.name', read_only=True)
+    subject_name = serializers.CharField(source='subject.name', read_only=True)
+    chapters = ChapterSummarySerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Book
+        fields = [
+            'id', 'class_obj', 'class_name',
+            'subject', 'subject_name',
+            'title', 'language',
+            'chapters',
+        ]
+
+
+class TopicLessonPlanSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Topic
+        fields = [
+            'id', 'title', 'topic_number',
+            'page_start', 'page_end',
+            'estimated_periods',
+            'content_kind',
+            'description',
+        ]
+
+
+class ChapterLessonPlanSerializer(serializers.ModelSerializer):
+    topics = TopicLessonPlanSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Chapter
+        fields = [
+            'id', 'title', 'chapter_number',
+            'page_start', 'page_end',
+            'topics',
+        ]
+
+
+class BookLessonPlanReadSerializer(serializers.ModelSerializer):
+    class_name = serializers.CharField(source='class_obj.name', read_only=True)
+    subject_name = serializers.CharField(source='subject.name', read_only=True)
+    chapters = ChapterLessonPlanSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Book
+        fields = [
+            'id', 'class_obj', 'class_name',
+            'subject', 'subject_name',
+            'title', 'language',
+            'chapters',
+        ]
+
+
+class TopicExamExercisesSerializer(serializers.ModelSerializer):
+    chapter_number = serializers.IntegerField(source='chapter.chapter_number', read_only=True)
+    chapter_title = serializers.CharField(source='chapter.title', read_only=True)
+    test_question_count = serializers.IntegerField(source='active_test_question_count', read_only=True)
+
+    class Meta:
+        model = Topic
+        fields = [
+            'id',
+            'chapter', 'chapter_number', 'chapter_title',
+            'title', 'topic_number',
+            'page_start', 'page_end',
+            'content_kind',
+            'test_question_count',
+        ]
 
 
 class BookReadSerializer(serializers.ModelSerializer):

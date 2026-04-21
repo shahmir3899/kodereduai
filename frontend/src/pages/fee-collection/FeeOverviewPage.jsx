@@ -14,23 +14,53 @@ export default function FeeOverviewPage() {
   const canWrite = !isStaffMember
   const now = new Date()
   const initialFeeType = (searchParams.get('feeType') || 'MONTHLY').toUpperCase() === 'ANNUAL' ? 'ANNUAL' : 'MONTHLY'
+  const initialAnnualCategory = searchParams.get('annualCategory') || ''
+  const initialMonthlyCategory = searchParams.get('monthlyCategory') || ''
 
   const [month, setMonth] = useState(now.getMonth() + 1)
   const [year, setYear] = useState(now.getFullYear())
   const [feeType, setFeeType] = useState(initialFeeType)
+  const [annualCategoryFilter, setAnnualCategoryFilter] = useState(initialAnnualCategory)
+  const [monthlyCategoryFilter, setMonthlyCategoryFilter] = useState(initialMonthlyCategory)
   const [showCharts, setShowCharts] = useState(false)
 
-  const { allPayments, summaryData, isLoading } = useFeeOverview({
+  const { allPayments, summaryData, annualCategories, monthlyCategories, isLoading } = useFeeOverview({
     month, year,
     feeType,
+    annualCategoryId: feeType === 'ANNUAL' ? annualCategoryFilter : undefined,
+    monthlyCategoryId: feeType === 'MONTHLY' ? monthlyCategoryFilter : undefined,
     academicYearId: activeAcademicYear?.id,
   })
 
   const handleFeeTypeChange = (nextType) => {
     setFeeType(nextType)
+    if (nextType === 'ANNUAL') setMonthlyCategoryFilter('')
+    if (nextType === 'MONTHLY') setAnnualCategoryFilter('')
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev)
       next.set('feeType', nextType)
+      if (nextType === 'ANNUAL') next.delete('monthlyCategory')
+      if (nextType === 'MONTHLY') next.delete('annualCategory')
+      return next
+    }, { replace: true })
+  }
+
+  const handleCategoryChange = (value) => {
+    if (feeType === 'ANNUAL') {
+      setAnnualCategoryFilter(value)
+    } else {
+      setMonthlyCategoryFilter(value)
+    }
+
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      if (feeType === 'ANNUAL') {
+        if (value) next.set('annualCategory', value)
+        else next.delete('annualCategory')
+      } else {
+        if (value) next.set('monthlyCategory', value)
+        else next.delete('monthlyCategory')
+      }
       return next
     }, { replace: true })
   }
@@ -148,14 +178,49 @@ export default function FeeOverviewPage() {
           </button>
         </div>
       ) : (
-        <div className="flex items-center gap-3 mb-6">
-          <label className="text-sm font-medium text-gray-600">Year</label>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-6">
+          <div className="flex items-center gap-3">
+            <label className="text-sm font-medium text-gray-600">Year</label>
+            <select
+              value={year}
+              onChange={(e) => setYear(parseInt(e.target.value))}
+              className="input-field text-sm font-medium"
+            >
+              {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-gray-600">Category</label>
+            <select
+              value={annualCategoryFilter}
+              onChange={(e) => handleCategoryChange(e.target.value)}
+              className="input-field text-sm font-medium min-w-[220px]"
+            >
+              <option value="">All categories</option>
+              {annualCategories.map((category) => (
+                <option key={category.id} value={String(category.id)}>
+                  {category.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      )}
+
+      {feeType === 'MONTHLY' && (
+        <div className="flex items-center gap-2 mb-4">
+          <label className="text-sm font-medium text-gray-600">Category</label>
           <select
-            value={year}
-            onChange={(e) => setYear(parseInt(e.target.value))}
-            className="input-field text-sm font-medium"
+            value={monthlyCategoryFilter}
+            onChange={(e) => handleCategoryChange(e.target.value)}
+            className="input-field text-sm font-medium min-w-[220px]"
           >
-            {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
+            <option value="">All categories</option>
+            {monthlyCategories.map((category) => (
+              <option key={category.id} value={String(category.id)}>
+                {category.name}
+              </option>
+            ))}
           </select>
         </div>
       )}
@@ -172,6 +237,41 @@ export default function FeeOverviewPage() {
         <>
           {/* KPI Summary Cards */}
           <FeeSummaryCards summaryData={summaryData} />
+
+          {summaryData?.by_category?.length > 0 && (
+            <div className="card mb-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-gray-700">Category-wise Collection</h3>
+                <span className="text-xs text-gray-500">{summaryData.by_category.length} categories</span>
+              </div>
+              <div className="space-y-2">
+                {summaryData.by_category.map((category) => {
+                  const totalDue = Number(category.total_due || 0)
+                  const totalCollected = Number(category.total_collected || 0)
+                  const rate = totalDue > 0 ? Math.round((totalCollected / totalDue) * 100) : 0
+
+                  return (
+                    <div key={category.category_id || category.category_name} className="rounded-lg border border-gray-100 p-3">
+                      <div className="flex items-center justify-between text-sm mb-1.5">
+                        <span className="font-medium text-gray-900">{category.category_name || 'Uncategorized'}</span>
+                        <span className="text-gray-600">{totalCollected.toLocaleString()} / {totalDue.toLocaleString()}</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div
+                          className="bg-primary-600 h-2 rounded-full transition-all duration-500"
+                          style={{ width: `${Math.min(100, rate)}%` }}
+                        />
+                      </div>
+                      <div className="mt-1 text-xs text-gray-500 flex justify-between">
+                        <span>{category.count} records</span>
+                        <span>{rate}% collected</span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Collection Progress Bar */}
           {summaryData && summaryData.total_due > 0 && (

@@ -76,11 +76,13 @@ class StaffMemberSerializer(serializers.ModelSerializer):
     department_name = serializers.CharField(source='department.name', read_only=True, default=None)
     designation_name = serializers.CharField(source='designation.name', read_only=True, default=None)
     user_username = serializers.CharField(source='user.username', read_only=True, default=None)
+    user_role = serializers.CharField(source='user.role', read_only=True, default=None)
 
     class Meta:
         model = StaffMember
         fields = [
             'id', 'school', 'user', 'user_username',
+            'user_role',
             'first_name', 'last_name', 'full_name',
             'email', 'phone', 'gender', 'date_of_birth', 'photo_url',
             'employee_id', 'department', 'department_name',
@@ -93,7 +95,7 @@ class StaffMemberSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             'id', 'school', 'full_name', 'department_name',
-            'designation_name', 'user_username',
+            'designation_name', 'user_username', 'user_role',
             'created_at', 'updated_at',
         ]
 

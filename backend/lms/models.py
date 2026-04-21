@@ -80,7 +80,38 @@ class Chapter(models.Model):
     chapter_number = models.PositiveIntegerField(
         help_text='Chapter ordering number (1, 2, 3...)',
     )
+    page_start = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text='Optional first page for this chapter in the source book',
+    )
+    page_end = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text='Optional last page for this chapter in the source book',
+    )
     description = models.TextField(blank=True)
+    content_blocks = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='Structured rich content blocks for chapter-level notes',
+    )
+    content_text = models.TextField(
+        blank=True,
+        help_text='Flattened plain text derived from content blocks for search/prompting',
+    )
+    content_blocks_schema_version = models.PositiveSmallIntegerField(
+        default=1,
+        help_text='Schema version of content_blocks payload',
+    )
+    content_version = models.PositiveIntegerField(
+        default=1,
+        help_text='Monotonic content revision number for chapter content',
+    )
+    needs_migration = models.BooleanField(
+        default=False,
+        help_text='True when stored content blocks require schema migration',
+    )
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -90,6 +121,10 @@ class Chapter(models.Model):
         ordering = ['chapter_number']
         verbose_name = 'Chapter'
         verbose_name_plural = 'Chapters'
+        indexes = [
+            models.Index(fields=['book', 'chapter_number']),
+            models.Index(fields=['book', 'page_start']),
+        ]
 
     def __str__(self):
         return f"Ch {self.chapter_number}: {self.title}"
@@ -107,7 +142,43 @@ class Topic(models.Model):
     topic_number = models.PositiveIntegerField(
         help_text='Topic ordering within chapter (1, 2, 3...)',
     )
+    page_start = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text='Optional first page for this topic in the source book',
+    )
+    page_end = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text='Optional last page for this topic in the source book',
+    )
+    content_kind = models.CharField(
+        max_length=20,
+        default='general',
+        help_text='Primary classification for topic content (for example general or exercise)',
+    )
     description = models.TextField(blank=True)
+    content_blocks = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='Structured rich content blocks for topic details',
+    )
+    content_text = models.TextField(
+        blank=True,
+        help_text='Flattened plain text derived from content blocks for search/prompting',
+    )
+    content_blocks_schema_version = models.PositiveSmallIntegerField(
+        default=1,
+        help_text='Schema version of content_blocks payload',
+    )
+    content_version = models.PositiveIntegerField(
+        default=1,
+        help_text='Monotonic content revision number for topic content',
+    )
+    needs_migration = models.BooleanField(
+        default=False,
+        help_text='True when stored content blocks require schema migration',
+    )
     estimated_periods = models.PositiveIntegerField(
         default=1,
         help_text='Estimated teaching periods needed',
@@ -121,6 +192,11 @@ class Topic(models.Model):
         ordering = ['topic_number']
         verbose_name = 'Topic'
         verbose_name_plural = 'Topics'
+        indexes = [
+            models.Index(fields=['chapter', 'topic_number']),
+            models.Index(fields=['chapter', 'page_start']),
+            models.Index(fields=['content_kind']),
+        ]
 
     def __str__(self):
         return f"{self.chapter.chapter_number}.{self.topic_number}: {self.title}"

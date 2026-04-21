@@ -203,6 +203,8 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'anon': '30/minute',
         'user': '120/minute',
+        'ocr_toc': '20/hour',      # Phase 5: OCR endpoint rate limit (per user)
+        'suggest_toc': '30/hour',  # Phase 5: AI suggest endpoint rate limit (per user)
     },
 }
 
@@ -345,13 +347,20 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'notifications.tasks.dispatch_scheduled_notifications',
         'schedule': crontab(minute='*/5'),
     },
-    'daily-accuracy-drift-detection': {
-        'task': 'attendance.tasks.detect_accuracy_drift',
-        'schedule': crontab(hour=22, minute=0),
+    # Accuracy drift + anomaly detection tasks intentionally unscheduled —
+    # too noisy for daily in-app alerts. Tasks kept in attendance/tasks.py
+    # and can be re-enabled manually or per-school as needed.
+    'class-teacher-fee-reminder-10th': {
+        'task': 'notifications.tasks.send_class_teacher_fee_reminders',
+        'schedule': crontab(day_of_month='10', hour='9', minute='0'),
     },
-    'daily-attendance-anomaly-detection': {
-        'task': 'attendance.tasks.detect_attendance_anomalies',
-        'schedule': crontab(hour=21, minute=30),
+    'class-teacher-fee-reminder-15th': {
+        'task': 'notifications.tasks.send_class_teacher_fee_reminders',
+        'schedule': crontab(day_of_month='15', hour='9', minute='0'),
+    },
+    'class-teacher-attendance-reminder-11am': {
+        'task': 'notifications.tasks.send_class_teacher_attendance_reminders',
+        'schedule': crontab(hour='11', minute='0'),
     },
     'nightly-sibling-detection': {
         'task': 'finance.tasks.scan_all_siblings_task',

@@ -279,6 +279,22 @@ class SchoolNotificationConfig(models.Model):
         default=True,
         help_text='Send transport update notifications (bus departed, arriving, completed)',
     )
+    class_teacher_fee_reminder_enabled = models.BooleanField(
+        default=True,
+        help_text='Send consolidated fee pending reminders to class teachers on the 10th and 15th of each month',
+    )
+    lesson_plan_notification_enabled = models.BooleanField(
+        default=True,
+        help_text='Notify students in-app when a lesson plan is published for their class',
+    )
+    daily_report_enabled = models.BooleanField(
+        default=True,
+        help_text='Send a daily school report to admins and principal at 5 PM (attendance, lesson plans, fees, leave)',
+    )
+    class_teacher_attendance_reminder_enabled = models.BooleanField(
+        default=True,
+        help_text='Remind class teachers via in-app notification at 11:00 AM if student attendance is not yet marked',
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

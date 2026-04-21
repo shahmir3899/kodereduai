@@ -393,7 +393,63 @@ school(FK), name, event_type (FEE_DUE/ABSENCE/EXAM/GENERAL), channel (IN_APP/SMS
 school(FK), template(FK nullable), channel, event_type, recipient_type, recipient_identifier, title, body, status (PENDING/SENT/DELIVERED/FAILED/READ), metadata(JSON), sent_at
 
 ### SchoolNotificationConfig
-school(OneToOne), whatsapp_enabled, sms_enabled, in_app_enabled, email_enabled, push_enabled, quiet_hours_start/end, fee_reminder_day, daily_absence_summary_time, smart_scheduling_enabled, absence_notification_enabled, fee_reminder_enabled, fee_overdue_enabled, exam_result_enabled, daily_absence_summary_enabled, transport_notification_enabled
+school(OneToOne), whatsapp_enabled, sms_enabled, in_app_enabled, email_enabled, push_enabled, quiet_hours_start/end, fee_reminder_day, daily_absence_summary_time, smart_scheduling_enabled
+
+**Trigger toggles (all BooleanField, default=True unless noted):**
+- `absence_notification_enabled` — WhatsApp to parent + IN_APP to admins when student marked absent
+- `fee_reminder_enabled` — WhatsApp to parents with unpaid/partial fees (monthly, 5th)
+- `fee_overdue_enabled` — WhatsApp to parents with fully unpaid fees from prior month (weekly Monday)
+- `exam_result_enabled` — WhatsApp to parent when exam result published (trigger unwired — future)
+- `daily_absence_summary_enabled` — legacy flag (default=False); replaced by `daily_report_enabled`
+- `transport_notification_enabled` — transport update push/in-app (bus departed, arriving, completed)
+- `class_teacher_fee_reminder_enabled` — IN_APP to each class teacher listing pending-fee students (10th & 15th)
+- `lesson_plan_notification_enabled` — IN_APP to students in a class when a lesson plan is published
+- `daily_report_enabled` — IN_APP daily school report to SCHOOL_ADMIN + PRINCIPAL at 5 PM
+
+---
+
+### In-App Notification Reference (all channels=IN_APP)
+
+| Trigger function | Recipients | Who receives (selection rule) | Event type | When fired | Config flag |
+|---|---|---|---|---|---|
+| `trigger_absence_notification` | SCHOOL_ADMIN, PRINCIPAL (up to 5) | Active school memberships with role in SCHOOL_ADMIN/PRINCIPAL, limited to first 5 users | `ABSENCE` | Whenever attendance record is saved as ABSENT (upload, manual bulk entry, face attendance); per absent student | `absence_notification_enabled` |
+| `trigger_class_teacher_fee_pending` | Class teacher (one per class) | Active `ClassTeacherAssignment` users for that school/class; one notification per assignment with pending fees | `FEE_DUE` | Celery beat: 10th & 15th of month at 09:00 | `class_teacher_fee_reminder_enabled` |
+| `trigger_class_teacher_attendance_pending` | Class teacher (one per class) | Active `ClassTeacherAssignment` users where teacher has staff status PRESENT and class attendance is still unmarked by 11:00 on non-OFF day | `GENERAL` | Celery beat: daily at 11:00 | — |
+| `trigger_lesson_plan_published` | All students in the class (with user accounts) | Active students in lesson plan class where linked user account exists | `GENERAL` | LessonPlan publish action (`POST /api/lms/lesson-plans/{id}/publish/`) | `lesson_plan_notification_enabled` |
+| `trigger_daily_school_report` | SCHOOL_ADMIN, PRINCIPAL | Active school memberships with role in SCHOOL_ADMIN/PRINCIPAL | `GENERAL` | Celery beat: daily at 17:00 | `daily_report_enabled` |
+| `trigger_general` | Caller-supplied users (default: all admins+teachers) | Explicit `recipient_users` list or default role-filtered users in school | `GENERAL` | Ad-hoc / manual announcements | — |
+
+**trigger_absence_notification body:**
+> "Ahmed Ali was marked absent on 21 April 2026"
+> Title: "Absence: Ahmed Ali (Class 5A)"
+
+**trigger_class_teacher_fee_pending body:**
+> "Dear Ayesha Khan, following fee are still pending:
+> 1. Student Name (5000)
+> 2. Student Name (1900)
+> 3. Student Name (1200)"
+> Title: "Fee Pending — Class 5A (April 2026)"
+
+**trigger_class_teacher_attendance_pending body (11:00 reminder):**
+> "Dear Ayesha Khan, you are class teacher of class 5A, Please mark attendance"
+> Title: "Attendance Reminder - 5A"
+
+**trigger_lesson_plan_published body:**
+> "A new Mathematics lesson plan has been published for 21 April 2026.
+> Objectives: …" (first 200 chars)
+> Title: "New Lesson Plan: [plan title]"
+
+**trigger_daily_school_report body (5 PM daily):**
+> "Daily School Report — School Name (21 April 2026)
+> 📋 Student Attendance
+>   Present: 120  |  Absent: 8  |  Total: 128  |  Rate: 93.8%
+> 📚 Lesson Plans
+>   Published: 5  |  Draft: 2
+> 💰 Fee Status (this month)
+>   Students with pending/partial fees: 34
+> 🏖 Staff Leave
+>   Staff on approved leave today: 1"
+> Title: "Daily Report — 21 April 2026"
 
 ### NotificationPreference
 school(FK), user(FK nullable), student(FK nullable), channel, event_type, is_enabled

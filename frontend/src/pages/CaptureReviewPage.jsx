@@ -514,6 +514,7 @@ function UploadTab({ onUploadSuccess }) {
 function ReviewDetail({ uploadId, onBack }) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const { activeAcademicYear } = useAcademicYear()
 
   const [selectedAbsent, setSelectedAbsent] = useState(new Set())
   const [nameCorrections, setNameCorrections] = useState({})
@@ -536,11 +537,12 @@ function ReviewDetail({ uploadId, onBack }) {
   })
   const upload = uploadData?.data
 
+  const effectiveAcademicYear = upload?.academic_year ?? activeAcademicYear?.id
   const { data: studentsData } = useQuery({
-    queryKey: ['classStudents', upload?.class_obj, upload?.academic_year],
+    queryKey: ['classStudents', upload?.class_obj, effectiveAcademicYear],
     queryFn: () => studentsApi.getStudents({
       class_id: upload?.class_obj,
-      ...(upload?.academic_year ? { academic_year: upload.academic_year } : {}),
+      ...(effectiveAcademicYear ? { academic_year: effectiveAcademicYear } : {}),
       is_active: true,
       page_size: 9999,
     }),

@@ -308,6 +308,7 @@ class FaceAttendanceSessionViewSet(ModuleAccessMixin, TenantQuerySetMixin, views
         created_count = 0
         updated_count = 0
         errors = []
+        absence_notification_failures = 0
 
         for student in class_students:
             student_status = (
@@ -331,6 +332,16 @@ class FaceAttendanceSessionViewSet(ModuleAccessMixin, TenantQuerySetMixin, views
                     created_count += 1
                 else:
                     updated_count += 1
+
+                if student_status == AttendanceRecord.AttendanceStatus.ABSENT:
+                    try:
+                        from notifications.triggers import trigger_absence_notification
+                        trigger_absence_notification(record)
+                    except Exception as e:
+                        absence_notification_failures += 1
+                        logger.warning(
+                            f"Could not send absence notification for student {student.id}: {e}"
+                        )
             except Exception as e:
                 errors.append(f'{student.name}: {str(e)}')
 
@@ -348,6 +359,7 @@ class FaceAttendanceSessionViewSet(ModuleAccessMixin, TenantQuerySetMixin, views
             'absent_count': class_students.count() - len(present_ids),
             'created': created_count,
             'updated': updated_count,
+            'absence_notification_failures': absence_notification_failures,
             'errors': errors,
         })
 

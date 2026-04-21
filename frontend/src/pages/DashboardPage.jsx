@@ -208,6 +208,9 @@ export default function DashboardPage({ variant }) {
     ? Math.round((Number(fin.total_collected) / Number(fin.total_due)) * 100) : null
   const staffPresentPct = !attendanceIsOffDay && hr?.active_staff > 0
     ? Math.round(((hr.attendance_present_today || 0) / hr.active_staff) * 100) : null
+  const notMarkedCount = report
+    ? Math.max((report.total_students || 0) - (report.present_count || 0) - (report.absent_count || 0), 0)
+    : 0
 
   // ─── Quick Actions ──────────────────────────────────────────────────────────
 
@@ -236,7 +239,7 @@ export default function DashboardPage({ variant }) {
       metric: attendanceIsOffDay ? 'N/A' : attendanceRate != null ? `${attendanceRate}%` : '—',
       metricLabel: attendanceIsOffDay ? 'off day' : 'today',
       status: attendanceRate == null ? 'gray' : attendanceRate >= 90 ? 'green' : attendanceRate >= 75 ? 'yellow' : 'red',
-      href: '/attendance', loading: loadingAttendance,
+      href: '/attendance/register', loading: loadingAttendance,
     })
   }
 
@@ -256,7 +259,7 @@ export default function DashboardPage({ variant }) {
       metric: attendanceIsOffDay ? 'N/A' : staffPresentPct != null ? `${staffPresentPct}%` : '—',
       metricLabel: attendanceIsOffDay ? 'off day' : 'present',
       status: staffPresentPct == null ? 'gray' : staffPresentPct >= 90 ? 'green' : staffPresentPct >= 75 ? 'yellow' : 'red',
-      href: '/hr', loading: loadingHR,
+      href: '/hr/attendance', loading: loadingHR,
     })
   }
 
@@ -364,7 +367,7 @@ export default function DashboardPage({ variant }) {
           subtitle={attendanceIsOffDay ? `OFF day${report?.off_day_types?.length ? ` (${report.off_day_types.join(', ')})` : ''}` : report ? `${report.absent_count} absent` : undefined}
           icon={icons.attendance}
           color={attendanceIsOffDay ? 'gray' : attendanceRate >= 90 ? 'green' : attendanceRate >= 75 ? 'amber' : 'red'}
-          href="/attendance"
+          href="/attendance/register"
           loading={isModuleEnabled('attendance') && loadingAttendance}
         />
         <StatCard
@@ -382,7 +385,7 @@ export default function DashboardPage({ variant }) {
           subtitle={hr ? (attendanceIsOffDay ? 'OFF day' : (staffPresentPct != null ? `${hr.staff_on_leave_today || 0} on leave` : 'total staff')) : undefined}
           icon={icons.staff}
           color={attendanceIsOffDay ? 'gray' : 'purple'}
-          href="/hr"
+          href="/hr/attendance"
           loading={isModuleEnabled('hr') && loadingHR}
         />
       </div>
@@ -413,7 +416,7 @@ export default function DashboardPage({ variant }) {
             <div className="card">
               <div className="flex items-center justify-between mb-3">
                 <h2 className="text-sm font-semibold text-gray-900">Today's Attendance</h2>
-                <Link to="/attendance" className="text-xs text-sky-600 hover:text-sky-700 font-medium">View Details</Link>
+                <Link to="/attendance/register" className="text-xs text-sky-600 hover:text-sky-700 font-medium">View Details</Link>
               </div>
               {attendanceIsOffDay && (
                 <div className="mb-3 inline-flex items-center gap-2 rounded-lg px-3 py-2 bg-gray-100 text-gray-700 text-xs font-semibold">
@@ -451,6 +454,10 @@ export default function DashboardPage({ variant }) {
                       <span className="w-2.5 h-2.5 rounded-full bg-red-400" />
                       Absent: {report.absent_count}
                     </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full bg-gray-400" />
+                      Not Marked: {notMarkedCount}
+                    </span>
                     {pendingCount > 0 && (
                       <Link to="/attendance?tab=review" className="flex items-center gap-1.5 text-amber-600 hover:text-amber-700 font-medium">
                         <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
@@ -470,7 +477,7 @@ export default function DashboardPage({ variant }) {
             <div className="card">
               <div className="flex items-center justify-between mb-3">
                 <h2 className="text-sm font-semibold text-gray-900">Finance — This Month</h2>
-                <Link to="/finance" className="text-xs text-sky-600 hover:text-sky-700 font-medium">View Details</Link>
+                <Link to="/finance/fees" className="text-xs text-sky-600 hover:text-sky-700 font-medium">View Details</Link>
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <div className="text-center p-3 bg-green-50 rounded-lg">

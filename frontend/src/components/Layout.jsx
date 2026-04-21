@@ -366,6 +366,9 @@ export default function Layout() {
   const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
+  const userDisplayName = [user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.username || 'User'
+  const userAvatarInitial = userDisplayName.charAt(0).toUpperCase()
+
   const isSessionAwarePage = SESSION_AWARE_PREFIXES.some(
     prefix => location.pathname === prefix || location.pathname.startsWith(prefix + '/')
   )
@@ -716,11 +719,11 @@ export default function Layout() {
           >
             <div className="w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center">
               <span className="text-primary-700 font-medium">
-                {user?.username?.charAt(0).toUpperCase()}
+                {userAvatarInitial}
               </span>
             </div>
             <div className="ml-3">
-              <p className="text-sm font-medium text-gray-900">{user?.username}</p>
+              <p className="text-sm font-medium text-gray-900">{userDisplayName}</p>
               <p className="text-xs text-gray-500">{user?.role_display}</p>
             </div>
           </Link>
@@ -769,10 +772,10 @@ export default function Layout() {
               <TaskDrawerButton />
               {!isSuperAdmin && <NotificationBell />}
               <Link to="/profile" className="hidden lg:flex items-center hover:opacity-80 transition-opacity">
-                <span className="text-sm text-gray-600 mr-3">{user?.username}</span>
+                <span className="text-sm text-gray-600 mr-3">{userDisplayName}</span>
                 <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center">
                   <span className="text-primary-700 font-medium text-sm">
-                    {user?.username?.charAt(0).toUpperCase()}
+                    {userAvatarInitial}
                   </span>
                 </div>
               </Link>

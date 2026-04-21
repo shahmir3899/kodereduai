@@ -24,6 +24,11 @@ const LANGUAGES = [
   { value: 'other', label: 'Other' },
 ]
 
+// Phase 5: Large text safeguards
+const MAX_TOC_TEXT_SIZE = 500 * 1024 // 500KB to match backend limit
+const TOC_WARN_TEXT_SIZE = 50 * 1024  // Warn at 50KB
+const MAX_UNDO_DEPTH = 20             // Cap undo history stack
+
 const EMPTY_BOOK_FORM = {
   title: '',
   author: '',
@@ -60,11 +65,117 @@ const parseOcrLinesFromText = (text) => {
     .filter((line) => !!line.text)
 }
 
+const parseLabeledRawLines = (text) => {
+  return (text || '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => !!line)
+    .map((line) => {
+      const match = line.match(/^(chapter|topic|note|exercise)\s*:\s*(.*)$/i)
+      if (!match) {
+        return { label: 'none', text: line }
+      }
+      return {
+        label: match[1].toLowerCase(),
+        text: (match[2] || '').trim(),
+      }
+    })
+}
+
+const buildRawTextFromLabeledLines = (lines) => {
+  const prefixByLabel = {
+    chapter: 'CHAPTER: ',
+    topic: 'TOPIC: ',
+    note: 'NOTE: ',
+    exercise: 'EXERCISE: ',
+    none: '',
+  }
+
+  return (lines || [])
+    .map((line) => {
+      const cleanText = (line?.text || '').trim()
+      if (!cleanText) return ''
+      const label = line?.label || 'none'
+      return `${prefixByLabel[label] || ''}${cleanText}`
+    })
+    .filter(Boolean)
+    .join('\n')
+}
+
+const buildTocFromLabeledRawText = (text) => {
+  const lines = parseLabeledRawLines(text)
+  const hasLabels = lines.some((line) => line.label !== 'none')
+  const chapters = []
+  const warnings = []
+  let currentChapterIndex = -1
+
+  const ensureDefaultChapter = () => {
+    if (currentChapterIndex !== -1) return
+    chapters.push({ title: 'Untitled Chapter', topics: [], notes: [], page_start: null, page_end: null })
+    currentChapterIndex = chapters.length - 1
+  }
+
+  lines.forEach((line, index) => {
+    const content = (line.text || '').trim()
+    if (!content) return
+
+    if (line.label === 'chapter') {
+      chapters.push({ title: content, topics: [], notes: [], page_start: null, page_end: null })
+      currentChapterIndex = chapters.length - 1
+      return
+    }
+
+    if (line.label === 'topic') {
+      if (currentChapterIndex === -1) {
+        warnings.push(`Line ${index + 1}: Topic found before chapter. Added under Untitled Chapter.`)
+        ensureDefaultChapter()
+      }
+      chapters[currentChapterIndex].topics.push({ title: content, notes: [], page_start: null, page_end: null, content_kind: 'general' })
+      return
+    }
+
+    if (line.label === 'exercise') {
+      // EXERCISE: tags mark topics as exercise-type content
+      if (currentChapterIndex === -1) {
+        ensureDefaultChapter()
+      }
+      chapters[currentChapterIndex].topics.push({ title: content, notes: [], page_start: null, page_end: null, content_kind: 'exercise' })
+      return
+    }
+
+    if (line.label === 'note') {
+      // Attach note to last topic, or to chapter if no topics yet
+      if (currentChapterIndex === -1) {
+        ensureDefaultChapter()
+      }
+      const chapter = chapters[currentChapterIndex]
+      if (chapter.topics.length > 0) {
+        const lastTopic = chapter.topics[chapter.topics.length - 1]
+        if (!lastTopic.notes) lastTopic.notes = []
+        lastTopic.notes.push(content)
+      } else {
+        if (!chapter.notes) chapter.notes = []
+        chapter.notes.push(content)
+      }
+      return
+    }
+
+    if (currentChapterIndex === -1) {
+      chapters.push({ title: content, topics: [], notes: [], page_start: null, page_end: null })
+      currentChapterIndex = chapters.length - 1
+    } else {
+      chapters[currentChapterIndex].topics.push({ title: content, notes: [], page_start: null, page_end: null, content_kind: 'general' })
+    }
+  })
+
+  return { hasLabels, chapters, warnings }
+}
+
 const createDefaultPerspectiveCorners = () => ({
-  tl: { x: 0.08, y: 0.08 },
-  tr: { x: 0.92, y: 0.08 },
-  br: { x: 0.92, y: 0.92 },
-  bl: { x: 0.08, y: 0.92 },
+  tl: { x: 0, y: 0 },
+  tr: { x: 1, y: 0 },
+  br: { x: 1, y: 1 },
+  bl: { x: 0, y: 1 },
 })
 
 export default function CurriculumPage() {
@@ -115,6 +226,7 @@ export default function CurriculumPage() {
   const [tocImageRotation, setTocImageRotation] = useState(0)
   const [tocImageSkewX, setTocImageSkewX] = useState(0)
   const [tocImageSkewY, setTocImageSkewY] = useState(0)
+  const [tocSkewUiMode, setTocSkewUiMode] = useState('basic')
   const [tocImageWizardStep, setTocImageWizardStep] = useState(1)
   const [tocCropAspect, setTocCropAspect] = useState('free')
   const [tocPerspectiveCorners, setTocPerspectiveCorners] = useState(createDefaultPerspectiveCorners)
@@ -128,6 +240,8 @@ export default function CurriculumPage() {
   const [tocFinalPreviewUrl, setTocFinalPreviewUrl] = useState(null)
   const [tocFinalPreviewLoading, setTocFinalPreviewLoading] = useState(false)
   const tocPreviewImageRef = useRef(null)
+  const tocModalBodyRef = useRef(null)
+  const tocRawTextAreaRef = useRef(null)
   const [ocrLoading, setOcrLoading] = useState(false)
   const [tocOcrLines, setTocOcrLines] = useState([])
   const [selectedOcrLineId, setSelectedOcrLineId] = useState(null)
@@ -158,8 +272,8 @@ export default function CurriculumPage() {
   }
 
   const pushToUndoStack = (lines, chapters) => {
-    setUndoStackLines((prev) => [...prev, lines])
-    setUndoStackChapters((prev) => [...prev, chapters])
+    setUndoStackLines((prev) => [...prev.slice(-MAX_UNDO_DEPTH + 1), lines])
+    setUndoStackChapters((prev) => [...prev.slice(-MAX_UNDO_DEPTH + 1), chapters])
     setRedoStackLines([])
     setRedoStackChapters([])
   }
@@ -215,6 +329,60 @@ export default function CurriculumPage() {
     }
   }
 
+  const syncRawText = (nextText) => {
+    // Phase 5: Block input beyond max size to prevent backend rejection
+    if (nextText && nextText.length > MAX_TOC_TEXT_SIZE) {
+      showError(`Text exceeds the maximum size of ${Math.round(MAX_TOC_TEXT_SIZE / 1024)}KB. Please reduce the text size or use the chunked parser.`)
+      return
+    }
+    setTocText(nextText)
+    const nextLines = parseOcrLinesFromText(nextText)
+    setTocOcrLines(nextLines)
+    clearTocSuggestionState()
+    if (selectedOcrLineId && !nextLines.some((line) => line.id === selectedOcrLineId)) {
+      setSelectedOcrLineId(null)
+    }
+  }
+
+  const handleApplyLabelToCurrentLine = (label, event) => {
+    if (event) {
+      event.preventDefault()
+      event.stopPropagation()
+    }
+
+    const textarea = tocRawTextAreaRef.current
+    if (!textarea) return
+
+    const value = tocText || ''
+    const selectionStart = textarea.selectionStart ?? value.length
+    const selectionEnd = textarea.selectionEnd ?? value.length
+    const textAreaScrollTop = textarea.scrollTop
+    const modalScrollTop = tocModalBodyRef.current?.scrollTop ?? 0
+    const lineStart = value.lastIndexOf('\n', Math.max(0, selectionStart - 1)) + 1
+    const nextBreak = value.indexOf('\n', selectionEnd)
+    const lineEnd = nextBreak === -1 ? value.length : nextBreak
+    const currentLine = value.slice(lineStart, lineEnd)
+    const withoutPrefix = currentLine.replace(/^\s*(chapter|topic|note)\s*:\s*/i, '').trim()
+    const nextLine = label === 'none' ? withoutPrefix : `${label.toUpperCase()}: ${withoutPrefix}`
+    const nextText = `${value.slice(0, lineStart)}${nextLine}${value.slice(lineEnd)}`
+
+    syncRawText(nextText)
+    requestAnimationFrame(() => {
+      if (!tocRawTextAreaRef.current) return
+      const caret = lineStart + nextLine.length
+      if (tocModalBodyRef.current) {
+        tocModalBodyRef.current.scrollTop = modalScrollTop
+      }
+      tocRawTextAreaRef.current.scrollTop = textAreaScrollTop
+      tocRawTextAreaRef.current.focus()
+      tocRawTextAreaRef.current.setSelectionRange(caret, caret)
+    })
+  }
+
+  const handleRawLabelButtonMouseDown = (event) => {
+    event.preventDefault()
+  }
+
   const saveLine = (lineId) => {
     const normalized = normalizeText(editingLineText)
     if (!normalized) {
@@ -255,79 +423,6 @@ export default function CurriculumPage() {
   }
 
   const selectedOcrLine = tocOcrLines.find((line) => line.id === selectedOcrLineId)
-
-  // ---- Keyboard Shortcuts for OCR Lines (Phase 2/3) ----
-  useEffect(() => {
-    if (!showTocModal || tocOcrLines.length === 0) return
-
-    const handleKeyDown = (e) => {
-      // If focus is inside the raw textarea, do NOT handle shortcuts
-      const active = document.activeElement
-      if (active && active.getAttribute && active.getAttribute('data-rawarea') === 'true') return
-
-      // Only handle shortcuts when modal is open and OCR lines are visible
-      const key = e.key.toLowerCase()
-      const selectedIndex = tocOcrLines.findIndex((line) => line.id === selectedOcrLineId)
-
-      // Ctrl+Z: Undo
-      if ((e.ctrlKey || e.metaKey) && key === 'z') {
-        e.preventDefault()
-        handleUndo()
-      }
-      // Ctrl+Y or Ctrl+Shift+Z: Redo
-      else if ((e.ctrlKey || e.metaKey) && (key === 'y' || (e.shiftKey && key === 'z'))) {
-        e.preventDefault()
-        handleRedo()
-      }
-      // C: Map selected line as chapter
-      else if (key === 'c' && !editingLineId) {
-        e.preventDefault()
-        handleMapSelectedLineAsChapter()
-      }
-      // T: Map selected line as topic
-      else if (key === 't' && !editingLineId) {
-        e.preventDefault()
-        handleMapSelectedLineAsTopic()
-      }
-      // E: Edit selected line
-      else if (key === 'e' && !editingLineId && selectedOcrLine) {
-        e.preventDefault()
-        startEditingLine(selectedOcrLine.id, selectedOcrLine.text)
-      }
-      // Delete: Remove selected OCR line (undo supported)
-      else if ((e.key === 'Delete' || e.key === 'Backspace') && !editingLineId && selectedOcrLine) {
-        e.preventDefault()
-        handleDeleteOcrLine(selectedOcrLine.id)
-      }
-      // Arrow Up: Select previous line
-      else if (e.key === 'ArrowUp' && !editingLineId) {
-        e.preventDefault()
-        if (selectedIndex > 0) {
-          setSelectedOcrLineId(tocOcrLines[selectedIndex - 1].id)
-        }
-      }
-      // Arrow Down: Select next line
-      else if (e.key === 'ArrowDown' && !editingLineId) {
-        e.preventDefault()
-        if (selectedIndex >= 0 && selectedIndex < tocOcrLines.length - 1) {
-          setSelectedOcrLineId(tocOcrLines[selectedIndex + 1].id)
-        }
-      }
-      // Escape: Clear selection or exit edit mode
-      else if (e.key === 'Escape') {
-        e.preventDefault()
-        if (editingLineId) {
-          setEditingLineId(null)
-          setEditingLineText('')
-        } else {
-          setSelectedOcrLineId(null)
-        }
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown, true)
-    return () => window.removeEventListener('keydown', handleKeyDown, true)
-  }, [showTocModal, tocOcrLines, selectedOcrLineId, editingLineId, selectedOcrLine])
 
   // ---- Queries ----
 
@@ -502,6 +597,28 @@ export default function CurriculumPage() {
     },
   })
 
+  // Phase 5: Chunked parse for large text (> 50KB)
+  const parseTocStreamMutation = useMutation({
+    mutationFn: ({ id, data }) => lmsApi.parseTOCStream(id, data),
+    onSuccess: (response) => {
+      const parsed = response?.data?.chapters || []
+      const normalized = parsed.map((chapter) => ({
+        title: chapter.title || '',
+        topics: (chapter.topics || []).map((topic) => ({ title: topic.title || '' })),
+      }))
+      setTocChapters(normalized)
+      setTocSuggestionItems([])
+      const chunkCount = response?.data?.chunk_count || 1
+      setTocWarnings(response?.data?.warnings || [])
+      setTocSuggestionMeta({ source: 'rule_based', confidence: null })
+      setTocStep('review')
+      showSuccess(`Large text parsed in ${chunkCount} chunk${chunkCount > 1 ? 's' : ''}. Review and adjust before applying.`)
+    },
+    onError: (error) => {
+      showError(error.response?.data?.detail || error.response?.data?.error || 'Failed to parse large text')
+    },
+  })
+
   const applyTocMutation = useMutation({
     mutationFn: ({ id, data }) => lmsApi.applyTOC(id, data),
     onSuccess: () => {
@@ -657,7 +774,7 @@ export default function CurriculumPage() {
     setTocText('')
     setTocMode('paste')
     setTocStep('input')
-    setTocChapters([{ title: '', topics: [{ title: '' }] }])
+    setTocChapters([{ title: '', topics: [{ title: '', page_start: null, page_end: null, content_kind: 'general' }], page_start: null, page_end: null }])
     setTocSuggestionItems([])
     setTocWarnings([])
     setTocSuggestionMeta(null)
@@ -666,6 +783,7 @@ export default function CurriculumPage() {
     setTocImageRotation(0)
     setTocImageSkewX(0)
     setTocImageSkewY(0)
+    setTocSkewUiMode('basic')
     setTocImageWizardStep(1)
     setTocCropAspect('free')
     setTocPerspectiveCorners(createDefaultPerspectiveCorners())
@@ -686,7 +804,7 @@ export default function CurriculumPage() {
     setTocText('')
     setTocMode('paste')
     setTocStep('input')
-    setTocChapters([{ title: '', topics: [{ title: '' }] }])
+    setTocChapters([{ title: '', topics: [{ title: '', page_start: null, page_end: null, content_kind: 'general' }], page_start: null, page_end: null }])
     setTocSuggestionItems([])
     setTocWarnings([])
     setTocSuggestionMeta(null)
@@ -770,17 +888,67 @@ export default function CurriculumPage() {
       showError('Please provide Table of Contents text first')
       return
     }
-    parseTocMutation.mutate({ id: selectedBookId, data: { toc_text: tocText } })
+
+    const labeledResult = buildTocFromLabeledRawText(tocText)
+    if (labeledResult.hasLabels) {
+      if (labeledResult.chapters.length === 0) {
+        showError('No chapter/topic lines found in labeled text.')
+        return
+      }
+      setTocChapters(labeledResult.chapters)
+      setTocSuggestionItems([])
+      setTocWarnings(labeledResult.warnings)
+      setTocSuggestionMeta({ source: 'manual', confidence: 1 })
+      setTocStep('review')
+      showSuccess('Labeled lines applied. Review structure before saving.')
+      return
+    }
+
+    // Phase 5: Route large text through chunked parse endpoint
+    if (tocText.length > TOC_WARN_TEXT_SIZE) {
+      parseTocStreamMutation.mutate({ id: selectedBookId, data: { toc_text: tocText } })
+    } else {
+      parseTocMutation.mutate({ id: selectedBookId, data: { toc_text: tocText } })
+    }
+  }
+
+  const generateUUID = () => {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      const r = (Math.random() * 16) | 0
+      const v = c === 'x' ? r : (r & 0x3) | 0x8
+      return v.toString(16)
+    })
   }
 
   const handleApplyToc = () => {
     const chapters = tocChapters
-      .map((chapter) => ({
-        title: (chapter.title || '').trim(),
-        topics: (chapter.topics || [])
-          .map((topic) => ({ title: (topic.title || '').trim() }))
-          .filter((topic) => !!topic.title),
-      }))
+      .map((chapter) => {
+        const chapterData = {
+          title: (chapter.title || '').trim(),
+          topics: (chapter.topics || [])
+            .map((topic) => {
+              const topicData = { title: (topic.title || '').trim() }
+              if (topic.page_start !== null && topic.page_start !== undefined) {
+                topicData.page_start = parseInt(topic.page_start) || null
+              }
+              if (topic.page_end !== null && topic.page_end !== undefined) {
+                topicData.page_end = parseInt(topic.page_end) || null
+              }
+              if (topic.content_kind && topic.content_kind !== 'general') {
+                topicData.content_kind = topic.content_kind
+              }
+              return topicData
+            })
+            .filter((topic) => !!topic.title),
+        }
+        if (chapter.page_start !== null && chapter.page_start !== undefined) {
+          chapterData.page_start = parseInt(chapter.page_start) || null
+        }
+        if (chapter.page_end !== null && chapter.page_end !== undefined) {
+          chapterData.page_end = parseInt(chapter.page_end) || null
+        }
+        return chapterData
+      })
       .filter((chapter) => !!chapter.title)
 
     if (chapters.length === 0) {
@@ -788,7 +956,12 @@ export default function CurriculumPage() {
       return
     }
 
-    applyTocMutation.mutate({ id: selectedBookId, data: { chapters } })
+    const payload = {
+      chapters,
+      idempotency_key: generateUUID(),
+    }
+
+    applyTocMutation.mutate({ id: selectedBookId, data: payload })
   }
 
   const handleManualTocReview = () => {
@@ -811,6 +984,22 @@ export default function CurriculumPage() {
       showError('Please provide Table of Contents text before requesting AI suggestion.')
       return
     }
+
+    const labeledResult = buildTocFromLabeledRawText(cleanedRawText)
+    if (labeledResult.hasLabels) {
+      if (labeledResult.chapters.length === 0) {
+        showError('No chapter/topic lines found in labeled text.')
+        return
+      }
+      setTocChapters(labeledResult.chapters)
+      setTocSuggestionItems([])
+      setTocWarnings(labeledResult.warnings)
+      setTocSuggestionMeta({ source: 'manual', confidence: 1 })
+      setTocStep('review')
+      showSuccess('Labeled lines converted directly to structure.')
+      return
+    }
+
     suggestTocMutation.mutate({
       id: selectedBookId,
       data: { raw_text: cleanedRawText },
@@ -1057,7 +1246,7 @@ export default function CurriculumPage() {
       if (idx !== chapterIndex) return chapter
       return {
         ...chapter,
-        topics: [...(chapter.topics || []), { title: '' }],
+        topics: [...(chapter.topics || []), { title: '', page_start: null, page_end: null, content_kind: 'general' }],
       }
     }))
   }
@@ -1068,6 +1257,36 @@ export default function CurriculumPage() {
       return {
         ...chapter,
         topics: chapter.topics.filter((_, tIdx) => tIdx !== topicIndex),
+      }
+    }))
+  }
+
+  const updateTocChapterPageRange = (chapterIndex, pageStart, pageEnd) => {
+    setTocChapters((prev) => prev.map((chapter, idx) => 
+      idx === chapterIndex ? { ...chapter, page_start: pageStart, page_end: pageEnd } : chapter
+    ))
+  }
+
+  const updateTocTopicPageRange = (chapterIndex, topicIndex, pageStart, pageEnd) => {
+    setTocChapters((prev) => prev.map((chapter, idx) => {
+      if (idx !== chapterIndex) return chapter
+      return {
+        ...chapter,
+        topics: chapter.topics.map((topic, tidx) => 
+          tidx === topicIndex ? { ...topic, page_start: pageStart, page_end: pageEnd } : topic
+        ),
+      }
+    }))
+  }
+
+  const updateTocTopicContentKind = (chapterIndex, topicIndex, contentKind) => {
+    setTocChapters((prev) => prev.map((chapter, idx) => {
+      if (idx !== chapterIndex) return chapter
+      return {
+        ...chapter,
+        topics: chapter.topics.map((topic, tidx) => 
+          tidx === topicIndex ? { ...topic, content_kind: contentKind } : topic
+        ),
       }
     }))
   }
@@ -1336,7 +1555,7 @@ export default function CurriculumPage() {
   }
 
   const handleSaveTocCrop = async () => {
-    if (!tocCompletedCrop || !tocCropImageRef.current || !tocImageFile) {
+    if ((!tocCompletedCrop && !tocCrop) || !tocCropImageRef.current || !tocImageFile) {
       showError('Select a crop area first.')
       return
     }
@@ -1346,12 +1565,17 @@ export default function CurriculumPage() {
       const img = tocCropImageRef.current
       const scaleX = img.naturalWidth / img.width
       const scaleY = img.naturalHeight / img.height
+      const activeCrop = tocCompletedCrop || tocCrop
       const canvas = document.createElement('canvas')
+      const cropX = (activeCrop.unit === '%' ? (activeCrop.x / 100) * img.width : activeCrop.x)
+      const cropY = (activeCrop.unit === '%' ? (activeCrop.y / 100) * img.height : activeCrop.y)
+      const cropW = (activeCrop.unit === '%' ? (activeCrop.width / 100) * img.width : activeCrop.width)
+      const cropH = (activeCrop.unit === '%' ? (activeCrop.height / 100) * img.height : activeCrop.height)
       const pixelCrop = {
-        x: tocCompletedCrop.x * scaleX,
-        y: tocCompletedCrop.y * scaleY,
-        width: tocCompletedCrop.width * scaleX,
-        height: tocCompletedCrop.height * scaleY,
+        x: cropX * scaleX,
+        y: cropY * scaleY,
+        width: cropW * scaleX,
+        height: cropH * scaleY,
       }
       canvas.width = pixelCrop.width
       canvas.height = pixelCrop.height
@@ -1370,7 +1594,6 @@ export default function CurriculumPage() {
         { type: 'image/jpeg' },
       )
       replaceTocImageFile(croppedFile)
-      setTocCropModalOpen(false)
       setTocCrop(undefined)
       setTocCompletedCrop(null)
       showSuccess('Crop applied.')
@@ -1379,6 +1602,28 @@ export default function CurriculumPage() {
     } finally {
       setTocImageProcessing(false)
     }
+  }
+
+  const handleProceedToSkew = async (event) => {
+    if (event) {
+      event.preventDefault()
+      event.stopPropagation()
+    }
+
+    if (!tocImageFile || tocImageProcessing || ocrLoading) return
+
+    if (tocImageRotation) {
+      await handleApplyTocRotation()
+    }
+
+    const hasCropSelection = (tocCompletedCrop && tocCompletedCrop.width > 0 && tocCompletedCrop.height > 0)
+      || (tocCrop && tocCrop.width > 0 && tocCrop.height > 0)
+
+    if (hasCropSelection) {
+      await handleSaveTocCrop()
+    }
+
+    setTocImageWizardStep(3)
   }
 
   const handleTocImageSelect = (e) => {
@@ -1406,29 +1651,49 @@ export default function CurriculumPage() {
     setTocCrop(undefined)
     setTocCompletedCrop(null)
     setTocCropModalOpen(false)
+    setTocRawExtractedText('')
+    setTocShowCleanupEditor(false)
   }
 
-  const handleRotateTocImage = (direction) => {
+  const handleRotateTocImage = (delta) => {
     setTocImageRotation((prev) => {
-      if (direction === 'left') return (prev - 90 + 360) % 360
-      return (prev + 90) % 360
+      const next = prev + delta
+      return Math.max(-360, Math.min(360, next))
     })
   }
 
-  const bakeRotationAndAdvance = async (nextStep) => {
+  const handleSetTocImageRotation = (value) => {
+    const numeric = Number(value)
+    if (Number.isNaN(numeric)) return
+    const normalized = Math.max(-360, Math.min(360, Math.round(numeric)))
+    setTocImageRotation(normalized)
+  }
+
+  const handleApplyTocRotation = async () => {
     if (!tocImageRotation || !tocImageFile) {
-      setTocImageWizardStep(nextStep)
+      showError('Adjust rotation first.')
       return
     }
+
     setTocImageProcessing(true)
     try {
       const baked = await getRotatedImageFile(tocImageFile, tocImageRotation)
       replaceTocImageFile(baked)
       setTocImageRotation(0)
-    } catch {
-      // proceed even if bake fails
+      setTocCrop(undefined)
+      setTocCompletedCrop(null)
+      resetTocPerspectiveCorners()
+      showSuccess('Rotation applied.')
+    } catch (error) {
+      showError('Failed to apply rotation.')
     } finally {
       setTocImageProcessing(false)
+    }
+  }
+
+  const bakeRotationAndAdvance = async (nextStep) => {
+    if (tocImageRotation) {
+      await handleApplyTocRotation()
     }
     setTocImageWizardStep(nextStep)
   }
@@ -1556,7 +1821,8 @@ export default function CurriculumPage() {
       }
 
       const response = await lmsApi.ocrTOC(selectedBookId, processedFile)
-      setTocText(response.data.text)
+      const rawExtractedText = response?.data?.text || ''
+      setTocText(rawExtractedText)
       const responseLines = Array.isArray(response?.data?.lines)
         ? response.data.lines
           .map((line, index) => ({
@@ -1568,7 +1834,7 @@ export default function CurriculumPage() {
             mappedNumber: null,
           }))
           .filter((line) => !!line.text)
-        : parseOcrLinesFromText(response.data.text)
+        : parseOcrLinesFromText(rawExtractedText)
       setTocOcrLines(responseLines)
       setSelectedOcrLineId(responseLines[0]?.id || null)
       setTocMode('upload')
@@ -1741,7 +2007,7 @@ export default function CurriculumPage() {
           {/* TOC tip */}
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-3">
             <p className="text-xs text-blue-700">
-              <span className="font-semibold">Tip:</span> After adding a book, use "Import Table of Contents" to photograph the book's table of contents — the AI extracts chapters and topics automatically.
+              <span className="font-semibold">Tip:</span> After adding a book, use "Import Table of Contents" to photograph the book's table of contents. The AI extracts chapters and topics automatically.
             </p>
           </div>
         </div>
@@ -2277,7 +2543,7 @@ export default function CurriculumPage() {
       {/* ============ Table of Contents Import Modal ============ */}
       {showTocModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+          <div ref={tocModalBodyRef} className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
             <h2 className="text-xl font-bold text-gray-900 mb-2">Import Table of Contents</h2>
             <p className="text-sm text-gray-500 mb-4">
               Upload a photo of the book's Table of Contents page, or enter chapters and topics manually.
@@ -2333,7 +2599,7 @@ export default function CurriculumPage() {
                         <div className="relative rounded-lg overflow-hidden border border-gray-200">
                           <div className="w-full flex justify-center bg-gray-50 py-2">
                             <div className="relative inline-block">
-                              {tocImageWizardStep === 2 ? (
+                              {tocImageWizardStep === 1 ? (
                                 <ReactCrop
                                   crop={tocCrop}
                                   onChange={(c) => setTocCrop(c)}
@@ -2347,7 +2613,23 @@ export default function CurriculumPage() {
                                     ref={tocCropImageRef}
                                     src={tocImagePreview}
                                     alt="Crop TOC"
+                                    onLoad={(e) => {
+                                      const imageElement = e.currentTarget
+                                      const fullCrop = {
+                                        unit: '%',
+                                        x: 0,
+                                        y: 0,
+                                        width: 100,
+                                        height: 100,
+                                      }
+                                      if (!tocCrop || !tocCrop.width || !tocCrop.height) {
+                                        setTocCrop(fullCrop)
+                                      }
+                                      setTocCompletedCrop(fullCrop)
+                                      tocCropImageRef.current = imageElement
+                                    }}
                                     className="max-h-80 w-auto object-contain block"
+                                    style={{ transform: `rotate(${tocImageRotation}deg)` }}
                                   />
                                 </ReactCrop>
                               ) : (
@@ -2362,25 +2644,25 @@ export default function CurriculumPage() {
 
                               {tocImageWizardStep === 1 && (
                                 <>
-                                  {/* Rotate Left — left edge */}
+                                  {/* Rotate Left G�� left edge */}
                                   <button
                                     type="button"
-                                    onClick={() => handleRotateTocImage('left')}
+                                    onClick={() => handleRotateTocImage(-90)}
                                     disabled={ocrLoading || tocImageProcessing}
-                                    className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 w-9 h-9 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center shadow-lg transition-colors"
-                                    title="Rotate Left 90°"
+                                    className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center shadow-lg transition-colors z-10"
+                                    title="Rotate Left 90 degrees"
                                   >
                                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
                                       <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                                     </svg>
                                   </button>
-                                  {/* Rotate Right — right edge */}
+                                  {/* Rotate Right G�� right edge */}
                                   <button
                                     type="button"
-                                    onClick={() => handleRotateTocImage('right')}
+                                    onClick={() => handleRotateTocImage(90)}
                                     disabled={ocrLoading || tocImageProcessing}
-                                    className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 w-9 h-9 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center shadow-lg transition-colors"
-                                    title="Rotate Right 90°"
+                                    className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center shadow-lg transition-colors z-10"
+                                    title="Rotate Right 90 degrees"
                                   >
                                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
                                       <path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
@@ -2450,6 +2732,7 @@ export default function CurriculumPage() {
                               setTocImageRotation(0)
                               setTocImageSkewX(0)
                               setTocImageSkewY(0)
+                              setTocSkewUiMode('basic')
                               setTocImageWizardStep(1)
                               if (tocFinalPreviewUrl) URL.revokeObjectURL(tocFinalPreviewUrl)
                               setTocFinalPreviewUrl(null)
@@ -2467,45 +2750,67 @@ export default function CurriculumPage() {
                         </div>
 
                         <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-3">
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                            {[1, 2, 3, 4].map((step) => (
-                              <button
-                                key={`wiz-step-${step}`}
-                                type="button"
-                                onClick={() => setTocImageWizardStep(step)}
-                                className={`text-xs px-2 py-1 rounded border ${
-                                  tocImageWizardStep === step
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                            {[
+                              { id: 1, label: '1. Rotate + Crop' },
+                              { id: 3, label: '2. Skew' },
+                              { id: 4, label: '3. OCR' },
+                            ].map((step) => (
+                              <div
+                                key={`wiz-step-${step.id}`}
+                                className={`text-xs px-2 py-1.5 rounded border text-center ${
+                                  tocImageWizardStep === step.id
                                     ? 'bg-blue-600 text-white border-blue-600'
-                                    : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-100'
+                                    : 'bg-white text-gray-600 border-gray-200'
                                 }`}
                               >
-                                {step === 1 ? '1. Rotate' : step === 2 ? '2. Crop' : step === 3 ? '3. Skew' : '4. OCR'}
-                              </button>
+                                {step.label}
+                              </div>
                             ))}
                           </div>
 
                           {tocImageWizardStep === 1 && (
                             <div className="space-y-2">
-                              <p className="text-xs font-medium text-gray-700">Step 1: Rotate / Align</p>
-                              <p className="text-xs text-gray-500">Use the arrow buttons on the image to rotate.</p>
+                              <p className="text-xs font-medium text-gray-700">Step 1: Rotate + Crop</p>
+                              <p className="text-xs text-gray-500">Adjust rotation and crop. Changes are applied automatically when you click Next.</p>
+                              <div className="grid grid-cols-1 sm:grid-cols-[auto_1fr_auto] gap-2 items-center">
+                                <button
+                                  type="button"
+                                  onClick={() => handleRotateTocImage(-90)}
+                                  disabled={ocrLoading || tocImageProcessing}
+                                  className="btn btn-secondary text-xs"
+                                >
+                                  -90°
+                                </button>
+                                <input
+                                  type="range"
+                                  min={-360}
+                                  max={360}
+                                  step={1}
+                                  value={tocImageRotation}
+                                  onChange={(e) => handleSetTocImageRotation(e.target.value)}
+                                  className="w-full"
+                                  disabled={ocrLoading || tocImageProcessing}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleRotateTocImage(90)}
+                                  disabled={ocrLoading || tocImageProcessing}
+                                  className="btn btn-secondary text-xs"
+                                >
+                                  +90°
+                                </button>
+                              </div>
+                              <p className="text-xs text-gray-500">Current rotation: {tocImageRotation}deg</p>
                               <div className="flex flex-wrap gap-2">
                                 <button
                                   type="button"
-                                  onClick={() => bakeRotationAndAdvance(2)}
-                                  disabled={ocrLoading || tocImageProcessing}
-                                  className="btn btn-primary text-sm"
+                                  onClick={() => handleSetTocImageRotation(0)}
+                                  disabled={ocrLoading || tocImageProcessing || tocImageRotation === 0}
+                                  className="btn btn-secondary text-sm"
                                 >
-                                  {tocImageProcessing ? 'Processing...' : 'Next: Crop'}
+                                  Reset Rotation
                                 </button>
-                              </div>
-                            </div>
-                          )}
-
-                          {tocImageWizardStep === 2 && (
-                            <div className="space-y-2">
-                              <p className="text-xs font-medium text-gray-700">Step 2: Crop</p>
-                              <p className="text-xs text-gray-500">Draw a rectangle on the image above. Drag handles to resize, drag inside to move.</p>
-                              <div className="flex gap-2">
                                 <button
                                   type="button"
                                   onClick={() => { setTocCrop(undefined); setTocCompletedCrop(null) }}
@@ -2514,97 +2819,119 @@ export default function CurriculumPage() {
                                 >
                                   Clear Selection
                                 </button>
-                              </div>
-                              <div className="flex flex-wrap gap-2">
-                                <button type="button" onClick={() => setTocImageWizardStep(1)} className="btn btn-secondary text-sm">Back</button>
                                 <button
                                   type="button"
-                                  onClick={handleSaveTocCrop}
-                                  disabled={ocrLoading || tocImageProcessing || !tocCompletedCrop}
-                                  className="btn btn-secondary text-sm"
+                                  onClick={(e) => handleProceedToSkew(e)}
+                                  disabled={ocrLoading || tocImageProcessing}
+                                  className="btn btn-primary text-sm"
                                 >
-                                  {tocImageProcessing ? 'Applying...' : 'Apply Crop'}
+                                  {tocImageProcessing ? 'Applying...' : 'Next: Skew'}
                                 </button>
-                                <button type="button" onClick={() => setTocImageWizardStep(3)} className="btn btn-primary text-sm">Next: Skew</button>
                               </div>
                             </div>
                           )}
 
                           {tocImageWizardStep === 3 && (
                             <div className="space-y-2">
-                              <p className="text-xs font-medium text-gray-700">Step 3: Perspective / Skew</p>
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                <label className="text-xs text-gray-600 space-y-1 block">
-                                  <span>Corner Skew X ({tocImageSkewX}deg)</span>
-                                  <input
-                                    type="range"
-                                    min={-20}
-                                    max={20}
-                                    step={1}
-                                    value={tocImageSkewX}
-                                    onChange={(e) => setTocImageSkewX(parseInt(e.target.value, 10) || 0)}
-                                    className="w-full"
-                                    disabled={ocrLoading || tocImageProcessing}
-                                  />
-                                </label>
-                                <label className="text-xs text-gray-600 space-y-1 block">
-                                  <span>Corner Skew Y ({tocImageSkewY}deg)</span>
-                                  <input
-                                    type="range"
-                                    min={-20}
-                                    max={20}
-                                    step={1}
-                                    value={tocImageSkewY}
-                                    onChange={(e) => setTocImageSkewY(parseInt(e.target.value, 10) || 0)}
-                                    className="w-full"
-                                    disabled={ocrLoading || tocImageProcessing}
-                                  />
-                                </label>
+                              <p className="text-xs font-medium text-gray-700">Step 2: Perspective / Skew</p>
+                              <div className="inline-flex rounded-lg border border-gray-200 bg-white p-0.5">
+                                <button
+                                  type="button"
+                                  onClick={() => setTocSkewUiMode('basic')}
+                                  className={`px-3 py-1 text-xs rounded-md ${tocSkewUiMode === 'basic' ? 'bg-blue-600 text-white' : 'text-gray-600'}`}
+                                >
+                                  Basic
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setTocSkewUiMode('advanced')}
+                                  className={`px-3 py-1 text-xs rounded-md ${tocSkewUiMode === 'advanced' ? 'bg-blue-600 text-white' : 'text-gray-600'}`}
+                                >
+                                  Advanced
+                                </button>
                               </div>
 
-                              <div className="flex flex-wrap gap-2">
-                                <button type="button" onClick={handleApplyTocSkew} disabled={ocrLoading || tocImageProcessing} className="btn btn-secondary text-sm">
-                                  Apply Skew Correction
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={handleApplyTocPerspective}
-                                  disabled={ocrLoading || tocImageProcessing || hasPendingLinearTransforms}
-                                  className="btn btn-secondary text-sm"
-                                  title={hasPendingLinearTransforms ? 'Apply/reset rotate-skew first, then perspective.' : 'Apply 4-corner perspective correction'}
-                                >
-                                  Apply Perspective
-                                </button>
-                                <button type="button" onClick={resetTocPerspectiveCorners} disabled={ocrLoading || tocImageProcessing} className="btn btn-secondary text-sm">
-                                  Reset Corners
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setTocImageRotation(0)
-                                    setTocImageSkewX(0)
-                                    setTocImageSkewY(0)
-                                  }}
-                                  disabled={ocrLoading || tocImageProcessing}
-                                  className="btn btn-secondary text-sm"
-                                >
-                                  Reset Transforms
-                                </button>
-                              </div>
+                              {tocSkewUiMode === 'advanced' && (
+                                <>
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <label className="text-xs text-gray-600 space-y-1 block">
+                                      <span>Corner Skew X ({tocImageSkewX}deg)</span>
+                                      <input
+                                        type="range"
+                                        min={-20}
+                                        max={20}
+                                        step={1}
+                                        value={tocImageSkewX}
+                                        onChange={(e) => setTocImageSkewX(parseInt(e.target.value, 10) || 0)}
+                                        className="w-full"
+                                        disabled={ocrLoading || tocImageProcessing}
+                                      />
+                                    </label>
+                                    <label className="text-xs text-gray-600 space-y-1 block">
+                                      <span>Corner Skew Y ({tocImageSkewY}deg)</span>
+                                      <input
+                                        type="range"
+                                        min={-20}
+                                        max={20}
+                                        step={1}
+                                        value={tocImageSkewY}
+                                        onChange={(e) => setTocImageSkewY(parseInt(e.target.value, 10) || 0)}
+                                        className="w-full"
+                                        disabled={ocrLoading || tocImageProcessing}
+                                      />
+                                    </label>
+                                  </div>
+
+                                  <div className="flex flex-wrap gap-2">
+                                    <button type="button" onClick={handleApplyTocSkew} disabled={ocrLoading || tocImageProcessing} className="btn btn-secondary text-sm">
+                                      Apply Skew Correction
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={handleApplyTocPerspective}
+                                      disabled={ocrLoading || tocImageProcessing || hasPendingLinearTransforms}
+                                      className="btn btn-secondary text-sm"
+                                      title={hasPendingLinearTransforms ? 'Apply/reset rotate-skew first, then perspective.' : 'Apply 4-corner perspective correction'}
+                                    >
+                                      Apply Perspective
+                                    </button>
+                                    <button type="button" onClick={resetTocPerspectiveCorners} disabled={ocrLoading || tocImageProcessing} className="btn btn-secondary text-sm">
+                                      Reset Corners
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setTocImageRotation(0)
+                                        setTocImageSkewX(0)
+                                        setTocImageSkewY(0)
+                                      }}
+                                      disabled={ocrLoading || tocImageProcessing}
+                                      className="btn btn-secondary text-sm"
+                                    >
+                                      Reset Transforms
+                                    </button>
+                                  </div>
+                                </>
+                              )}
 
                               <p className="text-xs text-gray-500">
                                 Perspective: drag the 4 blue handles to page corners, then apply perspective correction.
                               </p>
+                              {tocSkewUiMode === 'basic' && (
+                                <p className="text-xs text-gray-500">
+                                  Basic mode keeps controls minimal. Use Next: OCR after corner alignment.
+                                </p>
+                              )}
                               <p className="text-xs text-gray-500">
                                 Handles snap to edges when close to image bounds for easier alignment.
                               </p>
-                              {hasPendingLinearTransforms && (
+                              {tocSkewUiMode === 'advanced' && hasPendingLinearTransforms && (
                                 <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
                                   Apply or reset rotate/skew before applying perspective correction.
                                 </p>
                               )}
                               <div className="flex flex-wrap gap-2">
-                                <button type="button" onClick={() => setTocImageWizardStep(2)} className="btn btn-secondary text-sm">Back</button>
+                                <button type="button" onClick={() => setTocImageWizardStep(1)} className="btn btn-secondary text-sm">Back</button>
                                 <button type="button" onClick={() => setTocImageWizardStep(4)} className="btn btn-primary text-sm">Next: OCR</button>
                               </div>
                             </div>
@@ -2612,7 +2939,7 @@ export default function CurriculumPage() {
 
                           {tocImageWizardStep === 4 && (
                             <div className="space-y-2">
-                              <p className="text-xs font-medium text-gray-700">Step 4: Run OCR</p>
+                              <p className="text-xs font-medium text-gray-700">Step 3: Run OCR</p>
                               <p className="text-xs text-gray-500">
                                 The preview above is the final processed area that will be sent to OCR, not the full original photo.
                               </p>
@@ -2638,6 +2965,7 @@ export default function CurriculumPage() {
                               </div>
                             </div>
                           )}
+
                         </div>
                       </div>
                     )}
@@ -2669,23 +2997,35 @@ export default function CurriculumPage() {
 
                         <div className="space-y-2 ml-2">
                           {(chapter.topics || []).map((topic, topicIndex) => (
-                            <div key={topicIndex} className="flex items-center gap-2">
-                              <span className="text-xs text-gray-500 w-20">
-                                {chapterIndex + 1}.{topicIndex + 1}
-                              </span>
-                              <input
-                                type="text"
-                                className="input flex-1"
-                                placeholder="Type topic title..."
-                                value={topic.title}
-                                onChange={(e) => updateTocTopicTitle(chapterIndex, topicIndex, e.target.value)}
-                              />
-                              <button
-                                onClick={() => removeTocTopic(chapterIndex, topicIndex)}
-                                className="text-xs text-red-600 hover:text-red-800 font-medium"
-                              >
-                                Remove
-                              </button>
+                            <div key={topicIndex}>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-gray-500 w-20">
+                                  {chapterIndex + 1}.{topicIndex + 1}
+                                </span>
+                                <input
+                                  type="text"
+                                  className="input flex-1"
+                                  placeholder="Type topic title..."
+                                  value={topic.title}
+                                  onChange={(e) => updateTocTopicTitle(chapterIndex, topicIndex, e.target.value)}
+                                />
+                                <button
+                                  onClick={() => removeTocTopic(chapterIndex, topicIndex)}
+                                  className="text-xs text-red-600 hover:text-red-800 font-medium"
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                              {(topic.notes || []).length > 0 && (
+                                <ul className="ml-24 mt-1 space-y-0.5">
+                                  {topic.notes.map((note, nIdx) => (
+                                    <li key={nIdx} className="text-xs text-gray-500 flex items-start gap-1">
+                                      <span className="mt-0.5 text-gray-400">•</span>
+                                      <span>{note}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
                             </div>
                           ))}
                         </div>
@@ -2708,55 +3048,57 @@ export default function CurriculumPage() {
                 {tocMode === 'upload' && tocText.trim() && (
                   <div className="mt-4">
                     <label className="label">Extracted Text (clean up here)</label>
-                    <textarea
-                      className="input font-mono text-sm"
-                      data-rawarea="true"
-                      rows={10}
-                      dir={isRTLLanguage(bookTree?.language) ? 'rtl' : 'ltr'}
-                      placeholder="OCR output will appear here..."
-                      value={tocText}
-                      onChange={(e) => {
-                        const nextText = e.target.value
-                        setTocText(nextText)
-                        setTocOcrLines(parseOcrLinesFromText(nextText))
-                        clearTocSuggestionState()
-                        if (selectedOcrLineId && !parseOcrLinesFromText(nextText).some((line) => line.id === selectedOcrLineId)) {
-                          setSelectedOcrLineId(null)
-                        }
-                      }}
-                      onKeyDown={(e) => {
-                        // Only handle merge logic, let all other keys act as normal
-                        if (e.key === 'Backspace') {
-                          const textarea = e.target
-                          const value = textarea.value
-                          const selectionStart = textarea.selectionStart
-                          const selectionEnd = textarea.selectionEnd
-                          // Only at start of a line, no selection
-                          if (selectionStart === selectionEnd && selectionStart > 0) {
-                            // Find previous newline
-                            const before = value.slice(0, selectionStart)
-                            const lastNewline = before.lastIndexOf('\n')
-                            if (lastNewline >= 0 && selectionStart === lastNewline + 1) {
-                              // Prevent default backspace
-                              e.preventDefault()
-                              // Merge this line with previous
-                              const after = value.slice(selectionEnd)
-                              const merged = value.slice(0, lastNewline) + after
-                              setTocText(merged)
-                              setTocOcrLines(parseOcrLinesFromText(merged))
-                              clearTocSuggestionState()
-                              // Move caret to end of previous line
-                              setTimeout(() => {
-                                textarea.selectionStart = textarea.selectionEnd = lastNewline
-                              }, 0)
-                            }
-                          }
-                        }
-                      }}
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Clean up the text above, then click <b>Build Structure from Text</b> to extract chapters/topics.
-                    </p>
+                    <div className="mb-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2">
+                      <p className="text-xs text-blue-800 font-medium">Quick format tips</p>
+                      <p className="text-xs text-blue-700 mt-1">
+                        You can use labeled lines like CHAPTER:, TOPIC:, and NOTE:. If labels are present, the parser maps chapters and topics directly.
+                      </p>
+                      <p className="text-xs text-blue-700 mt-1">
+                        Example: CHAPTER: Unit 1 Whole Numbers | TOPIC: 1.1 Whole Numbers | NOTE: Exercise (1a)
+                      </p>
+                    </div>
+                    <div className="mb-2 flex flex-wrap gap-2">
+                      <button type="button" onMouseDown={handleRawLabelButtonMouseDown} onClick={(e) => handleApplyLabelToCurrentLine('chapter', e)} className="btn btn-secondary text-xs">Set Current Line as Chapter</button>
+                      <button type="button" onMouseDown={handleRawLabelButtonMouseDown} onClick={(e) => handleApplyLabelToCurrentLine('topic', e)} className="btn btn-secondary text-xs">Set Current Line as Topic</button>
+                      <button type="button" onMouseDown={handleRawLabelButtonMouseDown} onClick={(e) => handleApplyLabelToCurrentLine('note', e)} className="btn btn-secondary text-xs">Set Current Line as Note</button>
+                      <button type="button" onMouseDown={handleRawLabelButtonMouseDown} onClick={(e) => handleApplyLabelToCurrentLine('none', e)} className="btn btn-secondary text-xs">Clear Line Label</button>
+                    </div>
+                    <div className="mt-3 rounded-md border border-gray-200 bg-gray-50 p-2">
+                      <p className="text-xs font-medium text-gray-700 mb-2">Notepad-style editor</p>
+                      <p className="text-xs text-gray-500 mb-2">
+                        Place cursor in any line and use the buttons above to label that line quickly.
+                      </p>
+                      <textarea
+                        ref={tocRawTextAreaRef}
+                        className="input font-mono text-sm"
+                        data-rawarea="true"
+                        rows={12}
+                        dir={isRTLLanguage(bookTree?.language) ? 'rtl' : 'ltr'}
+                        placeholder="OCR output will appear here..."
+                        value={tocText}
+                        onChange={(e) => syncRawText(e.target.value)}
+                      />
+                      {tocText.length > 0 && (
+                        <div className={`flex items-center justify-between mt-1 text-xs ${
+                          tocText.length > TOC_WARN_TEXT_SIZE
+                            ? tocText.length > MAX_TOC_TEXT_SIZE * 0.9
+                              ? 'text-red-600'
+                              : 'text-amber-600'
+                            : 'text-gray-400'
+                        }`}>
+                          <span>
+                            {tocText.length > TOC_WARN_TEXT_SIZE && (
+                              <span className="font-medium">Large text detected. </span>
+                            )}
+                            {Math.round(tocText.length / 1024)}KB / {Math.round(MAX_TOC_TEXT_SIZE / 1024)}KB max
+                          </span>
+                          {tocText.length > TOC_WARN_TEXT_SIZE && (
+                            <span className="font-medium">Consider using Build Structure to test before applying.</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
                     <button
                       onClick={handleSuggestToc}
                       disabled={suggestTocMutation.isPending || !tocText.trim()}
@@ -2764,214 +3106,6 @@ export default function CurriculumPage() {
                     >
                       {suggestTocMutation.isPending ? 'Building Structure...' : 'Build Structure from Text'}
                     </button>
-                  </div>
-                )}
-
-                {tocMode === 'upload' && tocOcrLines.length > 0 && (
-                  <div className="mt-4">
-                    <button
-                      type="button"
-                      onClick={() => setShowAdvancedOcrMapping((prev) => !prev)}
-                      className="btn btn-sm btn-secondary"
-                    >
-                      {showAdvancedOcrMapping ? 'Hide' : 'Show'} Advanced OCR Lines Panel
-                    </button>
-                    {showAdvancedOcrMapping && (
-                      <div className="mt-2 rounded-lg border border-gray-200 p-3 bg-gray-50 space-y-3">
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                          <div>
-                            <p className="text-sm font-semibold text-gray-900">OCR Lines (Advanced)</p>
-                            <p className="text-xs text-gray-500">
-                              C=Chapter | T=Topic | E=Edit | Delete=Remove line | Ctrl+Z/Y=Undo/Redo | ↑↓=Navigate
-                            </p>
-                            <p className="text-xs text-gray-500 mt-1">
-                              Use per-line mapping only if you want fine control. Most users can ignore this panel.
-                            </p>
-                          </div>
-                          <div className="flex gap-1">
-                            <button
-                              type="button"
-                              onClick={handleUndo}
-                              disabled={undoStackLines.length === 0}
-                              className="btn btn-sm text-xs"
-                              title="Undo (Ctrl+Z)"
-                            >
-                              ↶ Undo
-                            </button>
-                            <button
-                              type="button"
-                              onClick={handleRedo}
-                              disabled={redoStackLines.length === 0}
-                              className="btn btn-sm text-xs"
-                              title="Redo (Ctrl+Y)"
-                            >
-                              ↷ Redo
-                            </button>
-                          </div>
-                        </div>
-                        {/* ...existing OCR lines panel code here, unchanged... */}
-                        <div className="max-h-72 overflow-y-auto space-y-2 border border-gray-200 rounded-md bg-white p-2">
-                          {tocOcrLines.map((line) => {
-                            const isEditing = editingLineId === line.id
-                            return (
-                              <div
-                                key={line.id}
-                                className={`px-2 py-2 rounded border transition-colors ${
-                                  selectedOcrLineId === line.id
-                                    ? 'bg-blue-50 border-blue-300'
-                                    : 'bg-white border-gray-200 hover:bg-gray-50'
-                                }`}
-                              >
-                                {isEditing ? (
-                                  <div className="space-y-2">
-                                    <input
-                                      type="text"
-                                      autoFocus
-                                      value={editingLineText}
-                                      onChange={(e) => setEditingLineText(e.target.value)}
-                                      className="input input-sm w-full"
-                                      placeholder="Edit line text..."
-                                      onKeyDown={(e) => {
-                                        if (e.key === 'Enter') {
-                                          saveLine(line.id)
-                                        } else if (e.key === 'Escape') {
-                                          setEditingLineId(null)
-                                          setEditingLineText('')
-                                        }
-                                      }}
-                                    />
-                                    <div className="flex gap-1">
-                                      <button
-                                        type="button"
-                                        onClick={() => saveLine(line.id)}
-                                        className="btn btn-primary btn-sm text-xs flex-1"
-                                      >
-                                        Save
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setEditingLineId(null)
-                                          setEditingLineText('')
-                                        }}
-                                        className="btn btn-secondary btn-sm text-xs flex-1"
-                                      >
-                                        Cancel
-                                      </button>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <div
-                                    className="cursor-pointer hover:opacity-75 transition-opacity"
-                                    onClick={() => setSelectedOcrLineId(line.id)}
-                                  >
-                                    <div className="flex items-start gap-2">
-                                      <span className="text-xs text-gray-500 mt-0.5 min-w-fit">
-                                        {line.line_number}.
-                                      </span>
-                                      <span className="text-sm flex-1">{line.text}</span>
-                                      {line.mappedAs && (
-                                        <span className="text-[11px] px-2 py-0.5 rounded-full bg-green-100 text-green-700 whitespace-nowrap">
-                                          {line.mappedAs === 'chapter'
-                                            ? 'Mapped: Chapter'
-                                            : 'Mapped: Topic'}
-                                        </span>
-                                      )}
-                                    </div>
-                                    {selectedOcrLineId === line.id && (
-                                      <div className="space-y-2 mt-2">
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                          <div className={`rounded border px-2 py-1 text-xs ${
-                                            line.mappedAs === 'chapter'
-                                              ? 'border-blue-300 bg-blue-50 text-blue-800'
-                                              : 'border-gray-200 bg-white text-gray-400'
-                                          }`}>
-                                            <span className="font-semibold">Chapter Placeholder:</span>{' '}
-                                            {line.mappedAs === 'chapter'
-                                              ? `${line.mappedNumber ? `Ch ${line.mappedNumber}` : 'Chapter'} - ${line.text}`
-                                              : 'Empty'}
-                                          </div>
-                                          <div className={`rounded border px-2 py-1 text-xs ml-4 sm:ml-6 ${
-                                            (line.mappedAs || '').startsWith('topic:')
-                                              ? 'border-emerald-300 bg-emerald-50 text-emerald-800'
-                                              : 'border-gray-200 bg-white text-gray-400'
-                                          }`}>
-                                            <span className="font-semibold">Topic Placeholder:</span>{' '}
-                                            {(line.mappedAs || '').startsWith('topic:')
-                                              ? `${line.mappedNumber ? `T ${line.mappedNumber}` : 'Topic'} - ${line.text}`
-                                              : 'Empty'}
-                                          </div>
-                                        </div>
-                                        <div className="flex flex-wrap gap-1">
-                                          <button
-                                            type="button"
-                                            onClick={(e) => {
-                                              e.stopPropagation()
-                                              mapOcrLineAsChapter(line)
-                                            }}
-                                            className="text-xs text-blue-700 hover:text-blue-900 font-medium"
-                                            title="Place in Chapter placeholder"
-                                          >
-                                            ⇢ Place as Chapter
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={(e) => {
-                                              e.stopPropagation()
-                                              mapOcrLineAsTopic(line, targetChapterIndex)
-                                            }}
-                                            className="text-xs text-emerald-700 hover:text-emerald-900 font-medium"
-                                            title="Place in Topic placeholder"
-                                          >
-                                            ⇢ Place as Topic
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={(e) => {
-                                              e.stopPropagation()
-                                              startEditingLine(line.id, line.text)
-                                            }}
-                                            className="text-xs text-blue-600 hover:text-blue-800 font-medium"
-                                            title="Edit (E)"
-                                          >
-                                            ✎ Edit
-                                          </button>
-                                          {tocOcrLines.findIndex((l) => l.id === line.id) <
-                                            tocOcrLines.length - 1 && (
-                                            <button
-                                              type="button"
-                                              onClick={(e) => {
-                                                e.stopPropagation()
-                                                mergeWithNext(line.id)
-                                              }}
-                                              className="text-xs text-orange-600 hover:text-orange-800 font-medium"
-                                              title="Merge with next line"
-                                            >
-                                              ⤵ Merge
-                                            </button>
-                                          )}
-                                          <button
-                                            type="button"
-                                            onClick={(e) => {
-                                              e.stopPropagation()
-                                              handleDeleteOcrLine(line.id)
-                                            }}
-                                            className="text-xs text-red-600 hover:text-red-800 font-medium"
-                                            title="Delete line (undo supported)"
-                                          >
-                                            🗑 Delete
-                                          </button>
-                                        </div>
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            )
-                          })}
-                        </div>
-                      </div>
-                    )}
                   </div>
                 )}
 
@@ -3052,7 +3186,7 @@ export default function CurriculumPage() {
                     {tocSuggestionMeta && (
                       <span className="text-xs px-2 py-1 rounded-full bg-blue-100 text-blue-700">
                         {tocSuggestionMeta.source === 'ai' ? 'AI suggested' : tocSuggestionMeta.source === 'manual' ? 'Manual' : 'Rule-based'}
-                        {typeof tocSuggestionMeta.confidence === 'number' && ` • ${Math.round(tocSuggestionMeta.confidence * 100)}%`}
+                        {typeof tocSuggestionMeta.confidence === 'number' && ` - ${Math.round(tocSuggestionMeta.confidence * 100)}%`}
                       </span>
                     )}
                     <button onClick={addTocChapter} className="btn btn-secondary text-sm">
@@ -3066,7 +3200,7 @@ export default function CurriculumPage() {
                     <p className="text-xs font-semibold text-amber-800 mb-1">Parser notes</p>
                     <div className="max-h-28 overflow-y-auto space-y-1">
                       {tocWarnings.map((warning, idx) => (
-                        <p key={idx} className="text-xs text-amber-700">• {warning}</p>
+                        <p key={idx} className="text-xs text-amber-700">- {warning}</p>
                       ))}
                     </div>
                   </div>
@@ -3114,25 +3248,80 @@ export default function CurriculumPage() {
                           </button>
                         </div>
 
+                        <div className="ml-2 mb-2 flex gap-2">
+                          <div className="flex-1">
+                            <label className="text-xs text-gray-600">Page Start</label>
+                            <input
+                              type="number"
+                              className="input w-full"
+                              placeholder="e.g. 1"
+                              value={chapter.page_start !== null && chapter.page_start !== undefined ? chapter.page_start : ''}
+                              onChange={(e) => updateTocChapterPageRange(chapterIndex, parseInt(e.target.value) || null, chapter.page_end)}
+                            />
+                          </div>
+                          <div className="flex-1">
+                            <label className="text-xs text-gray-600">Page End</label>
+                            <input
+                              type="number"
+                              className="input w-full"
+                              placeholder="e.g. 10"
+                              value={chapter.page_end !== null && chapter.page_end !== undefined ? chapter.page_end : ''}
+                              onChange={(e) => updateTocChapterPageRange(chapterIndex, chapter.page_start, parseInt(e.target.value) || null)}
+                            />
+                          </div>
+                        </div>
+
                         <div className="space-y-2 ml-2">
                           {(chapter.topics || []).map((topic, topicIndex) => (
-                            <div key={topicIndex} className="flex items-center gap-2">
-                              <span className="text-xs text-gray-500 w-20">
-                                {chapterIndex + 1}.{topicIndex + 1}
-                              </span>
-                              <input
-                                type="text"
-                                className="input flex-1"
-                                placeholder="Topic title"
-                                value={topic.title}
-                                onChange={(e) => updateTocTopicTitle(chapterIndex, topicIndex, e.target.value)}
-                              />
-                              <button
-                                onClick={() => removeTocTopic(chapterIndex, topicIndex)}
-                                className="text-xs text-red-600 hover:text-red-800 font-medium"
-                              >
-                                Remove
-                              </button>
+                            <div key={topicIndex}>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-gray-500 w-20">
+                                  {chapterIndex + 1}.{topicIndex + 1}
+                                </span>
+                                <input
+                                  type="text"
+                                  className="input flex-1"
+                                  placeholder="Topic title"
+                                  value={topic.title}
+                                  onChange={(e) => updateTocTopicTitle(chapterIndex, topicIndex, e.target.value)}
+                                />
+                                <select
+                                  className="input text-xs w-24"
+                                  value={topic.content_kind || 'general'}
+                                  onChange={(e) => updateTocTopicContentKind(chapterIndex, topicIndex, e.target.value)}
+                                >
+                                  <option value="general">General</option>
+                                  <option value="exercise">Exercise</option>
+                                </select>
+                                <button
+                                  onClick={() => removeTocTopic(chapterIndex, topicIndex)}
+                                  className="text-xs text-red-600 hover:text-red-800 font-medium"
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                              <div className="ml-20 flex gap-2 mt-1">
+                                <div className="flex-1">
+                                  <label className="text-xs text-gray-600">Page Start</label>
+                                  <input
+                                    type="number"
+                                    className="input w-full text-xs"
+                                    placeholder="e.g. 1"
+                                    value={topic.page_start !== null && topic.page_start !== undefined ? topic.page_start : ''}
+                                    onChange={(e) => updateTocTopicPageRange(chapterIndex, topicIndex, parseInt(e.target.value) || null, topic.page_end)}
+                                  />
+                                </div>
+                                <div className="flex-1">
+                                  <label className="text-xs text-gray-600">Page End</label>
+                                  <input
+                                    type="number"
+                                    className="input w-full text-xs"
+                                    placeholder="e.g. 5"
+                                    value={topic.page_end !== null && topic.page_end !== undefined ? topic.page_end : ''}
+                                    onChange={(e) => updateTocTopicPageRange(chapterIndex, topicIndex, topic.page_start, parseInt(e.target.value) || null)}
+                                  />
+                                </div>
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -3169,10 +3358,12 @@ export default function CurriculumPage() {
                 <>
                   <button
                     onClick={handleTocSubmit}
-                    disabled={parseTocMutation.isPending || !tocText.trim()}
+                    disabled={parseTocMutation.isPending || parseTocStreamMutation.isPending || !tocText.trim()}
                     className="btn btn-primary"
                   >
-                    {parseTocMutation.isPending ? 'Parsing...' : 'Next: Review'}
+                    {parseTocMutation.isPending || parseTocStreamMutation.isPending
+                      ? (parseTocStreamMutation.isPending ? 'Parsing large text...' : 'Parsing...')
+                      : 'Next: Review'}
                   </button>
                 </>
               )}

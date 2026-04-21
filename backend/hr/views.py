@@ -478,6 +478,41 @@ class StaffMemberViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
             'unlinked_username': old_username,
         }, status=status.HTTP_200_OK)
 
+    @action(detail=True, methods=['post'], url_path='update-user-role')
+    def update_user_role(self, request, pk=None):
+        """Update linked user role for a staff member (ERP/system setting)."""
+        staff = self.get_object()
+        if staff.user is None:
+            return Response(
+                {'error': 'This staff member has no linked user account.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user_role = (request.data.get('user_role') or '').upper().strip()
+        if not user_role:
+            return Response({'error': 'user_role is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        creator_role = get_effective_role(request)
+        allowed_roles = ROLE_HIERARCHY.get(creator_role, [])
+        if not request.user.is_super_admin and user_role not in allowed_roles:
+            return Response(
+                {'error': f'You cannot assign users with the {user_role} role.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        staff.user.role = user_role
+        staff.user.save(update_fields=['role'])
+
+        from schools.models import UserSchoolMembership
+        UserSchoolMembership.objects.filter(user=staff.user, school_id=staff.school_id).update(role=user_role)
+
+        return Response({
+            'message': 'User role updated successfully.',
+            'user_id': staff.user.id,
+            'username': staff.user.username,
+            'role': staff.user.role,
+        }, status=status.HTTP_200_OK)
+
     @action(detail=False, methods=['post'], url_path='bulk-create-accounts')
     def bulk_create_accounts(self, request):
         """Bulk create user accounts for multiple staff members."""

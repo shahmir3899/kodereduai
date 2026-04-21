@@ -79,6 +79,8 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             'id': user.id,
             'username': user.username,
             'email': user.email,
+            'first_name': user.first_name,
+            'last_name': user.last_name,
             'role': user.role,
             'role_display': user.get_role_display(),
             'school_id': default_mem.school_id if default_mem else user.school_id,

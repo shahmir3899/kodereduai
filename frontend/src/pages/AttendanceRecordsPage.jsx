@@ -1,6 +1,8 @@
 import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { attendanceApi, studentsApi } from '../services/api'
+import { useAuth } from '../contexts/AuthContext'
+import { useToast } from '../components/Toast'
 import ClassSelector from '../components/ClassSelector'
 import { useAcademicYear } from '../contexts/AcademicYearContext'
 
@@ -18,10 +20,13 @@ function pad(n) {
 
 export default function AttendanceRecordsPage() {
   const { activeAcademicYear } = useAcademicYear()
+  const { isPrincipal, isHRManager, isTeacher, isSchoolAdmin } = useAuth()
+  const { showSuccess, showError } = useToast()
   const today = new Date()
   const [year, setYear] = useState(today.getFullYear())
   const [month, setMonth] = useState(today.getMonth()) // 0-indexed
   const [classId, setClassId] = useState('')
+  const [downloading, setDownloading] = useState(false)
 
   const daysInMonth = getDaysInMonth(year, month)
   const dateFrom = `${year}-${pad(month + 1)}-01`
@@ -113,6 +118,38 @@ export default function AttendanceRecordsPage() {
   const nextMonth = () => {
     if (month === 11) { setMonth(0); setYear(year + 1) }
     else setMonth(month + 1)
+  }
+
+  // Download register as PDF
+  const handleDownloadRegister = async () => {
+    try {
+      setDownloading(true)
+      const params = {
+        month: month + 1, // Convert to 1-indexed
+        year,
+        ...(activeAcademicYear?.id
+          ? { session_class_id: classId, academic_year: activeAcademicYear.id }
+          : { class_id: classId }
+        ),
+      }
+      const response = await attendanceApi.downloadRegisterPdf(params)
+
+      // Create blob and trigger download
+      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const link = document.createElement('a')
+      link.href = url
+      const monthName = new Date(year, month).toLocaleString('default', { month: 'short' })
+      link.setAttribute('download', `attendance_register_${monthName}_${year}.pdf`)
+      document.body.appendChild(link)
+      link.click()
+      link.parentNode.removeChild(link)
+      window.URL.revokeObjectURL(url)
+      showSuccess('Register downloaded successfully')
+    } catch (error) {
+      showError(error.response?.data?.error || 'Failed to download register')
+    } finally {
+      setDownloading(false)
+    }
   }
 
   if (error) {
@@ -224,6 +261,35 @@ export default function AttendanceRecordsPage() {
               <p className="text-xl sm:text-2xl font-bold text-red-600">{summary.totalAbsent}</p>
             </div>
           </div>
+
+          {/* Action Toolbar */}
+          {classId && (
+            <div className="flex justify-end">
+              {(isSchoolAdmin || isPrincipal || isHRManager || isTeacher) && (
+                <button
+                  onClick={handleDownloadRegister}
+                  disabled={downloading}
+                  className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {downloading ? (
+                    <>
+                      <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 2v20m10-10H2" />
+                      </svg>
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 16v-4m0 0V8m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      Download Register PDF
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Register Table */}
           <div className="card p-0 overflow-hidden">

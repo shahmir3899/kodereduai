@@ -85,13 +85,11 @@ export default function SubjectsPage() {
   const [editAssignId, setEditAssignId] = useState(null)
   const [assignForm, setAssignForm] = useState(EMPTY_ASSIGNMENT)
   const [assignErrors, setAssignErrors] = useState({})
-  const [expandedClasses, setExpandedClasses] = useState(new Set())
   const [classTeacherFilter, setClassTeacherFilter] = useState('')
   const [showClassTeacherModal, setShowClassTeacherModal] = useState(false)
   const [editClassTeacherId, setEditClassTeacherId] = useState(null)
   const [classTeacherForm, setClassTeacherForm] = useState({ session_class: '', teacher: '' })
   const [classTeacherErrors, setClassTeacherErrors] = useState({})
-  const [expandedTeacherClasses, setExpandedTeacherClasses] = useState(new Set())
   const { confirm, ConfirmModalRoot } = useConfirmModal()
   const { sessionClasses } = useSessionClasses(activeAcademicYear?.id)
   const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
@@ -188,23 +186,7 @@ export default function SubjectsPage() {
   // Set of existing subject codes for quick-add checks
   const existingCodes = useMemo(() => new Set(subjects.map(s => (s.code || '').toUpperCase())), [subjects])
 
-  // Matrix data: transform flat assignments into rows (classes) × columns (subjects)
-  const matrixData = useMemo(() => {
-    if (assignments.length === 0) return { classRows: [], subjectCols: [], lookup: new Map() }
-    const classMap = new Map()
-    const subjectMap = new Map()
-    const lookup = new Map()
-    for (const a of assignments) {
-      if (!classMap.has(a.class_obj)) classMap.set(a.class_obj, { id: a.class_obj, name: a.class_name, section: a.class_section || '', gradeLevel: a.class_grade_level ?? 0 })
-      if (!subjectMap.has(a.subject)) subjectMap.set(a.subject, { id: a.subject, code: a.subject_code, name: a.subject_name })
-      lookup.set(`${a.class_obj}-${a.subject}`, a)
-    }
-    const classRows = [...classMap.values()].sort((a, b) => (a.gradeLevel - b.gradeLevel) || (a.section || '').localeCompare(b.section || ''))
-    const subjectCols = [...subjectMap.values()].sort((a, b) => a.code.localeCompare(b.code))
-    return { classRows, subjectCols, lookup }
-  }, [assignments])
-
-  // Grouped assignments for mobile accordion
+  // Grouped assignments by class for card view
   const groupedAssignments = useMemo(() => {
     const map = new Map()
     for (const a of assignments) {
@@ -230,18 +212,6 @@ export default function SubjectsPage() {
     }
     return [...map.values()].sort((a, b) => (a.gradeLevel - b.gradeLevel) || (a.section || '').localeCompare(b.section || ''))
   }, [classTeacherAssignments])
-
-  const toggleClass = (classId) => setExpandedClasses(prev => {
-    const next = new Set(prev)
-    next.has(classId) ? next.delete(classId) : next.add(classId)
-    return next
-  })
-
-  const toggleTeacherClass = (classId) => setExpandedTeacherClasses(prev => {
-    const next = new Set(prev)
-    next.has(classId) ? next.delete(classId) : next.add(classId)
-    return next
-  })
 
   // Collapsible sections for gap analysis
   const [expandedGap, setExpandedGap] = useState({ red: true, orange: true, yellow: true, blue: true })
@@ -434,15 +404,6 @@ export default function SubjectsPage() {
     if (editClassTeacherId) updateClassTeacherMut.mutate({ id: editClassTeacherId, data: payload })
     else createClassTeacherMut.mutate(payload)
   }
-
-  // Matrix helpers: pre-fill modal for a specific class + subject cell
-  const openCreateAssignFor = (classId, subjectId) => {
-    setAssignForm({ class_obj: classId, subjects: [subjectId], teacher: '', subjectPeriods: { [subjectId]: 1 } })
-    setEditAssignId(null); setAssignErrors({}); setShowAssignModal(true)
-  }
-  const matrixCellClass = (a) =>
-    a ? (a.teacher_name ? 'bg-green-50 hover:bg-green-100' : 'bg-yellow-50 hover:bg-yellow-100')
-      : 'bg-gray-50 hover:bg-gray-100'
 
   const handleAssignSubmit = async (e) => {
     e.preventDefault()
@@ -809,100 +770,57 @@ export default function SubjectsPage() {
             </div>
           ) : (
             <>
-              {/* Desktop Matrix Grid */}
-              <div className="hidden md:block overflow-x-auto rounded-xl shadow-sm border border-gray-200">
-                <table className="min-w-full border-collapse bg-white">
-                  <thead>
-                    <tr className="bg-gray-50">
-                      <th className="sticky left-0 z-10 bg-gray-50 px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase border-b border-r border-gray-200 min-w-[120px]">
-                        Class
-                      </th>
-                      {matrixData.subjectCols.map(subj => (
-                        <th key={subj.id} className="px-2 py-2.5 text-center text-xs font-semibold text-gray-500 uppercase border-b border-gray-200 whitespace-nowrap min-w-[90px]" title={subj.name}>
-                          {subj.code}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {matrixData.classRows.map(cls => (
-                      <tr key={cls.id} className="border-b border-gray-100">
-                        <td className="sticky left-0 z-10 bg-white px-3 py-2 text-sm font-medium text-gray-900 border-r border-gray-200 whitespace-nowrap">
-                          {cls.name}{cls.section ? ` - ${cls.section}` : ''}
-                        </td>
-                        {matrixData.subjectCols.map(subj => {
-                          const a = matrixData.lookup.get(`${cls.id}-${subj.id}`)
-                          return (
-                            <td
-                              key={subj.id}
-                              onClick={() => a ? openEditAssign(a) : openCreateAssignFor(cls.id, subj.id)}
-                              className={`px-2 py-2 text-center cursor-pointer transition-colors border-r border-gray-100 last:border-r-0 ${matrixCellClass(a)}`}
-                              title={a ? `${subj.name} — ${a.teacher_name || 'No teacher'} (${a.periods_per_week}/wk)` : `Assign ${subj.name} to ${cls.name}`}
-                            >
-                              {a ? (
-                                <div className="text-xs leading-tight">
-                                  <span className={`font-medium ${a.teacher_name ? 'text-gray-800' : 'text-yellow-700 italic'}`}>
-                                    {a.teacher_name ? a.teacher_name.split(' ')[0] : 'No teacher'}
-                                  </span>
-                                  <span className="text-gray-400 ml-0.5">({a.periods_per_week})</span>
-                                </div>
-                              ) : (
-                                <span className="text-gray-300 text-xs">—</span>
-                              )}
-                            </td>
-                          )
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Mobile Accordion (grouped by class) */}
-              <div className="md:hidden space-y-3">
-                {groupedAssignments.map(group => {
-                  const isExpanded = expandedClasses.has(group.id)
-                  return (
-                    <div key={group.id} className="card p-0 overflow-hidden">
-                      <button
-                        onClick={() => toggleClass(group.id)}
-                        className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
-                      >
-                        <div className="flex items-center gap-2">
-                          <svg className={`w-4 h-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                          </svg>
-                          <span className="font-semibold text-sm text-gray-900">{group.name}{group.section ? ` - ${group.section}` : ''}</span>
+              <div className="space-y-4">
+                {assignFetching && (
+                  <div className="h-0.5 bg-primary-100 rounded overflow-hidden">
+                    <div className="h-full bg-primary-500 rounded animate-pulse w-1/2"></div>
+                  </div>
+                )}
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                  {groupedAssignments.map(group => {
+                    const sortedItems = [...group.items].sort((a, b) => (a.subject_code || '').localeCompare(b.subject_code || ''))
+                    return (
+                      <div key={group.id} className="card p-0 overflow-hidden border border-gray-200 shadow-sm">
+                        <div className="px-5 py-4 bg-gradient-to-r from-sky-50 to-indigo-50 border-b border-gray-100">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <h3 className="text-base font-semibold text-gray-900">{group.name}{group.section ? ` - ${group.section}` : ''}</h3>
+                              <p className="text-xs text-gray-600 mt-1">Class Subject Assignments</p>
+                            </div>
+                            <span className="text-xs bg-white text-primary-700 border border-primary-100 px-2.5 py-1 rounded-full font-medium">
+                              {group.items.length} subject{group.items.length !== 1 ? 's' : ''}
+                            </span>
+                          </div>
                         </div>
-                        <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
-                          {group.items.length} subject{group.items.length !== 1 ? 's' : ''}
-                        </span>
-                      </button>
-                      {isExpanded && (
-                        <div className="border-t border-gray-100">
-                          {group.items.map(a => (
-                            <div key={a.id} className="flex items-center gap-2 px-4 py-2.5 border-b border-gray-50 last:border-b-0">
-                              <span className="font-mono text-xs text-primary-700 font-bold w-12 shrink-0">{a.subject_code}</span>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm text-gray-900 truncate">{a.subject_name}</p>
-                                <p className="text-xs text-gray-500 truncate">
-                                  {a.teacher_name || <span className="italic text-yellow-600">No teacher</span>}
-                                  <span className="text-gray-400 ml-1">· {a.periods_per_week}/wk</span>
-                                </p>
+
+                        <div className="p-4 space-y-3">
+                          {sortedItems.map(a => (
+                            <div key={a.id} className="rounded-lg border border-gray-100 bg-white px-3 py-2.5 hover:border-primary-200 hover:bg-primary-50/40 transition-colors">
+                              <div className="flex items-start gap-3">
+                                <span className="font-mono text-xs text-primary-700 font-bold px-2 py-1 rounded bg-primary-50 border border-primary-100 shrink-0 min-w-[52px] text-center">
+                                  {a.subject_code}
+                                </span>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-gray-900 truncate">{a.subject_name}</p>
+                                  <p className="text-xs text-gray-600 mt-0.5">
+                                    {a.teacher_name || <span className="italic text-yellow-700">No teacher assigned</span>}
+                                    <span className="text-gray-400 ml-1">· {a.periods_per_week}/wk</span>
+                                  </p>
+                                </div>
+                                <button
+                                  onClick={() => openEditAssign(a)}
+                                  className="text-xs text-primary-700 hover:text-primary-800 hover:underline font-medium shrink-0"
+                                >
+                                  Edit
+                                </button>
                               </div>
-                              <button
-                                onClick={(e) => { e.stopPropagation(); openEditAssign(a) }}
-                                className="text-xs text-primary-600 hover:underline shrink-0 px-2 py-1"
-                              >
-                                Edit
-                              </button>
                             </div>
                           ))}
                         </div>
-                      )}
-                    </div>
-                  )
-                })}
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
             </>
           )}
@@ -1118,47 +1036,50 @@ export default function SubjectsPage() {
                   <div className="h-full bg-primary-500 rounded animate-pulse w-1/2"></div>
                 </div>
               )}
-              {groupedClassTeacherAssignments.map(group => {
-                const isExpanded = expandedTeacherClasses.has(group.id)
-                return (
-                  <div key={group.id} className="card p-0 overflow-hidden">
-                    <button
-                      onClick={() => toggleTeacherClass(group.id)}
-                      className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
-                    >
-                      <div className="flex items-center gap-2">
-                        <svg className={`w-4 h-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                        <span className="font-semibold text-sm text-gray-900">{group.name}{group.section ? ` - ${group.section}` : ''}</span>
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                {groupedClassTeacherAssignments.map(group => {
+                  const sortedItems = [...group.items].sort((a, b) => (a.teacher_name || '').localeCompare(b.teacher_name || ''))
+                  return (
+                    <div key={group.id} className="card p-0 overflow-hidden border border-gray-200 shadow-sm">
+                      <div className="px-5 py-4 bg-gradient-to-r from-emerald-50 to-teal-50 border-b border-gray-100">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <h3 className="text-base font-semibold text-gray-900">{group.name}{group.section ? ` - ${group.section}` : ''}</h3>
+                            <p className="text-xs text-gray-600 mt-1">Class Teacher Assignments</p>
+                          </div>
+                          <span className="text-xs bg-white text-emerald-700 border border-emerald-100 px-2.5 py-1 rounded-full font-medium">
+                            {group.items.length} teacher{group.items.length !== 1 ? 's' : ''}
+                          </span>
+                        </div>
                       </div>
-                      <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
-                        {group.items.length} class teacher{group.items.length !== 1 ? 's' : ''}
-                      </span>
-                    </button>
-                    {isExpanded && (
-                      <div className="border-t border-gray-100">
-                        {group.items.map(assignment => (
-                          <div key={assignment.id} className="flex items-center gap-3 px-4 py-3 border-b border-gray-50 last:border-b-0">
-                            <div className="min-w-0 flex-1">
-                              <p className="text-sm font-medium text-gray-900 truncate">{assignment.teacher_name}</p>
-                              <p className="text-xs text-gray-500">Full class access enabled</p>
+
+                      <div className="p-4 space-y-3">
+                        {sortedItems.map(assignment => (
+                          <div key={assignment.id} className="rounded-lg border border-gray-100 bg-white px-3 py-2.5 hover:border-emerald-200 hover:bg-emerald-50/40 transition-colors">
+                            <div className="flex items-start gap-3">
+                              <span className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold flex items-center justify-center shrink-0">
+                                {(assignment.teacher_name || '?').trim().charAt(0).toUpperCase()}
+                              </span>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-medium text-gray-900 truncate">{assignment.teacher_name}</p>
+                                <p className="text-xs text-gray-600 mt-0.5">Full class access enabled</p>
+                              </div>
+                              {isSchoolAdmin ? (
+                                <button
+                                  onClick={() => openEditClassTeacher(assignment)}
+                                  className="text-xs text-emerald-700 hover:text-emerald-800 hover:underline font-medium shrink-0"
+                                >
+                                  Edit
+                                </button>
+                              ) : null}
                             </div>
-                            {isSchoolAdmin ? (
-                              <button
-                                onClick={(e) => { e.stopPropagation(); openEditClassTeacher(assignment) }}
-                                className="text-xs text-primary-600 hover:underline shrink-0"
-                              >
-                                Edit
-                              </button>
-                            ) : null}
                           </div>
                         ))}
                       </div>
-                    )}
-                  </div>
-                )
-              })}
+                    </div>
+                  )
+                })}
+              </div>
             </div>
           )}
 
@@ -1204,6 +1125,9 @@ export default function SubjectsPage() {
                         <option key={teacher.id} value={teacher.id}>{teacher.full_name} {teacher.employee_id ? `(${teacher.employee_id})` : ''}</option>
                       ))}
                     </select>
+                    <p className="text-xs text-amber-700 mt-2">
+                      Only active staff marked as teachers are listed here. If someone is missing, update their user role to TEACHER from Staff/User management.
+                    </p>
                   </div>
                   <div className="rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-700">
                     <strong>Section-Scoped Access:</strong> This teacher will have full access only to the selected class section in attendance, students, and other modules.

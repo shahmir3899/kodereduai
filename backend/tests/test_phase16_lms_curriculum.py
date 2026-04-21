@@ -1108,3 +1108,869 @@ class TestPermissionsAndIsolation:
         assert resp2.status_code == 200
 
         lp.delete()
+
+
+# ==========================================================================
+# LEVEL J: RICH CONTENT BASELINE SAFEGUARDS
+# ==========================================================================
+
+@pytest.mark.phase16
+@pytest.mark.django_db
+class TestRichContentBaselineSafeguards:
+
+    def test_topic_and_chapter_defaults_exposed(self, seed_data, api, lms_book):
+        token = seed_data["tokens"]["admin"]
+        sid = seed_data["SID_A"]
+
+        # Chapter read serializer should expose new fields with safe defaults.
+        ch = lms_book["chapters"][0]
+        ch_resp = api.get(f"/api/lms/chapters/{ch.id}/", token, sid)
+        assert ch_resp.status_code == 200
+        ch_body = ch_resp.json()
+        assert ch_body.get("content_blocks") == []
+        assert ch_body.get("content_text") == ""
+        assert ch_body.get("content_blocks_schema_version") == 1
+        assert ch_body.get("content_version") == 1
+        assert ch_body.get("needs_migration") is False
+
+        # Topic read serializer should expose new fields with safe defaults.
+        tp = lms_book["topics"][0]
+        tp_resp = api.get(f"/api/lms/topics/{tp.id}/", token, sid)
+        assert tp_resp.status_code == 200
+        tp_body = tp_resp.json()
+        assert tp_body.get("content_kind") == "general"
+        assert tp_body.get("content_blocks") == []
+        assert tp_body.get("content_text") == ""
+        assert tp_body.get("content_blocks_schema_version") == 1
+        assert tp_body.get("content_version") == 1
+        assert tp_body.get("needs_migration") is False
+
+    def test_apply_toc_idempotency_key_prevents_duplicates(self, seed_data, api):
+        from lms.models import Book, Chapter, Topic
+
+        token = seed_data["tokens"]["admin"]
+        sid = seed_data["SID_A"]
+        book = Book.objects.create(
+            school=seed_data["school_a"],
+            class_obj=seed_data["classes"][0],
+            subject=seed_data["subjects"][0],
+            title=f"{P16}Apply TOC Idempotent",
+            language="en",
+        )
+
+        payload = {
+            "chapters": [
+                {
+                    "title": "Chapter A",
+                    "topics": [{"title": "Topic 1"}, {"title": "Topic 2"}],
+                },
+                {
+                    "title": "Chapter B",
+                    "topics": [{"title": "Topic 3"}],
+                },
+            ],
+            "idempotency_key": "phase16-apply-toc-idempotency",
+        }
+
+        first = api.post(f"/api/lms/books/{book.id}/apply_toc/", payload, token, sid)
+        second = api.post(f"/api/lms/books/{book.id}/apply_toc/", payload, token, sid)
+
+        assert first.status_code == 201
+        assert second.status_code == 200
+        assert Chapter.objects.filter(book=book).count() == 2
+        assert Topic.objects.filter(chapter__book=book).count() == 3
+
+
+@pytest.mark.phase16
+@pytest.mark.django_db
+class TestControlledViewProfilesAndValidation:
+
+    def test_tree_chapter_only_profile(self, seed_data, api, lms_book):
+        token = seed_data["tokens"]["admin"]
+        sid = seed_data["SID_A"]
+
+        resp = api.get(f"/api/lms/books/{lms_book['book'].id}/tree/?view=chapter_only", token, sid)
+        assert resp.status_code == 200
+        body = resp.json()
+        assert "chapters" in body
+        assert len(body["chapters"]) == 2
+        assert "topics" not in body["chapters"][0]
+
+    def test_tree_lesson_plan_profile(self, seed_data, api, lms_book):
+        token = seed_data["tokens"]["admin"]
+        sid = seed_data["SID_A"]
+
+        resp = api.get(f"/api/lms/books/{lms_book['book'].id}/tree/?view=lesson_plan", token, sid)
+        assert resp.status_code == 200
+        body = resp.json()
+        assert "chapters" in body
+        assert len(body["chapters"]) == 2
+        assert "topics" in body["chapters"][0]
+        assert len(body["chapters"][0]["topics"]) == 2
+        # Lesson plan projection should stay lightweight and avoid heavy rich payload fields.
+        first_topic = body["chapters"][0]["topics"][0]
+        assert "content_blocks" not in first_topic
+        assert "description" in first_topic
+
+    def test_for_class_subject_lesson_plan_profile(self, seed_data, api, lms_book):
+        token = seed_data["tokens"]["admin"]
+        sid = seed_data["SID_A"]
+        cls_id = seed_data["classes"][0].id
+        subj_id = lms_book["subject"].id
+
+        resp = api.get(
+            f"/api/lms/books/for_class_subject/?class_id={cls_id}&subject_id={subj_id}&view=lesson_plan",
+            token,
+            sid,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert isinstance(data, list)
+        assert len(data) >= 1
+        assert "chapters" in data[0]
+        assert "topics" in data[0]["chapters"][0]
+
+    def test_exam_exercises_profile_filters_topics(self, seed_data, api, lms_book):
+        from lms.models import Topic
+
+        token = seed_data["tokens"]["admin"]
+        sid = seed_data["SID_A"]
+
+        # Mark only one topic as exercise; profile should at least include it.
+        exercise_topic = lms_book["topics"][0]
+        exercise_topic.content_kind = 'exercise'
+        exercise_topic.save(update_fields=['content_kind'])
+
+        resp = api.get(
+            f"/api/lms/topics/?book_id={lms_book['book'].id}&view=exam_exercises",
+            token,
+            sid,
+        )
+        assert resp.status_code == 200
+        rows = _results(resp)
+        assert any(item["id"] == exercise_topic.id for item in rows)
+        # Exam profile should return compact exercise payload only.
+        first = rows[0]
+        assert "chapter_number" in first
+        assert "test_question_count" in first
+        assert "lesson_plans" not in first
+        assert "test_questions" not in first
+
+        # Sanity: without filter should still include all topics.
+        all_resp = api.get(f"/api/lms/topics/?book_id={lms_book['book'].id}", token, sid)
+        assert all_resp.status_code == 200
+        all_rows = _results(all_resp)
+        assert len(all_rows) >= len(rows)
+
+    def test_lesson_plan_profile_scope_isolation(self, seed_data, api, lms_book):
+        token = seed_data["tokens"]["admin_b"]
+        sid = seed_data["SID_B"]
+        resp = api.get("/api/lms/books/?view=lesson_plan", token, sid)
+        assert resp.status_code == 200
+        rows = _results(resp)
+        assert len(rows) == 0
+
+    def test_topic_page_range_validation(self, seed_data, api, lms_book):
+        token = seed_data["tokens"]["admin"]
+        sid = seed_data["SID_A"]
+        topic = lms_book["topics"][0]
+
+        resp = api.patch(
+            f"/api/lms/topics/{topic.id}/",
+            {"page_start": 12, "page_end": 5},
+            token,
+            sid,
+        )
+        assert resp.status_code == 400
+
+
+# ==========================================================================
+# LEVEL K: PHASE 5 — LARGE TEXT RELIABILITY & TRANSPORT HARDENING
+# ==========================================================================
+
+@pytest.mark.phase16
+@pytest.mark.django_db
+class TestPhase5LargeTextReliability:
+    """
+    Tests for parse_toc_stream endpoint and text size rejection (HTTP 413).
+    """
+
+    def _make_book(self, seed_data):
+        from lms.models import Book
+        return Book.objects.create(
+            school=seed_data["school_a"],
+            class_obj=seed_data["classes"][0],
+            subject=seed_data["subjects"][0],
+            title=f"{P16}Phase5 Stream Book",
+            language="en",
+        )
+
+    # ── parse_toc_stream: happy path ─────────────────────────────────────
+
+    def test_stream_endpoint_basic_response_shape(self, seed_data, api):
+        """parse_toc_stream returns required keys for valid input."""
+        token = seed_data["tokens"]["admin"]
+        sid = seed_data["SID_A"]
+        book = self._make_book(seed_data)
+
+        resp = api.post(f"/api/lms/books/{book.id}/parse_toc_stream/", {
+            "toc_text": "1. Introduction\n  1.1 Overview\n  1.2 History\n2. Core Concepts\n  2.1 Definitions",
+        }, token, sid)
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert "book_id" in body
+        assert "chapters" in body
+        assert "warnings" in body
+        assert "chapter_count" in body
+        assert "topic_count" in body
+        assert "chunk_count" in body
+        assert "chunk_size" in body
+        assert body["book_id"] == book.id
+
+    def test_stream_endpoint_parses_chapters_and_topics(self, seed_data, api):
+        """Parsed structure matches input text."""
+        token = seed_data["tokens"]["admin"]
+        sid = seed_data["SID_A"]
+        book = self._make_book(seed_data)
+
+        toc = "1. Algebra\n  1.1 Variables\n  1.2 Expressions\n2. Geometry\n  2.1 Angles\n  2.2 Triangles"
+        resp = api.post(f"/api/lms/books/{book.id}/parse_toc_stream/", {
+            "toc_text": toc,
+        }, token, sid)
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["chapter_count"] == 2
+        assert body["topic_count"] == 4
+
+    def test_stream_endpoint_single_chunk_for_small_text(self, seed_data, api):
+        """Small text fits in one chunk; chunk_count must be 1."""
+        token = seed_data["tokens"]["admin"]
+        sid = seed_data["SID_A"]
+        book = self._make_book(seed_data)
+
+        resp = api.post(f"/api/lms/books/{book.id}/parse_toc_stream/", {
+            "toc_text": "1. Only Chapter\n  1.1 Only Topic",
+        }, token, sid)
+
+        assert resp.status_code == 200
+        assert resp.json()["chunk_count"] == 1
+
+    def test_stream_endpoint_custom_chunk_size_produces_multiple_chunks(self, seed_data, api):
+        """Forcing a tiny chunk_size causes the text to be split into multiple chunks."""
+        token = seed_data["tokens"]["admin"]
+        sid = seed_data["SID_A"]
+        book = self._make_book(seed_data)
+
+        # 500-char text, chunk_size=50 → at least 5 chunks
+        text_line = "1. Chapter One\n  1.1 Topic Alpha\n  1.2 Topic Beta\n"
+        long_text = text_line * 15  # ~750 chars
+
+        resp = api.post(f"/api/lms/books/{book.id}/parse_toc_stream/", {
+            "toc_text": long_text,
+            "chunk_size": 50,
+        }, token, sid)
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["chunk_count"] > 1
+
+    # ── parse_toc_stream: validation errors ──────────────────────────────
+
+    def test_stream_endpoint_rejects_empty_text(self, seed_data, api):
+        """Empty toc_text returns 400."""
+        token = seed_data["tokens"]["admin"]
+        sid = seed_data["SID_A"]
+        book = self._make_book(seed_data)
+
+        resp = api.post(f"/api/lms/books/{book.id}/parse_toc_stream/", {
+            "toc_text": "",
+        }, token, sid)
+
+        assert resp.status_code == 400
+
+    def test_stream_endpoint_rejects_whitespace_only_text(self, seed_data, api):
+        """Whitespace-only toc_text is treated as empty and returns 400."""
+        token = seed_data["tokens"]["admin"]
+        sid = seed_data["SID_A"]
+        book = self._make_book(seed_data)
+
+        resp = api.post(f"/api/lms/books/{book.id}/parse_toc_stream/", {
+            "toc_text": "   \n\t\n  ",
+        }, token, sid)
+
+        assert resp.status_code == 400
+
+    def test_stream_endpoint_rejects_oversized_text(self, seed_data, api):
+        """Text exceeding 500KB returns 413."""
+        from lms.views import MAX_TOC_TEXT_SIZE
+        token = seed_data["tokens"]["admin"]
+        sid = seed_data["SID_A"]
+        book = self._make_book(seed_data)
+
+        oversized = "x" * (MAX_TOC_TEXT_SIZE + 1)
+        resp = api.post(f"/api/lms/books/{book.id}/parse_toc_stream/", {
+            "toc_text": oversized,
+        }, token, sid)
+
+        assert resp.status_code == 413
+
+    def test_stream_endpoint_accepts_text_at_boundary(self, seed_data, api):
+        """Text exactly at MAX_TOC_TEXT_SIZE is accepted (not rejected)."""
+        from lms.views import MAX_TOC_TEXT_SIZE
+        token = seed_data["tokens"]["admin"]
+        sid = seed_data["SID_A"]
+        book = self._make_book(seed_data)
+
+        # Build text right at boundary; pad with spaces to reach exact size
+        base = "1. Chapter\n  1.1 Topic\n"
+        at_boundary = base + (" " * (MAX_TOC_TEXT_SIZE - len(base)))
+
+        resp = api.post(f"/api/lms/books/{book.id}/parse_toc_stream/", {
+            "toc_text": at_boundary,
+        }, token, sid)
+
+        assert resp.status_code == 200
+
+    # ── suggest_toc: size rejection ───────────────────────────────────────
+
+    def test_suggest_toc_rejects_oversized_text(self, seed_data, api):
+        """suggest_toc returns 413 when raw_text exceeds MAX_TOC_TEXT_SIZE."""
+        from lms.views import MAX_TOC_TEXT_SIZE
+        token = seed_data["tokens"]["admin"]
+        sid = seed_data["SID_A"]
+        book = self._make_book(seed_data)
+
+        oversized = "x" * (MAX_TOC_TEXT_SIZE + 1)
+        resp = api.post(f"/api/lms/books/{book.id}/suggest_toc/", {
+            "raw_text": oversized,
+        }, token, sid)
+
+        assert resp.status_code == 413
+        body = resp.json()
+        assert "error" in body
+        assert "500" in body["error"]  # mentions the 500KB limit
+
+    def test_suggest_toc_accepts_normal_size_text(self, seed_data, api):
+        """suggest_toc accepts text well within the size limit."""
+        token = seed_data["tokens"]["admin"]
+        sid = seed_data["SID_A"]
+        book = self._make_book(seed_data)
+
+        with patch("lms.toc_ai_suggester.settings") as mock_settings:
+            mock_settings.GROQ_API_KEY = None
+            resp = api.post(f"/api/lms/books/{book.id}/suggest_toc/", {
+                "raw_text": "1. Intro\n  1.1 Topic A\n2. Body\n  2.1 Topic B",
+            }, token, sid)
+
+        assert resp.status_code == 200
+
+    # ── throttle class wiring ────────────────────────────────────────────
+
+    def test_throttle_classes_are_configured(self):
+        """Verify OCRRateThrottle and AIRateThrottle exist with correct scopes."""
+        from lms.views import OCRRateThrottle, AIRateThrottle
+        from rest_framework.throttling import UserRateThrottle
+
+        assert issubclass(OCRRateThrottle, UserRateThrottle)
+        assert issubclass(AIRateThrottle, UserRateThrottle)
+        assert OCRRateThrottle.scope == "ocr_toc"
+        assert AIRateThrottle.scope == "suggest_toc"
+
+    def test_ocr_toc_action_has_throttle_class(self):
+        """ocr_toc action must declare OCRRateThrottle (stored in action.kwargs by DRF)."""
+        from lms.views import BookViewSet, OCRRateThrottle
+
+        action_fn = getattr(BookViewSet, "ocr_toc", None)
+        assert action_fn is not None
+        # DRF @action stores extra kwargs in func.kwargs, not as direct attributes
+        throttles = getattr(action_fn, "kwargs", {}).get("throttle_classes", [])
+        assert OCRRateThrottle in throttles
+
+    def test_suggest_toc_action_has_throttle_class(self):
+        """suggest_toc action must declare AIRateThrottle (stored in action.kwargs by DRF)."""
+        from lms.views import BookViewSet, AIRateThrottle
+
+        action_fn = getattr(BookViewSet, "suggest_toc", None)
+        assert action_fn is not None
+        # DRF @action stores extra kwargs in func.kwargs, not as direct attributes
+        throttles = getattr(action_fn, "kwargs", {}).get("throttle_classes", [])
+        assert AIRateThrottle in throttles
+
+    # ── tenant isolation for stream endpoint ────────────────────────────
+
+    def test_stream_endpoint_school_b_cannot_access_school_a_book(self, seed_data, api):
+        """School B token cannot call parse_toc_stream on a school A book."""
+        token = seed_data["tokens"]["admin_b"]
+        sid = seed_data["SID_B"]
+        book = self._make_book(seed_data)  # created in school_a
+
+        resp = api.post(f"/api/lms/books/{book.id}/parse_toc_stream/", {
+            "toc_text": "1. Chapter\n  1.1 Topic",
+        }, token, sid)
+
+        assert resp.status_code in (403, 404)
+
+    def test_stream_endpoint_requires_auth(self, seed_data, api):
+        """Unauthenticated requests to parse_toc_stream are rejected."""
+        book = self._make_book(seed_data)
+        resp = api.client.post(
+            f"/api/lms/books/{book.id}/parse_toc_stream/",
+            {"toc_text": "1. Chapter"},
+            content_type="application/json",
+        )
+        assert resp.status_code == 401
+
+    # ── MAX_TOC_TEXT_SIZE constant ───────────────────────────────────────
+
+    def test_max_toc_text_size_is_500kb(self):
+        """Verify the constant matches the documented 500KB limit."""
+        from lms.views import MAX_TOC_TEXT_SIZE
+        assert MAX_TOC_TEXT_SIZE == 500 * 1024
+
+
+# ==========================================================================
+# LEVEL L: PHASE 6 — AI RETRIEVAL PIPELINE
+# ==========================================================================
+
+@pytest.mark.phase16
+@pytest.mark.django_db
+class TestPhase6AIRetrieval:
+    """
+    Tests for content_retrieval utilities and retrieve_for_ai endpoint.
+    """
+
+    # ── Helpers ──────────────────────────────────────────────────────────
+
+    def _make_book(self, seed_data):
+        from lms.models import Book
+        return Book.objects.create(
+            school=seed_data["school_a"],
+            class_obj=seed_data["classes"][0],
+            subject=seed_data["subjects"][0],
+            title=f"{P16}P6 Book",
+            language="en",
+        )
+
+    def _make_chapter_with_topics(self, book, ch_num=1, topics_data=None):
+        from lms.models import Chapter, Topic
+        ch = Chapter.objects.create(book=book, chapter_number=ch_num, title=f"Ch {ch_num}")
+        created = []
+        for i, td in enumerate(topics_data or [], start=1):
+            t = Topic.objects.create(
+                chapter=ch,
+                topic_number=i,
+                title=td.get('title', f'Topic {i}'),
+                content_kind=td.get('content_kind', 'general'),
+                page_start=td.get('page_start'),
+                page_end=td.get('page_end'),
+                content_blocks=td.get('content_blocks', []),
+                description=td.get('description', ''),
+            )
+            created.append(t)
+        return ch, created
+
+    # ── extract_text_from_blocks: unit tests ─────────────────────────────
+
+    def test_extract_empty_blocks(self):
+        from lms.content_retrieval import extract_text_from_blocks
+        assert extract_text_from_blocks([]) == ''
+        assert extract_text_from_blocks(None) == ''
+
+    def test_extract_paragraph_block(self):
+        from lms.content_retrieval import extract_text_from_blocks
+        blocks = [{'type': 'paragraph', 'text': 'Hello world'}]
+        assert extract_text_from_blocks(blocks) == 'Hello world'
+
+    def test_extract_heading_block(self):
+        from lms.content_retrieval import extract_text_from_blocks
+        blocks = [{'type': 'heading', 'text': 'Section Title'}]
+        assert 'Section Title' in extract_text_from_blocks(blocks)
+
+    def test_extract_exercise_block_all_fields(self):
+        from lms.content_retrieval import extract_text_from_blocks
+        blocks = [{'type': 'exercise', 'question': 'What is 2+2?', 'answer': '4'}]
+        result = extract_text_from_blocks(blocks)
+        assert 'What is 2+2?' in result
+        assert '4' in result
+
+    def test_extract_list_block(self):
+        from lms.content_retrieval import extract_text_from_blocks
+        blocks = [{'type': 'list', 'items': ['Item A', 'Item B', 'Item C']}]
+        result = extract_text_from_blocks(blocks)
+        assert 'Item A' in result
+        assert 'Item C' in result
+
+    def test_extract_table_block(self):
+        from lms.content_retrieval import extract_text_from_blocks
+        blocks = [{'type': 'table', 'rows': [['Name', 'Age'], ['Ali', '10']]}]
+        result = extract_text_from_blocks(blocks)
+        assert 'Name' in result
+        assert 'Ali' in result
+
+    def test_extract_multiple_blocks_concatenated(self):
+        from lms.content_retrieval import extract_text_from_blocks
+        blocks = [
+            {'type': 'heading', 'text': 'Title'},
+            {'type': 'paragraph', 'text': 'Body text.'},
+            {'type': 'exercise', 'question': 'Q1?', 'answer': 'A1'},
+        ]
+        result = extract_text_from_blocks(blocks)
+        assert 'Title' in result
+        assert 'Body text.' in result
+        assert 'Q1?' in result
+
+    def test_extract_unknown_block_type_fallback(self):
+        from lms.content_retrieval import extract_text_from_blocks
+        blocks = [{'type': 'custom_widget', 'label': 'Widget text'}]
+        result = extract_text_from_blocks(blocks)
+        assert 'Widget text' in result
+
+    def test_extract_skips_non_dict_items(self):
+        from lms.content_retrieval import extract_text_from_blocks
+        # Should not raise; non-dict entries are skipped
+        blocks = [{'type': 'paragraph', 'text': 'Good'}, 'bad_string', 42]
+        result = extract_text_from_blocks(blocks)
+        assert 'Good' in result
+
+    # ── retrieve_topics_for_ai: unit tests ───────────────────────────────
+
+    def test_retrieve_all_topics_no_filter(self, seed_data):
+        from lms.content_retrieval import retrieve_topics_for_ai
+        book = self._make_book(seed_data)
+        self._make_chapter_with_topics(book, 1, [
+            {'title': 'T1', 'content_kind': 'general'},
+            {'title': 'T2', 'content_kind': 'exercise'},
+        ])
+        result = retrieve_topics_for_ai(book)
+        assert len(result) == 2
+
+    def test_retrieve_filter_by_content_kind_exercise(self, seed_data):
+        from lms.content_retrieval import retrieve_topics_for_ai
+        book = self._make_book(seed_data)
+        self._make_chapter_with_topics(book, 1, [
+            {'title': 'General Topic', 'content_kind': 'general'},
+            {'title': 'Exercise Topic', 'content_kind': 'exercise'},
+        ])
+        result = retrieve_topics_for_ai(book, content_kind='exercise')
+        assert len(result) == 1
+        assert result[0]['topic_title'] == 'Exercise Topic'
+        assert result[0]['content_kind'] == 'exercise'
+
+    def test_retrieve_filter_by_page_range(self, seed_data):
+        from lms.content_retrieval import retrieve_topics_for_ai
+        book = self._make_book(seed_data)
+        self._make_chapter_with_topics(book, 1, [
+            {'title': 'Early',  'page_start': 1,  'page_end': 10},
+            {'title': 'Middle', 'page_start': 20, 'page_end': 30},
+            {'title': 'Late',   'page_start': 50, 'page_end': 60},
+        ])
+        # Request pages 15–35: only 'Middle' overlaps
+        result = retrieve_topics_for_ai(book, page_start=15, page_end=35)
+        titles = [r['topic_title'] for r in result]
+        assert 'Middle' in titles
+        assert 'Early' not in titles
+        assert 'Late' not in titles
+
+    def test_retrieve_topics_with_no_page_data_always_included(self, seed_data):
+        from lms.content_retrieval import retrieve_topics_for_ai
+        book = self._make_book(seed_data)
+        self._make_chapter_with_topics(book, 1, [
+            {'title': 'No pages', 'page_start': None, 'page_end': None},
+            {'title': 'In range', 'page_start': 5,    'page_end': 15},
+        ])
+        result = retrieve_topics_for_ai(book, page_start=10, page_end=20)
+        titles = [r['topic_title'] for r in result]
+        # Both should appear: 'No pages' has no page data so it passes through
+        assert 'No pages' in titles
+        assert 'In range' in titles
+
+    def test_retrieve_flat_text_from_content_blocks(self, seed_data):
+        from lms.content_retrieval import retrieve_topics_for_ai
+        book = self._make_book(seed_data)
+        self._make_chapter_with_topics(book, 1, [
+            {
+                'title': 'Rich Topic',
+                'content_blocks': [
+                    {'type': 'paragraph', 'text': 'Block content here'},
+                ],
+                'description': 'Description fallback',
+            },
+        ])
+        result = retrieve_topics_for_ai(book)
+        assert len(result) == 1
+        # content_blocks takes priority over description
+        assert 'Block content here' in result[0]['flat_text']
+
+    def test_retrieve_flat_text_falls_back_to_description(self, seed_data):
+        from lms.content_retrieval import retrieve_topics_for_ai
+        book = self._make_book(seed_data)
+        self._make_chapter_with_topics(book, 1, [
+            {'title': 'Desc Topic', 'content_blocks': [], 'description': 'From description'},
+        ])
+        result = retrieve_topics_for_ai(book)
+        assert result[0]['flat_text'] == 'From description'
+
+    def test_retrieve_result_dict_shape(self, seed_data):
+        from lms.content_retrieval import retrieve_topics_for_ai
+        book = self._make_book(seed_data)
+        self._make_chapter_with_topics(book, 1, [{'title': 'Shape Test'}])
+        result = retrieve_topics_for_ai(book)
+        assert len(result) == 1
+        item = result[0]
+        for key in ('chapter_number', 'chapter_title', 'topic_number',
+                    'topic_title', 'content_kind', 'page_start', 'page_end', 'flat_text'):
+            assert key in item, f"Missing key: {key}"
+
+    # ── build_prompt: unit tests ─────────────────────────────────────────
+
+    def test_build_lesson_plan_prompt_contains_context(self, seed_data):
+        from lms.content_retrieval import build_prompt, retrieve_topics_for_ai
+        book = self._make_book(seed_data)
+        self._make_chapter_with_topics(book, 1, [{'title': 'Variables'}])
+        topic_dicts = retrieve_topics_for_ai(book)
+
+        prompt = build_prompt(
+            mode='lesson_plan',
+            school=seed_data["school_a"],
+            class_obj=seed_data["classes"][0],
+            subject=seed_data["subjects"][0],
+            book=book,
+            topic_dicts=topic_dicts,
+            lesson_date='2026-04-21',
+            duration_minutes=45,
+        )
+        assert 'lesson plan' in prompt.lower()
+        assert 'Variables' in prompt
+        assert '2026-04-21' in prompt
+        assert '45' in prompt
+
+    def test_build_exam_prompt_contains_context(self, seed_data):
+        from lms.content_retrieval import build_prompt, retrieve_topics_for_ai
+        book = self._make_book(seed_data)
+        self._make_chapter_with_topics(book, 1, [
+            {'title': 'Ex 1', 'content_kind': 'exercise'},
+        ])
+        topic_dicts = retrieve_topics_for_ai(book, content_kind='exercise')
+
+        prompt = build_prompt(
+            mode='exam',
+            school=seed_data["school_a"],
+            class_obj=seed_data["classes"][0],
+            subject=seed_data["subjects"][0],
+            book=book,
+            topic_dicts=topic_dicts,
+        )
+        assert 'exam' in prompt.lower()
+        assert 'Ex 1' in prompt
+
+    def test_build_prompt_empty_topics_fallback(self, seed_data):
+        from lms.content_retrieval import build_prompt
+        book = self._make_book(seed_data)
+        prompt = build_prompt(
+            mode='lesson_plan',
+            school=seed_data["school_a"],
+            class_obj=seed_data["classes"][0],
+            subject=seed_data["subjects"][0],
+            book=book,
+            topic_dicts=[],
+        )
+        assert 'No specific topics selected' in prompt
+
+    # ── retrieve_for_ai endpoint ─────────────────────────────────────────
+
+    def test_retrieve_for_ai_endpoint_basic(self, seed_data, api):
+        token = seed_data["tokens"]["admin"]
+        sid = seed_data["SID_A"]
+        book = self._make_book(seed_data)
+        self._make_chapter_with_topics(book, 1, [
+            {'title': 'T1', 'content_kind': 'general'},
+            {'title': 'T2', 'content_kind': 'exercise'},
+        ])
+
+        resp = api.get(f"/api/lms/books/{book.id}/retrieve_for_ai/", token, sid)
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body['book_id'] == book.id
+        assert body['topic_count'] == 2
+        assert 'topics' in body
+        assert 'prompt_preview' in body
+        assert body['mode'] == 'lesson_plan'
+
+    def test_retrieve_for_ai_filters_by_content_kind(self, seed_data, api):
+        token = seed_data["tokens"]["admin"]
+        sid = seed_data["SID_A"]
+        book = self._make_book(seed_data)
+        self._make_chapter_with_topics(book, 1, [
+            {'title': 'General', 'content_kind': 'general'},
+            {'title': 'Exercise', 'content_kind': 'exercise'},
+        ])
+
+        resp = api.get(
+            f"/api/lms/books/{book.id}/retrieve_for_ai/?content_kind=exercise",
+            token, sid,
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body['topic_count'] == 1
+        assert body['topics'][0]['topic_title'] == 'Exercise'
+
+    def test_retrieve_for_ai_exam_mode(self, seed_data, api):
+        token = seed_data["tokens"]["admin"]
+        sid = seed_data["SID_A"]
+        book = self._make_book(seed_data)
+        self._make_chapter_with_topics(book, 1, [
+            {'title': 'Ex Topic', 'content_kind': 'exercise'},
+        ])
+
+        resp = api.get(
+            f"/api/lms/books/{book.id}/retrieve_for_ai/?mode=exam&content_kind=exercise",
+            token, sid,
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body['mode'] == 'exam'
+        assert 'exam' in body['prompt_preview'].lower()
+
+    def test_retrieve_for_ai_page_range_filter(self, seed_data, api):
+        token = seed_data["tokens"]["admin"]
+        sid = seed_data["SID_A"]
+        book = self._make_book(seed_data)
+        self._make_chapter_with_topics(book, 1, [
+            {'title': 'Early', 'page_start': 1,  'page_end': 10},
+            {'title': 'Late',  'page_start': 80, 'page_end': 100},
+        ])
+
+        resp = api.get(
+            f"/api/lms/books/{book.id}/retrieve_for_ai/?page_start=1&page_end=20",
+            token, sid,
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        titles = [t['topic_title'] for t in body['topics']]
+        assert 'Early' in titles
+        assert 'Late' not in titles
+
+    def test_retrieve_for_ai_invalid_page_params(self, seed_data, api):
+        token = seed_data["tokens"]["admin"]
+        sid = seed_data["SID_A"]
+        book = self._make_book(seed_data)
+
+        resp = api.get(
+            f"/api/lms/books/{book.id}/retrieve_for_ai/?page_start=abc",
+            token, sid,
+        )
+        assert resp.status_code == 400
+
+    def test_retrieve_for_ai_page_end_less_than_page_start(self, seed_data, api):
+        token = seed_data["tokens"]["admin"]
+        sid = seed_data["SID_A"]
+        book = self._make_book(seed_data)
+
+        resp = api.get(
+            f"/api/lms/books/{book.id}/retrieve_for_ai/?page_start=50&page_end=10",
+            token, sid,
+        )
+        assert resp.status_code == 400
+
+    def test_retrieve_for_ai_requires_auth(self, seed_data, api):
+        book = self._make_book(seed_data)
+        resp = api.client.get(f"/api/lms/books/{book.id}/retrieve_for_ai/")
+        assert resp.status_code == 401
+
+    def test_retrieve_for_ai_school_b_cannot_access_school_a_book(self, seed_data, api):
+        token = seed_data["tokens"]["admin_b"]
+        sid = seed_data["SID_B"]
+        book = self._make_book(seed_data)  # created in school_a
+
+        resp = api.get(f"/api/lms/books/{book.id}/retrieve_for_ai/", token, sid)
+        assert resp.status_code in (403, 404)
+
+    def test_retrieve_for_ai_prompt_preview_contains_book_title(self, seed_data, api):
+        token = seed_data["tokens"]["admin"]
+        sid = seed_data["SID_A"]
+        book = self._make_book(seed_data)
+        self._make_chapter_with_topics(book, 1, [{'title': 'T1'}])
+
+        resp = api.get(f"/api/lms/books/{book.id}/retrieve_for_ai/", token, sid)
+        assert resp.status_code == 200
+        assert book.title in resp.json()['prompt_preview']
+
+    # ── generate_exam_questions_ai endpoint ──────────────────────────────
+
+    def test_generate_exam_questions_missing_book_id(self, seed_data, api):
+        token = seed_data["tokens"]["admin"]
+        sid = seed_data["SID_A"]
+        resp = api.post("/api/lms/generate-exam-questions/", {}, token, sid)
+        assert resp.status_code == 400
+
+    def test_generate_exam_questions_invalid_book_id(self, seed_data, api):
+        token = seed_data["tokens"]["admin"]
+        sid = seed_data["SID_A"]
+        resp = api.post("/api/lms/generate-exam-questions/", {"book_id": 999999}, token, sid)
+        assert resp.status_code == 404
+
+    def test_generate_exam_questions_no_matching_topics(self, seed_data, api):
+        """When no exercise topics exist, endpoint returns 400."""
+        token = seed_data["tokens"]["admin"]
+        sid = seed_data["SID_A"]
+        book = self._make_book(seed_data)
+        # Only general topics, no exercises
+        self._make_chapter_with_topics(book, 1, [
+            {'title': 'General Only', 'content_kind': 'general'},
+        ])
+
+        resp = api.post("/api/lms/generate-exam-questions/", {
+            "book_id": book.id,
+            "content_kind": "exercise",
+        }, token, sid)
+        assert resp.status_code == 400
+        assert 'No matching topics' in resp.json().get('error', '')
+
+    def test_generate_exam_questions_no_api_key_returns_503(self, seed_data, api):
+        token = seed_data["tokens"]["admin"]
+        sid = seed_data["SID_A"]
+        book = self._make_book(seed_data)
+        self._make_chapter_with_topics(book, 1, [
+            {'title': 'Exercise', 'content_kind': 'exercise'},
+        ])
+
+        with patch("lms.views.settings") as mock_settings:
+            mock_settings.GROQ_API_KEY = None
+            resp = api.post("/api/lms/generate-exam-questions/", {
+                "book_id": book.id,
+                "content_kind": "exercise",
+            }, token, sid)
+
+        assert resp.status_code == 503
+
+    def test_generate_exam_questions_success(self, seed_data, api):
+        token = seed_data["tokens"]["admin"]
+        sid = seed_data["SID_A"]
+        book = self._make_book(seed_data)
+        self._make_chapter_with_topics(book, 1, [
+            {'title': 'Exercise 1', 'content_kind': 'exercise'},
+        ])
+
+        mock_json = '{"title":"Test Quiz","total_marks":10,"questions":[{"number":1,"question":"What is X?","marks":5,"answer":"X is Y"}]}'
+
+        with patch("lms.views.settings") as mock_settings, \
+             patch("groq.Groq") as MockGroq:
+            mock_settings.GROQ_API_KEY = "test-key"
+            mock_settings.GROQ_MODEL = "test-model"
+            mock_client = MagicMock()
+            MockGroq.return_value = mock_client
+            mock_client.chat.completions.create.return_value.choices = [
+                MagicMock(message=MagicMock(content=mock_json))
+            ]
+            resp = api.post("/api/lms/generate-exam-questions/", {
+                "book_id": book.id,
+                "content_kind": "exercise",
+            }, token, sid)
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body.get("success") is True
+        assert body.get("title") == "Test Quiz"
+        assert len(body.get("questions", [])) == 1

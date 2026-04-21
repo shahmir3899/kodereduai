@@ -54,6 +54,23 @@ export default function AccountsPage() {
   const [ledgerAccountId, setLedgerAccountId] = useState('')
   const [ledgerDateFrom, setLedgerDateFrom] = useState('')
   const [ledgerDateTo, setLedgerDateTo] = useState('')
+  const [isDownloadingLedgerPdf, setIsDownloadingLedgerPdf] = useState(false)
+  const [isDownloadingLedgerExcel, setIsDownloadingLedgerExcel] = useState(false)
+
+  const toIsoDate = (dt) => {
+    const y = dt.getFullYear()
+    const m = String(dt.getMonth() + 1).padStart(2, '0')
+    const d = String(dt.getDate()).padStart(2, '0')
+    return `${y}-${m}-${d}`
+  }
+
+  const applyLedgerQuickRange = (days) => {
+    const end = new Date()
+    const start = new Date()
+    start.setDate(end.getDate() - days + 1)
+    setLedgerDateFrom(toIsoDate(start))
+    setLedgerDateTo(toIsoDate(end))
+  }
 
   // Close month modal
   const [showCloseMonthModal, setShowCloseMonthModal] = useState(false)
@@ -222,6 +239,7 @@ export default function AccountsPage() {
       toast.showWarning('Please select an account first')
       return
     }
+    setIsDownloadingLedgerExcel(true)
     try {
       const response = await financeApi.exportLedger({
         account_id: ledgerAccountId,
@@ -244,6 +262,40 @@ export default function AccountsPage() {
     } catch (error) {
       console.error('Error downloading ledger:', error)
       toast.showError('Failed to download ledger')
+    } finally {
+      setIsDownloadingLedgerExcel(false)
+    }
+  }
+
+  const handleDownloadLedgerPdf = async () => {
+    if (!ledgerAccountId) {
+      toast.showWarning('Please select an account first')
+      return
+    }
+    setIsDownloadingLedgerPdf(true)
+    try {
+      const response = await financeApi.exportLedgerPdf({
+        account_id: ledgerAccountId,
+        ...(ledgerDateFrom && { date_from: ledgerDateFrom }),
+        ...(ledgerDateTo && { date_to: ledgerDateTo }),
+      })
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }))
+      const link = document.createElement('a')
+      link.href = url
+      const filename = response.headers['content-disposition']
+        ?.split('filename=')[1]
+        ?.replace(/"/g, '') || 'ledger.pdf'
+      link.setAttribute('download', filename)
+      document.body.appendChild(link)
+      link.click()
+      link.parentNode.removeChild(link)
+      window.URL.revokeObjectURL(url)
+      toast.showSuccess('Ledger PDF downloaded successfully')
+    } catch (error) {
+      console.error('Error downloading ledger PDF:', error)
+      toast.showError('Failed to download ledger PDF')
+    } finally {
+      setIsDownloadingLedgerPdf(false)
     }
   }
 
@@ -617,6 +669,22 @@ export default function AccountsPage() {
                   onChange={(e) => setLedgerDateFrom(e.target.value)}
                   className="input-field text-sm"
                 />
+                <div className="flex flex-wrap items-center gap-2 mt-2">
+                  <button
+                    type="button"
+                    onClick={() => applyLedgerQuickRange(30)}
+                    className="px-2.5 py-1 rounded-full text-xs border border-gray-300 hover:bg-gray-50"
+                  >
+                    Last 30 Days
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyLedgerQuickRange(60)}
+                    className="px-2.5 py-1 rounded-full text-xs border border-gray-300 hover:bg-gray-50"
+                  >
+                    Last 60 Days
+                  </button>
+                </div>
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">To Date</label>
@@ -628,13 +696,32 @@ export default function AccountsPage() {
                 />
               </div>
             </div>
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={handleDownloadLedgerPdf}
+                disabled={!ledgerAccountId || isDownloadingLedgerPdf}
+                className="btn btn-sm btn-outline-primary flex items-center gap-2"
+              >
+                {isDownloadingLedgerPdf && (
+                  <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                )}
+                Download PDF
+              </button>
               <button
                 onClick={handleDownloadLedger}
-                disabled={!ledgerAccountId}
-                className="btn btn-sm btn-outline-primary"
+                disabled={!ledgerAccountId || isDownloadingLedgerExcel}
+                className="btn btn-sm btn-outline-primary flex items-center gap-2"
               >
-                📥 Download Excel
+                {isDownloadingLedgerExcel && (
+                  <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                )}
+                Download Excel
               </button>
             </div>
           </div>
@@ -1250,6 +1337,7 @@ function LedgerView({ payload, isLoading, isError, error, accountSelected }) {
                     <span className="text-sm font-medium text-gray-900">{getLedgerTypeLabel(entry.type)}</span>
                     <span className="text-sm font-bold text-gray-900">{Number(entry.running_balance).toLocaleString()}</span>
                   </div>
+                  <p className="text-xs text-gray-500 mb-1">Account: {payload?.account?.name || '—'}</p>
                   <p className="text-xs text-gray-500 mb-1">{entry.date || 'Undated'} {entry.school_name ? `• ${entry.school_name}` : ''}</p>
                   <p className="text-sm text-gray-700 mb-2">{entry.description}</p>
                   <div className="grid grid-cols-2 gap-2 text-xs">
@@ -1264,6 +1352,7 @@ function LedgerView({ payload, isLoading, isError, error, accountSelected }) {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
+                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Account</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
                     <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
@@ -1276,6 +1365,7 @@ function LedgerView({ payload, isLoading, isError, error, accountSelected }) {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {entries.map((entry) => (
                     <tr key={`${entry.type}-${entry.id}`}>
+                      <td className="px-3 py-2 text-sm text-gray-700">{payload?.account?.name || '—'}</td>
                       <td className="px-3 py-2 text-sm text-gray-600">{entry.date || '—'}</td>
                       <td className="px-3 py-2 text-sm text-gray-900">{getLedgerTypeLabel(entry.type)}</td>
                       <td className="px-3 py-2 text-sm text-gray-700 max-w-xs truncate">{entry.description}</td>

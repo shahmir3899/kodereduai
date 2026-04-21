@@ -40,6 +40,7 @@ export default function StaffFormPage() {
     username: '', password: '', confirm_password: '', user_role: 'STAFF',
   })
   const [staffUserError, setStaffUserError] = useState('')
+  const [erpUserRole, setErpUserRole] = useState('')
   const staffRoleOptions = getAllowableRoles().filter(r => !['SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL'].includes(r))
 
   const ROLE_LABELS = {
@@ -100,6 +101,7 @@ export default function StaffFormPage() {
         emergency_contact_phone: s.emergency_contact_phone || '',
         notes: s.notes || '',
       })
+      setErpUserRole(s.user_role || '')
     }
   }, [staffData])
 
@@ -132,6 +134,22 @@ export default function StaffFormPage() {
     onError: (error) => {
       const data = error.response?.data
       const message = data?.employee_id?.[0] || data?.detail || data?.non_field_errors?.[0] || error.message || 'Failed to update staff member'
+      showError(message)
+    },
+  })
+
+  const updateUserRoleMutation = useMutation({
+    mutationFn: (payload) => hrApi.updateStaffUserRole(id, payload),
+    onSuccess: (response) => {
+      const newRole = response?.data?.role || erpUserRole
+      setErpUserRole(newRole)
+      queryClient.invalidateQueries({ queryKey: ['hrStaff'] })
+      queryClient.invalidateQueries({ queryKey: ['hrStaffMember', id] })
+      showSuccess('ERP role updated successfully!')
+    },
+    onError: (error) => {
+      const data = error.response?.data
+      const message = data?.error || data?.detail || error.message || 'Failed to update ERP role'
       showError(message)
     },
   })
@@ -219,6 +237,16 @@ export default function StaffFormPage() {
   return (
     <div>
       <div className="mb-6">
+        <button
+          type="button"
+          onClick={() => navigate('/hr/staff')}
+          className="inline-flex items-center gap-1.5 mb-3 px-3 py-1.5 rounded-full border border-gray-200 bg-white text-gray-600 hover:text-primary-700 hover:border-primary-200 hover:bg-primary-50 text-xs font-medium transition"
+        >
+          <svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+            <path fillRule="evenodd" d="M17 10a.75.75 0 01-.75.75H5.56l3.22 3.22a.75.75 0 11-1.06 1.06l-4.5-4.5a.75.75 0 010-1.06l4.5-4.5a.75.75 0 011.06 1.06L5.56 9.25h10.69A.75.75 0 0117 10z" clipRule="evenodd" />
+          </svg>
+          Back to Staff Directory
+        </button>
         <h1 className="text-xl sm:text-2xl font-bold text-gray-900">
           {isEdit ? 'Edit Staff Member' : 'Add Staff Member'}
         </h1>
@@ -317,6 +345,59 @@ export default function StaffFormPage() {
               </div>
             </div>
           </div>
+
+          {isEdit && (
+            <div className="card">
+              <h2 className="text-sm font-semibold text-gray-700 mb-4">System / ERP Settings</h2>
+              {!staffData?.data?.user ? (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                  This staff member does not have a linked user account yet. Link or create an account from Staff Directory to configure ERP role.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="label">Linked Username</label>
+                      <input
+                        type="text"
+                        className="input bg-gray-50 text-gray-600"
+                        value={staffData?.data?.user_username || ''}
+                        readOnly
+                      />
+                    </div>
+                    <div>
+                      <label className="label">ERP Role</label>
+                      <select
+                        className="input"
+                        value={erpUserRole}
+                        onChange={(e) => setErpUserRole(e.target.value)}
+                      >
+                        <option value="">Select Role</option>
+                        {staffRoleOptions.map(role => (
+                          <option key={role} value={role}>{ROLE_LABELS[role] || role}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-700">
+                    <strong>Class Teacher Visibility:</strong> Staff appear in Class Teacher assignment only when their ERP role is TEACHER.
+                  </div>
+
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => updateUserRoleMutation.mutate({ user_role: erpUserRole })}
+                      disabled={!erpUserRole || updateUserRoleMutation.isPending || erpUserRole === (staffData?.data?.user_role || '')}
+                      className="btn btn-primary"
+                    >
+                      {updateUserRoleMutation.isPending ? 'Updating Role...' : 'Update ERP Role'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Employment Details */}
           <div className="space-y-6">

@@ -310,6 +310,16 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | GET | /api/notifications/analytics/ | Analytics. Params: days (7\|30\|90, default=all time) |
 | POST | /api/notifications/ai-chat/ | Parent Communication AI chat. Body: `{message}`. Multi-round tool calling (15 tools), conversation history. See BACKEND_APPS.md → AI Chatbot Agents |
 
+### In-App Notifications — what exists and what each sends
+| # | Trigger | Recipients | When | Receipent |
+|---|---|---|---|---|
+| 1 | Student Absent (`trigger_absence_notification`) | SCHOOL_ADMIN, PRINCIPAL (up to 5) | Whenever attendance record is saved as ABSENT (upload, manual bulk entry, face attendance); per absent student | Active school memberships for SCHOOL_ADMIN/PRINCIPAL roles (max 5) |
+| 2 | Class Teacher Fee Pending (`trigger_class_teacher_fee_pending`) | Class teacher (per active class assignment) | Celery beat on 10th and 15th of month at 09:00 | `ClassTeacherAssignment.teacher.user` for each class with pending fees |
+| 3 | Class Teacher Attendance Pending (`trigger_class_teacher_attendance_pending`) | Class teacher (per active class assignment) | Celery beat daily at 11:00 when class attendance is still unmarked | `ClassTeacherAssignment.teacher.user` only when class day is not OFF day and teacher status is PRESENT |
+| 4 | Lesson Plan Published (`trigger_lesson_plan_published`) | Students in the lesson plan class | On `POST /api/lms/lesson-plans/{id}/publish/` | Active students in class with linked user accounts |
+| 5 | Daily School Report (`trigger_daily_school_report`) | SCHOOL_ADMIN, PRINCIPAL | Celery beat daily at 17:00 | Active school memberships for SCHOOL_ADMIN/PRINCIPAL roles |
+| 6 | General Announcement (`trigger_general`) | Caller-supplied users (default admins+teachers) | Ad-hoc/manual trigger | Explicit `recipient_users` list or default role-filtered users |
+
 ## Messaging
 | Method | URL | Description |
 |--------|-----|-------------|

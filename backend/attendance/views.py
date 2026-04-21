@@ -3,12 +3,16 @@ Attendance views for upload, review, and confirmation workflow.
 """
 
 import logging
+import io
+from calendar import monthrange
+from datetime import date
 from rest_framework import viewsets, status
 from rest_framework.views import APIView
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser
+from django.http import HttpResponse
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.db.models import Count, Q
@@ -153,9 +157,11 @@ class AttendanceUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
         if active_school_id:
             queryset = queryset.filter(school_id=active_school_id)
         elif not self.request.user.is_super_admin:
-            tenant_schools = ensure_tenant_schools(self.request)
-            if tenant_schools:
-                queryset = queryset.filter(school_id__in=tenant_schools)
+            # No X-School-ID header — fall back to the user's default school
+            # rather than leaking uploads from all accessible schools.
+            default_school_id = getattr(self.request.user, 'school_id', None)
+            if default_school_id:
+                queryset = queryset.filter(school_id=default_school_id)
             else:
                 return queryset.none()
 
@@ -402,12 +408,21 @@ class AttendanceUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
             for change in user_changed_marks:
                 logger.info(f"    Student {change['student_id']}: AI suggested {change['ai_suggested']} → User confirmed {change['user_confirmed']} (AI confidence: {change['confidence']})")
 
-        # Get all active students in the class
-        all_students = Student.objects.filter(
-            school=upload.school,
-            class_obj=upload.class_obj,
-            is_active=True
-        )
+        # Get all students enrolled in the class for this upload's academic year
+        if upload.academic_year_id:
+            all_students = Student.objects.filter(
+                school=upload.school,
+                enrollments__academic_year_id=upload.academic_year_id,
+                enrollments__class_obj_id=upload.class_obj_id,
+                enrollments__is_active=True,
+                is_active=True,
+            ).distinct()
+        else:
+            all_students = Student.objects.filter(
+                school=upload.school,
+                class_obj=upload.class_obj,
+                is_active=True,
+            )
 
         # Create attendance records using bulk operations
         student_ids = [s.id for s in all_students]
@@ -482,6 +497,18 @@ class AttendanceUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
                 send_whatsapp_notifications.delay(upload.id)
             except Exception as e:
                 logger.warning(f"Could not queue WhatsApp notifications: {e}")
+
+        # Trigger in-app absence notifications to admins
+        try:
+            from notifications.triggers import trigger_absence_notification
+            absent_records = [
+                r for r in created_records
+                if r.status == AttendanceRecord.AttendanceStatus.ABSENT
+            ]
+            for record in absent_records:
+                trigger_absence_notification(record)
+        except Exception as e:
+            logger.warning(f"Could not send absence in-app notifications: {e}")
 
         return Response({
             'success': True,
@@ -890,6 +917,273 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
         })
 
     @action(detail=False, methods=['get'])
+    def download_register_pdf(self, request):
+        """
+        Download attendance register as PDF for a specific month and class.
+        Includes day-by-day marks and space for principal signature.
+
+        Query params:
+        - class_id or session_class_id (required)
+        - month (required): 1-12
+        - year (required): YYYY
+        - academic_year (optional): academic year ID
+        """
+        logger.info("=== download_register_pdf CALLED ===")
+        logger.info(f"User: {request.user}, Params: {request.query_params}")
+        try:
+            return self._generate_register_pdf(request)
+        except Exception as e:
+            logger.exception(f"download_register_pdf ERROR: {e}")
+            return Response({'error': str(e)}, status=500)
+
+    def _generate_register_pdf(self, request):
+        import urllib.request as urllib_request
+        from reportlab.lib.pagesizes import A4, landscape
+        from reportlab.lib import colors
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
+        from reportlab.lib.units import inch
+        from students.models import Student, Class as StudentClass
+        from schools.models import School
+
+        # Get parameters
+        month = request.query_params.get('month')
+        year = request.query_params.get('year')
+        class_id = request.query_params.get('class_id')
+        academic_year_id = request.query_params.get('academic_year')
+
+        # Resolve session_class_id if provided
+        session_class_obj_id, session_class_year_id = _resolve_session_class_filter(request)
+        if session_class_obj_id:
+            class_id = session_class_obj_id
+        if not academic_year_id and session_class_year_id:
+            academic_year_id = session_class_year_id
+
+        # Validate parameters
+        if not (month and year and class_id):
+            return Response(
+                {'error': 'month, year, and class_id (or session_class_id) are required.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            month = int(month)
+            year = int(year)
+            if not (1 <= month <= 12):
+                raise ValueError("Month must be 1-12")
+        except (ValueError, TypeError):
+            return Response(
+                {'error': 'Invalid month or year. month: 1-12, year: YYYY'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Get school context
+        school_id = ensure_tenant_school_id(request)
+        if not school_id:
+            return Response({'error': 'School context required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            school = School.objects.get(id=school_id)
+        except School.DoesNotExist:
+            return Response({'error': 'School not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Permission check: teacher can only download assigned classes
+        user_role = get_effective_role(request)
+        if user_role == 'TEACHER':
+            teacher_classes = get_teacher_session_class_scope(request)
+            if class_id not in [str(cid) for cid in teacher_classes]:
+                return Response(
+                    {'error': 'You do not have permission to download this class.'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
+        # Get class name
+        try:
+            class_obj = StudentClass.objects.get(id=class_id, school_id=school_id)
+            class_name = class_obj.name
+        except StudentClass.DoesNotExist:
+            return Response({'error': 'Class not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Build date range for the month
+        last_day = monthrange(year, month)[1]
+        date_from = date(year, month, 1)
+        date_to = date(year, month, last_day)
+
+        # Get enrolled students for the class
+        students_qs = Student.objects.filter(school_id=school_id, is_active=True)
+        if academic_year_id:
+            students_qs = students_qs.filter(
+                enrollments__academic_year_id=academic_year_id,
+                enrollments__class_obj_id=class_id,
+                enrollments__is_active=True,
+            )
+        else:
+            students_qs = students_qs.filter(class_obj_id=class_id)
+
+        students = students_qs.order_by('roll_number').values('id', 'name', 'roll_number')
+        student_ids = [s['id'] for s in students]
+
+        # Get attendance records for the month
+        records = AttendanceRecord.objects.filter(
+            school_id=school_id,
+            date__gte=date_from,
+            date__lte=date_to,
+            student_id__in=student_ids,
+        ).values('student_id', 'date', 'status')
+
+        # Build attendance matrix: {student_id: {date: status}}
+        attendance_matrix = {s['id']: {} for s in students}
+        for record in records:
+            attendance_matrix[record['student_id']][record['date']] = record['status']
+
+        # Generate PDF
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(
+            buffer,
+            pagesize=landscape(A4),
+            topMargin=0.4*inch,
+            bottomMargin=0.5*inch,
+            leftMargin=0.3*inch,
+            rightMargin=0.3*inch,
+        )
+        elements = []
+        styles = getSampleStyleSheet()
+
+        # Title style
+        title_style = ParagraphStyle(
+            'ReportTitle',
+            parent=styles['Heading1'],
+            fontSize=14,
+            spaceAfter=4,
+            alignment=1,  # Center
+        )
+        subtitle_style = ParagraphStyle(
+            'Subtitle',
+            parent=styles['Normal'],
+            fontSize=10,
+            spaceAfter=2,
+            alignment=1,  # Center
+        )
+
+        # Build header: logo on left, school name + title centered
+        logo_image = None
+        if getattr(school, 'logo', None):
+            try:
+                logo_data = io.BytesIO(urllib_request.urlopen(school.logo, timeout=5).read())
+                logo_image = Image(logo_data, width=0.7*inch, height=0.7*inch)
+                logo_image.hAlign = 'LEFT'
+            except Exception as e:
+                logger.warning(f"Could not load school logo: {e}")
+
+        title_text = Paragraph(school.name, title_style)
+        subtitle_text = Paragraph(f"Attendance Register - {class_name}", subtitle_style)
+        period_text = Paragraph(f"{date_from.strftime('%B %Y')}", subtitle_style)
+
+        if logo_image:
+            header_table = Table(
+                [[logo_image, [title_text, subtitle_text, period_text]]],
+                colWidths=[0.9*inch, None],
+            )
+            header_table.setStyle(TableStyle([
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('ALIGN', (1, 0), (1, 0), 'CENTER'),
+                ('LEFTPADDING', (0, 0), (-1, -1), 0),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+                ('TOPPADDING', (0, 0), (-1, -1), 0),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+            ]))
+            elements.append(header_table)
+        else:
+            elements.append(title_text)
+            elements.append(subtitle_text)
+            elements.append(period_text)
+
+        elements.append(Spacer(1, 0.15*inch))
+
+        # Build table: headers (dates) + rows (students)
+        # Columns: Roll#, Student Name, Date1, Date2, ..., DateN, Present, Absent
+        dates_in_month = [date(year, month, day) for day in range(1, last_day + 1)]
+
+        # Table headers
+        headers = ['Roll#', 'Student Name'] + [str(d.day) for d in dates_in_month] + ['P', 'A']
+        table_data = [headers]
+
+        # Table rows
+        for student in students:
+            student_id = student['id']
+            present_count = 0
+            absent_count = 0
+
+            row = [
+                str(student['roll_number'] or ''),
+                student['name'][:20],  # Truncate long names
+            ]
+
+            # Add daily marks
+            for day_date in dates_in_month:
+                status_val = attendance_matrix[student_id].get(day_date, '')
+                if status_val == 'PRESENT':
+                    row.append('P')
+                    present_count += 1
+                elif status_val == 'ABSENT':
+                    row.append('A')
+                    absent_count += 1
+                else:
+                    row.append('-')
+
+            row.append(str(present_count))
+            row.append(str(absent_count))
+            table_data.append(row)
+
+        # Create table with styling
+        table = Table(table_data, repeatRows=1)
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2563EB')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('FONTSIZE', (0, 0), (-1, 0), 8),
+            ('FONTSIZE', (0, 1), (-1, -1), 7),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F9FAFB')]),
+            ('TOPPADDING', (0, 0), (-1, -1), 2),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+            ('LEFTPADDING', (0, 0), (-1, -1), 2),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 2),
+        ]))
+
+        elements.append(table)
+        elements.append(Spacer(1, 0.2*inch))
+
+        # Signature section
+        sig_text = ParagraphStyle(
+            'SigText',
+            parent=styles['Normal'],
+            fontSize=9,
+        )
+        elements.append(Paragraph("<b>Authorized By:</b>", sig_text))
+        elements.append(Spacer(1, 0.4*inch))
+        elements.append(Paragraph("_" * 40, sig_text))
+        elements.append(Paragraph("Principal / Authorized Officer", sig_text))
+        elements.append(Spacer(1, 0.1*inch))
+        elements.append(Paragraph(f"Date: _________________", sig_text))
+
+        # Footer
+        footer_text = f"Generated on {timezone.now().strftime('%d %b %Y at %H:%M')} | KoderEduAI"
+        elements.append(Spacer(1, 0.1*inch))
+        elements.append(Paragraph(footer_text, styles['Normal']))
+
+        # Build PDF
+        doc.build(elements)
+        pdf_bytes = buffer.getvalue()
+
+        # Return PDF response
+        filename = f"attendance_register_{class_name.replace(' ', '_')}_{year}{month:02d}.pdf"
+        response = HttpResponse(pdf_bytes, content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+
+    @action(detail=False, methods=['get'])
     def accuracy_stats(self, request):
         """
         Get AI accuracy statistics for the current school.
@@ -1210,6 +1504,7 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
         created = 0
         updated = 0
         errors = []
+        absence_notification_failures = 0
 
         for entry in entries:
             student_id = entry['student_id']
@@ -1235,6 +1530,16 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
                     created += 1
                 else:
                     updated += 1
+
+                if att_status == AttendanceRecord.AttendanceStatus.ABSENT:
+                    try:
+                        from notifications.triggers import trigger_absence_notification
+                        trigger_absence_notification(record)
+                    except Exception as e:
+                        absence_notification_failures += 1
+                        logger.warning(
+                            f"Could not send absence notification for student {student_id}: {e}"
+                        )
             except Exception as e:
                 errors.append({'student_id': student_id, 'error': str(e)})
 
@@ -1242,6 +1547,7 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
             'created': created,
             'updated': updated,
             'errors': errors,
+            'absence_notification_failures': absence_notification_failures,
             'message': f'{created + updated} attendance records saved.',
         })
 

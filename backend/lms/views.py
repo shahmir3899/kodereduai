@@ -3,14 +3,19 @@ LMS views for lesson plans, assignments, submissions, and curriculum management.
 """
 
 import logging
+import hashlib
+import json
+from django.conf import settings
 from django.utils import timezone
 from django.db import transaction
 from django.db.models import Count, Q
+from django.core.cache import cache
 from rest_framework import viewsets, status
 from rest_framework.decorators import action, api_view, permission_classes as perm_classes
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.throttling import UserRateThrottle
 
 from core.permissions import (
     IsSchoolAdminOrReadOnly, HasSchoolAccess, ModuleAccessMixin,
@@ -20,9 +25,14 @@ from core.permissions import (
 from core.mixins import TenantQuerySetMixin, ensure_tenant_school_id
 from core.class_scope import resolve_class_scope
 from .models import Book, Chapter, Topic, LessonPlan, Assignment, AssignmentSubmission
+from .content_retrieval import retrieve_topics_for_ai, build_prompt, extract_text_from_blocks
 from .serializers import (
     BookReadSerializer, BookCreateSerializer,
+    BookChapterOnlyReadSerializer,
+    BookLessonPlanReadSerializer,
+    TopicExamExercisesSerializer,
     ChapterReadSerializer, ChapterCreateSerializer,
+    TopicLessonPlanSerializer,
     TopicSerializer,
     LessonPlanReadSerializer, LessonPlanCreateSerializer,
     AssignmentReadSerializer, AssignmentCreateSerializer,
@@ -30,6 +40,24 @@ from .serializers import (
 )
 
 logger = logging.getLogger(__name__)
+
+TOC_APPLY_IDEMPOTENCY_TTL_SECONDS = 60 * 60
+TOC_APPLY_IDEMPOTENCY_FALLBACK = {}
+
+# Phase 5: Rate limiting for OCR/AI endpoints
+class OCRRateThrottle(UserRateThrottle):
+    """Rate limit OCR TOC extraction to prevent abuse and manage costs."""
+    scope = 'ocr_toc'
+    THROTTLE_RATES = {'ocr_toc': '20/hour'}  # 20 OCR requests per hour per user
+
+class AIRateThrottle(UserRateThrottle):
+    """Rate limit AI TOC suggestions to prevent abuse and manage costs."""
+    scope = 'suggest_toc'
+    THROTTLE_RATES = {'suggest_toc': '30/hour'}  # 30 AI suggestion requests per hour per user
+
+# Phase 5: Safeguards for large text processing
+MAX_TOC_TEXT_SIZE = 500 * 1024  # 500KB max
+CHUNK_SIZE = 50 * 1024  # 50KB per chunk for streaming parse
 
 
 def _apply_teacher_dual_scope(queryset, request, class_field='class_obj_id', subject_field='subject_id', school_id=None):
@@ -87,6 +115,11 @@ class BookViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):
             return BookCreateSerializer
+        view_profile = self.request.query_params.get('view')
+        if view_profile == 'chapter_only':
+            return BookChapterOnlyReadSerializer
+        if view_profile == 'lesson_plan':
+            return BookLessonPlanReadSerializer
         return BookReadSerializer
 
     def get_queryset(self):
@@ -121,7 +154,14 @@ class BookViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
         GET /api/lms/books/{id}/tree/
         """
         book = self.get_object()
-        serializer = BookReadSerializer(book)
+        view_profile = request.query_params.get('view')
+        if view_profile == 'chapter_only':
+            serializer_class = BookChapterOnlyReadSerializer
+        elif view_profile == 'lesson_plan':
+            serializer_class = BookLessonPlanReadSerializer
+        else:
+            serializer_class = BookReadSerializer
+        serializer = serializer_class(book)
         return Response(serializer.data)
 
     @action(detail=True, methods=['post'])
@@ -178,6 +218,11 @@ class BookViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
         """
         book = self.get_object()
         chapters = request.data.get('chapters', [])
+        idempotency_key = (
+            request.headers.get('X-Idempotency-Key')
+            or request.data.get('idempotency_key')
+            or ''
+        ).strip()
 
         if not isinstance(chapters, list) or not chapters:
             return Response(
@@ -185,18 +230,39 @@ class BookViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        payload_hash = hashlib.sha256(
+            json.dumps(chapters, sort_keys=True, ensure_ascii=False).encode('utf-8')
+        ).hexdigest()
+
+        if idempotency_key:
+            cache_key = f'lms:apply_toc:{book.id}:{idempotency_key}'
+            existing = cache.get(cache_key)
+            if not existing:
+                existing = TOC_APPLY_IDEMPOTENCY_FALLBACK.get(cache_key)
+            if existing and existing.get('payload_hash') == payload_hash:
+                return Response(existing.get('result', {}), status=status.HTTP_200_OK)
+
         from .toc_parser import apply_toc_structure
         with transaction.atomic():
             result = apply_toc_structure(book, chapters)
 
+        if idempotency_key:
+            record = {
+                'payload_hash': payload_hash,
+                'result': result,
+            }
+            cache.set(cache_key, record, TOC_APPLY_IDEMPOTENCY_TTL_SECONDS)
+            TOC_APPLY_IDEMPOTENCY_FALLBACK[cache_key] = record
+
         return Response(result, status=status.HTTP_201_CREATED)
 
-    @action(detail=True, methods=['post'], url_path='suggest_toc')
+    @action(detail=True, methods=['post'], url_path='suggest_toc', throttle_classes=[AIRateThrottle])
     def suggest_toc(self, request, pk=None):
         """
         Suggest TOC structure using AI with rule-based fallback.
         POST /api/lms/books/{id}/suggest_toc/
         Body: { "raw_text": "..." }
+        Rate limited to 30 requests per hour per user.
         """
         book = self.get_object()
         raw_text = request.data.get('raw_text') or request.data.get('toc_text') or ''
@@ -207,12 +273,19 @@ class BookViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # Phase 5: Validate text size to prevent excessive AI processing
+        if len(raw_text) > MAX_TOC_TEXT_SIZE:
+            return Response(
+                {'error': f'Text too large. Maximum size is {MAX_TOC_TEXT_SIZE // 1024}KB. Consider breaking into smaller sections or using parse_toc_stream for chunked processing.'},
+                status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            )
+
         from .toc_ai_suggester import suggest_toc_structure
         result = suggest_toc_structure(str(raw_text), language=book.language)
         return Response(result)
 
     @action(detail=True, methods=['post'], url_path='ocr_toc',
-            parser_classes=[MultiPartParser, FormParser])
+            parser_classes=[MultiPartParser, FormParser], throttle_classes=[OCRRateThrottle])
     def ocr_toc(self, request, pk=None):
         """
         OCR a Table of Contents image and return extracted text for review.
@@ -261,6 +334,64 @@ class BookViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
             'language': book.language,
         })
 
+    @action(detail=True, methods=['post'], url_path='parse_toc_stream')
+    def parse_toc_stream(self, request, pk=None):
+        """
+        Parse large TOC text in chunks to prevent timeout.
+        POST /api/lms/books/{id}/parse_toc_stream/
+        Body: { "toc_text": "...", "chunk_size": 50000 (optional) }
+        Returns structured preview with chapter/topic hierarchies per chunk.
+        Recommended for text > 50KB.
+        """
+        book = self.get_object()
+        toc_text = request.data.get('toc_text', '')
+        chunk_size = request.data.get('chunk_size', CHUNK_SIZE)
+
+        if not toc_text.strip():
+            return Response(
+                {'error': 'toc_text is required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if len(toc_text) > MAX_TOC_TEXT_SIZE:
+            return Response(
+                {'error': f'Text too large. Maximum size is {MAX_TOC_TEXT_SIZE // 1024}KB.'},
+                status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            )
+
+        from .toc_parser import parse_toc_preview
+        
+        # Split text into chunks and parse each
+        chunks = []
+        for i in range(0, len(toc_text), chunk_size):
+            chunk = toc_text[i:i + chunk_size]
+            if chunk.strip():
+                chunks.append(chunk)
+
+        all_chapters = []
+        all_warnings = []
+        total_topic_count = 0
+
+        for idx, chunk in enumerate(chunks):
+            try:
+                preview = parse_toc_preview(chunk)
+                all_chapters.extend(preview.get('chapters', []))
+                all_warnings.extend([f'Chunk {idx + 1}: {w}' for w in preview.get('warnings', [])])
+                total_topic_count += sum(len(ch.get('topics', [])) for ch in preview.get('chapters', []))
+            except Exception as e:
+                all_warnings.append(f'Chunk {idx + 1} parse error: {str(e)}')
+
+        return Response({
+            'book_id': book.id,
+            'chapters': all_chapters,
+            'warnings': all_warnings,
+            'chapter_count': len(all_chapters),
+            'topic_count': total_topic_count,
+            'chunk_count': len(chunks),
+            'chunk_size': chunk_size,
+        })
+
+
     @action(detail=False, methods=['get'])
     def for_class_subject(self, request):
         """
@@ -284,7 +415,14 @@ class BookViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
         books = self.get_queryset().filter(
             class_obj_id=class_id, subject_id=subject_id, is_active=True,
         )
-        serializer = BookReadSerializer(books, many=True)
+        view_profile = request.query_params.get('view')
+        if view_profile == 'chapter_only':
+            serializer_class = BookChapterOnlyReadSerializer
+        elif view_profile == 'lesson_plan':
+            serializer_class = BookLessonPlanReadSerializer
+        else:
+            serializer_class = BookReadSerializer
+        serializer = serializer_class(books, many=True)
         return Response(serializer.data)
 
     @action(detail=False, methods=['get'])
@@ -344,6 +482,67 @@ class BookViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
             'books': book_progress,
         })
 
+    @action(detail=True, methods=['get'])
+    def retrieve_for_ai(self, request, pk=None):
+        """
+        Phase 6 — return structured topic data suitable for AI prompts.
+
+        GET /api/lms/books/{id}/retrieve_for_ai/
+        Query params:
+          - content_kind   (optional) e.g. 'exercise' or 'general'
+          - page_start     (optional) integer
+          - page_end       (optional) integer
+          - mode           (optional) 'lesson_plan' (default) or 'exam'
+
+        Returns:
+          { book_id, book_title, topic_count, mode, topics: [...], prompt_preview }
+        """
+        book = self.get_object()
+
+        content_kind = request.query_params.get('content_kind') or None
+        mode = request.query_params.get('mode', 'lesson_plan')
+
+        try:
+            page_start = int(request.query_params['page_start']) if 'page_start' in request.query_params else None
+            page_end   = int(request.query_params['page_end'])   if 'page_end'   in request.query_params else None
+        except (ValueError, TypeError):
+            return Response(
+                {'error': 'page_start and page_end must be integers.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if page_start is not None and page_end is not None and page_end < page_start:
+            return Response(
+                {'error': 'page_end must be >= page_start.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        topic_dicts = retrieve_topics_for_ai(
+            book,
+            content_kind=content_kind,
+            page_start=page_start,
+            page_end=page_end,
+        )
+
+        # Build a prompt preview so the caller can inspect what will be sent to the LLM
+        prompt_preview = build_prompt(
+            mode=mode,
+            school=book.school,
+            class_obj=book.class_obj,
+            subject=book.subject,
+            book=book,
+            topic_dicts=topic_dicts,
+        )
+
+        return Response({
+            'book_id': book.id,
+            'book_title': book.title,
+            'topic_count': len(topic_dicts),
+            'mode': mode,
+            'topics': topic_dicts,
+            'prompt_preview': prompt_preview,
+        })
+
 
 class ChapterViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     """CRUD for chapters within books."""
@@ -380,6 +579,10 @@ class TopicViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet
 
     def get_serializer_class(self):
         # Use detailed serializer for list and retrieve actions
+        if self.action in ('list', 'retrieve') and self.request.query_params.get('view') == 'lesson_plan':
+            return TopicLessonPlanSerializer
+        if self.action in ('list', 'retrieve') and self.request.query_params.get('view') == 'exam_exercises':
+            return TopicExamExercisesSerializer
         if self.action in ('list', 'retrieve'):
             from .serializers import TopicDetailedSerializer
             return TopicDetailedSerializer
@@ -435,10 +638,17 @@ class TopicViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet
             ).distinct()
         elif coverage == 'uncovered':
             # Topics with neither lesson plans nor questions
-            from django.db.models import Q
             queryset = queryset.exclude(
                 Q(lesson_plans__is_active=True) | Q(test_questions__is_active=True)
             ).distinct()
+
+        # Controlled profile for exam-focused topic selection.
+        if self.request.query_params.get('view') == 'exam_exercises':
+            queryset = queryset.filter(
+                Q(content_kind='exercise') | Q(test_questions__is_active=True)
+            ).annotate(
+                active_test_question_count=Count('test_questions', filter=Q(test_questions__is_active=True), distinct=True)
+            ).distinct().order_by('chapter__chapter_number', 'topic_number', 'id')
 
         return queryset
 
@@ -500,6 +710,104 @@ def generate_lesson_plan_ai(request):
         duration_minutes=duration_minutes,
     )
     return Response(result)
+
+
+@api_view(['POST'])
+@perm_classes([IsAuthenticated])
+def generate_exam_questions_ai(request):
+    """
+    Phase 6 — Generate exam questions from exercise topics using AI.
+
+    POST /api/lms/generate-exam-questions/
+    Body: {
+        "book_id": 5,
+        "content_kind": "exercise",   # default
+        "page_start": 1,              # optional
+        "page_end": 50                # optional
+    }
+    """
+    book_id = request.data.get('book_id')
+    if not book_id:
+        return Response({'error': 'book_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        book = Book.objects.select_related('school', 'class_obj', 'subject').get(
+            id=book_id, school_id=request.META.get('HTTP_X_SCHOOL_ID'),
+        )
+    except Book.DoesNotExist:
+        return Response({'error': 'Book not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    content_kind = request.data.get('content_kind', 'exercise')
+    page_start = request.data.get('page_start')
+    page_end   = request.data.get('page_end')
+
+    topic_dicts = retrieve_topics_for_ai(
+        book,
+        content_kind=content_kind,
+        page_start=page_start,
+        page_end=page_end,
+    )
+
+    if not topic_dicts:
+        return Response(
+            {'error': 'No matching topics found for the given filters.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Language instruction for RTL books
+    language_instruction = ''
+    if book.language in Book.RTL_LANGUAGES:
+        lang_name = book.get_language_display()
+        language_instruction = (
+            f'IMPORTANT: Generate all questions and answers in {lang_name}.'
+        )
+
+    prompt = build_prompt(
+        mode='exam',
+        school=book.school,
+        class_obj=book.class_obj,
+        subject=book.subject,
+        book=book,
+        topic_dicts=topic_dicts,
+        language_instruction=language_instruction,
+    )
+
+    if not getattr(settings, 'GROQ_API_KEY', None):
+        return Response(
+            {'error': 'AI generation is not configured. GROQ_API_KEY is missing.'},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+
+    try:
+        from groq import Groq
+        client = Groq(api_key=settings.GROQ_API_KEY)
+        model_name = getattr(settings, 'GROQ_MODEL', 'llama-3.3-70b-versatile')
+        response = client.chat.completions.create(
+            model=model_name,
+            messages=[{'role': 'user', 'content': prompt}],
+            temperature=0.3,
+            max_tokens=3000,
+        )
+        result_text = response.choices[0].message.content
+        # Strip markdown fences
+        if '```json' in result_text:
+            result_text = result_text.split('```json')[1].split('```')[0]
+        elif '```' in result_text:
+            result_text = result_text.split('```')[1].split('```')[0]
+        result = json.loads(result_text.strip())
+        return Response({'success': True, **result})
+    except json.JSONDecodeError as exc:
+        logger.error('Failed to parse exam AI response: %s', exc)
+        return Response(
+            {'error': 'Failed to parse AI response. Please try again.'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+    except Exception as exc:
+        logger.error('Exam AI generation failed: %s', exc)
+        return Response(
+            {'error': str(exc)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -643,6 +951,13 @@ class LessonPlanViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
             f"Lesson plan {plan.id} '{plan.title}' published by "
             f"{request.user.email}"
         )
+
+        # Notify students in-app
+        try:
+            from notifications.triggers import trigger_lesson_plan_published
+            trigger_lesson_plan_published(plan)
+        except Exception as e:
+            logger.warning(f"Could not send lesson plan notification: {e}")
 
         serializer = LessonPlanReadSerializer(plan)
         return Response(serializer.data)
