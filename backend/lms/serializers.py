@@ -433,6 +433,7 @@ class AssignmentReadSerializer(serializers.ModelSerializer):
             'teacher', 'teacher_name',
             'title', 'description', 'instructions',
             'assignment_type', 'assignment_type_display',
+            'requires_submission',
             'due_date', 'total_marks', 'attachments_allowed',
             'status', 'status_display',
             'is_active', 'attachments', 'submission_count',
@@ -450,10 +451,35 @@ class AssignmentCreateSerializer(serializers.ModelSerializer):
             'id', 'school', 'academic_year',
             'class_obj', 'subject', 'teacher',
             'title', 'description', 'instructions',
-            'assignment_type', 'due_date', 'total_marks',
+            'assignment_type', 'requires_submission',
+            'due_date', 'total_marks',
             'attachments_allowed', 'status', 'is_active',
         ]
         read_only_fields = ['id']
+
+    def validate(self, attrs):
+        from lms.models import Assignment as AssignmentModel
+        assignment_type = attrs.get(
+            'assignment_type',
+            getattr(self.instance, 'assignment_type', AssignmentModel.AssignmentType.HOMEWORK),
+        )
+
+        # DIARY is always read-only — force requires_submission=False regardless of payload
+        if assignment_type == AssignmentModel.AssignmentType.DIARY:
+            attrs['requires_submission'] = False
+
+        # due_date is required for submission-based types
+        requires_submission = attrs.get(
+            'requires_submission',
+            getattr(self.instance, 'requires_submission', True),
+        )
+        due_date = attrs.get('due_date', getattr(self.instance, 'due_date', None))
+        if requires_submission and not due_date:
+            raise serializers.ValidationError({
+                'due_date': 'Due date is required for submission-based assignments.',
+            })
+
+        return attrs
 
 
 # ---------------------------------------------------------------------------
@@ -502,6 +528,12 @@ class AssignmentSubmissionCreateSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         assignment = attrs.get('assignment')
         student = attrs.get('student')
+
+        # Ensure the assignment accepts submissions
+        if assignment and not assignment.requires_submission:
+            raise serializers.ValidationError({
+                'assignment': 'This assignment does not accept submissions.',
+            })
 
         # Ensure the assignment is published
         if assignment and assignment.status != Assignment.Status.PUBLISHED:

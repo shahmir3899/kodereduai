@@ -623,9 +623,14 @@ class StaffMemberViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
             return Response({'detail': 'No school selected.'}, status=400)
 
         staff_qs = StaffMember.objects.filter(school_id=school_id)
+        today = date.today()
+        thirty_days_ago = today - timedelta(days=30)
 
-        total_staff = staff_qs.count()
-        active_staff = staff_qs.filter(is_active=True, employment_status='ACTIVE').count()
+        staff_counts = staff_qs.aggregate(
+            total_staff=Count('id'),
+            active_staff=Count('id', filter=Q(is_active=True, employment_status='ACTIVE')),
+            recent_joiners=Count('id', filter=Q(date_of_joining__gte=thirty_days_ago)),
+        )
 
         # Department breakdown
         department_breakdown = list(
@@ -651,61 +656,56 @@ class StaffMemberViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
             .order_by('-count')
         )
 
-        # Recent joiners (last 30 days)
-        thirty_days_ago = date.today() - timedelta(days=30)
-        recent_joiners = staff_qs.filter(
-            date_of_joining__gte=thirty_days_ago,
-        ).count()
-
         # Total departments
         total_departments = StaffDepartment.objects.filter(
             school_id=school_id, is_active=True,
         ).count()
 
         # Payroll stats (current month)
-        today = date.today()
         payslips_this_month = Payslip.objects.filter(
             school_id=school_id, month=today.month, year=today.year,
         )
-        total_payroll_this_month = payslips_this_month.aggregate(
+        payroll_stats = payslips_this_month.aggregate(
             total=Sum('net_salary'),
-        )['total'] or Decimal('0')
-        pending_payroll_approvals = payslips_this_month.filter(status='DRAFT').count()
+            pending_approvals=Count('id', filter=Q(status='DRAFT')),
+        )
+        total_payroll_this_month = payroll_stats['total'] or Decimal('0')
+        pending_payroll_approvals = payroll_stats['pending_approvals'] or 0
 
         # Leave stats
-        pending_leave_applications = LeaveApplication.objects.filter(
-            school_id=school_id, status='PENDING',
-        ).count()
-        staff_on_leave_today = LeaveApplication.objects.filter(
+        leave_stats = LeaveApplication.objects.filter(
             school_id=school_id,
-            status='APPROVED',
-            start_date__lte=today,
-            end_date__gte=today,
-        ).count()
+        ).aggregate(
+            pending_leave_applications=Count('id', filter=Q(status='PENDING')),
+            staff_on_leave_today=Count(
+                'id',
+                filter=Q(status='APPROVED', start_date__lte=today, end_date__gte=today),
+            ),
+        )
 
         # Attendance today
-        attendance_today_qs = StaffAttendance.objects.filter(
-            school_id=school_id, date=today,
+        attendance_stats = StaffAttendance.objects.filter(
+            school_id=school_id,
+            date=today,
+        ).aggregate(
+            attendance_present=Count('id', filter=Q(status__in=('PRESENT', 'LATE'))),
+            attendance_marked=Count('id'),
         )
-        attendance_present = attendance_today_qs.filter(
-            status__in=('PRESENT', 'LATE'),
-        ).count()
-        attendance_marked = attendance_today_qs.count()
 
         return Response({
-            'total_staff': total_staff,
-            'active_staff': active_staff,
+            'total_staff': staff_counts.get('total_staff', 0),
+            'active_staff': staff_counts.get('active_staff', 0),
             'total_departments': total_departments,
-            'recent_joiners': recent_joiners,
+            'recent_joiners': staff_counts.get('recent_joiners', 0),
             'department_breakdown': department_breakdown,
             'status_breakdown': status_breakdown,
             'type_breakdown': type_breakdown,
             'total_payroll_this_month': str(total_payroll_this_month),
             'pending_payroll_approvals': pending_payroll_approvals,
-            'pending_leave_applications': pending_leave_applications,
-            'staff_on_leave_today': staff_on_leave_today,
-            'attendance_present_today': attendance_present,
-            'attendance_marked_today': attendance_marked,
+            'pending_leave_applications': leave_stats.get('pending_leave_applications', 0),
+            'staff_on_leave_today': leave_stats.get('staff_on_leave_today', 0),
+            'attendance_present_today': attendance_stats.get('attendance_present', 0),
+            'attendance_marked_today': attendance_stats.get('attendance_marked', 0),
         })
 
 

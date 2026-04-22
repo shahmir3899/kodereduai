@@ -281,9 +281,28 @@ export function FeeStructureModal({ show, onClose, classList, bulkEffectiveFrom,
   }
 
   const handleStudentFeeSave = () => {
-    const toSend = studentFees
+    const rowsToSave = studentFees
       .filter(s => s.amount !== '')
-      .map(s => ({ student_id: s.student_id, monthly_amount: s.amount }))
+      .map(s => ({
+        student_id: Number(s.student_id),
+        student_name: s.student_name,
+        monthly_amount: String(s.amount).trim(),
+      }))
+
+    const invalidRows = rowsToSave.filter(
+      row => !Number.isInteger(row.student_id) || row.student_id <= 0 || Number.isNaN(Number(row.monthly_amount))
+    )
+
+    if (invalidRows.length > 0) {
+      addToast(
+        `Invalid amount for: ${invalidRows.slice(0, 3).map(r => r.student_name).join(', ')}${invalidRows.length > 3 ? '...' : ''}`,
+        'error'
+      )
+      return
+    }
+
+    const toSend = rowsToSave.map(({ student_name, ...rest }) => rest)
+
     if (toSend.length === 0) return
     studentFeeMutation.mutate({
       class_id: parseInt(resolvedStudentClassId),

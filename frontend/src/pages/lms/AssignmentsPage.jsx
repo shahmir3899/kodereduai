@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { lmsApi, hrApi } from '../../services/api'
+import { academicsApi, lmsApi, hrApi } from '../../services/api'
 import ClassSelector from '../../components/ClassSelector'
 import SubjectSelector from '../../components/SubjectSelector'
 import { useAuth } from '../../contexts/AuthContext'
@@ -20,12 +20,21 @@ const STATUS_BADGES = {
 
 const TYPE_BADGES = {
   HOMEWORK: 'bg-blue-100 text-blue-800',
+  DIARY: 'bg-amber-100 text-amber-800',
   PROJECT: 'bg-purple-100 text-purple-800',
   CLASSWORK: 'bg-green-100 text-green-800',
   LAB: 'bg-orange-100 text-orange-800',
 }
 
-const ASSIGNMENT_TYPES = ['HOMEWORK', 'PROJECT', 'CLASSWORK', 'LAB']
+const TYPE_DESCRIPTIONS = {
+  HOMEWORK: 'Student task. Requires submission and can be graded.',
+  DIARY: 'Daily class note or instruction. Read-only for students — no submission, no grading.',
+  PROJECT: 'Larger multi-day deliverable. Submission and grading enabled.',
+  CLASSWORK: 'In-class activity record. Submission optional.',
+  LAB: 'Practical activity with observations. Submission optional.',
+}
+
+const ASSIGNMENT_TYPES = ['HOMEWORK', 'DIARY', 'PROJECT', 'CLASSWORK', 'LAB']
 const STATUSES = ['DRAFT', 'PUBLISHED', 'CLOSED']
 
 const EMPTY_FORM = {
@@ -36,14 +45,20 @@ const EMPTY_FORM = {
   subject: '',
   teacher: '',
   assignment_type: 'HOMEWORK',
+  requires_submission: true,
   due_date: '',
   total_marks: 100,
   attachments_allowed: true,
   status: 'DRAFT',
 }
 
+const EMPTY_BULK_DIARY_FORM = {
+  class_obj: '',
+  details: '',
+}
+
 export default function AssignmentsPage() {
-  const { user, isSchoolAdmin, isTeacher } = useAuth()
+  const { user, isSchoolAdmin, isPrincipal, isTeacher } = useAuth()
   const { activeAcademicYear } = useAcademicYear()
   const { sessionClasses } = useSessionClasses(activeAcademicYear?.id)
   const queryClient = useQueryClient()
@@ -56,12 +71,19 @@ export default function AssignmentsPage() {
   const [filterStatus, setFilterStatus] = useState('')
   const [filterType, setFilterType] = useState('')
   const [showModal, setShowModal] = useState(false)
+  const [showBulkDiaryModal, setShowBulkDiaryModal] = useState(false)
   const [editingAssignment, setEditingAssignment] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [form, setForm] = useState({ ...EMPTY_FORM })
+  const [bulkDiaryForm, setBulkDiaryForm] = useState({ ...EMPTY_BULK_DIARY_FORM })
   const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
   const resolvedFilterClass = getResolvedMasterClassId(filterClass, activeAcademicYear?.id, sessionClasses)
   const resolvedFormClassObj = getResolvedMasterClassId(form.class_obj, activeAcademicYear?.id, sessionClasses)
+  const resolvedBulkDiaryClassObj = getResolvedMasterClassId(
+    bulkDiaryForm.class_obj,
+    activeAcademicYear?.id,
+    sessionClasses,
+  )
   const sessionClassIdByMaster = useMemo(() => {
     const map = {}
     sessionClasses.forEach((sc) => {
@@ -70,6 +92,45 @@ export default function AssignmentsPage() {
     return map
   }, [sessionClasses])
   const { classifyScope } = useTeacherScopeLookup({ academicYearId: activeAcademicYear?.id })
+  const canCreateAssignments = isSchoolAdmin || isPrincipal
+
+  const { data: classTeacherScopeRes } = useQuery({
+    queryKey: ['myClassTeacherAssignments', activeAcademicYear?.id],
+    queryFn: () => academicsApi.getMyClassTeacherAssignments(),
+    enabled: isTeacher,
+  })
+
+  const teacherScopedClassOptions = useMemo(() => {
+    if (!isTeacher) {
+      return []
+    }
+
+    const rows = classTeacherScopeRes?.data || []
+    const map = new Map()
+    rows.forEach((item) => {
+      const optionId = classSelectorScope === 'session' && item.session_class
+        ? String(item.session_class)
+        : String(item.class_obj)
+      if (!optionId) {
+        return
+      }
+      if (map.has(optionId)) {
+        return
+      }
+
+      map.set(optionId, {
+        id: optionId,
+        class_obj: item.class_obj,
+        name: item.class_name,
+        section: item.class_section || '',
+        label: item.session_class_display || `${item.class_name}${item.class_section ? ` - ${item.class_section}` : ''}`,
+      })
+    })
+
+    return Array.from(map.values())
+  }, [classTeacherScopeRes?.data, classSelectorScope, isTeacher])
+
+  const classOptionsForFilters = isTeacher ? teacherScopedClassOptions : undefined
 
   // -- Data fetching --
 
@@ -93,6 +154,29 @@ export default function AssignmentsPage() {
 
   const staff = staffData?.data?.results || staffData?.data || []
   const allAssignments = assignmentsData?.data?.results || assignmentsData?.data || []
+
+  const { data: bulkClassSubjectsRes, isLoading: bulkClassSubjectsLoading } = useQuery({
+    queryKey: ['bulkDiaryClassSubjects', resolvedBulkDiaryClassObj],
+    queryFn: () => academicsApi.getClassSubjects({ class_obj: resolvedBulkDiaryClassObj, page_size: 9999 }),
+    enabled: !!resolvedBulkDiaryClassObj,
+  })
+
+  const bulkDiarySubjects = useMemo(() => {
+    const rows = bulkClassSubjectsRes?.data?.results || bulkClassSubjectsRes?.data || []
+    const seen = new Set()
+    return rows
+      .filter((row) => {
+        if (!row.subject || seen.has(String(row.subject))) {
+          return false
+        }
+        seen.add(String(row.subject))
+        return true
+      })
+      .map((row) => ({
+        id: row.subject,
+        name: row.subject_name || `Subject #${row.subject}`,
+      }))
+  }, [bulkClassSubjectsRes?.data])
 
   // Client-side search
   const assignments = useMemo(() => {
@@ -169,6 +253,43 @@ export default function AssignmentsPage() {
     },
   })
 
+  const bulkDiaryMutation = useMutation({
+    mutationFn: async ({ classId, details, subjects }) => {
+      const trimmedDetails = details.trim()
+      const normalizedDate = new Date().toISOString().slice(0, 10)
+
+      const payloads = subjects.map((subject) => ({
+        class_obj: parseInt(classId, 10),
+        subject: parseInt(subject.id, 10),
+        title: `${subject.name} Diary - ${normalizedDate}`,
+        description: trimmedDetails,
+        instructions: trimmedDetails,
+        assignment_type: 'DIARY',
+        requires_submission: false,
+        due_date: '',
+        total_marks: 0,
+        attachments_allowed: false,
+        status: 'DRAFT',
+        ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
+      }))
+
+      return Promise.all(payloads.map((payload) => lmsApi.createAssignment(payload)))
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['assignments'] })
+      setShowBulkDiaryModal(false)
+      setBulkDiaryForm({ ...EMPTY_BULK_DIARY_FORM })
+      showSuccess(`Bulk diary created for ${variables.subjects.length} subjects`) 
+    },
+    onError: (error) => {
+      showError(
+        error.response?.data?.detail ||
+        error.response?.data?.non_field_errors?.[0] ||
+        'Failed to create bulk diary'
+      )
+    },
+  })
+
   // -- Handlers --
 
   const openAddModal = () => {
@@ -191,6 +312,7 @@ export default function AssignmentsPage() {
       subject: assignment.subject ? String(assignment.subject) : '',
       teacher: assignment.teacher ? String(assignment.teacher) : '',
       assignment_type: assignment.assignment_type || 'HOMEWORK',
+      requires_submission: assignment.requires_submission ?? true,
       due_date: assignment.due_date || '',
       total_marks: assignment.total_marks ?? 100,
       attachments_allowed: assignment.attachments_allowed ?? true,
@@ -205,6 +327,16 @@ export default function AssignmentsPage() {
     setForm({ ...EMPTY_FORM })
   }
 
+  const openBulkDiaryModal = () => {
+    setBulkDiaryForm({ ...EMPTY_BULK_DIARY_FORM })
+    setShowBulkDiaryModal(true)
+  }
+
+  const closeBulkDiaryModal = () => {
+    setShowBulkDiaryModal(false)
+    setBulkDiaryForm({ ...EMPTY_BULK_DIARY_FORM })
+  }
+
   const handleSubmit = () => {
     if (!form.title) {
       showError('Title is required')
@@ -216,6 +348,11 @@ export default function AssignmentsPage() {
     }
     if (!form.subject) {
       showError('Please select a subject')
+      return
+    }
+    const isDiary = form.assignment_type === 'DIARY'
+    if (!isDiary && form.requires_submission && !form.due_date) {
+      showError('Due date is required for submission-based assignments')
       return
     }
 
@@ -232,6 +369,27 @@ export default function AssignmentsPage() {
     } else {
       createMutation.mutate(payload)
     }
+  }
+
+  const handleBulkDiarySubmit = () => {
+    if (!bulkDiaryForm.class_obj) {
+      showError('Please select a class')
+      return
+    }
+    if (!bulkDiaryForm.details.trim()) {
+      showError('Please enter diary or homework details')
+      return
+    }
+    if (!bulkDiarySubjects.length) {
+      showError('No subjects found for this class')
+      return
+    }
+
+    bulkDiaryMutation.mutate({
+      classId: resolvedBulkDiaryClassObj,
+      details: bulkDiaryForm.details,
+      subjects: bulkDiarySubjects,
+    })
   }
 
   const isSubmitting = createMutation.isPending || updateMutation.isPending
@@ -261,16 +419,36 @@ export default function AssignmentsPage() {
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Assignments</h1>
           <p className="text-sm text-gray-600">
-            Create and manage homework, projects, classwork, and labs
+            Create and manage homework, projects, classwork, labs, and diary entries
           </p>
         </div>
-        <button onClick={openAddModal} className="btn btn-primary">
-          Create Assignment
-        </button>
+        <div className="flex gap-2 flex-wrap">
+          {canCreateAssignments && (
+            <button onClick={openBulkDiaryModal} className="btn btn-secondary">
+              Create Bulk Diary
+            </button>
+          )}
+          <button onClick={openAddModal} className="btn btn-primary">
+            Create Assignment
+          </button>
+        </div>
       </div>
 
       <div className="mb-6">
         <TeacherScopeSummary compact />
+      </div>
+
+      {/* Assignment type descriptions */}
+      <div className="card mb-6 p-4">
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Assignment Types</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+          {ASSIGNMENT_TYPES.map((t) => (
+            <div key={t} className="flex items-start gap-2">
+              <span className={`px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ${TYPE_BADGES[t]}`}>{t}</span>
+              <span className="text-xs text-gray-600">{TYPE_DESCRIPTIONS[t]}</span>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Filters */}
@@ -285,6 +463,7 @@ export default function AssignmentsPage() {
               showAllOption
               scope={classSelectorScope}
               academicYearId={activeAcademicYear?.id}
+              classes={classOptionsForFilters}
             />
           </div>
           <div>
@@ -627,6 +806,7 @@ export default function AssignmentsPage() {
                     onChange={(e) => setForm({ ...form, class_obj: e.target.value })}
                     scope={classSelectorScope}
                     academicYearId={activeAcademicYear?.id}
+                    classes={classOptionsForFilters}
                   />
                 </div>
                 <div>
@@ -669,7 +849,16 @@ export default function AssignmentsPage() {
                   <select
                     className="input"
                     value={form.assignment_type}
-                    onChange={(e) => setForm({ ...form, assignment_type: e.target.value })}
+                    onChange={(e) => {
+                      const newType = e.target.value
+                      const isDiary = newType === 'DIARY'
+                      setForm({
+                        ...form,
+                        assignment_type: newType,
+                        requires_submission: isDiary ? false : form.requires_submission,
+                        due_date: isDiary ? '' : form.due_date,
+                      })
+                    }}
                   >
                     {ASSIGNMENT_TYPES.map((t) => (
                       <option key={t} value={t}>
@@ -677,19 +866,28 @@ export default function AssignmentsPage() {
                       </option>
                     ))}
                   </select>
+                  {TYPE_DESCRIPTIONS[form.assignment_type] && (
+                    <p className="text-xs text-gray-500 mt-1">{TYPE_DESCRIPTIONS[form.assignment_type]}</p>
+                  )}
                 </div>
               </div>
 
               {/* Due Date, Total Marks, Status */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
-                  <label className="label">Due Date</label>
+                  <label className="label">
+                    Due Date {form.requires_submission && form.assignment_type !== 'DIARY' ? '*' : ''}
+                  </label>
                   <input
                     type="date"
                     className="input"
                     value={form.due_date}
+                    disabled={form.assignment_type === 'DIARY'}
                     onChange={(e) => setForm({ ...form, due_date: e.target.value })}
                   />
+                  {form.assignment_type === 'DIARY' && (
+                    <p className="text-xs text-amber-600 mt-1">No due date for diary entries.</p>
+                  )}
                 </div>
                 <div>
                   <label className="label">Total Marks</label>
@@ -716,6 +914,22 @@ export default function AssignmentsPage() {
                   </select>
                 </div>
               </div>
+
+              {/* Requires Submission toggle */}
+              {form.assignment_type !== 'DIARY' && (
+                <div className="flex items-center gap-3">
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="sr-only peer"
+                      checked={form.requires_submission}
+                      onChange={(e) => setForm({ ...form, requires_submission: e.target.checked })}
+                    />
+                    <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                  </label>
+                  <span className="text-sm text-gray-700">Require student submission</span>
+                </div>
+              )}
 
               {/* Attachments Allowed toggle */}
               <div className="flex items-center gap-3">
@@ -772,6 +986,83 @@ export default function AssignmentsPage() {
                   : editingAssignment
                   ? 'Save Changes'
                   : 'Create Assignment'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Diary Modal */}
+      {showBulkDiaryModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-3xl mx-4 max-h-[90vh] overflow-y-auto">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Create Bulk Diary</h2>
+
+            <div className="space-y-4">
+              <div>
+                <label className="label">Class *</label>
+                <ClassSelector
+                  className="input"
+                  value={bulkDiaryForm.class_obj}
+                  onChange={(e) => setBulkDiaryForm((prev) => ({ ...prev, class_obj: e.target.value }))}
+                  scope={classSelectorScope}
+                  academicYearId={activeAcademicYear?.id}
+                  classes={classOptionsForFilters}
+                />
+              </div>
+
+              <div>
+                <label className="label">Diary / Homework Details *</label>
+                <textarea
+                  className="input"
+                  rows={4}
+                  placeholder="Enter the diary or homework details for all subjects..."
+                  value={bulkDiaryForm.details}
+                  onChange={(e) => setBulkDiaryForm((prev) => ({ ...prev, details: e.target.value }))}
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="label mb-0">Subjects in Selected Class</label>
+                  {bulkDiarySubjects.length > 0 && (
+                    <span className="text-xs text-gray-500">{bulkDiarySubjects.length} subjects</span>
+                  )}
+                </div>
+
+                {!bulkDiaryForm.class_obj ? (
+                  <p className="text-sm text-gray-500">Select a class to load subjects.</p>
+                ) : bulkClassSubjectsLoading ? (
+                  <p className="text-sm text-gray-500">Loading subjects...</p>
+                ) : bulkDiarySubjects.length === 0 ? (
+                  <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-md p-3">
+                    No subjects are assigned to this class yet.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {bulkDiarySubjects.map((subject) => (
+                      <div
+                        key={subject.id}
+                        className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900"
+                      >
+                        {subject.name}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3 mt-6">
+              <button onClick={closeBulkDiaryModal} className="btn btn-secondary">
+                Cancel
+              </button>
+              <button
+                onClick={handleBulkDiarySubmit}
+                disabled={bulkDiaryMutation.isPending}
+                className="btn btn-primary"
+              >
+                {bulkDiaryMutation.isPending ? 'Submitting...' : 'Submit Bulk Diary'}
               </button>
             </div>
           </div>

@@ -376,9 +376,13 @@ class Assignment(models.Model):
 
     class AssignmentType(models.TextChoices):
         HOMEWORK = 'HOMEWORK', 'Homework'
+        DIARY = 'DIARY', 'Diary'
         PROJECT = 'PROJECT', 'Project'
         CLASSWORK = 'CLASSWORK', 'Classwork'
         LAB = 'LAB', 'Lab'
+
+    # Types that never require student submission (read-only for students)
+    READONLY_TYPES = {AssignmentType.DIARY}
 
     class Status(models.TextChoices):
         DRAFT = 'DRAFT', 'Draft'
@@ -424,7 +428,17 @@ class Assignment(models.Model):
         choices=AssignmentType.choices,
         default=AssignmentType.HOMEWORK,
     )
-    due_date = models.DateTimeField()
+    # DIARY entries are read-only; other types allow submissions by default.
+    # Teachers can turn off submission for HOMEWORK/CLASSWORK/LAB individually.
+    requires_submission = models.BooleanField(
+        default=True,
+        help_text='Whether students can submit work for this assignment. Always False for DIARY.',
+    )
+    due_date = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Required for submission-based types. Optional for DIARY.',
+    )
     total_marks = models.DecimalField(
         max_digits=5,
         decimal_places=2,
@@ -449,7 +463,8 @@ class Assignment(models.Model):
         verbose_name_plural = 'Assignments'
 
     def __str__(self):
-        return f"{self.title} - {self.class_obj.name} (due {self.due_date:%Y-%m-%d})"
+        due = f' (due {self.due_date:%Y-%m-%d})' if self.due_date else ''
+        return f"{self.title} - {self.class_obj.name}{due}"
 
     def get_submission_count(self):
         return self.submissions.count()

@@ -132,6 +132,9 @@ export const attendanceApi = {
   // Lightweight register data (only student_id, date, status — no pagination overhead)
   getRegisterData: (params) => api.get('/api/attendance/records/register_data/', { params }),
 
+  // Bulk monthly records for all classes in one request (used for preloading)
+  getMonthlyBulk: (params) => api.get('/api/attendance/records/monthly_bulk/', { params }),
+
   // Get daily report
   getDailyReport: (date, schoolId, academicYearId) =>
     api.get('/api/attendance/records/daily_report/', {
@@ -819,9 +822,9 @@ export const studentPortalApi = {
   getExamResults: (params) => api.get('/api/student-portal/exam-results/', { params }),
 
   // Assignments
-  getAssignments: (params) => api.get('/api/student-portal/assignments/', { params }),
-  getAssignment: (id) => api.get(`/api/student-portal/assignments/${id}/`),
-  submitAssignment: (id, data) => api.post(`/api/student-portal/assignments/${id}/submit/`, data),
+  getAssignments: (params) => api.get('/api/students/portal/assignments/', { params }),
+  getAssignment: (id) => api.get(`/api/students/portal/assignments/${id}/`),
+  submitAssignment: (id, data) => api.post(`/api/students/portal/assignments/${id}/submit/`, data),
 
   // AI Study Helper
   getStudyHelperHistory: () => api.get('/api/students/portal/study-helper/'),
@@ -1114,6 +1117,20 @@ export const tasksApi = {
   getTask: (taskId) => api.get(`/api/tasks/tasks/${taskId}/`),
   cancelTask: (taskId) => api.post(`/api/tasks/tasks/${taskId}/cancel/`),
   getAIInsights: (params) => api.get('/api/tasks/ai-insights/', { params }),
+}
+
+// ─── Bootstrap (single-request dashboard fan-out) ────────────────────────────
+export const bootstrapApi = {
+  /**
+   * Fetches attendance + hr + finance dashboard data in one request.
+   * @param {Object} params
+   * @param {string} [params.date]          YYYY-MM-DD (default: today)
+   * @param {number} [params.academic_year] Academic year ID
+   * @param {number} [params.month]         1-12 (default: current month)
+   * @param {number} [params.year]          e.g. 2026 (default: current year)
+   * @param {string} [params.sections]      Comma-separated: attendance,hr,finance
+   */
+  getAdminDashboard: (params) => api.get('/api/bootstrap/admin-dashboard/', { params }),
 }
 
 // ─── Face Attendance (Camera-Based) ──────────────────────────────────────────

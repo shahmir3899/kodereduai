@@ -388,11 +388,11 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | GET | /api/lms/lesson-plans/by_class/ | Params: class_id |
 | POST | /api/lms/lesson-plans/{id}/publish/ | Publish lesson plan |
 | POST | /api/lms/lesson-plans/generate/ | AI-generate lesson plan. Body: {topic_ids, lesson_date, duration_minutes} |
-| GET/POST | /api/lms/assignments/ | Assignments. Params: class_obj, subject, status, assignment_type |
+| GET/POST | /api/lms/assignments/ | Assignments. Params: class_obj, subject, status, assignment_type. assignment_type values: HOMEWORK, DIARY, PROJECT, CLASSWORK, LAB. Body fields: requires_submission (bool, default true; auto-false for DIARY), due_date (required when requires_submission=true, nullable for DIARY) |
 | POST | /api/lms/assignments/{id}/publish/ | Publish |
 | POST | /api/lms/assignments/{id}/close/ | Close |
 | GET | /api/lms/assignments/{id}/submissions/ | Submissions for assignment |
-| GET/POST | /api/lms/submissions/ | All submissions |
+| GET/POST | /api/lms/submissions/ | All submissions. POST returns 400 if assignment.requires_submission=false |
 | POST | /api/lms/submissions/{id}/grade/ | Grade submission |
 
 ## Transport

@@ -1159,7 +1159,8 @@ class StudentAssignmentsView(APIView):
                     'subject': a.subject.name,
                     'teacher': a.teacher.user.get_full_name() if a.teacher else None,
                     'assignment_type': a.assignment_type,
-                    'due_date': a.due_date.isoformat(),
+                    'requires_submission': a.requires_submission,
+                    'due_date': a.due_date.isoformat() if a.due_date else None,
                     'total_marks': float(a.total_marks) if a.total_marks else None,
                     'status': a.status,
                     'submission': {
@@ -1194,6 +1195,12 @@ class StudentAssignmentsView(APIView):
             )
         except Exception:
             return Response({'error': 'Assignment not found or not available.'}, status=404)
+
+        if not assignment.requires_submission:
+            return Response(
+                {'error': 'This assignment does not accept submissions.'},
+                status=400,
+            )
 
         if AssignmentSubmission.objects.filter(assignment=assignment, student=student).exists():
             return Response({'error': 'You have already submitted this assignment.'}, status=400)

@@ -34,7 +34,7 @@ from hr.models import StaffDepartment, StaffDesignation, StaffMember
 
 # ── Constants ───────────────────────────────────────────────────────────────
 SEED_PREFIX = "SEED_TEST_"
-PASSWORD = "TestPass123!"
+PASSWORD = "Abcd1234"
 
 # ── Shared test client & helpers ────────────────────────────────────────────
 _client = Client()

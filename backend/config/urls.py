@@ -180,8 +180,9 @@ urlpatterns = [
     # Messaging
     path('api/messaging/', include('messaging.urls')),
 
-    # Background Tasks
+    # Background Tasks & Bootstrap
     path('api/tasks/', include('core.urls')),
+    path('api/bootstrap/', include('core.bootstrap_urls')),
     path('api/admin/brochure/', include('brochure.urls')),
 ]
 

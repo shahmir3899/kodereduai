@@ -230,6 +230,54 @@ const mockStaffWithAccounts = [
   },
 ]
 
+export const mockAssignments = [
+  {
+    id: 1, school: 1, school_name: 'Test School',
+    academic_year: 1, academic_year_name: '2025-2026',
+    class_obj: 1, class_name: 'Class 1A',
+    subject: 1, subject_name: 'Mathematics',
+    teacher: 1, teacher_name: 'Ali Khan',
+    title: 'Chapter 5 Homework', description: 'Solve exercises 1-10',
+    instructions: '', assignment_type: 'HOMEWORK', assignment_type_display: 'Homework',
+    requires_submission: true,
+    due_date: '2026-06-01T23:59:00Z', total_marks: 20,
+    attachments_allowed: true, status: 'PUBLISHED', status_display: 'Published',
+    is_active: true, attachments: [], submission_count: 3,
+    created_at: '2026-05-01', updated_at: '2026-05-01',
+  },
+  {
+    id: 2, school: 1, school_name: 'Test School',
+    academic_year: 1, academic_year_name: '2025-2026',
+    class_obj: 1, class_name: 'Class 1A',
+    subject: 1, subject_name: 'Mathematics',
+    teacher: 1, teacher_name: 'Ali Khan',
+    title: 'Monday Class Diary', description: 'Today we covered algebra basics.',
+    instructions: '', assignment_type: 'DIARY', assignment_type_display: 'Diary',
+    requires_submission: false,
+    due_date: null, total_marks: null,
+    attachments_allowed: false, status: 'PUBLISHED', status_display: 'Published',
+    is_active: true, attachments: [], submission_count: 0,
+    created_at: '2026-05-02', updated_at: '2026-05-02',
+  },
+]
+
+export const mockStudentAssignments = [
+  {
+    id: 1, title: 'Chapter 5 Homework', description: 'Solve exercises 1-10',
+    subject: 'Mathematics', teacher: 'Ali Khan',
+    assignment_type: 'HOMEWORK', requires_submission: true,
+    due_date: '2026-06-01T23:59:00Z', total_marks: 20,
+    status: 'PUBLISHED', submission: null,
+  },
+  {
+    id: 2, title: 'Monday Class Diary', description: 'Today we covered algebra basics.',
+    subject: 'Mathematics', teacher: 'Ali Khan',
+    assignment_type: 'DIARY', requires_submission: false,
+    due_date: null, total_marks: null,
+    status: 'PUBLISHED', submission: null,
+  },
+]
+
 export const handlers = [
   // LMS Books
   http.get('/api/lms/books/', ({ request }) => {
@@ -331,6 +379,66 @@ export const handlers = [
   http.post('/api/lms/lesson-plans/:id/publish/', ({ params }) => {
     const plan = mockLessonPlans.find(p => p.id === parseInt(params.id))
     return HttpResponse.json({ ...plan, status: 'PUBLISHED', status_display: 'Published' })
+  }),
+
+  // LMS Assignments
+  http.get('/api/lms/assignments/', ({ request }) => {
+    const url = new URL(request.url)
+    const classId = url.searchParams.get('class_obj')
+    const type = url.searchParams.get('assignment_type')
+    let list = mockAssignments
+    if (classId) list = list.filter(a => a.class_obj === parseInt(classId))
+    if (type) list = list.filter(a => a.assignment_type === type)
+    return HttpResponse.json({ count: list.length, results: list })
+  }),
+  http.get('/api/lms/assignments/:id/', ({ params }) => {
+    const a = mockAssignments.find(a => a.id === parseInt(params.id))
+    return a ? HttpResponse.json(a) : new HttpResponse(null, { status: 404 })
+  }),
+  http.post('/api/lms/assignments/', async ({ request }) => {
+    const body = await request.json()
+    const isDiary = body.assignment_type === 'DIARY'
+    return HttpResponse.json({
+      id: 99, school: 1, school_name: 'Test School',
+      class_name: 'Class 1A', subject_name: 'Mathematics',
+      teacher_name: 'Ali Khan', status: 'DRAFT', status_display: 'Draft',
+      assignment_type_display: body.assignment_type || 'Homework',
+      requires_submission: isDiary ? false : (body.requires_submission ?? true),
+      submission_count: 0, is_active: true, attachments: [],
+      created_at: '2026-05-01', updated_at: '2026-05-01',
+      ...body,
+    }, { status: 201 })
+  }),
+  http.patch('/api/lms/assignments/:id/', async ({ request, params }) => {
+    const body = await request.json()
+    const a = mockAssignments.find(a => a.id === parseInt(params.id))
+    return HttpResponse.json({ ...a, ...body })
+  }),
+  http.delete('/api/lms/assignments/:id/', () => new HttpResponse(null, { status: 204 })),
+  http.post('/api/lms/assignments/:id/publish/', ({ params }) => {
+    const a = mockAssignments.find(a => a.id === parseInt(params.id))
+    return HttpResponse.json({ ...a, status: 'PUBLISHED', status_display: 'Published' })
+  }),
+  http.post('/api/lms/assignments/:id/close/', ({ params }) => {
+    const a = mockAssignments.find(a => a.id === parseInt(params.id))
+    return HttpResponse.json({ ...a, status: 'CLOSED', status_display: 'Closed' })
+  }),
+
+  // Student Portal Assignments
+  http.get('/api/students/portal/assignments/', () =>
+    HttpResponse.json(mockStudentAssignments)
+  ),
+  http.post('/api/students/portal/assignments/', async ({ request }) => {
+    const body = await request.json()
+    // Reject submission for DIARY entries (requires_submission=false)
+    const assignment = mockStudentAssignments.find(a => a.id === body.assignment_id)
+    if (assignment && !assignment.requires_submission) {
+      return HttpResponse.json(
+        { error: 'This assignment does not accept submissions.' },
+        { status: 400 },
+      )
+    }
+    return HttpResponse.json({ id: 1, status: 'SUBMITTED', submitted_at: new Date().toISOString() }, { status: 201 })
   }),
 
   // AI Generate

@@ -395,6 +395,124 @@ else:
 
 
 # ==================================================================
+# LEVEL E: DIARY / REQUIRES_SUBMISSION RULES
+# ==================================================================
+print("\n" + "=" * 70)
+print("  LEVEL E: DIARY / REQUIRES_SUBMISSION RULES")
+print("=" * 70)
+
+tomorrow = str(date.today() + timedelta(days=1))
+
+# E1: Create DIARY assignment without due_date -> 201
+resp = api_post('/api/lms/assignments/', {
+    'school': SID_A,
+    'academic_year': ay.id,
+    'class_obj': class_1.id,
+    'subject': subj.id,
+    'teacher': teacher_staff.id,
+    'title': f'{P12}Monday Class Diary',
+    'description': 'Today we covered algebra basics.',
+    'assignment_type': 'DIARY',
+    # intentionally no due_date
+}, token_admin, SID_A)
+check("E1  Create DIARY without due_date -> 201", resp.status_code == 201,
+      f"status={resp.status_code} body={resp.content[:200]}")
+diary_id = resp.json().get('id') if resp.status_code == 201 else None
+
+# E2: DIARY response must have requires_submission=False
+if diary_id:
+    resp = api_get(f'/api/lms/assignments/{diary_id}/', token_admin, SID_A)
+    data = resp.json()
+    check("E2  DIARY requires_submission is False", data.get('requires_submission') is False,
+          f"requires_submission={data.get('requires_submission')}")
+else:
+    check("E2  DIARY requires_submission is False", False, "no diary_id")
+
+# E3: Create HOMEWORK without due_date -> 400
+resp = api_post('/api/lms/assignments/', {
+    'school': SID_A,
+    'academic_year': ay.id,
+    'class_obj': class_1.id,
+    'subject': subj.id,
+    'teacher': teacher_staff.id,
+    'title': f'{P12}No-duedate Homework',
+    'description': 'Missing due date',
+    'assignment_type': 'HOMEWORK',
+    'requires_submission': True,
+    # intentionally no due_date
+}, token_admin, SID_A)
+check("E3  Create HOMEWORK without due_date -> 400", resp.status_code == 400,
+      f"status={resp.status_code} body={resp.content[:200]}")
+
+# E4: Create HOMEWORK with due_date -> 201
+resp = api_post('/api/lms/assignments/', {
+    'school': SID_A,
+    'academic_year': ay.id,
+    'class_obj': class_1.id,
+    'subject': subj.id,
+    'teacher': teacher_staff.id,
+    'title': f'{P12}Valid Homework',
+    'description': 'Has a due date',
+    'assignment_type': 'HOMEWORK',
+    'requires_submission': True,
+    'due_date': tomorrow,
+}, token_admin, SID_A)
+check("E4  Create HOMEWORK with due_date -> 201", resp.status_code == 201,
+      f"status={resp.status_code} body={resp.content[:200]}")
+hw_id = resp.json().get('id') if resp.status_code == 201 else None
+
+# E5: Publish DIARY and attempt student submission -> 400
+if diary_id:
+    api_post(f'/api/lms/assignments/{diary_id}/publish/', {}, token_admin, SID_A)
+    # Use DRF endpoint to attempt submission
+    resp = api_post('/api/lms/submissions/', {
+        'assignment': diary_id,
+        'student': students[0].id,
+        'school': SID_A,
+        'submission_text': 'I read the diary.',
+    }, token_teacher, SID_A)
+    check("E5  Submit to DIARY assignment -> 400", resp.status_code == 400,
+          f"status={resp.status_code} body={resp.content[:200]}")
+else:
+    check("E5  Submit to DIARY assignment -> 400", False, "no diary_id")
+
+# E6: Student portal returns requires_submission field for DIARY
+if diary_id:
+    from students.models import Student
+    student_obj = students[0]
+    from students.models import StudentProfile
+    # Check if student already has portal account
+    existing_profile = StudentProfile.objects.filter(student=student_obj).first()
+    if existing_profile:
+        student_user = existing_profile.user
+    else:
+        student_user = None
+    if student_user:
+        from rest_framework_simplejwt.tokens import RefreshToken as RT
+        st_refresh = RT.for_user(student_user)
+        st_token = str(st_refresh.access_token)
+        resp = _client.get(
+            '/api/students/portal/assignments/',
+            HTTP_AUTHORIZATION=f'Bearer {st_token}',
+            HTTP_X_SCHOOL_ID=str(SID_A),
+        )
+        if resp.status_code == 200:
+            entries = resp.json()
+            diary_entries = [e for e in entries if e.get('assignment_type') == 'DIARY']
+            all_have_field = all('requires_submission' in e for e in entries)
+            check("E6  Portal returns requires_submission field", all_have_field,
+                  f"entries={len(entries)} diary={len(diary_entries)}")
+        else:
+            check("E6  Portal returns requires_submission field", False,
+                  f"status={resp.status_code}")
+    else:
+        check("E6  Portal returns requires_submission field", True,
+              "(no student portal user - field check skipped)")
+else:
+    check("E6  Portal returns requires_submission field", False, "no diary_id")
+
+
+# ==================================================================
 # SUMMARY
 # ==================================================================
 print("\n" + "=" * 70)

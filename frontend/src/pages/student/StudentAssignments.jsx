@@ -4,6 +4,7 @@ import { studentPortalApi } from '../../services/api'
 
 const TYPE_COLORS = {
   HOMEWORK: 'bg-blue-100 text-blue-800',
+  DIARY: 'bg-amber-100 text-amber-800',
   PROJECT: 'bg-purple-100 text-purple-800',
   TEST: 'bg-red-100 text-red-800',
   QUIZ: 'bg-amber-100 text-amber-800',
@@ -54,10 +55,12 @@ export default function StudentAssignments() {
   }
 
   const getSubmissionStatus = (assignment) => {
+    // Diary / no-submission types are always read-only
+    if (assignment.requires_submission === false) return 'READ_ONLY'
     if (assignment.submission_status) return assignment.submission_status
     if (assignment.submission) {
-      if (assignment.submission.marks != null) return 'GRADED'
-      if (assignment.submission.is_late) return 'LATE'
+      if (assignment.submission.marks_obtained != null) return 'GRADED'
+      if (assignment.submission.status === 'LATE') return 'LATE'
       return 'SUBMITTED'
     }
     return 'NOT_SUBMITTED'
@@ -133,14 +136,15 @@ export default function StudentAssignments() {
         <div className="space-y-3">
           {assignments.map((assignment, idx) => {
             const subStatus = getSubmissionStatus(assignment)
+            const isDiary = assignment.assignment_type === 'DIARY' || assignment.requires_submission === false
             const statusInfo = SUBMISSION_STATUS[subStatus] || SUBMISSION_STATUS.NOT_SUBMITTED
-            const overdue = isOverdue(assignment.due_date) && subStatus === 'NOT_SUBMITTED'
+            const overdue = !isDiary && isOverdue(assignment.due_date) && subStatus === 'NOT_SUBMITTED'
 
             return (
               <div
                 key={assignment.id || idx}
                 className={`bg-white rounded-xl border p-4 sm:p-5 transition-all ${
-                  overdue ? 'border-red-300 bg-red-50/30' : 'border-gray-200'
+                  overdue ? 'border-red-300 bg-red-50/30' : isDiary ? 'border-amber-200 bg-amber-50/20' : 'border-gray-200'
                 }`}
               >
                 <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
@@ -148,26 +152,33 @@ export default function StudentAssignments() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <h3 className="text-sm font-semibold text-gray-900">{assignment.title}</h3>
-                      {assignment.type && (
-                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${TYPE_COLORS[assignment.type] || 'bg-gray-100 text-gray-800'}`}>
-                          {assignment.type}
+                      {assignment.assignment_type && (
+                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${TYPE_COLORS[assignment.assignment_type] || 'bg-gray-100 text-gray-800'}`}>
+                          {assignment.assignment_type}
                         </span>
                       )}
-                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusInfo.cls}`}>
-                        {statusInfo.label}
-                      </span>
+                      {!isDiary && (
+                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusInfo.cls}`}>
+                          {statusInfo.label}
+                        </span>
+                      )}
+                      {isDiary && (
+                        <span className="px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">
+                          Diary Entry
+                        </span>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
-                      {assignment.subject_name && (
+                      {assignment.subject && (
                         <span className="flex items-center gap-1">
                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                           </svg>
-                          {assignment.subject_name}
+                          {assignment.subject}
                         </span>
                       )}
-                      {assignment.due_date && (
+                      {assignment.due_date && !isDiary && (
                         <span className={`flex items-center gap-1 ${overdue ? 'text-red-600 font-medium' : ''}`}>
                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -178,7 +189,7 @@ export default function StudentAssignments() {
                           {overdue && ' (Overdue)'}
                         </span>
                       )}
-                      {assignment.total_marks != null && (
+                      {assignment.total_marks != null && !isDiary && (
                         <span>Marks: {assignment.total_marks}</span>
                       )}
                     </div>
@@ -191,11 +202,11 @@ export default function StudentAssignments() {
                     {subStatus === 'GRADED' && assignment.submission && (
                       <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                         <div className="flex items-center gap-3">
-                          {assignment.submission.marks != null && (
+                          {assignment.submission.marks_obtained != null && (
                             <div>
                               <span className="text-xs text-blue-600">Marks:</span>{' '}
                               <span className="text-sm font-bold text-blue-800">
-                                {assignment.submission.marks}
+                                {assignment.submission.marks_obtained}
                                 {assignment.total_marks ? ` / ${assignment.total_marks}` : ''}
                               </span>
                             </div>

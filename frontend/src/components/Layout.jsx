@@ -434,7 +434,7 @@ export default function Layout() {
       ],
     }] : []),
 
-    // Academics group (includes examinations items when that module is enabled)
+    // Academics navigation split into focused groups to reduce clutter
     ...(isModuleEnabled('academics') ? [{
       type: 'group',
       name: 'Academics',
@@ -443,27 +443,63 @@ export default function Layout() {
         { type: 'divider', label: 'Curriculum' },
         { name: 'Subjects', href: '/academics/subjects', icon: AcademicIcon },
         { name: 'Timetable', href: '/academics/timetable', icon: ClockIcon },
-        ...(isModuleEnabled('examinations') ? [
+        ...(isModuleEnabled('examinations') || isModuleEnabled('lms') ? [
           { type: 'divider', label: 'Assessment' },
+        ] : []),
+        ...(isModuleEnabled('examinations') ? [
           { name: 'Exam Types', href: '/academics/exam-types', icon: FolderIcon },
           { name: 'Exams', href: '/academics/exams', icon: ClipboardIcon },
           { name: 'Marks Entry', href: '/academics/marks-entry', icon: DocumentIcon },
           { name: 'Grade Scale', href: '/academics/grade-scale', icon: SettingsIcon },
           { name: 'Results', href: '/academics/results', icon: ChartIcon },
           { name: 'Report Cards', href: '/academics/report-cards', icon: ReportIcon },
-          { type: 'divider', label: 'Paper & Coverage' },
+        ] : []),
+        ...(isModuleEnabled('lms') ? [
+          { name: 'Assignments', href: '/academics/assignments', icon: DocumentIcon },
+        ] : []),
+      ],
+    }] : []),
+
+    ...(isModuleEnabled('academics') && (isModuleEnabled('examinations') || isModuleEnabled('lms')) ? [{
+      type: 'group',
+      name: 'Content Creation',
+      icon: PencilIcon,
+      children: [
+        ...(isModuleEnabled('examinations') ? [
           { name: 'Question Bank', href: '/academics/questions', icon: PencilIcon },
           { name: 'Paper Builder', href: '/academics/paper-builder', icon: PencilIcon },
+        ] : []),
+        ...(isModuleEnabled('lms') ? [
+          { name: 'Curriculum', href: '/academics/curriculum', icon: BookOpenIcon },
+        ] : []),
+      ],
+    }] : []),
+
+    ...(isModuleEnabled('academics') && (isModuleEnabled('examinations') || isModuleEnabled('lms')) ? [{
+      type: 'group',
+      name: 'Planning & Delivery',
+      icon: CalendarIcon,
+      children: [
+        { name: 'Timetable', href: '/academics/timetable', icon: ClockIcon },
+        ...(isModuleEnabled('examinations') ? [
           { name: 'Curriculum Coverage', href: '/academics/curriculum-coverage', icon: ChartIcon },
         ] : []),
         ...(isModuleEnabled('lms') ? [
-          { type: 'divider', label: 'Learning' },
-          { name: 'Curriculum', href: '/academics/curriculum', icon: BookOpenIcon },
           { name: 'Lesson Plans', href: '/academics/lesson-plans', icon: BookOpenIcon },
-          { name: 'Assignments', href: '/academics/assignments', icon: PencilIcon },
         ] : []),
-        { type: 'divider', label: 'Insights' },
+      ],
+    }] : []),
+
+    ...(isModuleEnabled('academics') ? [{
+      type: 'group',
+      name: 'Analytics & Reports',
+      icon: ChartIcon,
+      children: [
         { name: 'AI Analytics', href: '/academics/analytics', icon: ChartIcon },
+        ...(isModuleEnabled('examinations') ? [
+          { name: 'Results', href: '/academics/results', icon: ChartIcon },
+          { name: 'Report Cards', href: '/academics/report-cards', icon: ReportIcon },
+        ] : []),
       ],
     }] : []),
 

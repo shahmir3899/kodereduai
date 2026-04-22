@@ -63,7 +63,7 @@ def trigger_absence_notification(attendance_record):
 
     # Create in-app notification for admins
     admin_users = _get_admin_users(school)
-    for admin_user in admin_users[:5]:  # Limit to prevent spam
+    for admin_user in admin_users:
         engine.send(
             event_type='ABSENCE',
             channel='IN_APP',

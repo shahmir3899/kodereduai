@@ -28,6 +28,11 @@ from .serializers import (
     AttendanceConfirmSerializer,
     AttendanceRecordSerializer,
 )
+from .absence_notifications import (
+    filter_transitioned_absent_records,
+    is_transition_to_absent,
+    dispatch_in_app_absence_notifications,
+)
 from students.models import Student
 
 logger = logging.getLogger(__name__)
@@ -432,6 +437,9 @@ class AttendanceUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
                 student_id__in=student_ids, date=upload.date
             )
         }
+        existing_status_by_student_id = {
+            student_id: record.status for student_id, record in existing_records.items()
+        }
 
         to_create = []
         to_update = []
@@ -498,17 +506,17 @@ class AttendanceUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
             except Exception as e:
                 logger.warning(f"Could not queue WhatsApp notifications: {e}")
 
-        # Trigger in-app absence notifications to admins
-        try:
-            from notifications.triggers import trigger_absence_notification
-            absent_records = [
-                r for r in created_records
-                if r.status == AttendanceRecord.AttendanceStatus.ABSENT
-            ]
-            for record in absent_records:
-                trigger_absence_notification(record)
-        except Exception as e:
-            logger.warning(f"Could not send absence in-app notifications: {e}")
+        transitioned_absent_records = filter_transitioned_absent_records(
+            created_records,
+            existing_status_by_student_id,
+        )
+        in_app_failures = dispatch_in_app_absence_notifications(transitioned_absent_records)
+        if in_app_failures:
+            logger.warning(
+                "In-app absence notifications had %s failures for upload %s",
+                in_app_failures,
+                upload.id,
+            )
 
         return Response({
             'success': True,
@@ -803,6 +811,90 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
         return Response(list(records))
 
     @action(detail=False, methods=['get'])
+    def monthly_bulk(self, request):
+        """
+        Returns all attendance records for a full month grouped by session_class_id.
+        One DB query covers the whole school — client populates per-class cache entries.
+
+        Query params:
+          month          int (1-12, default: current month)
+          year           int (default: current year)
+          academic_year  int id (optional, recommended)
+
+        Response:
+          {
+            "month": 4, "year": 2026, "academic_year": 37,
+            "by_class": {
+              "<session_class_id>": [
+                {"student_id": 1, "date": "2026-04-01", "status": "PRESENT"},
+                ...
+              ]
+            }
+          }
+        """
+        from calendar import monthrange as _monthrange
+        from academic_sessions.models import SessionClass
+
+        school_id = ensure_tenant_school_id(request)
+        if not school_id:
+            return Response({'detail': 'School context required.'}, status=400)
+
+        today = timezone.now().date()
+        try:
+            month = int(request.query_params.get('month', today.month))
+            year = int(request.query_params.get('year', today.year))
+        except (TypeError, ValueError):
+            return Response({'detail': 'Invalid month or year.'}, status=400)
+
+        academic_year_id = request.query_params.get('academic_year')
+
+        _, days_in_month = _monthrange(year, month)
+        date_from = f'{year}-{month:02d}-01'
+        date_to = f'{year}-{month:02d}-{days_in_month:02d}'
+
+        # Single DB query — all records for the school in the month
+        records_qs = AttendanceRecord.objects.filter(
+            school_id=school_id,
+            date__gte=date_from,
+            date__lte=date_to,
+        )
+        if academic_year_id:
+            records_qs = records_qs.filter(academic_year_id=academic_year_id)
+
+        rows = list(records_qs.values('student_id', 'date', 'status', 'student__class_obj_id'))
+
+        # Build class_obj_id → session_class_id lookup for the year
+        sc_qs = SessionClass.objects.filter(school_id=school_id, is_active=True)
+        if academic_year_id:
+            sc_qs = sc_qs.filter(academic_year_id=academic_year_id)
+        class_obj_to_sc = {
+            sc['class_obj_id']: str(sc['id'])
+            for sc in sc_qs.values('id', 'class_obj_id')
+            if sc['class_obj_id']
+        }
+
+        # Group rows by session_class_id
+        by_class = {}
+        for row in rows:
+            sc_id = class_obj_to_sc.get(row['student__class_obj_id'])
+            if sc_id is None:
+                sc_id = f"c{row['student__class_obj_id']}" if row['student__class_obj_id'] else '__unknown__'
+            if sc_id not in by_class:
+                by_class[sc_id] = []
+            by_class[sc_id].append({
+                'student_id': row['student_id'],
+                'date': str(row['date']),
+                'status': row['status'],
+            })
+
+        return Response({
+            'month': month,
+            'year': year,
+            'academic_year': academic_year_id,
+            'by_class': by_class,
+        })
+
+    @action(detail=False, methods=['get'])
     def daily_report(self, request):
         """Get daily attendance report."""
         date_param = request.query_params.get('date')
@@ -822,9 +914,17 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
                 enrollments__academic_year_id=academic_year,
                 enrollments__is_active=True,
             )
-        total = students_qs.count()
-        records = AttendanceRecord.objects.filter(school_id=school_id, date=date)
+        total = students_qs.values('id').distinct().count()
 
+        records = AttendanceRecord.objects.filter(
+            school_id=school_id,
+            date=date,
+        ).select_related('student', 'student__class_obj', 'academic_year')
+
+        counts = records.aggregate(
+            present_count=Count('id', filter=Q(status=AttendanceRecord.AttendanceStatus.PRESENT)),
+            absent_count=Count('id', filter=Q(status=AttendanceRecord.AttendanceStatus.ABSENT)),
+        )
         absent_records = records.filter(status=AttendanceRecord.AttendanceStatus.ABSENT)
 
         is_off_day = is_off_day_for_date(school_id, date)
@@ -833,8 +933,8 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
             'is_off_day': is_off_day,
             'off_day_types': off_day_types_for_date(school_id, date),
             'total_students': total,
-            'present_count': records.filter(status=AttendanceRecord.AttendanceStatus.PRESENT).count(),
-            'absent_count': absent_records.count(),
+            'present_count': counts.get('present_count') or 0,
+            'absent_count': counts.get('absent_count') or 0,
             'absent_students': AttendanceRecordSerializer(absent_records, many=True).data,
         })
 
@@ -1504,7 +1604,15 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
         created = 0
         updated = 0
         errors = []
-        absence_notification_failures = 0
+        transitioned_absent_records = []
+
+        existing_status_by_student_id = {
+            r.student_id: r.status
+            for r in AttendanceRecord.objects.filter(
+                student_id__in=[entry['student_id'] for entry in entries],
+                date=date,
+            )
+        }
 
         for entry in entries:
             student_id = entry['student_id']
@@ -1531,17 +1639,17 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
                 else:
                     updated += 1
 
-                if att_status == AttendanceRecord.AttendanceStatus.ABSENT:
-                    try:
-                        from notifications.triggers import trigger_absence_notification
-                        trigger_absence_notification(record)
-                    except Exception as e:
-                        absence_notification_failures += 1
-                        logger.warning(
-                            f"Could not send absence notification for student {student_id}: {e}"
-                        )
+                if is_transition_to_absent(
+                    record,
+                    existing_status_by_student_id.get(student_id),
+                ):
+                    transitioned_absent_records.append(record)
             except Exception as e:
                 errors.append({'student_id': student_id, 'error': str(e)})
+
+        absence_notification_failures = dispatch_in_app_absence_notifications(
+            transitioned_absent_records
+        )
 
         return Response({
             'created': created,
