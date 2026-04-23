@@ -67,7 +67,10 @@ function getTodayContext() {
 
 function isModuleAvailable({ moduleKey, enabledModules, isSuperAdmin }) {
   if (isSuperAdmin) return true
-  return enabledModules?.[moduleKey] === true
+  const moduleConfig = enabledModules?.[moduleKey]
+  if (typeof moduleConfig === 'boolean') return moduleConfig
+  if (moduleConfig && typeof moduleConfig === 'object') return !!moduleConfig.enabled
+  return false
 }
 
 function normalizeListResponse(data) {
@@ -103,6 +106,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [activeSchool, setActiveSchool] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [isSwitchingSchool, setIsSwitchingSchool] = useState(false)
   const lastPreloadFingerprintRef = useRef('')
 
   useEffect(() => {
@@ -792,19 +796,37 @@ export function AuthProvider({ children }) {
   }, [user, logout])
 
   const switchSchool = async (schoolId) => {
+    if (isSwitchingSchool) return
+    setIsSwitchingSchool(true)
     try {
       const response = await authApi.switchSchool(schoolId)
       const { school_id, school_name, role } = response.data
 
-      const newSchool = { id: school_id, name: school_name, role }
-      setActiveSchool(newSchool)
       setActiveSchoolId(String(school_id))
 
-      // Reload to refresh all data for the new school context
-      window.location.reload()
+      // Stop old-school requests and clear stale cache before rehydration.
+      await queryClient.cancelQueries()
+      queryClient.clear()
+
+      const freshUser = await refreshUser()
+      const resolvedSchool = resolveActiveSchool(freshUser)
+
+      if (resolvedSchool) {
+        setActiveSchool(resolvedSchool)
+        setActiveSchoolId(String(resolvedSchool.id))
+        void preloadVisibleData(freshUser, resolvedSchool)
+      } else {
+        setActiveSchool({ id: school_id, name: school_name, role })
+      }
     } catch (error) {
+      if (activeSchool?.id) {
+        // Restore storage to previously active school on failure.
+        setActiveSchoolId(String(activeSchool.id))
+      }
       console.error('Failed to switch school:', error)
       throw error
+    } finally {
+      setIsSwitchingSchool(false)
     }
   }
 
@@ -821,7 +843,10 @@ export function AuthProvider({ children }) {
   const isModuleEnabled = useCallback((moduleKey) => {
     // Super admin sees everything (they manage modules, not use them)
     if (user?.is_super_admin) return true
-    return enabledModules[moduleKey] === true
+    const moduleConfig = enabledModules?.[moduleKey]
+    if (typeof moduleConfig === 'boolean') return moduleConfig
+    if (moduleConfig && typeof moduleConfig === 'object') return !!moduleConfig.enabled
+    return false
   }, [user?.is_super_admin, enabledModules])
 
   // Role hierarchy: which roles can the current user create?
@@ -836,6 +861,7 @@ export function AuthProvider({ children }) {
     user,
     activeSchool,
     loading,
+    isSwitchingSchool,
     login,
     logout,
     switchSchool,
@@ -856,7 +882,7 @@ export function AuthProvider({ children }) {
     enabledModules,
     isModuleEnabled,
     getAllowableRoles,
-  }), [user, activeSchool, loading, effectiveRole, enabledModules, isModuleEnabled, getAllowableRoles, logout, switchSchool, refreshUser, isSchoolAdmin, isParent, isStudent, isStaffLevel])
+  }), [user, activeSchool, loading, isSwitchingSchool, effectiveRole, enabledModules, isModuleEnabled, getAllowableRoles, logout, switchSchool, refreshUser, isSchoolAdmin, isParent, isStudent, isStaffLevel])
 
   return (
     <AuthContext.Provider value={value}>

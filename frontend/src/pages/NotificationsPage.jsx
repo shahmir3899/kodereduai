@@ -928,8 +928,8 @@ function SettingsTab() {
                 </p>
               </div>
               <ToggleSwitch
-                checked={config.daily_absence_summary_enabled || false}
-                onChange={(v) => updateConfig({ daily_absence_summary_enabled: v })}
+                checked={config.daily_report_enabled !== false}
+                onChange={(v) => updateConfig({ daily_report_enabled: v })}
               />
             </div>
           )}

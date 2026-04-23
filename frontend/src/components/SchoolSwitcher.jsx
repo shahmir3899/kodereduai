@@ -3,7 +3,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useToast } from './Toast'
 
 export default function SchoolSwitcher() {
-  const { user, activeSchool, switchSchool } = useAuth()
+  const { user, activeSchool, switchSchool, isSwitchingSchool } = useAuth()
   const { showSuccess } = useToast()
   const [open, setOpen] = useState(false)
   const [switching, setSwitching] = useState(false)
@@ -30,11 +30,12 @@ export default function SchoolSwitcher() {
     showSuccess(`Switching to ${school.name}...`)
 
     try {
-      // Call backend switch-school API, then reload page
-      // switchSchool updates activeSchool, localStorage, and reloads
+      // switchSchool updates school context and refreshes data in-app.
       await switchSchool(school.id)
+      setOpen(false)
     } catch (err) {
       console.error('School switch failed:', err)
+    } finally {
       setSwitching(false)
     }
   }
@@ -48,7 +49,7 @@ export default function SchoolSwitcher() {
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen(!open)}
-        disabled={switching}
+        disabled={switching || isSwitchingSchool}
         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-gray-100 transition-colors text-sm font-medium text-gray-700 disabled:opacity-50"
       >
         📚 {activeSchool?.name || 'Select School'}
@@ -63,7 +64,7 @@ export default function SchoolSwitcher() {
             <button
               key={school.id}
               onClick={() => handleSwitchSchool(school)}
-              disabled={switching}
+              disabled={switching || isSwitchingSchool}
               className={`w-full text-left px-4 py-3 text-sm hover:bg-gray-50 flex items-center justify-between transition-colors disabled:opacity-50 ${
                 school.id === activeSchool?.id ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'
               }`}

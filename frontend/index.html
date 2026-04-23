@@ -8,20 +8,20 @@
     <style>
       /* Loading screen while detecting subdomain */
       #subdomain-loader {
-        display: flex;
+        display: none;
         align-items: center;
         justify-content: center;
         height: 100vh;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
+        background: #f9fafb;
+        color: #374151;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       }
       .loader-content {
         text-align: center;
       }
       .spinner {
-        border: 4px solid rgba(255, 255, 255, 0.3);
-        border-top: 4px solid white;
+        border: 4px solid rgba(59, 130, 246, 0.2);
+        border-top: 4px solid #2563eb;
         border-radius: 50%;
         width: 40px;
         height: 40px;
@@ -106,19 +106,43 @@
         // Dynamically import the correct app
         if (appToLoad === 'portal') {
           import('/src/apps/portal/main.jsx').then(() => {
+            if (window.__subdomainLoaderTimer) {
+              window.clearTimeout(window.__subdomainLoaderTimer);
+            }
             if (loader) loader.style.display = 'none';
           }).catch(err => {
             console.error('Failed to load portal app:', err);
+            if (window.__subdomainLoaderTimer) {
+              window.clearTimeout(window.__subdomainLoaderTimer);
+            }
+            if (loader) loader.style.display = 'flex';
             loader.innerHTML = '<div class="loader-content"><p>⚠️ Failed to load portal</p></div>';
           });
         } else if (appToLoad === 'school') {
           import('/src/apps/school/main.jsx').then(() => {
+            if (window.__subdomainLoaderTimer) {
+              window.clearTimeout(window.__subdomainLoaderTimer);
+            }
             if (loader) loader.style.display = 'none';
           }).catch(err => {
             console.error('Failed to load school app:', err);
+            if (window.__subdomainLoaderTimer) {
+              window.clearTimeout(window.__subdomainLoaderTimer);
+            }
+            if (loader) loader.style.display = 'flex';
             loader.innerHTML = '<div class="loader-content"><p>⚠️ Failed to load school portal</p></div>';
           });
         }
+      })();
+    </script>
+    <script>
+      // Avoid flash-of-loader: only show bootstrap loader if startup is noticeably slow.
+      (function() {
+        const loader = document.getElementById('subdomain-loader')
+        if (!loader) return
+        window.__subdomainLoaderTimer = window.setTimeout(() => {
+          loader.style.display = 'flex'
+        }, 700)
       })();
     </script>
   </body>

@@ -67,6 +67,8 @@ class SchoolNotificationConfigSerializer(serializers.ModelSerializer):
             'absence_notification_enabled', 'fee_reminder_enabled',
             'fee_overdue_enabled', 'exam_result_enabled',
             'daily_absence_summary_enabled', 'transport_notification_enabled',
+            'class_teacher_fee_reminder_enabled', 'lesson_plan_notification_enabled',
+            'daily_report_enabled', 'class_teacher_attendance_reminder_enabled',
             'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
