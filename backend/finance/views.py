@@ -1826,6 +1826,10 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             if date_from:
                 dt = date_from if isinstance(date_from, date) else date.fromisoformat(str(date_from))
                 snap_year, snap_month = dt.year, dt.month
+            elif date_to:
+                # For as-of queries (date_to only), anchor snapshot selection to date_to.
+                dt = date_to if isinstance(date_to, date) else date.fromisoformat(str(date_to))
+                snap_year, snap_month = dt.year, dt.month
             else:
                 snap_year, snap_month = 9999, 12
 
@@ -2307,20 +2311,22 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
                     if col in [6, 7, 8]:  # Credit, Debit, Running Balance columns
                         cell.number_format = '0.00'
                         cell.alignment = right_align
+                    elif col == 4:  # School — wrap so full name is visible
+                        cell.alignment = Alignment(horizontal='left', vertical='top', wrap_text=True)
                     else:
                         cell.alignment = Alignment(horizontal='left', vertical='center')
 
                 row += 1
 
-            # Column widths
+            # Column widths — School column (D) widened to accommodate full names
             ws.column_dimensions['A'].width = 12
             ws.column_dimensions['B'].width = 15
-            ws.column_dimensions['C'].width = 30
-            ws.column_dimensions['D'].width = 15
-            ws.column_dimensions['E'].width = 15
-            ws.column_dimensions['F'].width = 12
-            ws.column_dimensions['G'].width = 12
-            ws.column_dimensions['H'].width = 15
+            ws.column_dimensions['C'].width = 35
+            ws.column_dimensions['D'].width = 32
+            ws.column_dimensions['E'].width = 18
+            ws.column_dimensions['F'].width = 14
+            ws.column_dimensions['G'].width = 14
+            ws.column_dimensions['H'].width = 18
 
             # Create file response
             output = BytesIO()
@@ -2357,7 +2363,19 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             from fpdf import FPDF
 
             def safe_text(value):
-                return str(value or '').encode('latin-1', 'replace').decode('latin-1')
+                text = str(value or '')
+                # Replace common Unicode typographic chars that Helvetica can't render.
+                # Do this before encode() because fpdf2 validates chars ahead of encoding.
+                replacements = {
+                    '\u2014': '-', '\u2013': '-',   # em dash, en dash
+                    '\u2018': "'", '\u2019': "'",   # left/right single quotes
+                    '\u201c': '"', '\u201d': '"',   # left/right double quotes
+                    '\u2026': '...', '\u00a0': ' ', # ellipsis, non-breaking space
+                    '\u2022': '*', '\u2192': '->', '\u2190': '<-',
+                }
+                for char, repl in replacements.items():
+                    text = text.replace(char, repl)
+                return text.encode('latin-1', 'replace').decode('latin-1')
 
             def format_amount(value):
                 return f"{float(value or 0):,.2f}"
@@ -2388,29 +2406,76 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             pdf.ln(3)
 
             headers = ['Account', 'Date', 'Type', 'Description', 'School', 'Credit', 'Debit', 'Running']
-            col_widths = [32, 22, 24, 72, 52, 20, 20, 25]
+            # Widened school (52→60) and description (72→76) to allow full text; reduced account (32→28)
+            col_widths = [28, 22, 24, 76, 60, 20, 20, 25]
+            row_aligns = ['L', 'L', 'L', 'L', 'L', 'R', 'R', 'R']
+            line_h = 5
 
             pdf.set_font('Helvetica', 'B', 9)
             for header, width in zip(headers, col_widths):
                 pdf.cell(width, 7, safe_text(header), border=1)
             pdf.ln()
 
-            pdf.set_font('Helvetica', '', 8)
+            def _draw_pdf_row(row_data):
+                """Draw one table row with automatic text wrapping."""
+                y0 = pdf.get_y()
+                pdf.set_font('Helvetica', '', 8)
+
+                # Calculate how many lines each column needs so all cells in the
+                # row share the same total height.
+                max_lines = 1
+                for text, width in zip(row_data, col_widths):
+                    s = safe_text(text)  # must sanitise before get_string_width validates chars
+                    usable = width - 2
+                    line_w = 0.0
+                    lines = 1
+                    for word in s.split():
+                        ww = pdf.get_string_width(word + ' ')
+                        if line_w + ww > usable and line_w > 0:
+                            lines += 1
+                            line_w = ww
+                        else:
+                            line_w += ww
+                    max_lines = max(max_lines, lines)
+
+                row_h = max_lines * line_h
+
+                # Manual page-break: if row overflows, add a page and re-draw headers.
+                if y0 + row_h > pdf.h - pdf.b_margin:
+                    pdf.add_page()
+                    pdf.set_font('Helvetica', 'B', 9)
+                    for header, width in zip(headers, col_widths):
+                        pdf.cell(width, 7, safe_text(header), border=1)
+                    pdf.ln()
+                    pdf.set_font('Helvetica', '', 8)
+                    y0 = pdf.get_y()
+
+                x = pdf.l_margin
+                for text, width, align in zip(row_data, col_widths, row_aligns):
+                    s = safe_text(str(text or ''))
+                    pdf.set_xy(x, y0)
+                    if max_lines > 1:
+                        # Draw the border box, then fill text with multi_cell
+                        pdf.rect(x, y0, width, row_h)
+                        pdf.set_xy(x, y0)
+                        pdf.multi_cell(width, line_h, s, border=0, align=align)
+                    else:
+                        pdf.cell(width, row_h, s, border=1, align=align)
+                    x += width
+
+                pdf.set_xy(pdf.l_margin, y0 + row_h)
+
             for entry in ledger_data.get('entries', []):
-                row = [
+                _draw_pdf_row([
                     account.name,
                     entry.get('date') or '-',
                     type_labels.get(entry.get('type'), entry.get('type') or '-'),
-                    (entry.get('description') or '-')[:55],
-                    (entry.get('school_name') or '-')[:32],
+                    entry.get('description') or '-',
+                    entry.get('school_name') or '-',
                     format_amount(entry.get('credit')),
                     format_amount(entry.get('debit')),
                     format_amount(entry.get('running_balance')),
-                ]
-                for idx, (value, width) in enumerate(zip(row, col_widths)):
-                    align = 'R' if idx >= 5 else 'L'
-                    pdf.cell(width, 6, safe_text(value), border=1, align=align)
-                pdf.ln()
+                ])
 
             output = BytesIO()
             output.write(pdf.output(dest='S'))
