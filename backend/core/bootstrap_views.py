@@ -201,8 +201,19 @@ class AdminDashboardBootstrapView(APIView):
         except School.DoesNotExist:
             enabled = {}
 
+        if not isinstance(enabled, dict):
+            enabled = {}
+
         def module_on(key):
-            return enabled.get(key, {}).get('enabled', False)
+            module_cfg = enabled.get(key, False)
+            # Backward compatibility:
+            # - New shape: {"attendance": {"enabled": true}}
+            # - Legacy shape: {"attendance": true}
+            if isinstance(module_cfg, dict):
+                return bool(module_cfg.get('enabled', False))
+            if isinstance(module_cfg, bool):
+                return module_cfg
+            return False
 
         result = {}
 
