@@ -99,6 +99,7 @@ class SubjectViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
     required_module = 'academics'
     queryset = Subject.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
+    pagination_class = None
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
@@ -147,6 +148,11 @@ class SubjectViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         serializer.save(school_id=school_id)
         headers = self.get_success_headers(serializer.data)
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
+    def perform_destroy(self, instance):
+        """Soft-delete subjects to preserve historical references."""
+        instance.is_active = False
+        instance.save(update_fields=['is_active', 'updated_at'])
 
     @action(detail=False, methods=['post'])
     def bulk_create(self, request):
@@ -202,6 +208,7 @@ class ClassSubjectViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Model
     required_module = 'academics'
     queryset = ClassSubject.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
+    pagination_class = None
 
 
     def get_serializer_context(self):
@@ -216,7 +223,7 @@ class ClassSubjectViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Model
 
     def get_queryset(self):
         queryset = ClassSubject.objects.select_related(
-            'school', 'class_obj', 'subject', 'teacher', 'academic_year',
+            'school', 'class_obj', 'session_class', 'subject', 'teacher', 'academic_year',
         )
         if _is_school_header_rejected(self.request):
             return queryset.none()
@@ -243,6 +250,10 @@ class ClassSubjectViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Model
         if class_obj:
             queryset = queryset.filter(class_obj_id=class_obj)
 
+        session_class = self.request.query_params.get('session_class')
+        if session_class:
+            queryset = queryset.filter(session_class_id=session_class)
+
         subject = self.request.query_params.get('subject')
         if subject:
             queryset = queryset.filter(subject_id=subject)
@@ -263,16 +274,34 @@ class ClassSubjectViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Model
             from rest_framework.exceptions import ValidationError
             raise ValidationError({'detail': 'No school associated with your account.'})
 
+        session_class = serializer.validated_data.get('session_class')
+        class_obj = serializer.validated_data.get('class_obj')
+
         # Auto-resolve academic year if not provided
         academic_year = serializer.validated_data.get('academic_year')
         if not academic_year:
-            from academic_sessions.models import AcademicYear
-            sid = ensure_tenant_school_id(self.request) or self.request.user.school_id
-            academic_year = AcademicYear.objects.filter(
-                school_id=sid, is_current=True, is_active=True,
-            ).first()
+            if session_class:
+                academic_year = session_class.academic_year
+            else:
+                from academic_sessions.models import AcademicYear
+                sid = ensure_tenant_school_id(self.request) or self.request.user.school_id
+                academic_year = AcademicYear.objects.filter(
+                    school_id=sid, is_current=True, is_active=True,
+                ).first()
 
-        serializer.save(school_id=school_id, academic_year=academic_year)
+        class_obj = session_class.class_obj if session_class else class_obj
+
+        serializer.save(
+            school_id=school_id,
+            academic_year=academic_year,
+            session_class=session_class,
+            class_obj=class_obj,
+        )
+
+    def perform_destroy(self, instance):
+        """Soft-delete class-subject assignments to preserve history."""
+        instance.is_active = False
+        instance.save(update_fields=['is_active', 'updated_at'])
 
     @action(detail=False, methods=['post'], url_path='bulk-assign')
     def bulk_assign(self, request):
@@ -286,32 +315,83 @@ class ClassSubjectViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Model
             from rest_framework.exceptions import ValidationError
             raise ValidationError({'detail': 'No school associated with your account.'})
 
-        from academic_sessions.models import AcademicYear
-        sid = ensure_tenant_school_id(request) or request.user.school_id
-        academic_year = AcademicYear.objects.filter(
-            school_id=sid, is_current=True, is_active=True,
-        ).first()
-
-        class_obj = serializer.validated_data['class_obj']
+        session_class = serializer.validated_data.get('session_class')
+        class_obj = serializer.validated_data.get('class_obj')
         subjects = serializer.validated_data['subjects']
         teacher = serializer.validated_data.get('teacher')
         periods_per_week = serializer.validated_data.get('periods_per_week', 1)
 
+        target_session_classes = []
+        legacy_class_obj = None
+
+        if session_class:
+            academic_year = session_class.academic_year
+            class_obj = session_class.class_obj
+            target_session_classes = [session_class]
+        else:
+            from academic_sessions.models import AcademicYear, SessionClass
+
+            sid = ensure_tenant_school_id(request) or request.user.school_id
+            academic_year = AcademicYear.objects.filter(
+                school_id=sid, is_current=True, is_active=True,
+            ).first()
+            legacy_class_obj = class_obj
+            if academic_year and class_obj:
+                target_session_classes = list(
+                    SessionClass.objects.filter(
+                        school_id=school_id,
+                        academic_year=academic_year,
+                        class_obj=class_obj,
+                        is_active=True,
+                    ).order_by('grade_level', 'display_name', 'section', 'id')
+                )
+
         created = []
         skipped = []
-        for subject in subjects:
-            exists = ClassSubject.objects.filter(
-                school_id=school_id, class_obj=class_obj, subject=subject,
-            ).exists()
-            if exists:
-                skipped.append(subject.name if hasattr(subject, 'name') else str(subject))
-                continue
-            obj = ClassSubject.objects.create(
-                school_id=school_id, academic_year=academic_year,
-                class_obj=class_obj, subject=subject,
-                teacher=teacher, periods_per_week=periods_per_week,
-            )
-            created.append(obj.id)
+        if target_session_classes:
+            for target_session_class in target_session_classes:
+                for subject in subjects:
+                    exists = ClassSubject.objects.filter(
+                        school_id=school_id,
+                        academic_year=academic_year,
+                        session_class=target_session_class,
+                        subject=subject,
+                    ).exists()
+                    if exists:
+                        skipped.append(target_session_class.label + ': ' + (subject.name if hasattr(subject, 'name') else str(subject)))
+                        continue
+                    obj = ClassSubject.objects.create(
+                        school_id=school_id,
+                        academic_year=academic_year,
+                        session_class=target_session_class,
+                        class_obj=target_session_class.class_obj,
+                        subject=subject,
+                        teacher=teacher,
+                        periods_per_week=periods_per_week,
+                    )
+                    created.append(obj.id)
+        else:
+            for subject in subjects:
+                exists = ClassSubject.objects.filter(
+                    school_id=school_id,
+                    academic_year=academic_year,
+                    session_class=None,
+                    class_obj=legacy_class_obj,
+                    subject=subject,
+                ).exists()
+                if exists:
+                    skipped.append(subject.name if hasattr(subject, 'name') else str(subject))
+                    continue
+                obj = ClassSubject.objects.create(
+                    school_id=school_id,
+                    academic_year=academic_year,
+                    session_class=None,
+                    class_obj=legacy_class_obj,
+                    subject=subject,
+                    teacher=teacher,
+                    periods_per_week=periods_per_week,
+                )
+                created.append(obj.id)
 
         return Response({
             'created_count': len(created),
@@ -464,6 +544,7 @@ class TimetableSlotViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mode
     required_module = 'academics'
     queryset = TimetableSlot.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
+    pagination_class = None
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
@@ -489,6 +570,10 @@ class TimetableSlotViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mode
             else:
                 return queryset.none()
 
+        is_active = self.request.query_params.get('is_active')
+        if is_active is not None:
+            queryset = queryset.filter(is_active=is_active.lower() == 'true')
+
         return queryset
 
     def perform_create(self, serializer):
@@ -497,6 +582,11 @@ class TimetableSlotViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mode
             from rest_framework.exceptions import ValidationError
             raise ValidationError({'detail': 'No school associated with your account.'})
         serializer.save(school_id=school_id)
+
+    def perform_destroy(self, instance):
+        """Soft-delete timetable slots to avoid breaking historical timetables."""
+        instance.is_active = False
+        instance.save(update_fields=['is_active', 'updated_at'])
 
     @action(detail=False, methods=['post'])
     def suggest_slots(self, request):
@@ -871,11 +961,16 @@ class TimetableEntryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
                 )
             except Exception as e:
                 return Response({'detail': str(e)}, status=500)
-            return Response({
+            result_data = bg_task.result_data or {}
+            response_data = {
                 'task_id': bg_task.celery_task_id,
-                'message': bg_task.result_data.get('message', 'Timetable generated.') if bg_task.result_data else 'Timetable generated.',
-                'result': bg_task.result_data,
-            })
+                'message': result_data.get('message', 'Timetable generated.'),
+                'result': result_data,
+            }
+            # Backward compatibility: older clients/tests expect task result keys at top-level.
+            if isinstance(result_data, dict):
+                response_data.update(result_data)
+            return Response(response_data)
         else:
             from core.task_utils import dispatch_background_task
             bg_task = dispatch_background_task(

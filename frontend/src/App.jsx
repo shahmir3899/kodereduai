@@ -1,4 +1,4 @@
-import { Component, lazy, Suspense } from 'react'
+import { Component, lazy, Suspense, useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './contexts/AuthContext'
 
@@ -243,6 +243,13 @@ function ModuleRoute({ module, children }) {
 
 function App() {
   const { loading } = useAuth()
+
+  // Signal React app readiness to bootstrap loader - clears fallback timer
+  useEffect(() => {
+    window.reactAppReady = true
+    window.dispatchEvent(new Event('reactReady'))
+    console.log('✅ React app ready - bootstrap loader cleared')
+  }, [])
 
   if (loading) {
     return <LoadingSpinner />

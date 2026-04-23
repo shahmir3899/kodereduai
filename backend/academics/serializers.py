@@ -44,7 +44,7 @@ class SubjectBulkCreateSerializer(serializers.Serializer):
 
 class ClassSubjectSerializer(serializers.ModelSerializer):
     class_name = serializers.CharField(source='class_obj.name', read_only=True)
-    class_section = serializers.CharField(source='class_obj.section', read_only=True, default='')
+    class_section = serializers.SerializerMethodField()
     class_grade_level = serializers.IntegerField(source='class_obj.grade_level', read_only=True, default=0)
     subject_name = serializers.CharField(source='subject.name', read_only=True)
     subject_code = serializers.CharField(source='subject.code', read_only=True)
@@ -52,51 +52,136 @@ class ClassSubjectSerializer(serializers.ModelSerializer):
     academic_year_name = serializers.CharField(
         source='academic_year.name', read_only=True, default=None,
     )
+    session_class_display = serializers.SerializerMethodField()
 
     class Meta:
         model = ClassSubject
         fields = [
-            'id', 'school', 'class_obj', 'class_name',
+            'id', 'school', 'class_obj', 'session_class', 'class_name',
             'class_section', 'class_grade_level',
             'subject', 'subject_name', 'subject_code',
             'teacher', 'teacher_name',
             'academic_year', 'academic_year_name',
+            'session_class_display',
             'periods_per_week', 'is_active',
             'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'school', 'created_at', 'updated_at']
 
+    def get_class_section(self, obj):
+        if obj.session_class and obj.session_class.section:
+            return obj.session_class.section
+        return obj.class_obj.section or None
+
     def get_teacher_name(self, obj):
         return obj.teacher.full_name if obj.teacher else None
 
+    def get_session_class_display(self, obj):
+        if obj.session_class:
+            return obj.session_class.label
+        if obj.class_obj.section:
+            return f"{obj.class_obj.name} - {obj.class_obj.section}"
+        return obj.class_obj.name
+
 
 class ClassSubjectCreateSerializer(serializers.ModelSerializer):
+    class_obj = serializers.PrimaryKeyRelatedField(
+        queryset=ClassSubject.class_obj.field.related_model.objects.all(),
+        required=False,
+        allow_null=True,
+    )
+    session_class = serializers.PrimaryKeyRelatedField(
+        queryset=ClassSubject.session_class.field.related_model.objects.all(),
+        required=False,
+        allow_null=True,
+    )
+
     class Meta:
         model = ClassSubject
-        fields = ['class_obj', 'subject', 'teacher', 'periods_per_week']
+        fields = ['session_class', 'class_obj', 'subject', 'teacher', 'periods_per_week', 'academic_year', 'is_active']
 
     def validate(self, data):
         school_id = self.context.get('school_id')
-        if school_id:
-            qs = ClassSubject.objects.filter(
-                school_id=school_id,
-                class_obj=data.get('class_obj'),
-                subject=data.get('subject'),
+        session_class = data.get('session_class') or getattr(self.instance, 'session_class', None)
+        class_obj = data.get('class_obj') or getattr(self.instance, 'class_obj', None)
+        subject = data.get('subject') or getattr(self.instance, 'subject', None)
+        academic_year = data.get('academic_year') or getattr(self.instance, 'academic_year', None)
+
+        if not session_class and not class_obj:
+            raise serializers.ValidationError({'session_class': 'SessionClass or master class is required.'})
+
+        if school_id and class_obj and class_obj.school_id != school_id:
+            raise serializers.ValidationError({'class_obj': 'Class does not belong to the active school.'})
+
+        if school_id and session_class and session_class.school_id != school_id:
+            raise serializers.ValidationError({'session_class': 'SessionClass does not belong to the active school.'})
+
+        resolved_year = academic_year or (session_class.academic_year if session_class else None)
+        if session_class and resolved_year and session_class.academic_year_id != resolved_year.id:
+            raise serializers.ValidationError(
+                {'session_class': 'SessionClass must belong to the selected academic year.'}
             )
+
+        if not session_class and class_obj and resolved_year:
+            session_matches = list(
+                ClassSubject.session_class.field.related_model.objects.filter(
+                    school_id=school_id,
+                    academic_year=resolved_year,
+                    class_obj=class_obj,
+                )[:2]
+            )
+            if len(session_matches) == 1:
+                session_class = session_matches[0]
+                data['session_class'] = session_class
+            elif len(session_matches) > 1:
+                raise serializers.ValidationError(
+                    {'session_class': 'Multiple session classes exist for this class. Select a specific class section.'}
+                )
+
+        if school_id:
+            if session_class:
+                qs = ClassSubject.objects.filter(
+                    school_id=school_id,
+                    academic_year=resolved_year,
+                    session_class=session_class,
+                    subject=subject,
+                )
+            else:
+                qs = ClassSubject.objects.filter(
+                    school_id=school_id,
+                    class_obj=class_obj,
+                    subject=subject,
+                )
+                if resolved_year:
+                    qs = qs.filter(academic_year=resolved_year)
             if self.instance:
                 qs = qs.exclude(pk=self.instance.pk)
             if qs.exists():
                 raise serializers.ValidationError(
-                    'This subject is already assigned to this class.'
+                    'This subject is already assigned to this class section.'
                 )
         return data
 
 
 class ClassSubjectBulkAssignSerializer(serializers.Serializer):
-    class_obj = serializers.PrimaryKeyRelatedField(queryset=ClassSubject.class_obj.field.related_model.objects.all())
+    session_class = serializers.PrimaryKeyRelatedField(
+        queryset=ClassSubject.session_class.field.related_model.objects.all(),
+        required=False,
+        allow_null=True,
+    )
+    class_obj = serializers.PrimaryKeyRelatedField(
+        queryset=ClassSubject.class_obj.field.related_model.objects.all(),
+        required=False,
+        allow_null=True,
+    )
     subjects = serializers.PrimaryKeyRelatedField(queryset=Subject.objects.all(), many=True)
     teacher = serializers.PrimaryKeyRelatedField(queryset=ClassSubject.teacher.field.related_model.objects.all(), required=False, allow_null=True)
     periods_per_week = serializers.IntegerField(default=1, min_value=1, max_value=20)
+
+    def validate(self, data):
+        if not data.get('session_class') and not data.get('class_obj'):
+            raise serializers.ValidationError('SessionClass or master class is required.')
+        return data
 
 
 # ── ClassTeacherAssignment ──────────────────────────────────────────────────

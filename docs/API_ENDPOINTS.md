@@ -210,8 +210,8 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | GET/POST | /api/academics/subjects/ | search, is_active |
 | POST | /api/academics/subjects/bulk_create/ | |
 | GET | /api/academics/subjects/gap_analysis/ | |
-| GET/POST | /api/academics/class-subjects/ | class_obj, subject, teacher |
-| POST | /api/academics/class-subjects/bulk-assign/ | |
+| GET/POST | /api/academics/class-subjects/ | session_class, class_obj, academic_year, subject, teacher. Returns flat list (no pagination). POST accepts session_class (preferred) or class_obj. academic_year auto-resolved from session_class or current year. Duplicate check is section-aware. DELETE is soft (sets is_active=False) |
+| POST | /api/academics/class-subjects/bulk-assign/ | Body: {session_class (preferred) or class_obj, subjects[], teacher?, periods_per_week}. When session_class is provided, assigns only to that section. When only class_obj provided, assigns to all active session classes for that class in current year. |
 | GET | /api/academics/class-subjects/by_class/ | class_id |
 | GET | /api/academics/class-subjects/workload_analysis/ | |
 | GET/POST | /api/academics/timetable-slots/ | |

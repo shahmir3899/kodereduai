@@ -2103,6 +2103,18 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
 
         for fp in fee_qs.order_by('payment_date', 'updated_at', 'id'):
             fee_type_display = fp.get_fee_type_display()
+            if fp.fee_type == 'MONTHLY':
+                month_label = fee_type_display
+                if fp.month and fp.year:
+                    try:
+                        month_label = date(int(fp.year), int(fp.month), 1).strftime('%B %Y')
+                    except (TypeError, ValueError):
+                        month_label = fee_type_display
+                detail_label = month_label
+            elif fp.fee_type == 'ANNUAL':
+                detail_label = fp.annual_category.name if fp.annual_category else 'Uncategorized'
+            else:
+                detail_label = fp.fee_type
             entries.append({
                 'id': fp.id,
                 'type': 'fee_payment',
@@ -2110,7 +2122,7 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
                 'timestamp': fp.updated_at,
                 'school_id': fp.school_id,
                 'school_name': fp.school.name if fp.school else None,
-                'description': f"{fp.student.name if fp.student else 'Unknown'} ({fee_type_display} - {fp.fee_type})",
+                'description': f"{fp.student.name if fp.student else 'Unknown'} ({fee_type_display} - {detail_label})",
                 'reference': fp.receipt_number,
                 'credit': fp.amount_paid,
                 'debit': Decimal('0'),

@@ -2,8 +2,9 @@ from datetime import date
 from decimal import Decimal
 
 from django.test import TestCase
+from rest_framework.test import APIRequestFactory
 
-from finance.models import Account, AccountSnapshot, FeePayment, MonthlyClosing
+from finance.models import Account, AccountSnapshot, FeePayment, MonthlyClosing, AnnualFeeCategory
 from finance.views import AccountViewSet
 from schools.models import Organization, School
 from students.models import Class, Student
@@ -106,3 +107,83 @@ class TestAccountSnapshotBoundary(TestCase):
         self.assertEqual(result['opening_balance'], Decimal('500.00'))
         self.assertEqual(result['receipts'], Decimal('75.00'))
         self.assertEqual(result['net_balance'], Decimal('575.00'))
+
+    def _build_ledger_response(self):
+        factory = APIRequestFactory()
+        request = factory.get('/api/finance/accounts/ledger/', {
+            'account_id': self.account.id,
+            'ordering': 'asc',
+        })
+
+        # Bypass auth/tenant for focused unit test; ledger data logic is the target.
+        request.user = type('User', (), {
+            'is_authenticated': True,
+            'is_super_admin': True,
+            'school_id': self.school.id,
+            'organization_id': self.org.id,
+        })()
+        request.META['HTTP_X_SCHOOL_ID'] = str(self.school.id)
+
+        view = AccountViewSet()
+        view.request = request
+        view.kwargs = {}
+        response = view.ledger(request)
+        self.assertEqual(response.status_code, 200)
+        return response.data
+
+    def test_monthly_fee_description_uses_month_and_year(self):
+        data = self._build_ledger_response()
+        monthly_entries = [
+            e for e in data['entries']
+            if e['type'] == 'fee_payment' and e['date'] == date(2025, 2, 10)
+        ]
+        self.assertTrue(monthly_entries)
+        self.assertIn('(Monthly - February 2025)', monthly_entries[0]['description'])
+
+    def test_annual_fee_description_uses_category_name(self):
+        books = AnnualFeeCategory.objects.create(
+            school=self.school,
+            name='Books',
+        )
+        FeePayment.objects.create(
+            school=self.school,
+            student=self.student,
+            fee_type='ANNUAL',
+            month=0,
+            year=2025,
+            annual_category=books,
+            amount_due=Decimal('100.00'),
+            amount_paid=Decimal('100.00'),
+            payment_date=date(2025, 4, 20),
+            account=self.account,
+        )
+
+        data = self._build_ledger_response()
+        annual_entries = [
+            e for e in data['entries']
+            if e['type'] == 'fee_payment' and e['date'] == date(2025, 4, 20)
+        ]
+        self.assertTrue(annual_entries)
+        self.assertIn('(Annual - Books)', annual_entries[0]['description'])
+
+    def test_annual_fee_description_falls_back_to_uncategorized(self):
+        FeePayment.objects.create(
+            school=self.school,
+            student=self.student,
+            fee_type='ANNUAL',
+            month=0,
+            year=2025,
+            annual_category=None,
+            amount_due=Decimal('100.00'),
+            amount_paid=Decimal('100.00'),
+            payment_date=date(2025, 4, 21),
+            account=self.account,
+        )
+
+        data = self._build_ledger_response()
+        annual_entries = [
+            e for e in data['entries']
+            if e['type'] == 'fee_payment' and e['date'] == date(2025, 4, 21)
+        ]
+        self.assertTrue(annual_entries)
+        self.assertIn('(Annual - Uncategorized)', annual_entries[0]['description'])

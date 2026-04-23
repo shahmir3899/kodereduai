@@ -46,6 +46,14 @@ class ClassSubject(models.Model):
         related_name='class_subjects',
         help_text="Academic year for this assignment"
     )
+    session_class = models.ForeignKey(
+        'academic_sessions.SessionClass',
+        on_delete=models.CASCADE,
+        related_name='class_subjects',
+        null=True,
+        blank=True,
+        help_text='Specific session class (with section). Enables section-level subject assignment.',
+    )
     class_obj = models.ForeignKey(
         'students.Class',
         on_delete=models.CASCADE,
@@ -70,16 +78,19 @@ class ClassSubject(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = ('school', 'class_obj', 'subject')
-        ordering = ['class_obj', 'subject__name']
+        unique_together = ('school', 'academic_year', 'session_class', 'subject')
+        ordering = ['class_obj__grade_level', 'class_obj__name', 'session_class__section', 'subject__name']
         indexes = [
             models.Index(fields=['teacher']),
             models.Index(fields=['academic_year']),
+            models.Index(fields=['session_class', 'academic_year', 'is_active']),
+            models.Index(fields=['class_obj', 'academic_year', 'is_active']),
         ]
 
     def __str__(self):
         teacher_name = self.teacher.full_name if self.teacher else 'Unassigned'
-        return f"{self.class_obj.name} - {self.subject.name} ({teacher_name})"
+        section = f" - {self.session_class.section}" if self.session_class and self.session_class.section else ""
+        return f"{self.class_obj.name}{section} - {self.subject.name} ({teacher_name})"
 
 
 class ClassTeacherAssignment(models.Model):

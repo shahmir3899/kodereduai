@@ -64,7 +64,7 @@ Redirects: /attendance/upload, /attendance/review, /attendance/records, /accurac
 ## Academics
 | Route | Component | Description | API Calls |
 |-------|-----------|-------------|-----------|
-| /academics/subjects | SubjectsPage.jsx | Subject CRUD | GET/POST subjects/ |
+| /academics/subjects | SubjectsPage.jsx | Three tabs: **Subjects** (CRUD with bulk create), **Class Assignments** (session-class-scoped subject assignments grouped by session class), **Class Teachers** (session-class-scoped teacher assignments). Both assignment tabs use the same session-class selector source (`useSessionClasses(activeAcademicYear.id)`). Both tabs are gated on `activeAcademicYear` — empty state shown if no year selected. Grouping key is `session_class` id (falls back to `legacy-{class_obj}` for unlinked rows). Card header displays `session_class_display` from API. Assign modal sends `session_class` (not `class_obj`). Subjects soft-deleted (is_active=False). | GET/POST subjects/, GET class-subjects/?session_class=&academic_year=, POST class-subjects/bulk-assign/, GET class-teachers/?session_class=&academic_year=&is_active=true |
 | /academics/timetable | TimetablePage.jsx | Timetable grid editor. Auto-generate supports algorithm selector (Greedy/OR-Tools) | GET/POST timetable-entries/, POST auto_generate/ with {algorithm} |
 | /academics/analytics | AcademicsAnalyticsPage.jsx | Academic analytics | GET analytics/ |
 | /academics/exam-types | ExamTypesPage.jsx | Exam type config | GET/POST exam-types/ |

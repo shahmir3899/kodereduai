@@ -229,10 +229,14 @@ school(FK), academic_year(FK), name, term_type (TERM/SEMESTER/QUARTER), order, s
 school(FK), name, code, description, is_active
 
 ### ClassSubject
-school(FK), class_obj(FK), subject(FK), teacher(FK → StaffMember, nullable), periods_per_week
+school(FK), academic_year(FK), session_class(FK → SessionClass, nullable), class_obj(FK → Class), subject(FK), teacher(FK → StaffMember, nullable), periods_per_week, is_active
+
+**Key changes (2026-04):** `session_class` FK added for section-level subject assignment. Unique constraint changed from `(school, class_obj, subject)` to `(school, academic_year, session_class, subject)`. Deletes are soft (is_active=False). API list endpoint returns a flat list (no pagination). `class_section` and `session_class_display` are emitted as computed fields. Backfill migration clones rows across sections of the same master class. Records with no academic_year are considered orphaned and should be deleted.
 
 ### TimetableSlot
-school(FK), name, start_time, end_time, slot_type (PERIOD/BREAK/ASSEMBLY), order
+school(FK), name, start_time, end_time, slot_type (PERIOD/BREAK/ASSEMBLY), order, is_active
+
+**Note:** Deletes are soft (is_active=False). Supports `is_active` filter param.
 
 ### TimetableEntry
 school(FK), class_obj(FK), slot(FK), day_of_week (0=Mon..6=Sun), subject(FK, nullable), teacher(FK, nullable)

@@ -1,7 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { academicsApi, hrApi } from '../../services/api'
-import { useClasses } from '../../hooks/useClasses'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import { useAuth } from '../../contexts/AuthContext'
 import ClassSelector from '../../components/ClassSelector'
@@ -10,10 +9,7 @@ import { useDebounce } from '../../hooks/useDebounce'
 import { useToast } from '../../components/Toast'
 import { useConfirmModal } from '../../components/ConfirmModal'
 import {
-  buildSessionLabeledMasterClassOptions,
   buildSessionClassOptions,
-  getClassSelectorScope,
-  resolveClassIdToMasterClassId,
 } from '../../utils/classScope'
 
 const SEVERITY_STYLES = {
@@ -59,7 +55,7 @@ function generateCode(name) {
 }
 
 const EMPTY_SUBJECT = { name: '', code: '', description: '', is_elective: false }
-const EMPTY_ASSIGNMENT = { class_obj: '', subjects: [], teacher: '', subjectPeriods: {} }
+const EMPTY_ASSIGNMENT = { session_class: '', subjects: [], teacher: '', subjectPeriods: {} }
 
 export default function SubjectsPage() {
   const queryClient = useQueryClient()
@@ -92,8 +88,10 @@ export default function SubjectsPage() {
   const [classTeacherErrors, setClassTeacherErrors] = useState({})
   const { confirm, ConfirmModalRoot } = useConfirmModal()
   const { sessionClasses } = useSessionClasses(activeAcademicYear?.id)
-  const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
-  const resolvedClassFilter = resolveClassIdToMasterClassId(classFilter, activeAcademicYear?.id, sessionClasses)
+  const sessionClassOptions = useMemo(
+    () => buildSessionClassOptions(sessionClasses),
+    [sessionClasses],
+  )
 
   // Queries
   const { data: subjectRes, isLoading: subjectLoading, isError: subjectError, error: subjectFetchError, isFetching: subjectFetching } = useQuery({
@@ -102,12 +100,13 @@ export default function SubjectsPage() {
   })
 
   const { data: assignRes, isLoading: assignLoading, isError: assignError, error: assignFetchError, isFetching: assignFetching } = useQuery({
-    queryKey: ['classSubjects', classFilter, resolvedClassFilter],
+    queryKey: ['classSubjects', classFilter, activeAcademicYear?.id],
     queryFn: () => academicsApi.getClassSubjects({
-      class_obj: resolvedClassFilter || undefined,
+      session_class: classFilter || undefined,
+      academic_year: activeAcademicYear?.id || undefined,
       page_size: 9999,
     }),
-    enabled: tab === 'assignments',
+    enabled: tab === 'assignments' && !!activeAcademicYear?.id,
   })
 
   const { data: classTeacherRes, isLoading: classTeacherLoading, isError: classTeacherError, error: classTeacherFetchError, isFetching: classTeacherFetching } = useQuery({
@@ -115,25 +114,11 @@ export default function SubjectsPage() {
     queryFn: () => academicsApi.getClassTeachers({
       session_class: classTeacherFilter || undefined,
       academic_year: activeAcademicYear?.id || undefined,
+      is_active: true,
       page_size: 9999,
     }),
-    enabled: tab === 'classTeachers',
+    enabled: tab === 'classTeachers' && !!activeAcademicYear?.id,
   })
-
-  const { classes } = useClasses()
-  const assignmentClassOptions = useMemo(() => {
-    if (!activeAcademicYear?.id) return classes
-    return buildSessionLabeledMasterClassOptions({
-      sessionClasses,
-      masterClasses: classes,
-      sessionScopedOnly: true,
-    })
-  }, [activeAcademicYear?.id, classes, sessionClasses])
-
-  const classTeacherClassOptions = useMemo(() => {
-    if (!activeAcademicYear?.id) return classes
-    return buildSessionClassOptions(sessionClasses)
-  }, [activeAcademicYear?.id, classes, sessionClasses])
 
   const { data: staffData } = useQuery({
     queryKey: ['hrStaffActive'],
@@ -190,8 +175,18 @@ export default function SubjectsPage() {
   const groupedAssignments = useMemo(() => {
     const map = new Map()
     for (const a of assignments) {
-      if (!map.has(a.class_obj)) map.set(a.class_obj, { id: a.class_obj, name: a.class_name, section: a.class_section || '', gradeLevel: a.class_grade_level ?? 0, items: [] })
-      map.get(a.class_obj).items.push(a)
+      const groupKey = a.session_class || `legacy-${a.class_obj}`
+      if (!map.has(groupKey)) {
+        map.set(groupKey, {
+          id: groupKey,
+          name: a.class_name,
+          section: a.class_section || '',
+          gradeLevel: a.class_grade_level ?? 0,
+          display: a.session_class_display || `${a.class_name}${a.class_section ? ` - ${a.class_section}` : ''}`,
+          items: [],
+        })
+      }
+      map.get(groupKey).items.push(a)
     }
     return [...map.values()].sort((a, b) => (a.gradeLevel - b.gradeLevel) || (a.section || '').localeCompare(b.section || ''))
   }, [assignments])
@@ -199,16 +194,18 @@ export default function SubjectsPage() {
   const groupedClassTeacherAssignments = useMemo(() => {
     const map = new Map()
     for (const assignment of classTeacherAssignments) {
-      if (!map.has(assignment.class_obj)) {
-        map.set(assignment.class_obj, {
-          id: assignment.class_obj,
+      const groupKey = assignment.session_class || `legacy-${assignment.class_obj}`
+      if (!map.has(groupKey)) {
+        map.set(groupKey, {
+          id: groupKey,
           name: assignment.class_name,
           section: assignment.class_section || '',
           gradeLevel: assignment.class_grade_level ?? 0,
+          display: assignment.session_class_display || `${assignment.class_name}${assignment.class_section ? ` - ${assignment.class_section}` : ''}`,
           items: [],
         })
       }
-      map.get(assignment.class_obj).items.push(assignment)
+      map.get(groupKey).items.push(assignment)
     }
     return [...map.values()].sort((a, b) => (a.gradeLevel - b.gradeLevel) || (a.section || '').localeCompare(b.section || ''))
   }, [classTeacherAssignments])
@@ -361,7 +358,7 @@ export default function SubjectsPage() {
   const openCreateAssign = () => { setAssignForm(EMPTY_ASSIGNMENT); setEditAssignId(null); setAssignErrors({}); setShowAssignModal(true) }
   const openEditAssign = (a) => {
     setAssignForm({
-      class_obj: a.class_obj, subjects: [a.subject],
+      session_class: a.session_class || '', subjects: [a.subject],
       teacher: a.teacher || '', subjectPeriods: { [a.subject]: a.periods_per_week },
     })
     setEditAssignId(a.id); setAssignErrors({}); setShowAssignModal(true)
@@ -410,13 +407,18 @@ export default function SubjectsPage() {
     if (editAssignId) {
       const subjectId = assignForm.subjects[0]
       const payload = {
-        class_obj: assignForm.class_obj,
+        session_class: parseInt(assignForm.session_class) || assignForm.session_class,
         subject: subjectId,
         teacher: assignForm.teacher || null,
         periods_per_week: parseInt(assignForm.subjectPeriods[subjectId]) || 1,
+        ...(activeAcademicYear?.id ? { academic_year: activeAcademicYear.id } : {}),
       }
       updateAssignMut.mutate({ id: editAssignId, data: payload })
     } else {
+      if (!assignForm.session_class) {
+        setAssignErrors({ detail: 'Please select a class section.' })
+        return
+      }
       if (assignForm.subjects.length === 0) {
         setAssignErrors({ detail: 'Please select at least one subject.' })
         return
@@ -433,7 +435,7 @@ export default function SubjectsPage() {
         // All subjects share the same periods — single bulk call
         const [periods, subjectIds] = entries[0]
         createAssignMut.mutate({
-          class_obj: assignForm.class_obj,
+          session_class: parseInt(assignForm.session_class) || assignForm.session_class,
           subjects: subjectIds,
           teacher: assignForm.teacher || null,
           periods_per_week: parseInt(periods),
@@ -443,7 +445,7 @@ export default function SubjectsPage() {
         try {
           for (const [periods, subjectIds] of entries) {
             await academicsApi.bulkAssignSubjects({
-              class_obj: assignForm.class_obj,
+              session_class: parseInt(assignForm.session_class) || assignForm.session_class,
               subjects: subjectIds,
               teacher: assignForm.teacher || null,
               periods_per_week: parseInt(periods),
@@ -746,15 +748,24 @@ export default function SubjectsPage() {
               onChange={e => setClassFilter(e.target.value)}
               className="input w-full sm:w-52"
               showAllOption
-              scope={classSelectorScope}
-              academicYearId={activeAcademicYear?.id}
+              classes={sessionClassOptions}
             />
             <button onClick={openCreateAssign} className="btn-primary text-sm px-4 py-2 whitespace-nowrap">
               + Assign Subject
             </button>
           </div>
 
-          {assignLoading ? (
+          {activeAcademicYear && (
+            <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+              Managing subject assignments for <span className="font-semibold">{activeAcademicYear.name}</span> session classes.
+            </div>
+          )}
+
+          {!activeAcademicYear ? (
+            <div className="card p-6 text-center">
+              <p className="text-gray-600 text-sm">Select an academic year to manage session-class subject assignments.</p>
+            </div>
+          ) : assignLoading ? (
             <div className="text-center py-12">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
             </div>
@@ -784,7 +795,7 @@ export default function SubjectsPage() {
                         <div className="px-5 py-4 bg-gradient-to-r from-sky-50 to-indigo-50 border-b border-gray-100">
                           <div className="flex items-start justify-between gap-3">
                             <div>
-                              <h3 className="text-base font-semibold text-gray-900">{group.name}{group.section ? ` - ${group.section}` : ''}</h3>
+                              <h3 className="text-base font-semibold text-gray-900">{group.display}</h3>
                               <p className="text-xs text-gray-600 mt-1">Class Subject Assignments</p>
                             </div>
                             <span className="text-xs bg-white text-primary-700 border border-primary-100 px-2.5 py-1 rounded-full font-medium">
@@ -842,14 +853,15 @@ export default function SubjectsPage() {
 
                 <form onSubmit={handleAssignSubmit} className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Class *</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Class Section *</label>
                     <ClassSelector
-                      value={assignForm.class_obj}
-                      onChange={e => setAssignForm(p => ({ ...p, class_obj: e.target.value }))}
+                      value={assignForm.session_class}
+                      onChange={e => setAssignForm(p => ({ ...p, session_class: e.target.value }))}
                       className="input w-full"
                       required
-                      classes={assignmentClassOptions}
+                      classes={sessionClassOptions}
                     />
+                    <p className="text-xs text-gray-500 mt-1">Assign subjects to a specific session class section for the active academic year.</p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -998,9 +1010,7 @@ export default function SubjectsPage() {
               onChange={e => setClassTeacherFilter(e.target.value)}
               className="input w-full sm:w-52"
               showAllOption
-              scope={classSelectorScope}
-              academicYearId={activeAcademicYear?.id}
-              classes={classTeacherClassOptions}
+              classes={sessionClassOptions}
             />
             {isSchoolAdmin && (
               <button onClick={openCreateClassTeacher} className="btn-primary text-sm px-4 py-2 whitespace-nowrap">
@@ -1015,7 +1025,11 @@ export default function SubjectsPage() {
             </div>
           )}
 
-          {classTeacherLoading ? (
+          {!activeAcademicYear ? (
+            <div className="card p-6 text-center">
+              <p className="text-gray-600 text-sm">Select an academic year to manage session-class teacher assignments.</p>
+            </div>
+          ) : classTeacherLoading ? (
             <div className="text-center py-12">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
             </div>
@@ -1044,7 +1058,7 @@ export default function SubjectsPage() {
                       <div className="px-5 py-4 bg-gradient-to-r from-emerald-50 to-teal-50 border-b border-gray-100">
                         <div className="flex items-start justify-between gap-3">
                           <div>
-                            <h3 className="text-base font-semibold text-gray-900">{group.name}{group.section ? ` - ${group.section}` : ''}</h3>
+                            <h3 className="text-base font-semibold text-gray-900">{group.display}</h3>
                             <p className="text-xs text-gray-600 mt-1">Class Teacher Assignments</p>
                           </div>
                           <span className="text-xs bg-white text-emerald-700 border border-emerald-100 px-2.5 py-1 rounded-full font-medium">
@@ -1105,7 +1119,7 @@ export default function SubjectsPage() {
                       onChange={e => setClassTeacherForm(p => ({ ...p, session_class: e.target.value }))}
                       className="input w-full"
                       required
-                      classes={classTeacherClassOptions}
+                      classes={sessionClassOptions}
                     />
                     <p className="text-xs text-gray-500 mt-1">
                       Select the specific class section. Different teachers can be assigned to different sections of the same class.
