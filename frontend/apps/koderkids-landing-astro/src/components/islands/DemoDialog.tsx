@@ -3,6 +3,32 @@ import { siteConfig } from '../../content/landing';
 
 const EVENT_NAME = 'open-demo-dialog';
 
+const buildSubmitErrorMessage = (error: unknown, fallback: string): string => {
+  if (error instanceof TypeError) {
+    return 'Unable to reach the server. Please check local backend/CORS settings and try again.';
+  }
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
+  return fallback;
+};
+
+const extractErrorDetail = async (response: Response): Promise<string | null> => {
+  try {
+    const payload = await response.json() as { detail?: unknown; message?: unknown };
+    if (typeof payload.detail === 'string' && payload.detail.trim()) return payload.detail;
+    if (typeof payload.message === 'string' && payload.message.trim()) return payload.message;
+  } catch {
+    try {
+      const text = await response.text();
+      if (text.trim()) return text.trim();
+    } catch {
+      return null;
+    }
+  }
+  return null;
+};
+
 export default function DemoDialog() {
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<'idle' | 'submitting' | 'submitted' | 'error'>('idle');
@@ -65,14 +91,18 @@ export default function DemoDialog() {
       });
 
       if (!response.ok) {
-        throw new Error('Demo form submission failed');
+        const detail = await extractErrorDetail(response);
+        throw new Error(detail || `Demo request failed with status ${response.status}.`);
       }
 
       e.currentTarget.reset();
       setStatus('submitted');
-    } catch {
+    } catch (error) {
       setStatus('error');
-      setMessage('Could not send your request right now. Please try again shortly or email admin@koderkids.pk.');
+      setMessage(buildSubmitErrorMessage(
+        error,
+        'Could not send your request right now. Please try again shortly or email admin@koderkids.pk.',
+      ));
     }
   };
 

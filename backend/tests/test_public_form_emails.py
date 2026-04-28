@@ -92,12 +92,13 @@ def test_public_career_application_sends_branded_email(client):
 def test_career_cv_upload_path_uses_now_when_created_at_missing():
     instance = type('Obj', (), {'created_at': None})()
     path = career_cv_upload_path(instance, 'resume.pdf')
-    assert path.startswith(f"careers/cv/{timezone.now():%Y/%m}/")
-    assert path.endswith('/resume.pdf')
+    assert path.startswith(f"files/careers/cv/{timezone.now():%Y/%m}/")
+    assert path.endswith('_resume.pdf')
 
 
 def test_career_cv_upload_path_uses_instance_created_at_when_available():
     dt = timezone.datetime(2026, 4, 1, tzinfo=timezone.get_current_timezone())
     instance = type('Obj', (), {'created_at': dt})()
     path = career_cv_upload_path(instance, 'resume.pdf')
-    assert path == 'careers/cv/2026/04/resume.pdf'
+    assert path.startswith('files/careers/cv/2026/04/')
+    assert path.endswith('_resume.pdf')

@@ -1,10 +1,16 @@
 from django.db import models
 from django.utils import timezone
+from uuid import uuid4
+
+from .storage import CareerCVSupabaseStorage
+
+
+career_cv_storage = CareerCVSupabaseStorage()
 
 
 def career_cv_upload_path(instance, filename):
     created_at = getattr(instance, 'created_at', None) or timezone.now()
-    return f"careers/cv/{created_at:%Y/%m}/{filename}"
+    return f"files/careers/cv/{created_at:%Y/%m}/{uuid4().hex}_{filename}"
 
 
 class BrochureSection(models.Model):
@@ -36,7 +42,7 @@ class CareerApplication(models.Model):
     phone = models.CharField(max_length=30)
     role_applied = models.CharField(max_length=120)
     cover_letter = models.TextField()
-    cv_file = models.FileField(upload_to=career_cv_upload_path)
+    cv_file = models.FileField(upload_to=career_cv_upload_path, storage=career_cv_storage)
     source = models.CharField(max_length=50, default='landing-page')
     ip_address = models.GenericIPAddressField(null=True, blank=True)
     user_agent = models.CharField(max_length=255, blank=True)

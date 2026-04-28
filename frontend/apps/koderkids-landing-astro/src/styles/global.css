@@ -459,10 +459,3 @@ img {
   background: var(--surface);
   padding: 1rem;
 }
-
-footer {
-  margin-top: 3rem;
-  border-top: 1px solid var(--border);
-  padding: 1rem 0 2rem;
-  color: var(--muted);
-}

@@ -224,25 +224,25 @@ export const landingContent = {
     heading: 'What Principals Say',
     testimonials: [
       {
-        name: 'Dr. Sarah Mitchell',
-        role: 'Principal, Oakridge Academy',
+        name: 'Dr. Ayesha Khan',
+        role: 'Principal, Beacon Horizon School, Lahore',
         content:
-          'The AI attendance upload alone saves our admin team 3 hours a day. The fee module replaced an entire spreadsheet workflow. I\'d never go back.',
+          'The AI attendance upload alone saves our admin team 3 hours daily. The fee module replaced our spreadsheet process completely and made fee follow-ups much faster.',
+        avatar: 'AK',
+      },
+      {
+        name: 'Usman Tariq',
+        role: 'Director, The City Campus Network, Karachi',
+        content:
+          'We run four branches from one account. The multi-school switcher and per-campus reporting finally give us clean oversight without extra manual work.',
+        avatar: 'UT',
+      },
+      {
+        name: 'Sara Mahmood',
+        role: 'Principal, Allied Public School, Islamabad',
+        content:
+          'Parent engagement increased sharply after launching the parent portal. Families now check fees, attendance, and marks themselves, and front-desk call volume dropped right away.',
         avatar: 'SM',
-      },
-      {
-        name: 'Michael Chen',
-        role: 'Director, Global Learning Institute',
-        content:
-          'We run 4 branches from one account. The multi-school switcher and per-branch reporting make oversight genuinely easy for the first time.',
-        avatar: 'MC',
-      },
-      {
-        name: 'Priya Sharma',
-        role: 'Principal, Delhi Public School',
-        content:
-          'Parent engagement went up 60% after we gave parents the portal. They check fees, attendance, and marks themselves — reception calls dropped immediately.',
-        avatar: 'PS',
       },
     ],
     metrics: [

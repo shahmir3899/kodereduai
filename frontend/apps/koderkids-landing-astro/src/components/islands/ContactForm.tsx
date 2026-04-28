@@ -11,6 +11,32 @@ type FormState = {
 
 const INITIAL: FormState = { name: '', school: '', email: '', phone: '', message: '' };
 
+const buildSubmitErrorMessage = (error: unknown, fallback: string): string => {
+  if (error instanceof TypeError) {
+    return 'Unable to reach the server. Please check local backend/CORS settings and try again.';
+  }
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
+  return fallback;
+};
+
+const extractErrorDetail = async (response: Response): Promise<string | null> => {
+  try {
+    const payload = await response.json() as { detail?: unknown; message?: unknown };
+    if (typeof payload.detail === 'string' && payload.detail.trim()) return payload.detail;
+    if (typeof payload.message === 'string' && payload.message.trim()) return payload.message;
+  } catch {
+    try {
+      const text = await response.text();
+      if (text.trim()) return text.trim();
+    } catch {
+      return null;
+    }
+  }
+  return null;
+};
+
 export default function ContactForm() {
   const [form, setForm] = useState<FormState>(INITIAL);
   const [status, setStatus] = useState<'idle' | 'submitting' | 'submitted' | 'error'>('idle');
@@ -40,14 +66,18 @@ export default function ContactForm() {
       });
 
       if (!response.ok) {
-        throw new Error('Contact form submission failed');
+        const detail = await extractErrorDetail(response);
+        throw new Error(detail || `Contact enquiry failed with status ${response.status}.`);
       }
 
       setStatus('submitted');
       setForm(INITIAL);
-    } catch {
+    } catch (error) {
       setStatus('error');
-      setMessage('Could not send your message right now. Please try again shortly or email admin@koderkids.pk.');
+      setMessage(buildSubmitErrorMessage(
+        error,
+        'Could not send your message right now. Please try again shortly or email admin@koderkids.pk.',
+      ));
     }
   };
 

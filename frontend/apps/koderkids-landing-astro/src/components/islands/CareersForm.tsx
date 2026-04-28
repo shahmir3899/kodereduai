@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { siteConfig } from '../../content/landing';
 
 type FormState = {
@@ -23,6 +23,7 @@ export default function CareersForm() {
   const [form, setForm] = useState<FormState>(INITIAL);
   const [status, setStatus] = useState<'idle' | 'submitting' | 'submitted' | 'error'>('idle');
   const [message, setMessage] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const setField = (key: keyof FormState, value: string | File | null) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -73,13 +74,16 @@ export default function CareersForm() {
       if (siteConfig.careersEndpoint) {
         await submitViaEndpoint();
         setStatus('submitted');
-        setMessage('Application submitted successfully. Our team will review your profile soon.');
+        setMessage('Application submitted successfully. We received your CV and will contact you within 1 business day.');
       } else {
         fallbackToEmail();
         setStatus('submitted');
         setMessage('Your email client has opened. Please attach your CV and send your application.');
       }
       setForm(INITIAL);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     } catch {
       setStatus('error');
       setMessage('Could not submit right now. Please try again or email admin@koderkids.pk.');
@@ -146,6 +150,7 @@ export default function CareersForm() {
       <div className="flex flex-col gap-1.5">
         <label htmlFor="career-cv" className="text-xs font-medium text-gray-500">Upload CV</label>
         <input
+          ref={fileInputRef}
           id="career-cv"
           type="file"
           required
