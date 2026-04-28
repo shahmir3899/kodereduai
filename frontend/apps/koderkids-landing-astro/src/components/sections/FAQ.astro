@@ -1,0 +1,56 @@
+---
+import { faqContent } from '../../content/landing';
+---
+
+<section id="faq" class="py-24 bg-brand-light">
+  <div class="max-w-3xl mx-auto px-6">
+
+    <!-- Header -->
+    <div class="text-center mb-14">
+      <span class="section-label mb-3 block">FAQ</span>
+      <h2 class="font-display text-3xl sm:text-4xl font-bold text-brand-dark">
+        Frequently Asked Questions
+      </h2>
+      <p class="mt-4 text-brand-gray leading-relaxed max-w-xl mx-auto">
+        Common questions from school leadership teams before getting started.
+      </p>
+    </div>
+
+    <!-- Accordion list -->
+    <div class="space-y-3" itemscope itemtype="https://schema.org/FAQPage">
+      {faqContent.map((item) => (
+        <details
+          class="group border border-gray-200 rounded-2xl overflow-hidden bg-white"
+          name="faq-accordion"
+          itemscope
+          itemprop="mainEntity"
+          itemtype="https://schema.org/Question"
+        >
+          <summary class="flex items-center justify-between gap-4 px-6 py-5 cursor-pointer list-none select-none hover:bg-gray-50 transition-colors" itemprop="name">
+            <span class="font-semibold text-brand-dark text-sm sm:text-base">{item.question}</span>
+            <!-- Plus rotates to X when open -->
+            <svg
+              class="w-5 h-5 text-brand-gray flex-shrink-0 transition-transform duration-200 group-open:rotate-45"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              stroke-width="2.5"
+              aria-hidden="true"
+            >
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+            </svg>
+          </summary>
+          <div
+            class="px-6 pb-6 text-brand-gray leading-relaxed text-sm border-t border-gray-100 pt-4"
+            itemscope
+            itemprop="acceptedAnswer"
+            itemtype="https://schema.org/Answer"
+          >
+            <span itemprop="text">{item.answer}</span>
+          </div>
+        </details>
+      ))}
+    </div>
+
+  </div>
+</section>

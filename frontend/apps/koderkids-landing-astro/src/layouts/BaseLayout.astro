@@ -8,11 +8,12 @@ interface Props {
   description: string;
   canonical?: string;
   robots?: string;
+  ogImage?: string;
   ogType?: string;
   jsonLd?: object | object[];
 }
 
-const { title, description, canonical, robots, ogType, jsonLd } = Astro.props as Props;
+const { title, description, canonical, robots, ogImage, ogType, jsonLd } = Astro.props as Props;
 ---
 
 <!doctype html>
@@ -50,6 +51,7 @@ const { title, description, canonical, robots, ogType, jsonLd } = Astro.props as
       description={description}
       canonical={canonical}
       robots={robots}
+      ogImage={ogImage}
       ogType={ogType}
       jsonLd={jsonLd}
     />

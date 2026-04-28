@@ -130,6 +130,10 @@ services:
         sync: false
       - key: LANDING_FORMS_EMAIL_SENDER
         sync: false
+      - key: ENABLE_CELERY
+        value: "false"
+      - key: ENABLE_CELERY_BEAT
+        value: "false"
       - key: PYTHON_VERSION
         value: "3.12.0"
       - key: WEB_CONCURRENCY

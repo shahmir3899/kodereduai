@@ -2,7 +2,7 @@
 import BaseLayout from '../layouts/BaseLayout.astro';
 import CareersForm from '../components/islands/CareersForm.tsx';
 
-const siteUrl = Astro.site?.toString().replace(/\/$/, '') ?? 'https://www.koderkids.pk';
+const siteUrl = Astro.site?.toString().replace(/\/$/, '') ?? 'https://www.kodereduai.pk';
 
 const schema = {
   '@context': 'https://schema.org',
@@ -18,6 +18,7 @@ const schema = {
   description="Apply for open roles at Education AI. Submit your profile and CV through a simple form."
   canonical="/careers"
   robots="index,follow"
+  ogImage="/hrstaff.jpg"
   jsonLd={schema}
 >
   <main id="main-content" class="py-20 bg-brand-light min-h-screen">

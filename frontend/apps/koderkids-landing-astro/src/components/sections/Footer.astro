@@ -101,13 +101,13 @@ const year = new Date().getFullYear();
       <nav class="flex gap-5" aria-label="Legal links">
         {footer.legalLinks.map((link) => (
           link.modalKey ? (
-            <button
-              type="button"
-              onclick={`document.dispatchEvent(new CustomEvent('open-legal-dialog', { detail: '${link.modalKey}' }))`}
-              class="text-xs text-brand-gray hover:text-white transition-colors bg-transparent border-0 p-0 cursor-pointer"
+            <a
+              href={link.href}
+              onclick={`event.preventDefault(); document.dispatchEvent(new CustomEvent('open-legal-dialog', { detail: '${link.modalKey}' }))`}
+              class="text-xs text-brand-gray hover:text-white transition-colors"
             >
               {link.label}
-            </button>
+            </a>
           ) : (
             <a href={link.href} class="text-xs text-brand-gray hover:text-white transition-colors">
               {link.label}

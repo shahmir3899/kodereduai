@@ -1,7 +1,7 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 
-const siteUrl = Astro.site?.toString().replace(/\/$/, '') ?? 'https://www.koderkids.pk';
+const siteUrl = Astro.site?.toString().replace(/\/$/, '') ?? 'https://www.kodereduai.pk';
 
 const webPageSchema = {
   '@context': 'https://schema.org',
@@ -18,6 +18,7 @@ const webPageSchema = {
   description="Need help? Contact Education AI for demo scheduling, onboarding assistance, and ongoing platform support for your school."
   canonical="/support"
   robots="index,follow"
+  ogImage="/messages.jpg"
   jsonLd={webPageSchema}
 >
   <main id="main-content" class="py-20 bg-brand-light min-h-screen">

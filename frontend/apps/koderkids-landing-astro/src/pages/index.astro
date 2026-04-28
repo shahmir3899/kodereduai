@@ -9,12 +9,13 @@ import SocialProof           from '../components/sections/SocialProof.astro';
 import Pricing               from '../components/sections/Pricing.astro';
 import TrustStrip            from '../components/sections/TrustStrip.astro';
 import FinalCTA              from '../components/sections/FinalCTA.astro';
+import FAQ                   from '../components/sections/FAQ.astro';
 import Footer                from '../components/sections/Footer.astro';
 
 import WalkthroughCarousel   from '../components/islands/WalkthroughCarousel.tsx';
 import DemoDialog            from '../components/islands/DemoDialog.tsx';
 
-const siteUrl = Astro.site?.toString().replace(/\/$/, '') ?? 'https://www.koderkids.pk';
+const siteUrl = Astro.site?.toString().replace(/\/$/, '') ?? 'https://www.kodereduai.pk';
 
 const organizationSchema = {
   '@context': 'https://schema.org',
@@ -27,13 +28,18 @@ const organizationSchema = {
     siteConfig.linkedInUrl,
     siteConfig.youtubeUrl,
   ],
+  address: {
+    '@type': 'PostalAddress',
+    addressLocality: 'Islamabad',
+    addressCountry: 'PK',
+  },
   contactPoint: {
     '@type': 'ContactPoint',
     email: siteConfig.salesEmail,
     telephone: siteConfig.contactPhone,
     contactType: 'sales',
-    availableLanguage: 'English',
-    areaServed: siteConfig.contactCity,
+    availableLanguage: ['English', 'Urdu'],
+    areaServed: 'PK',
   },
 };
 
@@ -86,6 +92,7 @@ const faqSchema = {
   title={landingContent.title}
   description={landingContent.description}
   canonical="/"
+  ogImage="/dashboard_overview.jpg"
   jsonLd={[organizationSchema, softwareSchema, faqSchema]}
 >
   <!-- Preload LCP image (hero dashboard screenshot) -->
@@ -109,6 +116,7 @@ const faqSchema = {
     <SocialProof />
     <Pricing />
     <TrustStrip />
+    <FAQ />
     <FinalCTA />
   </main>
 

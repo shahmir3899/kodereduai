@@ -2,6 +2,14 @@
 # Start script for Render - runs Celery worker alongside Gunicorn
 # in a single free-tier web service.
 
+set -euo pipefail
+
+ENABLE_CELERY="${ENABLE_CELERY:-false}"
+ENABLE_CELERY_BEAT="${ENABLE_CELERY_BEAT:-false}"
+
+CELERY_LOOP_PID=""
+CELERY_BEAT_LOOP_PID=""
+
 # Auto-restart Celery worker if it crashes
 restart_celery() {
     while true; do
@@ -24,18 +32,30 @@ restart_celery_beat() {
     done
 }
 
-# Run the restart loop in background
-restart_celery &
-CELERY_LOOP_PID=$!
+if [ "$ENABLE_CELERY" = "true" ]; then
+    echo "==> ENABLE_CELERY=true, starting Celery worker loop..."
+    restart_celery &
+    CELERY_LOOP_PID=$!
+else
+    echo "==> ENABLE_CELERY=false, skipping Celery worker in web service"
+fi
 
-# Run Celery Beat in background
-restart_celery_beat &
-CELERY_BEAT_LOOP_PID=$!
+if [ "$ENABLE_CELERY_BEAT" = "true" ]; then
+    echo "==> ENABLE_CELERY_BEAT=true, starting Celery Beat loop..."
+    restart_celery_beat &
+    CELERY_BEAT_LOOP_PID=$!
+else
+    echo "==> ENABLE_CELERY_BEAT=false, skipping Celery Beat in web service"
+fi
 
 # Start Gunicorn in foreground
 echo "==> Starting Gunicorn..."
 gunicorn config.wsgi:application
 
 # If Gunicorn exits, also stop the Celery restart loop
-kill $CELERY_LOOP_PID 2>/dev/null
-kill $CELERY_BEAT_LOOP_PID 2>/dev/null
+if [ -n "$CELERY_LOOP_PID" ]; then
+    kill "$CELERY_LOOP_PID" 2>/dev/null || true
+fi
+if [ -n "$CELERY_BEAT_LOOP_PID" ]; then
+    kill "$CELERY_BEAT_LOOP_PID" 2>/dev/null || true
+fi

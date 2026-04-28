@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://www.koderkids.pk/sitemap-index.xml
+Sitemap: https://www.kodereduai.pk/sitemap-index.xml
