@@ -20,7 +20,7 @@ class SchoolSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'subdomain', 'logo', 'letterhead_url',
             'address', 'contact_email', 'contact_phone',
-            'whatsapp_sender_id', 'enabled_modules',
+            'whatsapp_sender_id', 'enabled_modules', 'module_entitlements',
             'mark_mappings', 'register_config', 'exam_config',
             'organization', 'organization_name',
             'is_active', 'user_count', 'student_count',
@@ -42,6 +42,19 @@ class SchoolSerializer(serializers.ModelSerializer):
                         raise serializers.ValidationError(
                             f"Module '{key}' is not allowed by the organization '{org.name}'."
                         )
+        return value
+
+    def validate_module_entitlements(self, value):
+        """Strip unknown module/capability keys."""
+        from core.module_registry import CAPABILITY_REGISTRY
+        if value is not None:
+            cleaned = {}
+            for mod_key, caps in value.items():
+                if mod_key not in CAPABILITY_REGISTRY:
+                    continue
+                valid_caps = set(CAPABILITY_REGISTRY[mod_key])
+                cleaned[mod_key] = [c for c in caps if c in valid_caps]
+            return cleaned
         return value
 
 
@@ -108,7 +121,7 @@ class SchoolCreateSerializer(serializers.ModelSerializer):
         fields = [
             'name', 'subdomain', 'logo', 'letterhead_url',
             'address', 'contact_email', 'contact_phone',
-            'whatsapp_sender_id', 'enabled_modules', 'organization'
+            'whatsapp_sender_id', 'enabled_modules', 'module_entitlements', 'organization'
         ]
 
     def validate_subdomain(self, value):

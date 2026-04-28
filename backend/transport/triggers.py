@@ -4,8 +4,52 @@ Sends push/in-app notifications for transport events using the NotificationEngin
 """
 
 import logging
+from django.utils import timezone
+from notifications.recipients import get_admin_users
 
 logger = logging.getLogger(__name__)
+
+
+def _transport_notification_already_sent(*, school, recipient_user, student, title, body, target_date):
+    """Return True when same transport push already exists for recipient/student/day."""
+    from notifications.models import NotificationLog
+
+    return NotificationLog.objects.filter(
+        school=school,
+        event_type='TRANSPORT_UPDATE',
+        channel='PUSH',
+        recipient_user=recipient_user,
+        student=student,
+        title=title,
+        body=body,
+        created_at__date=target_date,
+        status__in=['PENDING', 'SCHEDULED', 'SENT', 'DELIVERED', 'READ'],
+    ).exists()
+
+
+def _get_parent_users_for_students(students, school):
+    """Resolve ParentChild links and return {student_id: [parent_user, ...]} mapping."""
+    from parents.models import ParentChild
+
+    links = (
+        ParentChild.objects
+        .filter(school=school, student__in=students)
+        .select_related('parent__user', 'student')
+    )
+    results = {}
+    for link in links:
+        parent_user = getattr(getattr(link, 'parent', None), 'user', None)
+        if not parent_user:
+            continue
+        student_id = link.student_id
+        if student_id not in results:
+            results[student_id] = {}
+        results[student_id][parent_user.id] = parent_user
+
+    return {
+        student_id: list(user_map.values())
+        for student_id, user_map in results.items()
+    }
 
 
 def _get_parent_users_for_route(route):
@@ -17,17 +61,14 @@ def _get_parent_users_for_route(route):
 
     assignments = TransportAssignment.objects.filter(
         route=route, is_active=True,
-    ).select_related('student', 'student__user')
+    ).select_related('student')
+    students = [assignment.student for assignment in assignments if assignment.student_id]
+    parent_users_by_student_id = _get_parent_users_for_students(students, route.school)
 
     results = []
     for assignment in assignments:
         student = assignment.student
-        # Try to find parent user via parent relationship
-        parent_user = None
-        if hasattr(student, 'parent') and student.parent:
-            parent_user = getattr(student.parent, 'user', None)
-
-        if parent_user:
+        for parent_user in parent_users_by_student_id.get(student.id, []):
             results.append((parent_user, student))
 
     return results
@@ -42,16 +83,14 @@ def _get_parent_users_for_stop(route, stop):
 
     assignments = TransportAssignment.objects.filter(
         route=route, stop=stop, is_active=True,
-    ).select_related('student', 'student__user')
+    ).select_related('student')
+    students = [assignment.student for assignment in assignments if assignment.student_id]
+    parent_users_by_student_id = _get_parent_users_for_students(students, route.school)
 
     results = []
     for assignment in assignments:
         student = assignment.student
-        parent_user = None
-        if hasattr(student, 'parent') and student.parent:
-            parent_user = getattr(student.parent, 'user', None)
-
-        if parent_user:
+        for parent_user in parent_users_by_student_id.get(student.id, []):
             results.append((parent_user, student))
 
     return results
@@ -86,7 +125,10 @@ def trigger_bus_departed(route_journey):
     parent_students = _get_parent_users_for_route(route)
 
     sent_count = 0
+    target_date = timezone.localdate()
     for parent_user, student in parent_students:
+        title = f'Bus Departed - {route.name}'
+        body = f'Bus on {route.name} has departed ({route_journey.get_journey_type_display()}).'
         context = {
             'route_name': route.name,
             'student_name': student.name,
@@ -96,6 +138,20 @@ def trigger_bus_departed(route_journey):
         }
 
         try:
+            if _transport_notification_already_sent(
+                school=school,
+                recipient_user=parent_user,
+                student=student,
+                title=title,
+                body=body,
+                target_date=target_date,
+            ):
+                logger.info(
+                    "Skipped transport departure notification",
+                    extra={'reason_code': 'skipped_due_to_dedupe', 'recipient_user_id': parent_user.id},
+                )
+                continue
+
             engine.send(
                 event_type='TRANSPORT_UPDATE',
                 channel='PUSH',
@@ -104,8 +160,8 @@ def trigger_bus_departed(route_journey):
                 recipient_type='PARENT',
                 recipient_user=parent_user,
                 student=student,
-                title=f'Bus Departed - {route.name}',
-                body=f'Bus on {route.name} has departed ({route_journey.get_journey_type_display()}).',
+                title=title,
+                body=body,
             )
             sent_count += 1
         except Exception:
@@ -142,7 +198,10 @@ def trigger_bus_arriving_stop(route_journey, stop):
     parent_students = _get_parent_users_for_stop(route, stop)
 
     sent_count = 0
+    target_date = timezone.localdate()
     for parent_user, student in parent_students:
+        title = f'Bus Arriving - {stop.name}'
+        body = f'Bus on {route.name} is arriving at {stop.name}.'
         context = {
             'route_name': route.name,
             'stop_name': stop.name,
@@ -152,6 +211,20 @@ def trigger_bus_arriving_stop(route_journey, stop):
         }
 
         try:
+            if _transport_notification_already_sent(
+                school=school,
+                recipient_user=parent_user,
+                student=student,
+                title=title,
+                body=body,
+                target_date=target_date,
+            ):
+                logger.info(
+                    "Skipped transport geofence notification",
+                    extra={'reason_code': 'skipped_due_to_dedupe', 'recipient_user_id': parent_user.id},
+                )
+                continue
+
             engine.send(
                 event_type='TRANSPORT_UPDATE',
                 channel='PUSH',
@@ -160,8 +233,8 @@ def trigger_bus_arriving_stop(route_journey, stop):
                 recipient_type='PARENT',
                 recipient_user=parent_user,
                 student=student,
-                title=f'Bus Arriving - {stop.name}',
-                body=f'Bus on {route.name} is arriving at {stop.name}.',
+                title=title,
+                body=body,
             )
             sent_count += 1
         except Exception:
@@ -190,7 +263,10 @@ def trigger_journey_completed(route_journey):
     parent_students = _get_parent_users_for_route(route)
 
     sent_count = 0
+    target_date = timezone.localdate()
     for parent_user, student in parent_students:
+        title = f'Journey Completed - {route.name}'
+        body = f"Bus on {route.name} has completed today's {route_journey.get_journey_type_display().lower()} run."
         context = {
             'route_name': route.name,
             'student_name': student.name,
@@ -200,6 +276,20 @@ def trigger_journey_completed(route_journey):
         }
 
         try:
+            if _transport_notification_already_sent(
+                school=school,
+                recipient_user=parent_user,
+                student=student,
+                title=title,
+                body=body,
+                target_date=target_date,
+            ):
+                logger.info(
+                    "Skipped transport completion notification",
+                    extra={'reason_code': 'skipped_due_to_dedupe', 'recipient_user_id': parent_user.id},
+                )
+                continue
+
             engine.send(
                 event_type='TRANSPORT_UPDATE',
                 channel='PUSH',
@@ -208,8 +298,8 @@ def trigger_journey_completed(route_journey):
                 recipient_type='PARENT',
                 recipient_user=parent_user,
                 student=student,
-                title=f'Journey Completed - {route.name}',
-                body=f'Bus on {route.name} has completed today\'s {route_journey.get_journey_type_display().lower()} run.',
+                title=title,
+                body=body,
             )
             sent_count += 1
         except Exception:
@@ -221,12 +311,7 @@ def trigger_journey_completed(route_journey):
 
 def _notify_admins_in_app(engine, school, title, body):
     """Send an in-app notification to school admins."""
-    from users.models import User
-
-    admins = User.objects.filter(
-        school=school,
-        role__in=['SCHOOL_ADMIN', 'PRINCIPAL'],
-    )[:5]
+    admins = get_admin_users(school)[:5]
 
     for admin_user in admins:
         try:

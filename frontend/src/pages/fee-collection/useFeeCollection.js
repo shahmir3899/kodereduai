@@ -128,7 +128,7 @@ export function useFeeCollection({ month, year, classFilter, statusFilter, feeTy
   })
 
   const createFeePaymentMutation = useMutation({
-    mutationFn: (data) => financeApi.createPayment(data),
+    mutationFn: (data) => financeApi.generateSingleFee(data),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['feePayments'] }); queryClient.invalidateQueries({ queryKey: ['feeSummary'] }) },
   })
 

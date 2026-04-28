@@ -7,6 +7,12 @@ import logging
 from datetime import datetime, timedelta
 from typing import Optional, Tuple
 from django.utils import timezone
+from .observability import (
+    REASON_FAILED_DISPATCH,
+    REASON_SKIPPED_DUE_TO_CONFIG,
+    mark_log_failed,
+    merge_metadata,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -97,18 +103,18 @@ class NotificationEngine:
 
     def _get_channel_handler(self, channel: str):
         """Get the channel handler for dispatching."""
-        from .channels.whatsapp import WhatsAppChannel
-        from .channels.in_app import InAppChannel
-        from .channels.expo import ExpoChannel
+        if channel == 'IN_APP':
+            from .channels.in_app import InAppChannel
+            return InAppChannel(self.school)
 
-        handlers = {
-            'WHATSAPP': WhatsAppChannel,
-            'IN_APP': InAppChannel,
-            'PUSH': ExpoChannel,
-        }
-        handler_class = handlers.get(channel)
-        if handler_class:
-            return handler_class(self.school)
+        if channel == 'WHATSAPP':
+            from .channels.whatsapp import WhatsAppChannel
+            return WhatsAppChannel(self.school)
+
+        if channel == 'PUSH':
+            from .channels.expo import ExpoChannel
+            return ExpoChannel(self.school)
+
         return None
 
     def _create_log(self, **kwargs):
@@ -207,13 +213,19 @@ class NotificationEngine:
 
         # Check channel is enabled for school
         if not self._check_config(channel):
-            logger.info(f"Channel {channel} disabled for school {self.school.name}")
+            logger.info(
+                f"Channel {channel} disabled for school {self.school.name}",
+                extra={'reason_code': REASON_SKIPPED_DUE_TO_CONFIG, 'channel': channel},
+            )
             return None
 
         # Check recipient preference
         if not self._check_preference(event_type, channel,
                                        user=recipient_user, student=student):
-            logger.info(f"Notification opted out: {event_type}/{channel} for {recipient_identifier}")
+            logger.info(
+                f"Notification opted out: {event_type}/{channel} for {recipient_identifier}",
+                extra={'reason_code': REASON_SKIPPED_DUE_TO_CONFIG, 'channel': channel},
+            )
             return None
 
         # Render message from template if body not provided
@@ -224,7 +236,10 @@ class NotificationEngine:
                 title = title or rendered['subject']
                 body = rendered['body']
             else:
-                logger.warning(f"No template found for {event_type}/{channel}")
+                logger.warning(
+                    f"No template found for {event_type}/{channel}",
+                    extra={'reason_code': REASON_SKIPPED_DUE_TO_CONFIG, 'channel': channel},
+                )
                 return None
         else:
             template = None
@@ -248,16 +263,27 @@ class NotificationEngine:
         if should_defer and scheduled_for:
             log.status = 'SCHEDULED'
             log.scheduled_for = scheduled_for
-            log.save(update_fields=['status', 'scheduled_for'])
+            log.metadata = merge_metadata(
+                log.metadata,
+                {
+                    'reason_code': 'scheduled_for_optimization',
+                    'scheduled_for': scheduled_for.isoformat(),
+                },
+            )
+            log.save(update_fields=['status', 'scheduled_for', 'metadata'])
             logger.info(f"Notification {log.id} scheduled for {scheduled_for}")
             return log
 
         # Dispatch to channel handler
         handler = self._get_channel_handler(channel)
         if not handler:
-            log.status = 'FAILED'
-            log.metadata = {'error': f'No handler for channel: {channel}'}
-            log.save(update_fields=['status', 'metadata'])
+            mark_log_failed(
+                log,
+                reason_code=REASON_FAILED_DISPATCH,
+                error=f'No handler for channel: {channel}',
+                retriable=False,
+                extra_metadata={'channel': channel},
+            )
             return log
 
         try:
@@ -271,14 +297,25 @@ class NotificationEngine:
                 log.status = 'SENT'
                 log.sent_at = timezone.now()
             else:
-                log.status = 'FAILED'
-                log.metadata = {'error': 'Channel handler returned False'}
+                mark_log_failed(
+                    log,
+                    reason_code=REASON_FAILED_DISPATCH,
+                    error='Channel handler returned False',
+                    retriable=True,
+                    extra_metadata={'channel': channel},
+                )
         except Exception as e:
-            log.status = 'FAILED'
-            log.metadata = {'error': str(e)}
+            mark_log_failed(
+                log,
+                reason_code=REASON_FAILED_DISPATCH,
+                error=e,
+                retriable=True,
+                extra_metadata={'channel': channel},
+            )
             logger.error(f"Notification dispatch failed: {e}")
 
-        log.save(update_fields=['status', 'sent_at', 'metadata'])
+        if log.status == 'SENT':
+            log.save(update_fields=['status', 'sent_at'])
         return log
 
     def send_bulk(

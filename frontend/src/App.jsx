@@ -241,6 +241,22 @@ function ModuleRoute({ module, children }) {
   return children
 }
 
+// Guard: block access to premium capabilities not included in the school's bundle
+function CapabilityRoute({ module, capability, children }) {
+  const { isCapabilityEnabled, isSuperAdmin } = useAuth()
+  if (isSuperAdmin) return children
+  if (!isCapabilityEnabled(module, capability)) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center">
+        <div className="text-5xl mb-4">⭐</div>
+        <h2 className="text-xl font-semibold text-gray-900 mb-2">Premium Feature</h2>
+        <p className="text-gray-500 max-w-md">This feature is not included in your current plan. Contact your administrator to upgrade your bundle.</p>
+      </div>
+    )
+  }
+  return children
+}
+
 function App() {
   const { loading } = useAuth()
 
@@ -287,9 +303,9 @@ function App() {
             <Route path="attendance/anomalies" element={<SchoolRoute><ModuleRoute module="attendance"><AnomaliesPage /></ModuleRoute></SchoolRoute>} />
 
             {/* Face Attendance (camera-based) */}
-            <Route path="face-attendance" element={<SchoolRoute><ModuleRoute module="attendance"><FaceAttendancePage /></ModuleRoute></SchoolRoute>} />
-            <Route path="face-attendance/review/:sessionId" element={<SchoolRoute><ModuleRoute module="attendance"><FaceReviewPage /></ModuleRoute></SchoolRoute>} />
-            <Route path="face-attendance/enrollment" element={<SchoolRoute><ModuleRoute module="attendance"><FaceEnrollmentPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="face-attendance" element={<SchoolRoute><CapabilityRoute module="attendance" capability="face_recognition"><FaceAttendancePage /></CapabilityRoute></SchoolRoute>} />
+            <Route path="face-attendance/review/:sessionId" element={<SchoolRoute><CapabilityRoute module="attendance" capability="face_recognition"><FaceReviewPage /></CapabilityRoute></SchoolRoute>} />
+            <Route path="face-attendance/enrollment" element={<SchoolRoute><CapabilityRoute module="attendance" capability="face_recognition"><FaceEnrollmentPage /></CapabilityRoute></SchoolRoute>} />
 
             {/* Redirects from old routes */}
             <Route path="attendance/upload" element={<Navigate to="/attendance" replace />} />
@@ -330,7 +346,7 @@ function App() {
             <Route path="academics/results" element={<SchoolRoute><ModuleRoute module="examinations"><ResultsPage /></ModuleRoute></SchoolRoute>} />
             <Route path="academics/report-cards" element={<SchoolRoute><ModuleRoute module="examinations"><ReportCardPage /></ModuleRoute></SchoolRoute>} />
             <Route path="academics/grade-scale" element={<SchoolRoute><ModuleRoute module="examinations"><GradeScalePage /></ModuleRoute></SchoolRoute>} />
-            <Route path="academics/paper-builder" element={<SchoolRoute><ModuleRoute module="examinations"><QuestionPaperBuilderPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="academics/paper-builder" element={<SchoolRoute><CapabilityRoute module="examinations" capability="paper_builder"><QuestionPaperBuilderPage /></CapabilityRoute></SchoolRoute>} />
             <Route path="academics/curriculum-coverage" element={<SchoolRoute><ModuleRoute module="examinations"><CurriculumCoveragePage /></ModuleRoute></SchoolRoute>} />
             <Route path="academics/questions" element={<SchoolRoute><ModuleRoute module="examinations"><QuestionsPage /></ModuleRoute></SchoolRoute>} />
 

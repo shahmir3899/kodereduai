@@ -1,0 +1,62 @@
+---
+import { landingContent } from '../../content/landing';
+const { overview } = landingContent;
+
+/* Inline SVG paths keyed by pillar icon */
+const icons: Record<string, string> = {
+  zap: 'M13 2L3 14h9l-1 8 10-12h-9l1-8z',
+  brain: 'M12 2a6 6 0 0 1 6 6c0 2.4-1.4 4.5-3.5 5.5L14 22h-4l-.5-8.5A6 6 0 0 1 12 2zM9 9h6M9 12h4',
+  network: 'M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 0 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2v-4M9 21H5a2 2 0 0 0-2-2v-4m0 0h18',
+  trending: 'M23 6 13.5 15.5 8.5 10.5 1 18',
+};
+
+const colorMap: Record<string, { bg: string; icon: string }> = {
+  amber:   { bg: 'bg-amber-50',   icon: 'text-amber-500'  },
+  blue:    { bg: 'bg-blue-50',    icon: 'text-blue-500'   },
+  emerald: { bg: 'bg-emerald-50', icon: 'text-emerald-500'},
+  violet:  { bg: 'bg-violet-50',  icon: 'text-violet-500' },
+};
+---
+
+<section id="overview" class="py-24 bg-white">
+  <div class="max-w-6xl mx-auto px-6">
+
+    <!-- Header -->
+    <div class="text-center mb-16">
+      <span class="section-label mb-3 block">{overview.label}</span>
+      <h2 class="font-display text-3xl sm:text-4xl font-bold text-brand-dark mb-4">
+        {overview.heading}
+      </h2>
+      <p class="text-brand-gray text-lg max-w-2xl mx-auto">
+        {overview.subheading}
+      </p>
+    </div>
+
+    <!-- 4-pillar grid -->
+    <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      {overview.pillars.map((pillar) => {
+        const { bg, icon: iconColor } = colorMap[pillar.color] ?? colorMap.blue;
+        const path = icons[pillar.icon] ?? icons.zap;
+        return (
+          <div class="group rounded-2xl border border-gray-100 bg-white p-6 shadow-card hover:shadow-hover transition-shadow">
+            <div class={`w-11 h-11 rounded-xl ${bg} flex items-center justify-center mb-4`}>
+              <svg
+                class={`w-5 h-5 ${iconColor}`}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                stroke-width="2"
+                aria-hidden="true"
+              >
+                <path stroke-linecap="round" stroke-linejoin="round" d={path} />
+              </svg>
+            </div>
+            <h3 class="font-display font-semibold text-brand-dark mb-2">{pillar.title}</h3>
+            <p class="text-sm text-brand-gray leading-relaxed">{pillar.desc}</p>
+          </div>
+        );
+      })}
+    </div>
+
+  </div>
+</section>

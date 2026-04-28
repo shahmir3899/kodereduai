@@ -13,6 +13,25 @@ from rest_framework.permissions import AllowAny
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
+def landing_metrics(request):
+    """Public endpoint: real platform statistics for the landing page."""
+    from schools.models import School
+    from students.models import Student
+    from hr.models import StaffMember
+
+    schools_count = School.objects.count()
+    students_count = Student.objects.filter(is_active=True).count()
+    teachers_count = StaffMember.objects.count()
+
+    return Response({
+        'schools': schools_count,
+        'students': students_count,
+        'teachers': teachers_count,
+        'countries': 1,
+    })
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
 def api_root(request):
     """API root endpoint with available endpoints."""
     return Response({
@@ -119,6 +138,7 @@ urlpatterns = [
 
     # API Root
     path('api/', api_root, name='api-root'),
+    path('api/public/landing-metrics/', landing_metrics, name='landing-metrics'),
 
     # Authentication & Users
     path('api/', include('users.urls')),

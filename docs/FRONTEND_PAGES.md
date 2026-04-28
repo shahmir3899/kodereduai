@@ -3,6 +3,20 @@
 Framework: React 18.3 + Vite 6 + React Router 7 (NOT Next.js)
 All pages lazy-loaded via React.lazy() with Suspense fallback.
 
+## Standalone Frontend Apps
+
+### KoderKids Landing App
+
+- Location: `frontend/apps/koderkids-landing`
+- Type: standalone Vite app, separate from the authenticated ERP router in `frontend/src/App.jsx`
+- Purpose: public marketing/branding site for KoderKids with feature storytelling, dashboard screenshots, testimonials, and contact/demo CTAs
+- Entry files: `src/main.tsx`, `src/App.tsx`
+- Optional integration: `src/services/mainAppMetrics.ts` fetches public metrics (schools, students, teachers, countries) from the main backend and falls back to static values if unavailable
+- Assets: static dashboard screenshots live in `public/`
+- Run locally: `cd frontend/apps/koderkids-landing && npm install && npm run dev`
+
+This document primarily covers the authenticated ERP SPA routes below. The landing app is intentionally separate and does not participate in the main React Router route table.
+
 ## Route Protection
 - **ProtectedRoute** — Requires authentication
 - **SchoolRoute** — Requires school context

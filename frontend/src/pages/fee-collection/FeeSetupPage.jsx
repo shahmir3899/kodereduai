@@ -15,6 +15,7 @@ import {
 import AnnualChargesTab from './AnnualChargesTab'
 import FeeGenerationSurface from './FeeGenerationSurface'
 import MonthlyChargesTab from './MonthlyChargesTab'
+import { CreateSingleFeeModal } from './FeeModals'
 
 function calcDiscountOff(discount, scholarship, baseFee) {
   const base = Number(baseFee) || 0
@@ -72,6 +73,7 @@ export default function FeeSetupPage() {
   const [bulkType, setBulkType] = useState('discount')
   const [bulkSelectedId, setBulkSelectedId] = useState('')
   const [removeConfirm, setRemoveConfirm] = useState(null) // studentDiscount id
+  const [showCreateFeeModal, setShowCreateFeeModal] = useState(false)
 
   const { sessionClasses } = useSessionClasses(activeAcademicYear?.id, activeSchool?.id)
   const resolvedSingleStructClassId = resolveClassIdToMasterClassId(singleStructForm.classId, activeAcademicYear?.id, sessionClasses)
@@ -351,6 +353,18 @@ export default function FeeSetupPage() {
       {activeTab === 'generate' && (
         <div className="card">
           <p className="mb-4 text-sm text-gray-500">Generate fee payment records for students. <strong>Monthly fees</strong> are recurring; <strong>annual fees</strong> use categories defined in the <strong>Annual Charges</strong> tab.</p>
+          <div className="mb-4">
+            <button
+              type="button"
+              onClick={() => {
+                data.createFeePaymentMutation.reset()
+                setShowCreateFeeModal(true)
+              }}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+            >
+              Create Single Fee Record
+            </button>
+          </div>
           <FeeGenerationSurface
             mode="inline"
             month={now.getMonth() + 1}
@@ -605,6 +619,31 @@ export default function FeeSetupPage() {
           )}
         </div>
       )}
+
+      <CreateSingleFeeModal
+        show={showCreateFeeModal}
+        onClose={() => {
+          setShowCreateFeeModal(false)
+          data.createFeePaymentMutation.reset()
+        }}
+        onSubmit={(payload) => {
+          data.createFeePaymentMutation.mutate(payload, {
+            onSuccess: () => {
+              window.setTimeout(() => {
+                setShowCreateFeeModal(false)
+                data.createFeePaymentMutation.reset()
+              }, 1200)
+            },
+          })
+        }}
+        isPending={data.createFeePaymentMutation.isPending}
+        error={data.createFeePaymentMutation.isError ? data.createFeePaymentMutation.error : null}
+        isSuccess={data.createFeePaymentMutation.isSuccess}
+        classList={data.classList}
+        activeSchoolId={activeSchool?.id}
+        academicYearId={activeAcademicYear?.id}
+        accountsList={data.accountsList}
+      />
 
       {/* === ASSIGN MODAL === */}
       {assignModal && (

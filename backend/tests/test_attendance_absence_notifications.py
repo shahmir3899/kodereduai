@@ -2,10 +2,17 @@ from datetime import date, timedelta
 from unittest.mock import patch
 
 import pytest
+from django.utils import timezone
 
 from academic_sessions.models import StudentEnrollment
 from attendance.models import AttendanceRecord, AttendanceUpload
 from face_attendance.models import FaceAttendanceSession
+from notifications.models import NotificationLog
+from schools.models import UserSchoolMembership
+from students.models import StudentProfile
+from parents.models import ParentProfile, ParentChild
+from academics.models import ClassTeacherAssignment
+from users.models import User
 
 
 @pytest.mark.django_db
@@ -142,3 +149,105 @@ class TestTransitionOnlyAbsenceNotifications:
             )
             assert resp.status_code == 200, f"face confirm failed: {resp.status_code} {resp.content}"
             assert mock_trigger.call_count == 0
+
+    def test_manual_bulk_entry_notifies_admin_teacher_parent_student_profiles(self, seed_data, api):
+        class_obj = seed_data['classes'][0]
+        student = seed_data['students'][0]
+        target_date = str(date.today() + timedelta(days=11))
+
+        self._ensure_enrollments(seed_data, class_obj, [student])
+
+        # Link a class teacher for this class/year.
+        class_teacher_staff = seed_data['staff'][0]
+        class_teacher_user = class_teacher_staff.user
+        ClassTeacherAssignment.objects.create(
+            school=seed_data['school_a'],
+            academic_year=seed_data['academic_year'],
+            class_obj=class_obj,
+            session_class=None,
+            teacher=class_teacher_staff,
+            is_active=True,
+        )
+
+        # Create a parent profile user and link to the student.
+        parent_user = User.objects.create_user(
+            username=f"{seed_data['prefix']}parent_absence",
+            email=f"{seed_data['prefix']}parent_absence@test.com",
+            password=seed_data['password'],
+            role='PARENT',
+            school=seed_data['school_a'],
+            organization=seed_data['org'],
+        )
+        UserSchoolMembership.objects.create(
+            user=parent_user,
+            school=seed_data['school_a'],
+            role=UserSchoolMembership.Role.PARENT,
+            is_default=True,
+        )
+        parent_profile = ParentProfile.objects.create(
+            user=parent_user,
+            phone='+923001112233',
+        )
+        ParentChild.objects.create(
+            parent=parent_profile,
+            student=student,
+            school=seed_data['school_a'],
+            relation='FATHER',
+            is_primary=True,
+        )
+
+        # Create a student profile user linked to the same student.
+        student_user = User.objects.create_user(
+            username=f"{seed_data['prefix']}student_absence",
+            email=f"{seed_data['prefix']}student_absence@test.com",
+            password=seed_data['password'],
+            role='STUDENT',
+            school=seed_data['school_a'],
+            organization=seed_data['org'],
+        )
+        UserSchoolMembership.objects.create(
+            user=student_user,
+            school=seed_data['school_a'],
+            role=UserSchoolMembership.Role.STUDENT,
+            is_default=True,
+        )
+        StudentProfile.objects.create(
+            user=student_user,
+            student=student,
+            school=seed_data['school_a'],
+        )
+
+        payload = {
+            'class_id': class_obj.id,
+            'academic_year': seed_data['academic_year'].id,
+            'date': target_date,
+            'entries': [
+                {'student_id': student.id, 'status': 'ABSENT'},
+            ],
+        }
+        started_at = timezone.now()
+        resp = api.post(
+            '/api/attendance/records/bulk_entry/',
+            payload,
+            seed_data['tokens']['admin'],
+            seed_data['SID_A'],
+        )
+        assert resp.status_code == 200, f"bulk entry failed: {resp.status_code} {resp.content}"
+
+        logs = NotificationLog.objects.filter(
+            school=seed_data['school_a'],
+            event_type='ABSENCE',
+            channel='IN_APP',
+            student=student,
+            created_at__gte=started_at,
+        )
+        actual_user_ids = set(logs.values_list('recipient_user_id', flat=True))
+        expected_user_ids = {
+            seed_data['users']['admin'].id,
+            class_teacher_user.id,
+            parent_user.id,
+            student_user.id,
+        }
+
+        missing = expected_user_ids - actual_user_ids
+        assert not missing, f"missing recipients for absence notification: {sorted(missing)}"

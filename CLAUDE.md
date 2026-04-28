@@ -3,13 +3,13 @@
 ## Quick Reference (Auto-loaded each session)
 
 ### What This Is
-Multi-tenant school management SaaS with AI-powered attendance from handwritten registers. Built with Django REST + React (Vite) + React Native (Expo).
+Multi-tenant school management SaaS with AI-powered attendance from handwritten registers. Built with Django REST + React (Vite) + React Native (Expo). The repo now also includes a separate standalone marketing landing app for KoderKids in `frontend/apps/koderkids-landing`.
 
 ### Tech Stack
 | Layer | Tech |
 |-------|------|
 | Backend | Django 5.2, DRF 3.16, SimpleJWT, Celery 5.6, Redis |
-| Frontend | React 18.3, Vite 6, Tailwind 3.4, React Query 5, Axios |
+| Frontend | React 18.3, Vite 6, Tailwind 3.4, React Query 5, Axios, standalone landing app in `frontend/apps/koderkids-landing` |
 | Mobile | React Native 0.81, Expo 54, TypeScript |
 | Database | PostgreSQL (Supabase pooler) / SQLite (dev) |
 | File Storage | Supabase Storage (bucket: `atten-reg`) |
@@ -40,13 +40,15 @@ smart-attendance/
 │   ├── hostel/                 # Hostels, rooms, allocations, gate passes
 │   ├── inventory/              # Items, vendors, stock transactions
 │   └── reports/                # PDF/Excel report generation
-├── frontend/                   # React (Vite) app
-│   └── src/
-│       ├── components/         # Layout, SchoolSwitcher, Toast, etc.
-│       ├── contexts/           # AuthContext, AcademicYearContext, BackgroundTaskContext
-│       ├── hooks/              # useBackgroundTask, useDebounce, useWorkflowTransition
-│       ├── pages/              # ~88 page components
-│       └── services/api.js     # Centralized API layer (876 lines)
+├── frontend/                   # React (Vite) apps
+│   ├── src/
+│   │   ├── components/         # Layout, SchoolSwitcher, Toast, etc.
+│   │   ├── contexts/           # AuthContext, AcademicYearContext, BackgroundTaskContext
+│   │   ├── hooks/              # useBackgroundTask, useDebounce, useWorkflowTransition
+│   │   ├── pages/              # ~88 page components
+│   │   └── services/api.js     # Centralized API layer (876 lines)
+│   └── apps/
+│       └── koderkids-landing/  # Standalone marketing landing app with its own Vite config/public assets
 ├── mobile/                     # React Native (Expo) app
 ├── docs/                       # Detailed documentation (see below)
 └── render.yaml                 # Deployment blueprint
@@ -57,11 +59,17 @@ smart-attendance/
 # Backend (from backend/)
 python manage.py runserver 8000
 
-# Frontend (from frontend/)
+# Main frontend (from frontend/)
 npm run dev          # Runs on port 3000, proxies /api to :8000
+
+# Standalone landing app (from frontend/apps/koderkids-landing/)
+npm install
+npm run dev
 
 # Both use .env files for configuration
 ```
+
+Helper script: `run_landing_app.bat` starts backend + the standalone landing app in separate terminals.
 
 ### Key Architectural Patterns
 
@@ -107,6 +115,7 @@ For deeper reference, read these files from `docs/`:
 - `docs/FRONTEND_COMPONENTS.md` — Components, contexts, hooks, state management
 - `docs/ATTENDANCE_PIPELINE.md` — Complete AI OCR flow with code references
 - `docs/ENV_AND_DEPLOYMENT.md` — Environment variables, Render config, Celery
+- `frontend/apps/koderkids-landing/README.md` — Standalone landing app run/build/metrics integration notes
 
 ### Test Accounts (Dev)
 | Username | Role | Password |
@@ -120,6 +129,7 @@ School ID: **37** (SEED_TEST_School_Alpha) — has all modules enabled, seed dat
 
 ### Important Notes
 - Frontend is Vite + React (NOT Next.js) — no SSR, client-side routing only
+- Main authenticated app lives in `frontend/`; the standalone marketing site lives in `frontend/apps/koderkids-landing`
 - Attendance URLs use underscores in Django (e.g., `pending_review`, `daily_report`) not hyphens
 - Finance gateway config endpoint is `gateway-config/` not `payment-gateways/`
 - Reports endpoint is `reports/list/` and `reports/generate/` not just `reports/`

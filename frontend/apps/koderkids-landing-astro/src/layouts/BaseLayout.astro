@@ -1,0 +1,63 @@
+---
+import SeoHead from '../components/seo/SeoHead.astro';
+import '../styles/global.css';
+
+interface Props {
+  title: string;
+  description: string;
+  canonical?: string;
+  robots?: string;
+  ogType?: string;
+  jsonLd?: object | object[];
+}
+
+const { title, description, canonical, robots, ogType, jsonLd } = Astro.props as Props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <meta name="generator" content={Astro.generator} />
+
+    <!-- Font: preconnect to Google Fonts origins -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Load Inter (body) + Space Grotesk (display) — reduced to 3 weights -->
+    <link
+      rel="preload"
+      as="style"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Space+Grotesk:wght@400;600;700&display=swap"
+    />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Space+Grotesk:wght@400;600;700&display=swap"
+      media="print"
+      onload="this.media='all'"
+    />
+    <noscript>
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Space+Grotesk:wght@400;600;700&display=swap"
+      />
+    </noscript>
+
+    <SeoHead
+      title={title}
+      description={description}
+      canonical={canonical}
+      robots={robots}
+      ogType={ogType}
+      jsonLd={jsonLd}
+    />
+    <!-- Per-page head additions (preloads, etc.) -->
+    <slot name="head" />
+  </head>
+  <body>
+    <!-- Skip navigation for keyboard users -->
+    <a href="#main-content" class="skip-nav">Skip to main content</a>
+    <slot />
+  </body>
+</html>

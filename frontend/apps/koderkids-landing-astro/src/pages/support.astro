@@ -1,0 +1,30 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+
+const siteUrl = Astro.site?.toString().replace(/\/$/, '') ?? 'https://www.koderkids.pk';
+
+const webPageSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'ContactPage',
+  name: 'Support — KoderKids',
+  url: `${siteUrl}/support`,
+  description: 'Contact KoderKids for demo scheduling, onboarding, and platform support.',
+  isPartOf: { '@type': 'WebSite', url: siteUrl, name: 'KoderKids' },
+};
+---
+
+<BaseLayout
+  title="Support & Contact | KoderKids"
+  description="Need help? Contact KoderKids for demo scheduling, onboarding assistance, and ongoing platform support for your school."
+  canonical="/support"
+  robots="index,follow"
+  jsonLd={webPageSchema}
+>
+  <main class="container hero">
+    <h1>Support</h1>
+    <p>
+      Reach us at sales@koderkids.pk for demo scheduling, onboarding, and
+      implementation support.
+    </p>
+  </main>
+</BaseLayout>

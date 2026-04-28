@@ -10,6 +10,24 @@ import { BackgroundTaskProvider } from './contexts/BackgroundTaskContext.jsx'
 import { schoolsApi } from './services/api'
 import './index.css'
 
+const VITE_PRELOAD_RELOAD_KEY = 'vite-preload-reloaded-once'
+
+// Recover from stale hashed chunks after a new deployment by forcing one hard reload.
+window.addEventListener('vite:preloadError', (event) => {
+  event.preventDefault()
+
+  if (sessionStorage.getItem(VITE_PRELOAD_RELOAD_KEY) === 'true') {
+    console.error('Vite preload failed after reload, skipping additional auto-reloads.', event)
+    return
+  }
+
+  sessionStorage.setItem(VITE_PRELOAD_RELOAD_KEY, 'true')
+  window.location.reload()
+})
+
+// Clear the one-time reload guard after successful boot.
+sessionStorage.removeItem(VITE_PRELOAD_RELOAD_KEY)
+
 const QUERY_STALE_TIME_MS = Number(import.meta.env.VITE_QUERY_STALE_TIME_MS || 30 * 1000)
 const QUERY_GC_TIME_MS = Number(import.meta.env.VITE_QUERY_GC_TIME_MS || 5 * 60 * 1000)
 const QUERY_REFETCH_ON_FOCUS = String(import.meta.env.VITE_QUERY_REFETCH_ON_WINDOW_FOCUS || 'true').toLowerCase() === 'true'

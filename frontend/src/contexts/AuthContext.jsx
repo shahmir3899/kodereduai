@@ -849,6 +849,16 @@ export function AuthProvider({ children }) {
     return false
   }, [user?.is_super_admin, enabledModules])
 
+  const moduleEntitlements = activeSchool?.module_entitlements || {}
+  const isCapabilityEnabled = useCallback((moduleKey, capabilityKey) => {
+    // Super admin bypasses all capability gates
+    if (user?.is_super_admin) return true
+    if (!isModuleEnabled(moduleKey)) return false
+    const caps = moduleEntitlements?.[moduleKey]
+    if (!Array.isArray(caps)) return false
+    return caps.includes(capabilityKey)
+  }, [user?.is_super_admin, isModuleEnabled, moduleEntitlements])
+
   // Role hierarchy: which roles can the current user create?
   const getAllowableRoles = useCallback(() => {
     if (user?.is_super_admin) return ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL', 'HR_MANAGER', 'ACCOUNTANT', 'TEACHER', 'STAFF', 'DRIVER']
@@ -881,8 +891,10 @@ export function AuthProvider({ children }) {
     effectiveRole,
     enabledModules,
     isModuleEnabled,
+    moduleEntitlements,
+    isCapabilityEnabled,
     getAllowableRoles,
-  }), [user, activeSchool, loading, isSwitchingSchool, effectiveRole, enabledModules, isModuleEnabled, getAllowableRoles, logout, switchSchool, refreshUser, isSchoolAdmin, isParent, isStudent, isStaffLevel])
+  }), [user, activeSchool, loading, isSwitchingSchool, effectiveRole, enabledModules, isModuleEnabled, moduleEntitlements, isCapabilityEnabled, getAllowableRoles, logout, switchSchool, refreshUser, isSchoolAdmin, isParent, isStudent, isStaffLevel])
 
   return (
     <AuthContext.Provider value={value}>

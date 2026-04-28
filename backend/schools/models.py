@@ -1,6 +1,6 @@
 from django.db import models
 
-from core.module_registry import get_default_modules, ALL_MODULE_KEYS
+from core.module_registry import get_default_modules, get_default_entitlements, ALL_MODULE_KEYS
 
 
 class Organization(models.Model):
@@ -201,6 +201,13 @@ class School(models.Model):
         help_text="Per-school module toggles: {'attendance': true, 'finance': true, ...}"
     )
 
+    # Fine-grained capability entitlements per module
+    module_entitlements = models.JSONField(
+        default=get_default_entitlements,
+        blank=True,
+        help_text="Per-school capability lists: {'attendance': ['manual_entry', 'ocr_review'], ...}"
+    )
+
     # AI pipeline configuration (per-school thresholds, pipeline settings, auto-tuning)
     ai_config = models.JSONField(
         default=default_ai_config,
@@ -229,6 +236,14 @@ class School(models.Model):
 
     def __str__(self):
         return self.name
+
+    def has_capability(self, module_key: str, capability_key: str) -> bool:
+        """Check if a specific capability is unlocked for this school."""
+        if not self.get_enabled_module(module_key):
+            return False
+        entitlements = self.module_entitlements or {}
+        module_caps = entitlements.get(module_key, [])
+        return capability_key in module_caps
 
     def get_enabled_module(self, module_name: str) -> bool:
         """Check if a specific module is enabled for this school (respects org ceiling)."""

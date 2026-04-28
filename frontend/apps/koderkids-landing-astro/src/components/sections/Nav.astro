@@ -1,0 +1,93 @@
+---
+import { siteConfig } from '../../content/landing';
+---
+
+<header class="fixed top-0 inset-x-0 z-40 bg-brand-light/85 backdrop-blur-xl border-b border-gray-200/60">
+  <nav class="flex items-center justify-between h-16 px-6 max-w-[1800px] mx-auto">
+
+    <!-- Brand -->
+    <a href="/" class="flex items-center gap-2.5 flex-shrink-0">
+      <img src="/Logo.jpeg" alt="KoderKids logo" class="h-8 w-8 rounded-md object-contain" width="32" height="32" loading="eager" decoding="sync" />
+      <span class="font-display font-semibold text-brand-dark tracking-tight">
+        Koder<span class="text-primary">Kids</span>
+      </span>
+    </a>
+
+    <!-- Desktop nav links -->
+    <div class="hidden md:flex items-center gap-7">
+      <a href="#overview"      class="text-sm font-medium text-brand-gray hover:text-brand-dark transition-colors">Product</a>
+      <a href="#social-proof"  class="text-sm font-medium text-brand-gray hover:text-brand-dark transition-colors">Schools</a>
+      <a href="#pricing"       class="text-sm font-medium text-brand-gray hover:text-brand-dark transition-colors">Pricing</a>
+      <a href="#contact"       class="text-sm font-medium text-brand-gray hover:text-brand-dark transition-colors">Contact</a>
+    </div>
+
+    <!-- Desktop CTAs -->
+    <div class="hidden md:flex items-center gap-3">
+      <a
+        href={siteConfig.demoUrl}
+        target="_blank"
+        rel="noreferrer noopener"
+        class="text-sm font-semibold text-brand-dark border border-gray-300 rounded-full px-4 py-2 hover:bg-gray-100 transition-colors"
+      >
+        Live Demo
+      </a>
+      <button
+        type="button"
+        onclick="document.dispatchEvent(new CustomEvent('open-demo-dialog'))"
+        class="text-sm font-semibold text-white bg-primary rounded-full px-4 py-2 hover:bg-primary-600 transition-colors shadow-sm cursor-pointer border-0"
+      >
+        Book a Demo
+      </button>
+    </div>
+
+    <!-- Mobile menu: CSS-only via details/summary -->
+    <details class="md:hidden relative">
+      <summary class="list-none cursor-pointer p-2 -mr-2 rounded-lg hover:bg-gray-100 transition-colors" aria-label="Toggle navigation menu">
+        <!-- Hamburger icon -->
+        <svg class="h-5 w-5 text-brand-dark" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M3 6h18M3 12h18M3 18h18" />
+        </svg>
+      </summary>
+      <div class="absolute right-0 top-full mt-2 w-64 bg-white rounded-2xl shadow-hover border border-gray-100 p-4 flex flex-col gap-1">
+        <a href="#overview"      class="px-3 py-2.5 text-sm font-medium text-brand-dark hover:bg-gray-50 rounded-xl transition-colors">Product</a>
+        <a href="#social-proof"  class="px-3 py-2.5 text-sm font-medium text-brand-dark hover:bg-gray-50 rounded-xl transition-colors">Schools</a>
+        <a href="#pricing"       class="px-3 py-2.5 text-sm font-medium text-brand-dark hover:bg-gray-50 rounded-xl transition-colors">Pricing</a>
+        <a href="#contact"       class="px-3 py-2.5 text-sm font-medium text-brand-dark hover:bg-gray-50 rounded-xl transition-colors">Contact</a>
+        <div class="border-t border-gray-100 mt-2 pt-3 flex flex-col gap-2">
+          <a
+            href={siteConfig.demoUrl}
+            target="_blank"
+            rel="noreferrer noopener"
+            class="text-center text-sm font-semibold text-brand-dark border border-gray-200 rounded-full px-4 py-2 hover:bg-gray-50 transition-colors"
+          >
+            Live Demo
+          </a>
+          <button
+            type="button"
+            onclick="document.dispatchEvent(new CustomEvent('open-demo-dialog'))"
+            class="text-center text-sm font-semibold text-white bg-primary rounded-full px-4 py-2 hover:bg-primary-600 transition-colors cursor-pointer border-0 w-full"
+          >
+            Book a Demo
+          </button>
+        </div>
+      </div>
+    </details>
+
+  </nav>
+</header>
+
+<script>
+  /* Close mobile <details> menu on Escape or outside click */
+  const details = document.querySelector('header details') as HTMLDetailsElement | null;
+  if (details) {
+    document.addEventListener('click', (e) => {
+      if (!details.contains(e.target as Node)) details.open = false;
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && details.open) {
+        details.open = false;
+        (details.querySelector('summary') as HTMLElement | null)?.focus();
+      }
+    });
+  }
+</script>

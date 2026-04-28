@@ -2,6 +2,8 @@
 Finance serializers for fee structures, payments, expenses, other income, and AI chat.
 """
 
+from decimal import Decimal
+
 from rest_framework import serializers
 from core.mixins import ensure_tenant_school_id
 from core.permissions import _is_data_restricted_user
@@ -468,6 +470,62 @@ class GenerateAnnualFeesSerializer(serializers.Serializer):
         default='skip',
         help_text='How to handle existing records when regenerated amounts differ.',
     )
+
+
+class GenerateSingleFeeSerializer(serializers.Serializer):
+    """Generate a single fee payment record from fee structure."""
+
+    student = serializers.IntegerField()
+    fee_type = serializers.ChoiceField(choices=['MONTHLY', 'ANNUAL'])
+    year = serializers.IntegerField(min_value=2020, max_value=2100)
+    month = serializers.IntegerField(min_value=0, max_value=12, required=False)
+    annual_category = serializers.IntegerField(required=False, allow_null=True)
+    monthly_category = serializers.IntegerField(required=False, allow_null=True)
+    academic_year = serializers.IntegerField(required=False)
+    conflict_strategy = serializers.ChoiceField(
+        choices=['skip', 'update', 'delete_recreate'],
+        required=False,
+        default='skip',
+        help_text='How to handle existing records when regenerated amounts differ.',
+    )
+    amount_paid = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, default=Decimal('0'))
+    payment_date = serializers.DateField(required=False)
+    payment_method = serializers.ChoiceField(choices=FeePayment.PaymentMethod.choices, required=False, default='CASH')
+    receipt_number = serializers.CharField(required=False, allow_blank=True, max_length=50)
+    notes = serializers.CharField(required=False, allow_blank=True)
+    account = serializers.IntegerField(required=False, allow_null=True)
+
+    def validate(self, attrs):
+        fee_type = attrs.get('fee_type')
+        month = attrs.get('month')
+        annual_category = attrs.get('annual_category')
+        monthly_category = attrs.get('monthly_category')
+        amount_paid = attrs.get('amount_paid') or Decimal('0')
+        account = attrs.get('account')
+        payment_date = attrs.get('payment_date')
+
+        if fee_type == 'MONTHLY':
+            if month is None or month < 1 or month > 12:
+                raise serializers.ValidationError({'month': 'Month must be between 1 and 12 for monthly fees.'})
+            if not monthly_category:
+                raise serializers.ValidationError({'monthly_category': 'Monthly category is required for monthly fees.'})
+            if annual_category:
+                raise serializers.ValidationError({'annual_category': 'Annual category is not allowed for monthly fees.'})
+        else:
+            if month not in (None, 0):
+                raise serializers.ValidationError({'month': 'Month should be 0 for annual fees.'})
+            if not annual_category:
+                raise serializers.ValidationError({'annual_category': 'Annual category is required for annual fees.'})
+            if monthly_category:
+                raise serializers.ValidationError({'monthly_category': 'Monthly category is not allowed for annual fees.'})
+
+        if amount_paid > 0:
+            if not account:
+                raise serializers.ValidationError({'account': 'Please select account when recording payment.'})
+            if not payment_date:
+                raise serializers.ValidationError({'payment_date': 'Payment date is required when recording payment.'})
+
+        return attrs
 
 
 class ExpenseCategorySerializer(serializers.ModelSerializer):

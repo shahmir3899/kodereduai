@@ -4,6 +4,8 @@
 
 A **multi-tenant SaaS platform** (KoderEduAI.pk) for AI-powered school management. Current modules include attendance management from manual register images — schools upload photos of handwritten attendance registers, the system extracts absent students using OCR + LLM, and sends WhatsApp notifications to parents. Upcoming modules: fee management with online payments (JazzCash, Easypaisa).
 
+The repository also contains a **standalone marketing landing app** for KoderKids at `frontend/apps/koderkids-landing`. This app is separate from the authenticated ERP frontend, has its own Vite configuration, serves static marketing content, and can optionally fetch public summary metrics from the backend.
+
 **Project Location:** `D:\Personal\smart-attendance`
 
 ---
@@ -106,7 +108,15 @@ D:\Personal\smart-attendance\
 │   ├── package.json
 │   ├── vite.config.js
 │   ├── tailwind.config.js
-│   └── postcss.config.js
+│   ├── postcss.config.js
+│   └── apps/
+│       └── koderkids-landing/
+│           ├── src/App.tsx              # Standalone landing page UI
+│           ├── src/services/mainAppMetrics.ts  # Optional public metrics integration
+│           ├── public/                  # Marketing/dashboard image assets
+│           ├── .env.example             # Landing-specific env vars
+│           ├── vite.config.ts           # Separate Vite config for landing app
+│           └── README.md                # Run/build notes for this app
 │
 └── PROJECT_SUMMARY.md           # This file
 ```

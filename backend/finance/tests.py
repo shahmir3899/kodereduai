@@ -5,6 +5,8 @@ from datetime import date
 from decimal import Decimal
 
 from django.test import TestCase, override_settings
+from django.contrib.auth import get_user_model
+from rest_framework.test import APIClient
 
 from academic_sessions.models import AcademicYear, SessionClass, StudentEnrollment
 from finance.models import (
@@ -24,6 +26,119 @@ def _make_school():
     org = Organization.objects.create(name="Test Org", slug="test-org-fees")
     school = School.objects.create(organization=org, name="Test School", subdomain="test-fees-school")
     return school
+
+
+@override_settings(CELERY_TASK_ALWAYS_EAGER=True)
+class TestSingleFeeGenerationEndpoint(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.school = _make_school()
+        cls.class_obj = Class.objects.create(school=cls.school, name='Class 1', grade_level=1)
+        cls.student = Student.objects.create(
+            school=cls.school,
+            class_obj=cls.class_obj,
+            name='Single Fee Student',
+            roll_number='1',
+        )
+        cls.monthly_cat = MonthlyFeeCategory.objects.create(
+            school=cls.school,
+            name='Tuition',
+            is_active=True,
+        )
+        cls.annual_cat = AnnualFeeCategory.objects.create(
+            school=cls.school,
+            name='Annual Charge',
+            is_active=True,
+        )
+
+        FeeStructure.objects.create(
+            school=cls.school,
+            class_obj=cls.class_obj,
+            fee_type='MONTHLY',
+            monthly_category=cls.monthly_cat,
+            monthly_amount=Decimal('500'),
+            effective_from=date(2024, 1, 1),
+            is_active=True,
+        )
+        FeeStructure.objects.create(
+            school=cls.school,
+            class_obj=cls.class_obj,
+            fee_type='ANNUAL',
+            annual_category=cls.annual_cat,
+            monthly_amount=Decimal('4000'),
+            effective_from=date(2024, 1, 1),
+            is_active=True,
+        )
+
+        cls.user = get_user_model().objects.create_superuser(
+            username='single_fee_admin',
+            password='test12345',
+        )
+
+    def setUp(self):
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+        self.school_header = {'HTTP_X_SCHOOL_ID': str(self.school.id)}
+
+    def test_generate_single_monthly_includes_previous_balance(self):
+        FeePayment.objects.create(
+            school=self.school,
+            student=self.student,
+            fee_type='MONTHLY',
+            monthly_category=self.monthly_cat,
+            month=3,
+            year=2026,
+            amount_due=Decimal('1000'),
+            amount_paid=Decimal('300'),
+            previous_balance=Decimal('0'),
+            base_monthly_fee=Decimal('500'),
+        )
+
+        response = self.client.post(
+            '/api/finance/fee-payments/generate_single/',
+            {
+                'student': self.student.id,
+                'fee_type': 'MONTHLY',
+                'month': 4,
+                'year': 2026,
+                'monthly_category': self.monthly_cat.id,
+            },
+            format='json',
+            **self.school_header,
+        )
+
+        self.assertEqual(response.status_code, 201)
+        payload = response.json()
+        self.assertTrue(payload['created'])
+
+        record = payload['record']
+        self.assertEqual(record['previous_balance'], '700.00')
+        self.assertEqual(record['amount_due'], '1200.00')
+
+        generated = FeePayment.objects.get(id=record['id'])
+        self.assertEqual(generated.base_monthly_fee, Decimal('500.00'))
+
+    def test_generate_single_annual_uses_structure_without_carry_forward(self):
+        response = self.client.post(
+            '/api/finance/fee-payments/generate_single/',
+            {
+                'student': self.student.id,
+                'fee_type': 'ANNUAL',
+                'year': 2026,
+                'annual_category': self.annual_cat.id,
+            },
+            format='json',
+            **self.school_header,
+        )
+
+        self.assertEqual(response.status_code, 201)
+        payload = response.json()
+        self.assertTrue(payload['created'])
+
+        record = payload['record']
+        self.assertEqual(record['month'], 0)
+        self.assertEqual(record['amount_due'], '4000.00')
+        self.assertEqual(record['previous_balance'], '0.00')
 
 
 @override_settings(CELERY_TASK_ALWAYS_EAGER=True)

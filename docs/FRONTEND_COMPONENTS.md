@@ -7,6 +7,17 @@
 - **React Router 7.1** — client-side routing
 - **Axios 1.7** — HTTP client
 
+## Standalone Landing App
+
+In addition to the authenticated ERP frontend in `frontend/src/`, the repo includes a separate marketing site at `frontend/apps/koderkids-landing`.
+
+- **App.tsx** — single-page marketing experience with hero, feature tour, AI section, trust/security section, testimonials, CTA, and demo/contact dialog
+- **mainAppMetrics.ts** — optional fetch layer for public metric cards. Accepts backend payload variants like `schools`, `total_schools`, `students_count`, `countries_count`, and falls back to static display values when unavailable
+- **public/** — static dashboard screenshots shown in the marketing site
+- **README.md** — local run/build instructions and landing-specific env vars
+
+This app does not reuse the main ERP router/layout stack and should be treated as a separate deployable frontend surface.
+
 ## Shared Components (src/components/)
 
 ### Layout.jsx

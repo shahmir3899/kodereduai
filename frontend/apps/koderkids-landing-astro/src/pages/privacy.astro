@@ -1,0 +1,30 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+
+const siteUrl = Astro.site?.toString().replace(/\/$/, '') ?? 'https://www.koderkids.pk';
+
+const webPageSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'WebPage',
+  name: 'Privacy Policy — KoderKids',
+  url: `${siteUrl}/privacy`,
+  description: 'Read how KoderKids collects, stores, and protects your school data.',
+  isPartOf: { '@type': 'WebSite', url: siteUrl, name: 'KoderKids' },
+};
+---
+
+<BaseLayout
+  title="Privacy Policy | KoderKids"
+  description="Read how KoderKids collects, stores, and protects your school data in compliance with applicable privacy regulations."
+  canonical="/privacy"
+  robots="index,follow"
+  jsonLd={webPageSchema}
+>
+  <main class="container hero">
+    <h1>Privacy Policy</h1>
+    <p>
+      This page is part of the Astro migration bootstrap and will be populated
+      with approved legal copy in Phase 2.
+    </p>
+  </main>
+</BaseLayout>

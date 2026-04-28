@@ -22,6 +22,12 @@ const PAYMENT_METHODS = [
   { value: 'OTHER', label: 'Other' },
 ]
 
+const SINGLE_CONFLICT_STRATEGIES = [
+  { value: 'skip', label: 'Skip conflicting existing record' },
+  { value: 'update', label: 'Update existing record to current fee structure' },
+  { value: 'delete_recreate', label: 'Delete and recreate conflicting record' },
+]
+
 
 export function PaymentModal({ payment, form, setForm, onSubmit, onClose, isPending, error, accountsList }) {
   if (!payment) return null
@@ -738,7 +744,7 @@ export function StudentFeeModal({ student, amount, setAmount, onSubmit, onClose,
   )
 }
 
-export function CreateSingleFeeModal({ show, onClose, onSubmit, isPending, error, isSuccess, classList, activeSchoolId, academicYearId, accountsList = [] }) {
+export function CreateSingleFeeModal({ show, onClose, onSubmit, isPending, error, isSuccess, classList, activeSchoolId: _activeSchoolId, academicYearId, accountsList = [] }) {
   const { activeSchool } = useAuth()
   const { showWarning } = useToast()
   const now = new Date()
@@ -747,6 +753,7 @@ export function CreateSingleFeeModal({ show, onClose, onSubmit, isPending, error
     annualCategoryId: '', monthlyCategoryId: '',
     month: now.getMonth() + 1, year: now.getFullYear(),
     amount_due: '', amount_paid: '0', notes: '',
+    conflict_strategy: 'skip',
     account: '', payment_method: 'CASH',
     payment_date: new Date().toISOString().split('T')[0],
   }
@@ -846,12 +853,11 @@ export function CreateSingleFeeModal({ show, onClose, onSubmit, isPending, error
     }
 
     onSubmit({
-      school: activeSchoolId,
       student: parseInt(form.student),
       fee_type: form.fee_type,
       month: isMonthly ? parseInt(form.month) : 0,
       year: parseInt(form.year),
-      amount_due: parseFloat(form.amount_due),
+      conflict_strategy: form.conflict_strategy,
       amount_paid: parseFloat(form.amount_paid || 0),
       ...(form.fee_type === 'ANNUAL' && form.annualCategoryId && { annual_category: parseInt(form.annualCategoryId) }),
       ...(form.fee_type === 'MONTHLY' && form.monthlyCategoryId && { monthly_category: parseInt(form.monthlyCategoryId) }),
@@ -965,19 +971,43 @@ export function CreateSingleFeeModal({ show, onClose, onSubmit, isPending, error
                   {selectedCategoryName ? ` for ${selectedCategoryName}` : ''}
                   {isMonthly ? ` in ${MONTHS[form.month - 1]}` : ''} {form.year}.
                 </p>
-                <p className="text-xs text-amber-600 mt-1">Creating another will fail due to duplicate constraint.</p>
+                <p className="text-xs text-amber-600 mt-1">
+                  Choose how to handle the existing record: skip, update, or delete and recreate.
+                </p>
+
+                <div className="mt-3 space-y-2">
+                  {SINGLE_CONFLICT_STRATEGIES.map((strategy) => (
+                    <label key={strategy.value} className="flex items-start gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="single-conflict-strategy"
+                        value={strategy.value}
+                        checked={form.conflict_strategy === strategy.value}
+                        onChange={(e) => setForm(f => ({ ...f, conflict_strategy: e.target.value }))}
+                        className="mt-0.5 border-amber-300 text-amber-600 focus:ring-amber-500"
+                      />
+                      <span className="text-sm text-amber-800">{strategy.label}</span>
+                    </label>
+                  ))}
+                </div>
+
+                {form.conflict_strategy === 'delete_recreate' && (
+                  <p className="text-xs text-red-700 mt-2">
+                    Delete and recreate can remove recorded payment history for the conflicting record.
+                  </p>
+                )}
               </div>
             )}
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Amount Due <span className="text-red-500">*</span></label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Base Amount (from structure)</label>
                 <div className="relative">
                   <input
                     type="number" step="0.01"
                     value={form.amount_due}
-                    onChange={(e) => setForm(f => ({ ...f, amount_due: e.target.value }))}
-                    className="input-field" required placeholder="0.00"
+                    readOnly
+                    className="input-field bg-gray-50" placeholder="Auto"
                   />
                   {resolvingFee && (
                     <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-400">...</span>
@@ -990,6 +1020,9 @@ export function CreateSingleFeeModal({ show, onClose, onSubmit, isPending, error
                 )}
                 {form.student && selectedCategoryId && !resolvingFee && resolvedFee?.data && !resolvedFee.data.amount && (
                   <p className="text-xs text-amber-600 mt-1">No fee structure found for this type and category</p>
+                )}
+                {isMonthly && (
+                  <p className="text-xs text-gray-500 mt-1">Final amount due includes carry-forward balance from previous month (if any).</p>
                 )}
               </div>
               <div>
@@ -1040,12 +1073,12 @@ export function CreateSingleFeeModal({ show, onClose, onSubmit, isPending, error
             </div>
             <div className="flex gap-3 pt-2">
               <button type="button" onClick={handleClose} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm">Cancel</button>
-              <button type="submit" disabled={isPending || hasDuplicate || !selectedCategoryId} className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50">
+              <button type="submit" disabled={isPending || !selectedCategoryId || !form.student} className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50">
                 {isPending ? 'Creating...' : 'Create'}
               </button>
             </div>
-            {error && <p className="text-sm text-red-600">{getErrorMessage(error, 'Failed to create fee record')}</p>}
-            {isSuccess && <p className="text-sm text-green-600">Fee record created successfully!</p>}
+            {error && <p className="text-sm text-red-600">{getErrorMessage(error, 'Failed to generate fee record')}</p>}
+            {isSuccess && <p className="text-sm text-green-600">Fee record generated successfully.</p>}
           </form>
         </div>
       </div>

@@ -16,6 +16,7 @@ from .views import (
     SendNotificationView,
     BroadcastNotificationView,
     NotificationAnalyticsView,
+    NotificationDiagnosticsView,
     CommunicationAgentView,
 )
 
@@ -34,5 +35,6 @@ urlpatterns = [
     path('send/', SendNotificationView.as_view(), name='send-notification'),
     path('broadcast/', BroadcastNotificationView.as_view(), name='broadcast-notification'),
     path('analytics/', NotificationAnalyticsView.as_view(), name='notification-analytics'),
+    path('diagnostics/', NotificationDiagnosticsView.as_view(), name='notification-diagnostics'),
     path('ai-chat/', CommunicationAgentView.as_view(), name='communication-agent'),
 ]

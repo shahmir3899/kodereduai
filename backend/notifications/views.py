@@ -321,6 +321,92 @@ class NotificationAnalyticsView(ModuleAccessMixin, APIView):
         })
 
 
+class NotificationDiagnosticsView(ModuleAccessMixin, APIView):
+    """Diagnostics endpoint for notification non-delivery visibility."""
+    required_module = 'notifications'
+    permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
+
+    def get(self, request):
+        school_id = ensure_tenant_school_id(request)
+        if not school_id:
+            return Response({'error': 'school_id required'}, status=400)
+
+        now = timezone.now()
+        since_days = int(request.query_params.get('days', 7) or 7)
+        since = now - timezone.timedelta(days=since_days)
+
+        logs = NotificationLog.objects.filter(
+            school_id=school_id,
+            created_at__gte=since,
+        )
+
+        failed_logs = logs.filter(status='FAILED').order_by('-created_at')
+        pending_old_count = logs.filter(
+            status='PENDING',
+            created_at__lt=now - timezone.timedelta(minutes=1),
+        ).count()
+        scheduled_due_count = logs.filter(status='SCHEDULED', scheduled_for__lte=now).count()
+        scheduled_future_count = logs.filter(status='SCHEDULED', scheduled_for__gt=now).count()
+
+        reason_counts = {}
+        for metadata in failed_logs.values_list('metadata', flat=True):
+            reason = (metadata or {}).get('reason_code') or 'unknown'
+            reason_counts[reason] = reason_counts.get(reason, 0) + 1
+
+        retry_eligible = 0
+        for metadata in failed_logs.values_list('metadata', flat=True):
+            payload = metadata or {}
+            retry_count = int(payload.get('retry_count', 0) or 0)
+            if payload.get('retriable') and retry_count < 3:
+                retry_eligible += 1
+
+        recent_failures = []
+        for log in failed_logs[:20]:
+            metadata = log.metadata or {}
+            recent_failures.append({
+                'id': log.id,
+                'event_type': log.event_type,
+                'channel': log.channel,
+                'recipient_identifier': log.recipient_identifier,
+                'created_at': log.created_at,
+                'reason_code': metadata.get('reason_code'),
+                'error': metadata.get('error') or metadata.get('retry_error'),
+                'retriable': bool(metadata.get('retriable')),
+                'retry_count': int(metadata.get('retry_count', 0) or 0),
+            })
+
+        config = SchoolNotificationConfig.objects.filter(school_id=school_id).first()
+        config_blockers = []
+        if config:
+            if not config.in_app_enabled:
+                config_blockers.append('in_app_disabled')
+            if not config.whatsapp_enabled:
+                config_blockers.append('whatsapp_disabled')
+            if not config.sms_enabled:
+                config_blockers.append('sms_disabled')
+            if not config.email_enabled:
+                config_blockers.append('email_disabled')
+            if not config.push_enabled:
+                config_blockers.append('push_disabled')
+
+        return Response({
+            'window_days': since_days,
+            'queue': {
+                'pending_old': pending_old_count,
+                'scheduled_due': scheduled_due_count,
+                'scheduled_future': scheduled_future_count,
+            },
+            'failed_total': failed_logs.count(),
+            'failed_by_reason_code': reason_counts,
+            'retry': {
+                'eligible_failed': retry_eligible,
+                'max_retry_attempts': 3,
+            },
+            'config_blockers': config_blockers,
+            'recent_failures': recent_failures,
+        })
+
+
 class CommunicationAgentView(ModuleAccessMixin, APIView):
     """AI-powered parent communication assistant."""
     required_module = 'notifications'

@@ -305,7 +305,8 @@ from celery.schedules import crontab
 CELERY_BEAT_SCHEDULE = {
     'monthly-fee-reminders': {
         'task': 'notifications.tasks.send_fee_reminders',
-        'schedule': crontab(day_of_month='5', hour='9', minute='0'),
+        # Runtime checks per-school fee_reminder_day; run daily at 09:00.
+        'schedule': crontab(hour='9', minute='0'),
     },
     'weekly-overdue-alerts': {
         'task': 'notifications.tasks.send_fee_overdue_alerts',
@@ -313,7 +314,8 @@ CELERY_BEAT_SCHEDULE = {
     },
     'daily-absence-summary': {
         'task': 'notifications.tasks.send_daily_absence_summary',
-        'schedule': crontab(hour='17', minute='0'),
+        # Runtime checks per-school daily_absence_summary_time; run every minute.
+        'schedule': crontab(minute='*'),
     },
     'process-notification-queue': {
         'task': 'notifications.tasks.process_notification_queue',

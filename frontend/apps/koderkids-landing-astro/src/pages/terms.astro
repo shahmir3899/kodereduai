@@ -1,0 +1,30 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+
+const siteUrl = Astro.site?.toString().replace(/\/$/, '') ?? 'https://www.koderkids.pk';
+
+const webPageSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'WebPage',
+  name: 'Terms of Service — KoderKids',
+  url: `${siteUrl}/terms`,
+  description: 'KoderKids terms of service governing use of the KoderEduAI school management platform.',
+  isPartOf: { '@type': 'WebSite', url: siteUrl, name: 'KoderKids' },
+};
+---
+
+<BaseLayout
+  title="Terms of Service | KoderKids"
+  description="Review the terms governing your use of KoderEduAI, the AI-powered school management platform by KoderKids."
+  canonical="/terms"
+  robots="index,follow"
+  jsonLd={webPageSchema}
+>
+  <main class="container hero">
+    <h1>Terms of Service</h1>
+    <p>
+      This page is part of the Astro migration bootstrap and will be populated
+      with approved legal terms in Phase 2.
+    </p>
+  </main>
+</BaseLayout>

@@ -18,6 +18,12 @@ export function useFeeSetup({ academicYearId, feeType, studentClassId, structure
     staleTime: 5 * 60_000,
   })
 
+  const { data: accountsData } = useQuery({
+    queryKey: ['accounts'],
+    queryFn: () => financeApi.getAccounts({ page_size: 9999 }),
+    staleTime: 5 * 60_000,
+  })
+
   // All fee structures (no fee_type filter) so each tab has its own data
   const { data: allStructures } = useQuery({
     queryKey: ['feeStructures-all', academicYearId],
@@ -103,17 +109,28 @@ export function useFeeSetup({ academicYearId, feeType, studentClassId, structure
     },
   })
 
+  const createFeePaymentMutation = useMutation({
+    mutationFn: (data) => financeApi.generateSingleFee(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['feePayments'] })
+      queryClient.invalidateQueries({ queryKey: ['feeSummary'] })
+      queryClient.invalidateQueries({ queryKey: ['generate-preview'] })
+    },
+  })
+
   // Derived data
   const classList = classes?.data?.results || classes?.data || []
   const classStudents = classStudentsData?.data?.results || classStudentsData?.data || []
   const classStructures = classFeeStructures?.data?.results || classFeeStructures?.data || []
   const allStructuresList = allStructures?.data?.results || allStructures?.data || []
+  const accountsList = accountsData?.data?.results || accountsData?.data || []
 
   return {
     classList,
     allStructuresList,
     classStudents,
     classStructures,
+    accountsList,
     studentsLoading,
     structuresLoading,
     bulkEffectiveFrom,
@@ -123,5 +140,6 @@ export function useFeeSetup({ academicYearId, feeType, studentClassId, structure
     generateMutation,
     generateOnetimeMutation,
     generateAnnualMutation,
+    createFeePaymentMutation,
   }
 }

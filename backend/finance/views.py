@@ -40,7 +40,7 @@ from .serializers import (
     TransferSerializer, TransferCreateSerializer,
     FeeStructureSerializer, FeeStructureCreateSerializer, BulkFeeStructureSerializer, BulkStudentFeeStructureSerializer,
     FeePaymentSerializer, FeePaymentCreateSerializer, FeePaymentUpdateSerializer,
-    GenerateMonthlySerializer, GenerateOnetimeFeesSerializer, GenerateAnnualFeesSerializer,
+    GenerateMonthlySerializer, GenerateOnetimeFeesSerializer, GenerateAnnualFeesSerializer, GenerateSingleFeeSerializer,
     ExpenseCategorySerializer, IncomeCategorySerializer, AnnualFeeCategorySerializer, MonthlyFeeCategorySerializer,
     ExpenseSerializer, ExpenseCreateSerializer,
     OtherIncomeSerializer, OtherIncomeCreateSerializer,
@@ -131,6 +131,28 @@ def _filter_students_by_scope(queryset, class_id=None, academic_year_id=None, se
     elif class_id:
         queryset = queryset.filter(class_obj_id=class_id)
     return queryset.distinct()
+
+
+def _get_previous_month_balance(school_id, student_id, month, year, monthly_category_id):
+    prev_month = month - 1
+    prev_year = year
+    if prev_month == 0:
+        prev_month = 12
+        prev_year = year - 1
+
+    prev_payment = FeePayment.objects.filter(
+        school_id=school_id,
+        student_id=student_id,
+        fee_type='MONTHLY',
+        monthly_category_id=monthly_category_id,
+        month=prev_month,
+        year=prev_year,
+    ).first()
+
+    if not prev_payment:
+        return Decimal('0')
+
+    return (prev_payment.amount_due or Decimal('0')) - (prev_payment.amount_paid or Decimal('0'))
 
 
 class FeeStructureViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
@@ -518,6 +540,192 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
             serializer.save(collected_by=self.request.user, payment_date=date.today())
         else:
             serializer.save(collected_by=self.request.user)
+
+    @action(detail=False, methods=['post'], url_path='generate_single')
+    def generate_single(self, request):
+        """Generate a single fee record from fee structure using bulk-consistent calculations."""
+        serializer = GenerateSingleFeeSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response({'detail': 'No school associated with your account.'}, status=400)
+
+        data = serializer.validated_data
+        student_id = data['student']
+        fee_type = data['fee_type']
+        year = data['year']
+        month = data.get('month') if fee_type == 'MONTHLY' else 0
+        annual_category_id = data.get('annual_category')
+        monthly_category_id = data.get('monthly_category')
+        conflict_strategy = data.get('conflict_strategy', 'skip')
+        amount_paid = data.get('amount_paid') or Decimal('0')
+
+        try:
+            student = Student.objects.get(id=student_id, school_id=school_id, is_active=True)
+        except Student.DoesNotExist:
+            return Response({'detail': 'Student not found.'}, status=404)
+
+        # Auto-resolve academic year if omitted
+        from academic_sessions.models import AcademicYear
+        academic_year_id = data.get('academic_year')
+        if not academic_year_id:
+            current_ay = AcademicYear.objects.filter(
+                school_id=school_id, is_current=True, is_active=True
+            ).first()
+            if current_ay:
+                academic_year_id = current_ay.id
+
+        # Validate category ownership
+        if fee_type == 'MONTHLY':
+            if MonthlyClosing.objects.filter(school_id=school_id, year=year, month=month).exists():
+                return Response({'detail': f'Period {year}/{month:02d} is closed. Reopen it before generating fees.'}, status=400)
+
+            category_exists = MonthlyFeeCategory.objects.filter(
+                id=monthly_category_id,
+                school_id=school_id,
+                is_active=True,
+            ).exists()
+            if not category_exists:
+                return Response({'monthly_category': 'Monthly category is invalid, inactive, or from another school.'}, status=400)
+        else:
+            category_exists = AnnualFeeCategory.objects.filter(
+                id=annual_category_id,
+                school_id=school_id,
+                is_active=True,
+            ).exists()
+            if not category_exists:
+                return Response({'annual_category': 'Annual category is invalid, inactive, or from another school.'}, status=400)
+
+        # Validate account ownership if payment is being recorded
+        account_id = data.get('account')
+        if amount_paid > 0:
+            if not Account.objects.filter(id=account_id, school_id=school_id, is_active=True).exists():
+                return Response({'account': 'Account is invalid, inactive, or from another school.'}, status=400)
+
+        base_amount = resolve_fee_amount(
+            student,
+            fee_type,
+            annual_category_id=annual_category_id,
+            monthly_category_id=monthly_category_id,
+        )
+        if base_amount is None:
+            return Response({'detail': 'No fee structure found for the selected student/type/category.'}, status=400)
+
+        previous_balance = Decimal('0')
+        base_monthly_fee = None
+        if fee_type == 'MONTHLY':
+            previous_balance = _get_previous_month_balance(
+                school_id=school_id,
+                student_id=student.id,
+                month=month,
+                year=year,
+                monthly_category_id=monthly_category_id,
+            )
+            base_monthly_fee = base_amount
+            amount_due = previous_balance + base_amount
+        else:
+            amount_due = base_amount
+
+        existing_payment = FeePayment.objects.filter(
+            school_id=school_id,
+            student_id=student.id,
+            fee_type=fee_type,
+            month=month,
+            year=year,
+            annual_category_id=annual_category_id,
+            monthly_category_id=monthly_category_id,
+        ).first()
+
+        if existing_payment:
+            if fee_type == 'MONTHLY':
+                same_computed_values = (
+                    (existing_payment.previous_balance or Decimal('0')) == previous_balance
+                    and (existing_payment.base_monthly_fee or Decimal('0')) == base_monthly_fee
+                    and (existing_payment.amount_due or Decimal('0')) == amount_due
+                )
+            else:
+                same_computed_values = (existing_payment.amount_due or Decimal('0')) == amount_due
+
+            if same_computed_values:
+                return Response({
+                    'created': False,
+                    'updated': False,
+                    'skipped': True,
+                    'message': 'Fee record already exists and matches current fee structure.',
+                    'record': FeePaymentSerializer(existing_payment, context={'request': request}).data,
+                })
+
+            if conflict_strategy == 'skip':
+                return Response({
+                    'created': False,
+                    'updated': False,
+                    'skipped': True,
+                    'message': 'Conflicting fee record exists and was skipped.',
+                    'record': FeePaymentSerializer(existing_payment, context={'request': request}).data,
+                })
+
+            if conflict_strategy == 'update':
+                if (existing_payment.amount_paid or Decimal('0')) > amount_due:
+                    return Response({
+                        'created': False,
+                        'updated': False,
+                        'skipped': True,
+                        'protected_conflict': True,
+                        'message': 'Existing record has amount_paid greater than recalculated amount_due; skipped for safety.',
+                        'record': FeePaymentSerializer(existing_payment, context={'request': request}).data,
+                    }, status=409)
+
+                existing_payment.amount_due = amount_due
+                if fee_type == 'MONTHLY':
+                    existing_payment.previous_balance = previous_balance
+                    existing_payment.base_monthly_fee = base_monthly_fee
+                if data.get('notes') is not None:
+                    existing_payment.notes = data.get('notes')
+                existing_payment.save()
+                return Response({
+                    'created': False,
+                    'updated': True,
+                    'skipped': False,
+                    'message': 'Existing fee record updated using current fee structure.',
+                    'record': FeePaymentSerializer(existing_payment, context={'request': request}).data,
+                })
+
+            # delete_recreate
+            existing_payment.delete()
+
+        create_kwargs = {
+            'school_id': school_id,
+            'student': student,
+            'fee_type': fee_type,
+            'month': month,
+            'year': year,
+            'annual_category_id': annual_category_id,
+            'monthly_category_id': monthly_category_id,
+            'academic_year_id': academic_year_id,
+            'amount_due': amount_due,
+            'amount_paid': amount_paid,
+            'notes': data.get('notes', ''),
+            'collected_by': request.user,
+        }
+        if fee_type == 'MONTHLY':
+            create_kwargs['previous_balance'] = previous_balance
+            create_kwargs['base_monthly_fee'] = base_monthly_fee
+
+        if amount_paid > 0:
+            create_kwargs['account_id'] = account_id
+            create_kwargs['payment_method'] = data.get('payment_method', 'CASH')
+            create_kwargs['payment_date'] = data.get('payment_date')
+            create_kwargs['receipt_number'] = data.get('receipt_number', '')
+
+        payment = FeePayment.objects.create(**create_kwargs)
+        return Response({
+            'created': True,
+            'updated': False,
+            'skipped': False,
+            'message': 'Fee record created from fee structure.',
+            'record': FeePaymentSerializer(payment, context={'request': request}).data,
+        }, status=status.HTTP_201_CREATED)
 
     @action(detail=False, methods=['get'])
     def resolve_amount(self, request):

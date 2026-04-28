@@ -108,6 +108,47 @@ class SuperAdminSchoolViewSet(viewsets.ModelViewSet):
         serializer = SchoolStatsSerializer(stats)
         return Response(serializer.data)
 
+    @action(detail=True, methods=['post'])
+    def apply_bundle(self, request, pk=None):
+        """Apply a commercial bundle preset (STARTER / GROWTH / ENTERPRISE) to a school."""
+        from core.module_registry import BUNDLE_PRESETS
+        school = self.get_object()
+        bundle_key = request.data.get('bundle')
+        if not bundle_key or bundle_key not in BUNDLE_PRESETS:
+            return Response(
+                {'error': f"Invalid bundle. Choose from: {', '.join(BUNDLE_PRESETS.keys())}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        preset = BUNDLE_PRESETS[bundle_key]
+
+        # Build the full enabled_modules dict (all known modules, preset sets which are on)
+        from core.module_registry import ALL_MODULE_KEYS
+        new_modules = {key: preset['modules'].get(key, False) for key in ALL_MODULE_KEYS}
+        school.enabled_modules = new_modules
+        school.module_entitlements = preset['entitlements']
+        school.save(update_fields=['enabled_modules', 'module_entitlements', 'updated_at'])
+
+        serializer = self.get_serializer(school)
+        return Response({
+            'message': f"Bundle '{preset['label']}' applied to {school.name}.",
+            'school': serializer.data,
+        })
+
+    @action(detail=False, methods=['get'])
+    def bundles(self, request):
+        """Return available bundle presets with their descriptions."""
+        from core.module_registry import BUNDLE_PRESETS
+        return Response([
+            {
+                'key': key,
+                'label': preset['label'],
+                'description': preset['description'],
+                'modules': list(preset['modules'].keys()),
+                'capabilities': {m: list(caps) for m, caps in preset['entitlements'].items()},
+            }
+            for key, preset in BUNDLE_PRESETS.items()
+        ])
+
     @action(detail=False, methods=['get'])
     def platform_stats(self, request):
         """Platform-wide aggregate statistics for the SuperAdmin overview."""

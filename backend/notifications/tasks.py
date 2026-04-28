@@ -3,10 +3,19 @@ Celery tasks for scheduled notifications.
 """
 
 import logging
+from datetime import time as dt_time
 from celery import shared_task
 from django.utils import timezone
+from .observability import REASON_FAILED_DISPATCH, bump_retry_count, mark_log_failed, should_retry_log
 
 logger = logging.getLogger(__name__)
+
+
+def _get_daily_report_send_time(config):
+    """Return configured report send time or the historical default (17:00)."""
+    if config and config.daily_absence_summary_time:
+        return config.daily_absence_summary_time
+    return dt_time(hour=17, minute=0)
 
 
 @shared_task
@@ -14,7 +23,7 @@ def send_fee_reminders():
     """
     Monthly fee reminder task.
     Sends reminders to parents with unpaid fees for the current month.
-    Runs on the configured fee_reminder_day (default: 5th of month).
+    Scheduler can invoke this task daily; per-school config decides due day.
     """
     from schools.models import School
     from .models import SchoolNotificationConfig
@@ -26,20 +35,38 @@ def send_fee_reminders():
 
     schools = School.objects.filter(is_active=True)
     total_sent = 0
+    processed_schools = 0
 
     for school in schools:
         try:
             config = SchoolNotificationConfig.objects.filter(school=school).first()
+            reminder_day = config.fee_reminder_day if config else 5
+
+            if now.day != reminder_day:
+                logger.info(
+                    "Skipped fee reminders",
+                    extra={
+                        'reason_code': 'skipped_due_to_schedule',
+                        'school_id': school.id,
+                        'scheduled_day': reminder_day,
+                        'current_day': now.day,
+                    },
+                )
+                continue
+
             if config and not config.whatsapp_enabled:
                 continue
 
             sent = trigger_fee_reminder(school, month, year)
             total_sent += sent
+            processed_schools += 1
         except Exception as e:
             logger.error(f"Fee reminder failed for {school.name}: {e}")
 
-    logger.info(f"Fee reminders complete: {total_sent} sent across all schools")
-    return {'total_sent': total_sent}
+    logger.info(
+        f"Fee reminders complete: {total_sent} sent across {processed_schools} due schools"
+    )
+    return {'total_sent': total_sent, 'processed_schools': processed_schools}
 
 
 @shared_task
@@ -77,23 +104,59 @@ def send_daily_absence_summary():
     """
     Daily comprehensive school report sent to SCHOOL_ADMIN and PRINCIPAL users.
     Covers: attendance, lesson plans submitted today, pending fees, staff leave.
-    Runs at 5 PM daily (see CELERY_BEAT_SCHEDULE).
+    Scheduler can invoke this task frequently; per-school configured
+    daily_absence_summary_time determines when each school is due.
     Replaces the old absence-only summary; uses trigger_daily_school_report().
     """
     from schools.models import School
+    from .models import SchoolNotificationConfig
     from .triggers import trigger_daily_school_report
 
-    today = timezone.now().date()
+    local_now = timezone.localtime()
+    today = local_now.date()
     schools = School.objects.filter(is_active=True)
+    processed_schools = 0
+    total_sent = 0
 
     for school in schools:
         try:
-            trigger_daily_school_report(school, today)
+            config = SchoolNotificationConfig.objects.filter(school=school).first()
+            if config and not getattr(config, 'daily_report_enabled', True):
+                logger.info(
+                    "Skipped daily school report",
+                    extra={'reason_code': 'skipped_due_to_config', 'school_id': school.id},
+                )
+                continue
+
+            configured_time = _get_daily_report_send_time(config)
+            if (local_now.hour, local_now.minute) != (
+                configured_time.hour,
+                configured_time.minute,
+            ):
+                logger.info(
+                    "Skipped daily school report",
+                    extra={
+                        'reason_code': 'skipped_due_to_schedule',
+                        'school_id': school.id,
+                        'configured_time': configured_time.strftime('%H:%M'),
+                        'current_time': local_now.strftime('%H:%M'),
+                    },
+                )
+                continue
+
+            total_sent += trigger_daily_school_report(school, today)
+            processed_schools += 1
         except Exception as e:
             logger.error(f"Daily report failed for {school.name}: {e}")
 
-    logger.info("Daily school reports sent")
-    return {'date': str(today)}
+    logger.info(
+        f"Daily school reports processed for {processed_schools} schools at {local_now.strftime('%H:%M')}"
+    )
+    return {
+        'date': str(today),
+        'processed_schools': processed_schools,
+        'total_sent': total_sent,
+    }
 
 
 @shared_task
@@ -155,44 +218,77 @@ def send_class_teacher_attendance_reminders():
 @shared_task
 def process_notification_queue():
     """
-    Process pending notifications that failed to send immediately.
-    Retries PENDING notifications that are older than 1 minute.
+    Process queued/retriable notifications.
+    Retries:
+    - PENDING notifications older than 1 minute
+    - FAILED notifications explicitly marked retriable (limited attempts)
     """
     from .models import NotificationLog
     from .engine import NotificationEngine
 
     cutoff = timezone.now() - timezone.timedelta(minutes=1)
 
-    pending = NotificationLog.objects.filter(
-        status='PENDING',
+    candidates = NotificationLog.objects.filter(
+        status__in=['PENDING', 'FAILED'],
         created_at__lt=cutoff,
     ).select_related('school')[:100]
 
     retried = 0
-    for log in pending:
+    skipped_non_retriable = 0
+    for log in candidates:
+        if not should_retry_log(log):
+            skipped_non_retriable += 1
+            logger.info(
+                "Skipped retry for non-retriable notification",
+                extra={'reason_code': 'skipped_due_to_non_retriable', 'log_id': log.id},
+            )
+            continue
+
+        bump_retry_count(log)
         try:
             engine = NotificationEngine(log.school)
             handler = engine._get_channel_handler(log.channel)
-            if handler:
-                success = handler.send(
-                    recipient=log.recipient_identifier,
-                    title=log.title,
-                    body=log.body,
+            if not handler:
+                mark_log_failed(
+                    log,
+                    reason_code=REASON_FAILED_DISPATCH,
+                    error=f'No handler for channel: {log.channel}',
+                    retriable=False,
+                    extra_metadata={'channel': log.channel},
                 )
-                if success:
-                    log.status = 'SENT'
-                    log.sent_at = timezone.now()
-                else:
-                    log.status = 'FAILED'
-                log.save(update_fields=['status', 'sent_at'])
-                retried += 1
-        except Exception as e:
-            log.status = 'FAILED'
-            log.metadata = {'retry_error': str(e)}
-            log.save(update_fields=['status', 'metadata'])
+                continue
 
-    logger.info(f"Notification queue processed: {retried} retried")
-    return {'retried': retried}
+            success = handler.send(
+                recipient=log.recipient_identifier,
+                title=log.title,
+                body=log.body,
+            )
+            if success:
+                log.status = 'SENT'
+                log.sent_at = timezone.now()
+                log.save(update_fields=['status', 'sent_at'])
+            else:
+                mark_log_failed(
+                    log,
+                    reason_code=REASON_FAILED_DISPATCH,
+                    error='Channel handler returned False',
+                    retriable=True,
+                    extra_metadata={'channel': log.channel},
+                )
+            retried += 1
+        except Exception as e:
+            mark_log_failed(
+                log,
+                reason_code=REASON_FAILED_DISPATCH,
+                error=e,
+                retriable=True,
+                extra_metadata={'retry_error': str(e), 'channel': log.channel},
+            )
+
+    logger.info(
+        f"Notification queue processed: {retried} retried, {skipped_non_retriable} skipped"
+    )
+    return {'retried': retried, 'skipped_non_retriable': skipped_non_retriable}
 
 
 @shared_task
@@ -220,9 +316,13 @@ def dispatch_scheduled_notifications():
             engine = NotificationEngine(log.school)
             handler = engine._get_channel_handler(log.channel)
             if not handler:
-                log.status = 'FAILED'
-                log.metadata = {'error': f'No handler for channel: {log.channel}'}
-                log.save(update_fields=['status', 'metadata'])
+                mark_log_failed(
+                    log,
+                    reason_code=REASON_FAILED_DISPATCH,
+                    error=f'No handler for channel: {log.channel}',
+                    retriable=False,
+                    extra_metadata={'channel': log.channel},
+                )
                 failed += 1
                 continue
 
@@ -235,11 +335,15 @@ def dispatch_scheduled_notifications():
             if success:
                 log.status = 'SENT'
                 log.sent_at = timezone.now()
+                log.save(update_fields=['status', 'sent_at'])
             else:
-                log.status = 'FAILED'
-                log.metadata = {'error': 'Channel handler returned False'}
-
-            log.save(update_fields=['status', 'sent_at', 'metadata'])
+                mark_log_failed(
+                    log,
+                    reason_code=REASON_FAILED_DISPATCH,
+                    error='Channel handler returned False',
+                    retriable=True,
+                    extra_metadata={'channel': log.channel},
+                )
 
             if success:
                 sent += 1
@@ -247,9 +351,13 @@ def dispatch_scheduled_notifications():
                 failed += 1
 
         except Exception as e:
-            log.status = 'FAILED'
-            log.metadata = {'error': str(e)}
-            log.save(update_fields=['status', 'metadata'])
+            mark_log_failed(
+                log,
+                reason_code=REASON_FAILED_DISPATCH,
+                error=e,
+                retriable=True,
+                extra_metadata={'channel': log.channel},
+            )
             failed += 1
             logger.error(f"Scheduled dispatch failed for log {log.id}: {e}")
 

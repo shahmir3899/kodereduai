@@ -1,0 +1,91 @@
+---
+import { landingContent, siteConfig } from '../../content/landing';
+const { pricing } = landingContent;
+---
+
+<section id="pricing" class="py-24 bg-brand-light">
+  <div class="max-w-6xl mx-auto px-6">
+
+    <!-- Header -->
+    <div class="text-center mb-14">
+      <span class="section-label mb-3 block">{pricing.label}</span>
+      <h2 class="font-display text-3xl sm:text-4xl font-bold text-brand-dark mb-4">
+        {pricing.heading}
+      </h2>
+      <p class="text-brand-gray text-lg max-w-xl mx-auto">{pricing.subheading}</p>
+    </div>
+
+    <!-- Plan cards -->
+    <div class="grid md:grid-cols-3 gap-6 items-stretch">
+      {pricing.plans.map((plan) => (
+        <div class={[
+          'relative flex flex-col rounded-2xl p-8 border transition-shadow hover:shadow-hover',
+          plan.highlight
+            ? 'bg-brand-dark border-primary/40 shadow-dashboard'
+            : 'bg-white border-gray-200 shadow-card',
+        ].join(' ')}>
+
+          {/* Badge */}
+          {plan.badge && (
+            <span class={`absolute top-5 right-5 text-xs font-semibold px-3 py-1 rounded-full ${plan.badgeBg}`}>
+              {plan.badge}
+            </span>
+          )}
+
+          {/* Tier */}
+          <div class={`text-sm font-bold uppercase tracking-wider mb-1 ${plan.accentClass}`}>
+            {plan.tier}
+          </div>
+
+          {/* Title */}
+          <h3 class={`font-display text-xl font-bold mb-2 ${plan.highlight ? 'text-white' : 'text-brand-dark'}`}>
+            {plan.title}
+          </h3>
+
+          {/* Desc */}
+          <p class={`text-sm leading-relaxed mb-6 ${plan.highlight ? 'text-brand-gray' : 'text-brand-gray'}`}>
+            {plan.desc}
+          </p>
+
+          {/* Features */}
+          <ul class="space-y-2.5 flex-1 mb-8">
+            {plan.features.map((f) => (
+              <li class="flex items-start gap-2.5">
+                <svg
+                  class={`w-4 h-4 mt-0.5 flex-shrink-0 ${plan.highlight ? 'text-primary-300' : 'text-primary'}`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                  aria-hidden="true"
+                >
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+                </svg>
+                <span class={`text-sm ${plan.highlight ? 'text-gray-300' : 'text-brand-dark'}`}>{f}</span>
+              </li>
+            ))}
+          </ul>
+
+          {/* CTA */}
+          <button
+            type="button"
+            onclick="document.dispatchEvent(new CustomEvent('open-demo-dialog'))"
+            class={[
+              'block w-full text-center text-sm font-semibold rounded-full py-2.5 px-6 transition-all hover:-translate-y-0.5 border-0 cursor-pointer',
+              plan.highlight
+                ? 'bg-primary text-white hover:bg-primary-600 hover:shadow-[0_6px_20px_rgba(43,106,255,0.4)]'
+                : 'bg-brand-light text-brand-dark border border-gray-200 hover:bg-gray-100',
+            ].join(' ')}
+          >
+            {plan.cta}
+          </button>
+
+        </div>
+      ))}
+    </div>
+
+    <p class="text-center text-sm text-brand-gray mt-8">
+      All plans include onboarding support. Custom pricing available for large networks.
+    </p>
+  </div>
+</section>

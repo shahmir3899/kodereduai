@@ -1,0 +1,54 @@
+---
+import { landingContent } from '../../content/landing';
+import LiveMetrics from '../islands/LiveMetrics.tsx';
+const { socialProof } = landingContent;
+---
+
+<section id="social-proof" class="py-24 bg-white">
+  <div class="max-w-6xl mx-auto px-6">
+
+    <!-- Header -->
+    <div class="text-center mb-14">
+      <span class="section-label mb-3 block">{socialProof.label}</span>
+      <h2 class="font-display text-3xl sm:text-4xl font-bold text-brand-dark">
+        {socialProof.heading}
+      </h2>
+    </div>
+
+    <!-- Testimonial cards -->
+    <div class="grid md:grid-cols-3 gap-6 mb-16">
+      {socialProof.testimonials.map((t) => (
+        <div class="bg-brand-light rounded-2xl p-7 flex flex-col gap-5 border border-gray-100">
+          <!-- Stars -->
+          <div class="flex gap-1" aria-label="5 out of 5 stars">
+            {[1,2,3,4,5].map(() => (
+              <svg class="w-4 h-4 text-amber-400 fill-current" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+              </svg>
+            ))}
+          </div>
+
+          <!-- Quote -->
+          <blockquote class="text-brand-dark text-sm leading-relaxed flex-1">
+            "{t.content}"
+          </blockquote>
+
+          <!-- Author -->
+          <div class="flex items-center gap-3 pt-2 border-t border-gray-200">
+            <div class="w-9 h-9 rounded-full bg-primary-100 text-primary font-semibold text-xs flex items-center justify-center flex-shrink-0">
+              {t.avatar}
+            </div>
+            <div>
+              <div class="text-sm font-semibold text-brand-dark">{t.name}</div>
+              <div class="text-xs text-brand-gray">{t.role}</div>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+
+    <!-- Live metrics strip (falls back to static values before hydration) -->
+    <LiveMetrics client:idle variant="strip" />
+
+  </div>
+</section>

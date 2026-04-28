@@ -196,6 +196,8 @@ export const schoolsApi = {
 
   // Module management
   getModuleRegistry: () => api.get('/api/admin/modules/'),
+  getBundles: () => api.get('/api/admin/schools/bundles/'),
+  applyBundle: (schoolId, bundle) => api.post(`/api/admin/schools/${schoolId}/apply_bundle/`, { bundle }),
 
   // Regular endpoints
   getMySchool: () => api.get('/api/schools/current/'),
@@ -280,6 +282,7 @@ export const financeApi = {
   getFeePayments: (params) => api.get('/api/finance/fee-payments/', { params }),
   recordPayment: (id, data) => api.patch(`/api/finance/fee-payments/${id}/`, data),
   createPayment: (data) => api.post('/api/finance/fee-payments/', data),
+  generateSingleFee: (data) => api.post('/api/finance/fee-payments/generate_single/', data),
   generateMonthly: (data) => api.post('/api/finance/fee-payments/generate_monthly/', data),
   generateOnetimeFees: (data) => api.post('/api/finance/fee-payments/generate_onetime_fees/', data),
   generateAnnualFees: (data) => api.post('/api/finance/fee-payments/generate_annual_fees/', data),

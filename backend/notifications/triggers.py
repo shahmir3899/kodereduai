@@ -4,9 +4,103 @@ Called by other modules to fire notifications through the engine.
 """
 
 import logging
+from django.db.models import Q
 from django.utils import timezone
+from notifications.recipients import (
+    get_admin_users,
+    get_parent_users_for_student,
+    get_school_membership_users,
+    get_student_user,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def _daily_notification_already_sent(
+    *,
+    school,
+    event_type,
+    channel,
+    recipient_user,
+    title,
+    body,
+    target_date,
+    student=None,
+):
+    """Return True when the same daily notification already exists for a recipient."""
+    from .models import NotificationLog
+
+    filters = {
+        'school': school,
+        'event_type': event_type,
+        'channel': channel,
+        'recipient_user': recipient_user,
+        'title': title,
+        'body': body,
+        'created_at__date': target_date,
+        'status__in': ['PENDING', 'SCHEDULED', 'SENT', 'DELIVERED', 'READ'],
+    }
+    if student is not None:
+        filters['student'] = student
+    return NotificationLog.objects.filter(**filters).exists()
+
+
+def _monthly_notification_already_sent(
+    *,
+    school,
+    event_type,
+    channel,
+    recipient_user,
+    title,
+    body,
+    month,
+    year,
+    student=None,
+):
+    """Return True when the same monthly notification already exists for a recipient."""
+    from .models import NotificationLog
+
+    filters = {
+        'school': school,
+        'event_type': event_type,
+        'channel': channel,
+        'recipient_user': recipient_user,
+        'title': title,
+        'body': body,
+        'created_at__month': month,
+        'created_at__year': year,
+        'status__in': ['PENDING', 'SCHEDULED', 'SENT', 'DELIVERED', 'READ'],
+    }
+    if student is not None:
+        filters['student'] = student
+    return NotificationLog.objects.filter(**filters).exists()
+
+
+def _notification_already_sent(
+    *,
+    school,
+    event_type,
+    channel,
+    recipient_user,
+    title,
+    body,
+    student=None,
+):
+    """Return True when the same notification already exists for a recipient."""
+    from .models import NotificationLog
+
+    filters = {
+        'school': school,
+        'event_type': event_type,
+        'channel': channel,
+        'recipient_user': recipient_user,
+        'title': title,
+        'body': body,
+        'status__in': ['PENDING', 'SCHEDULED', 'SENT', 'DELIVERED', 'READ'],
+    }
+    if student is not None:
+        filters['student'] = student
+    return NotificationLog.objects.filter(**filters).exists()
 
 
 def _get_config(school):
@@ -20,12 +114,20 @@ def _get_config(school):
 
 def trigger_absence_notification(attendance_record):
     """
-    Send in-app absence notification to admins when a student is marked absent.
+    Send in-app absence notification when a student is marked absent.
+
+    Recipients (if profiles/accounts exist):
+    - SCHOOL_ADMIN and PRINCIPAL users
+    - Class teacher user for the student's class
+    - Linked parent profile users for the student
+    - Linked student profile user
 
     Args:
         attendance_record: AttendanceRecord instance (status=ABSENT)
     """
     from .engine import NotificationEngine
+    from .models import NotificationLog
+    from academics.models import ClassTeacherAssignment
 
     student = attendance_record.student
     school = attendance_record.school
@@ -48,35 +150,93 @@ def trigger_absence_notification(attendance_record):
     title = f"Absence: {student.name} ({student.class_obj.name})"
     body = f"{student.name} was marked absent on {context['date']}"
 
-    # Idempotency guard: skip if this same absence in-app message was already logged.
-    from .models import NotificationLog
-    already_sent = NotificationLog.objects.filter(
+    # Build recipient set with explicit recipient type per user ID.
+    recipient_types_by_user_id = {}
+
+    # 1) Admin recipients (includes principals).
+    for user in _get_admin_users(school):
+        if user:
+            recipient_types_by_user_id[user.id] = 'ADMIN'
+
+    # 2) Class teacher recipients for this class and relevant academic year.
+    teacher_assignments = ClassTeacherAssignment.objects.filter(
         school=school,
-        event_type='ABSENCE',
-        channel='IN_APP',
-        student=student,
-        title=title,
-        body=body,
-    ).exists()
-    if already_sent:
+        class_obj=student.class_obj,
+        is_active=True,
+    ).select_related('teacher__user')
+    if attendance_record.academic_year_id:
+        teacher_assignments = teacher_assignments.filter(
+            Q(academic_year_id=attendance_record.academic_year_id) |
+            Q(academic_year__isnull=True)
+        )
+    else:
+        teacher_assignments = teacher_assignments.filter(
+            Q(academic_year__is_current=True) |
+            Q(academic_year__isnull=True)
+        )
+    for assignment in teacher_assignments:
+        teacher_user = getattr(getattr(assignment, 'teacher', None), 'user', None)
+        if teacher_user:
+            recipient_types_by_user_id.setdefault(teacher_user.id, 'STAFF')
+
+    # 3) Parent recipients linked to this student.
+    for parent_user in get_parent_users_for_student(student):
+        recipient_types_by_user_id.setdefault(parent_user.id, 'PARENT')
+
+    # 4) Student recipient if student profile exists.
+    student_user = get_student_user(student)
+    if student_user:
+        # Reuse PARENT recipient_type for family/student audience in current enum.
+        recipient_types_by_user_id.setdefault(student_user.id, 'PARENT')
+
+    if not recipient_types_by_user_id:
         return None
 
-    # Create in-app notification for admins
-    admin_users = _get_admin_users(school)
-    for admin_user in admin_users:
+    users_by_id = {}
+    for user in _get_admin_users(school):
+        if user:
+            users_by_id[user.id] = user
+    for assignment in teacher_assignments:
+        teacher_user = getattr(getattr(assignment, 'teacher', None), 'user', None)
+        if teacher_user:
+            users_by_id[teacher_user.id] = teacher_user
+    for parent_user in get_parent_users_for_student(student):
+        users_by_id[parent_user.id] = parent_user
+    if student_user:
+        users_by_id[student_user.id] = student_user
+
+    # Idempotency guard: each recipient gets exactly one in-app notification
+    # for this student/date message regardless of repeated attendance saves.
+    sent_any = False
+    for user_id, recipient_type in recipient_types_by_user_id.items():
+        recipient_user = users_by_id.get(user_id)
+        if not recipient_user:
+            continue
+        already_sent = NotificationLog.objects.filter(
+            school=school,
+            event_type='ABSENCE',
+            channel='IN_APP',
+            student=student,
+            recipient_user=recipient_user,
+            title=title,
+            body=body,
+        ).exists()
+        if already_sent:
+            continue
         engine.send(
             event_type='ABSENCE',
             channel='IN_APP',
             context=context,
-            recipient_identifier=str(admin_user.id),
-            recipient_type='ADMIN',
-            recipient_user=admin_user,
+            recipient_identifier=str(recipient_user.id),
+            recipient_type=recipient_type,
+            recipient_user=recipient_user,
             student=student,
             title=title,
             body=body,
         )
+        sent_any = True
 
-    return True
+    return True if sent_any else None
 
 
 def trigger_fee_reminder(school, month, year):
@@ -229,25 +389,30 @@ def trigger_general(school, title, body, recipient_users=None):
         body: Notification body
         recipient_users: List of User objects (defaults to all admins)
     """
-    from users.models import User
+    from schools.models import UserSchoolMembership
     from .engine import NotificationEngine
 
     engine = NotificationEngine(school)
 
     if recipient_users is None:
-        recipient_users = User.objects.filter(
-            school=school,
-            role__in=['SCHOOL_ADMIN', 'PRINCIPAL', 'TEACHER'],
+        recipient_users = get_school_membership_users(
+            school,
+            roles=[
+                UserSchoolMembership.Role.SCHOOL_ADMIN,
+                UserSchoolMembership.Role.PRINCIPAL,
+                UserSchoolMembership.Role.TEACHER,
+            ],
         )
 
     sent = 0
     for user in recipient_users:
+        recipient_type = 'ADMIN' if user.role in {'SCHOOL_ADMIN', 'PRINCIPAL'} else 'STAFF'
         engine.send(
             event_type='GENERAL',
             channel='IN_APP',
             context={},
             recipient_identifier=str(user.id),
-            recipient_type='STAFF',
+            recipient_type=recipient_type,
             recipient_user=user,
             title=title,
             body=body,
@@ -258,17 +423,8 @@ def trigger_general(school, title, body, recipient_users=None):
 
 
 def _get_admin_users(school):
-    """
-    Return User objects for SCHOOL_ADMIN and PRINCIPAL roles for a given school,
-    using UserSchoolMembership for correct multi-school support.
-    """
-    from schools.models import UserSchoolMembership
-    memberships = UserSchoolMembership.objects.filter(
-        school=school,
-        role__in=['SCHOOL_ADMIN', 'PRINCIPAL'],
-        is_active=True,
-    ).select_related('user')
-    return [m.user for m in memberships]
+    """Backward-compatible local wrapper for admin recipient resolution."""
+    return get_admin_users(school)
 
 
 def trigger_class_teacher_attendance_pending(school, target_date=None):
@@ -482,6 +638,20 @@ def trigger_class_teacher_fee_pending(school, month, year):
         title = f"Fee Pending — {class_obj.name} ({month_label})"
 
         try:
+            if _notification_already_sent(
+                school=school,
+                event_type='FEE_DUE',
+                channel='IN_APP',
+                recipient_user=teacher_user,
+                title=title,
+                body=body,
+            ):
+                logger.info(
+                    "Skipped class-teacher fee reminder",
+                    extra={'reason_code': 'skipped_due_to_dedupe', 'teacher_user_id': teacher_user.id},
+                )
+                continue
+
             engine.send(
                 event_type='FEE_DUE',
                 channel='IN_APP',
@@ -537,22 +707,39 @@ def trigger_lesson_plan_published(lesson_plan):
             school=lesson_plan.school,
             is_active=True,
         )
-        .select_related('user')
+        .select_related('user_profile__user')
     )
 
     sent = 0
+    target_date = timezone.localdate()
     for student in students:
-        # Only notify students who have a user account
-        student_user = getattr(student, 'user', None)
+        # Only notify students with a linked StudentProfile user account.
+        student_user = get_student_user(student)
         if not student_user:
             continue
         try:
+            if _daily_notification_already_sent(
+                school=lesson_plan.school,
+                event_type='GENERAL',
+                channel='IN_APP',
+                recipient_user=student_user,
+                student=student,
+                title=title,
+                body=body,
+                target_date=target_date,
+            ):
+                logger.info(
+                    "Skipped lesson plan notification",
+                    extra={'reason_code': 'skipped_due_to_dedupe', 'student_id': student.id},
+                )
+                continue
+
             engine.send(
                 event_type='GENERAL',
                 channel='IN_APP',
                 context={},
                 recipient_identifier=str(student_user.id),
-                recipient_type='STAFF',  # closest available type for students
+                recipient_type='PARENT',
                 recipient_user=student_user,
                 student=student,
                 title=title,
@@ -661,6 +848,21 @@ def trigger_daily_school_report(school, date):
     sent = 0
     for admin_user in admin_users:
         try:
+            if _daily_notification_already_sent(
+                school=school,
+                event_type='GENERAL',
+                channel='IN_APP',
+                recipient_user=admin_user,
+                title=title,
+                body=body,
+                target_date=timezone.localdate(),
+            ):
+                logger.info(
+                    "Skipped daily school report",
+                    extra={'reason_code': 'skipped_due_to_dedupe', 'recipient_user_id': admin_user.id},
+                )
+                continue
+
             engine.send(
                 event_type='GENERAL',
                 channel='IN_APP',

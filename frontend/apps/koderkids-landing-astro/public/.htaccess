@@ -1,0 +1,20 @@
+Options -Indexes
+DirectoryIndex index.html
+
+RewriteEngine On
+
+# ── 1. Force HTTPS (handles both direct TLS and proxy/load-balancer setups) ──
+RewriteCond %{HTTPS} !=on [NC]
+RewriteCond %{HTTP:X-Forwarded-Proto} !https [NC]
+RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301,NE]
+
+# ── 2. Redirect bare domain → www ──────────────────────────────────────────
+# (adjust if canonical is non-www — swap the two conditions below)
+RewriteCond %{HTTP_HOST} ^kodereduai\.pk$ [NC]
+RewriteRule ^ https://www.kodereduai.pk%{REQUEST_URI} [L,R=301,NE]
+
+# ── NOTE ────────────────────────────────────────────────────────────────────
+# No SPA fallback here — Astro static output uses directory-based routing.
+# Apache serves /privacy/ → /privacy/index.html automatically via DirectoryIndex.
+# This file lives in public/ and is copied to dist/ on every `npm run build`.
+# ────────────────────────────────────────────────────────────────────────────

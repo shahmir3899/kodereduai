@@ -32,6 +32,14 @@
 |----------|----------|---------|---------|
 | VITE_API_URL | Prod only | - | Backend API URL. Dev uses proxy to localhost:8000 |
 
+### Standalone Landing App (`frontend/apps/koderkids-landing/.env`)
+
+| Variable | Required | Default | Purpose |
+|----------|----------|---------|---------|
+| VITE_MAIN_APP_API_BASE_URL | No | http://localhost:8000 | Base URL for optional public metrics API |
+| VITE_LANDING_METRICS_PATH | No | /api/public/landing-metrics/ | Endpoint path returning landing metrics JSON |
+| VITE_PUBLIC_SCHOOL_ID | No | 37 | Optional `X-School-ID` header for multi-tenant public metrics requests |
+
 ### Mobile Build Environment (EAS)
 
 | Variable | Used In | Purpose |
@@ -62,6 +70,14 @@
 - Publish: dist/
 - SPA Rewrite: /* → /index.html
 - Headers: X-Frame-Options: DENY, X-Content-Type-Options: nosniff
+
+**3. koderkids-landing (Optional standalone marketing site)**
+
+- Runtime: Static site
+- Root: `frontend/apps/koderkids-landing/`
+- Build: `npm install && npm run build`
+- Publish: `dist/`
+- Notes: deploy separately from the authenticated ERP SPA when you want an isolated marketing surface or different domain/subdomain
 
 ### External Services
 
@@ -221,6 +237,12 @@ npm install
 cp .env.example .env  # Usually empty for local
 npm run dev  # Port 3000, proxies /api to :8000
 
+# 2b. Standalone landing app
+cd frontend/apps/koderkids-landing
+npm install
+cp .env.example .env
+npm run dev
+
 # 3. Mobile (optional)
 cd mobile
 npm install
@@ -233,12 +255,14 @@ npx expo start
 2. Set all env vars in Render dashboard
 3. Ensure Redis (Upstash) is configured
 4. Set VITE_API_URL in frontend service
-5. Set `CORS_ALLOWED_ORIGINS` to explicit HTTPS frontend URLs
-6. If hosting frontend on Apache/cPanel, verify HTTP requests redirect to HTTPS
-7. Confirm web login behavior:
+5. If deploying the standalone landing app, set its `VITE_MAIN_APP_API_BASE_URL`, `VITE_LANDING_METRICS_PATH`, and optional `VITE_PUBLIC_SCHOOL_ID`
+6. Set `CORS_ALLOWED_ORIGINS` to explicit HTTPS frontend URLs, including the landing app domain if it fetches public metrics from the backend
+7. If hosting frontend on Apache/cPanel, verify HTTP requests redirect to HTTPS
+8. Confirm web login behavior:
 	- Remember me unchecked: login ends on browser close
 	- Remember me checked: login persists until token expiry
-8. Confirm inactivity logout still triggers after 30 minutes idle
-9. For mobile EAS builds, set profile env vars for API URL and HTTP policy
-10. Verify Celery worker is running (check Render logs)
-11. Test login at frontend URL
+9. Confirm inactivity logout still triggers after 30 minutes idle
+10. For mobile EAS builds, set profile env vars for API URL and HTTP policy
+11. Verify Celery worker is running (check Render logs)
+12. Test login at frontend URL
+13. Test landing app metrics/cards if the standalone marketing site is deployed
