@@ -106,6 +106,30 @@ services:
         sync: false
       - key: SUPABASE_BUCKET
         value: atten-reg
+      - key: EMAIL_HOST
+        sync: false
+      - key: EMAIL_PORT
+        sync: false
+      - key: EMAIL_HOST_USER
+        sync: false
+      - key: EMAIL_HOST_PASSWORD
+        sync: false
+      - key: EMAIL_USE_TLS
+        sync: false
+      - key: EMAIL_USE_SSL
+        sync: false
+      - key: DEFAULT_FROM_EMAIL
+        sync: false
+      - key: CAREERS_EMAIL_RECIPIENT
+        sync: false
+      - key: CAREERS_EMAIL_SENDER
+        sync: false
+      - key: CAREERS_SAVE_TO_DB
+        value: "True"
+      - key: LANDING_FORMS_EMAIL_RECIPIENT
+        sync: false
+      - key: LANDING_FORMS_EMAIL_SENDER
+        sync: false
       - key: PYTHON_VERSION
         value: "3.12.0"
       - key: WEB_CONCURRENCY

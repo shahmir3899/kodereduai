@@ -3,7 +3,11 @@ setlocal
 
 set "ROOT=%~dp0"
 set "LANDING_DIR=%ROOT%frontend\apps\koderkids-landing-astro"
-set "LANDING_ENV=%LANDING_DIR%\.env"
+set "LANDING_ENV_PROD=%LANDING_DIR%\.env.production"
+
+if "%LANDING_SITE_URL%"=="" set "LANDING_SITE_URL=https://koderkids.pk"
+if "%LANDING_API_BASE_URL%"=="" set "LANDING_API_BASE_URL=https://kodereduai-api.onrender.com"
+if "%LANDING_SCHOOL_ID%"=="" set "LANDING_SCHOOL_ID=37"
 
 if not exist "%LANDING_DIR%\package.json" (
   echo [ERROR] Landing app not found: %LANDING_DIR%
@@ -11,16 +15,16 @@ if not exist "%LANDING_DIR%\package.json" (
   exit /b 1
 )
 
-echo Writing landing .env in DEV mode...
+echo Writing landing .env.production in PRODUCTION mode...
 (
-  echo SITE_URL=http://127.0.0.1:4321
-  echo PUBLIC_MAIN_APP_API_BASE_URL=http://127.0.0.1:8000
+  echo SITE_URL=%LANDING_SITE_URL%
+  echo PUBLIC_MAIN_APP_API_BASE_URL=%LANDING_API_BASE_URL%
   echo PUBLIC_LANDING_METRICS_PATH=/api/public/landing-metrics/
-  echo PUBLIC_SCHOOL_ID=37
+  echo PUBLIC_SCHOOL_ID=%LANDING_SCHOOL_ID%
   echo PUBLIC_CAREERS_FORM_ENDPOINT=
   echo PUBLIC_DEMO_FORM_ENDPOINT=
   echo PUBLIC_CONTACT_FORM_ENDPOINT=
-) > "%LANDING_ENV%"
+) > "%LANDING_ENV_PROD%"
 
 echo Building Astro landing app...
 cd /d "%LANDING_DIR%"
@@ -51,7 +55,9 @@ if exist "%LANDING_DIR%\dist\index.html" (
 )
 
 echo.
-echo Build complete. Dev-mode .env written to:
-echo   %LANDING_ENV%
+echo Build complete. Production env written to:
+echo   %LANDING_ENV_PROD%
+echo API base used:
+echo   %LANDING_API_BASE_URL%
 echo.
 pause
