@@ -10,7 +10,11 @@ from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
-from brochure.views import PublicCareerApplicationCreateView
+from brochure.views import (
+    PublicCareerApplicationCreateView,
+    PublicDemoRequestCreateView,
+    PublicContactEnquiryCreateView,
+)
 
 
 @api_view(['GET'])
@@ -151,6 +155,8 @@ urlpatterns = [
     # API Root
     path('api/', api_root, name='api-root'),
     path('api/public/landing-metrics/', landing_metrics, name='landing-metrics'),
+    path('api/public/forms/demo-request/', PublicDemoRequestCreateView.as_view(), name='public-demo-request'),
+    path('api/public/forms/contact-enquiry/', PublicContactEnquiryCreateView.as_view(), name='public-contact-enquiry'),
     path('api/public/careers/apply/', PublicCareerApplicationCreateView.as_view(), name='public-careers-apply'),
 
     # Authentication & Users

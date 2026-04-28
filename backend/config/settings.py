@@ -481,6 +481,14 @@ CAREERS_EMAIL_SENDER = os.getenv(
     DEFAULT_FROM_EMAIL,
 ).strip()
 CAREERS_SAVE_TO_DB = os.getenv('CAREERS_SAVE_TO_DB', 'true').lower() in ('true', '1', 'yes')
+LANDING_FORMS_EMAIL_RECIPIENT = os.getenv(
+    'LANDING_FORMS_EMAIL_RECIPIENT',
+    CAREERS_EMAIL_RECIPIENT,
+).strip()
+LANDING_FORMS_EMAIL_SENDER = os.getenv(
+    'LANDING_FORMS_EMAIL_SENDER',
+    CAREERS_EMAIL_SENDER,
+).strip()
 
 # =============================================================================
 # Attendance AI Settings

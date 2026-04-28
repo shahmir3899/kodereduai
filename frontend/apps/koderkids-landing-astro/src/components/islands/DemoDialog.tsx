@@ -5,7 +5,8 @@ const EVENT_NAME = 'open-demo-dialog';
 
 export default function DemoDialog() {
   const [open, setOpen] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
+  const [status, setStatus] = useState<'idle' | 'submitting' | 'submitted' | 'error'>('idle');
+  const [message, setMessage] = useState('');
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   /* Listen for the custom event dispatched by static buttons */
@@ -36,32 +37,43 @@ export default function DemoDialog() {
   /* Close on Escape (native <dialog> already fires this, but we sync state) */
   const handleClose = () => {
     setOpen(false);
-    setSubmitted(false);
+    setStatus('idle');
+    setMessage('');
     document.body.style.overflow = '';
   };
 
   const close = () => handleClose();
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const data = new FormData(e.currentTarget);
-    const name          = String(data.get('name') || '');
-    const school        = String(data.get('school') || '');
-    const email         = String(data.get('email') || '');
-    const preferredDate = String(data.get('preferred_date') || '');
+    setStatus('submitting');
+    setMessage('');
 
-    const subject = `Demo Request – ${school || 'School Not Provided'}`;
-    const body = [
-      'Demo request from Education AI landing page:',
-      '',
-      `Name: ${name || '-'}`,
-      `School: ${school || '-'}`,
-      `Email: ${email || '-'}`,
-      `Preferred Date: ${preferredDate || '-'}`,
-    ].join('\n');
+    try {
+      const response = await fetch(siteConfig.demoRequestEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: String(data.get('name') || ''),
+          school: String(data.get('school') || ''),
+          email: String(data.get('email') || ''),
+          preferred_date: String(data.get('preferred_date') || '') || null,
+        }),
+      });
 
-    window.location.href = `mailto:${siteConfig.salesEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    setSubmitted(true);
+      if (!response.ok) {
+        throw new Error('Demo form submission failed');
+      }
+
+      e.currentTarget.reset();
+      setStatus('submitted');
+    } catch {
+      setStatus('error');
+      setMessage('Could not send your request right now. Please try again shortly or email admin@koderkids.pk.');
+    }
   };
 
   return (
@@ -86,7 +98,7 @@ export default function DemoDialog() {
             </svg>
           </button>
 
-          {submitted ? (
+          {status === 'submitted' ? (
             <div className="flex flex-col items-center gap-4 py-6 text-center">
               <div className="w-14 h-14 rounded-full bg-emerald-100 flex items-center justify-center">
                 <svg className="w-7 h-7 text-emerald-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -95,7 +107,7 @@ export default function DemoDialog() {
               </div>
               <h3 className="font-display font-bold text-brand-dark text-lg">Request sent!</h3>
               <p className="text-brand-gray text-sm max-w-xs">
-                Your email app should have opened. We'll confirm your demo slot within 1 business day.
+                Your request has been emailed to the Education AI team. We'll confirm your demo slot within 1 business day.
               </p>
               <button onClick={close} className="btn-primary mt-2">
                 Close
@@ -167,12 +179,16 @@ export default function DemoDialog() {
                   />
                 </div>
 
-                <button type="submit" className="btn-primary w-full justify-center mt-1">
-                  Request Demo
+                <button type="submit" disabled={status === 'submitting'} className="btn-primary w-full justify-center mt-1 disabled:opacity-70 disabled:cursor-not-allowed">
+                  {status === 'submitting' ? 'Sending...' : 'Request Demo'}
                   <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <path d="M5 12h14M12 5l7 7-7 7"/>
                   </svg>
                 </button>
+
+                {message && (
+                  <p className="text-sm text-rose-600">{message}</p>
+                )}
               </form>
             </>
           )}

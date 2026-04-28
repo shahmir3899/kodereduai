@@ -61,3 +61,18 @@ class CareerApplicationSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('Unsupported file extension. Use PDF, DOC, or DOCX.')
 
         return value
+
+
+class DemoRequestSerializer(serializers.Serializer):
+    name = serializers.CharField(max_length=120)
+    school = serializers.CharField(max_length=160)
+    email = serializers.EmailField()
+    preferred_date = serializers.DateField(required=False, allow_null=True)
+
+
+class ContactEnquirySerializer(serializers.Serializer):
+    name = serializers.CharField(max_length=120)
+    school = serializers.CharField(max_length=160)
+    email = serializers.EmailField()
+    phone = serializers.CharField(max_length=30, required=False, allow_blank=True)
+    message = serializers.CharField(required=False, allow_blank=True, trim_whitespace=False)

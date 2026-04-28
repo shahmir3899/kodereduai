@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ title }}</title>
+</head>
+<body style="margin:0;padding:24px;background-color:#f4f7fb;font-family:Arial,sans-serif;color:#172033;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:680px;margin:0 auto;background-color:#ffffff;border:1px solid #d7ece8;border-radius:20px;overflow:hidden;">
+    <tr>
+      <td style="background:linear-gradient(135deg, {{ accent_color }}, #115e59);padding:24px 28px;color:#ffffff;">
+        <div style="font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;opacity:0.92;">Education AI - Form Contact Enquiry</div>
+        <div style="font-size:28px;font-weight:700;line-height:1.25;margin-top:10px;">New message from the landing page</div>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:28px;">
+        <div style="background-color:{{ accent_soft }};border-left:4px solid {{ accent_color }};padding:16px 18px;border-radius:14px;font-size:14px;line-height:1.6;">
+          A visitor submitted the main contact form and expects a reply within one business day.
+        </div>
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:22px;border-collapse:separate;border-spacing:0 12px;">
+          <tr><td style="width:180px;font-size:13px;color:#5b6475;font-weight:700;">Contact Name</td><td style="font-size:15px;color:#172033;">{{ name }}</td></tr>
+          <tr><td style="font-size:13px;color:#5b6475;font-weight:700;">School</td><td style="font-size:15px;color:#172033;">{{ school }}</td></tr>
+          <tr><td style="font-size:13px;color:#5b6475;font-weight:700;">Email</td><td style="font-size:15px;color:#172033;">{{ email }}</td></tr>
+          <tr><td style="font-size:13px;color:#5b6475;font-weight:700;">Phone</td><td style="font-size:15px;color:#172033;">{{ phone }}</td></tr>
+        </table>
+        <div style="margin-top:22px;padding:18px;border:1px solid #d7ece8;border-radius:16px;background-color:#f8fffe;">
+          <div style="font-size:13px;color:#5b6475;font-weight:700;margin-bottom:8px;">Message</div>
+          <div style="font-size:15px;line-height:1.65;color:#172033;white-space:pre-line;">{{ message }}</div>
+        </div>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

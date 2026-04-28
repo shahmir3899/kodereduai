@@ -13,29 +13,45 @@ const INITIAL: FormState = { name: '', school: '', email: '', phone: '', message
 
 export default function ContactForm() {
   const [form, setForm] = useState<FormState>(INITIAL);
-  const [submitted, setSubmitted] = useState(false);
+  const [status, setStatus] = useState<'idle' | 'submitting' | 'submitted' | 'error'>('idle');
+  const [message, setMessage] = useState('');
 
   const set = (field: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm((prev) => ({ ...prev, [field]: e.target.value }));
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const subject = `New Landing Enquiry – ${form.school || 'School Not Provided'}`;
-    const body = [
-      'New enquiry from the Education AI landing page:',
-      '',
-      `Name: ${form.name || '-'}`,
-      `School: ${form.school || '-'}`,
-      `Email: ${form.email || '-'}`,
-      `Phone: ${form.phone || '-'}`,
-      `Message: ${form.message || '-'}`,
-    ].join('\n');
-    window.location.href = `mailto:${siteConfig.salesEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    setSubmitted(true);
-    setForm(INITIAL);
+    setStatus('submitting');
+    setMessage('');
+
+    try {
+      const response = await fetch(siteConfig.contactEnquiryEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: form.name,
+          school: form.school,
+          email: form.email,
+          phone: form.phone,
+          message: form.message,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Contact form submission failed');
+      }
+
+      setStatus('submitted');
+      setForm(INITIAL);
+    } catch {
+      setStatus('error');
+      setMessage('Could not send your message right now. Please try again shortly or email admin@koderkids.pk.');
+    }
   };
 
-  if (submitted) {
+  if (status === 'submitted') {
     return (
       <div className="bg-white/5 border border-white/10 rounded-2xl p-8 flex flex-col items-center justify-center gap-4 min-h-[24rem]">
         <div className="w-14 h-14 rounded-full bg-emerald-500/15 flex items-center justify-center">
@@ -43,12 +59,15 @@ export default function ContactForm() {
             <path d="M5 13l4 4L19 7"/>
           </svg>
         </div>
-        <h3 className="font-display font-semibold text-white text-lg">Opening your email app…</h3>
+        <h3 className="font-display font-semibold text-white text-lg">Message sent</h3>
         <p className="text-brand-gray text-sm text-center max-w-xs">
-          Your message has been composed. Send it in the email app that just opened. We'll reply within 1 business day.
+          Your enquiry has been emailed to the Education AI team. We'll reply within 1 business day.
         </p>
         <button
-          onClick={() => setSubmitted(false)}
+          onClick={() => {
+            setStatus('idle');
+            setMessage('');
+          }}
           className="text-sm text-primary-300 underline underline-offset-2 mt-2"
         >
           Send another message
@@ -132,13 +151,18 @@ export default function ContactForm() {
 
         <button
           type="submit"
-          className="btn-primary w-full justify-center mt-1"
+          disabled={status === 'submitting'}
+          className="btn-primary w-full justify-center mt-1 disabled:opacity-70 disabled:cursor-not-allowed"
         >
-          Send Message
+          {status === 'submitting' ? 'Sending...' : 'Send Message'}
           <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M5 12h14M12 5l7 7-7 7"/>
           </svg>
         </button>
+
+        {message && (
+          <p className="text-sm text-rose-300 text-center">{message}</p>
+        )}
 
         <p className="text-xs text-brand-gray/60 text-center">
           We respond within 1 business day. No spam — ever.

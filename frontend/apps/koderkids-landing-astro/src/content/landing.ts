@@ -5,6 +5,12 @@ export const siteConfig = {
   salesEmail: 'admin@koderkids.pk',
   contactPhone: '03167394390',
   contactCity: 'Islamabad',
+  demoRequestEndpoint:
+    import.meta.env.PUBLIC_DEMO_FORM_ENDPOINT ||
+    `${publicApiBase || ''}/api/public/forms/demo-request/`,
+  contactEnquiryEndpoint:
+    import.meta.env.PUBLIC_CONTACT_FORM_ENDPOINT ||
+    `${publicApiBase || ''}/api/public/forms/contact-enquiry/`,
   careersEndpoint:
     import.meta.env.PUBLIC_CAREERS_FORM_ENDPOINT ||
     `${publicApiBase || ''}/api/public/careers/apply/`,

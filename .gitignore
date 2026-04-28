@@ -36,6 +36,8 @@ media/
 # ==============================
 node_modules/
 frontend/dist/
+frontend/apps/koderkids-landing-astro/dist/
+frontend/apps/koderkids-landing-astro/.astro/
 *.local
 .cache
 
