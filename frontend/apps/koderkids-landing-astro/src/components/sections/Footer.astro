@@ -12,9 +12,9 @@ const year = new Date().getFullYear();
     <!-- Brand column -->
     <div class="lg:col-span-2">
       <a href="/" class="flex items-center gap-2.5 mb-4">
-        <img src="/Logo.jpeg" alt="KoderKids logo" class="h-8 w-8 rounded-md object-contain" width="32" height="32" loading="lazy" decoding="async" />
+        <img src="/Logo.jpeg" alt="Education AI logo" class="h-8 w-8 rounded-md object-contain" width="32" height="32" loading="lazy" decoding="async" />
         <span class="font-display font-semibold text-white tracking-tight">
-          Koder<span class="text-primary-300">Kids</span>
+          Education <span class="text-primary-300">AI</span>
         </span>
       </a>
       <p class="text-sm text-brand-gray leading-relaxed max-w-sm mb-6">
@@ -100,9 +100,19 @@ const year = new Date().getFullYear();
       </p>
       <nav class="flex gap-5" aria-label="Legal links">
         {footer.legalLinks.map((link) => (
-          <a href={link.href} class="text-xs text-brand-gray hover:text-white transition-colors">
-            {link.label}
-          </a>
+          link.modalKey ? (
+            <button
+              type="button"
+              onclick={`document.dispatchEvent(new CustomEvent('open-legal-dialog', { detail: '${link.modalKey}' }))`}
+              class="text-xs text-brand-gray hover:text-white transition-colors bg-transparent border-0 p-0 cursor-pointer"
+            >
+              {link.label}
+            </button>
+          ) : (
+            <a href={link.href} class="text-xs text-brand-gray hover:text-white transition-colors">
+              {link.label}
+            </a>
+          )
         ))}
       </nav>
     </div>

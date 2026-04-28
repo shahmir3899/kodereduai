@@ -139,7 +139,9 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | GET/POST | /api/finance/fee-structures/ | class_obj, academic_year, fee_type |
 | POST | /api/finance/fee-structures/bulk_set/ | Body: {items: [{class_id, amount, fee_type?}]}. fee_type per item (default MONTHLY) |
 | GET/POST | /api/finance/fee-payments/ | student, class_obj, month, year, status, academic_year, fee_type |
+| PATCH | /api/finance/fee-payments/{id}/ | Direct inline record updates. Supports `amount_due`, `previous_balance`, `amount_paid`, `payment_date`, `payment_method`, `receipt_number`, `notes`, `account` |
 | POST | /api/finance/fee-payments/generate_monthly/ | Scoped to MONTHLY fee_type only. Body supports `conflict_strategy=skip|update|delete_recreate` |
+| POST | /api/finance/fee-payments/generate_single/ | Body: {student, fee_type, month/year, annual_category or monthly_category, conflict_strategy?}. Uses fee structure amount resolution and monthly carry-forward balance logic |
 | POST | /api/finance/fee-payments/generate_onetime_fees/ | Body: {student_ids, fee_types, year, month}. Generates non-MONTHLY fee records |
 | GET | /api/finance/fee-payments/monthly_summary/ | month, year, fee_type |
 | GET | /api/finance/fee-payments/monthly_summary_all/ | |

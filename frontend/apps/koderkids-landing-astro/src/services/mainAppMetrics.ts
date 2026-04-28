@@ -1,15 +1,32 @@
 export type LandingMetrics = {
   schools: string;
+  classes: string;
   students: string;
+  activeStudents: string;
   teachers: string;
   countries: string;
+  lastUpdated: string;
 };
 
 export const FALLBACK_METRICS: LandingMetrics = {
   schools: '1,200+',
+  classes: '3,500+',
   students: '450K+',
+  activeStudents: '430K+',
   teachers: '35K+',
   countries: '45',
+  lastUpdated: 'Live',
+};
+
+const formatLastUpdated = (value: unknown, fallback: string): string => {
+  if (typeof value !== 'string' || !value.trim()) return fallback;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return fallback;
+  return parsed.toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
 };
 
 const toDisplayValue = (value: unknown, fallback: string): string => {
@@ -47,8 +64,17 @@ export const fetchMainAppMetrics = async (): Promise<LandingMetrics> => {
 
   return {
     schools:   toDisplayValue(pickValue(payload, ['schools', 'schools_count', 'total_schools']), FALLBACK_METRICS.schools),
+    classes:   toDisplayValue(pickValue(payload, ['classes', 'classes_count', 'total_classes']), FALLBACK_METRICS.classes),
     students:  toDisplayValue(pickValue(payload, ['students', 'students_count', 'total_students']), FALLBACK_METRICS.students),
+    activeStudents: toDisplayValue(
+      pickValue(payload, ['active_students', 'activeStudents', 'active_students_count']),
+      FALLBACK_METRICS.activeStudents,
+    ),
     teachers:  toDisplayValue(pickValue(payload, ['teachers', 'teachers_count', 'total_teachers', 'staff_count']), FALLBACK_METRICS.teachers),
     countries: toDisplayValue(pickValue(payload, ['countries', 'countries_count']), FALLBACK_METRICS.countries),
+    lastUpdated: formatLastUpdated(
+      pickValue(payload, ['last_updated', 'lastUpdated', 'updated_at']),
+      FALLBACK_METRICS.lastUpdated,
+    ),
   };
 };

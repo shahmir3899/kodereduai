@@ -1,6 +1,13 @@
 /* ─── Site-wide config ─────────────────────────────── */
+const publicApiBase = (import.meta.env.PUBLIC_MAIN_APP_API_BASE_URL || '').replace(/\/$/, '');
+
 export const siteConfig = {
-  salesEmail: 'sales@koderkids.pk',
+  salesEmail: 'admin@koderkids.pk',
+  contactPhone: '03167394390',
+  contactCity: 'Islamabad',
+  careersEndpoint:
+    import.meta.env.PUBLIC_CAREERS_FORM_ENDPOINT ||
+    `${publicApiBase || ''}/api/public/careers/apply/`,
   demoUrl: 'https://demo.kodereduai.pk',
   twitterUrl: 'https://twitter.com/koderkidspk',
   linkedInUrl: 'https://www.linkedin.com/company/koderkids',
@@ -10,7 +17,7 @@ export const siteConfig = {
 /* ─── Typed content for the landing page ──────────── */
 export const landingContent = {
   /* SEO */
-  title: 'Education AI for Schools | KoderKids',
+  title: 'Education AI for Schools',
   description:
     'Modern school operations platform with AI-assisted attendance, fees, academics, communication, and analytics in one connected experience.',
 
@@ -23,7 +30,7 @@ export const landingContent = {
     primaryCta: { label: 'Book a Demo', href: '#contact' },
     secondaryCta: { label: 'See it in action', href: '#walkthrough' },
     dashboardImage: '/dashboard_overview.jpg',
-    dashboardAlt: 'KoderEduAI School Dashboard Overview',
+    dashboardAlt: 'Education AI School Dashboard Overview',
     /* Fallback metrics shown when live fetch is unavailable */
     metrics: {
       schools: '1,200+',
@@ -89,21 +96,21 @@ export const landingContent = {
       },
       {
         id: 'attendance',
-        label: 'Attendance',
-        title: 'AI Register Upload & Review',
+        label: 'Academic Calendar',
+        title: 'Academic Calendar Planning & Tracking',
         description:
-          'Photograph a handwritten register. AI reads it, maps students, flags gaps. Admin reviews in under 2 minutes.',
+          'Configure working days, holidays, exam periods, and school events in one monthly calendar view.',
         bullets: [
-          'Google Vision OCR → LLM table parsing',
-          'Side-by-side confidence review UI',
-          'One-click confirm or per-row edit',
+          'Month-wise calendar completeness indicator',
+          'Single-day and date-range event marking',
+          'Automatic Sunday and off-day handling',
         ],
         image: '/academiccalendar.jpg',
         color: 'indigo',
       },
       {
         id: 'academics',
-        label: 'Academics',
+        label: 'Time table',
         title: 'Timetable & Lesson Plans',
         description:
           'Drag-and-drop weekly timetable with automatic clash detection. Lesson plans linked to curriculum objectives.',
@@ -159,28 +166,28 @@ export const landingContent = {
       },
       {
         id: 'parents',
-        label: 'Parent Portal',
-        title: 'Real-Time Parent Engagement',
+        label: 'Notifications',
+        title: 'School Notifications & Alerts',
         description:
-          'Parents see fees, attendance, marks, timetable, and messages without calling the front office.',
+          'Send targeted announcements to staff, students, and parents with clear delivery visibility.',
         bullets: [
-          'Role-scoped view — only their child\'s data',
-          'In-app messaging thread with staff',
-          'Leave request and approval workflow',
+          'Broadcast by role, class, or whole school',
+          'In-app notification history and status',
+          'Fee, event, and attendance reminder alerts',
         ],
         image: '/messages.jpg',
         color: 'teal',
       },
       {
         id: 'lms',
-        label: 'LMS',
-        title: 'Assignments & Submissions',
+        label: 'Lesson Plans',
+        title: 'Lesson Planning by Class & Subject',
         description:
-          'Teachers post assignments per class/subject. Students submit digitally. Grading happens in the same flow.',
+          'Create and manage lesson plans mapped to timetable slots and curriculum objectives.',
         bullets: [
-          'Assignment deadline tracking',
-          'Submission inbox with review UI',
-          'Grade linked back to exam module',
+          'Plan topics with objectives and classwork',
+          'Track curriculum coverage progress by subject',
+          'Share plans with academic leadership for review',
         ],
         image: '/lessonplan.jpg',
         color: 'fuchsia',
@@ -242,13 +249,15 @@ export const landingContent = {
     label: 'PRICING',
     heading: 'Flexible Plans by School Stage',
     subheading:
-      "Choose depth and rollout scope based on your institution's size and priorities.",
+      'Simple monthly billing with annual savings for every plan.',
     plans: [
       {
         tier: 'Starter',
         badge: null as string | null,
         title: 'Core Operations',
         desc: 'Manual attendance, student management, timetable, and notifications.',
+        monthlyPrice: 'PKR 6,000 / month',
+        annualPrice: 'PKR 64,800 / year (10% off)',
         features: [
           'Students & Classes',
           'Manual Attendance',
@@ -265,6 +274,8 @@ export const landingContent = {
         badge: 'Most Popular',
         title: 'Full School Suite',
         desc: 'AI register OCR, finance, exams, parent portal, admissions, and LMS.',
+        monthlyPrice: 'PKR 8,000 / month',
+        annualPrice: 'PKR 86,400 / year (10% off)',
         features: [
           'Everything in Starter',
           'AI Register Upload & OCR Review',
@@ -283,6 +294,8 @@ export const landingContent = {
         badge: null as string | null,
         title: 'Full Platform + AI',
         desc: 'All 18 modules + face recognition, AI paper builder, and payment gateway.',
+        monthlyPrice: 'PKR 12,000 / month',
+        annualPrice: 'PKR 129,600 / year (10% off)',
         features: [
           'Everything in Growth',
           'Face Recognition Attendance',
@@ -349,42 +362,42 @@ export const landingContent = {
     ],
     companyLinks: [
       { label: 'Contact', href: '#contact' },
-      { label: 'Careers', href: 'mailto:careers@koderkids.pk' },
-      { label: 'About', href: 'mailto:sales@koderkids.pk' },
+      { label: 'Careers', href: '/careers' },
+      { label: 'About', href: '/about' },
     ],
     legalLinks: [
-      { label: 'Privacy Policy', href: '/privacy' },
-      { label: 'Terms of Service', href: '/terms' },
-      { label: 'Support', href: '/support' },
+      { label: 'Privacy Policy', href: '/privacy', modalKey: 'privacy' },
+      { label: 'Terms of Service', href: '/terms', modalKey: 'terms' },
+      { label: 'Support', href: '/support', modalKey: 'support' },
     ],
-    copyright: 'Koder Kids',
+    copyright: 'Education AI (a product of Koder Kids)',
   },
 };
 
 /* ─── FAQ content (used for JSON-LD FAQPage schema) ── */
 export const faqContent = [
   {
-    question: 'What is KoderKids / KoderEduAI?',
+    question: 'What is Education AI?',
     answer:
-      'KoderKids (KoderEduAI) is a cloud-based school operating system that brings admissions, AI-assisted attendance, academics, finance, HR, transport, library, hostel, and inventory management into a single platform designed for K-12 schools.',
+      'Education AI is a cloud-based school operating system that brings admissions, AI-assisted attendance, academics, finance, HR, transport, library, hostel, and inventory management into a single platform designed for K-12 schools.',
   },
   {
     question: 'How does the AI-powered attendance work?',
     answer:
-      'Teachers photograph handwritten attendance registers. KoderEduAI uses Google Cloud Vision OCR and an LLM to extract student names and present/absent marks from the image. Staff review the extracted data, confirm it, and the system saves the records — no manual data entry required.',
+      'Teachers photograph handwritten attendance registers. Education AI uses Google Cloud Vision OCR and an LLM to extract student names and present/absent marks from the image. Staff review the extracted data, confirm it, and the system saves the records — no manual data entry required.',
   },
   {
-    question: 'Can KoderEduAI manage multiple school branches?',
+    question: 'Can Education AI manage multiple school branches?',
     answer:
       'Yes. The platform is fully multi-tenant. Each school or branch operates in an isolated data environment. A super-admin can oversee all organisations, while school admins only see their own data.',
   },
   {
-    question: 'What modules are included in the platform?',
+    question: 'What modules are included in Education AI?',
     answer:
-      'KoderEduAI includes 18 modules: Admissions, Attendance (AI-powered), Academics, Examinations, Finance & Fees, HR & Payroll, Transport & GPS, Library, Hostel & Gate Passes, Inventory, LMS & Assignments, Parent Portal, Notifications, Reports, and more.',
+      'Education AI includes 18 modules: Admissions, Attendance (AI-powered), Academics, Examinations, Finance & Fees, HR & Payroll, Transport & GPS, Library, Hostel & Gate Passes, Inventory, LMS & Assignments, Parent Portal, Notifications, Reports, and more.',
   },
   {
-    question: 'Is KoderEduAI available on mobile?',
+    question: 'Is Education AI available on mobile?',
     answer:
       'Yes. A React Native mobile app is available for iOS and Android, giving teachers, parents, and admins on-the-go access to attendance, notifications, fee status, and more.',
   },
@@ -394,13 +407,13 @@ export const faqContent = [
       'All data is encrypted in transit (TLS) and at rest. Role-based access control ensures users only see data relevant to their role. File storage is hosted on Supabase with private bucket policies. The platform is built following OWASP security best practices.',
   },
   {
-    question: 'Can I try KoderEduAI before committing?',
+    question: 'Can I try Education AI before committing?',
     answer:
       'Yes. Book a live demo via the form on this page and our team will walk you through the platform with a fully seeded demo environment. You can also access the live demo at demo.kodereduai.pk.',
   },
   {
     question: 'How is pricing structured?',
     answer:
-      'KoderEduAI offers three tiers — Essential, Professional, and Enterprise — billed annually per school. Each tier unlocks progressively more modules and AI features. Contact our sales team to discuss the right plan for your institution.',
+      'Education AI offers three plans: Starter (PKR 6,000/month), Growth (PKR 8,000/month), and Enterprise (PKR 12,000/month). Annual billing gets a 10% discount on each plan.',
   },
 ];

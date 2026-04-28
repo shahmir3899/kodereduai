@@ -60,12 +60,12 @@ export default function WalkthroughCarousel() {
   const accentClass = accentColorMap[slide.color] ?? 'bg-primary';
 
   return (
-    <section id="walkthrough" className="py-20 lg:py-28 bg-brand-light">
+    <section id="walkthrough" className="py-14 lg:py-18 bg-brand-light">
       <div className="w-full px-6 lg:px-12">
         <div className="max-w-[1200px] mx-auto">
 
           {/* Header */}
-          <div className="text-center mb-10">
+          <div className="text-center mb-7">
             <div className="section-label mb-2">{walkthrough.label}</div>
             <h2 className="font-display text-3xl lg:text-5xl font-bold text-brand-dark mb-4">
               {walkthrough.heading}
@@ -106,81 +106,83 @@ export default function WalkthroughCarousel() {
             ))}
           </div>
 
-            {/* Screenshot frame */}
-            <div className="feature-screenshot-wrap">
-              <button
-                onClick={() => { goTo(active - 1); setPaused(true); }}
-                className="feature-arrow feature-arrow-left"
-                aria-label="Previous slide"
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M15 18l-6-6 6-6"/>
-                </svg>
-              </button>
-              <button
-                onClick={() => { goTo(active + 1); setPaused(true); }}
-                className="feature-arrow feature-arrow-right"
-                aria-label="Next slide"
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M9 18l6-6-6-6"/>
-                </svg>
-              </button>
+            <div className="feature-main-grid">
+              {/* Screenshot frame */}
+              <div className="feature-screenshot-wrap">
+                <button
+                  onClick={() => { goTo(active - 1); setPaused(true); }}
+                  className="feature-arrow feature-arrow-left"
+                  aria-label="Previous slide"
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M15 18l-6-6 6-6"/>
+                  </svg>
+                </button>
+                <button
+                  onClick={() => { goTo(active + 1); setPaused(true); }}
+                  className="feature-arrow feature-arrow-right"
+                  aria-label="Next slide"
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M9 18l6-6-6-6"/>
+                  </svg>
+                </button>
 
-              <div className="dashboard-card feature-frame">
-                <div className="window-chrome">
-                  <span className="window-dot window-dot-red"></span>
-                  <span className="window-dot window-dot-yellow"></span>
-                  <span className="window-dot window-dot-green"></span>
-                  <span className="ml-2 text-sm text-brand-gray">{slide.label}</span>
-                </div>
-                <div className="p-3 lg:p-4">
-                  <img
-                    key={slide.image}
-                    src={slide.image}
-                    alt={slide.title}
-                    className="w-full h-auto rounded-xl slideshow-img"
-                    loading="lazy"
-                    decoding="async"
-                    width={1200}
-                    height={750}
-                    sizes="(max-width: 768px) 100vw, (max-width: 1280px) 60vw, 800px"
-                  />
+                <div className="dashboard-card feature-frame">
+                  <div className="window-chrome">
+                    <span className="window-dot window-dot-red"></span>
+                    <span className="window-dot window-dot-yellow"></span>
+                    <span className="window-dot window-dot-green"></span>
+                    <span className="ml-2 text-sm text-brand-gray">{slide.label}</span>
+                  </div>
+                  <div className="feature-image-shell">
+                    <img
+                      key={slide.image}
+                      src={slide.image}
+                      alt={slide.title}
+                      className="w-full rounded-xl slideshow-img"
+                      loading="lazy"
+                      decoding="async"
+                      width={1200}
+                      height={750}
+                      sizes="(max-width: 768px) 100vw, (max-width: 1280px) 60vw, 800px"
+                    />
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* Content row */}
-            <div className="feature-content-row">
-              <div className="feature-content-left">
-                <div className={`feature-content-accent ${accentClass}`}></div>
-                <h3 className="font-display text-2xl lg:text-3xl font-bold text-brand-dark mb-2">
-                  {slide.title}
-                </h3>
-                <p className="text-brand-gray leading-relaxed">{slide.description}</p>
-              </div>
+              {/* Content column */}
+              <div className="feature-content-panel">
+                <div className="feature-content-left">
+                  <div className={`feature-content-accent ${accentClass}`}></div>
+                  <h3 className="font-display text-2xl lg:text-3xl font-bold text-brand-dark mb-2">
+                    {slide.title}
+                  </h3>
+                  <p className="text-brand-gray leading-relaxed">{slide.description}</p>
+                </div>
 
-              <ul className="feature-bullets">
-                {slide.bullets.map((b) => (
-                  <li key={b} className="flex items-center gap-3 text-sm text-brand-gray">
-                    <svg className="w-4 h-4 text-emerald-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <path d="M5 13l4 4L19 7"/>
-                    </svg>
-                    {b}
-                  </li>
-                ))}
-              </ul>
+                <ul className="feature-bullets">
+                  {slide.bullets.map((b) => (
+                    <li key={b} className="flex items-center gap-3 text-sm text-brand-gray">
+                      <svg className="w-4 h-4 text-emerald-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M5 13l4 4L19 7"/>
+                      </svg>
+                      {b}
+                    </li>
+                  ))}
+                </ul>
 
-              {/* Dot nav */}
-              <div className="feature-dots">
-                {slides.map((_, i) => (
-                  <button
-                    key={i}
-                    onClick={() => { goTo(i); setPaused(true); }}
-                    className={`slideshow-dot${i === active ? ' slideshow-dot-active' : ''}`}
-                    aria-label={`Go to slide ${i + 1}: ${slides[i].label}`}
-                  />
-                ))}
+                {/* Dot nav */}
+                <div className="feature-dots">
+                  {slides.map((_, i) => (
+                    <button
+                      key={i}
+                      onClick={() => { goTo(i); setPaused(true); }}
+                      className={`slideshow-dot${i === active ? ' slideshow-dot-active' : ''}`}
+                      aria-label={`Go to slide ${i + 1}: ${slides[i].label}`}
+                    />
+                  ))}
+                </div>
               </div>
             </div>
           </div>

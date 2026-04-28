@@ -291,11 +291,15 @@ school(FK), name, account_type (CASH/BANK/MOBILE), description, is_default, is_a
 school(FK), name, class_obj(FK nullable), student(FK SET_NULL nullable), amount, fee_type (FeeType, default=MONTHLY), academic_year(FK), frequency (MONTHLY/QUARTERLY/ANNUAL/ONE_TIME)
 
 ### FeePayment
-school(FK), student(FK SET_NULL nullable), fee_structure(FK nullable), amount, paid_amount, discount_amount, balance, fee_type (FeeType, default=MONTHLY), month, year, status (PENDING/PARTIAL/PAID/OVERDUE), payment_date, payment_method, receipt_number, account(FK nullable), academic_year(FK)
+school(FK), academic_year(FK nullable), student(FK SET_NULL nullable), fee_type (FeeType, default=MONTHLY), annual_category(FK nullable), monthly_category(FK nullable), month, year, amount_due, previous_balance, base_monthly_fee(nullable), amount_paid, status (PAID/PARTIAL/UNPAID/ADVANCE), payment_date(nullable), payment_method, receipt_number, notes, collected_by(FK nullable), account(FK nullable), created_at, updated_at
 
-**Unique constraint:** (school, student, month, year, fee_type)
+**Unique constraint:** (school, student, month, year, fee_type, annual_category, monthly_category)
 
-**Note:** `resolve_fee_amount(student, fee_type='MONTHLY')` accepts a fee_type parameter. `FeePayment.save()/delete()` skip MonthlyClosing lock for month=0 records (used by non-MONTHLY fee types).
+**Notes:**
+- `resolve_fee_amount(student, fee_type='MONTHLY')` accepts fee type + category inputs and is used by the single-fee generation flow.
+- `generate_single` creates one record using the same structure-based logic as bulk generation; for MONTHLY fees it adds carried-forward `previous_balance` to the resolved base amount.
+- `FeePayment.save()/delete()` skip MonthlyClosing lock for month=0 records (used by non-MONTHLY fee types).
+- Updating a FeePayment recalculates `status`; when a record becomes `UNPAID`, payment metadata such as `payment_date`, `account`, and `receipt_number` is cleared.
 
 **Financial Record Safety:** FeePayment, FeeStructure, OnlinePayment, and StudentDiscount use `on_delete=SET_NULL` on student ForeignKeys. Deleting a student preserves all financial records (student field becomes NULL, displayed as "Deleted Student" in the UI).
 

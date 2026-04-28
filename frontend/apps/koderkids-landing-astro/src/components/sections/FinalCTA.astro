@@ -28,6 +28,12 @@ const { finalCta } = landingContent;
           ))}
         </div>
 
+        <div class="mb-10 space-y-1.5 text-sm text-gray-300">
+          <p>Email: <a href={`mailto:${siteConfig.salesEmail}`} class="text-primary-300 hover:text-primary-200">{siteConfig.salesEmail}</a></p>
+          <p>Phone: <a href={`tel:${siteConfig.contactPhone}`} class="text-primary-300 hover:text-primary-200">{siteConfig.contactPhone}</a></p>
+          <p>City: {siteConfig.contactCity}</p>
+        </div>
+
         <!-- CTA buttons -->
         <div class="flex flex-wrap gap-3">
           <button

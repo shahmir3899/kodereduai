@@ -210,6 +210,7 @@ export default function FeeTable({
                 {group.items.map(({ payment, prevBal, monthlyFee, balance }) => {
                   const isSelected = selectedIds.has(payment.id)
                   const isEditingReceived = editingCell?.id === payment.id && editingCell?.field === 'amount_paid'
+                  const isEditingPrevBal = editingCell?.id === payment.id && editingCell?.field === 'previous_balance'
                   return (
                     <div key={payment.id} className={`rounded-md border p-1.5 ${isSelected ? 'border-primary-400 bg-primary-50' : 'border-gray-200 bg-gray-50'}`}>
                       <div className="flex items-start gap-2">
@@ -281,6 +282,29 @@ export default function FeeTable({
                                 />
                               ) : (
                                 <p className="font-medium text-green-700">{Number(payment.amount_paid).toLocaleString()}</p>
+                              )}
+                            </div>
+                            <div
+                              className={canWrite ? 'cursor-pointer' : ''}
+                              onClick={() => canWrite && handleCellClick(payment.id, 'previous_balance', prevBal)}
+                            >
+                              <p className="text-gray-500">Prev Bal</p>
+                              {isEditingPrevBal ? (
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  autoFocus
+                                  value={editValue}
+                                  onChange={(e) => setEditValue(e.target.value)}
+                                  onBlur={() => onInlineUpdate(payment.id, 'previous_balance', editValue)}
+                                  onKeyDown={(e) => handleKeyDown(e, payment.id, 'previous_balance')}
+                                  className="w-full input-field text-sm py-0.5 px-1"
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                              ) : (
+                                <p className={`font-medium ${prevBal > 0 ? 'text-orange-700' : prevBal < 0 ? 'text-blue-700' : 'text-gray-900'}`}>
+                                  {prevBal.toLocaleString()}
+                                </p>
                               )}
                             </div>
                             <div>
@@ -377,7 +401,7 @@ export default function FeeTable({
                   </div>
                 </div>
               </div>
-              <div className="grid grid-cols-4 gap-2 text-sm mb-2">
+              <div className="grid grid-cols-5 gap-2 text-sm mb-2">
                 <div>
                   <p className="text-xs text-gray-500">{feeColumnLabel}</p>
                   <p className="font-medium">{monthlyFee.toLocaleString()}</p>
@@ -422,6 +446,29 @@ export default function FeeTable({
                     />
                   ) : (
                     <p className="font-medium text-green-700">{Number(payment.amount_paid).toLocaleString()}</p>
+                  )}
+                </div>
+                <div
+                  className={canWrite ? 'cursor-pointer' : ''}
+                  onClick={() => canWrite && handleCellClick(payment.id, 'previous_balance', prevBal)}
+                >
+                  <p className="text-xs text-gray-500">Prev Bal {canWrite && <span className="text-orange-500">edit</span>}</p>
+                  {editingCell?.id === payment.id && editingCell?.field === 'previous_balance' ? (
+                    <input
+                      type="number"
+                      step="0.01"
+                      autoFocus
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      onBlur={() => onInlineUpdate(payment.id, 'previous_balance', editValue)}
+                      onKeyDown={(e) => handleKeyDown(e, payment.id, 'previous_balance')}
+                      className="w-full input-field text-sm py-0.5 px-1"
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  ) : (
+                    <p className={`font-medium ${prevBal > 0 ? 'text-orange-700' : prevBal < 0 ? 'text-blue-700' : 'text-gray-500'}`}>
+                      {prevBal === 0 ? '\u2014' : prevBal.toLocaleString()}
+                    </p>
                   )}
                 </div>
                 <div>
@@ -513,6 +560,7 @@ export default function FeeTable({
               const isSelected = selectedIds.has(payment.id)
               const isEditingReceived = editingCell?.id === payment.id && editingCell?.field === 'amount_paid'
               const isEditingAmountDue = editingCell?.id === payment.id && editingCell?.field === 'amount_due'
+              const isEditingPrevBal = editingCell?.id === payment.id && editingCell?.field === 'previous_balance'
               const group = studentGroups?.get(payment.id)
               const showStudentCols = !shouldGroupByStudent || !group || group.isFirst
               const studentTotal = groupedTotalsByKey.get(studentKey)
@@ -553,8 +601,26 @@ export default function FeeTable({
                       </td>
                     )}
                     {showPrevBal && (
-                      <td className={`px-3 py-2 text-sm text-right ${prevBal > 0 ? 'text-orange-700 font-medium' : prevBal < 0 ? 'text-blue-700 font-medium' : 'text-gray-400'}`}>
-                        {prevBal > 0 ? prevBal.toLocaleString() : prevBal < 0 ? `-${Math.abs(prevBal).toLocaleString()}` : '\u2014'}
+                      <td
+                        className={`px-3 py-2 text-sm text-right ${canWrite ? 'cursor-pointer hover:bg-orange-50' : ''} ${prevBal > 0 ? 'text-orange-700 font-medium' : prevBal < 0 ? 'text-blue-700 font-medium' : 'text-gray-400'}`}
+                        onClick={() => canWrite && !isEditingPrevBal && handleCellClick(payment.id, 'previous_balance', prevBal)}
+                        title={canWrite ? 'Click to edit previous balance' : undefined}
+                      >
+                        {isEditingPrevBal ? (
+                          <input
+                            type="number"
+                            step="0.01"
+                            autoFocus
+                            value={editValue}
+                            onChange={(e) => setEditValue(e.target.value)}
+                            onBlur={() => onInlineUpdate(payment.id, 'previous_balance', editValue)}
+                            onKeyDown={(e) => handleKeyDown(e, payment.id, 'previous_balance')}
+                            className="w-24 text-right input-field text-sm py-0.5 px-1"
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        ) : (
+                          prevBal > 0 ? prevBal.toLocaleString() : prevBal < 0 ? `-${Math.abs(prevBal).toLocaleString()}` : '\u2014'
+                        )}
                       </td>
                     )}
                     <td className={`px-3 py-2 text-sm text-gray-900 text-right`}>

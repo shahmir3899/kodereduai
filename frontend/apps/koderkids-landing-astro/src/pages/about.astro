@@ -1,0 +1,57 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { siteConfig } from '../content/landing';
+
+const siteUrl = Astro.site?.toString().replace(/\/$/, '') ?? 'https://www.koderkids.pk';
+
+const schema = {
+  '@context': 'https://schema.org',
+  '@type': 'AboutPage',
+  name: 'About Education AI',
+  url: `${siteUrl}/about`,
+  description: 'About Education AI and Koder Kids, an education consultant focused on school transformation.',
+};
+---
+
+<BaseLayout
+  title="About | Education AI"
+  description="Learn about Education AI and Koder Kids, an education consultant helping schools modernize operations."
+  canonical="/about"
+  robots="index,follow"
+  jsonLd={schema}
+>
+  <main id="main-content" class="py-20 bg-brand-light min-h-screen">
+    <div class="max-w-4xl mx-auto px-6">
+      <div class="bg-white border border-gray-200 rounded-2xl p-8 sm:p-10 shadow-card">
+        <span class="section-label mb-2 block">ABOUT</span>
+        <h1 class="font-display text-3xl sm:text-4xl font-bold text-brand-dark mb-4">About Education AI</h1>
+
+        <p class="text-brand-gray leading-relaxed mb-5">
+          Education AI is a school operations platform that helps institutions manage attendance,
+          academics, finance, communication, and administration in one connected system.
+        </p>
+
+        <p class="text-brand-gray leading-relaxed mb-8">
+          Koder Kids is an education consultant focused on practical digital transformation for schools.
+          We work with school leadership teams to streamline operations, improve visibility, and build
+          scalable systems that support better learning environments.
+        </p>
+
+        <div class="grid sm:grid-cols-3 gap-4 text-sm">
+          <div class="rounded-xl border border-gray-200 p-4">
+            <p class="text-gray-500 mb-1">Email</p>
+            <a href={`mailto:${siteConfig.salesEmail}`} class="text-brand-dark font-medium hover:text-primary transition-colors">{siteConfig.salesEmail}</a>
+          </div>
+          <div class="rounded-xl border border-gray-200 p-4">
+            <p class="text-gray-500 mb-1">Phone</p>
+            <a href={`tel:${siteConfig.contactPhone}`} class="text-brand-dark font-medium hover:text-primary transition-colors">{siteConfig.contactPhone}</a>
+          </div>
+          <div class="rounded-xl border border-gray-200 p-4">
+            <p class="text-gray-500 mb-1">Location</p>
+            <p class="text-brand-dark font-medium">{siteConfig.contactCity}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</BaseLayout>

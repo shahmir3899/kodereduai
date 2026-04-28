@@ -1081,6 +1081,89 @@ Query params: `student`, `class_obj`, `month`, `year`, `status`, `academic_year`
 }
 ```
 
+### PATCH /api/finance/fee-payments/{id}/
+Direct record update used by inline editing on Fee Collect for Total Payable, Received, and Prev Bal.
+```json
+// Request
+{
+  "previous_balance": "700.00"
+}
+
+// Response
+{
+  "id": 888,
+  "school": 1,
+  "student": 182,
+  "student_name": "Eshaal Fatima",
+  "student_roll": "1",
+  "class_name": "Playgroup - A",
+  "class_obj_id": 5,
+  "academic_year": null,
+  "academic_year_name": null,
+  "fee_type": "MONTHLY",
+  "fee_type_display": "Monthly",
+  "month": 2,
+  "year": 2026,
+  "previous_balance": "700.00",
+  "amount_due": "1600.00",
+  "amount_paid": "900.00",
+  "status": "PARTIAL",
+  "payment_date": "2026-02-11",
+  "payment_method": "CASH",
+  "receipt_number": "",
+  "notes": "",
+  "collected_by": 4,
+  "collected_by_name": "focus3899",
+  "account": 1,
+  "account_name": "Principal",
+  "created_at": "2026-02-11T15:33:41.743408+05:00",
+  "updated_at": "2026-04-28T12:10:05.000000+05:00"
+}
+```
+
+Updating a record only changes that record, but `status` and payment metadata may be recalculated automatically by model save rules.
+
+### POST /api/finance/fee-payments/generate_single/
+Request body supports optional `conflict_strategy` with values `skip`, `update`, or `delete_recreate`.
+```json
+// Request
+{
+  "student": 182,
+  "fee_type": "MONTHLY",
+  "monthly_category": 3,
+  "month": 4,
+  "year": 2026,
+  "academic_year": 43,
+  "conflict_strategy": "update"
+}
+
+// Response
+{
+  "created": 0,
+  "updated": 1,
+  "skipped": 0,
+  "message": "Existing fee record updated.",
+  "record": {
+    "id": 1204,
+    "student": 182,
+    "student_name": "Eshaal Fatima",
+    "fee_type": "MONTHLY",
+    "month": 4,
+    "year": 2026,
+    "monthly_category": 3,
+    "monthly_category_name": "Tuition Fee",
+    "previous_balance": "700.00",
+    "amount_due": "1200.00",
+    "amount_paid": "0.00",
+    "status": "UNPAID",
+    "account": null,
+    "account_name": null
+  }
+}
+```
+
+For MONTHLY records, `amount_due` includes resolved base fee amount plus prior carried-forward balance when applicable. For ANNUAL records, no monthly carry-forward is applied.
+
 ### POST /api/finance/fee-payments/generate_onetime_fees/
 ```json
 // Request

@@ -184,10 +184,35 @@ img {
 
 .feature-screenshot-wrap {
   position: relative;
-  margin-bottom: 1.75rem;
+  margin-bottom: 1.25rem;
 }
 .feature-frame {
   width: 100%;
+}
+
+.feature-main-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+  align-items: stretch;
+}
+@media (min-width: 1024px) {
+  .feature-main-grid {
+    grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
+  }
+  .feature-screenshot-wrap {
+    margin-bottom: 0;
+  }
+}
+
+.feature-image-shell {
+  padding: 0.75rem;
+  background: #fff;
+}
+@media (min-width: 1024px) {
+  .feature-image-shell {
+    padding: 0.625rem;
+  }
 }
 
 .feature-arrow {
@@ -240,6 +265,22 @@ img {
   position: relative;
   padding-left: 1rem;
 }
+
+.feature-content-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  padding: 1rem 1.1rem;
+  background: #fff;
+  border-radius: 1.25rem;
+  box-shadow: 0 4px 24px rgba(11, 15, 25, 0.07);
+}
+@media (min-width: 1024px) {
+  .feature-content-panel {
+    padding: 1.1rem 1.25rem;
+  }
+}
+
 .feature-content-accent {
   position: absolute;
   top: 0;
@@ -260,7 +301,7 @@ img {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding-top: 0.25rem;
+  padding-top: 0.15rem;
 }
 
 .slideshow-dot {
@@ -280,6 +321,16 @@ img {
 
 .slideshow-img {
   animation: slideFadeIn 0.3s ease-out;
+  object-fit: contain;
+  height: clamp(220px, 42vh, 490px);
+  background: #f8fafc;
+}
+@media (max-width: 1023px) {
+  .slideshow-img {
+    height: auto;
+    object-fit: cover;
+    background: transparent;
+  }
 }
 @keyframes slideFadeIn {
   from { opacity: 0; transform: scale(0.98); }

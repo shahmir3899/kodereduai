@@ -19,44 +19,52 @@ export default function LiveMetrics({ variant = 'strip' }: Props) {
 
   const items = [
     { value: metrics.schools,   label: 'Schools'   },
+    { value: metrics.classes,   label: 'Classes'   },
     { value: metrics.students,  label: 'Students'  },
+    { value: metrics.activeStudents, label: 'Active Students' },
     { value: metrics.teachers,  label: 'Teachers'  },
     { value: metrics.countries, label: 'Countries' },
   ];
 
   if (variant === 'bar') {
     return (
-      <div className="flex flex-wrap gap-6">
-        {items.map((item, i) => (
-          <>
-            {i > 0 && <div className="w-px bg-white/10 self-stretch" key={`sep-${i}`}></div>}
-            <div key={item.label}>
-              <div className="text-2xl font-display font-bold text-white">{item.value}</div>
-              <div className="text-xs text-brand-gray mt-0.5">{item.label}</div>
+      <div>
+        <div className="flex flex-wrap gap-6">
+          {items.map((item, i) => (
+            <div key={item.label} className="contents">
+              {i > 0 && <div className="w-px bg-white/10 self-stretch" key={`sep-${i}`}></div>}
+              <div>
+                <div className="text-2xl font-display font-bold text-white">{item.value}</div>
+                <div className="text-xs text-brand-gray mt-0.5">{item.label}</div>
+              </div>
             </div>
-          </>
-        ))}
+          ))}
+        </div>
+        <div className="mt-4 text-xs text-brand-gray">Last updated: {metrics.lastUpdated}</div>
       </div>
     );
   }
 
   /* strip variant */
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-0 rounded-2xl bg-brand-dark overflow-hidden">
-      {items.map((item, i) => (
-        <div
-          key={item.label}
-          className={[
-            'flex flex-col items-center justify-center py-10 px-6 text-center',
-            i < items.length - 1 ? 'border-r border-white/10' : '',
-          ].join(' ')}
-        >
-          <div className="font-display text-3xl sm:text-4xl font-bold text-white mb-1">
-            {item.value}
+    <div>
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-0 rounded-2xl bg-brand-dark overflow-hidden">
+        {items.map((item, i) => (
+          <div
+            key={item.label}
+            className={[
+              'flex flex-col items-center justify-center py-10 px-6 text-center',
+              i < items.length - 1 ? 'border-r border-white/10' : '',
+            ].join(' ')}
+          >
+            <div className="font-display text-3xl sm:text-4xl font-bold text-white mb-1">
+              {item.value}
+            </div>
+            <div className="text-xs text-brand-gray uppercase tracking-widest">{item.label}</div>
           </div>
-          <div className="text-xs text-brand-gray uppercase tracking-widest">{item.label}</div>
-        </div>
-      ))}
+        ))}
+      </div>
+      <div className="mt-4 text-right text-xs text-brand-gray">Last updated: {metrics.lastUpdated}</div>
     </div>
   );
 }

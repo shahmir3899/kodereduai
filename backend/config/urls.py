@@ -6,9 +6,11 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
+from brochure.views import PublicCareerApplicationCreateView
 
 
 @api_view(['GET'])
@@ -17,17 +19,23 @@ def landing_metrics(request):
     """Public endpoint: real platform statistics for the landing page."""
     from schools.models import School
     from students.models import Student
+    from students.models import Class
     from hr.models import StaffMember
 
     schools_count = School.objects.count()
-    students_count = Student.objects.filter(is_active=True).count()
+    classes_count = Class.objects.filter(is_active=True).count()
+    active_students_count = Student.objects.filter(is_active=True).count()
+    students_count = active_students_count
     teachers_count = StaffMember.objects.count()
 
     return Response({
         'schools': schools_count,
+        'classes': classes_count,
         'students': students_count,
+        'active_students': active_students_count,
         'teachers': teachers_count,
         'countries': 1,
+        'last_updated': timezone.now().isoformat(),
     })
 
 @api_view(['GET'])
@@ -94,6 +102,10 @@ def api_root(request):
                 'enquiries': '/api/admissions/enquiries/',
                 'analytics': '/api/admissions/analytics/pipeline/',
             },
+            'public': {
+                'landing_metrics': '/api/public/landing-metrics/',
+                'careers_apply': '/api/public/careers/apply/',
+            },
             'lms': {
                 'lesson_plans': '/api/lms/lesson-plans/',
                 'assignments': '/api/lms/assignments/',
@@ -139,6 +151,7 @@ urlpatterns = [
     # API Root
     path('api/', api_root, name='api-root'),
     path('api/public/landing-metrics/', landing_metrics, name='landing-metrics'),
+    path('api/public/careers/apply/', PublicCareerApplicationCreateView.as_view(), name='public-careers-apply'),
 
     # Authentication & Users
     path('api/', include('users.urls')),

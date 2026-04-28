@@ -52,7 +52,7 @@ export default function DemoDialog() {
 
     const subject = `Demo Request – ${school || 'School Not Provided'}`;
     const body = [
-      'Demo request from KoderKids landing page:',
+      'Demo request from Education AI landing page:',
       '',
       `Name: ${name || '-'}`,
       `School: ${school || '-'}`,

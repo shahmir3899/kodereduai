@@ -6,25 +6,154 @@ const siteUrl = Astro.site?.toString().replace(/\/$/, '') ?? 'https://www.koderk
 const webPageSchema = {
   '@context': 'https://schema.org',
   '@type': 'WebPage',
-  name: 'Terms of Service — KoderKids',
+  name: 'Terms of Service — Education AI',
   url: `${siteUrl}/terms`,
-  description: 'KoderKids terms of service governing use of the KoderEduAI school management platform.',
-  isPartOf: { '@type': 'WebSite', url: siteUrl, name: 'KoderKids' },
+  description: 'Education AI terms of service governing use of the platform.',
+  isPartOf: { '@type': 'WebSite', url: siteUrl, name: 'Education AI' },
 };
 ---
 
 <BaseLayout
-  title="Terms of Service | KoderKids"
-  description="Review the terms governing your use of KoderEduAI, the AI-powered school management platform by KoderKids."
+  title="Terms of Service | Education AI"
+  description="Review the terms governing your use of Education AI, the AI-powered school management platform."
   canonical="/terms"
   robots="index,follow"
   jsonLd={webPageSchema}
 >
-  <main class="container hero">
-    <h1>Terms of Service</h1>
-    <p>
-      This page is part of the Astro migration bootstrap and will be populated
-      with approved legal terms in Phase 2.
-    </p>
+  <main id="main-content" class="py-20 bg-brand-light min-h-screen">
+    <div class="max-w-4xl mx-auto px-6">
+      <article class="bg-white border border-gray-200 rounded-2xl p-8 sm:p-10 shadow-card">
+        <span class="section-label mb-2 block">LEGAL</span>
+        <h1 class="font-display text-3xl sm:text-4xl font-bold text-brand-dark mb-3">Terms of Service</h1>
+        <p class="text-sm text-brand-gray mb-8">Effective date: April 28, 2026</p>
+
+        <div class="space-y-7 text-brand-gray leading-relaxed">
+          <section>
+            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">1. Acceptance of Terms</h2>
+            <p>
+              By accessing or using Education AI services, you agree to these Terms of Service.
+              If you are using the platform on behalf of a school or institution, you represent
+              that you are authorized to bind that organization.
+            </p>
+          </section>
+
+          <section>
+            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">2. Service Description</h2>
+            <p>
+              Education AI provides cloud-based school management services, including modules such as
+              attendance, academics, examinations, finance, communication, and related administrative tools.
+              Features may evolve as part of ongoing product improvement.
+            </p>
+          </section>
+
+          <section>
+            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">3. Account and Access</h2>
+            <ul class="list-disc pl-6 space-y-1.5">
+              <li>Accounts must be used only by authorized users.</li>
+              <li>You are responsible for credential security and account activity.</li>
+              <li>Role-based permissions must be managed by your institution.</li>
+              <li>We may suspend access for security threats, abuse, or legal non-compliance.</li>
+            </ul>
+          </section>
+
+          <section>
+            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">4. Acceptable Use</h2>
+            <p class="mb-2">You agree not to:</p>
+            <ul class="list-disc pl-6 space-y-1.5">
+              <li>Use the service for unlawful, harmful, or fraudulent purposes.</li>
+              <li>Attempt unauthorized access, probing, or system disruption.</li>
+              <li>Upload malicious code, harmful content, or infringing material.</li>
+              <li>Reverse engineer or misuse the platform beyond permitted use.</li>
+            </ul>
+          </section>
+
+          <section>
+            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">5. Data and Content Responsibility</h2>
+            <p>
+              Institutions are responsible for the legality, accuracy, and permissions associated with
+              data entered into the platform. Education AI processes this data to provide services,
+              subject to applicable privacy and data processing obligations.
+            </p>
+          </section>
+
+          <section>
+            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">6. Fees and Billing</h2>
+            <p>
+              Paid plans, invoices, billing cycles, and renewal terms are governed by your
+              proposal/order form or service agreement. Unless otherwise agreed, fees are non-refundable
+              except where required by law.
+            </p>
+          </section>
+
+          <section>
+            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">7. Intellectual Property</h2>
+            <p>
+              Education AI and related branding, software, designs, and documentation remain the intellectual
+              property of Koder Kids and its licensors. You receive a limited, non-exclusive,
+              non-transferable right to use the service under these terms.
+            </p>
+          </section>
+
+          <section>
+            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">8. Confidentiality</h2>
+            <p>
+              Both parties agree to protect confidential information shared during service use,
+              onboarding, and support, and to use such information only for authorized purposes.
+            </p>
+          </section>
+
+          <section>
+            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">9. Availability and Maintenance</h2>
+            <p>
+              We aim for reliable service availability, but uninterrupted access is not guaranteed.
+              Scheduled maintenance, upgrades, or emergency interventions may temporarily affect access.
+            </p>
+          </section>
+
+          <section>
+            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">10. Warranties and Disclaimers</h2>
+            <p>
+              The service is provided on an "as available" basis. To the extent permitted by law,
+              we disclaim implied warranties including merchantability, fitness for a particular purpose,
+              and non-infringement.
+            </p>
+          </section>
+
+          <section>
+            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">11. Limitation of Liability</h2>
+            <p>
+              To the maximum extent permitted by law, Education AI and Koder Kids are not liable for
+              indirect, incidental, special, consequential, or punitive damages, or loss of data,
+              profits, or business opportunities arising from service use.
+            </p>
+          </section>
+
+          <section>
+            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">12. Termination</h2>
+            <p>
+              Either party may terminate service per applicable agreement terms. Upon termination,
+              access may be revoked and data handling will follow contractual commitments and legal requirements.
+            </p>
+          </section>
+
+          <section>
+            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">13. Changes to Terms</h2>
+            <p>
+              We may revise these Terms of Service from time to time. Continued use after updates
+              constitutes acceptance of the revised terms.
+            </p>
+          </section>
+
+          <section>
+            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">14. Contact</h2>
+            <p>
+              For legal or contractual inquiries: <a href="mailto:admin@koderkids.pk" class="text-primary hover:text-primary-600">admin@koderkids.pk</a>,
+              phone: <a href="tel:03167394390" class="text-primary hover:text-primary-600">03167394390</a>,
+              Islamabad, Pakistan.
+            </p>
+          </section>
+        </div>
+      </article>
+    </div>
   </main>
 </BaseLayout>

@@ -1,0 +1,37 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import CareersForm from '../components/islands/CareersForm.tsx';
+
+const siteUrl = Astro.site?.toString().replace(/\/$/, '') ?? 'https://www.koderkids.pk';
+
+const schema = {
+  '@context': 'https://schema.org',
+  '@type': 'WebPage',
+  name: 'Careers at Education AI',
+  url: `${siteUrl}/careers`,
+  description: 'Apply for careers at Education AI and submit your CV.',
+};
+---
+
+<BaseLayout
+  title="Careers | Education AI"
+  description="Apply for open roles at Education AI. Submit your profile and CV through a simple form."
+  canonical="/careers"
+  robots="index,follow"
+  jsonLd={schema}
+>
+  <main id="main-content" class="py-20 bg-brand-light min-h-screen">
+    <div class="max-w-4xl mx-auto px-6">
+      <div class="mb-6">
+        <span class="section-label mb-2 block">CAREERS</span>
+        <h1 class="font-display text-3xl sm:text-4xl font-bold text-brand-dark mb-3">Join Our Team</h1>
+        <p class="text-brand-gray leading-relaxed max-w-2xl">
+          We are building practical technology for schools. If you care about education outcomes,
+          product quality, and meaningful impact, we would love to hear from you.
+        </p>
+      </div>
+
+      <CareersForm client:visible />
+    </div>
+  </main>
+</BaseLayout>

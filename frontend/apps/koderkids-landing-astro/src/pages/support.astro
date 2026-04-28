@@ -6,25 +6,101 @@ const siteUrl = Astro.site?.toString().replace(/\/$/, '') ?? 'https://www.koderk
 const webPageSchema = {
   '@context': 'https://schema.org',
   '@type': 'ContactPage',
-  name: 'Support — KoderKids',
+  name: 'Support — Education AI',
   url: `${siteUrl}/support`,
-  description: 'Contact KoderKids for demo scheduling, onboarding, and platform support.',
-  isPartOf: { '@type': 'WebSite', url: siteUrl, name: 'KoderKids' },
+  description: 'Contact Education AI for demo scheduling, onboarding, and platform support.',
+  isPartOf: { '@type': 'WebSite', url: siteUrl, name: 'Education AI' },
 };
 ---
 
 <BaseLayout
-  title="Support & Contact | KoderKids"
-  description="Need help? Contact KoderKids for demo scheduling, onboarding assistance, and ongoing platform support for your school."
+  title="Support & Contact | Education AI"
+  description="Need help? Contact Education AI for demo scheduling, onboarding assistance, and ongoing platform support for your school."
   canonical="/support"
   robots="index,follow"
   jsonLd={webPageSchema}
 >
-  <main class="container hero">
-    <h1>Support</h1>
-    <p>
-      Reach us at sales@koderkids.pk for demo scheduling, onboarding, and
-      implementation support.
-    </p>
+  <main id="main-content" class="py-20 bg-brand-light min-h-screen">
+    <div class="max-w-4xl mx-auto px-6">
+      <article class="bg-white border border-gray-200 rounded-2xl p-8 sm:p-10 shadow-card">
+        <span class="section-label mb-2 block">SUPPORT</span>
+        <h1 class="font-display text-3xl sm:text-4xl font-bold text-brand-dark mb-3">Support Center</h1>
+        <p class="text-brand-gray mb-8">
+          We support schools through onboarding, implementation, daily operations,
+          and product guidance for Education AI.
+        </p>
+
+        <div class="grid sm:grid-cols-3 gap-4 mb-8">
+          <div class="rounded-xl border border-gray-200 p-4">
+            <p class="text-xs uppercase tracking-wide text-gray-500 mb-1">Email</p>
+            <a href="mailto:admin@koderkids.pk" class="font-medium text-brand-dark hover:text-primary transition-colors">admin@koderkids.pk</a>
+          </div>
+          <div class="rounded-xl border border-gray-200 p-4">
+            <p class="text-xs uppercase tracking-wide text-gray-500 mb-1">Phone</p>
+            <a href="tel:03167394390" class="font-medium text-brand-dark hover:text-primary transition-colors">03167394390</a>
+          </div>
+          <div class="rounded-xl border border-gray-200 p-4">
+            <p class="text-xs uppercase tracking-wide text-gray-500 mb-1">Location</p>
+            <p class="font-medium text-brand-dark">Islamabad, Pakistan</p>
+          </div>
+        </div>
+
+        <div class="space-y-7 text-brand-gray leading-relaxed">
+          <section>
+            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">1. Support Scope</h2>
+            <ul class="list-disc pl-6 space-y-1.5">
+              <li>Account setup and school onboarding guidance.</li>
+              <li>Module configuration assistance and best-practice recommendations.</li>
+              <li>Issue triage for platform errors and usage blockers.</li>
+              <li>General product guidance and feature clarification.</li>
+            </ul>
+          </section>
+
+          <section>
+            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">2. Availability</h2>
+            <p>
+              Standard support is available during business hours on working days.
+              Response windows may vary by plan, issue severity, and request complexity.
+            </p>
+          </section>
+
+          <section>
+            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">3. Priority and Response Targets</h2>
+            <ul class="list-disc pl-6 space-y-1.5">
+              <li><strong>Critical:</strong> Service outage or major operational block — fastest priority handling.</li>
+              <li><strong>High:</strong> Significant feature impairment with available workaround limits.</li>
+              <li><strong>Normal:</strong> Standard bugs, functional questions, and enhancement guidance.</li>
+              <li><strong>Low:</strong> Minor UI issues, documentation requests, and non-urgent clarifications.</li>
+            </ul>
+          </section>
+
+          <section>
+            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">4. What to Include in a Ticket</h2>
+            <ul class="list-disc pl-6 space-y-1.5">
+              <li>School name and affected module.</li>
+              <li>User role and impacted workflow.</li>
+              <li>Clear steps to reproduce the issue.</li>
+              <li>Screenshots, dates, and relevant record identifiers.</li>
+            </ul>
+          </section>
+
+          <section>
+            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">5. Onboarding and Training</h2>
+            <p>
+              We provide structured onboarding support and can coordinate role-based training
+              for administrative staff, teachers, and operations teams where applicable.
+            </p>
+          </section>
+
+          <section>
+            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">6. Escalation Path</h2>
+            <p>
+              If an issue remains unresolved, request escalation via email with subject
+              "Support Escalation" and include the original request context.
+            </p>
+          </section>
+        </div>
+      </article>
+    </div>
   </main>
 </BaseLayout>

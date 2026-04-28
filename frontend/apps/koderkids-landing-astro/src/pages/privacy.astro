@@ -6,25 +6,159 @@ const siteUrl = Astro.site?.toString().replace(/\/$/, '') ?? 'https://www.koderk
 const webPageSchema = {
   '@context': 'https://schema.org',
   '@type': 'WebPage',
-  name: 'Privacy Policy — KoderKids',
+  name: 'Privacy Policy — Education AI',
   url: `${siteUrl}/privacy`,
-  description: 'Read how KoderKids collects, stores, and protects your school data.',
-  isPartOf: { '@type': 'WebSite', url: siteUrl, name: 'KoderKids' },
+  description: 'Read how Education AI collects, stores, and protects your school data.',
+  isPartOf: { '@type': 'WebSite', url: siteUrl, name: 'Education AI' },
 };
 ---
 
 <BaseLayout
-  title="Privacy Policy | KoderKids"
-  description="Read how KoderKids collects, stores, and protects your school data in compliance with applicable privacy regulations."
+  title="Privacy Policy | Education AI"
+  description="Read how Education AI collects, stores, and protects your school data in compliance with applicable privacy regulations."
   canonical="/privacy"
   robots="index,follow"
   jsonLd={webPageSchema}
 >
-  <main class="container hero">
-    <h1>Privacy Policy</h1>
-    <p>
-      This page is part of the Astro migration bootstrap and will be populated
-      with approved legal copy in Phase 2.
-    </p>
+  <main id="main-content" class="py-20 bg-brand-light min-h-screen">
+    <div class="max-w-4xl mx-auto px-6">
+      <article class="bg-white border border-gray-200 rounded-2xl p-8 sm:p-10 shadow-card">
+        <span class="section-label mb-2 block">LEGAL</span>
+        <h1 class="font-display text-3xl sm:text-4xl font-bold text-brand-dark mb-3">Privacy Policy</h1>
+        <p class="text-sm text-brand-gray mb-8">Effective date: April 28, 2026</p>
+
+        <div class="space-y-7 text-brand-gray leading-relaxed">
+          <section>
+            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">1. Scope</h2>
+            <p>
+              This Privacy Policy explains how Education AI (a product of Koder Kids)
+              collects, uses, stores, and protects personal data when schools, staff,
+              students, parents, and authorized users access our website and platform services.
+            </p>
+          </section>
+
+          <section>
+            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">2. Information We Collect</h2>
+            <p class="mb-2">We may collect and process the following categories of data:</p>
+            <ul class="list-disc pl-6 space-y-1.5">
+              <li>Account and profile data (name, role, email, phone, school details).</li>
+              <li>Operational school data (attendance, academics, finance, notifications, reports).</li>
+              <li>Support and communication records (messages, enquiry forms, demo requests).</li>
+              <li>Technical and usage data (IP, browser, device type, logs, diagnostics).</li>
+              <li>Uploaded files and documents provided by authorized users.</li>
+            </ul>
+          </section>
+
+          <section>
+            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">3. How We Use Data</h2>
+            <ul class="list-disc pl-6 space-y-1.5">
+              <li>Deliver and maintain the Education AI platform.</li>
+              <li>Authenticate users and enforce role-based access controls.</li>
+              <li>Provide attendance, academic, finance, and communication workflows.</li>
+              <li>Improve reliability, security, and performance of our services.</li>
+              <li>Respond to support requests, onboarding needs, and product inquiries.</li>
+              <li>Comply with legal, contractual, and regulatory obligations.</li>
+            </ul>
+          </section>
+
+          <section>
+            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">4. Legal Basis and School Responsibility</h2>
+            <p>
+              For school platform data, schools act as the primary data controllers for their
+              institutional records. Education AI generally acts as a data processor/service provider
+              operating under school instructions and applicable agreements.
+            </p>
+          </section>
+
+          <section>
+            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">5. Data Sharing</h2>
+            <p class="mb-2">We do not sell personal data. We may share data only when necessary with:</p>
+            <ul class="list-disc pl-6 space-y-1.5">
+              <li>Hosting, cloud, storage, and infrastructure providers.</li>
+              <li>Service partners supporting messaging, analytics, or operations.</li>
+              <li>Authorities where disclosure is required by law.</li>
+              <li>Professional advisors under confidentiality obligations.</li>
+            </ul>
+          </section>
+
+          <section>
+            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">6. Data Security</h2>
+            <ul class="list-disc pl-6 space-y-1.5">
+              <li>Encryption in transit (TLS) and secure storage controls.</li>
+              <li>Role-based permissions and tenant-level data isolation.</li>
+              <li>Audit logging, monitoring, and controlled administrative access.</li>
+              <li>Reasonable technical and organizational safeguards aligned with industry practice.</li>
+            </ul>
+          </section>
+
+          <section>
+            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">7. Data Retention</h2>
+            <p>
+              We retain data for as long as required to provide contracted services,
+              fulfill legal obligations, resolve disputes, and enforce agreements.
+              Retention periods may vary by data type and school policy.
+            </p>
+          </section>
+
+          <section>
+            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">8. International Transfers</h2>
+            <p>
+              Where data is processed across regions, we apply contractual and technical safeguards
+              designed to protect personal data under applicable regulations.
+            </p>
+          </section>
+
+          <section>
+            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">9. Your Rights</h2>
+            <p class="mb-2">Subject to applicable law, users may request:</p>
+            <ul class="list-disc pl-6 space-y-1.5">
+              <li>Access to personal data.</li>
+              <li>Correction of inaccurate data.</li>
+              <li>Deletion or restriction of processing where legally applicable.</li>
+              <li>Data export/portability for eligible records.</li>
+              <li>Objection to certain processing activities.</li>
+            </ul>
+            <p class="mt-2">
+              Requests related to school-managed records should generally be routed through the relevant school administration first.
+            </p>
+          </section>
+
+          <section>
+            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">10. Children and Student Data</h2>
+            <p>
+              Education AI processes student data only as required for educational administration and
+              under school authorization. Schools are responsible for obtaining any required parental
+              consents and legal permissions under local law.
+            </p>
+          </section>
+
+          <section>
+            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">11. Cookies and Similar Technologies</h2>
+            <p>
+              We may use essential cookies and similar technologies for authentication,
+              session management, and platform security. Non-essential analytics use,
+              if enabled, follows applicable consent and disclosure requirements.
+            </p>
+          </section>
+
+          <section>
+            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">12. Changes to This Policy</h2>
+            <p>
+              We may update this Privacy Policy periodically. Material updates will be
+              communicated through website notice, platform notification, or direct communication.
+            </p>
+          </section>
+
+          <section>
+            <h2 class="font-display text-xl font-semibold text-brand-dark mb-2">13. Contact</h2>
+            <p>
+              For privacy questions or data requests, contact: <a href="mailto:admin@koderkids.pk" class="text-primary hover:text-primary-600">admin@koderkids.pk</a>,
+              phone: <a href="tel:03167394390" class="text-primary hover:text-primary-600">03167394390</a>,
+              Islamabad, Pakistan.
+            </p>
+          </section>
+        </div>
+      </article>
+    </div>
   </main>
 </BaseLayout>

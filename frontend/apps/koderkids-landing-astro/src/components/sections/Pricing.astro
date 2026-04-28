@@ -47,6 +47,16 @@ const { pricing } = landingContent;
             {plan.desc}
           </p>
 
+          {/* Price */}
+          <div class="mb-6">
+            <p class={`font-display text-2xl font-bold ${plan.highlight ? 'text-white' : 'text-brand-dark'}`}>
+              {plan.monthlyPrice}
+            </p>
+            <p class={`text-xs mt-1 ${plan.highlight ? 'text-gray-300' : 'text-brand-gray'}`}>
+              {plan.annualPrice}
+            </p>
+          </div>
+
           {/* Features */}
           <ul class="space-y-2.5 flex-1 mb-8">
             {plan.features.map((f) => (
@@ -85,7 +95,7 @@ const { pricing } = landingContent;
     </div>
 
     <p class="text-center text-sm text-brand-gray mt-8">
-      All plans include onboarding support. Custom pricing available for large networks.
+      All plans include onboarding support. Annual billing includes a 10% discount.
     </p>
   </div>
 </section>

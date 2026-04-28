@@ -136,9 +136,9 @@ export default function FeeCollectPage() {
     }
     const payment = data.paymentList.find(p => p.id === id)
 
-    // amount_due edit: direct override of total payable amount
-    if (field === 'amount_due') {
-      data.paymentMutation.mutate({ id, data: { amount_due: parsedValue } })
+    // amount_due/previous_balance edits: direct override on fee record
+    if (field === 'amount_due' || field === 'previous_balance') {
+      data.paymentMutation.mutate({ id, data: { [field]: parsedValue } })
       setEditingCell(null)
       return
     }

@@ -22,7 +22,7 @@ export default function ContactForm() {
     e.preventDefault();
     const subject = `New Landing Enquiry – ${form.school || 'School Not Provided'}`;
     const body = [
-      'New enquiry from the KoderKids landing page:',
+      'New enquiry from the Education AI landing page:',
       '',
       `Name: ${form.name || '-'}`,
       `School: ${form.school || '-'}`,

@@ -19,8 +19,7 @@ const siteUrl = Astro.site?.toString().replace(/\/$/, '') ?? 'https://www.koderk
 const organizationSchema = {
   '@context': 'https://schema.org',
   '@type': 'Organization',
-  name: 'KoderKids',
-  alternateName: 'KoderEduAI',
+  name: 'Education AI',
   url: siteUrl,
   logo: `${siteUrl}/Logo.jpeg`,
   sameAs: [
@@ -31,15 +30,17 @@ const organizationSchema = {
   contactPoint: {
     '@type': 'ContactPoint',
     email: siteConfig.salesEmail,
+    telephone: siteConfig.contactPhone,
     contactType: 'sales',
     availableLanguage: 'English',
+    areaServed: siteConfig.contactCity,
   },
 };
 
 const softwareSchema = {
   '@context': 'https://schema.org',
   '@type': 'SoftwareApplication',
-  name: 'KoderEduAI',
+  name: 'Education AI',
   operatingSystem: 'Web, iOS, Android',
   applicationCategory: 'EducationApplication',
   offers: {

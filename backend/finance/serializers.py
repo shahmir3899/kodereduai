@@ -351,7 +351,7 @@ class FeePaymentUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = FeePayment
         fields = [
-            'amount_due', 'amount_paid', 'payment_date', 'payment_method',
+            'amount_due', 'previous_balance', 'amount_paid', 'payment_date', 'payment_method',
             'receipt_number', 'notes', 'account'
         ]
 
