@@ -1,8 +1,10 @@
 from django.db import models
+from django.utils import timezone
 
 
 def career_cv_upload_path(instance, filename):
-    return f"careers/cv/{instance.created_at:%Y/%m}/{filename}"
+    created_at = getattr(instance, 'created_at', None) or timezone.now()
+    return f"careers/cv/{created_at:%Y/%m}/{filename}"
 
 
 class BrochureSection(models.Model):

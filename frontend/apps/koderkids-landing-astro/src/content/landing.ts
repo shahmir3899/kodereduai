@@ -1,5 +1,8 @@
 /* ─── Site-wide config ─────────────────────────────── */
-const publicApiBase = (import.meta.env.PUBLIC_MAIN_APP_API_BASE_URL || '').replace(/\/$/, '');
+const fallbackApiBase = import.meta.env.DEV
+  ? ''
+  : 'https://kodereduai-api.onrender.com';
+const publicApiBase = (import.meta.env.PUBLIC_MAIN_APP_API_BASE_URL || fallbackApiBase).replace(/\/$/, '');
 
 export const siteConfig = {
   salesEmail: 'admin@koderkids.pk',

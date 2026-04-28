@@ -9,6 +9,13 @@ const site = process.env.SITE_URL || 'https://www.koderkids.pk';
 export default defineConfig({
   site,
   output: 'static',
+  vite: {
+    server: {
+      proxy: {
+        '/api': 'http://127.0.0.1:8000',
+      },
+    },
+  },
   integrations: [
     react(),
     sitemap(),

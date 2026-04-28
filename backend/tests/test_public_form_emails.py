@@ -1,6 +1,9 @@
 from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
+from django.utils import timezone
+
+from brochure.models import career_cv_upload_path
 
 
 @override_settings(
@@ -84,3 +87,17 @@ def test_public_career_application_sends_branded_email(client):
     assert 'Education AI - Form Career Application' in mail.outbox[0].alternatives[0][0]
     assert 'Frontend Engineer' in mail.outbox[0].alternatives[0][0]
     assert len(mail.outbox[0].attachments) == 1
+
+
+def test_career_cv_upload_path_uses_now_when_created_at_missing():
+    instance = type('Obj', (), {'created_at': None})()
+    path = career_cv_upload_path(instance, 'resume.pdf')
+    assert path.startswith(f"careers/cv/{timezone.now():%Y/%m}/")
+    assert path.endswith('/resume.pdf')
+
+
+def test_career_cv_upload_path_uses_instance_created_at_when_available():
+    dt = timezone.datetime(2026, 4, 1, tzinfo=timezone.get_current_timezone())
+    instance = type('Obj', (), {'created_at': dt})()
+    path = career_cv_upload_path(instance, 'resume.pdf')
+    assert path == 'careers/cv/2026/04/resume.pdf'
