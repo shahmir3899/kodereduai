@@ -619,5 +619,10 @@ LOGGING = {
             'level': 'INFO',
             'propagate': False,
         },
+        'brochure': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
     },
 }

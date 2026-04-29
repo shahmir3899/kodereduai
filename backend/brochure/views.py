@@ -1,5 +1,6 @@
 import io
 import logging
+import time
 
 from django.http import HttpResponse
 from django.conf import settings
@@ -33,6 +34,15 @@ def send_landing_form_email(*, subject, template_name, context, reply_to=None, a
         logger.warning('LANDING_FORMS_EMAIL_RECIPIENT is not configured. Skipping form email delivery.')
         return False
 
+    logger.info(
+        'Landing form email start: subject=%s recipient_configured=%s sender_configured=%s template=%s attachments=%s',
+        subject,
+        bool(recipient),
+        bool(getattr(settings, 'LANDING_FORMS_EMAIL_SENDER', '').strip()),
+        template_name,
+        len(attachments or []),
+    )
+
     html_body = render_to_string(template_name, context)
     text_body = strip_tags(html_body)
 
@@ -48,11 +58,26 @@ def send_landing_form_email(*, subject, template_name, context, reply_to=None, a
     for attachment in attachments or []:
         email.attach(*attachment)
 
+    start = time.monotonic()
     try:
         email.send(fail_silently=False)
+        logger.info(
+            'Landing form email sent successfully: subject=%s elapsed_ms=%s',
+            subject,
+            int((time.monotonic() - start) * 1000),
+        )
         return True
     except Exception:
-        logger.exception('Failed to send landing form email for subject %s.', subject)
+        logger.exception(
+            'Failed to send landing form email: subject=%s elapsed_ms=%s host=%s port=%s tls=%s ssl=%s timeout=%s',
+            subject,
+            int((time.monotonic() - start) * 1000),
+            getattr(settings, 'EMAIL_HOST', ''),
+            getattr(settings, 'EMAIL_PORT', ''),
+            getattr(settings, 'EMAIL_USE_TLS', ''),
+            getattr(settings, 'EMAIL_USE_SSL', ''),
+            getattr(settings, 'EMAIL_TIMEOUT', ''),
+        )
         return False
 
 
@@ -122,6 +147,12 @@ class PublicCareerApplicationCreateView(APIView):
     parser_classes = [MultiPartParser, FormParser]
 
     def post(self, request):
+        logger.info(
+            'Public career application received: content_type=%s has_files=%s remote_addr=%s',
+            request.content_type,
+            bool(request.FILES),
+            request.META.get('REMOTE_ADDR'),
+        )
         serializer = CareerApplicationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -135,6 +166,12 @@ class PublicCareerApplicationCreateView(APIView):
             )
 
         email_sent = self._send_application_email(validated)
+        logger.info(
+            'Public career application processed: saved_to_db=%s email_sent=%s applicant_email_present=%s',
+            bool(saved_instance),
+            email_sent,
+            bool(validated.get('email')),
+        )
 
         if not settings.CAREERS_SAVE_TO_DB and not email_sent:
             return Response(
@@ -187,6 +224,12 @@ class PublicDemoRequestCreateView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
+        logger.info(
+            'Public demo request received: content_type=%s remote_addr=%s origin=%s',
+            request.content_type,
+            request.META.get('REMOTE_ADDR'),
+            request.META.get('HTTP_ORIGIN'),
+        )
         serializer = DemoRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -207,11 +250,13 @@ class PublicDemoRequestCreateView(APIView):
         )
 
         if not email_sent:
+            logger.warning('Public demo request email delivery unavailable: school=%s email_present=%s', bool(validated.get('school')), bool(validated.get('email')))
             return Response(
                 {'detail': 'Submission received but email delivery is not configured.'},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
+        logger.info('Public demo request completed successfully: email_sent=%s', email_sent)
         return Response(
             {'message': 'Demo request submitted successfully.', 'email_sent': True},
             status=status.HTTP_201_CREATED,
@@ -222,6 +267,12 @@ class PublicContactEnquiryCreateView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
+        logger.info(
+            'Public contact enquiry received: content_type=%s remote_addr=%s origin=%s',
+            request.content_type,
+            request.META.get('REMOTE_ADDR'),
+            request.META.get('HTTP_ORIGIN'),
+        )
         serializer = ContactEnquirySerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -243,11 +294,18 @@ class PublicContactEnquiryCreateView(APIView):
         )
 
         if not email_sent:
+            logger.warning(
+                'Public contact enquiry email delivery unavailable: school_present=%s email_present=%s message_length=%s',
+                bool(validated.get('school')),
+                bool(validated.get('email')),
+                len(validated.get('message') or ''),
+            )
             return Response(
                 {'detail': 'Submission received but email delivery is not configured.'},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
+        logger.info('Public contact enquiry completed successfully: email_sent=%s', email_sent)
         return Response(
             {'message': 'Contact enquiry submitted successfully.', 'email_sent': True},
             status=status.HTTP_201_CREATED,
