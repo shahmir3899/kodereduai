@@ -106,6 +106,8 @@ services:
         sync: false
       - key: SUPABASE_BUCKET
         value: atten-reg
+      - key: EMAIL_BACKEND
+        sync: false
       - key: EMAIL_HOST
         sync: false
       - key: EMAIL_PORT
@@ -117,6 +119,8 @@ services:
       - key: EMAIL_USE_TLS
         sync: false
       - key: EMAIL_USE_SSL
+        sync: false
+      - key: EMAIL_TIMEOUT
         sync: false
       - key: DEFAULT_FROM_EMAIL
         sync: false
