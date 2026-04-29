@@ -10,10 +10,15 @@ type FormState = {
 };
 
 const INITIAL: FormState = { name: '', school: '', email: '', phone: '', message: '' };
+const LOG_PREFIX = '[ContactForm]';
 
 const buildSubmitErrorMessage = (error: unknown, fallback: string): string => {
   if (error instanceof TypeError) {
-    return 'Unable to reach the server. Please check local backend/CORS settings and try again.';
+    const msg = error.message || '';
+    if (/fetch|network/i.test(msg)) {
+      return 'Could not reach the server. Please check your connection and try again.';
+    }
+    return fallback;
   }
   if (error instanceof Error && error.message.trim()) {
     return error.message;
@@ -50,29 +55,53 @@ export default function ContactForm() {
     setStatus('submitting');
     setMessage('');
 
+    const payload = {
+      name: form.name,
+      school: form.school,
+      email: form.email,
+      phone: form.phone,
+      message: form.message,
+    };
+
     try {
+      console.info(`${LOG_PREFIX} submit start`, {
+        endpoint: siteConfig.contactEnquiryEndpoint,
+        online: navigator.onLine,
+        schoolProvided: Boolean(payload.school),
+      });
+
       const response = await fetch(siteConfig.contactEnquiryEndpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          name: form.name,
-          school: form.school,
-          email: form.email,
-          phone: form.phone,
-          message: form.message,
-        }),
+        body: JSON.stringify(payload),
+      });
+
+      console.info(`${LOG_PREFIX} submit response`, {
+        endpoint: siteConfig.contactEnquiryEndpoint,
+        status: response.status,
+        ok: response.ok,
       });
 
       if (!response.ok) {
         const detail = await extractErrorDetail(response);
+        console.warn(`${LOG_PREFIX} submit non-ok`, {
+          status: response.status,
+          detail: detail || null,
+        });
         throw new Error(detail || `Contact enquiry failed with status ${response.status}.`);
       }
 
       setStatus('submitted');
       setForm(INITIAL);
+      console.info(`${LOG_PREFIX} submit success`);
     } catch (error) {
+      console.error(`${LOG_PREFIX} submit error`, {
+        endpoint: siteConfig.contactEnquiryEndpoint,
+        online: navigator.onLine,
+        error,
+      });
       setStatus('error');
       setMessage(buildSubmitErrorMessage(
         error,

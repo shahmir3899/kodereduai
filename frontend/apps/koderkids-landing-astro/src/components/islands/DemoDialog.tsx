@@ -2,10 +2,17 @@ import { useState, useEffect, useRef } from 'react';
 import { siteConfig } from '../../content/landing';
 
 const EVENT_NAME = 'open-demo-dialog';
+const LOG_PREFIX = '[DemoDialog]';
 
 const buildSubmitErrorMessage = (error: unknown, fallback: string): string => {
   if (error instanceof TypeError) {
-    return 'Unable to reach the server. Please check local backend/CORS settings and try again.';
+    const msg = error.message || '';
+    // Only network-level fetch failures produce these messages
+    if (/fetch|network/i.test(msg)) {
+      return 'Could not reach the server. Please check your connection and try again.';
+    }
+    // Any other TypeError is a JS runtime bug — use fallback
+    return fallback;
   }
   if (error instanceof Error && error.message.trim()) {
     return error.message;
@@ -72,32 +79,58 @@ export default function DemoDialog() {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const data = new FormData(e.currentTarget);
+    // Capture before any await — currentTarget becomes null after suspension
+    const formEl = e.currentTarget;
+    const data = new FormData(formEl);
+    const payload = {
+      name: String(data.get('name') || ''),
+      school: String(data.get('school') || ''),
+      email: String(data.get('email') || ''),
+      preferred_date: String(data.get('preferred_date') || '') || null,
+    };
+
     setStatus('submitting');
     setMessage('');
 
     try {
+      console.info(`${LOG_PREFIX} submit start`, {
+        endpoint: siteConfig.demoRequestEndpoint,
+        online: navigator.onLine,
+        schoolProvided: Boolean(payload.school),
+      });
+
       const response = await fetch(siteConfig.demoRequestEndpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          name: String(data.get('name') || ''),
-          school: String(data.get('school') || ''),
-          email: String(data.get('email') || ''),
-          preferred_date: String(data.get('preferred_date') || '') || null,
-        }),
+        body: JSON.stringify(payload),
+      });
+
+      console.info(`${LOG_PREFIX} submit response`, {
+        endpoint: siteConfig.demoRequestEndpoint,
+        status: response.status,
+        ok: response.ok,
       });
 
       if (!response.ok) {
         const detail = await extractErrorDetail(response);
+        console.warn(`${LOG_PREFIX} submit non-ok`, {
+          status: response.status,
+          detail: detail || null,
+        });
         throw new Error(detail || `Demo request failed with status ${response.status}.`);
       }
 
-      e.currentTarget.reset();
+      formEl.reset();
       setStatus('submitted');
+      console.info(`${LOG_PREFIX} submit success`);
     } catch (error) {
+      console.error(`${LOG_PREFIX} submit error`, {
+        endpoint: siteConfig.demoRequestEndpoint,
+        online: navigator.onLine,
+        error,
+      });
       setStatus('error');
       setMessage(buildSubmitErrorMessage(
         error,
