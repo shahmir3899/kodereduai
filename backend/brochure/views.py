@@ -16,7 +16,7 @@ from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny
 
 from core.permissions import IsSuperAdmin
-from .models import BrochureSection
+from .models import BrochureSection, DemoRequest, ContactEnquiry
 from .serializers import (
     BrochureSectionSerializer,
     CareerApplicationSerializer,
@@ -234,6 +234,16 @@ class PublicDemoRequestCreateView(APIView):
         serializer.is_valid(raise_exception=True)
 
         validated = serializer.validated_data
+
+        # Persist submission first so data is never lost even if email fails.
+        submission = DemoRequest.objects.create(
+            name=validated.get('name', '') or '',
+            school=validated.get('school', '') or '',
+            email=validated.get('email', '') or '',
+            preferred_date=validated.get('preferred_date') or None,
+            ip_address=request.META.get('REMOTE_ADDR'),
+        )
+
         email_sent = send_landing_form_email(
             subject='Education AI - Form Demo Request',
             template_name='brochure/emails/demo_request.html',
@@ -241,24 +251,23 @@ class PublicDemoRequestCreateView(APIView):
                 'title': 'Education AI - Form Demo Request',
                 'accent_color': '#2563eb',
                 'accent_soft': '#dbeafe',
-                'name': validated.get('name', '-') or '-',
-                'school': validated.get('school', '-') or '-',
-                'email': validated.get('email', '-') or '-',
-                'preferred_date': validated.get('preferred_date') or '-',
+                'name': submission.name or '-',
+                'school': submission.school or '-',
+                'email': submission.email or '-',
+                'preferred_date': submission.preferred_date or '-',
             },
-            reply_to=[validated.get('email')] if validated.get('email') else None,
+            reply_to=[submission.email] if submission.email else None,
         )
 
-        if not email_sent:
-            logger.warning('Public demo request email delivery unavailable: school=%s email_present=%s', bool(validated.get('school')), bool(validated.get('email')))
-            return Response(
-                {'detail': 'Submission received but email delivery is not configured.'},
-                status=status.HTTP_503_SERVICE_UNAVAILABLE,
-            )
+        submission.email_sent = email_sent
+        submission.save(update_fields=['email_sent'])
 
-        logger.info('Public demo request completed successfully: email_sent=%s', email_sent)
+        if not email_sent:
+            logger.warning('Public demo request email delivery failed (saved to DB id=%s): school=%s email_present=%s', submission.pk, bool(submission.school), bool(submission.email))
+
+        logger.info('Public demo request completed: id=%s email_sent=%s', submission.pk, email_sent)
         return Response(
-            {'message': 'Demo request submitted successfully.', 'email_sent': True},
+            {'message': 'Demo request submitted successfully.', 'email_sent': email_sent},
             status=status.HTTP_201_CREATED,
         )
 
@@ -277,6 +286,17 @@ class PublicContactEnquiryCreateView(APIView):
         serializer.is_valid(raise_exception=True)
 
         validated = serializer.validated_data
+
+        # Persist submission first so data is never lost even if email fails.
+        submission = ContactEnquiry.objects.create(
+            name=validated.get('name', '') or '',
+            school=validated.get('school', '') or '',
+            email=validated.get('email', '') or '',
+            phone=validated.get('phone', '') or '',
+            message=validated.get('message', '') or '',
+            ip_address=request.META.get('REMOTE_ADDR'),
+        )
+
         email_sent = send_landing_form_email(
             subject='Education AI - Form Contact Enquiry',
             template_name='brochure/emails/contact_enquiry.html',
@@ -284,29 +304,29 @@ class PublicContactEnquiryCreateView(APIView):
                 'title': 'Education AI - Form Contact Enquiry',
                 'accent_color': '#0f766e',
                 'accent_soft': '#ccfbf1',
-                'name': validated.get('name', '-') or '-',
-                'school': validated.get('school', '-') or '-',
-                'email': validated.get('email', '-') or '-',
-                'phone': validated.get('phone', '-') or '-',
-                'message': validated.get('message', '-') or '-',
+                'name': submission.name or '-',
+                'school': submission.school or '-',
+                'email': submission.email or '-',
+                'phone': submission.phone or '-',
+                'message': submission.message or '-',
             },
-            reply_to=[validated.get('email')] if validated.get('email') else None,
+            reply_to=[submission.email] if submission.email else None,
         )
+
+        submission.email_sent = email_sent
+        submission.save(update_fields=['email_sent'])
 
         if not email_sent:
             logger.warning(
-                'Public contact enquiry email delivery unavailable: school_present=%s email_present=%s message_length=%s',
-                bool(validated.get('school')),
-                bool(validated.get('email')),
-                len(validated.get('message') or ''),
-            )
-            return Response(
-                {'detail': 'Submission received but email delivery is not configured.'},
-                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                'Public contact enquiry email delivery failed (saved to DB id=%s): school_present=%s email_present=%s message_length=%s',
+                submission.pk,
+                bool(submission.school),
+                bool(submission.email),
+                len(submission.message),
             )
 
-        logger.info('Public contact enquiry completed successfully: email_sent=%s', email_sent)
+        logger.info('Public contact enquiry completed: id=%s email_sent=%s', submission.pk, email_sent)
         return Response(
-            {'message': 'Contact enquiry submitted successfully.', 'email_sent': True},
+            {'message': 'Contact enquiry submitted successfully.', 'email_sent': email_sent},
             status=status.HTTP_201_CREATED,
         )

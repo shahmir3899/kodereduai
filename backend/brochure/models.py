@@ -53,3 +53,39 @@ class CareerApplication(models.Model):
 
     def __str__(self):
         return f"{self.full_name} - {self.role_applied}"
+
+
+class DemoRequest(models.Model):
+    name = models.CharField(max_length=120)
+    school = models.CharField(max_length=200, blank=True)
+    email = models.EmailField()
+    preferred_date = models.DateField(null=True, blank=True)
+    email_sent = models.BooleanField(default=False)
+    source = models.CharField(max_length=50, default='landing-page')
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.name} - {self.school} ({self.email})"
+
+
+class ContactEnquiry(models.Model):
+    name = models.CharField(max_length=120)
+    school = models.CharField(max_length=200, blank=True)
+    email = models.EmailField()
+    phone = models.CharField(max_length=30, blank=True)
+    message = models.TextField(blank=True)
+    email_sent = models.BooleanField(default=False)
+    source = models.CharField(max_length=50, default='landing-page')
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name_plural = 'Contact enquiries'
+
+    def __str__(self):
+        return f"{self.name} - {self.email}"
