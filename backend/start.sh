@@ -6,6 +6,8 @@ set -euo pipefail
 
 ENABLE_CELERY="${ENABLE_CELERY:-false}"
 ENABLE_CELERY_BEAT="${ENABLE_CELERY_BEAT:-false}"
+GUNICORN_TIMEOUT="${GUNICORN_TIMEOUT:-90}"
+GUNICORN_GRACEFUL_TIMEOUT="${GUNICORN_GRACEFUL_TIMEOUT:-30}"
 
 CELERY_LOOP_PID=""
 CELERY_BEAT_LOOP_PID=""
@@ -49,8 +51,8 @@ else
 fi
 
 # Start Gunicorn in foreground
-echo "==> Starting Gunicorn..."
-gunicorn config.wsgi:application
+echo "==> Starting Gunicorn (timeout=${GUNICORN_TIMEOUT}s, graceful_timeout=${GUNICORN_GRACEFUL_TIMEOUT}s)..."
+gunicorn config.wsgi:application --timeout "$GUNICORN_TIMEOUT" --graceful-timeout "$GUNICORN_GRACEFUL_TIMEOUT"
 
 # If Gunicorn exits, also stop the Celery restart loop
 if [ -n "$CELERY_LOOP_PID" ]; then
