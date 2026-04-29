@@ -69,7 +69,7 @@ services:
     name: kodereduai-api
     runtime: python
     region: oregon
-    plan: free
+    plan: starter
     rootDir: backend
     buildCommand: ./build.sh
     startCommand: bash start.sh
