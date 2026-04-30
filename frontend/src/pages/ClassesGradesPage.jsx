@@ -20,6 +20,7 @@ export default function ClassesGradesPage() {
   const showSuccess = (msg) => addToast(msg, 'success')
   const { activeAcademicYear } = useAcademicYear()
   const isSuperAdmin = user?.is_super_admin
+  const canEditClasses = !isTeacher
 
   // School selection (super admin can switch; regular users always use activeSchool)
   const [selectedSchoolId, setSelectedSchoolId] = useState(activeSchool?.id || null)
@@ -310,6 +311,7 @@ export default function ClassesGradesPage() {
   }
 
   const openClassEdit = (cls) => {
+    if (!canEditClasses) return
     setEditingClass(cls)
     setClassForm({
       name: cls.name,
@@ -685,14 +687,16 @@ export default function ClassesGradesPage() {
                     </svg>
                   </div>
                   <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => editableClass && openClassEdit(editableClass)}
-                      disabled={!editableClass}
-                      className="text-xs text-sky-600 hover:underline disabled:opacity-40 disabled:cursor-not-allowed"
-                      title={levelClasses.length > 1 ? 'Editing primary class in this level. Expand row to edit specific sections.' : 'Edit class'}
-                    >
-                      Edit
-                    </button>
+                    {canEditClasses && (
+                      <button
+                        onClick={() => editableClass && openClassEdit(editableClass)}
+                        disabled={!editableClass}
+                        className="text-xs text-sky-600 hover:underline disabled:opacity-40 disabled:cursor-not-allowed"
+                        title={levelClasses.length > 1 ? 'Editing primary class in this level. Expand row to edit specific sections.' : 'Edit class'}
+                      >
+                        Edit
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -747,10 +751,12 @@ export default function ClassesGradesPage() {
                                   </div>
                                 )}
                               </div>
-                              <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button onClick={() => openClassEdit(c)} className="text-xs text-blue-600 hover:underline">Edit</button>
-                                <button onClick={() => handleDeleteClass(c)} className="text-xs text-red-600 hover:underline">Del</button>
-                              </div>
+                              {canEditClasses && (
+                                <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <button onClick={() => openClassEdit(c)} className="text-xs text-blue-600 hover:underline">Edit</button>
+                                  <button onClick={() => handleDeleteClass(c)} className="text-xs text-red-600 hover:underline">Del</button>
+                                </div>
+                              )}
                             </div>
                           </div>
                         )})
@@ -836,10 +842,12 @@ export default function ClassesGradesPage() {
                   <span className="font-medium text-gray-900">{cls.grade_level}</span>
                 </div>
               </div>
-              <div className="flex justify-end space-x-2 mt-4 pt-4 border-t border-gray-100">
-                <button onClick={() => openClassEdit(cls)} className="text-sm text-blue-600 hover:text-blue-800 font-medium">Edit</button>
-                <button onClick={() => handleDeleteClass(cls)} className="text-sm text-red-600 hover:text-red-800 font-medium">Delete</button>
-              </div>
+              {canEditClasses && (
+                <div className="flex justify-end space-x-2 mt-4 pt-4 border-t border-gray-100">
+                  <button onClick={() => openClassEdit(cls)} className="text-sm text-blue-600 hover:text-blue-800 font-medium">Edit</button>
+                  <button onClick={() => handleDeleteClass(cls)} className="text-sm text-red-600 hover:text-red-800 font-medium">Delete</button>
+                </div>
+              )}
             </div>
           ))}
         </div>

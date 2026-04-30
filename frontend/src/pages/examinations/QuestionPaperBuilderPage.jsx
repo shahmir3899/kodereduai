@@ -5,8 +5,10 @@ import { questionPaperApi, examinationsApi } from '../../services/api'
 import Toast from '../../components/Toast'
 import ClassSelector from '../../components/ClassSelector'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
+import { useAuth } from '../../contexts/AuthContext'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import { useClassSubjects } from '../../hooks/useClassSubjects'
+import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 import ImageCapturePaperTab from './ImageCapturePaperTab'
 import ManualEntryPaperTab from './ManualEntryPaperTab'
@@ -19,6 +21,7 @@ import LessonPlanPaperTab from './LessonPlanPaperTab'
  * 2. Manual entry - Type questions with rich editor
  */
 export default function QuestionPaperBuilderPage() {
+  const { isTeacher } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const { activeAcademicYear } = useAcademicYear()
@@ -33,6 +36,16 @@ export default function QuestionPaperBuilderPage() {
   const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
   const resolvedClassObj = getResolvedMasterClassId(paperMetadata.class_obj, activeAcademicYear?.id, sessionClasses)
   const { subjects: classSubjects, isLoading: classSubjectsLoading } = useClassSubjects(resolvedClassObj)
+  const {
+    showAllOption,
+    classOptions: teacherClassOptions,
+  } = useTeacherScopedClasses({
+    academicYearId: activeAcademicYear?.id,
+    selectedClass: paperMetadata.class_obj,
+    setSelectedClass: (value) => setPaperMetadata((prev) => ({ ...prev, class_obj: value, subject: '' })),
+    autoSelectFirst: true,
+    queryKey: 'teacherPaperBuilderClasses',
+  })
 
   // Fetch exams
   const { data: examsData, isLoading: examsLoading } = useQuery({
@@ -127,6 +140,8 @@ export default function QuestionPaperBuilderPage() {
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 scope={classSelectorScope}
                 academicYearId={activeAcademicYear?.id}
+                showAllOption={showAllOption}
+                classes={teacherClassOptions || undefined}
                 required
               />
             </div>

@@ -8,10 +8,11 @@ import { faceAttendanceApi } from '../../services/api'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import ClassSelector from '../../components/ClassSelector'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
+import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
 import { getClassSelectorScope, getResolvedMasterClassId, resolveSessionClassId } from '../../utils/classScope'
 
 export default function FaceAttendancePage() {
-  const { activeSchool } = useAuth()
+  const { activeSchool, isTeacher } = useAuth()
   const { activeAcademicYear } = useAcademicYear()
   const { showError, showSuccess } = useToast()
   const navigate = useNavigate()
@@ -27,6 +28,16 @@ export default function FaceAttendancePage() {
   const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
   const resolvedSelectedClass = getResolvedMasterClassId(selectedClass, activeAcademicYear?.id, sessionClasses)
   const resolvedSelectedSessionClass = resolveSessionClassId(selectedClass, activeAcademicYear?.id, sessionClasses)
+  const {
+    showAllOption,
+    classOptions: teacherClassOptions,
+  } = useTeacherScopedClasses({
+    academicYearId: activeAcademicYear?.id,
+    selectedClass,
+    setSelectedClass,
+    autoSelectFirst: true,
+    queryKey: 'teacherFaceAttendanceClasses',
+  })
 
   // Load face recognition status
   const { data: statusData } = useQuery({
@@ -199,6 +210,8 @@ export default function FaceAttendancePage() {
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
                 scope={classSelectorScope}
                 academicYearId={activeAcademicYear?.id}
+                showAllOption={showAllOption}
+                classes={teacherClassOptions || undefined}
               />
             </div>
             <div>

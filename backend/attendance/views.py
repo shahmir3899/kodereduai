@@ -56,6 +56,21 @@ def _resolve_session_class_filter(request):
     return (session_class.class_obj_id, session_class.academic_year_id)
 
 
+def _resolve_session_class(request):
+    """Resolve session_class_id into SessionClass instance (school-scoped)."""
+    session_class_id = request.query_params.get('session_class_id') or request.data.get('session_class_id') or request.data.get('session_class')
+    if not session_class_id:
+        return None
+
+    from academic_sessions.models import SessionClass
+
+    school_id = ensure_tenant_school_id(request)
+    qs = SessionClass.objects.filter(id=session_class_id)
+    if school_id:
+        qs = qs.filter(school_id=school_id)
+    return qs.first()
+
+
 class ImageUploadView(ModuleAccessMixin, APIView):
     """
     Upload attendance images to Supabase storage.
@@ -154,7 +169,7 @@ class AttendanceUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
 
     def get_queryset(self):
         queryset = AttendanceUpload.objects.select_related(
-            'school', 'class_obj', 'created_by', 'confirmed_by', 'academic_year'
+            'school', 'class_obj', 'session_class', 'created_by', 'confirmed_by', 'academic_year'
         ).prefetch_related('images')
 
         # Filter by active school (works for all users including super admin)
@@ -186,7 +201,11 @@ class AttendanceUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
         if academic_year_id and session_class_year_id and str(academic_year_id) != str(session_class_year_id):
             return queryset.none()
 
-        if class_id:
+        session_class = _resolve_session_class(self.request)
+        if session_class:
+            queryset = queryset.filter(session_class_id=session_class.id)
+            class_id = session_class.class_obj_id
+        elif class_id:
             queryset = queryset.filter(class_obj_id=class_id)
 
         # Filter by status
@@ -206,19 +225,14 @@ class AttendanceUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
         if date_to:
             queryset = queryset.filter(date__lte=date_to)
 
-        # Teacher: only see uploads for their assigned classes (section-scoped)
         role = get_effective_role(self.request)
         if role == 'TEACHER':
             session_class_ids = get_teacher_session_class_scope(self.request)
-            if session_class_ids:
-                # Section-level: filter uploads where session_class is assigned
-                queryset = queryset.filter(
-                    Q(session_class_id__in=session_class_ids) |
-                    Q(session_class__isnull=True, class_obj_id__in=get_teacher_class_scope(self.request))
-                )
-            else:
-                teacher_class_ids = get_teacher_class_scope(self.request)
-                queryset = queryset.filter(class_obj_id__in=teacher_class_ids)
+            teacher_class_ids = get_teacher_class_scope(self.request)
+            queryset = queryset.filter(
+                Q(session_class_id__in=session_class_ids) |
+                Q(session_class__isnull=True, class_obj_id__in=teacher_class_ids)
+            )
 
         return queryset.order_by('-created_at')
 
@@ -252,10 +266,13 @@ class AttendanceUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
                 school_id=school_id, is_current=True, is_active=True,
             ).first()
 
+        session_class = serializer.validated_data.get('session_class') or _resolve_session_class(self.request)
+
         upload = serializer.save(
             created_by=self.request.user,
             status=AttendanceUpload.Status.PROCESSING,
             academic_year=academic_year,
+            session_class=session_class,
         )
 
         # Try to use Celery if available, otherwise process synchronously
@@ -415,12 +432,19 @@ class AttendanceUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
 
         # Get all students enrolled in the class for this upload's academic year
         if upload.academic_year_id:
+            enrollment_filters = {
+                'enrollments__academic_year_id': upload.academic_year_id,
+                'enrollments__is_active': True,
+            }
+            if upload.session_class_id:
+                enrollment_filters['enrollments__session_class_id'] = upload.session_class_id
+            else:
+                enrollment_filters['enrollments__class_obj_id'] = upload.class_obj_id
+
             all_students = Student.objects.filter(
                 school=upload.school,
-                enrollments__academic_year_id=upload.academic_year_id,
-                enrollments__class_obj_id=upload.class_obj_id,
-                enrollments__is_active=True,
                 is_active=True,
+                **enrollment_filters,
             ).distinct()
         else:
             all_students = Student.objects.filter(

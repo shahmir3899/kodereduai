@@ -506,7 +506,6 @@ export default function Layout() {
       name: 'Planning & Delivery',
       icon: CalendarIcon,
       children: [
-        { name: 'Timetable', href: '/academics/timetable', icon: ClockIcon },
         ...(isModuleEnabled('examinations') ? [
           { name: 'Curriculum Coverage', href: '/academics/curriculum-coverage', icon: ChartIcon },
         ] : []),
@@ -516,17 +515,11 @@ export default function Layout() {
       ],
     }] : []),
 
-    ...(isModuleEnabled('academics') ? [{
-      type: 'group',
-      name: 'Analytics & Reports',
+    ...(isModuleEnabled('academics') && !isStaffLevel ? [{
+      type: 'item',
+      name: 'AI Analytics',
+      href: '/academics/analytics',
       icon: ChartIcon,
-      children: [
-        { name: 'AI Analytics', href: '/academics/analytics', icon: ChartIcon },
-        ...(isModuleEnabled('examinations') ? [
-          { name: 'Results', href: '/academics/results', icon: ChartIcon },
-          { name: 'Report Cards', href: '/academics/report-cards', icon: ReportIcon },
-        ] : []),
-      ],
     }] : []),
 
     // HR & Staff group (visible to SCHOOL_ADMIN, PRINCIPAL, HR_MANAGER + module check)

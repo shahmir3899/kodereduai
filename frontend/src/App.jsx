@@ -321,6 +321,20 @@ function AssessmentManageRoute({ children }) {
   return children
 }
 
+function AdminPrincipalRoute({ children }) {
+  const { effectiveRole } = useAuth()
+  if (effectiveRole !== 'SCHOOL_ADMIN' && effectiveRole !== 'PRINCIPAL') {
+    return (
+      <AccessRestrictedRedirect
+        to="/dashboard"
+        title="Analytics Access Limited"
+        message="This analytics page is available only to School Admin and Principal roles."
+      />
+    )
+  }
+  return children
+}
+
 function TimetableRoute() {
   const { effectiveRole } = useAuth()
   if (effectiveRole === 'TEACHER') {
@@ -408,7 +422,7 @@ function App() {
             {/* Academics routes */}
             <Route path="academics/subjects" element={<SchoolRoute><ModuleRoute module="academics"><SubjectsPage /></ModuleRoute></SchoolRoute>} />
             <Route path="academics/timetable" element={<SchoolRoute><ModuleRoute module="academics"><TimetableRoute /></ModuleRoute></SchoolRoute>} />
-            <Route path="academics/analytics" element={<SchoolRoute><ModuleRoute module="academics"><AcademicsAnalyticsPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="academics/analytics" element={<SchoolRoute><ModuleRoute module="academics"><AdminPrincipalRoute><AcademicsAnalyticsPage /></AdminPrincipalRoute></ModuleRoute></SchoolRoute>} />
             <Route path="academics/calendar" element={<SchoolRoute><ModuleRoute module="academics"><ManagementRoute><AcademicCalendarPage /></ManagementRoute></ModuleRoute></SchoolRoute>} />
             <Route path="academics/sessions" element={<SchoolRoute><ModuleRoute module="academics"><ManagementRoute><AcademicYearsPage /></ManagementRoute></ModuleRoute></SchoolRoute>} />
             <Route path="academics/promotion" element={<SchoolRoute><ModuleRoute module="academics"><ManagementRoute><PromotionPage /></ManagementRoute></ModuleRoute></SchoolRoute>} />

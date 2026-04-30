@@ -1,9 +1,10 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { academicsApi, hrApi, attendanceApi } from '../../services/api'
+import { academicsApi, hrApi } from '../../services/api'
 import { useBackgroundTask } from '../../hooks/useBackgroundTask'
 import { useClasses } from '../../hooks/useClasses'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
+import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
 import ClassSelector from '../../components/ClassSelector'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useAuth } from '../../contexts/AuthContext'
@@ -86,30 +87,16 @@ export default function TimetablePage() {
   const { sessionClasses } = useSessionClasses(activeAcademicYear?.id)
   const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
 
-  const { data: teacherScopeClassesRes } = useQuery({
-    queryKey: ['myTimetableClasses'],
-    queryFn: () => attendanceApi.getMyAttendanceClasses(),
-    enabled: isTeacher,
+  const {
+    showAllOption,
+    classOptions: teacherScopedClassOptions,
+  } = useTeacherScopedClasses({
+    academicYearId: activeAcademicYear?.id,
+    selectedClass: selectedClassId,
+    setSelectedClass: setSelectedClassId,
+    autoSelectFirst: true,
+    queryKey: 'myTimetableClasses',
   })
-
-  const teacherScopeClasses = teacherScopeClassesRes?.data || []
-  const teacherScopedClassOptions = useMemo(() => {
-    if (!isTeacher) return null
-    if (activeAcademicYear?.id) {
-      const allowedMasterClassIds = new Set(teacherScopeClasses.map(c => Number(c.id)))
-      return sessionClasses
-        .filter(sc => allowedMasterClassIds.has(Number(sc.class_obj)))
-        .map(sc => ({
-          id: sc.id,
-          class_obj: sc.class_obj,
-          name: sc.display_name,
-          section: sc.section || '',
-          grade_level: sc.grade_level,
-          label: sc.label,
-        }))
-    }
-    return teacherScopeClasses
-  }, [isTeacher, activeAcademicYear?.id, sessionClasses, teacherScopeClasses])
 
   const resolvedSelectedClassId = getResolvedMasterClassId(selectedClassId, activeAcademicYear?.id, sessionClasses)
 
@@ -512,6 +499,7 @@ export default function TimetablePage() {
               placeholder="-- Select Class --"
               scope={classSelectorScope}
               academicYearId={activeAcademicYear?.id}
+              showAllOption={showAllOption}
               classes={teacherScopedClassOptions || undefined}
             />
           </div>

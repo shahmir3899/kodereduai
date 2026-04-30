@@ -10,6 +10,7 @@ import { useAcademicYear } from '../contexts/AcademicYearContext'
 import { attendanceApi, studentsApi } from '../services/api'
 import { AnalyticsTab, ConfigurationTab } from '../components/attendance'
 import { useSessionClasses } from '../hooks/useSessionClasses'
+import useTeacherScopedClasses from '../hooks/useTeacherScopedClasses'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../utils/classScope'
 import { sortClassOptions } from '../utils/classOrdering'
 
@@ -106,7 +107,7 @@ function AIStatusBadge({ status }) {
 // UPLOAD TAB
 // ═══════════════════════════════════════════
 function UploadTab({ onUploadSuccess }) {
-  const { user, activeSchool } = useAuth()
+  const { user, activeSchool, isTeacher } = useAuth()
   const { activeAcademicYear } = useAcademicYear()
   const queryClient = useQueryClient()
 
@@ -121,21 +122,30 @@ function UploadTab({ onUploadSuccess }) {
   const [zoom, setZoom] = useState(1)
   const [croppedAreaPixels, setCroppedAreaPixels] = useState(null)
 
-  // Role-aware class list (teachers see only assigned classes)
-  const { data: myClassesRes, isLoading: classesLoading } = useQuery({
-    queryKey: ['myAttendanceClasses'],
-    queryFn: () => attendanceApi.getMyAttendanceClasses(),
+  // Role-aware class list via shared hook
+  const {
+    classOptions: scopedClassOptions,
+    isLoadingTeacherClasses: classesLoading,
+  } = useTeacherScopedClasses({
+    academicYearId: activeAcademicYear?.id,
+    selectedClass,
+    setSelectedClass,
+    autoSelectFirst: true,
+    queryKey: 'myAttendanceClasses',
   })
-  const myClasses = myClassesRes?.data || []
+  const { data: allClassesRes } = useQuery({
+    queryKey: ['myAttendanceClassesAllRoles'],
+    queryFn: () => attendanceApi.getMyAttendanceClasses(),
+    enabled: !isTeacher,
+  })
 
   const { sessionClasses } = useSessionClasses(activeAcademicYear?.id, activeSchool?.id)
-  const allowedMasterClassIds = new Set(myClasses.map(c => c.id))
-  const sessionClassOptions = sortClassOptions(sessionClasses
-    .filter(sc => sc.class_obj && allowedMasterClassIds.has(sc.class_obj))
-    .map(sc => ({ id: sc.id, name: sc.display_name, section: sc.section || '', label: sc.label, class_obj: sc.class_obj, grade_level: sc.grade_level })))
+  const sessionClassOptions = sortClassOptions((scopedClassOptions || []).filter((opt) => opt.class_obj))
   const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
-  const useSessionClassSelection = classSelectorScope === 'session' && sessionClassOptions.length > 0
-  const classOptions = useSessionClassSelection ? sessionClassOptions : sortClassOptions(myClasses)
+  const useSessionClassSelection = isTeacher
+    ? !!activeAcademicYear?.id && sessionClassOptions.length > 0
+    : classSelectorScope === 'session' && sessionClassOptions.length > 0
+  const classOptions = sortClassOptions(scopedClassOptions || allClassesRes?.data || [])
 
   const { data: aiStatusData } = useQuery({
     queryKey: ['aiStatus'],
@@ -257,6 +267,9 @@ function UploadTab({ onUploadSuccess }) {
         class_obj: parseInt(resolvedMasterClassId),
         date: selectedDate,
         ...(activeAcademicYear?.id ? { academic_year: activeAcademicYear.id } : {}),
+      }
+      if (useSessionClassSelection) {
+        createData.session_class = parseInt(selectedClass)
       }
       if (imageUrls.length === 1) createData.image_url = imageUrls[0]
       else createData.image_urls = imageUrls

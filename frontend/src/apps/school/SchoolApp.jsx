@@ -28,6 +28,8 @@ export default function SchoolApp() {
     data: school,
     isLoading: schoolLoading,
     error: schoolError,
+    refetch: retryFetch,
+    isFetching: isRetrying,
   } = useQuery({
     queryKey: ['school-by-subdomain', subdomain],
     queryFn: () => api.get(`/api/schools/by-subdomain/?subdomain=${subdomain}`),
@@ -121,14 +123,16 @@ export default function SchoolApp() {
       const isLocalhost = hostname === 'localhost' || hostname.startsWith('127.0.0.1')
       
       if (isLocalhost) {
-        // Localhost - clear corrupted data and go to home
-        localStorage.removeItem('dev_subdomain')
-        localStorage.removeItem('active_school_id')
+        // Localhost - go to home without clearing dev_subdomain
         window.location.href = '/'
       } else {
         // Production
         window.location.href = 'https://www.kodereduai.pk'
       }
+    }
+
+    const handleRetry = () => {
+      retryFetch()
     }
 
     return (
@@ -138,12 +142,24 @@ export default function SchoolApp() {
           <p className="text-gray-600 mb-4">
             School with subdomain "{subdomain}" not found or is inactive.
           </p>
-          <button
-            onClick={handleReturn}
-            className="mt-4 bg-primary-600 text-white px-6 py-2 rounded hover:bg-primary-700 transition-colors"
-          >
-            Return to home
-          </button>
+          <p className="text-sm text-gray-500 mb-6">
+            The server may still be starting up. Please retry in a moment.
+          </p>
+          <div className="flex gap-3 justify-center flex-wrap">
+            <button
+              onClick={handleRetry}
+              disabled={isRetrying}
+              className="bg-primary-600 text-white px-6 py-2 rounded hover:bg-primary-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {isRetrying ? 'Retrying...' : 'Retry'}
+            </button>
+            <button
+              onClick={handleReturn}
+              className="bg-gray-500 text-white px-6 py-2 rounded hover:bg-gray-600 transition-colors"
+            >
+              Return to home
+            </button>
+          </div>
         </div>
       </div>
     )

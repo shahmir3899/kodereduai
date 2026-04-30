@@ -1,10 +1,11 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { attendanceApi, studentsApi } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
 import ClassSelector from '../components/ClassSelector'
 import { useAcademicYear } from '../contexts/AcademicYearContext'
+import useTeacherScopedClasses from '../hooks/useTeacherScopedClasses'
 
 function getDaysInMonth(year, month) {
   return new Date(year, month + 1, 0).getDate()
@@ -31,6 +32,16 @@ export default function AttendanceRecordsPage() {
   const daysInMonth = getDaysInMonth(year, month)
   const dateFrom = `${year}-${pad(month + 1)}-01`
   const dateTo = `${year}-${pad(month + 1)}-${pad(daysInMonth)}`
+  const {
+    showAllOption,
+    classOptions: teacherClassOptions,
+  } = useTeacherScopedClasses({
+    academicYearId: activeAcademicYear?.id,
+    selectedClass: classId,
+    setSelectedClass: setClassId,
+    autoSelectFirst: true,
+    queryKey: 'teacherAttendanceRegisterClasses',
+  })
 
   // Fetch all enrolled students for the selected class (from DB)
   const { data: studentsData } = useQuery({
@@ -183,6 +194,8 @@ export default function AttendanceRecordsPage() {
               className="input w-full"
               scope={activeAcademicYear?.id ? 'session' : 'master'}
               academicYearId={activeAcademicYear?.id}
+              showAllOption={showAllOption}
+              classes={teacherClassOptions || undefined}
             />
           </div>
 

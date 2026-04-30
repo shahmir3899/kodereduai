@@ -1,12 +1,13 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { lmsApi, hrApi, attendanceApi } from '../../services/api'
+import { lmsApi, hrApi } from '../../services/api'
 import ClassSelector from '../../components/ClassSelector'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import { useClassSubjects } from '../../hooks/useClassSubjects'
+import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 import { useToast } from '../../components/Toast'
 import TeacherScopeSummary from '../../components/teacher/TeacherScopeSummary'
@@ -48,7 +49,6 @@ export default function LessonPlansPage() {
   const [editingPlan, setEditingPlan] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [form, setForm] = useState({ ...EMPTY_FORM })
-  const [teacherClassOptions, setTeacherClassOptions] = useState(null)
   const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
   const resolvedFilterClass = getResolvedMasterClassId(filterClass, activeAcademicYear?.id, sessionClasses)
   const resolvedFormClassObj = getResolvedMasterClassId(form.class_obj, activeAcademicYear?.id, sessionClasses)
@@ -63,39 +63,16 @@ export default function LessonPlansPage() {
   }, [sessionClasses])
   const { classifyScope } = useTeacherScopeLookup({ academicYearId: activeAcademicYear?.id })
 
-  const { data: myClassesRes } = useQuery({
-    queryKey: ['teacherLessonPlanClasses'],
-    queryFn: () => attendanceApi.getMyAttendanceClasses(),
-    enabled: isTeacher,
+  const {
+    showAllOption,
+    classOptions: teacherClassOptions,
+  } = useTeacherScopedClasses({
+    academicYearId: activeAcademicYear?.id,
+    selectedClass: filterClass,
+    setSelectedClass: setFilterClass,
+    autoSelectFirst: true,
+    queryKey: 'teacherLessonPlanClasses',
   })
-
-  useEffect(() => {
-    if (!isTeacher) {
-      setTeacherClassOptions(null)
-      return
-    }
-    const myClasses = myClassesRes?.data || []
-    if (!myClasses.length) {
-      setTeacherClassOptions([])
-      return
-    }
-    if (activeAcademicYear?.id && sessionClasses?.length) {
-      const allowedMasterClassIds = new Set(myClasses.map((c) => Number(c.id)))
-      const scoped = sessionClasses
-        .filter((sc) => allowedMasterClassIds.has(Number(sc.class_obj)))
-        .map((sc) => ({
-          id: sc.id,
-          class_obj: sc.class_obj,
-          name: sc.display_name,
-          section: sc.section || '',
-          grade_level: sc.grade_level,
-          label: sc.label,
-        }))
-      setTeacherClassOptions(scoped.length > 0 ? scoped : myClasses)
-      return
-    }
-    setTeacherClassOptions(myClasses)
-  }, [isTeacher, myClassesRes?.data, sessionClasses, activeAcademicYear?.id])
 
   // -- Data fetching --
 
@@ -291,7 +268,7 @@ export default function LessonPlansPage() {
                 setFilterClass(e.target.value)
                 setFilterSubject('')
               }}
-              showAllOption={!isTeacher}
+              showAllOption={showAllOption}
               scope={classSelectorScope}
               academicYearId={activeAcademicYear?.id}
               classes={teacherClassOptions || undefined}
@@ -610,7 +587,7 @@ export default function LessonPlansPage() {
                     onChange={(e) => setForm({ ...form, class_obj: e.target.value, subject: '' })}
                     scope={classSelectorScope}
                     academicYearId={activeAcademicYear?.id}
-                    showAllOption={!isTeacher}
+                    showAllOption={showAllOption}
                     classes={teacherClassOptions || undefined}
                   />
                 </div>

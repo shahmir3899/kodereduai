@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { attendanceApi, sessionsApi } from '../services/api'
 import { useAcademicYear } from '../contexts/AcademicYearContext'
 import ClassSelector from '../components/ClassSelector'
+import useTeacherScopedClasses from '../hooks/useTeacherScopedClasses'
 import { buildSessionOrMasterClassParams } from '../utils/classScope'
 
 export default function ManualEntryPage() {
@@ -13,49 +14,33 @@ export default function ManualEntryPage() {
   const [attendanceData, setAttendanceData] = useState([])
   const [saveMsg, setSaveMsg] = useState('')
 
-  // Fetch classes (role-aware: admin=all, teacher=assigned only)
-  const { data: classesRes, isLoading: classesLoading } = useQuery({
-    queryKey: ['myAttendanceClasses'],
-    queryFn: () => attendanceApi.getMyAttendanceClasses(),
+  const {
+    showAllOption,
+    classOptions,
+    isLoadingTeacherClasses: classesLoading,
+  } = useTeacherScopedClasses({
+    academicYearId: activeAcademicYear?.id,
+    selectedClass: classId,
+    setSelectedClass: setClassId,
+    autoSelectFirst: true,
+    queryKey: 'myAttendanceClasses',
   })
-  const classes = classesRes?.data || []
 
-  const { data: sessionClassesRes, isLoading: sessionClassesLoading } = useQuery({
-    queryKey: ['manualEntrySessionClasses', activeAcademicYear?.id],
-    queryFn: () => sessionsApi.getSessionClasses({
-      academic_year: activeAcademicYear?.id,
-      page_size: 9999,
-      is_active: true,
-    }),
-    enabled: !!activeAcademicYear?.id,
-  })
-  const sessionClasses = sessionClassesRes?.data?.results || sessionClassesRes?.data || []
-
-  const allowedMasterClassIds = new Set(classes.map(c => c.id))
-  const filteredSessionClasses = sessionClasses.filter(sc => sc.class_obj && allowedMasterClassIds.has(sc.class_obj))
-  const useSessionClassFilter = !!activeAcademicYear?.id && filteredSessionClasses.length > 0
-  const classOptions = useSessionClassFilter
-    ? filteredSessionClasses.map(sc => ({
-      id: sc.id,
-      name: sc.display_name,
-      section: sc.section || '',
-      label: sc.label,
-      grade_level: sc.grade_level,
-    }))
-    : classes
+  const effectiveClassOptions = classOptions || []
+  const useSessionClassFilter = !!activeAcademicYear?.id && effectiveClassOptions.some((opt) => opt.class_obj)
 
   const classFilterParams = buildSessionOrMasterClassParams({
     classId,
     activeAcademicYearId: useSessionClassFilter ? activeAcademicYear?.id : null,
-    sessionClasses: filteredSessionClasses,
+    sessionClasses: effectiveClassOptions,
   })
 
   const selectedMasterClassId = useMemo(() => {
     if (!classId) return ''
     if (!useSessionClassFilter) return classId
-    const selectedSessionClass = filteredSessionClasses.find(sc => String(sc.id) === String(classId))
+    const selectedSessionClass = effectiveClassOptions.find(sc => String(sc.id) === String(classId))
     return selectedSessionClass?.class_obj || ''
-  }, [classId, useSessionClassFilter, filteredSessionClasses])
+  }, [classId, useSessionClassFilter, effectiveClassOptions])
 
   const { data: selectedDayStatusRes } = useQuery({
     queryKey: ['manualEntryDayStatus', date, selectedMasterClassId, activeAcademicYear?.id],
@@ -194,9 +179,10 @@ export default function ManualEntryPage() {
               value={classId}
               onChange={e => { setClassId(e.target.value); setAttendanceData([]); setSaveMsg('') }}
               className="input w-full"
-              disabled={classesLoading || sessionClassesLoading}
+              disabled={classesLoading}
               classes={classOptions}
-              placeholder={classesLoading || sessionClassesLoading ? 'Loading classes...' : 'Select Class'}
+              showAllOption={showAllOption}
+              placeholder={classesLoading ? 'Loading classes...' : 'Select Class'}
             />
             {useSessionClassFilter && (
               <p className="text-[11px] text-blue-600 mt-1">Using session classes for {activeAcademicYear?.name}</p>

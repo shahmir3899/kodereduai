@@ -519,6 +519,10 @@ export const academicsApi = {
     api.get('/api/academics/subjects/gap_analysis/'),
   getAnalytics: (params) =>
     api.get('/api/academics/analytics/', { params }),
+  getAnalyticsAlerts: () =>
+    api.get('/api/academics/analytics/', { params: { type: 'alerts' } }),
+  updateAnalyticsAlert: (data) =>
+    api.patch('/api/academics/analytics/', data),
 
   // AI Chat
   sendChatMessage: (data) => api.post('/api/academics/ai-chat/', data),

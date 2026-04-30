@@ -6,6 +6,7 @@ import logging
 from datetime import datetime
 
 from django.db.models import Q
+from django.db.utils import OperationalError, ProgrammingError
 
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
@@ -15,6 +16,7 @@ from rest_framework.views import APIView
 
 from core.permissions import (
     HasSchoolAccess,
+    IsSchoolAdmin,
     IsSchoolAdminOrReadOnly,
     ModuleAccessMixin,
     get_effective_role,
@@ -1143,18 +1145,34 @@ class AcademicsAIChatView(ModuleAccessMixin, APIView):
 class AcademicsAnalyticsView(ModuleAccessMixin, APIView):
     """Predictive analytics for academics."""
     required_module = 'academics'
-    permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
 
     def get(self, request):
-        school_id = _resolve_school_id(request)
-        if not school_id:
-            return Response({'detail': 'No school selected.'}, status=400)
-
         report_type = request.query_params.get('type', 'overview')
         date_from = request.query_params.get('date_from')
         date_to = request.query_params.get('date_to')
+        months = int(request.query_params.get('months', 6))
+        scope = request.query_params.get('scope', 'school')
 
         from .analytics import AcademicsAnalytics
+
+        if scope == 'global':
+            if not request.user.is_super_admin:
+                return Response({'detail': 'Only super admins can request global analytics.'}, status=403)
+            school_ids = ensure_tenant_schools(request)
+            if not school_ids:
+                return Response({'detail': 'No schools available for global scope.'}, status=400)
+            overviews = []
+            for sid in school_ids:
+                analytics = AcademicsAnalytics(sid)
+                overviews.append(
+                    analytics.build_v2_overview(date_from=date_from, date_to=date_to, months=months, scope='school')
+                )
+            return Response(AcademicsAnalytics.merge_overviews(overviews))
+
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response({'detail': 'No school selected.'}, status=400)
         analytics = AcademicsAnalytics(school_id)
 
         if report_type == 'subject_attendance':
@@ -1164,13 +1182,44 @@ class AcademicsAnalyticsView(ModuleAccessMixin, APIView):
         elif report_type == 'slot_recommendations':
             return Response(analytics.optimal_slot_recommendations())
         elif report_type == 'trends':
-            months = int(request.query_params.get('months', 6))
             return Response(analytics.attendance_trends(months))
+        elif report_type == 'alerts':
+            try:
+                return Response(analytics.list_alerts())
+            except (ProgrammingError, OperationalError):
+                return Response({'items': []})
         else:
-            months = int(request.query_params.get('months', 6))
-            return Response({
-                'subject_attendance': analytics.subject_attendance_by_slot(date_from, date_to),
-                'teacher_effectiveness': analytics.teacher_effectiveness(date_from, date_to),
-                'slot_recommendations': analytics.optimal_slot_recommendations(),
-                'attendance_trends': analytics.attendance_trends(months),
-            })
+            payload = analytics.build_v2_overview(date_from=date_from, date_to=date_to, months=months, scope='school')
+            try:
+                analytics.sync_alerts(payload.get('alerts', {}))
+                payload['alerts'] = analytics.list_alerts()
+            except (ProgrammingError, OperationalError):
+                # Migration may not be applied yet; serve computed alerts only.
+                pass
+            return Response(payload)
+
+    def patch(self, request):
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response({'detail': 'No school selected.'}, status=400)
+
+        alert_id = request.data.get('alert_id')
+        status_value = request.data.get('status')
+        if not alert_id or status_value not in ('acknowledged', 'resolved', 'new'):
+            return Response({'detail': 'alert_id and valid status are required.'}, status=400)
+
+        from .analytics import AcademicsAnalytics
+        analytics = AcademicsAnalytics(school_id)
+        try:
+            updated = analytics.update_alert_status(alert_id=alert_id, status_value=status_value)
+        except (ProgrammingError, OperationalError):
+            return Response({'detail': 'Analytics alerts storage is not ready. Run migrations first.'}, status=503)
+        if not updated:
+            return Response({'detail': 'Alert not found.'}, status=404)
+
+        return Response({
+            'id': updated.id,
+            'status': updated.status,
+            'acknowledged_at': updated.acknowledged_at,
+            'resolved_at': updated.resolved_at,
+        })

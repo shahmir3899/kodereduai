@@ -40,6 +40,14 @@ class AttendanceUpload(models.Model):
         related_name='attendance_uploads',
         help_text="Academic year this attendance belongs to (auto-resolved if not provided)"
     )
+    session_class = models.ForeignKey(
+        'academic_sessions.SessionClass',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='attendance_uploads',
+        help_text="Session class/section for this upload (preferred over master class when available)"
+    )
 
     # Date for this attendance
     date = models.DateField(help_text="Date of the attendance register")
@@ -118,7 +126,6 @@ class AttendanceUpload(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = ('school', 'class_obj', 'date')
         ordering = ['-created_at']
         verbose_name = 'Attendance Upload'
         verbose_name_plural = 'Attendance Uploads'
@@ -126,6 +133,19 @@ class AttendanceUpload(models.Model):
             models.Index(fields=['status']),
             models.Index(fields=['-created_at']),
             models.Index(fields=['academic_year']),
+            models.Index(fields=['session_class']),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['school', 'session_class', 'date'],
+                condition=models.Q(session_class__isnull=False),
+                name='unique_upload_per_session_class_date',
+            ),
+            models.UniqueConstraint(
+                fields=['school', 'class_obj', 'date'],
+                condition=models.Q(session_class__isnull=True),
+                name='unique_upload_per_master_class_date',
+            ),
         ]
 
     def __str__(self):

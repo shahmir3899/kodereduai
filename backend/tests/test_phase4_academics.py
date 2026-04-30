@@ -1428,12 +1428,19 @@ class TestAIFeatures:
         assert resp.status_code == 200, f"E6 gap_analysis status={resp.status_code}"
 
     def test_e7_analytics_overview(self, seed_data, api):
-        """E7: Analytics overview returns 200."""
+        """E7: Analytics overview returns 200 with v2 contract + compatibility keys."""
         token = seed_data['tokens']['admin']
         SID_A = seed_data['SID_A']
 
         resp = api.safe_get('/api/academics/analytics/?type=overview', token, SID_A)
         assert resp.status_code == 200, f"E7 analytics overview status={resp.status_code}"
+        payload = resp.json()
+        assert 'meta' in payload, "E7 missing meta"
+        assert 'signals' in payload, "E7 missing signals"
+        assert 'alerts' in payload, "E7 missing alerts"
+        assert 'recommendations' in payload, "E7 missing recommendations"
+        assert 'subject_attendance' in payload, "E7 missing compatibility key subject_attendance"
+        assert 'assignment_engagement' in payload, "E7 missing compatibility key assignment_engagement"
 
     def test_e8_analytics_with_date_range(self, seed_data, api):
         """E8: Analytics with date range returns 200."""
@@ -1445,6 +1452,28 @@ class TestAIFeatures:
             token, SID_A,
         )
         assert resp.status_code == 200, f"E8 analytics date range status={resp.status_code}"
+
+    def test_e9_analytics_alerts_lifecycle(self, seed_data, api):
+        """E9: Analytics alerts endpoint lists and supports lifecycle patch."""
+        token = seed_data['tokens']['admin']
+        SID_A = seed_data['SID_A']
+
+        # Generate/sync alerts from overview.
+        api.safe_get('/api/academics/analytics/?type=overview', token, SID_A)
+
+        alerts_resp = api.safe_get('/api/academics/analytics/?type=alerts', token, SID_A)
+        assert alerts_resp.status_code == 200, f"E9 alerts list status={alerts_resp.status_code}"
+        alerts = alerts_resp.json().get('items', [])
+        if not alerts:
+            return  # Valid for seed data with no threshold breaches
+
+        first_alert_id = alerts[0]['id']
+        patch_resp = api.patch('/api/academics/analytics/', {
+            'alert_id': first_alert_id,
+            'status': 'acknowledged',
+        }, token, SID_A)
+        assert patch_resp.status_code == 200, f"E9 alert patch status={patch_resp.status_code}"
+        assert patch_resp.json().get('status') == 'acknowledged'
 
 
 # ---------------------------------------------------------------------------

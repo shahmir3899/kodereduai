@@ -289,3 +289,48 @@ class AcademicsAIChatMessage(models.Model):
 
     def __str__(self):
         return f"{self.user} ({self.role}): {self.content[:50]}"
+
+
+class AcademicsAnalyticsAlert(models.Model):
+    """Persisted analytics alerts with lifecycle state."""
+
+    class Severity(models.TextChoices):
+        LOW = 'low', 'Low'
+        MEDIUM = 'medium', 'Medium'
+        HIGH = 'high', 'High'
+
+    class Status(models.TextChoices):
+        NEW = 'new', 'New'
+        ACKNOWLEDGED = 'acknowledged', 'Acknowledged'
+        RESOLVED = 'resolved', 'Resolved'
+
+    school = models.ForeignKey(
+        'schools.School',
+        on_delete=models.CASCADE,
+        related_name='academics_analytics_alerts',
+    )
+    alert_code = models.CharField(max_length=80)
+    title = models.CharField(max_length=255)
+    severity = models.CharField(max_length=10, choices=Severity.choices, default=Severity.MEDIUM)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.NEW)
+    rationale = models.TextField(blank=True)
+    suggested_action = models.TextField(blank=True)
+    metric_key = models.CharField(max_length=120, blank=True)
+    metric_value = models.FloatField(null=True, blank=True)
+    context = models.JSONField(default=dict, blank=True)
+    first_seen_at = models.DateTimeField(auto_now_add=True)
+    last_seen_at = models.DateTimeField(auto_now_add=True)
+    acknowledged_at = models.DateTimeField(null=True, blank=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-updated_at']
+        indexes = [
+            models.Index(fields=['school', 'status', 'severity']),
+            models.Index(fields=['school', 'alert_code']),
+        ]
+
+    def __str__(self):
+        return f"{self.school_id}:{self.alert_code}:{self.status}"

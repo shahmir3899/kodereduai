@@ -1,20 +1,18 @@
 import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { examinationsApi, sessionsApi, studentsApi, attendanceApi } from '../../services/api'
+import { examinationsApi, sessionsApi, studentsApi } from '../../services/api'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
-import { useAuth } from '../../contexts/AuthContext'
 import ClassSelector from '../../components/ClassSelector'
 import TeacherScopeSummary from '../../components/teacher/TeacherScopeSummary'
 import TeacherScopeBadge, { TeacherScopeHint, useTeacherScopeLookup } from '../../components/teacher/TeacherScopeBadge'
 import * as XLSX from 'xlsx'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
+import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 
 export default function MarksEntryPage() {
   const queryClient = useQueryClient()
   const { activeAcademicYear } = useAcademicYear()
-  const { isTeacher } = useAuth()
-  const [teacherClassOptions, setTeacherClassOptions] = useState(null)
   const fileInputRef = useRef(null)
 
   // Selection state
@@ -26,12 +24,18 @@ export default function MarksEntryPage() {
   const { sessionClasses } = useSessionClasses(yearFilter)
   const classSelectorScope = getClassSelectorScope(yearFilter)
   const resolvedClassFilter = getResolvedMasterClassId(classFilter, yearFilter, sessionClasses)
-  const { classifyScope } = useTeacherScopeLookup({ academicYearId: yearFilter || undefined })
-
-  const { data: myClassesRes } = useQuery({
-    queryKey: ['myMarksEntryClasses'],
-    queryFn: () => attendanceApi.getMyAttendanceClasses(),
+  const {
+    isTeacher,
+    showAllOption,
+    classOptions: teacherClassOptions,
+  } = useTeacherScopedClasses({
+    academicYearId: yearFilter || undefined,
+    selectedClass: classFilter,
+    setSelectedClass: setClassFilter,
+    autoSelectFirst: true,
+    queryKey: 'myMarksEntryClasses',
   })
+  const { classifyScope } = useTeacherScopeLookup({ academicYearId: yearFilter || undefined })
 
   // Sync year filter with global session switcher
   useEffect(() => {
@@ -94,30 +98,6 @@ export default function MarksEntryPage() {
     enabled: !!selectedExam?.class_obj && !!selectedSubjectId,
   })
   const classStudents = classStudentsRes?.data?.results || classStudentsRes?.data || []
-
-  useEffect(() => {
-    const myClasses = myClassesRes?.data || []
-    if (!myClasses.length) {
-      setTeacherClassOptions(null)
-      return
-    }
-    if (yearFilter && sessionClasses?.length) {
-      const allowedMasterClassIds = new Set(myClasses.map((c) => Number(c.id)))
-      const scoped = sessionClasses
-        .filter((sc) => allowedMasterClassIds.has(Number(sc.class_obj)))
-        .map((sc) => ({
-          id: sc.id,
-          class_obj: sc.class_obj,
-          name: sc.display_name,
-          section: sc.section || '',
-          grade_level: sc.grade_level,
-          label: sc.label,
-        }))
-      setTeacherClassOptions(scoped.length > 0 ? scoped : myClasses)
-      return
-    }
-    setTeacherClassOptions(myClasses)
-  }, [myClassesRes?.data, sessionClasses, yearFilter])
 
   // Initialize marks grid when subject is selected and marks load
   useEffect(() => {
@@ -319,7 +299,7 @@ export default function MarksEntryPage() {
               value={classFilter}
               onChange={e => { setClassFilter(e.target.value); setSelectedExamId(''); setSelectedSubjectId(''); setMarksData([]) }}
               className="input w-full text-sm"
-              showAllOption={!isTeacher}
+              showAllOption={showAllOption}
               scope={classSelectorScope}
               academicYearId={yearFilter || undefined}
               classes={teacherClassOptions || undefined}

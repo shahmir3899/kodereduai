@@ -3,7 +3,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import { attendanceApi, schoolsApi, sessionsApi } from '../services/api'
 import { useAcademicYear } from '../contexts/AcademicYearContext'
+import { useAuth } from '../contexts/AuthContext'
 import ClassSelector from '../components/ClassSelector'
+import useTeacherScopedClasses from '../hooks/useTeacherScopedClasses'
 
 // ─── Utility helpers ───
 function getDaysInMonth(year, month) {
@@ -51,6 +53,7 @@ function getAccuracyBg(accuracy) {
 // REGISTER TAB
 // ═══════════════════════════════════════════
 function RegisterTab() {
+  const { isTeacher } = useAuth()
   const today = new Date()
   const [year, setYear] = useState(today.getFullYear())
   const [month, setMonth] = useState(today.getMonth())
@@ -74,6 +77,17 @@ function RegisterTab() {
     enabled: !!activeAcademicYear?.id,
   })
   const sessionClasses = sessionClassesRes?.data?.results || sessionClassesRes?.data || []
+
+  const {
+    showAllOption,
+    classOptions: teacherClassOptions,
+  } = useTeacherScopedClasses({
+    academicYearId: activeAcademicYear?.id,
+    selectedClass: classId,
+    setSelectedClass: setClassId,
+    autoSelectFirst: true,
+    queryKey: 'teacherRegisterClasses',
+  })
 
   const { data: enrollmentData } = useQuery({
     queryKey: ['enrollments-by-class', classId, activeAcademicYear?.id],
@@ -188,6 +202,8 @@ function RegisterTab() {
               className="input w-full"
               scope={activeAcademicYear?.id ? 'session' : 'master'}
               academicYearId={activeAcademicYear?.id}
+              showAllOption={showAllOption}
+              classes={teacherClassOptions || undefined}
             />
           </div>
           <div className="flex items-center gap-2">

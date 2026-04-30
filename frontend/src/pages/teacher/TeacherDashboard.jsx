@@ -10,6 +10,15 @@ import NotificationsFeed from '../../components/dashboard/NotificationsFeed'
 
 const DAY_NAMES = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
 
+function getOrdinalSuffix(day) {
+  if (day >= 11 && day <= 13) return 'th'
+  const lastDigit = day % 10
+  if (lastDigit === 1) return 'st'
+  if (lastDigit === 2) return 'nd'
+  if (lastDigit === 3) return 'rd'
+  return 'th'
+}
+
 // ─── Icons ──────────────────────────────────────────────────────────────────────
 const icons = {
   classes: (
@@ -64,6 +73,7 @@ export default function TeacherDashboard() {
   const { activeAcademicYear } = useAcademicYear()
   const now = new Date()
   const todayDay = DAY_NAMES[now.getDay()]
+  const formattedLongDate = `${now.toLocaleDateString('en-US', { weekday: 'long' })}, ${now.getDate()}${getOrdinalSuffix(now.getDate())} ${now.toLocaleDateString('en-US', { month: 'long' })} ${now.getFullYear()}`
 
   // Detect current period
   const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
@@ -249,7 +259,10 @@ export default function TeacherDashboard() {
           subjects: [],
         })
       }
-      subjectTeacherClasses.get(key).subjects.push(item.subject_code || item.subject_name)
+      const subjectLabel = item.subject_name || item.subject_code
+      if (subjectLabel && !subjectTeacherClasses.get(key).subjects.includes(subjectLabel)) {
+        subjectTeacherClasses.get(key).subjects.push(subjectLabel)
+      }
     })
 
     return {
@@ -280,7 +293,7 @@ export default function TeacherDashboard() {
         <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Dashboard</h1>
         <p className="text-sm text-gray-500">
           Welcome back, {[user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.username}
-          <span className="text-gray-400 ml-1">— {todayDay}, {now.toLocaleDateString('default', { month: 'long', day: 'numeric' })}</span>
+          <span className="text-gray-400 ml-1">— {formattedLongDate}</span>
         </p>
       </div>
 

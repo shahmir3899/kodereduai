@@ -1,12 +1,13 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { lmsApi, attendanceApi } from '../../services/api'
+import { lmsApi } from '../../services/api'
 import ClassSelector from '../../components/ClassSelector'
 import TopicStatusBadge from './TopicStatusBadge'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import { useClassSubjects } from '../../hooks/useClassSubjects'
+import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 
 export default function CurriculumCoveragePage() {
@@ -19,41 +20,16 @@ export default function CurriculumCoveragePage() {
   const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
   const resolvedClassId = getResolvedMasterClassId(classId, activeAcademicYear?.id, sessionClasses)
   const { subjects: classSubjects, isLoading: classSubjectsLoading } = useClassSubjects(resolvedClassId)
-  const [teacherClassOptions, setTeacherClassOptions] = useState(null)
-
-  const { data: myClassesRes } = useQuery({
-    queryKey: ['teacherCurriculumCoverageClasses'],
-    queryFn: () => attendanceApi.getMyAttendanceClasses(),
-    enabled: isTeacher,
+  const {
+    showAllOption,
+    classOptions: teacherClassOptions,
+  } = useTeacherScopedClasses({
+    academicYearId: activeAcademicYear?.id,
+    selectedClass: classId,
+    setSelectedClass: setClassId,
+    autoSelectFirst: true,
+    queryKey: 'teacherCurriculumCoverageClasses',
   })
-
-  useEffect(() => {
-    if (!isTeacher) {
-      setTeacherClassOptions(null)
-      return
-    }
-    const myClasses = myClassesRes?.data || []
-    if (!myClasses.length) {
-      setTeacherClassOptions([])
-      return
-    }
-    if (activeAcademicYear?.id && sessionClasses?.length) {
-      const allowedMasterClassIds = new Set(myClasses.map((c) => Number(c.id)))
-      const scoped = sessionClasses
-        .filter((sc) => allowedMasterClassIds.has(Number(sc.class_obj)))
-        .map((sc) => ({
-          id: sc.id,
-          class_obj: sc.class_obj,
-          name: sc.display_name,
-          section: sc.section || '',
-          grade_level: sc.grade_level,
-          label: sc.label,
-        }))
-      setTeacherClassOptions(scoped.length > 0 ? scoped : myClasses)
-      return
-    }
-    setTeacherClassOptions(myClasses)
-  }, [isTeacher, myClassesRes?.data, sessionClasses, activeAcademicYear?.id])
 
   const { data, isLoading } = useQuery({
     queryKey: ['curriculumCoverageTopics', resolvedClassId, subjectId, coverage, activeAcademicYear?.id],
@@ -88,7 +64,7 @@ export default function CurriculumCoveragePage() {
               className="input"
               scope={classSelectorScope}
               academicYearId={activeAcademicYear?.id}
-              showAllOption={!isTeacher}
+              showAllOption={showAllOption}
               classes={teacherClassOptions || undefined}
             />
           </div>

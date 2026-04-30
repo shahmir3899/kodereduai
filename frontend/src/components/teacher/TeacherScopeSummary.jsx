@@ -41,7 +41,10 @@ export default function TeacherScopeSummary({ compact = false }) {
           subjects: [],
         })
       }
-      subjectTeacherClasses.get(key).subjects.push(item.subject_code || item.subject_name)
+      const subjectLabel = item.subject_name || item.subject_code
+      if (subjectLabel && !subjectTeacherClasses.get(key).subjects.includes(subjectLabel)) {
+        subjectTeacherClasses.get(key).subjects.push(subjectLabel)
+      }
     })
 
     return {

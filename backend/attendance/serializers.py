@@ -29,6 +29,7 @@ class AttendanceUploadSerializer(serializers.ModelSerializer):
     Serializer for AttendanceUpload - basic info.
     """
     class_name = serializers.CharField(source='class_obj.name', read_only=True)
+    session_class_label = serializers.CharField(source='session_class.label', read_only=True, default=None)
     school_name = serializers.CharField(source='school.name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     created_by_name = serializers.CharField(source='created_by.username', read_only=True)
@@ -39,6 +40,7 @@ class AttendanceUploadSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'school', 'school_name',
             'class_obj', 'class_name', 'date',
+            'session_class', 'session_class_label',
             'academic_year', 'academic_year_name',
             'image_url', 'status', 'status_display',
             'confidence_score', 'error_message',
@@ -56,6 +58,7 @@ class AttendanceUploadDetailSerializer(serializers.ModelSerializer):
     Detailed serializer for AttendanceUpload - includes AI results.
     """
     class_name = serializers.CharField(source='class_obj.name', read_only=True)
+    session_class_label = serializers.CharField(source='session_class.label', read_only=True, default=None)
     class_details = ClassSerializer(source='class_obj', read_only=True)
     school_name = serializers.CharField(source='school.name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
@@ -72,7 +75,7 @@ class AttendanceUploadDetailSerializer(serializers.ModelSerializer):
         model = AttendanceUpload
         fields = [
             'id', 'school', 'school_name',
-            'class_obj', 'class_name', 'class_details', 'date',
+            'class_obj', 'class_name', 'class_details', 'session_class', 'session_class_label', 'date',
             'academic_year', 'academic_year_name',
             'image_url', 'images', 'all_image_urls', 'total_pages',
             'status', 'status_display',
@@ -114,7 +117,7 @@ class AttendanceUploadCreateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = AttendanceUpload
-        fields = ['id', 'school', 'class_obj', 'date', 'image_url', 'image_urls', 'status']
+        fields = ['id', 'school', 'class_obj', 'session_class', 'academic_year', 'date', 'image_url', 'image_urls', 'status']
         read_only_fields = ['id', 'status']
         extra_kwargs = {
             'image_url': {'required': False}  # Make optional since we support image_urls
@@ -130,7 +133,30 @@ class AttendanceUploadCreateSerializer(serializers.ModelSerializer):
 
         school = attrs.get('school')
         class_obj = attrs.get('class_obj')
+        session_class = attrs.get('session_class')
+        academic_year = attrs.get('academic_year')
         date = attrs.get('date')
+        # Validate optional session_class belongs to same school and matches class
+        if session_class:
+            if session_class.school_id != school.id:
+                raise serializers.ValidationError({
+                    'session_class': 'Session class does not belong to this school.'
+                })
+            if session_class.class_obj_id and class_obj and session_class.class_obj_id != class_obj.id:
+                raise serializers.ValidationError({
+                    'class_obj': 'Class must match the selected session class.'
+                })
+            if not class_obj and session_class.class_obj_id:
+                attrs['class_obj'] = session_class.class_obj
+                class_obj = session_class.class_obj
+            if not academic_year:
+                attrs['academic_year'] = session_class.academic_year
+                academic_year = session_class.academic_year
+            elif session_class.academic_year_id != academic_year.id:
+                raise serializers.ValidationError({
+                    'academic_year': 'Academic year must match the selected session class.'
+                })
+
         image_url = attrs.get('image_url')
         image_urls = attrs.get('image_urls', [])
 
@@ -154,11 +180,17 @@ class AttendanceUploadCreateSerializer(serializers.ModelSerializer):
             })
 
         # Check for duplicates - allow replacing failed/pending uploads
-        existing = AttendanceUpload.objects.filter(
-            school=school,
-            class_obj=class_obj,
-            date=date
-        ).first()
+        duplicate_filter = {
+            'school': school,
+            'date': date,
+        }
+        if session_class:
+            duplicate_filter['session_class'] = session_class
+        else:
+            duplicate_filter['class_obj'] = class_obj
+            duplicate_filter['session_class__isnull'] = True
+
+        existing = AttendanceUpload.objects.filter(**duplicate_filter).first()
 
         if existing:
             # Allow replacing if not confirmed
@@ -235,19 +267,30 @@ class AttendanceConfirmSerializer(serializers.Serializer):
     def validate_absent_student_ids(self, value):
         """Validate all student IDs exist and belong to the correct school/class."""
         from students.models import Student
+        from academic_sessions.models import StudentEnrollment
 
         upload = self.context.get('upload')
         if not upload:
             return value
 
-        # Get valid student IDs for this class
-        valid_ids = set(
-            Student.objects.filter(
-                school=upload.school,
-                class_obj=upload.class_obj,
-                is_active=True
-            ).values_list('id', flat=True)
-        )
+        # Prefer strict section-aware enrollment validation when session_class is present.
+        if upload.session_class_id:
+            valid_ids = set(
+                StudentEnrollment.objects.filter(
+                    school=upload.school,
+                    academic_year=upload.academic_year,
+                    session_class_id=upload.session_class_id,
+                    is_active=True,
+                ).values_list('student_id', flat=True)
+            )
+        else:
+            valid_ids = set(
+                Student.objects.filter(
+                    school=upload.school,
+                    class_obj=upload.class_obj,
+                    is_active=True
+                ).values_list('id', flat=True)
+            )
 
         invalid_ids = [sid for sid in value if sid not in valid_ids]
         if invalid_ids:
