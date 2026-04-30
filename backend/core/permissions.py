@@ -337,6 +337,82 @@ class IsSchoolAdminOrStaffReadOnly(permissions.BasePermission):
         return False
 
 
+class FinanceRoleAccessPermission(permissions.BasePermission):
+    """
+    Finance access policy:
+    - SUPER_ADMIN/SCHOOL_ADMIN/PRINCIPAL: full access
+    - HR_MANAGER/ACCOUNTANT/DRIVER: read-only
+    - TEACHER: only fee-collection scoped actions
+    - STAFF: no finance access
+    """
+    message = "You don't have permission to access this finance resource."
+
+    # ViewSet class name -> allowed actions for TEACHER role.
+    TEACHER_ALLOWED_ACTIONS = {
+        'FeePaymentViewSet': {'list', 'retrieve', 'update', 'partial_update', 'fee_summary'},
+        'AccountViewSet': {'list', 'retrieve'},
+        'AnnualFeeCategoryViewSet': {'list', 'retrieve', 'suggestions'},
+        'MonthlyFeeCategoryViewSet': {'list', 'retrieve', 'suggestions'},
+    }
+
+    def has_permission(self, request, view):
+        if not request.user.is_authenticated:
+            return False
+
+        role = get_effective_role(request)
+        if role in ADMIN_ROLES:
+            return True
+
+        if role in ('HR_MANAGER', 'ACCOUNTANT', 'DRIVER'):
+            return request.method in permissions.SAFE_METHODS
+
+        if role == 'STAFF':
+            self.message = "Staff users are not allowed to access finance endpoints."
+            return False
+
+        if role == 'TEACHER':
+            action = getattr(view, 'action', None)
+            allowed_actions = self.TEACHER_ALLOWED_ACTIONS.get(view.__class__.__name__, set())
+            if action in allowed_actions:
+                return True
+            self.message = "Teachers can only access fee collection for assigned classes."
+            return False
+
+        return False
+
+
+class InventoryRoleAccessPermission(permissions.BasePermission):
+    """
+    Inventory access policy:
+    - SUPER_ADMIN/SCHOOL_ADMIN/PRINCIPAL: full access
+    - HR_MANAGER/ACCOUNTANT/DRIVER: read-only
+    - TEACHER/STAFF: only their own assignment reads
+    """
+    message = "You don't have permission to access this inventory resource."
+
+    TEACHER_STAFF_ALLOWED_ACTIONS = {
+        'ItemAssignmentViewSet': {'list', 'retrieve', 'by_user'},
+    }
+
+    def has_permission(self, request, view):
+        if not request.user.is_authenticated:
+            return False
+
+        role = get_effective_role(request)
+        if role in ADMIN_ROLES:
+            return True
+
+        if role in ('HR_MANAGER', 'ACCOUNTANT', 'DRIVER'):
+            return request.method in permissions.SAFE_METHODS
+
+        if role in ('TEACHER', 'STAFF'):
+            action = getattr(view, 'action', None)
+            allowed_actions = self.TEACHER_STAFF_ALLOWED_ACTIONS.get(view.__class__.__name__, set())
+            return request.method in permissions.SAFE_METHODS and action in allowed_actions
+
+        return False
+
+
 class CanManageAttendance(permissions.BasePermission):
     """
     Permission for attendance-related operations.

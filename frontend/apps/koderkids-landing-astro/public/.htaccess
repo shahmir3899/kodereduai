@@ -13,6 +13,21 @@ RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301,NE]
 RewriteCond %{HTTP_HOST} ^kodereduai\.pk$ [NC]
 RewriteRule ^ https://www.kodereduai.pk%{REQUEST_URI} [L,R=301,NE]
 
+# Fresh HTML documents on each visit.
+# Note: true Ctrl+F5 cannot be forced server-side.
+<IfModule mod_headers.c>
+  <FilesMatch "\.html$">
+    Header set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+    Header set Pragma "no-cache"
+    Header set Expires "0"
+  </FilesMatch>
+
+  # Keep static assets heavily cached for performance.
+  <FilesMatch "\.(js|css|png|jpg|jpeg|gif|svg|ico|webp|woff|woff2)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+</IfModule>
+
 # ── NOTE ────────────────────────────────────────────────────────────────────
 # No SPA fallback here — Astro static output uses directory-based routing.
 # Apache serves /privacy/ → /privacy/index.html automatically via DirectoryIndex.

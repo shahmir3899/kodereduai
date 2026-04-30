@@ -58,6 +58,7 @@ export default function WalkthroughCarousel() {
 
   const slide = slides[active];
   const accentClass = accentColorMap[slide.color] ?? 'bg-primary';
+  const shouldPrioritizeImage = active === 0;
 
   return (
     <section id="walkthrough" className="py-14 lg:py-18 bg-brand-light">
@@ -141,8 +142,9 @@ export default function WalkthroughCarousel() {
                       src={slide.image}
                       alt={slide.title}
                       className="w-full rounded-xl slideshow-img"
-                      loading="lazy"
-                      decoding="async"
+                      loading={shouldPrioritizeImage ? 'eager' : 'lazy'}
+                      decoding={shouldPrioritizeImage ? 'sync' : 'async'}
+                      fetchPriority={shouldPrioritizeImage ? 'high' : 'auto'}
                       width={1200}
                       height={750}
                       sizes="(max-width: 768px) 100vw, (max-width: 1280px) 60vw, 800px"

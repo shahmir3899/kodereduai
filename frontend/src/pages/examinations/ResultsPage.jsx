@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { examinationsApi, sessionsApi } from '../../services/api'
+import { examinationsApi, sessionsApi, attendanceApi } from '../../services/api'
 import ClassSelector from '../../components/ClassSelector'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
+import { useAuth } from '../../contexts/AuthContext'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 
 export default function ResultsPage() {
   const queryClient = useQueryClient()
   const { activeAcademicYear } = useAcademicYear()
+  const { isTeacher } = useAuth()
   const [selectedExamId, setSelectedExamId] = useState('')
   const [yearFilter, setYearFilter] = useState('')
   const [classFilter, setClassFilter] = useState('')
@@ -18,6 +20,7 @@ export default function ResultsPage() {
   const { sessionClasses } = useSessionClasses(yearFilter)
   const classSelectorScope = getClassSelectorScope(yearFilter)
   const resolvedClassFilter = getResolvedMasterClassId(classFilter, yearFilter, sessionClasses)
+  const [teacherClassOptions, setTeacherClassOptions] = useState(null)
 
   // Sync year filter with global session switcher
   useEffect(() => {
@@ -46,6 +49,12 @@ export default function ResultsPage() {
     enabled: !!selectedExamId,
   })
 
+  const { data: myClassesRes } = useQuery({
+    queryKey: ['myResultsClasses'],
+    queryFn: () => attendanceApi.getMyAttendanceClasses(),
+    enabled: isTeacher,
+  })
+
   const { data: summaryRes } = useQuery({
     queryKey: ['classSummary', selectedExamId],
     queryFn: () => examinationsApi.getClassSummary(selectedExamId),
@@ -70,6 +79,30 @@ export default function ResultsPage() {
   const hasAnyComments = results?.results?.some(r => r.marks?.some(m => m.ai_comment)) ||
     results?.some?.(r => r.marks?.some(m => m.ai_comment))
 
+  useEffect(() => {
+    const myClasses = myClassesRes?.data || []
+    if (!myClasses.length) {
+      setTeacherClassOptions(null)
+      return
+    }
+    if (yearFilter && sessionClasses?.length) {
+      const allowedMasterClassIds = new Set(myClasses.map((c) => Number(c.id)))
+      const scoped = sessionClasses
+        .filter((sc) => allowedMasterClassIds.has(Number(sc.class_obj)))
+        .map((sc) => ({
+          id: sc.id,
+          class_obj: sc.class_obj,
+          name: sc.display_name,
+          section: sc.section || '',
+          grade_level: sc.grade_level,
+          label: sc.label,
+        }))
+      setTeacherClassOptions(scoped.length > 0 ? scoped : myClasses)
+      return
+    }
+    setTeacherClassOptions(myClasses)
+  }, [myClassesRes?.data, sessionClasses, yearFilter])
+
   return (
     <div>
       <div className="mb-6">
@@ -93,9 +126,10 @@ export default function ResultsPage() {
               value={classFilter}
               onChange={e => { setClassFilter(e.target.value); setSelectedExamId('') }}
               className="input w-full text-sm"
-              showAllOption
+              showAllOption={!isTeacher}
               scope={classSelectorScope}
               academicYearId={yearFilter || undefined}
+              classes={teacherClassOptions || undefined}
             />
           </div>
           <div>

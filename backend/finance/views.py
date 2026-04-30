@@ -21,7 +21,7 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from django.http import FileResponse
 
-from core.permissions import IsSchoolAdmin, IsSchoolAdminOrStaffReadOnly, HasSchoolAccess, get_effective_role, ModuleAccessMixin, ADMIN_ROLES, _is_data_restricted_user, get_teacher_class_scope, get_teacher_session_class_scope, _get_session_class_student_ids
+from core.permissions import IsSchoolAdmin, FinanceRoleAccessPermission, HasSchoolAccess, get_effective_role, ModuleAccessMixin, ADMIN_ROLES, _is_data_restricted_user, get_teacher_class_scope, get_teacher_session_class_scope, _get_session_class_student_ids
 from core.mixins import TenantQuerySetMixin, ensure_tenant_schools, ensure_tenant_school_id
 from core.class_scope import resolve_class_scope
 from students.models import Student, Class
@@ -159,7 +159,7 @@ class FeeStructureViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Model
     """CRUD for fee structures (class-level and student-level)."""
     required_module = 'finance'
     queryset = FeeStructure.objects.all()
-    permission_classes = [IsAuthenticated, IsSchoolAdminOrStaffReadOnly, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, FinanceRoleAccessPermission, HasSchoolAccess]
 
 
     def get_serializer_class(self):
@@ -404,7 +404,7 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
     """CRUD + bulk generation + summaries for fee payments."""
     required_module = 'finance'
     queryset = FeePayment.objects.all()
-    permission_classes = [IsAuthenticated, IsSchoolAdminOrStaffReadOnly, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, FinanceRoleAccessPermission, HasSchoolAccess]
 
 
     def get_serializer_class(self):
@@ -1561,7 +1561,7 @@ class ExpenseCategoryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mo
     required_module = 'finance'
     queryset = ExpenseCategory.objects.all()
     serializer_class = ExpenseCategorySerializer
-    permission_classes = [IsAuthenticated, IsSchoolAdminOrStaffReadOnly, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, FinanceRoleAccessPermission, HasSchoolAccess]
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -1598,7 +1598,7 @@ class IncomeCategoryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
     required_module = 'finance'
     queryset = IncomeCategory.objects.all()
     serializer_class = IncomeCategorySerializer
-    permission_classes = [IsAuthenticated, IsSchoolAdminOrStaffReadOnly, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, FinanceRoleAccessPermission, HasSchoolAccess]
 
     def list(self, request, *args, **kwargs):
         school_id = _resolve_school_id(request)
@@ -1635,7 +1635,7 @@ class AnnualFeeCategoryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.
     required_module = 'finance'
     queryset = AnnualFeeCategory.objects.all()
     serializer_class = AnnualFeeCategorySerializer
-    permission_classes = [IsAuthenticated, IsSchoolAdminOrStaffReadOnly, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, FinanceRoleAccessPermission, HasSchoolAccess]
 
     def list(self, request, *args, **kwargs):
         response = super().list(request, *args, **kwargs)
@@ -1678,7 +1678,7 @@ class MonthlyFeeCategoryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets
     required_module = 'finance'
     queryset = MonthlyFeeCategory.objects.all()
     serializer_class = MonthlyFeeCategorySerializer
-    permission_classes = [IsAuthenticated, IsSchoolAdminOrStaffReadOnly, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, FinanceRoleAccessPermission, HasSchoolAccess]
 
     def list(self, request, *args, **kwargs):
         school_id = _resolve_school_id(request)
@@ -1724,7 +1724,7 @@ class ExpenseViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
     """CRUD + category summaries for school expenses."""
     required_module = 'finance'
     queryset = Expense.objects.all()
-    permission_classes = [IsAuthenticated, IsSchoolAdminOrStaffReadOnly, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, FinanceRoleAccessPermission, HasSchoolAccess]
 
 
     def get_serializer_class(self):
@@ -1857,7 +1857,7 @@ class OtherIncomeViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
     """CRUD for non-student-linked income (book sales, donations, etc.)."""
     required_module = 'finance'
     queryset = OtherIncome.objects.all()
-    permission_classes = [IsAuthenticated, IsSchoolAdminOrStaffReadOnly, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, FinanceRoleAccessPermission, HasSchoolAccess]
 
 
     def get_serializer_class(self):
@@ -1939,7 +1939,7 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
     """CRUD for accounts + balance computation."""
     required_module = 'finance'
     queryset = Account.objects.all()
-    permission_classes = [IsAuthenticated, IsSchoolAdminOrStaffReadOnly, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, FinanceRoleAccessPermission, HasSchoolAccess]
 
 
     def get_serializer_class(self):
@@ -3071,7 +3071,7 @@ class TransferViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelView
     """CRUD for inter-account transfers."""
     required_module = 'finance'
     queryset = Transfer.objects.all()
-    permission_classes = [IsAuthenticated, IsSchoolAdminOrStaffReadOnly, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, FinanceRoleAccessPermission, HasSchoolAccess]
 
 
     def get_serializer_class(self):
@@ -3191,7 +3191,7 @@ class TransferViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelView
 class FinanceReportsView(ModuleAccessMixin, APIView):
     """Financial reports: summary and monthly trends."""
     required_module = 'finance'
-    permission_classes = [IsAuthenticated, IsSchoolAdminOrStaffReadOnly, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, FinanceRoleAccessPermission, HasSchoolAccess]
 
     def get(self, request):
         school_id = _resolve_school_id(request)

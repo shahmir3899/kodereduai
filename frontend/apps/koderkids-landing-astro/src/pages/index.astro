@@ -15,12 +15,13 @@ import Footer                from '../components/sections/Footer.astro';
 import WalkthroughCarousel   from '../components/islands/WalkthroughCarousel.tsx';
 import DemoDialog            from '../components/islands/DemoDialog.tsx';
 
-const siteUrl = Astro.site?.toString().replace(/\/$/, '') ?? 'https://www.kodereduai.pk';
+const siteUrl = Astro.site?.toString().replace(/\/$/, '') ?? siteConfig.siteUrl.replace(/\/$/, '');
 
 const organizationSchema = {
   '@context': 'https://schema.org',
   '@type': 'Organization',
-  name: 'Education AI',
+  name: siteConfig.brandName,
+  alternateName: siteConfig.productName,
   url: siteUrl,
   logo: `${siteUrl}/Logo.jpeg`,
   sameAs: [
@@ -46,7 +47,7 @@ const organizationSchema = {
 const softwareSchema = {
   '@context': 'https://schema.org',
   '@type': 'SoftwareApplication',
-  name: 'Education AI',
+  name: siteConfig.productName,
   operatingSystem: 'Web, iOS, Android',
   applicationCategory: 'EducationApplication',
   offers: {
@@ -102,6 +103,12 @@ const faqSchema = {
     as="image"
     href="/dashboard_overview.jpg"
     fetchpriority="high"
+  />
+  <link
+    slot="head"
+    rel="preload"
+    as="image"
+    href="/dashboard.jpg"
   />
 
   <!-- Subtle noise texture overlay -->

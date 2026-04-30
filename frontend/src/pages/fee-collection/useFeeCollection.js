@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { financeApi, classesApi } from '../../services/api'
+import { financeApi, attendanceApi } from '../../services/api'
 import { useBackgroundTask } from '../../hooks/useBackgroundTask'
 import { filterPayments } from './feeUtils'
 
@@ -19,8 +19,8 @@ export function useFeeCollection({ month, year, classFilter, statusFilter, feeTy
   })
 
   const { data: classes } = useQuery({
-    queryKey: ['classes'],
-    queryFn: () => classesApi.getClasses({ page_size: 9999 }),
+    queryKey: ['myFeeCollectionClasses'],
+    queryFn: () => attendanceApi.getMyAttendanceClasses(),
     staleTime: 5 * 60_000,
   })
 

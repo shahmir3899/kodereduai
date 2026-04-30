@@ -8,6 +8,7 @@ import NotificationBell from './NotificationBell'
 import { TaskDrawerButton } from './TaskDrawer'
 import SchoolSwitcher from './SchoolSwitcher'
 import AcademicYearSwitcher from './AcademicYearSwitcher'
+import { inventoryApi } from '../services/api'
 
 // Icons (simple SVG components)
 const RocketIcon = () => (
@@ -365,6 +366,29 @@ export default function Layout() {
   const { user, logout, activeSchool, effectiveRole, isSuperAdmin, isStaffMember, isPrincipal, isHRManager, isStaffLevel, isParent, isStudent, isModuleEnabled } = useAuth()
   const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [hasInventoryAssignments, setHasInventoryAssignments] = useState(false)
+  const isTeacher = effectiveRole === 'TEACHER'
+  const isStaff = effectiveRole === 'STAFF'
+
+  useEffect(() => {
+    let alive = true
+    const checkAssignments = async () => {
+      if (!user?.id || !(isTeacher || isStaff) || !isModuleEnabled('inventory')) {
+        if (alive) setHasInventoryAssignments(false)
+        return
+      }
+      try {
+        const res = await inventoryApi.getAssignments({ user_id: user.id, is_active: true, page_size: 1 })
+        const payload = res?.data
+        const rows = Array.isArray(payload?.results) ? payload.results : (Array.isArray(payload) ? payload : [])
+        if (alive) setHasInventoryAssignments(rows.length > 0)
+      } catch {
+        if (alive) setHasInventoryAssignments(false)
+      }
+    }
+    checkAssignments()
+    return () => { alive = false }
+  }, [user?.id, isTeacher, isStaff, isModuleEnabled])
 
   const userDisplayName = [user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.username || 'User'
   const userAvatarInitial = userDisplayName.charAt(0).toUpperCase()
@@ -409,29 +433,31 @@ export default function Layout() {
     }] : []),
 
     // Finance group
-    ...(isModuleEnabled('finance') ? [{
+    ...(isModuleEnabled('finance') && !isStaff ? [{
       type: 'group',
       name: 'Finance',
       icon: CurrencyIcon,
-      children: [
-        { name: 'Dashboard', href: '/finance', icon: ChartIcon },
-        { name: 'Accounts', href: '/finance/accounts', icon: BanknotesIcon },
-        { type: 'divider', label: 'Fees' },
-        { name: 'Fee Overview', href: '/finance/fees', icon: ClipboardCheckIcon },
-        { name: 'Collect Payments', href: '/finance/fees/collect', icon: ReceiptIcon },
-        ...(!isStaffLevel
-          ? [{ name: 'Fee Setup', href: '/finance/fees/setup', icon: CogIcon }]
-          : []),
-        { type: 'divider', label: 'Income & Expenses' },
-        { name: 'Other Income', href: '/finance/income', icon: BanknotesIcon },
-        { name: 'Expenses', href: '/finance/expenses', icon: WalletIcon },
-        ...(!isStaffLevel
-          ? [
-              { name: 'Discounts', href: '/finance/discounts', icon: TagIcon },
-              { name: 'Payment Gateways', href: '/finance/payment-gateways', icon: CogIcon },
-            ]
-          : []),
-      ],
+      children: isTeacher
+        ? [{ name: 'Collect Payments', href: '/finance/fees/collect', icon: ReceiptIcon }]
+        : [
+            { name: 'Dashboard', href: '/finance', icon: ChartIcon },
+            { name: 'Accounts', href: '/finance/accounts', icon: BanknotesIcon },
+            { type: 'divider', label: 'Fees' },
+            { name: 'Fee Overview', href: '/finance/fees', icon: ClipboardCheckIcon },
+            { name: 'Collect Payments', href: '/finance/fees/collect', icon: ReceiptIcon },
+            ...(!isStaffLevel
+              ? [{ name: 'Fee Setup', href: '/finance/fees/setup', icon: CogIcon }]
+              : []),
+            { type: 'divider', label: 'Income & Expenses' },
+            { name: 'Other Income', href: '/finance/income', icon: BanknotesIcon },
+            { name: 'Expenses', href: '/finance/expenses', icon: WalletIcon },
+            ...(!isStaffLevel
+              ? [
+                  { name: 'Discounts', href: '/finance/discounts', icon: TagIcon },
+                  { name: 'Payment Gateways', href: '/finance/payment-gateways', icon: CogIcon },
+                ]
+              : []),
+          ],
     }] : []),
 
     // Academics navigation split into focused groups to reduce clutter
@@ -447,10 +473,10 @@ export default function Layout() {
           { type: 'divider', label: 'Assessment' },
         ] : []),
         ...(isModuleEnabled('examinations') ? [
-          { name: 'Exam Types', href: '/academics/exam-types', icon: FolderIcon },
-          { name: 'Exams', href: '/academics/exams', icon: ClipboardIcon },
+          ...(!isTeacher ? [{ name: 'Exam Types', href: '/academics/exam-types', icon: FolderIcon }] : []),
+          ...(!isTeacher ? [{ name: 'Exams', href: '/academics/exams', icon: ClipboardIcon }] : []),
           { name: 'Marks Entry', href: '/academics/marks-entry', icon: DocumentIcon },
-          { name: 'Grade Scale', href: '/academics/grade-scale', icon: SettingsIcon },
+          ...(!isTeacher ? [{ name: 'Grade Scale', href: '/academics/grade-scale', icon: SettingsIcon }] : []),
           { name: 'Results', href: '/academics/results', icon: ChartIcon },
           { name: 'Report Cards', href: '/academics/report-cards', icon: ReportIcon },
         ] : []),
@@ -525,7 +551,7 @@ export default function Layout() {
       : []),
 
     // Management group
-    ...((isModuleEnabled('students') || isModuleEnabled('academics')) ? [{
+    ...((isModuleEnabled('students') || isModuleEnabled('academics')) && !isStaff ? [{
       type: 'group',
       name: 'Management',
       icon: FolderIcon,
@@ -534,7 +560,7 @@ export default function Layout() {
           { name: 'Classes', href: '/classes', icon: TableIcon },
           { name: 'Students', href: '/students', icon: UsersIcon },
         ] : []),
-        ...(isModuleEnabled('academics') ? [
+        ...(!isTeacher && isModuleEnabled('academics') ? [
           { type: 'divider', label: 'Academic Ops' },
           { name: 'Academic Calendar', href: '/academics/calendar', icon: CalendarIcon },
           { name: 'Sessions', href: '/academics/sessions', icon: CalendarIcon },
@@ -600,16 +626,18 @@ export default function Layout() {
     }] : []),
 
     // Inventory group
-    ...(isModuleEnabled('inventory') ? [{
+    ...(isModuleEnabled('inventory') && (!isTeacher && !isStaff ? true : hasInventoryAssignments) ? [{
       type: 'group',
       name: 'Inventory',
       icon: ClipboardCheckIcon,
-      children: [
-        { name: 'Dashboard', href: '/inventory', icon: ChartIcon },
-        { name: 'Items', href: '/inventory/items', icon: FolderIcon },
-        { name: 'Transactions', href: '/inventory/transactions', icon: DocumentIcon },
-        { name: 'Assignments', href: '/inventory/assignments', icon: UsersIcon },
-      ],
+      children: (isTeacher || isStaff)
+        ? [{ name: 'Assignments', href: '/inventory/assignments', icon: UsersIcon }]
+        : [
+            { name: 'Dashboard', href: '/inventory', icon: ChartIcon },
+            { name: 'Items', href: '/inventory/items', icon: FolderIcon },
+            { name: 'Transactions', href: '/inventory/transactions', icon: DocumentIcon },
+            { name: 'Assignments', href: '/inventory/assignments', icon: UsersIcon },
+          ],
     }] : []),
 
     // Discounts moved into Finance group above
@@ -626,7 +654,7 @@ export default function Layout() {
     ...(!isStaffLevel
       ? [{ type: 'item', name: 'Settings', href: '/settings', icon: CogIcon }]
       : []),
-  ], [isModuleEnabled, isStaffLevel, isHRManager])
+  ], [isModuleEnabled, isStaffLevel, isHRManager, isTeacher, isStaff, hasInventoryAssignments])
 
   // SuperAdmin only sees the Admin Panel link — no school-internal nav
   const visibleNavGroups = isSuperAdmin ? [] : (isParent ? parentNavGroups : (isStudent ? studentNavGroups : navigationGroups))

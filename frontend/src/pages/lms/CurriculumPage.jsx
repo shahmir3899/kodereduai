@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import ReactCrop from 'react-image-crop'
 import 'react-image-crop/dist/ReactCrop.css'
-import { lmsApi, academicsApi } from '../../services/api'
+import { lmsApi, academicsApi, attendanceApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useToast } from '../../components/Toast'
@@ -179,9 +179,10 @@ const createDefaultPerspectiveCorners = () => ({
 })
 
 export default function CurriculumPage() {
-  const { activeSchool } = useAuth()
+  const { activeSchool, isTeacher } = useAuth()
   const { activeAcademicYear } = useAcademicYear()
   const { sessionClasses } = useSessionClasses(activeAcademicYear?.id)
+  const [teacherClassOptions, setTeacherClassOptions] = useState(null)
   const queryClient = useQueryClient()
   const { showError, showSuccess } = useToast()
   const { confirm, ConfirmModalRoot } = useConfirmModal()
@@ -192,6 +193,40 @@ export default function CurriculumPage() {
   const [selectedSubject, setSelectedSubject] = useState('')
   const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
   const resolvedSelectedClass = getResolvedMasterClassId(selectedClass, activeAcademicYear?.id, sessionClasses)
+
+  const { data: myClassesRes } = useQuery({
+    queryKey: ['teacherCurriculumClasses'],
+    queryFn: () => attendanceApi.getMyAttendanceClasses(),
+    enabled: isTeacher,
+  })
+
+  useEffect(() => {
+    if (!isTeacher) {
+      setTeacherClassOptions(null)
+      return
+    }
+    const myClasses = myClassesRes?.data || []
+    if (!myClasses.length) {
+      setTeacherClassOptions([])
+      return
+    }
+    if (activeAcademicYear?.id && sessionClasses?.length) {
+      const allowedMasterClassIds = new Set(myClasses.map((c) => Number(c.id)))
+      const scoped = sessionClasses
+        .filter((sc) => allowedMasterClassIds.has(Number(sc.class_obj)))
+        .map((sc) => ({
+          id: sc.id,
+          class_obj: sc.class_obj,
+          name: sc.display_name,
+          section: sc.section || '',
+          grade_level: sc.grade_level,
+          label: sc.label,
+        }))
+      setTeacherClassOptions(scoped.length > 0 ? scoped : myClasses)
+      return
+    }
+    setTeacherClassOptions(myClasses)
+  }, [isTeacher, myClassesRes?.data, sessionClasses, activeAcademicYear?.id])
 
   // Selected book
   const [selectedBookId, setSelectedBookId] = useState(null)
@@ -1938,6 +1973,8 @@ export default function CurriculumPage() {
               placeholder="Select Class"
               scope={classSelectorScope}
               academicYearId={activeAcademicYear?.id}
+              showAllOption={!isTeacher}
+              classes={teacherClassOptions || undefined}
             />
           </div>
           <div>

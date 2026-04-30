@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../contexts/AuthContext'
 import { useAcademicYear } from '../contexts/AcademicYearContext'
-import { classesApi, schoolsApi, sessionsApi } from '../services/api'
+import { attendanceApi, classesApi, schoolsApi, sessionsApi } from '../services/api'
 import { useToast } from '../components/Toast'
 import SectionAllocator from './sessions/SectionAllocator'
 import { GRADE_PRESETS, GRADE_LEVEL_LABELS } from '../constants/gradePresets'
@@ -13,7 +13,7 @@ const SECTION_LABELS = ['A', 'B', 'C', 'D', 'E', 'F']
 const EMPTY_CLASS = { name: '', section: '', grade_level: '' }
 
 export default function ClassesGradesPage() {
-  const { user, activeSchool } = useAuth()
+  const { user, activeSchool, isTeacher } = useAuth()
   const queryClient = useQueryClient()
   const { addToast } = useToast()
   const showError = (msg) => addToast(msg, 'error')
@@ -70,8 +70,19 @@ export default function ClassesGradesPage() {
     enabled: !!selectedSchoolId,
   })
 
+  const { data: myClassesRes } = useQuery({
+    queryKey: ['teacherManagementClasses'],
+    queryFn: () => attendanceApi.getMyAttendanceClasses(),
+    enabled: isTeacher,
+  })
+
   const classes = classesRes?.data?.results || classesRes?.data || []
-  const canonicalMasterClasses = classes.filter(c => !String(c.section || '').trim())
+  const teacherClasses = myClassesRes?.data || []
+  const allowedMasterClassIds = new Set((teacherClasses || []).map(c => Number(c.id)))
+  const scopedClasses = isTeacher
+    ? classes.filter((c) => allowedMasterClassIds.has(Number(c.id)))
+    : classes
+  const canonicalMasterClasses = scopedClasses.filter(c => !String(c.section || '').trim())
   const schools = schoolsData?.data?.results || []
   const {
     sessionClasses,
@@ -386,8 +397,12 @@ export default function ClassesGradesPage() {
     || updateSessionClassMut.isPending
   )
 
+  const scopedSessionClasses = isTeacher
+    ? sessionClasses.filter((sc) => allowedMasterClassIds.has(Number(sc.class_obj)))
+    : sessionClasses
+
   const activeClasses = classScope === 'session'
-    ? sessionClasses.map(sc => ({
+    ? scopedSessionClasses.map(sc => ({
       ...sc,
       name: sc.display_name,
       linked_master_name: sc.class_obj_name || '',
@@ -502,7 +517,7 @@ export default function ClassesGradesPage() {
               Active year: {activeAcademicYear?.name || 'Not selected'}
             </p>
             <p className="text-xs text-blue-700 mt-0.5">
-              {sessionClassesLoading ? 'Loading...' : `${sessionClasses.length} session classes configured`}
+              {sessionClassesLoading ? 'Loading...' : `${scopedSessionClasses.length} session classes configured`}
             </p>
             <p className="text-xs text-blue-700 mt-1">
               Master classes should stay section-free. Create sections like A/B/C inside Session Classes for each academic year.

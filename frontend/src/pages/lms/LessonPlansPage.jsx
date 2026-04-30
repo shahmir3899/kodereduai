@@ -1,12 +1,12 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { lmsApi, hrApi } from '../../services/api'
+import { lmsApi, hrApi, attendanceApi } from '../../services/api'
 import ClassSelector from '../../components/ClassSelector'
-import SubjectSelector from '../../components/SubjectSelector'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
+import { useClassSubjects } from '../../hooks/useClassSubjects'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 import { useToast } from '../../components/Toast'
 import TeacherScopeSummary from '../../components/teacher/TeacherScopeSummary'
@@ -48,9 +48,12 @@ export default function LessonPlansPage() {
   const [editingPlan, setEditingPlan] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [form, setForm] = useState({ ...EMPTY_FORM })
+  const [teacherClassOptions, setTeacherClassOptions] = useState(null)
   const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
   const resolvedFilterClass = getResolvedMasterClassId(filterClass, activeAcademicYear?.id, sessionClasses)
   const resolvedFormClassObj = getResolvedMasterClassId(form.class_obj, activeAcademicYear?.id, sessionClasses)
+  const { subjects: filterClassSubjects, isLoading: filterSubjectsLoading } = useClassSubjects(resolvedFilterClass)
+  const { subjects: formClassSubjects, isLoading: formSubjectsLoading } = useClassSubjects(resolvedFormClassObj)
   const sessionClassIdByMaster = useMemo(() => {
     const map = {}
     sessionClasses.forEach((sc) => {
@@ -59,6 +62,40 @@ export default function LessonPlansPage() {
     return map
   }, [sessionClasses])
   const { classifyScope } = useTeacherScopeLookup({ academicYearId: activeAcademicYear?.id })
+
+  const { data: myClassesRes } = useQuery({
+    queryKey: ['teacherLessonPlanClasses'],
+    queryFn: () => attendanceApi.getMyAttendanceClasses(),
+    enabled: isTeacher,
+  })
+
+  useEffect(() => {
+    if (!isTeacher) {
+      setTeacherClassOptions(null)
+      return
+    }
+    const myClasses = myClassesRes?.data || []
+    if (!myClasses.length) {
+      setTeacherClassOptions([])
+      return
+    }
+    if (activeAcademicYear?.id && sessionClasses?.length) {
+      const allowedMasterClassIds = new Set(myClasses.map((c) => Number(c.id)))
+      const scoped = sessionClasses
+        .filter((sc) => allowedMasterClassIds.has(Number(sc.class_obj)))
+        .map((sc) => ({
+          id: sc.id,
+          class_obj: sc.class_obj,
+          name: sc.display_name,
+          section: sc.section || '',
+          grade_level: sc.grade_level,
+          label: sc.label,
+        }))
+      setTeacherClassOptions(scoped.length > 0 ? scoped : myClasses)
+      return
+    }
+    setTeacherClassOptions(myClasses)
+  }, [isTeacher, myClassesRes?.data, sessionClasses, activeAcademicYear?.id])
 
   // -- Data fetching --
 
@@ -250,20 +287,37 @@ export default function LessonPlansPage() {
             <ClassSelector
               className="input"
               value={filterClass}
-              onChange={(e) => setFilterClass(e.target.value)}
-              showAllOption
+              onChange={(e) => {
+                setFilterClass(e.target.value)
+                setFilterSubject('')
+              }}
+              showAllOption={!isTeacher}
               scope={classSelectorScope}
               academicYearId={activeAcademicYear?.id}
+              classes={teacherClassOptions || undefined}
             />
           </div>
           <div>
             <label className="label">Subject</label>
-            <SubjectSelector
+            <select
+              className="input"
               value={filterSubject}
               onChange={(e) => setFilterSubject(e.target.value)}
-              showAllOption
-              allOptionLabel="All Subjects"
-            />
+              disabled={!resolvedFilterClass || filterSubjectsLoading}
+            >
+              <option value="">
+                {!resolvedFilterClass
+                  ? 'Select class first'
+                  : filterSubjectsLoading
+                  ? 'Loading subjects...'
+                  : 'All Assigned Subjects'}
+              </option>
+              {filterClassSubjects.map((subject) => (
+                <option key={subject.id} value={subject.id}>
+                  {subject.code ? `${subject.code} - ` : ''}{subject.name}
+                </option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="label">Search</label>
@@ -553,19 +607,37 @@ export default function LessonPlansPage() {
                   <ClassSelector
                     className="input"
                     value={form.class_obj}
-                    onChange={(e) => setForm({ ...form, class_obj: e.target.value })}
+                    onChange={(e) => setForm({ ...form, class_obj: e.target.value, subject: '' })}
                     scope={classSelectorScope}
                     academicYearId={activeAcademicYear?.id}
+                    showAllOption={!isTeacher}
+                    classes={teacherClassOptions || undefined}
                   />
                 </div>
                 <div>
                   <label className="label">Subject *</label>
-                  <SubjectSelector
+                  <select
+                    className="input"
                     value={form.subject}
                     onChange={(e) => setForm({ ...form, subject: e.target.value })}
-                    placeholder="Select Subject"
+                    disabled={!resolvedFormClassObj || formSubjectsLoading}
                     required
-                  />
+                  >
+                    <option value="">
+                      {!resolvedFormClassObj
+                        ? 'Select class first'
+                        : formSubjectsLoading
+                        ? 'Loading subjects...'
+                        : formClassSubjects.length > 0
+                        ? 'Select subject'
+                        : 'No subjects assigned'}
+                    </option>
+                    {formClassSubjects.map((subject) => (
+                      <option key={subject.id} value={subject.id}>
+                        {subject.code ? `${subject.code} - ` : ''}{subject.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 

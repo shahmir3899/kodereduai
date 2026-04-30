@@ -201,11 +201,13 @@ CAPABILITY_REGISTRY = {
 BUNDLE_PRESETS = {
     'STARTER': {
         'label': 'Starter',
-        'description': 'Core student + manual attendance for small schools',
+        'description': 'Core student, attendance, finance, and exams for small schools',
         'modules': {
             'students': True,
             'attendance': True,
             'academics': True,
+            'finance': True,
+            'examinations': True,
             'notifications': True,
             # all others OFF
         },
@@ -213,6 +215,8 @@ BUNDLE_PRESETS = {
             'students':      ['student_profiles'],
             'attendance':    ['manual_entry', 'basic_analytics'],
             'academics':     ['subjects', 'timetable'],
+            'finance':       ['fee_collection', 'expenses', 'financial_reports'],
+            'examinations':  ['exam_scheduling', 'marks_entry', 'report_cards'],
             'notifications': ['broadcast'],
         },
     },

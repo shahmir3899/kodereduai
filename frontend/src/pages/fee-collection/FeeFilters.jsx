@@ -25,6 +25,7 @@ export default function FeeFilters({
   classOptions,
   selectorScope,
   academicYearId,
+  allowAllClasses = true,
 }) {
   const isAllTypes = !feeTypeFilter
   const isMonthly = feeTypeFilter === 'MONTHLY'
@@ -80,7 +81,7 @@ export default function FeeFilters({
           value={classFilter}
           onChange={(e) => setClassFilter(e.target.value)}
           className={controlClass}
-          showAllOption
+          showAllOption={allowAllClasses}
           classes={classOptions}
           scope={classOptions ? 'master' : selectorScope}
           academicYearId={classOptions ? undefined : academicYearId}

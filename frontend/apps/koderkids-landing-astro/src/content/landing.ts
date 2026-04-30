@@ -5,6 +5,9 @@ const fallbackApiBase = import.meta.env.DEV
 const publicApiBase = (import.meta.env.PUBLIC_MAIN_APP_API_BASE_URL || fallbackApiBase).replace(/\/$/, '');
 
 export const siteConfig = {
+  brandName: 'KoderKids',
+  productName: 'Education AI',
+  siteUrl: import.meta.env.SITE_URL || 'https://www.koderkids.pk',
   salesEmail: 'admin@koderkids.pk',
   contactPhone: '03167394390',
   contactCity: 'Islamabad',
@@ -39,7 +42,7 @@ export const landingContent = {
     primaryCta: { label: 'Book a Demo', href: '#contact' },
     secondaryCta: { label: 'See it in action', href: '#walkthrough' },
     dashboardImage: '/dashboard_overview.jpg',
-    dashboardAlt: 'Education AI School Dashboard Overview',
+    dashboardAlt: 'Education AI school dashboard overview',
     /* Fallback metrics shown when live fetch is unavailable */
     metrics: {
       schools: '1,200+',
@@ -87,7 +90,7 @@ export const landingContent = {
   walkthrough: {
     label: 'PRODUCT WALKTHROUGH',
     heading: 'See Your School Platform',
-    subheading: 'Real screens from the live platform — not mockups.',
+    subheading: 'Screen from the live platform',
     slides: [
       {
         id: 'dashboard',
@@ -264,13 +267,15 @@ export const landingContent = {
         tier: 'Starter',
         badge: null as string | null,
         title: 'Core Operations',
-        desc: 'Manual attendance, student management, timetable, and notifications.',
+        desc: 'Manual attendance, student management, timetable, finance, exams, and notifications.',
         monthlyPrice: 'PKR 6,000 / month',
         annualPrice: 'PKR 64,800 / year (10% off)',
         features: [
           'Students & Classes',
           'Manual Attendance',
           'Subjects & Timetable',
+          'Fee Collection & Expenses',
+          'Exams & Report Cards',
           'Broadcast Notifications',
         ],
         cta: 'Discuss Plan',
@@ -388,12 +393,12 @@ export const faqContent = [
   {
     question: 'What is Education AI?',
     answer:
-      'Education AI is a cloud-based school operating system that brings admissions, AI-assisted attendance, academics, finance, HR, transport, library, hostel, and inventory management into a single platform designed for K-12 schools.',
+      'Education AI is a cloud-based school operating system by KoderKids that brings admissions, AI-assisted attendance, academics, finance, HR, transport, library, hostel, and inventory management into a single platform designed for K-12 schools.',
   },
   {
-    question: 'How does the AI-powered attendance work?',
+    question: 'How does Education AI attendance work?',
     answer:
-      'Teachers photograph handwritten attendance registers. Education AI uses Google Cloud Vision OCR and an LLM to extract student names and present/absent marks from the image. Staff review the extracted data, confirm it, and the system saves the records — no manual data entry required.',
+      'Teachers photograph handwritten attendance registers. Education AI uses Google Cloud Vision OCR and an LLM to extract student names and present/absent marks from the image. Staff review the extracted data, confirm it, and the system saves the records without manual data entry.',
   },
   {
     question: 'Can Education AI manage multiple school branches?',
@@ -421,7 +426,7 @@ export const faqContent = [
       'Yes. Book a live demo via the form on this page and our team will walk you through the platform with a fully seeded demo environment. You can also access the live demo at demo.kodereduai.pk.',
   },
   {
-    question: 'How is pricing structured?',
+    question: 'How is Education AI pricing structured?',
     answer:
       'Education AI offers three plans: Starter (PKR 6,000/month), Growth (PKR 8,000/month), and Enterprise (PKR 12,000/month). Annual billing gets a 10% discount on each plan.',
   },

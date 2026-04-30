@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
-import { academicsApi, attendanceApi, lmsApi, examinationsApi } from '../../services/api'
+import { academicsApi, attendanceApi, lmsApi, examinationsApi, sessionsApi } from '../../services/api'
 import StatCard from '../../components/dashboard/StatCard'
 import QuickActionGrid from '../../components/dashboard/QuickActionGrid'
 import NotificationsFeed from '../../components/dashboard/NotificationsFeed'
@@ -75,6 +75,7 @@ export default function TeacherDashboard() {
   weekEnd.setDate(weekStart.getDate() + 6)
   const weekStartStr = weekStart.toISOString().split('T')[0]
   const weekEndStr = weekEnd.toISOString().split('T')[0]
+  const todayDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
 
   // ─── Queries ──────────────────────────────────────────────────────────────────
 
@@ -94,7 +95,57 @@ export default function TeacherDashboard() {
     queryFn: () => attendanceApi.getMyAttendanceClasses(),
     enabled: isModuleEnabled('attendance'),
   })
-  const myClasses = myClassesRes?.data || []
+  const myClasses = myClassesRes?.data?.results || myClassesRes?.data || []
+
+  const { data: attendanceProgressByClass, isLoading: loadingAttendanceProgress } = useQuery({
+    queryKey: ['teacherAttendanceProgress', todayDate, activeAcademicYear?.id, myClasses.map(c => c.id).join(',')],
+    queryFn: async () => {
+      const classIds = myClasses.map((c) => c.id).filter(Boolean)
+      if (!classIds.length) return []
+
+      const settled = await Promise.allSettled(
+        classIds.map(async (classId) => {
+          const currentClass = myClasses.find((c) => Number(c.id) === Number(classId))
+          const [enrollRes, recordsRes] = await Promise.all([
+            sessionsApi.getEnrollments({
+              class_id: classId,
+              academic_year: activeAcademicYear?.id || undefined,
+              page_size: 1000,
+            }),
+            attendanceApi.getRecords({
+              class_id: classId,
+              date: todayDate,
+              academic_year: activeAcademicYear?.id || undefined,
+              page_size: 1000,
+            }),
+          ])
+
+          const enrollments = enrollRes?.data?.results || enrollRes?.data || []
+          const records = recordsRes?.data?.results || recordsRes?.data || []
+
+          return {
+            classId,
+            className: currentClass?.name || `Class ${classId}`,
+            classSection: currentClass?.section || '',
+            total: enrollments.length,
+            marked: records.length,
+          }
+        }),
+      )
+      return settled.map((result, index) => {
+        if (result.status === 'fulfilled') return result.value
+        const fallbackClass = myClasses[index]
+        return {
+          classId: fallbackClass?.id || `fallback-${index}`,
+          className: fallbackClass?.name || `Class ${fallbackClass?.id || index + 1}`,
+          classSection: fallbackClass?.section || '',
+          total: 0,
+          marked: 0,
+        }
+      })
+    },
+    enabled: isModuleEnabled('attendance') && myClasses.length > 0,
+  })
 
   const { data: classTeacherScopeRes } = useQuery({
     queryKey: ['myClassTeacherAssignments', activeAcademicYear?.id],
@@ -176,6 +227,13 @@ export default function TeacherDashboard() {
     return { total, completed, published }
   }, [weekPlans])
 
+  const pendingExamMarkingCount = useMemo(
+    () => allExams.filter((e) => e.status === 'PUBLISHED').length,
+    [allExams],
+  )
+  const pendingGradingCount = pendingExamMarkingCount + submissions.length
+  const hasGradingContext = allExams.length > 0 || submissions.length > 0
+
   const scopeSummary = useMemo(() => {
     const classTeacherClasses = classTeacherAssignments.map(item => ({
       id: item.id,
@@ -235,22 +293,55 @@ export default function TeacherDashboard() {
           icon={icons.classes}
           color="blue"
           loading={loadingTimetable}
+          cardClassName="h-28"
         />
-        <StatCard
-          label="Attendance to Mark"
-          value={myClasses.length}
-          subtitle={myClasses.length > 0 ? 'classes pending' : 'all marked'}
-          icon={icons.attendance}
-          color={myClasses.length > 0 ? 'amber' : 'green'}
-          href="/attendance/manual-entry"
-        />
+        <Link to="/attendance/manual-entry" className="block">
+          <div className="bg-white rounded-xl border border-gray-200 p-4 h-28 transition-shadow hover:shadow-md cursor-pointer">
+            <div className="flex items-start justify-between">
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Attendance to Mark</p>
+                {loadingAttendanceProgress ? (
+                  <p className="text-sm text-gray-400 mt-1">Loading...</p>
+                ) : attendanceProgressByClass?.length ? (
+                  <div className="mt-2 space-y-1.5 max-h-14 overflow-y-auto pr-1">
+                    {attendanceProgressByClass.map((row) => {
+                      const pending = Math.max((row.total || 0) - (row.marked || 0), 0)
+                      return (
+                        <div key={row.classId} className="flex items-center justify-between gap-3 text-sm">
+                          <span className="text-gray-700 truncate">
+                            {row.className}{row.classSection ? ` - ${row.classSection}` : ''}
+                          </span>
+                          <span className={pending > 0 ? 'font-semibold text-amber-700' : 'font-semibold text-green-700'}>
+                            {row.marked || 0}/{row.total || 0}
+                          </span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-400 mt-1">No classes assigned</p>
+                )}
+              </div>
+              <div className="w-10 h-10 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
+                {icons.attendance}
+              </div>
+            </div>
+          </div>
+        </Link>
         <StatCard
           label="Pending Grading"
-          value={submissions.length}
-          subtitle="submissions"
+          value={hasGradingContext ? pendingGradingCount : 'N/A'}
+          subtitle={
+            !hasGradingContext
+              ? 'no exam/test context'
+              : pendingGradingCount > 0
+              ? 'items pending'
+              : 'all marked'
+          }
           icon={icons.grading}
-          color={submissions.length > 0 ? 'red' : 'green'}
+          color={!hasGradingContext ? 'gray' : pendingGradingCount > 0 ? 'red' : 'green'}
           href="/academics/assignments"
+          cardClassName="h-28"
         />
         <StatCard
           label="Upcoming Exams"
@@ -259,6 +350,7 @@ export default function TeacherDashboard() {
           icon={icons.exams}
           color={upcomingExams.length > 0 ? 'purple' : 'gray'}
           href="/academics/exams"
+          cardClassName="h-28"
         />
       </div>
 

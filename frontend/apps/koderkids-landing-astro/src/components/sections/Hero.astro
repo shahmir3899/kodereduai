@@ -92,10 +92,11 @@ const { hero } = landingContent;
             alt={hero.dashboardAlt}
             class="w-full block"
             loading="eager"
-            decoding="async"
+            decoding="sync"
             fetchpriority="high"
             width="1200"
             height="750"
+            sizes="(max-width: 1024px) 100vw, 50vw"
           />
         </div>
 

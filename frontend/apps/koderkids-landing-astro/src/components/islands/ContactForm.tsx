@@ -11,6 +11,34 @@ type FormState = {
 
 const INITIAL: FormState = { name: '', school: '', email: '', phone: '', message: '' };
 const LOG_PREFIX = '[ContactForm]';
+const TRACK_EVENT = 'landing-conversion';
+
+const trackConversion = (eventName: string, detail: Record<string, unknown>) => {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(TRACK_EVENT, { detail: { event: eventName, ...detail } }));
+  const dataLayer = (window as Window & { dataLayer?: unknown[] }).dataLayer;
+  if (Array.isArray(dataLayer)) {
+    dataLayer.push({ event: eventName, ...detail });
+  }
+};
+
+const openMailFallback = (payload: FormState) => {
+  const subject = `Contact enquiry from ${payload.school || 'School team'}`;
+  const body = [
+    `Name: ${payload.name}`,
+    `School: ${payload.school}`,
+    `Email: ${payload.email}`,
+    `Phone: ${payload.phone || 'N/A'}`,
+    '',
+    'Message:',
+    payload.message || 'N/A',
+  ].join('\n');
+  const href =
+    `mailto:${siteConfig.salesEmail}` +
+    `?subject=${encodeURIComponent(subject)}` +
+    `&body=${encodeURIComponent(body)}`;
+  window.location.href = href;
+};
 
 const buildSubmitErrorMessage = (error: unknown, fallback: string): string => {
   if (error instanceof TypeError) {
@@ -95,6 +123,10 @@ export default function ContactForm() {
 
       setStatus('submitted');
       setForm(INITIAL);
+      trackConversion('landing_contact_submit_success', {
+        method: 'api',
+        endpoint: siteConfig.contactEnquiryEndpoint,
+      });
       console.info(`${LOG_PREFIX} submit success`);
     } catch (error) {
       console.error(`${LOG_PREFIX} submit error`, {
@@ -107,6 +139,11 @@ export default function ContactForm() {
         error,
         'Could not send your message right now. Please try again shortly or email admin@koderkids.pk.',
       ));
+      trackConversion('landing_contact_submit_fallback', {
+        method: 'mailto',
+        endpoint: siteConfig.contactEnquiryEndpoint,
+      });
+      openMailFallback(payload);
     }
   };
 

@@ -10,9 +10,10 @@ from rest_framework.decorators import action, api_view, permission_classes as pe
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.exceptions import PermissionDenied
 
 from core.permissions import (
-    IsSchoolAdmin, IsSchoolAdminOrReadOnly, HasSchoolAccess, ModuleAccessMixin,
+    IsSchoolAdmin, InventoryRoleAccessPermission, HasSchoolAccess, ModuleAccessMixin, get_effective_role,
 )
 from core.mixins import TenantQuerySetMixin, ensure_tenant_school_id
 
@@ -34,7 +35,7 @@ class InventoryCategoryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.
     """CRUD for inventory categories."""
     required_module = 'inventory'
     queryset = InventoryCategory.objects.all()
-    permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, InventoryRoleAccessPermission, HasSchoolAccess]
 
 
     def get_serializer_class(self):
@@ -62,7 +63,7 @@ class VendorViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSe
     """CRUD for vendors/suppliers."""
     required_module = 'inventory'
     queryset = Vendor.objects.all()
-    permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, InventoryRoleAccessPermission, HasSchoolAccess]
 
 
     def get_serializer_class(self):
@@ -98,7 +99,7 @@ class InventoryItemViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mode
     """
     required_module = 'inventory'
     queryset = InventoryItem.objects.all()
-    permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, InventoryRoleAccessPermission, HasSchoolAccess]
 
 
     def get_serializer_class(self):
@@ -149,7 +150,7 @@ class ItemAssignmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
     """
     required_module = 'inventory'
     queryset = ItemAssignment.objects.all()
-    permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, InventoryRoleAccessPermission, HasSchoolAccess]
 
 
     def get_serializer_class(self):
@@ -162,6 +163,9 @@ class ItemAssignmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
             'school', 'item', 'item__category',
             'assigned_to', 'assigned_by',
         )
+        role = get_effective_role(self.request)
+        if role in ('TEACHER', 'STAFF'):
+            queryset = queryset.filter(assigned_to_id=self.request.user.id)
 
         is_active = self.request.query_params.get('is_active')
         if is_active is not None:
@@ -254,6 +258,9 @@ class ItemAssignmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
     @action(detail=False, methods=['get'], url_path='by-user/(?P<user_id>[^/.]+)')
     def by_user(self, request, user_id=None):
         """Get all assignments for a specific user."""
+        role = get_effective_role(request)
+        if role in ('TEACHER', 'STAFF') and str(user_id) != str(request.user.id):
+            raise PermissionDenied("You can only view inventory assignments assigned to you.")
         queryset = self.get_queryset().filter(assigned_to_id=user_id)
         serializer = ItemAssignmentReadSerializer(queryset, many=True)
         return Response(serializer.data)
@@ -270,7 +277,7 @@ class StockTransactionViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
     """
     required_module = 'inventory'
     queryset = StockTransaction.objects.all()
-    permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, InventoryRoleAccessPermission, HasSchoolAccess]
 
     http_method_names = ['get', 'post', 'head', 'options']
 
@@ -318,7 +325,7 @@ class InventoryDashboardView(ModuleAccessMixin, APIView):
     GET: Returns aggregate inventory statistics for the active school.
     """
     required_module = 'inventory'
-    permission_classes = [IsAuthenticated, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, InventoryRoleAccessPermission, HasSchoolAccess]
 
     def get(self, request):
         school_id = ensure_tenant_school_id(request)

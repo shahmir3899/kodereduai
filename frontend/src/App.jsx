@@ -1,6 +1,8 @@
 import { Component, lazy, Suspense, useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './contexts/AuthContext'
+import AccessRestrictedRedirect from './components/AccessRestrictedRedirect'
+import { canAccessFinanceRoute, canAccessManagementRoute, canAccessInventoryRoute } from './utils/accessPolicies'
 
 // Components (kept eager - needed for app shell)
 import Layout from './components/Layout'
@@ -52,6 +54,7 @@ const LetterComposerPage = lazy(() => import('./pages/hr/LetterComposerPage'))
 // Academics pages
 const SubjectsPage = lazy(() => import('./pages/academics/SubjectsPage'))
 const TimetablePage = lazy(() => import('./pages/academics/TimetablePage'))
+const TeacherTimetablePage = lazy(() => import('./pages/academics/TeacherTimetablePage'))
 const AcademicsAnalyticsPage = lazy(() => import('./pages/academics/AcademicsAnalyticsPage'))
 const AcademicCalendarPage = lazy(() => import('./pages/academics/AcademicCalendarPage'))
 const AcademicYearsPage = lazy(() => import('./pages/sessions/AcademicYearsPage'))
@@ -257,6 +260,75 @@ function CapabilityRoute({ module, capability, children }) {
   return children
 }
 
+// Guard: finance access by role
+function FinanceRoute({ collectOnly = false, children }) {
+  const { effectiveRole } = useAuth()
+  if (!canAccessFinanceRoute(effectiveRole, { collectOnly })) {
+    return (
+      <AccessRestrictedRedirect
+        to={effectiveRole === 'TEACHER' ? '/finance/fees/collect' : '/dashboard'}
+        title="Finance Access Limited"
+        message={effectiveRole === 'TEACHER'
+          ? 'Teachers can only access fee collection for assigned classes.'
+          : 'Staff users cannot access the finance module.'}
+      />
+    )
+  }
+  return children
+}
+
+function ManagementRoute({ teacherAllowed = false, children }) {
+  const { effectiveRole } = useAuth()
+  if (!canAccessManagementRoute(effectiveRole, { teacherAllowed })) {
+    return (
+      <AccessRestrictedRedirect
+        to={effectiveRole === 'TEACHER' ? '/classes' : '/dashboard'}
+        title="Management Access Limited"
+        message={effectiveRole === 'TEACHER'
+          ? 'Teachers can only access their class and student views.'
+          : 'Staff users cannot access management pages.'}
+      />
+    )
+  }
+  return children
+}
+
+function InventoryRoute({ assignmentsOnly = false, children }) {
+  const { effectiveRole } = useAuth()
+  if (!canAccessInventoryRoute(effectiveRole, { assignmentsOnly })) {
+    return (
+      <AccessRestrictedRedirect
+        to="/inventory/assignments"
+        title="Inventory Access Limited"
+        message="Only assigned inventory is available for your role."
+      />
+    )
+  }
+  return children
+}
+
+function AssessmentManageRoute({ children }) {
+  const { effectiveRole } = useAuth()
+  if (effectiveRole === 'TEACHER' || effectiveRole === 'STAFF') {
+    return (
+      <AccessRestrictedRedirect
+        to="/academics/marks-entry"
+        title="Assessment Access Limited"
+        message="Only Marks Entry is available for your role."
+      />
+    )
+  }
+  return children
+}
+
+function TimetableRoute() {
+  const { effectiveRole } = useAuth()
+  if (effectiveRole === 'TEACHER') {
+    return <TeacherTimetablePage />
+  }
+  return <TimetablePage />
+}
+
 function App() {
   const { loading } = useAuth()
 
@@ -315,9 +387,9 @@ function App() {
             <Route path="school-setup" element={<SchoolRoute><SchoolSetupPage /></SchoolRoute>} />
             <Route path="accuracy" element={<Navigate to="/attendance?tab=analytics" replace />} />
 
-            <Route path="students" element={<SchoolRoute><ModuleRoute module="students"><StudentsPage /></ModuleRoute></SchoolRoute>} />
-            <Route path="students/:id" element={<SchoolRoute><ModuleRoute module="students"><StudentProfilePage /></ModuleRoute></SchoolRoute>} />
-            <Route path="classes" element={<SchoolRoute><ModuleRoute module="students"><ClassesGradesPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="students" element={<SchoolRoute><ModuleRoute module="students"><ManagementRoute teacherAllowed><StudentsPage /></ManagementRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="students/:id" element={<SchoolRoute><ModuleRoute module="students"><ManagementRoute teacherAllowed><StudentProfilePage /></ManagementRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="classes" element={<SchoolRoute><ModuleRoute module="students"><ManagementRoute teacherAllowed><ClassesGradesPage /></ManagementRoute></ModuleRoute></SchoolRoute>} />
 
             {/* HR routes */}
             <Route path="hr" element={<SchoolRoute><ModuleRoute module="hr"><HRDashboardPage /></ModuleRoute></SchoolRoute>} />
@@ -335,17 +407,17 @@ function App() {
 
             {/* Academics routes */}
             <Route path="academics/subjects" element={<SchoolRoute><ModuleRoute module="academics"><SubjectsPage /></ModuleRoute></SchoolRoute>} />
-            <Route path="academics/timetable" element={<SchoolRoute><ModuleRoute module="academics"><TimetablePage /></ModuleRoute></SchoolRoute>} />
+            <Route path="academics/timetable" element={<SchoolRoute><ModuleRoute module="academics"><TimetableRoute /></ModuleRoute></SchoolRoute>} />
             <Route path="academics/analytics" element={<SchoolRoute><ModuleRoute module="academics"><AcademicsAnalyticsPage /></ModuleRoute></SchoolRoute>} />
-            <Route path="academics/calendar" element={<SchoolRoute><ModuleRoute module="academics"><AcademicCalendarPage /></ModuleRoute></SchoolRoute>} />
-            <Route path="academics/sessions" element={<SchoolRoute><ModuleRoute module="academics"><AcademicYearsPage /></ModuleRoute></SchoolRoute>} />
-            <Route path="academics/promotion" element={<SchoolRoute><ModuleRoute module="academics"><PromotionPage /></ModuleRoute></SchoolRoute>} />
-            <Route path="academics/exam-types" element={<SchoolRoute><ModuleRoute module="examinations"><ExamTypesPage /></ModuleRoute></SchoolRoute>} />
-            <Route path="academics/exams" element={<SchoolRoute><ModuleRoute module="examinations"><ExamsPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="academics/calendar" element={<SchoolRoute><ModuleRoute module="academics"><ManagementRoute><AcademicCalendarPage /></ManagementRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="academics/sessions" element={<SchoolRoute><ModuleRoute module="academics"><ManagementRoute><AcademicYearsPage /></ManagementRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="academics/promotion" element={<SchoolRoute><ModuleRoute module="academics"><ManagementRoute><PromotionPage /></ManagementRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="academics/exam-types" element={<SchoolRoute><ModuleRoute module="examinations"><AssessmentManageRoute><ExamTypesPage /></AssessmentManageRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="academics/exams" element={<SchoolRoute><ModuleRoute module="examinations"><AssessmentManageRoute><ExamsPage /></AssessmentManageRoute></ModuleRoute></SchoolRoute>} />
             <Route path="academics/marks-entry" element={<SchoolRoute><ModuleRoute module="examinations"><MarksEntryPage /></ModuleRoute></SchoolRoute>} />
             <Route path="academics/results" element={<SchoolRoute><ModuleRoute module="examinations"><ResultsPage /></ModuleRoute></SchoolRoute>} />
             <Route path="academics/report-cards" element={<SchoolRoute><ModuleRoute module="examinations"><ReportCardPage /></ModuleRoute></SchoolRoute>} />
-            <Route path="academics/grade-scale" element={<SchoolRoute><ModuleRoute module="examinations"><GradeScalePage /></ModuleRoute></SchoolRoute>} />
+            <Route path="academics/grade-scale" element={<SchoolRoute><ModuleRoute module="examinations"><AssessmentManageRoute><GradeScalePage /></AssessmentManageRoute></ModuleRoute></SchoolRoute>} />
             <Route path="academics/paper-builder" element={<SchoolRoute><CapabilityRoute module="examinations" capability="paper_builder"><QuestionPaperBuilderPage /></CapabilityRoute></SchoolRoute>} />
             <Route path="academics/curriculum-coverage" element={<SchoolRoute><ModuleRoute module="examinations"><CurriculumCoveragePage /></ModuleRoute></SchoolRoute>} />
             <Route path="academics/questions" element={<SchoolRoute><ModuleRoute module="examinations"><QuestionsPage /></ModuleRoute></SchoolRoute>} />
@@ -363,16 +435,16 @@ function App() {
             <Route path="guide" element={<UserGuidePage />} />
 
             {/* Finance routes */}
-            <Route path="finance" element={<SchoolRoute><ModuleRoute module="finance"><FinanceDashboardPage /></ModuleRoute></SchoolRoute>} />
-            <Route path="finance/fees" element={<SchoolRoute><ModuleRoute module="finance"><FeeOverviewPage /></ModuleRoute></SchoolRoute>} />
-            <Route path="finance/fees/collect" element={<SchoolRoute><ModuleRoute module="finance"><FeeCollectPage /></ModuleRoute></SchoolRoute>} />
-            <Route path="finance/fees/setup" element={<SchoolRoute><ModuleRoute module="finance"><FeeSetupPage /></ModuleRoute></SchoolRoute>} />
-            <Route path="finance/income" element={<SchoolRoute><ModuleRoute module="finance"><OtherIncomePage /></ModuleRoute></SchoolRoute>} />
-            <Route path="finance/accounts" element={<SchoolRoute><ModuleRoute module="finance"><AccountsPage /></ModuleRoute></SchoolRoute>} />
-            <Route path="finance/expenses" element={<SchoolRoute><ModuleRoute module="finance"><ExpensesPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="finance" element={<SchoolRoute><ModuleRoute module="finance"><FinanceRoute><FinanceDashboardPage /></FinanceRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="finance/fees" element={<SchoolRoute><ModuleRoute module="finance"><FinanceRoute><FeeOverviewPage /></FinanceRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="finance/fees/collect" element={<SchoolRoute><ModuleRoute module="finance"><FinanceRoute collectOnly><FeeCollectPage /></FinanceRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="finance/fees/setup" element={<SchoolRoute><ModuleRoute module="finance"><FinanceRoute><FeeSetupPage /></FinanceRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="finance/income" element={<SchoolRoute><ModuleRoute module="finance"><FinanceRoute><OtherIncomePage /></FinanceRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="finance/accounts" element={<SchoolRoute><ModuleRoute module="finance"><FinanceRoute><AccountsPage /></FinanceRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="finance/expenses" element={<SchoolRoute><ModuleRoute module="finance"><FinanceRoute><ExpensesPage /></FinanceRoute></ModuleRoute></SchoolRoute>} />
             <Route path="finance/reports" element={<Navigate to="/finance" replace />} />
-            <Route path="finance/discounts" element={<SchoolRoute><ModuleRoute module="finance"><DiscountsPage /></ModuleRoute></SchoolRoute>} />
-            <Route path="finance/payment-gateways" element={<SchoolRoute><ModuleRoute module="finance"><PaymentGatewayPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="finance/discounts" element={<SchoolRoute><ModuleRoute module="finance"><FinanceRoute><DiscountsPage /></FinanceRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="finance/payment-gateways" element={<SchoolRoute><ModuleRoute module="finance"><FinanceRoute><PaymentGatewayPage /></FinanceRoute></ModuleRoute></SchoolRoute>} />
 
             {/* Parent Portal routes */}
             <Route path="parent/dashboard" element={<ParentRoute><ParentDashboard /></ParentRoute>} />
@@ -421,10 +493,10 @@ function App() {
             <Route path="library/overdue" element={<SchoolRoute><ModuleRoute module="library"><OverdueBooksPage /></ModuleRoute></SchoolRoute>} />
 
             {/* Inventory routes */}
-            <Route path="inventory" element={<SchoolRoute><ModuleRoute module="inventory"><InventoryDashboard /></ModuleRoute></SchoolRoute>} />
-            <Route path="inventory/items" element={<SchoolRoute><ModuleRoute module="inventory"><InventoryItemsPage /></ModuleRoute></SchoolRoute>} />
-            <Route path="inventory/transactions" element={<SchoolRoute><ModuleRoute module="inventory"><StockTransactionsPage /></ModuleRoute></SchoolRoute>} />
-            <Route path="inventory/assignments" element={<SchoolRoute><ModuleRoute module="inventory"><ItemAssignmentsPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="inventory" element={<SchoolRoute><ModuleRoute module="inventory"><InventoryRoute><InventoryDashboard /></InventoryRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="inventory/items" element={<SchoolRoute><ModuleRoute module="inventory"><InventoryRoute><InventoryItemsPage /></InventoryRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="inventory/transactions" element={<SchoolRoute><ModuleRoute module="inventory"><InventoryRoute><StockTransactionsPage /></InventoryRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="inventory/assignments" element={<SchoolRoute><ModuleRoute module="inventory"><InventoryRoute assignmentsOnly><ItemAssignmentsPage /></InventoryRoute></ModuleRoute></SchoolRoute>} />
 
             {/* Admissions routes */}
             <Route path="admissions" element={<SchoolRoute><ModuleRoute module="admissions"><EnquiriesPage /></ModuleRoute></SchoolRoute>} />

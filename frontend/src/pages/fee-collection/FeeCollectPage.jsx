@@ -22,10 +22,12 @@ import {
 } from '../../utils/classScope'
 
 export default function FeeCollectPage() {
-  const { user, activeSchool, isStaffMember } = useAuth()
+  const { user, activeSchool, effectiveRole, isSchoolAdmin, isAccountant, isPrincipal, isSuperAdmin } = useAuth()
   const { activeAcademicYear } = useAcademicYear()
   const { showWarning } = useToast()
-  const canWrite = !isStaffMember
+  const canWrite = isSuperAdmin || isSchoolAdmin || isPrincipal || isAccountant || effectiveRole === 'TEACHER'
+  const canManageFeeRecords = isSuperAdmin || isSchoolAdmin || isPrincipal || isAccountant
+  const isTeacher = effectiveRole === 'TEACHER'
   const now = new Date()
   const [searchParams] = useSearchParams()
 
@@ -81,7 +83,12 @@ export default function FeeCollectPage() {
   const classFilterOptions = useMemo(() => {
     if (!activeAcademicYear?.id) return data.classList
     if (!sessionClasses?.length) return []
-    return buildSessionClassOptions(sessionClasses)
+    const allowedMasterClassIds = new Set((data.classList || []).map((c) => Number(c.id)))
+    const scopedSessionClasses = sessionClasses.filter((sc) => {
+      const masterClassId = Number(sc.class_obj)
+      return allowedMasterClassIds.has(masterClassId)
+    })
+    return buildSessionClassOptions(scopedSessionClasses)
   }, [activeAcademicYear?.id, data.classList, sessionClasses])
 
   const selectedClassLabel = useMemo(() => {
@@ -92,6 +99,13 @@ export default function FeeCollectPage() {
     if (!fallback) return 'All Classes'
     return `${fallback.name}${fallback.section ? ` - ${fallback.section}` : ''}`
   }, [classFilter, classFilterOptions, data.classList])
+
+  useEffect(() => {
+    if (!isTeacher) return
+    if (classFilter) return
+    if (!classFilterOptions?.length) return
+    setClassFilter(String(classFilterOptions[0].id))
+  }, [isTeacher, classFilter, classFilterOptions])
 
   // Deep-link: auto-scroll to specific student from URL
   const urlStudentId = searchParams.get('student')
@@ -231,7 +245,7 @@ export default function FeeCollectPage() {
           <p className="text-sm text-gray-600">Record student fee payments</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {canWrite && (
+          {canManageFeeRecords && (
             <>
               <button
                 onClick={() => {
@@ -270,6 +284,7 @@ export default function FeeCollectPage() {
             classOptions={classFilterOptions}
             selectorScope={classSelectorScope}
             academicYearId={activeAcademicYear?.id}
+            allowAllClasses={!isTeacher}
           />
           </div>
           {data.paymentList.length > 0 && (
@@ -307,7 +322,7 @@ export default function FeeCollectPage() {
       />
 
       {/* Bulk Actions */}
-      {canWrite && (
+      {canManageFeeRecords && (
         <BulkActionsBar
           selectedCount={selectedIds.size}
           onBulkUpdate={handleBulkUpdate}
@@ -340,6 +355,7 @@ export default function FeeCollectPage() {
         academicYearId={activeAcademicYear?.id}
         annualCategories={data.annualCategories}
         monthlyCategories={data.monthlyCategories}
+        isTeacher={isTeacher}
       />
 
       <CreateSingleFeeModal

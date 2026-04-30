@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { examinationsApi, sessionsApi, schoolsApi } from '../../services/api'
+import { examinationsApi, sessionsApi, schoolsApi, attendanceApi } from '../../services/api'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { exportReportCardPDF } from './reportCardExport'
 import ClassSelector from '../../components/ClassSelector'
@@ -17,6 +17,7 @@ export default function ReportCardPage() {
   const [termId, setTermId] = useState('')
   const [search, setSearch] = useState('')
   const [downloading, setDownloading] = useState(false)
+  const [teacherClassOptions, setTeacherClassOptions] = useState(null)
 
   const { sessionClasses } = useSessionClasses(yearId)
   const classSelectorScope = getClassSelectorScope(yearId)
@@ -72,6 +73,11 @@ export default function ReportCardPage() {
     queryFn: () => schoolsApi.getMySchool(),
   })
 
+  const { data: myClassesRes } = useQuery({
+    queryKey: ['myReportCardClasses'],
+    queryFn: () => attendanceApi.getMyAttendanceClasses(),
+  })
+
   const years = yearsRes?.data?.results || yearsRes?.data || []
   const terms = termsRes?.data?.results || termsRes?.data || []
   const enrollments = enrollmentsRes?.data?.results || enrollmentsRes?.data || []
@@ -80,6 +86,30 @@ export default function ReportCardPage() {
     .sort((a, b) => String(a.roll_number || '').localeCompare(String(b.roll_number || ''), undefined, { numeric: true, sensitivity: 'base' }))
   const report = reportRes?.data || null
   const schoolData = schoolRes?.data
+
+  useEffect(() => {
+    const myClasses = myClassesRes?.data || []
+    if (!myClasses.length) {
+      setTeacherClassOptions(null)
+      return
+    }
+    if (yearId && sessionClasses?.length) {
+      const allowedMasterClassIds = new Set(myClasses.map((c) => Number(c.id)))
+      const scoped = sessionClasses
+        .filter((sc) => allowedMasterClassIds.has(Number(sc.class_obj)))
+        .map((sc) => ({
+          id: sc.id,
+          class_obj: sc.class_obj,
+          name: sc.display_name,
+          section: sc.section || '',
+          grade_level: sc.grade_level,
+          label: sc.label,
+        }))
+      setTeacherClassOptions(scoped.length > 0 ? scoped : myClasses)
+      return
+    }
+    setTeacherClassOptions(myClasses)
+  }, [myClassesRes?.data, sessionClasses, yearId])
 
   const handleModeChange = (newMode) => {
     setMode(newMode)
@@ -144,6 +174,7 @@ export default function ReportCardPage() {
               placeholder="Select class..."
               scope={classSelectorScope}
               academicYearId={yearId || undefined}
+              classes={teacherClassOptions || undefined}
             />
           </div>
           <div>

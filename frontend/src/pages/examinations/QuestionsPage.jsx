@@ -1,10 +1,11 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { questionPaperApi, lmsApi } from '../../services/api'
+import { questionPaperApi, lmsApi, attendanceApi } from '../../services/api'
 import ClassSelector from '../../components/ClassSelector'
 import Toast from '../../components/Toast'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
+import { useAuth } from '../../contexts/AuthContext'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import { useClassSubjects } from '../../hooks/useClassSubjects'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
@@ -448,9 +449,11 @@ function TopicPicker({ classId, subjectId, selectedTopics, onChange, initialBook
 
 function QuestionModal({ editQuestion, initialClassFilterId, initialSubject, initialTopicId, initialBookId, initialChapterId, onClose, onSaved }) {
   const isEdit = !!editQuestion
+  const { isTeacher } = useAuth()
   const { activeAcademicYear } = useAcademicYear()
   const { sessionClasses } = useSessionClasses(activeAcademicYear?.id)
   const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
+  const [teacherClassOptions, setTeacherClassOptions] = useState(null)
 
   const [modalClassFilterId, setModalClassFilterId] = useState(initialClassFilterId || '')
   const resolvedModalClassId = getResolvedMasterClassId(modalClassFilterId, activeAcademicYear?.id, sessionClasses)
@@ -466,6 +469,40 @@ function QuestionModal({ editQuestion, initialClassFilterId, initialSubject, ini
       setModalChapterId('')
     }
   }, [modalSubjectOptions, modalSubject])
+
+  const { data: myClassesRes } = useQuery({
+    queryKey: ['teacherQuestionModalClasses'],
+    queryFn: () => attendanceApi.getMyAttendanceClasses(),
+    enabled: isTeacher,
+  })
+
+  useEffect(() => {
+    if (!isTeacher) {
+      setTeacherClassOptions(null)
+      return
+    }
+    const myClasses = myClassesRes?.data || []
+    if (!myClasses.length) {
+      setTeacherClassOptions([])
+      return
+    }
+    if (activeAcademicYear?.id && sessionClasses?.length) {
+      const allowedMasterClassIds = new Set(myClasses.map((c) => Number(c.id)))
+      const scoped = sessionClasses
+        .filter((sc) => allowedMasterClassIds.has(Number(sc.class_obj)))
+        .map((sc) => ({
+          id: sc.id,
+          class_obj: sc.class_obj,
+          name: sc.display_name,
+          section: sc.section || '',
+          grade_level: sc.grade_level,
+          label: sc.label,
+        }))
+      setTeacherClassOptions(scoped.length > 0 ? scoped : myClasses)
+      return
+    }
+    setTeacherClassOptions(myClasses)
+  }, [isTeacher, myClassesRes?.data, sessionClasses, activeAcademicYear?.id])
 
   useEffect(() => {
     if (!isEdit) {
@@ -599,6 +636,8 @@ function QuestionModal({ editQuestion, initialClassFilterId, initialSubject, ini
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
                   scope={classSelectorScope}
                   academicYearId={activeAcademicYear?.id}
+                  showAllOption={!isTeacher}
+                  classes={teacherClassOptions || undefined}
                   required
                 />
                 {errors.class_obj && <p className="text-red-500 text-xs mt-1">{errors.class_obj}</p>}
@@ -965,10 +1004,12 @@ function DeleteConfirm({ question, onCancel, onConfirm, isLoading }) {
 export default function QuestionsPage() {
   const queryClient = useQueryClient()
   const location = useLocation()
+  const { isTeacher } = useAuth()
   const { activeAcademicYear } = useAcademicYear()
   const locationState = location.state || {}
   const { sessionClasses } = useSessionClasses(activeAcademicYear?.id)
   const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
+  const [teacherClassOptions, setTeacherClassOptions] = useState(null)
 
   // Filters
   const [filterClassId, setFilterClassId] = useState(locationState.classId || '')
@@ -982,6 +1023,40 @@ export default function QuestionsPage() {
   const [page, setPage] = useState(1)
   const resolvedClassId = getResolvedMasterClassId(filterClassId, activeAcademicYear?.id, sessionClasses)
   const { subjects: classSubjects, isLoading: classSubjectsLoading } = useClassSubjects(resolvedClassId)
+
+  const { data: myClassesRes } = useQuery({
+    queryKey: ['teacherQuestionBankClasses'],
+    queryFn: () => attendanceApi.getMyAttendanceClasses(),
+    enabled: isTeacher,
+  })
+
+  useEffect(() => {
+    if (!isTeacher) {
+      setTeacherClassOptions(null)
+      return
+    }
+    const myClasses = myClassesRes?.data || []
+    if (!myClasses.length) {
+      setTeacherClassOptions([])
+      return
+    }
+    if (activeAcademicYear?.id && sessionClasses?.length) {
+      const allowedMasterClassIds = new Set(myClasses.map((c) => Number(c.id)))
+      const scoped = sessionClasses
+        .filter((sc) => allowedMasterClassIds.has(Number(sc.class_obj)))
+        .map((sc) => ({
+          id: sc.id,
+          class_obj: sc.class_obj,
+          name: sc.display_name,
+          section: sc.section || '',
+          grade_level: sc.grade_level,
+          label: sc.label,
+        }))
+      setTeacherClassOptions(scoped.length > 0 ? scoped : myClasses)
+      return
+    }
+    setTeacherClassOptions(myClasses)
+  }, [isTeacher, myClassesRes?.data, sessionClasses, activeAcademicYear?.id])
 
   const { data: booksData, isLoading: booksLoading } = useQuery({
     queryKey: ['question-bank-books', resolvedClassId, filterSubject],
@@ -1100,6 +1175,8 @@ export default function QuestionsPage() {
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
                 scope={classSelectorScope}
                 academicYearId={activeAcademicYear?.id}
+                showAllOption={!isTeacher}
+                classes={teacherClassOptions || undefined}
               />
             </div>
 

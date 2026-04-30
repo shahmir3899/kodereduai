@@ -35,14 +35,15 @@ function SkeletonCard() {
  * @param {'sky'|'green'|'red'|'amber'|'blue'|'purple'|'orange'|'gray'} [props.color='sky']
  * @param {string} [props.href] - Link destination
  * @param {boolean} [props.loading]
+ * @param {string} [props.cardClassName] - Extra classes for card container
  */
-export default function StatCard({ label, value, subtitle, icon, color = 'sky', href, loading }) {
+export default function StatCard({ label, value, subtitle, icon, color = 'sky', href, loading, cardClassName = '' }) {
   if (loading) return <SkeletonCard />
 
   const c = COLOR_MAP[color] || COLOR_MAP.sky
 
   const content = (
-    <div className={`bg-white rounded-xl border border-gray-200 p-4 transition-shadow ${href ? 'hover:shadow-md cursor-pointer' : ''}`}>
+    <div className={`bg-white rounded-xl border border-gray-200 p-4 transition-shadow ${href ? 'hover:shadow-md cursor-pointer' : ''} ${cardClassName}`}>
       <div className="flex items-start justify-between">
         <div className="min-w-0">
           <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{label}</p>

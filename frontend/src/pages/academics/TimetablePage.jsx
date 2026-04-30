@@ -1,11 +1,12 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { academicsApi, hrApi } from '../../services/api'
+import { academicsApi, hrApi, attendanceApi } from '../../services/api'
 import { useBackgroundTask } from '../../hooks/useBackgroundTask'
 import { useClasses } from '../../hooks/useClasses'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import ClassSelector from '../../components/ClassSelector'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
+import { useAuth } from '../../contexts/AuthContext'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 
 const DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
@@ -29,6 +30,7 @@ const isSlotApplicable = (slot, day) => {
 export default function TimetablePage() {
   const queryClient = useQueryClient()
   const { activeAcademicYear } = useAcademicYear()
+  const { isTeacher } = useAuth()
   const [selectedClassId, setSelectedClassId] = useState('')
   const [showSlotsModal, setShowSlotsModal] = useState(false)
   const [editingCell, setEditingCell] = useState(null)
@@ -83,6 +85,32 @@ export default function TimetablePage() {
   const { classes: classesFromHook } = useClasses()
   const { sessionClasses } = useSessionClasses(activeAcademicYear?.id)
   const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
+
+  const { data: teacherScopeClassesRes } = useQuery({
+    queryKey: ['myTimetableClasses'],
+    queryFn: () => attendanceApi.getMyAttendanceClasses(),
+    enabled: isTeacher,
+  })
+
+  const teacherScopeClasses = teacherScopeClassesRes?.data || []
+  const teacherScopedClassOptions = useMemo(() => {
+    if (!isTeacher) return null
+    if (activeAcademicYear?.id) {
+      const allowedMasterClassIds = new Set(teacherScopeClasses.map(c => Number(c.id)))
+      return sessionClasses
+        .filter(sc => allowedMasterClassIds.has(Number(sc.class_obj)))
+        .map(sc => ({
+          id: sc.id,
+          class_obj: sc.class_obj,
+          name: sc.display_name,
+          section: sc.section || '',
+          grade_level: sc.grade_level,
+          label: sc.label,
+        }))
+    }
+    return teacherScopeClasses
+  }, [isTeacher, activeAcademicYear?.id, sessionClasses, teacherScopeClasses])
+
   const resolvedSelectedClassId = getResolvedMasterClassId(selectedClassId, activeAcademicYear?.id, sessionClasses)
 
   const { data: slotsData, isLoading: slotsLoading } = useQuery({
@@ -484,6 +512,7 @@ export default function TimetablePage() {
               placeholder="-- Select Class --"
               scope={classSelectorScope}
               academicYearId={activeAcademicYear?.id}
+              classes={teacherScopedClassOptions || undefined}
             />
           </div>
           {/* Quality Score Badge */}

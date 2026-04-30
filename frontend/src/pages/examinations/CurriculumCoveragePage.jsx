@@ -1,14 +1,16 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { lmsApi } from '../../services/api'
+import { lmsApi, attendanceApi } from '../../services/api'
 import ClassSelector from '../../components/ClassSelector'
-import SubjectSelector from '../../components/SubjectSelector'
 import TopicStatusBadge from './TopicStatusBadge'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
+import { useAuth } from '../../contexts/AuthContext'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
+import { useClassSubjects } from '../../hooks/useClassSubjects'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 
 export default function CurriculumCoveragePage() {
+  const { isTeacher } = useAuth()
   const { activeAcademicYear } = useAcademicYear()
   const [classId, setClassId] = useState('')
   const [subjectId, setSubjectId] = useState('')
@@ -16,6 +18,42 @@ export default function CurriculumCoveragePage() {
   const { sessionClasses } = useSessionClasses(activeAcademicYear?.id)
   const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
   const resolvedClassId = getResolvedMasterClassId(classId, activeAcademicYear?.id, sessionClasses)
+  const { subjects: classSubjects, isLoading: classSubjectsLoading } = useClassSubjects(resolvedClassId)
+  const [teacherClassOptions, setTeacherClassOptions] = useState(null)
+
+  const { data: myClassesRes } = useQuery({
+    queryKey: ['teacherCurriculumCoverageClasses'],
+    queryFn: () => attendanceApi.getMyAttendanceClasses(),
+    enabled: isTeacher,
+  })
+
+  useEffect(() => {
+    if (!isTeacher) {
+      setTeacherClassOptions(null)
+      return
+    }
+    const myClasses = myClassesRes?.data || []
+    if (!myClasses.length) {
+      setTeacherClassOptions([])
+      return
+    }
+    if (activeAcademicYear?.id && sessionClasses?.length) {
+      const allowedMasterClassIds = new Set(myClasses.map((c) => Number(c.id)))
+      const scoped = sessionClasses
+        .filter((sc) => allowedMasterClassIds.has(Number(sc.class_obj)))
+        .map((sc) => ({
+          id: sc.id,
+          class_obj: sc.class_obj,
+          name: sc.display_name,
+          section: sc.section || '',
+          grade_level: sc.grade_level,
+          label: sc.label,
+        }))
+      setTeacherClassOptions(scoped.length > 0 ? scoped : myClasses)
+      return
+    }
+    setTeacherClassOptions(myClasses)
+  }, [isTeacher, myClassesRes?.data, sessionClasses, activeAcademicYear?.id])
 
   const { data, isLoading } = useQuery({
     queryKey: ['curriculumCoverageTopics', resolvedClassId, subjectId, coverage, activeAcademicYear?.id],
@@ -50,11 +88,33 @@ export default function CurriculumCoveragePage() {
               className="input"
               scope={classSelectorScope}
               academicYearId={activeAcademicYear?.id}
+              showAllOption={!isTeacher}
+              classes={teacherClassOptions || undefined}
             />
           </div>
           <div>
             <label className="label">Subject</label>
-            <SubjectSelector value={subjectId} onChange={(e) => setSubjectId(e.target.value)} className="input" />
+            <select
+              value={subjectId}
+              onChange={(e) => setSubjectId(e.target.value)}
+              className="input"
+              disabled={!resolvedClassId || classSubjectsLoading}
+            >
+              <option value="">
+                {!resolvedClassId
+                  ? 'Select class first'
+                  : classSubjectsLoading
+                  ? 'Loading subjects...'
+                  : classSubjects.length > 0
+                  ? 'Select subject...'
+                  : 'No subjects assigned'}
+              </option>
+              {classSubjects.map((subject) => (
+                <option key={subject.id} value={subject.id}>
+                  {subject.code ? `${subject.code} - ` : ''}{subject.name}
+                </option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="label">Coverage Filter</label>

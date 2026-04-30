@@ -61,7 +61,7 @@ export default function SubjectsPage() {
   const queryClient = useQueryClient()
   const { activeAcademicYear } = useAcademicYear()
   const { showSuccess, showError } = useToast()
-  const { isSchoolAdmin } = useAuth()
+  const { isSchoolAdmin, isTeacher } = useAuth()
   const [tab, setTab] = useState('subjects')
 
   // Subject state
@@ -162,7 +162,15 @@ export default function SubjectsPage() {
 
   const subjects = extractList(subjectRes)
   const assignments = extractList(assignRes)
-  const classTeacherAssignments = extractList(classTeacherRes)
+  const rawClassTeacherAssignments = extractList(classTeacherRes)
+  const classTeacherAssignments = useMemo(() => {
+    if (!isTeacher) return rawClassTeacherAssignments
+    const allowedSessionClassIds = new Set(sessionClassOptions.map((opt) => String(opt.id)))
+    return rawClassTeacherAssignments.filter((assignment) => {
+      const sid = assignment?.session_class
+      return sid && allowedSessionClassIds.has(String(sid))
+    })
+  }, [isTeacher, rawClassTeacherAssignments, sessionClassOptions])
   const staffList = extractList(staffData)
   const teacherStaffList = extractList(teacherStaffData)
   const workloadData = workloadRes?.data || {}
@@ -489,18 +497,21 @@ export default function SubjectsPage() {
         >
           Class Teachers{classTeacherAssignments.length > 0 && <span className="ml-1.5 text-xs bg-primary-100 text-primary-700 px-1.5 py-0.5 rounded-full">{classTeacherAssignments.length}</span>}
         </button>
-        <button
-          onClick={() => setTab('insights')}
-          className={`px-4 py-2 text-sm rounded-md transition-colors ${tab === 'insights' ? 'bg-white shadow text-indigo-700 font-medium' : 'text-gray-600 hover:text-gray-800'}`}
-        >
-          AI Insights
-        </button>
+        {!isTeacher && (
+          <button
+            onClick={() => setTab('insights')}
+            className={`px-4 py-2 text-sm rounded-md transition-colors ${tab === 'insights' ? 'bg-white shadow text-indigo-700 font-medium' : 'text-gray-600 hover:text-gray-800'}`}
+          >
+            AI Insights
+          </button>
+        )}
       </div>
 
       {/* ─── Subjects Tab ─── */}
       {tab === 'subjects' && (
         <>
           {/* Quick Add Section */}
+          {!isTeacher && (
           <div className="card mb-4">
             <button
               onClick={() => setShowQuickAdd(p => !p)}
@@ -574,6 +585,7 @@ export default function SubjectsPage() {
               </div>
             )}
           </div>
+          )}
 
           <div className="flex flex-col sm:flex-row gap-3 mb-4">
             <input
@@ -583,9 +595,9 @@ export default function SubjectsPage() {
               onChange={e => setSearch(e.target.value)}
               className="input w-full sm:w-60"
             />
-            <button onClick={openCreateSubject} className="btn-primary text-sm px-4 py-2 whitespace-nowrap">
+            {!isTeacher && <button onClick={openCreateSubject} className="btn-primary text-sm px-4 py-2 whitespace-nowrap">
               + Add Subject
-            </button>
+            </button>}
           </div>
 
           {subjectLoading ? (
@@ -650,7 +662,7 @@ export default function SubjectsPage() {
                   {s.description && (
                     <p className="text-xs text-gray-500 mt-1 line-clamp-2">{s.description}</p>
                   )}
-                  <div className="flex gap-2 mt-3 pt-2 border-t border-gray-100">
+                  {!isTeacher && <div className="flex gap-2 mt-3 pt-2 border-t border-gray-100">
                     <button onClick={() => openEditSubject(s)} className="text-xs text-primary-600 hover:underline">Edit</button>
                     <button
                       onClick={async () => {
@@ -659,14 +671,14 @@ export default function SubjectsPage() {
                       }}
                       className="text-xs text-red-600 hover:underline"
                     >Delete</button>
-                  </div>
+                  </div>}
                 </div>
               ))}
             </div>
           )}
 
           {/* Subject Modal */}
-          {showSubjectModal && (
+          {!isTeacher && showSubjectModal && (
             <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={closeSubjectModal}>
               <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center justify-between mb-4">
@@ -750,9 +762,9 @@ export default function SubjectsPage() {
               showAllOption
               classes={sessionClassOptions}
             />
-            <button onClick={openCreateAssign} className="btn-primary text-sm px-4 py-2 whitespace-nowrap">
+            {isSchoolAdmin && <button onClick={openCreateAssign} className="btn-primary text-sm px-4 py-2 whitespace-nowrap">
               + Assign Subject
-            </button>
+            </button>}
           </div>
 
           {activeAcademicYear && (
@@ -818,12 +830,12 @@ export default function SubjectsPage() {
                                     <span className="text-gray-400 ml-1">· {a.periods_per_week}/wk</span>
                                   </p>
                                 </div>
-                                <button
+                                {isSchoolAdmin && <button
                                   onClick={() => openEditAssign(a)}
                                   className="text-xs text-primary-700 hover:text-primary-800 hover:underline font-medium shrink-0"
                                 >
                                   Edit
-                                </button>
+                                </button>}
                               </div>
                             </div>
                           ))}
@@ -837,7 +849,7 @@ export default function SubjectsPage() {
           )}
 
           {/* Assignment Modal */}
-          {showAssignModal && (
+          {isSchoolAdmin && showAssignModal && (
             <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={closeAssignModal}>
               <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center justify-between mb-4">
@@ -1177,7 +1189,7 @@ export default function SubjectsPage() {
       <ConfirmModalRoot />
 
       {/* ─── AI Insights Tab ─── */}
-      {tab === 'insights' && (
+      {!isTeacher && tab === 'insights' && (
         <>
           {(workloadLoading || gapLoading) ? (
             <div className="text-center py-12">

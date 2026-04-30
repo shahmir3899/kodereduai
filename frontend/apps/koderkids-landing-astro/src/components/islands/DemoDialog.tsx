@@ -3,6 +3,31 @@ import { siteConfig } from '../../content/landing';
 
 const EVENT_NAME = 'open-demo-dialog';
 const LOG_PREFIX = '[DemoDialog]';
+const TRACK_EVENT = 'landing-conversion';
+
+const trackConversion = (eventName: string, detail: Record<string, unknown>) => {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(TRACK_EVENT, { detail: { event: eventName, ...detail } }));
+  const dataLayer = (window as Window & { dataLayer?: unknown[] }).dataLayer;
+  if (Array.isArray(dataLayer)) {
+    dataLayer.push({ event: eventName, ...detail });
+  }
+};
+
+const openMailFallback = (payload: { name: string; school: string; email: string; preferred_date: string | null }) => {
+  const subject = `Demo request from ${payload.school || 'School team'}`;
+  const body = [
+    `Name: ${payload.name}`,
+    `School: ${payload.school}`,
+    `Work Email: ${payload.email}`,
+    `Preferred Date: ${payload.preferred_date || 'N/A'}`,
+  ].join('\n');
+  const href =
+    `mailto:${siteConfig.salesEmail}` +
+    `?subject=${encodeURIComponent(subject)}` +
+    `&body=${encodeURIComponent(body)}`;
+  window.location.href = href;
+};
 
 const buildSubmitErrorMessage = (error: unknown, fallback: string): string => {
   if (error instanceof TypeError) {
@@ -124,6 +149,10 @@ export default function DemoDialog() {
 
       formEl.reset();
       setStatus('submitted');
+      trackConversion('landing_demo_submit_success', {
+        method: 'api',
+        endpoint: siteConfig.demoRequestEndpoint,
+      });
       console.info(`${LOG_PREFIX} submit success`);
     } catch (error) {
       console.error(`${LOG_PREFIX} submit error`, {
@@ -136,6 +165,11 @@ export default function DemoDialog() {
         error,
         'Could not send your request right now. Please try again shortly or email admin@koderkids.pk.',
       ));
+      trackConversion('landing_demo_submit_fallback', {
+        method: 'mailto',
+        endpoint: siteConfig.demoRequestEndpoint,
+      });
+      openMailFallback(payload);
     }
   };
 
