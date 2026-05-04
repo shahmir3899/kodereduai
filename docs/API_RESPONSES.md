@@ -2562,6 +2562,19 @@ _(Expected fields from serializers)_
 }
 ```
 
+### POST /api/lms/lesson-plans/bulk_create/
+```json
+{
+  "created": [],
+  "created_count": 0,
+  "skipped_dates": [],
+  "skipped_off_days": [
+    { "date": "2026-06-03", "reason": "off_day" },
+    { "date": "2026-06-06", "reason": "saturday" }
+  ]
+}
+```
+
 ### GET /api/lms/assignments/
 ```json
 {

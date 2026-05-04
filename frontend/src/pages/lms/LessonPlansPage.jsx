@@ -1,7 +1,6 @@
-import { useState, useMemo, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { lmsApi, hrApi } from '../../services/api'
+import { lmsApi, hrApi, schoolsApi } from '../../services/api'
 import ClassSelector from '../../components/ClassSelector'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
@@ -12,7 +11,8 @@ import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/cla
 import { useToast } from '../../components/Toast'
 import TeacherScopeSummary from '../../components/teacher/TeacherScopeSummary'
 import TeacherScopeBadge, { TeacherScopeHint, useTeacherScopeLookup } from '../../components/teacher/TeacherScopeBadge'
-import LessonPlanWizard from './LessonPlanWizard'
+import BulkLessonPlansModal from './BulkLessonPlansModal'
+import { exportLessonPlansPDF } from './lessonPlansExportPdf'
 
 const STATUS_BADGES = {
   DRAFT: 'bg-gray-100 text-gray-800',
@@ -34,7 +34,6 @@ const EMPTY_FORM = {
 }
 
 export default function LessonPlansPage() {
-  const navigate = useNavigate()
   const { user, isSchoolAdmin, isTeacher } = useAuth()
   const { activeAcademicYear } = useAcademicYear()
   const { sessionClasses } = useSessionClasses(activeAcademicYear?.id)
@@ -42,10 +41,12 @@ export default function LessonPlansPage() {
   const { showError, showSuccess } = useToast()
 
   const [search, setSearch] = useState('')
+  const [exportDateFrom, setExportDateFrom] = useState('')
+  const [exportDateTo, setExportDateTo] = useState('')
   const [filterClass, setFilterClass] = useState('')
   const [filterSubject, setFilterSubject] = useState('')
   const [showModal, setShowModal] = useState(false)
-  const [showWizard, setShowWizard] = useState(false)
+  const [showBulkModal, setShowBulkModal] = useState(false)
   const [editingPlan, setEditingPlan] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [form, setForm] = useState({ ...EMPTY_FORM })
@@ -61,7 +62,7 @@ export default function LessonPlansPage() {
     })
     return map
   }, [sessionClasses])
-  const { classifyScope } = useTeacherScopeLookup({ academicYearId: activeAcademicYear?.id })
+  const { classifyScope, isTeacherEnabled } = useTeacherScopeLookup({ academicYearId: activeAcademicYear?.id })
 
   const {
     showAllOption,
@@ -75,6 +76,11 @@ export default function LessonPlansPage() {
   })
 
   // -- Data fetching --
+
+  const { data: schoolRes } = useQuery({
+    queryKey: ['currentSchool'],
+    queryFn: () => schoolsApi.getMySchool(),
+  })
 
   const { data: staffData } = useQuery({
     queryKey: ['hrStaff'],
@@ -99,8 +105,23 @@ export default function LessonPlansPage() {
   const plans = useMemo(() => {
     if (!search) return allPlans
     const q = search.toLowerCase()
-    return allPlans.filter((p) => p.title?.toLowerCase().includes(q))
+    return allPlans.filter(
+      (p) =>
+        p.title?.toLowerCase().includes(q) ||
+        p.description?.toLowerCase().includes(q)
+    )
   }, [allPlans, search])
+
+  const exportPlans = useMemo(() => {
+    if (!exportDateFrom || !exportDateTo || exportDateFrom > exportDateTo) return []
+    return plans
+      .filter((p) => p.lesson_date && p.lesson_date >= exportDateFrom && p.lesson_date <= exportDateTo)
+      .slice()
+      .sort((a, b) => String(a.lesson_date).localeCompare(String(b.lesson_date)))
+  }, [plans, exportDateFrom, exportDateTo])
+
+  const canDownloadExport =
+    Boolean(exportDateFrom && exportDateTo && exportDateFrom <= exportDateTo) && exportPlans.length > 0
 
   // -- Mutations --
 
@@ -239,6 +260,34 @@ export default function LessonPlansPage() {
     }
   }
 
+  const handleDownloadLessonPlansExport = async () => {
+    if (!exportDateFrom || !exportDateTo) {
+      showError('Select a start and end date to download.')
+      return
+    }
+    if (exportDateFrom > exportDateTo) {
+      showError('Start date must be on or before end date.')
+      return
+    }
+    if (exportPlans.length === 0) {
+      showError('No lesson plans in the selected date range for your current filters.')
+      return
+    }
+    try {
+      await exportLessonPlansPDF({
+        plans: exportPlans,
+        dateFrom: exportDateFrom,
+        dateTo: exportDateTo,
+        academicYearLabel: activeAcademicYear?.name || activeAcademicYear?.year_name || '',
+        schoolData: schoolRes?.data || null,
+      })
+      showSuccess(`Downloaded ${exportPlans.length} lesson plan(s) as PDF.`)
+    } catch (e) {
+      console.error(e)
+      showError('Could not generate the PDF. Try again or use a smaller date range.')
+    }
+  }
+
   return (
     <div>
       {/* Header */}
@@ -247,8 +296,8 @@ export default function LessonPlansPage() {
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Lesson Plans</h1>
           <p className="text-sm text-gray-600">Create and manage lesson plans for your classes</p>
         </div>
-        <button onClick={() => setShowWizard(true)} className="btn btn-primary">
-          Add Lesson Plan
+        <button type="button" onClick={() => setShowBulkModal(true)} className="btn btn-primary">
+          Add lesson plan
         </button>
       </div>
 
@@ -301,10 +350,53 @@ export default function LessonPlansPage() {
             <input
               type="text"
               className="input"
-              placeholder="Search by title..."
+              placeholder="Search by title or description..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
+          </div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4 mt-4 pt-4 border-t border-gray-100">
+          <div>
+            <label className="label">Download — from (lesson date)</label>
+            <input
+              type="date"
+              className="input"
+              value={exportDateFrom}
+              onChange={(e) => setExportDateFrom(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="label">Download — to (lesson date)</label>
+            <input
+              type="date"
+              className="input"
+              value={exportDateTo}
+              onChange={(e) => setExportDateTo(e.target.value)}
+            />
+          </div>
+          <div className="flex flex-col justify-end">
+            <button
+              type="button"
+              className="btn btn-secondary w-full sm:w-auto"
+              disabled={!canDownloadExport}
+              onClick={handleDownloadLessonPlansExport}
+              title={
+                !exportDateFrom || !exportDateTo
+                  ? 'Choose both dates to download full lesson plans in this range'
+                  : exportDateFrom > exportDateTo
+                  ? 'Start date must be on or before end date'
+                  : exportPlans.length === 0
+                  ? 'No plans in this range for current class/subject/search'
+                  : `Download ${exportPlans.length} plan(s) as PDF`
+              }
+            >
+              Download lesson plans (PDF)
+            </button>
+            <p className="text-xs text-gray-500 mt-1">
+              Pick a date range, then download a formatted PDF with full details for every plan in range
+              (respects class, subject, and search above).
+            </p>
           </div>
         </div>
         <TeacherScopeHint
@@ -372,10 +464,17 @@ export default function LessonPlansPage() {
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
                       <p className="font-medium text-sm text-gray-900 truncate">{plan.title}</p>
+                      {plan.description?.trim() && (
+                        <p className="text-xs text-gray-600 mt-0.5 line-clamp-2 whitespace-pre-wrap break-words">
+                          {plan.description.trim()}
+                        </p>
+                      )}
                       <p className="text-xs text-gray-500 mt-0.5">
                         {plan.class_name || 'N/A'} | {plan.subject_name || 'N/A'}
                       </p>
-                      <TeacherScopeBadge scope={classifyScope({ classId: plan.class_obj, subjectId: plan.subject })} className="mt-1" />
+                      {isTeacherEnabled && (
+                        <TeacherScopeBadge scope={classifyScope({ classId: plan.class_obj, subjectId: plan.subject })} className="mt-1" />
+                      )}
                       <p className="text-xs text-gray-500">
                         {formatDate(plan.lesson_date)} | {plan.duration_minutes || '--'} min
                       </p>
@@ -411,12 +510,6 @@ export default function LessonPlansPage() {
                       className="text-xs text-blue-600 font-medium"
                     >
                       Edit
-                    </button>
-                    <button
-                      onClick={() => navigate('/academics/paper-builder', { state: { lessonPlanId: plan.id } })}
-                      className="text-xs text-indigo-600 font-medium"
-                    >
-                      Create Paper
                     </button>
                     {plan.status === 'DRAFT' && (
                       <button
@@ -471,8 +564,13 @@ export default function LessonPlansPage() {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {plans.map((plan) => (
                     <tr key={plan.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 text-sm max-w-[250px]">
+                      <td className="px-4 py-3 text-sm max-w-[280px]">
                         <div className="font-medium text-gray-900 truncate">{plan.title}</div>
+                        {plan.description?.trim() && (
+                          <p className="text-xs text-gray-600 mt-0.5 line-clamp-2 whitespace-pre-wrap break-words">
+                            {plan.description.trim()}
+                          </p>
+                        )}
                         {plan.planned_topics?.length > 0 && (
                           <div className="flex flex-wrap gap-1 mt-1">
                             {plan.planned_topics.slice(0, 2).map((topic) => (
@@ -490,9 +588,11 @@ export default function LessonPlansPage() {
                             AI
                           </span>
                         )}
-                        <div className="mt-1">
-                          <TeacherScopeBadge scope={classifyScope({ classId: plan.class_obj, subjectId: plan.subject })} />
-                        </div>
+                        {isTeacherEnabled && (
+                          <div className="mt-1">
+                            <TeacherScopeBadge scope={classifyScope({ classId: plan.class_obj, subjectId: plan.subject })} />
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-500">
                         {plan.class_name || '--'}
@@ -524,12 +624,6 @@ export default function LessonPlansPage() {
                           className="text-sm text-blue-600 hover:text-blue-800 font-medium mr-3"
                         >
                           Edit
-                        </button>
-                        <button
-                          onClick={() => navigate('/academics/paper-builder', { state: { lessonPlanId: plan.id } })}
-                          className="text-sm text-indigo-600 hover:text-indigo-800 font-medium mr-3"
-                        >
-                          Create Paper
                         </button>
                         {plan.status === 'DRAFT' && (
                           <button
@@ -747,12 +841,11 @@ export default function LessonPlansPage() {
         </div>
       )}
 
-      {/* Lesson Plan Wizard (for new plans) */}
-      {showWizard && (
-        <LessonPlanWizard
-          onClose={() => setShowWizard(false)}
+      {showBulkModal && (
+        <BulkLessonPlansModal
+          onClose={() => setShowBulkModal(false)}
           onSuccess={() => {
-            setShowWizard(false)
+            setShowBulkModal(false)
             queryClient.invalidateQueries({ queryKey: ['lessonPlans'] })
           }}
         />

@@ -388,6 +388,7 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | GET/POST | /api/lms/topics/ | Topics. Params: chapter_id, book_id |
 | GET/POST | /api/lms/lesson-plans/ | Lesson plans. Params: class_id, subject_id, teacher_id, status, academic_year |
 | GET | /api/lms/lesson-plans/by_class/ | Params: class_id |
+| POST | /api/lms/lesson-plans/bulk_create/ | Bulk draft lesson plans for a date range. Body: date_from, date_to, skip_saturday, on_conflict (skip or error), school, class_obj, subject, teacher, optional academic_year, title_template (placeholder `{{date}}`), shared text/topic fields. Skips school OFF days (calendar + Sundays) and optionally Saturdays. Max 35 days. |
 | POST | /api/lms/lesson-plans/{id}/publish/ | Publish lesson plan |
 | POST | /api/lms/lesson-plans/generate/ | AI-generate lesson plan. Body: {topic_ids, lesson_date, duration_minutes} |
 | GET/POST | /api/lms/assignments/ | Assignments. Params: class_obj, subject, status, assignment_type. assignment_type values: HOMEWORK, DIARY, PROJECT, CLASSWORK, LAB. Body fields: requires_submission (bool, default true; auto-false for DIARY), due_date (required when requires_submission=true, nullable for DIARY) |

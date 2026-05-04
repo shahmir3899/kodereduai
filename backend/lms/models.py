@@ -222,6 +222,33 @@ class Topic(models.Model):
         return self.lesson_plans.filter(is_active=True).count()
 
 
+class SubTopic(models.Model):
+    """Fine-grained unit under a topic (e.g. section or activity) for lesson planning."""
+
+    topic = models.ForeignKey(
+        Topic,
+        on_delete=models.CASCADE,
+        related_name='subtopics',
+    )
+    title = models.CharField(max_length=300)
+    subtopic_number = models.PositiveIntegerField(
+        help_text='Ordering within the parent topic (1, 2, 3…)',
+    )
+    description = models.TextField(blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('topic', 'subtopic_number')
+        ordering = ['subtopic_number']
+        verbose_name = 'Sub-topic'
+        verbose_name_plural = 'Sub-topics'
+
+    def __str__(self):
+        return f"{self.topic.chapter.chapter_number}.{self.topic.topic_number}.{self.subtopic_number}: {self.title}"
+
+
 # ---------------------------------------------------------------------------
 # Lesson Plans & Assignments
 # ---------------------------------------------------------------------------
@@ -282,6 +309,12 @@ class LessonPlan(models.Model):
         related_name='lesson_plans',
         help_text='Topics planned for this lesson (from curriculum books)',
     )
+    planned_subtopics = models.ManyToManyField(
+        'lms.SubTopic',
+        blank=True,
+        related_name='lesson_plans',
+        help_text='Optional finer curriculum units linked to this lesson',
+    )
     display_text = models.TextField(
         blank=True,
         help_text='Pre-formatted topic display text, computed on save',
@@ -316,14 +349,24 @@ class LessonPlan(models.Model):
         return f"{self.title} - {self.class_obj.name} ({self.lesson_date})"
 
     def compute_display_text(self):
-        """Build pre-formatted text from planned topics, grouped by chapter."""
+        """Build pre-formatted text from planned topics and sub-topics, grouped by chapter."""
         if not self.pk:
             return ''
-        topics = self.planned_topics.select_related(
-            'chapter', 'chapter__book',
-        ).order_by('chapter__chapter_number', 'topic_number')
-        if not topics:
+        topics = list(
+            self.planned_topics.select_related('chapter', 'chapter__book').order_by(
+                'chapter__chapter_number', 'topic_number',
+            ),
+        )
+        subtopics = list(
+            self.planned_subtopics.select_related('topic', 'topic__chapter').order_by(
+                'topic__chapter__chapter_number', 'topic__topic_number', 'subtopic_number',
+            ),
+        )
+        if not topics and not subtopics:
             return ''
+        subs_by_topic = {}
+        for st in subtopics:
+            subs_by_topic.setdefault(st.topic_id, []).append(st)
         lines = []
         current_chapter = None
         for t in topics:
@@ -331,6 +374,8 @@ class LessonPlan(models.Model):
                 current_chapter = t.chapter
                 lines.append(f"Ch {t.chapter.chapter_number}: {t.chapter.title}")
             lines.append(f"  {t.chapter.chapter_number}.{t.topic_number} {t.title}")
+            for st in subs_by_topic.get(t.id, ()):
+                lines.append(f"      · {st.title}")
         self.display_text = '\n'.join(lines)
         self.save(update_fields=['display_text'])
         return self.display_text

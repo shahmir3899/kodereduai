@@ -56,6 +56,7 @@ Generate a detailed lesson plan with the following sections:
 def generate_lesson_plan(
     school, class_obj, subject, book, topics,
     lesson_date, duration_minutes=45,
+    subtopics=None,
 ):
     """
     Generate lesson plan content from selected topics using Groq LLM.
@@ -68,6 +69,7 @@ def generate_lesson_plan(
         topics: QuerySet of Topic instances
         lesson_date: date string (YYYY-MM-DD)
         duration_minutes: int
+        subtopics: optional QuerySet of SubTopic for finer curriculum focus
 
     Returns:
         dict with 'success' flag and generated content or error
@@ -83,13 +85,22 @@ def generate_lesson_plan(
 
         client = Groq(api_key=settings.GROQ_API_KEY)
 
-        # Format topics
+        # Format topics (and optional sub-topics)
         topics_lines = []
         for t in topics.select_related('chapter'):
             topics_lines.append(
                 f"- Ch {t.chapter.chapter_number}: {t.chapter.title} > "
                 f"Topic {t.topic_number}: {t.title}"
             )
+        if subtopics:
+            topics_lines.append('## Sub-topics (finer focus)')
+            for st in subtopics.select_related('topic', 'topic__chapter'):
+                ch = st.topic.chapter
+                topics_lines.append(
+                    f"  · Ch {ch.chapter_number}: {ch.title} > "
+                    f"Topic {st.topic.topic_number}: {st.topic.title} > "
+                    f"Sub-topic {st.subtopic_number}: {st.title}"
+                )
         topics_text = '\n'.join(topics_lines) or 'No specific topics selected'
 
         # Language instruction for RTL books

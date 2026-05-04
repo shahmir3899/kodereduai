@@ -17,16 +17,22 @@ const mockLmsBooks = [
         id: 1, book: 1, title: 'Algebra', chapter_number: 1,
         description: '', is_active: true, topic_count: 2,
         topics: [
-          { id: 1, chapter: 1, title: 'Variables', topic_number: 1, estimated_periods: 2, is_covered: true, is_active: true },
-          { id: 2, chapter: 1, title: 'Expressions', topic_number: 2, estimated_periods: 1, is_covered: false, is_active: true },
+          {
+            id: 1, chapter: 1, title: 'Variables', topic_number: 1, estimated_periods: 2, is_covered: true, is_active: true,
+            subtopics: [
+              { id: 101, topic: 1, title: 'Constants', subtopic_number: 1, is_active: true },
+              { id: 102, topic: 1, title: 'Coefficients', subtopic_number: 2, is_active: true },
+            ],
+          },
+          { id: 2, chapter: 1, title: 'Expressions', topic_number: 2, estimated_periods: 1, is_covered: false, is_active: true, subtopics: [] },
         ],
       },
       {
         id: 2, book: 1, title: 'Geometry', chapter_number: 2,
         description: '', is_active: true, topic_count: 2,
         topics: [
-          { id: 3, chapter: 2, title: 'Angles', topic_number: 1, estimated_periods: 3, is_covered: false, is_active: true },
-          { id: 4, chapter: 2, title: 'Triangles', topic_number: 2, estimated_periods: 2, is_covered: false, is_active: true },
+          { id: 3, chapter: 2, title: 'Angles', topic_number: 1, estimated_periods: 3, is_covered: false, is_active: true, subtopics: [] },
+          { id: 4, chapter: 2, title: 'Triangles', topic_number: 2, estimated_periods: 2, is_covered: false, is_active: true, subtopics: [] },
         ],
       },
     ],
@@ -46,7 +52,7 @@ const mockLmsBooks = [
         id: 3, book: 2, title: 'باب اول', chapter_number: 1,
         description: '', is_active: true, topic_count: 1,
         topics: [
-          { id: 5, chapter: 3, title: 'موضوع اول', topic_number: 1, estimated_periods: 2, is_covered: false, is_active: true },
+          { id: 5, chapter: 3, title: 'موضوع اول', topic_number: 1, estimated_periods: 2, is_covered: false, is_active: true, subtopics: [] },
         ],
       },
     ],
@@ -68,8 +74,9 @@ const mockLessonPlans = [
     materials_needed: 'Whiteboard, markers',
     teaching_methods: 'Direct instruction',
     planned_topics: [
-      { id: 1, chapter: 1, title: 'Variables', topic_number: 1, estimated_periods: 2, is_covered: true, is_active: true },
+      { id: 1, chapter: 1, title: 'Variables', topic_number: 1, estimated_periods: 2, is_covered: true, is_active: true, subtopics: [] },
     ],
+    planned_subtopics: [],
     display_text: 'Ch 1: Algebra\n  1.1 Variables',
     content_mode: 'TOPICS', ai_generated: false,
     status: 'DRAFT', status_display: 'Draft',
@@ -89,8 +96,9 @@ const mockLessonPlans = [
     materials_needed: 'Protractor, ruler',
     teaching_methods: 'Interactive demonstration',
     planned_topics: [
-      { id: 3, chapter: 2, title: 'Angles', topic_number: 1, estimated_periods: 3, is_covered: true, is_active: true },
+      { id: 3, chapter: 2, title: 'Angles', topic_number: 1, estimated_periods: 3, is_covered: true, is_active: true, subtopics: [] },
     ],
+    planned_subtopics: [],
     display_text: 'Ch 2: Geometry\n  2.1 Angles',
     content_mode: 'TOPICS', ai_generated: true,
     status: 'PUBLISHED', status_display: 'Published',
@@ -346,6 +354,13 @@ export const handlers = [
   }),
   http.delete('/api/lms/topics/:id/', () => new HttpResponse(null, { status: 204 })),
 
+  // LMS Sub-topics
+  http.get('/api/lms/subtopics/', () => HttpResponse.json({ count: 0, results: [] })),
+  http.post('/api/lms/subtopics/', async ({ request }) => {
+    const body = await request.json()
+    return HttpResponse.json({ id: 200, ...body }, { status: 201 })
+  }),
+
   // LMS Lesson Plans
   http.get('/api/lms/lesson-plans/', ({ request }) => {
     const url = new URL(request.url)
@@ -365,9 +380,29 @@ export const handlers = [
     return HttpResponse.json({
       id: 10, school: 1, school_name: 'Test School',
       status: body.status || 'DRAFT', status_display: body.status === 'PUBLISHED' ? 'Published' : 'Draft',
-      planned_topics: [], display_text: '', content_mode: body.content_mode || 'FREEFORM',
+      planned_topics: [], planned_subtopics: [], display_text: '', content_mode: body.content_mode || 'FREEFORM',
       ai_generated: body.ai_generated || false, attachments: [],
       ...body,
+    }, { status: 201 })
+  }),
+  http.post('/api/lms/lesson-plans/bulk_create/', async ({ request }) => {
+    const body = await request.json()
+    const created = [
+      {
+        id: 901,
+        title: `Lesson – ${body.date_from}`,
+        lesson_date: body.date_from,
+        class_obj: body.class_obj,
+        subject: body.subject,
+        status: 'DRAFT',
+        planned_topics: [],
+      },
+    ]
+    return HttpResponse.json({
+      created,
+      created_count: created.length,
+      skipped_dates: [],
+      skipped_off_days: [],
     }, { status: 201 })
   }),
   http.patch('/api/lms/lesson-plans/:id/', async ({ request, params }) => {

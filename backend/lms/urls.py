@@ -6,7 +6,7 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 
 from .views import (
-    BookViewSet, ChapterViewSet, TopicViewSet,
+    BookViewSet, ChapterViewSet, TopicViewSet, SubTopicViewSet,
     LessonPlanViewSet, AssignmentViewSet, AssignmentSubmissionViewSet,
     generate_lesson_plan_ai, generate_exam_questions_ai,
 )
@@ -15,6 +15,7 @@ router = DefaultRouter()
 router.register(r'books', BookViewSet, basename='book')
 router.register(r'chapters', ChapterViewSet, basename='chapter')
 router.register(r'topics', TopicViewSet, basename='topic')
+router.register(r'subtopics', SubTopicViewSet, basename='subtopic')
 router.register(r'lesson-plans', LessonPlanViewSet, basename='lesson-plan')
 router.register(r'assignments', AssignmentViewSet, basename='assignment')
 router.register(r'submissions', AssignmentSubmissionViewSet, basename='submission')

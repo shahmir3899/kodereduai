@@ -8,13 +8,32 @@ import RTLWrapper, { isRTLLanguage } from '../../components/RTLWrapper'
 import ClassSelector from '../../components/ClassSelector'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
+import LessonPlanAIModal from './LessonPlanAIModal'
+import { normalizeLessonPlanText } from './lessonPlanTextUtils'
 
 const STEPS = [
   { num: 1, label: 'Class & Date' },
   { num: 2, label: 'Topics' },
-  { num: 3, label: 'AI Generate' },
+  { num: 3, label: 'AI assistant' },
   { num: 4, label: 'Review & Save' },
 ]
+
+function collectChapterIds(chapter) {
+  const topicIds = []
+  const subtopicIds = []
+  for (const topic of chapter.topics || []) {
+    topicIds.push(topic.id)
+    for (const st of topic.subtopics || []) {
+      subtopicIds.push(st.id)
+    }
+  }
+  return { topicIds, subtopicIds }
+}
+
+function collectTopicIds(topic) {
+  const subtopicIds = (topic.subtopics || []).map((st) => st.id)
+  return { topicIds: [topic.id], subtopicIds }
+}
 
 export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
   const { activeSchool } = useAuth()
@@ -30,10 +49,12 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
   const [lessonDate, setLessonDate] = useState('')
   const [duration, setDuration] = useState(45)
   const [selectedTopicIds, setSelectedTopicIds] = useState([])
+  const [selectedSubtopicIds, setSelectedSubtopicIds] = useState([])
   const [expandedBooks, setExpandedBooks] = useState({})
   const [expandedChapters, setExpandedChapters] = useState({})
+  const [expandedTopics, setExpandedTopics] = useState({})
   const [wasAiGenerated, setWasAiGenerated] = useState(false)
-  const [aiLoading, setAiLoading] = useState(false)
+  const [showAIModal, setShowAIModal] = useState(false)
 
   const { sessionClasses } = useSessionClasses(activeAcademicYear?.id, activeSchool?.id)
   const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
@@ -70,8 +91,17 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
       setTeachingMethods(editingPlan.teaching_methods || '')
       setMaterialsNeeded(editingPlan.materials_needed || '')
       setWasAiGenerated(editingPlan.ai_generated || false)
-      if (editingPlan.planned_topic_ids?.length) {
+      if (editingPlan.planned_topics?.length) {
+        setSelectedTopicIds(editingPlan.planned_topics.map((t) => t.id))
+      } else if (editingPlan.planned_topic_ids?.length) {
         setSelectedTopicIds(editingPlan.planned_topic_ids)
+      } else {
+        setSelectedTopicIds([])
+      }
+      if (editingPlan.planned_subtopics?.length) {
+        setSelectedSubtopicIds(editingPlan.planned_subtopics.map((s) => s.id))
+      } else {
+        setSelectedSubtopicIds([])
       }
       if (editingPlan.title) {
         setStep(4)
@@ -101,6 +131,29 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
   const staff = staffData?.data?.results || staffData?.data || []
   const books = booksData?.data || booksData?.data?.results || []
 
+  const { topicMap, subtopicMap } = useMemo(() => {
+    const tMap = {}
+    const sMap = {}
+    if (!Array.isArray(books)) return { topicMap: tMap, subtopicMap: sMap }
+    books.forEach((book) => {
+      ;(book.chapters || []).forEach((chapter) => {
+        ;(chapter.topics || []).forEach((topic) => {
+          tMap[topic.id] = { ...topic, chapterName: chapter.title, bookTitle: book.title, language: book.language }
+          ;(topic.subtopics || []).forEach((st) => {
+            sMap[st.id] = {
+              ...st,
+              topicTitle: topic.title,
+              chapterName: chapter.title,
+              bookTitle: book.title,
+              language: book.language,
+            }
+          })
+        })
+      })
+    })
+    return { topicMap: tMap, subtopicMap: sMap }
+  }, [books])
+
   // Auto-populate teacher when subject is selected
   useEffect(() => {
     if (selectedSubject && classSubjects.length > 0) {
@@ -110,18 +163,6 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
       }
     }
   }, [selectedSubject, classSubjects])
-
-  // Build a flat map of all topics for lookup
-  const topicMap = {}
-  if (Array.isArray(books)) {
-    books.forEach((book) => {
-      (book.chapters || []).forEach((chapter) => {
-        (chapter.topics || []).forEach((topic) => {
-          topicMap[topic.id] = { ...topic, chapterName: chapter.title, bookTitle: book.title }
-        })
-      })
-    })
-  }
 
   // Mutations
   const createMutation = useMutation({
@@ -159,8 +200,8 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
   }
 
   const validateStep2 = () => {
-    if (mode === 'TOPICS' && selectedTopicIds.length === 0) {
-      showError('Please select at least one topic')
+    if (mode === 'TOPICS' && selectedTopicIds.length === 0 && selectedSubtopicIds.length === 0) {
+      showError('Please select at least one topic or sub-topic')
       return false
     }
     return true
@@ -184,9 +225,64 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
     setStep((s) => Math.max(s - 1, 1))
   }
 
-  const toggleTopic = (topicId) => {
-    setSelectedTopicIds((prev) =>
-      prev.includes(topicId) ? prev.filter((id) => id !== topicId) : [...prev, topicId]
+  const chapterFullySelected = (chapter) => {
+    const { topicIds, subtopicIds } = collectChapterIds(chapter)
+    if (topicIds.length === 0) return false
+    return (
+      topicIds.every((id) => selectedTopicIds.includes(id)) &&
+      subtopicIds.every((id) => selectedSubtopicIds.includes(id))
+    )
+  }
+
+  const toggleChapterSelection = (chapter) => {
+    const { topicIds, subtopicIds } = collectChapterIds(chapter)
+    const allOn = chapterFullySelected(chapter)
+    setSelectedTopicIds((prev) => {
+      const set = new Set(prev)
+      topicIds.forEach((id) => {
+        if (allOn) set.delete(id)
+        else set.add(id)
+      })
+      return Array.from(set)
+    })
+    setSelectedSubtopicIds((prev) => {
+      const set = new Set(prev)
+      subtopicIds.forEach((id) => {
+        if (allOn) set.delete(id)
+        else set.add(id)
+      })
+      return Array.from(set)
+    })
+  }
+
+  const topicFullySelected = (topic) => {
+    const { topicIds, subtopicIds } = collectTopicIds(topic)
+    const subsOk = subtopicIds.length === 0 || subtopicIds.every((id) => selectedSubtopicIds.includes(id))
+    return selectedTopicIds.includes(topicIds[0]) && subsOk
+  }
+
+  const toggleTopicBranch = (topic) => {
+    const { topicIds, subtopicIds } = collectTopicIds(topic)
+    const allOn = topicFullySelected(topic)
+    setSelectedTopicIds((prev) => {
+      const set = new Set(prev)
+      if (allOn) set.delete(topicIds[0])
+      else set.add(topicIds[0])
+      return Array.from(set)
+    })
+    setSelectedSubtopicIds((prev) => {
+      const set = new Set(prev)
+      subtopicIds.forEach((id) => {
+        if (allOn) set.delete(id)
+        else set.add(id)
+      })
+      return Array.from(set)
+    })
+  }
+
+  const toggleSubtopic = (subtopicId) => {
+    setSelectedSubtopicIds((prev) =>
+      prev.includes(subtopicId) ? prev.filter((id) => id !== subtopicId) : [...prev, subtopicId],
     )
   }
 
@@ -198,36 +294,22 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
     setExpandedChapters((prev) => ({ ...prev, [chapterId]: !prev[chapterId] }))
   }
 
-  const handleAIGenerate = async () => {
-    setAiLoading(true)
-    try {
-      const res = await lmsApi.generateLessonPlan({
-        topic_ids: selectedTopicIds,
-        lesson_date: lessonDate,
-        duration_minutes: duration,
-      })
-      const data = res.data
-      if (data.success !== false) {
-        setTitle(data.title || '')
-        setObjectives(data.objectives || '')
-        setDescription(data.description || '')
-        setTeachingMethods(data.teaching_methods || '')
-        setMaterialsNeeded(data.materials_needed || '')
-        setWasAiGenerated(true)
-        showSuccess('AI lesson plan generated!')
-        setStep(4)
-      } else {
-        showError('AI generation failed. You can write the plan manually.')
-      }
-    } catch (err) {
-      showError(err.response?.data?.detail || 'AI generation failed. You can write the plan manually.')
-    } finally {
-      setAiLoading(false)
-    }
+  const toggleTopicExpand = (topicId) => {
+    setExpandedTopics((prev) => ({ ...prev, [topicId]: !prev[topicId] }))
+  }
+
+  const applyAIGeneratedFields = (fields) => {
+    setTitle(normalizeLessonPlanText(fields.title))
+    setObjectives(normalizeLessonPlanText(fields.objectives))
+    setDescription(normalizeLessonPlanText(fields.description))
+    setTeachingMethods(normalizeLessonPlanText(fields.teaching_methods))
+    setMaterialsNeeded(normalizeLessonPlanText(fields.materials_needed))
+    setWasAiGenerated(true)
+    setStep(4)
   }
 
   const handleSave = (status) => {
-    if (!title.trim()) {
+    if (!normalizeLessonPlanText(title)) {
       showError('Title is required')
       return
     }
@@ -239,14 +321,15 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
       teacher: selectedTeacher ? parseInt(selectedTeacher) : null,
       lesson_date: lessonDate,
       duration_minutes: parseInt(duration) || 45,
-      title: title.trim(),
-      description: description.trim(),
-      objectives: objectives.trim(),
-      teaching_methods: teachingMethods.trim(),
-      materials_needed: materialsNeeded.trim(),
+      title: normalizeLessonPlanText(title),
+      description: normalizeLessonPlanText(description),
+      objectives: normalizeLessonPlanText(objectives),
+      teaching_methods: normalizeLessonPlanText(teachingMethods),
+      materials_needed: normalizeLessonPlanText(materialsNeeded),
       content_mode: mode === 'TOPICS' ? 'TOPICS' : 'FREEFORM',
       ai_generated: wasAiGenerated,
       planned_topic_ids: selectedTopicIds,
+      planned_subtopic_ids: selectedSubtopicIds,
       status,
     }
 
@@ -415,11 +498,11 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
           </div>
         )}
 
-        {/* Step 2: Topic Selection */}
+        {/* Step 2: Curriculum (chapter → topic → sub-topic) */}
         {step === 2 && mode === 'TOPICS' && (
           <div className="space-y-4">
             <p className="text-sm font-medium text-gray-700">
-              Select topics for this lesson plan
+              Select chapter, topics, and optional sub-topics. Use the chapter checkbox to grab the whole branch.
             </p>
 
             {booksLoading ? (
@@ -438,7 +521,14 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
               </div>
             ) : (
               <div className="border border-gray-200 rounded-lg max-h-80 overflow-y-auto divide-y divide-gray-100">
-                {books.map((book) => (
+                {books.map((book) => {
+                  const topicCount = (book.chapters || []).reduce((sum, ch) => sum + (ch.topics?.length || 0), 0)
+                  const subCount = (book.chapters || []).reduce(
+                    (sum, ch) =>
+                      sum + (ch.topics || []).reduce((s2, t) => s2 + (t.subtopics?.length || 0), 0),
+                    0,
+                  )
+                  return (
                   <div key={book.id}>
                     <button
                       type="button"
@@ -462,65 +552,133 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
                         )}
                       </div>
                       <span className="text-xs text-gray-400">
-                        {(book.chapters || []).reduce((sum, ch) => sum + (ch.topics?.length || 0), 0)} topics
+                        {topicCount} topics{subCount ? ` · ${subCount} sub-topics` : ''}
                       </span>
                     </button>
 
                     {expandedBooks[book.id] && (book.chapters || []).map((chapter) => (
-                      <div key={chapter.id} className="ml-4 border-l border-gray-200">
-                        <button
-                          type="button"
-                          onClick={() => toggleChapter(chapter.id)}
-                          className="w-full flex items-center gap-2 px-4 py-2 hover:bg-gray-50 text-left"
-                        >
-                          <svg
-                            className={`w-3 h-3 text-gray-400 transition-transform ${expandedChapters[chapter.id] ? 'rotate-90' : ''}`}
-                            fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                      <div key={chapter.id} className="ml-3 border-l border-gray-200 pl-1">
+                        <div className="flex items-stretch hover:bg-gray-50">
+                          <label className="flex items-center gap-2 px-2 py-2 cursor-pointer shrink-0">
+                            <input
+                              type="checkbox"
+                              checked={chapterFullySelected(chapter)}
+                              onChange={() => toggleChapterSelection(chapter)}
+                              className="rounded border-gray-300 text-primary-600"
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => toggleChapter(chapter.id)}
+                            className="flex-1 flex items-center gap-2 py-2 pr-2 text-left text-sm text-gray-700"
                           >
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                          </svg>
-                          <span className="text-sm text-gray-700">{chapter.title}</span>
-                          <span className="text-xs text-gray-400">({(chapter.topics || []).length})</span>
-                        </button>
+                            <span className="text-gray-400">{expandedChapters[chapter.id] ? '▼' : '▶'}</span>
+                            <span className="font-medium">{chapter.title}</span>
+                            <span className="text-xs text-gray-400">({(chapter.topics || []).length})</span>
+                          </button>
+                        </div>
 
-                        {expandedChapters[chapter.id] && (chapter.topics || []).map((topic) => (
-                          <RTLWrapper key={topic.id} language={book.language}>
-                            <label className="flex items-center gap-3 px-6 py-1.5 hover:bg-gray-50 cursor-pointer ml-4">
-                              <input
-                                type="checkbox"
-                                checked={selectedTopicIds.includes(topic.id)}
-                                onChange={() => toggleTopic(topic.id)}
-                                className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                              />
-                              <span className="text-sm text-gray-600">{topic.title}</span>
-                            </label>
-                          </RTLWrapper>
-                        ))}
+                        {expandedChapters[chapter.id] && (chapter.topics || []).map((topic) => {
+                          const subs = topic.subtopics || []
+                          const hasSubs = subs.length > 0
+                          return (
+                            <div key={topic.id} className="ml-4 border-l border-gray-100">
+                              <div className="flex items-stretch hover:bg-gray-50">
+                                <label className="flex items-center gap-2 px-2 py-1.5 cursor-pointer shrink-0">
+                                  <input
+                                    type="checkbox"
+                                    checked={topicFullySelected(topic)}
+                                    onChange={() => toggleTopicBranch(topic)}
+                                    className="rounded border-gray-300 text-primary-600"
+                                  />
+                                </label>
+                                <div className="flex-1 flex items-center min-w-0">
+                                  {hasSubs ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleTopicExpand(topic.id)}
+                                      className="flex items-center gap-1 py-1.5 text-left text-sm text-gray-700 flex-1"
+                                    >
+                                      <span className="text-gray-400 text-xs">{expandedTopics[topic.id] ? '▼' : '▶'}</span>
+                                      <RTLWrapper language={book.language}>
+                                        <span className="truncate">{topic.title}</span>
+                                      </RTLWrapper>
+                                      <span className="text-xs text-gray-400 shrink-0">{subs.length} sub</span>
+                                    </button>
+                                  ) : (
+                                    <RTLWrapper language={book.language}>
+                                      <span className="text-sm text-gray-700 py-1.5 pl-1">{topic.title}</span>
+                                    </RTLWrapper>
+                                  )}
+                                </div>
+                              </div>
+                              {hasSubs && expandedTopics[topic.id] && (
+                                <div className="ml-6 border-l border-gray-100 pb-1">
+                                  {subs.map((st) => (
+                                    <RTLWrapper key={st.id} language={book.language}>
+                                      <label className="flex items-center gap-2 px-3 py-1 hover:bg-gray-50 cursor-pointer text-sm">
+                                        <input
+                                          type="checkbox"
+                                          checked={selectedSubtopicIds.includes(st.id)}
+                                          onChange={() => toggleSubtopic(st.id)}
+                                          className="rounded border-gray-300 text-primary-600"
+                                        />
+                                        <span className="text-gray-700">{st.title}</span>
+                                      </label>
+                                    </RTLWrapper>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
                       </div>
                     ))}
                   </div>
-                ))}
+                  )
+                })}
               </div>
             )}
 
-            {selectedTopicIds.length > 0 && (
+            {(selectedTopicIds.length > 0 || selectedSubtopicIds.length > 0) && (
               <div>
                 <p className="text-sm font-medium text-gray-700 mb-2">
-                  Selected topics ({selectedTopicIds.length})
+                  Selected: {selectedTopicIds.length} topic(s), {selectedSubtopicIds.length} sub-topic(s)
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {selectedTopicIds.map((id) => {
                     const topic = topicMap[id]
                     return (
                       <span
-                        key={id}
+                        key={`t-${id}`}
                         className="inline-flex items-center gap-1 bg-primary-50 text-primary-700 text-xs px-2.5 py-1 rounded-full"
                       >
                         {topic?.title || `Topic #${id}`}
                         <button
                           type="button"
-                          onClick={() => toggleTopic(id)}
+                          onClick={() => {
+                            const t = topicMap[id]
+                            if (t) toggleTopicBranch(t)
+                          }}
                           className="text-primary-400 hover:text-primary-600 ml-0.5"
+                        >
+                          &times;
+                        </button>
+                      </span>
+                    )
+                  })}
+                  {selectedSubtopicIds.map((id) => {
+                    const st = subtopicMap[id]
+                    return (
+                      <span
+                        key={`s-${id}`}
+                        className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-800 text-xs px-2.5 py-1 rounded-full"
+                      >
+                        {st?.title || `Sub #${id}`}
+                        <button
+                          type="button"
+                          onClick={() => toggleSubtopic(id)}
+                          className="text-indigo-400 hover:text-indigo-600 ml-0.5"
                         >
                           &times;
                         </button>
@@ -533,12 +691,12 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
           </div>
         )}
 
-        {/* Step 3: AI Generate */}
+        {/* Step 3: AI assistant (opens modal — one API call per generation) */}
         {step === 3 && (
           <div className="space-y-6">
-            {mode === 'TOPICS' && selectedTopicIds.length > 0 && (
+            {mode === 'TOPICS' && (selectedTopicIds.length > 0 || selectedSubtopicIds.length > 0) && (
               <div>
-                <p className="text-sm font-medium text-gray-700 mb-2">Selected Topics</p>
+                <p className="text-sm font-medium text-gray-700 mb-2">Selected curriculum (sent to AI)</p>
                 <div className="bg-gray-50 rounded-lg p-3 space-y-1 max-h-40 overflow-y-auto">
                   {selectedTopicIds.map((id) => {
                     const topic = topicMap[id]
@@ -551,36 +709,44 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
                       </div>
                     )
                   })}
+                  {selectedSubtopicIds.map((id) => {
+                    const st = subtopicMap[id]
+                    return (
+                      <div key={`s-${id}`} className="text-sm text-gray-600 flex items-center gap-2">
+                        <svg className="w-3 h-3 text-indigo-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                        <span>{st?.title || `Sub-topic #${id}`}</span>
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             )}
 
-            <div className="text-center py-6">
-              <button
-                type="button"
-                onClick={handleAIGenerate}
-                disabled={aiLoading}
-                className="inline-flex items-center gap-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-8 py-3 rounded-lg font-medium text-base hover:from-purple-700 hover:to-indigo-700 transition-all disabled:opacity-50 shadow-lg"
-              >
-                {aiLoading ? (
-                  <>
-                    <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />
-                    Generating...
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                        d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
-                    </svg>
-                    Generate with AI
-                  </>
-                )}
-              </button>
-              <p className="text-xs text-gray-500 mt-3">
-                AI will generate a lesson plan based on your selected {mode === 'TOPICS' ? 'topics' : 'inputs'} and date.
+            {mode === 'TOPICS' && (selectedTopicIds.length > 0 || selectedSubtopicIds.length > 0) ? (
+              <div className="text-center py-4">
+                <button
+                  type="button"
+                  onClick={() => setShowAIModal(true)}
+                  className="inline-flex items-center gap-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-8 py-3 rounded-lg font-medium text-base hover:from-purple-700 hover:to-indigo-700 transition-all shadow-lg"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                  </svg>
+                  Open AI generator
+                </button>
+                <p className="text-xs text-gray-500 mt-3 max-w-md mx-auto">
+                  Opens a short dialog: your topics and lesson date are sent to the model in one request. You can run it
+                  again from here if you change topics (each run is a separate call).
+                </p>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-600 text-center py-4">
+                Free-form mode does not use topic-based AI. Continue to the next step to write the plan manually.
               </p>
-            </div>
+            )}
 
             <div className="text-center">
               <button
@@ -588,7 +754,7 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
                 onClick={() => setStep(4)}
                 className="text-sm text-gray-500 hover:text-gray-700 underline"
               >
-                Skip AI -- Write Manually
+                Skip AI — write manually in review
               </button>
             </div>
           </div>
@@ -652,9 +818,11 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
               />
             </div>
 
-            {selectedTopicIds.length > 0 && (
+            {(selectedTopicIds.length > 0 || selectedSubtopicIds.length > 0) && (
               <div>
-                <label className="label mb-2">Linked Topics ({selectedTopicIds.length})</label>
+                <label className="label mb-2">
+                  Linked curriculum ({selectedTopicIds.length} topics, {selectedSubtopicIds.length} sub-topics)
+                </label>
                 <div className="flex flex-wrap gap-2">
                   {selectedTopicIds.map((id) => {
                     const topic = topicMap[id]
@@ -664,6 +832,17 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
                         className="inline-flex items-center bg-gray-100 text-gray-700 text-xs px-2.5 py-1 rounded-full"
                       >
                         {topic?.title || `Topic #${id}`}
+                      </span>
+                    )
+                  })}
+                  {selectedSubtopicIds.map((id) => {
+                    const st = subtopicMap[id]
+                    return (
+                      <span
+                        key={`s-${id}`}
+                        className="inline-flex items-center bg-indigo-50 text-indigo-800 text-xs px-2.5 py-1 rounded-full"
+                      >
+                        {st?.title || `Sub #${id}`}
                       </span>
                     )
                   })}
@@ -721,6 +900,16 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
           </div>
         </div>
       </div>
+
+      <LessonPlanAIModal
+        open={showAIModal}
+        onClose={() => setShowAIModal(false)}
+        topicIds={selectedTopicIds}
+        subtopicIds={selectedSubtopicIds}
+        lessonDate={lessonDate}
+        durationMinutes={parseInt(duration, 10) || 45}
+        onApply={applyAIGeneratedFields}
+      />
     </div>
   )
 }

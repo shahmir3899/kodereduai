@@ -54,7 +54,7 @@ describe('LessonPlansPage', () => {
     it('renders header with Add button', async () => {
       renderWithProviders(<LessonPlansPage />)
       expect(screen.getByText('Lesson Plans')).toBeInTheDocument()
-      expect(screen.getByText('Add Lesson Plan')).toBeInTheDocument()
+      expect(screen.getByText('Add lesson plan')).toBeInTheDocument()
     })
 
     it('renders filters', async () => {
@@ -62,7 +62,7 @@ describe('LessonPlansPage', () => {
       // Class selector
       expect(screen.getByTestId('class-selector')).toBeInTheDocument()
       // Search input
-      expect(screen.getByPlaceholderText('Search by title...')).toBeInTheDocument()
+      expect(screen.getByPlaceholderText('Search by title or description...')).toBeInTheDocument()
     })
   })
 
@@ -107,12 +107,11 @@ describe('LessonPlansPage', () => {
   })
 
   describe('Actions', () => {
-    it('Add button shows wizard', async () => {
+    it('Add button opens bulk lesson plans modal', async () => {
       renderWithProviders(<LessonPlansPage />)
-      fireEvent.click(screen.getByText('Add Lesson Plan'))
+      fireEvent.click(screen.getByText('Add lesson plan'))
       await waitFor(() => {
-        // Wizard should appear with step content
-        expect(screen.getByText('Class & Date')).toBeInTheDocument()
+        expect(screen.getByText('Bulk lesson plans')).toBeInTheDocument()
       })
     })
   })
@@ -123,7 +122,7 @@ describe('LessonPlansPage', () => {
       await waitFor(() => {
         expect(screen.getAllByText('Introduction to Algebra').length).toBeGreaterThanOrEqual(1)
       }, WAIT_OPTS)
-      const searchInput = screen.getByPlaceholderText('Search by title...')
+      const searchInput = screen.getByPlaceholderText('Search by title or description...')
       fireEvent.change(searchInput, { target: { value: 'Geometry' } })
       await waitFor(() => {
         expect(screen.queryByText('Introduction to Algebra')).not.toBeInTheDocument()
@@ -144,7 +143,7 @@ describe('LessonPlansPage', () => {
       )
       renderWithProviders(<LessonPlansPage />)
       await waitFor(() => {
-        expect(screen.getByText(/No lesson plans found/)).toBeInTheDocument()
+        expect(screen.getByText(/No lesson plans yet/)).toBeInTheDocument()
       }, WAIT_OPTS)
     })
   })

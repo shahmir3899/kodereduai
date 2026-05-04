@@ -969,6 +969,12 @@ export const lmsApi = {
   updateTopic: (id, data) => api.patch(`/api/lms/topics/${id}/`, data),
   deleteTopic: (id) => api.delete(`/api/lms/topics/${id}/`),
 
+  // Sub-topics (under topics)
+  getSubtopics: (params) => api.get('/api/lms/subtopics/', { params }),
+  createSubtopic: (data) => api.post('/api/lms/subtopics/', data),
+  updateSubtopic: (id, data) => api.patch(`/api/lms/subtopics/${id}/`, data),
+  deleteSubtopic: (id) => api.delete(`/api/lms/subtopics/${id}/`),
+
   // AI Generation
   generateLessonPlan: (data) => api.post('/api/lms/generate-lesson-plan/', data),
 
@@ -979,6 +985,7 @@ export const lmsApi = {
   updateLessonPlan: (id, data) => api.patch(`/api/lms/lesson-plans/${id}/`, data),
   deleteLessonPlan: (id) => api.delete(`/api/lms/lesson-plans/${id}/`),
   publishLessonPlan: (id) => api.post(`/api/lms/lesson-plans/${id}/publish/`),
+  bulkCreateLessonPlans: (data) => api.post('/api/lms/lesson-plans/bulk_create/', data),
 
   // Assignments
   getAssignments: (params) => api.get('/api/lms/assignments/', { params }),

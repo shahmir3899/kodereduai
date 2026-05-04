@@ -106,35 +106,16 @@ describe('AssignmentsPage', () => {
     })
   })
 
-  describe('Create / Edit modal — DIARY behaviour', () => {
-    it('auto-hides due-date and unchecks requires_submission when DIARY is selected', async () => {
+  describe('Create / Edit modal — assignment type', () => {
+    it('does not offer DIARY in assignment type when creating (diary uses Create Daily Diary)', async () => {
       renderWithProviders(<AssignmentsPage />)
 
-      // Open the create modal
       fireEvent.click(screen.getByText('Create Assignment'))
       expect(screen.getByText('Create Assignment', { selector: 'h2' })).toBeInTheDocument()
 
-      // Change type to DIARY
       const typeSelect = screen.getByDisplayValue('HOMEWORK')
-      fireEvent.change(typeSelect, { target: { value: 'DIARY' } })
-
-      // Due date input should be disabled
-      await waitFor(() => {
-        const dueDateInputEl = document.querySelector('input[type="date"]')
-        expect(dueDateInputEl).toBeTruthy()
-        expect(dueDateInputEl.disabled).toBe(true)
-      }, WAIT)
-
-      // "No due date for diary entries" hint should appear
-      expect(screen.getByText('No due date for diary entries.')).toBeInTheDocument()
-
-      // The requires_submission toggle should NOT be shown for DIARY
-      expect(screen.queryByText('Require student submission')).not.toBeInTheDocument()
-
-      // The DIARY type description should appear
-      expect(
-        screen.getAllByText(/Read-only for students/).length
-      ).toBeGreaterThan(0)
+      const values = Array.from(typeSelect.querySelectorAll('option')).map((o) => o.value)
+      expect(values).not.toContain('DIARY')
     })
 
     it('shows requires_submission toggle for non-DIARY types', async () => {

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { academicsApi, lmsApi, hrApi } from '../../services/api'
@@ -11,6 +11,7 @@ import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/cla
 import { useToast } from '../../components/Toast'
 import TeacherScopeSummary from '../../components/teacher/TeacherScopeSummary'
 import TeacherScopeBadge, { TeacherScopeHint, useTeacherScopeLookup } from '../../components/teacher/TeacherScopeBadge'
+import LessonPlanTopicsPickerModal from './LessonPlanTopicsPickerModal'
 
 const STATUS_BADGES = {
   DRAFT: 'bg-gray-100 text-gray-800',
@@ -35,6 +36,8 @@ const TYPE_DESCRIPTIONS = {
 }
 
 const ASSIGNMENT_TYPES = ['HOMEWORK', 'DIARY', 'PROJECT', 'CLASSWORK', 'LAB']
+/** DIARY is created via "Create Daily Diary", not the single-assignment form (except when editing an existing diary). */
+const ASSIGNMENT_TYPES_SINGLE_FORM = ASSIGNMENT_TYPES.filter((t) => t !== 'DIARY')
 const STATUSES = ['DRAFT', 'PUBLISHED', 'CLOSED']
 
 const EMPTY_FORM = {
@@ -54,8 +57,10 @@ const EMPTY_FORM = {
 
 const EMPTY_BULK_DIARY_FORM = {
   class_obj: '',
-  details: '',
+  diary_date: '',
 }
+
+const defaultDiaryDateString = () => new Date().toISOString().slice(0, 10)
 
 export default function AssignmentsPage() {
   const { user, isSchoolAdmin, isPrincipal, isTeacher } = useAuth()
@@ -76,6 +81,11 @@ export default function AssignmentsPage() {
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [form, setForm] = useState({ ...EMPTY_FORM })
   const [bulkDiaryForm, setBulkDiaryForm] = useState({ ...EMPTY_BULK_DIARY_FORM })
+  const [bulkDiarySubjectDetails, setBulkDiarySubjectDetails] = useState({})
+  const [bulkDiaryCurriculumPicker, setBulkDiaryCurriculumPicker] = useState({
+    open: false,
+    subjectId: null,
+  })
   const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
   const resolvedFilterClass = getResolvedMasterClassId(filterClass, activeAcademicYear?.id, sessionClasses)
   const resolvedFormClassObj = getResolvedMasterClassId(form.class_obj, activeAcademicYear?.id, sessionClasses)
@@ -93,8 +103,9 @@ export default function AssignmentsPage() {
   }, [sessionClasses])
   const { classifyScope } = useTeacherScopeLookup({ academicYearId: activeAcademicYear?.id })
   const canCreateAssignments = isSchoolAdmin || isPrincipal
+  const canCreateDailyDiary = isSchoolAdmin || isPrincipal || isTeacher
 
-  const { data: classTeacherScopeRes } = useQuery({
+  const { data: classTeacherScopeRes, isLoading: classTeacherScopeLoading } = useQuery({
     queryKey: ['myClassTeacherAssignments', activeAcademicYear?.id],
     queryFn: () => academicsApi.getMyClassTeacherAssignments(),
     enabled: isTeacher,
@@ -131,6 +142,13 @@ export default function AssignmentsPage() {
   }, [classTeacherScopeRes?.data, classSelectorScope, isTeacher])
 
   const classOptionsForFilters = isTeacher ? teacherScopedClassOptions : undefined
+  /** Daily diary modal: admins see all classes; teachers only their assignments. */
+  const dailyDiaryClassOptions = isTeacher ? teacherScopedClassOptions : undefined
+
+  const teacherDailyDiaryPrefillClassId = useMemo(() => {
+    if (!isTeacher || teacherScopedClassOptions.length !== 1) return ''
+    return String(teacherScopedClassOptions[0].id)
+  }, [isTeacher, teacherScopedClassOptions])
 
   // -- Data fetching --
 
@@ -177,6 +195,38 @@ export default function AssignmentsPage() {
         name: row.subject_name || `Subject #${row.subject}`,
       }))
   }, [bulkClassSubjectsRes?.data])
+
+  const bulkDiarySubjectIdsKey = useMemo(
+    () => bulkDiarySubjects.map((s) => String(s.id)).sort().join('|'),
+    [bulkDiarySubjects],
+  )
+
+  useEffect(() => {
+    if (!bulkDiaryForm.class_obj) {
+      setBulkDiarySubjectDetails({})
+      return
+    }
+    setBulkDiarySubjectDetails((prev) => {
+      const next = {}
+      bulkDiarySubjects.forEach((s) => {
+        const k = String(s.id)
+        next[k] = prev[k] ?? ''
+      })
+      return next
+    })
+  }, [bulkDiaryForm.class_obj, bulkDiarySubjectIdsKey])
+
+  useEffect(() => {
+    if (!showBulkDiaryModal || !isTeacher || !teacherDailyDiaryPrefillClassId) return
+    setBulkDiaryForm((prev) => {
+      if (prev.class_obj) return prev
+      return {
+        ...prev,
+        class_obj: teacherDailyDiaryPrefillClassId,
+        diary_date: prev.diary_date || defaultDiaryDateString(),
+      }
+    })
+  }, [showBulkDiaryModal, isTeacher, teacherDailyDiaryPrefillClassId])
 
   // Client-side search
   const assignments = useMemo(() => {
@@ -254,24 +304,26 @@ export default function AssignmentsPage() {
   })
 
   const bulkDiaryMutation = useMutation({
-    mutationFn: async ({ classId, details, subjects }) => {
-      const trimmedDetails = details.trim()
-      const normalizedDate = new Date().toISOString().slice(0, 10)
+    mutationFn: async ({ classId, entries, diaryDate }) => {
+      const normalizedDate = (diaryDate || '').trim() || defaultDiaryDateString()
 
-      const payloads = subjects.map((subject) => ({
-        class_obj: parseInt(classId, 10),
-        subject: parseInt(subject.id, 10),
-        title: `${subject.name} Diary - ${normalizedDate}`,
-        description: trimmedDetails,
-        instructions: trimmedDetails,
-        assignment_type: 'DIARY',
-        requires_submission: false,
-        due_date: '',
-        total_marks: 0,
-        attachments_allowed: false,
-        status: 'DRAFT',
-        ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
-      }))
+      const payloads = entries.map(({ subject, details }) => {
+        const trimmed = details.trim()
+        return {
+          class_obj: parseInt(classId, 10),
+          subject: parseInt(subject.id, 10),
+          title: `${subject.name} Diary - ${normalizedDate}`,
+          description: trimmed,
+          instructions: trimmed,
+          assignment_type: 'DIARY',
+          requires_submission: false,
+          due_date: normalizedDate,
+          total_marks: 0,
+          attachments_allowed: false,
+          status: 'DRAFT',
+          ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
+        }
+      })
 
       return Promise.all(payloads.map((payload) => lmsApi.createAssignment(payload)))
     },
@@ -279,13 +331,14 @@ export default function AssignmentsPage() {
       queryClient.invalidateQueries({ queryKey: ['assignments'] })
       setShowBulkDiaryModal(false)
       setBulkDiaryForm({ ...EMPTY_BULK_DIARY_FORM })
-      showSuccess(`Bulk diary created for ${variables.subjects.length} subjects`) 
+      setBulkDiarySubjectDetails({})
+      showSuccess(`Daily diary created for ${variables.entries.length} subject(s)`)
     },
     onError: (error) => {
       showError(
         error.response?.data?.detail ||
         error.response?.data?.non_field_errors?.[0] ||
-        'Failed to create bulk diary'
+        'Failed to create daily diary'
       )
     },
   })
@@ -328,13 +381,25 @@ export default function AssignmentsPage() {
   }
 
   const openBulkDiaryModal = () => {
-    setBulkDiaryForm({ ...EMPTY_BULK_DIARY_FORM })
+    const prefillClass =
+      isTeacher && teacherScopedClassOptions.length === 1
+        ? String(teacherScopedClassOptions[0].id)
+        : ''
+    setBulkDiaryForm({
+      ...EMPTY_BULK_DIARY_FORM,
+      diary_date: defaultDiaryDateString(),
+      ...(prefillClass ? { class_obj: prefillClass } : {}),
+    })
+    setBulkDiarySubjectDetails({})
+    setBulkDiaryCurriculumPicker({ open: false, subjectId: null })
     setShowBulkDiaryModal(true)
   }
 
   const closeBulkDiaryModal = () => {
     setShowBulkDiaryModal(false)
     setBulkDiaryForm({ ...EMPTY_BULK_DIARY_FORM })
+    setBulkDiarySubjectDetails({})
+    setBulkDiaryCurriculumPicker({ open: false, subjectId: null })
   }
 
   const handleSubmit = () => {
@@ -376,8 +441,8 @@ export default function AssignmentsPage() {
       showError('Please select a class')
       return
     }
-    if (!bulkDiaryForm.details.trim()) {
-      showError('Please enter diary or homework details')
+    if (!bulkDiaryForm.diary_date?.trim()) {
+      showError('Please select a diary date')
       return
     }
     if (!bulkDiarySubjects.length) {
@@ -385,10 +450,33 @@ export default function AssignmentsPage() {
       return
     }
 
+    const entries = bulkDiarySubjects
+      .map((subject) => ({
+        subject,
+        details: (bulkDiarySubjectDetails[String(subject.id)] || '').trim(),
+      }))
+      .filter((row) => row.details.length > 0)
+
+    if (!entries.length) {
+      showError('Enter diary or homework text for at least one subject (manually or from curriculum)')
+      return
+    }
+
     bulkDiaryMutation.mutate({
       classId: resolvedBulkDiaryClassObj,
-      details: bulkDiaryForm.details,
-      subjects: bulkDiarySubjects,
+      entries,
+      diaryDate: bulkDiaryForm.diary_date.trim(),
+    })
+  }
+
+  const appendCurriculumToSubject = (subjectId, curriculumSummary) => {
+    const addition = (curriculumSummary || '').trim()
+    if (!addition) return
+    const key = String(subjectId)
+    setBulkDiarySubjectDetails((prev) => {
+      const cur = (prev[key] || '').trim()
+      const sep = cur ? '\n\n' : ''
+      return { ...prev, [key]: `${cur}${sep}${addition}` }
     })
   }
 
@@ -423,9 +511,9 @@ export default function AssignmentsPage() {
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
-          {canCreateAssignments && (
+          {canCreateDailyDiary && (
             <button onClick={openBulkDiaryModal} className="btn btn-secondary">
-              Create Bulk Diary
+              Create Daily Diary
             </button>
           )}
           <button onClick={openAddModal} className="btn btn-primary">
@@ -600,8 +688,16 @@ export default function AssignmentsPage() {
                     </div>
                   </div>
                   <div className="flex items-center justify-between mt-2 text-xs text-gray-500">
-                    <span className={isDueDatePast(a.due_date) && a.status !== 'CLOSED' ? 'text-red-600 font-medium' : ''}>
-                      Due: {formatDate(a.due_date)}
+                    <span
+                      className={
+                        a.assignment_type !== 'DIARY' &&
+                        isDueDatePast(a.due_date) &&
+                        a.status !== 'CLOSED'
+                          ? 'text-red-600 font-medium'
+                          : ''
+                      }
+                    >
+                      {a.assignment_type === 'DIARY' ? 'Date' : 'Due'}: {formatDate(a.due_date)}
                     </span>
                     <span>Marks: {a.total_marks ?? '--'}</span>
                   </div>
@@ -665,7 +761,7 @@ export default function AssignmentsPage() {
                       Type
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Due Date
+                      Due / diary date
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                       Marks
@@ -705,11 +801,15 @@ export default function AssignmentsPage() {
                           {a.assignment_type}
                         </span>
                       </td>
-                      <td className={`px-4 py-3 text-sm ${
-                        isDueDatePast(a.due_date) && a.status !== 'CLOSED'
-                          ? 'text-red-600 font-medium'
-                          : 'text-gray-500'
-                      }`}>
+                      <td
+                        className={`px-4 py-3 text-sm ${
+                          a.assignment_type !== 'DIARY' &&
+                          isDueDatePast(a.due_date) &&
+                          a.status !== 'CLOSED'
+                            ? 'text-red-600 font-medium'
+                            : 'text-gray-500'
+                        }`}
+                      >
                         {formatDate(a.due_date)}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-500">
@@ -860,7 +960,10 @@ export default function AssignmentsPage() {
                       })
                     }}
                   >
-                    {ASSIGNMENT_TYPES.map((t) => (
+                    {(editingAssignment?.assignment_type === 'DIARY'
+                      ? ASSIGNMENT_TYPES
+                      : ASSIGNMENT_TYPES_SINGLE_FORM
+                    ).map((t) => (
                       <option key={t} value={t}>
                         {t}
                       </option>
@@ -992,43 +1095,57 @@ export default function AssignmentsPage() {
         </div>
       )}
 
-      {/* Bulk Diary Modal */}
+      {/* Daily diary (multi-subject) modal */}
       {showBulkDiaryModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-3xl mx-4 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Create Bulk Diary</h2>
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Create Daily Diary</h2>
 
             <div className="space-y-4">
-              <div>
-                <label className="label">Class *</label>
-                <ClassSelector
-                  className="input"
-                  value={bulkDiaryForm.class_obj}
-                  onChange={(e) => setBulkDiaryForm((prev) => ({ ...prev, class_obj: e.target.value }))}
-                  scope={classSelectorScope}
-                  academicYearId={activeAcademicYear?.id}
-                  classes={classOptionsForFilters}
-                />
-              </div>
-
-              <div>
-                <label className="label">Diary / Homework Details *</label>
-                <textarea
-                  className="input"
-                  rows={4}
-                  placeholder="Enter the diary or homework details for all subjects..."
-                  value={bulkDiaryForm.details}
-                  onChange={(e) => setBulkDiaryForm((prev) => ({ ...prev, details: e.target.value }))}
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="label">Class *</label>
+                  <ClassSelector
+                    className="input"
+                    value={bulkDiaryForm.class_obj}
+                    onChange={(e) => setBulkDiaryForm((prev) => ({ ...prev, class_obj: e.target.value }))}
+                    scope={classSelectorScope}
+                    academicYearId={activeAcademicYear?.id}
+                    classes={dailyDiaryClassOptions}
+                    disabled={isTeacher && classTeacherScopeLoading}
+                  />
+                  {isTeacher && !classTeacherScopeLoading && teacherScopedClassOptions.length === 0 && (
+                    <p className="text-xs text-amber-700 mt-1.5">
+                      No classes are assigned to you for this academic year. Contact your administrator if this is wrong.
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <label className="label">Diary date *</label>
+                  <input
+                    type="date"
+                    className="input"
+                    value={bulkDiaryForm.diary_date}
+                    onChange={(e) => setBulkDiaryForm((prev) => ({ ...prev, diary_date: e.target.value }))}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Shown in the title and on the list. Choose a past date to record a backdated diary.
+                  </p>
+                </div>
               </div>
 
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="label mb-0">Subjects in Selected Class</label>
+                  <label className="label mb-0">Diary per subject *</label>
                   {bulkDiarySubjects.length > 0 && (
                     <span className="text-xs text-gray-500">{bulkDiarySubjects.length} subjects</span>
                   )}
                 </div>
+                <p className="text-xs text-gray-500 mb-3">
+                  Enter text for each subject, or use <strong className="font-medium">From curriculum</strong> to
+                  insert titles from saved books (same picker as lesson plans). Only subjects with text are saved as
+                  diary entries.
+                </p>
 
                 {!bulkDiaryForm.class_obj ? (
                   <p className="text-sm text-gray-500">Select a class to load subjects.</p>
@@ -1039,15 +1156,42 @@ export default function AssignmentsPage() {
                     No subjects are assigned to this class yet.
                   </p>
                 ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {bulkDiarySubjects.map((subject) => (
-                      <div
-                        key={subject.id}
-                        className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900"
-                      >
-                        {subject.name}
-                      </div>
-                    ))}
+                  <div className="space-y-4 max-h-[min(52vh,28rem)] overflow-y-auto pr-1">
+                    {bulkDiarySubjects.map((subject) => {
+                      const sid = String(subject.id)
+                      return (
+                        <div
+                          key={sid}
+                          className="rounded-lg border border-gray-200 bg-gray-50/80 p-3 sm:p-4 space-y-2"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="text-sm font-semibold text-gray-900">{subject.name}</span>
+                            <button
+                              type="button"
+                              className="btn btn-secondary text-xs py-1.5 px-2.5 shrink-0 whitespace-nowrap"
+                              disabled={!resolvedBulkDiaryClassObj}
+                              onClick={() =>
+                                setBulkDiaryCurriculumPicker({ open: true, subjectId: subject.id })
+                              }
+                            >
+                              From curriculum…
+                            </button>
+                          </div>
+                          <textarea
+                            className="input text-sm min-h-[5.5rem]"
+                            rows={4}
+                            placeholder="Type diary / homework for this subject, or add lines from curriculum above…"
+                            value={bulkDiarySubjectDetails[sid] ?? ''}
+                            onChange={(e) =>
+                              setBulkDiarySubjectDetails((prev) => ({
+                                ...prev,
+                                [sid]: e.target.value,
+                              }))
+                            }
+                          />
+                        </div>
+                      )
+                    })}
                   </div>
                 )}
               </div>
@@ -1062,12 +1206,24 @@ export default function AssignmentsPage() {
                 disabled={bulkDiaryMutation.isPending}
                 className="btn btn-primary"
               >
-                {bulkDiaryMutation.isPending ? 'Submitting...' : 'Submit Bulk Diary'}
+                {bulkDiaryMutation.isPending ? 'Submitting...' : 'Submit Daily Diary'}
               </button>
             </div>
           </div>
         </div>
       )}
+
+      <LessonPlanTopicsPickerModal
+        open={bulkDiaryCurriculumPicker.open && !!bulkDiaryCurriculumPicker.subjectId}
+        onClose={() => setBulkDiaryCurriculumPicker({ open: false, subjectId: null })}
+        classId={resolvedBulkDiaryClassObj}
+        subjectId={bulkDiaryCurriculumPicker.subjectId}
+        onApply={({ curriculumSummary }) => {
+          if (bulkDiaryCurriculumPicker.subjectId != null) {
+            appendCurriculumToSubject(bulkDiaryCurriculumPicker.subjectId, curriculumSummary)
+          }
+        }}
+      />
 
       {/* Delete Confirmation Modal */}
       {deleteConfirm && (

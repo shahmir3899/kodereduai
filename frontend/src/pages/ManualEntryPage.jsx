@@ -4,6 +4,7 @@ import { attendanceApi, sessionsApi } from '../services/api'
 import { useAcademicYear } from '../contexts/AcademicYearContext'
 import ClassSelector from '../components/ClassSelector'
 import useTeacherScopedClasses from '../hooks/useTeacherScopedClasses'
+import { useSessionClasses } from '../hooks/useSessionClasses'
 import { buildSessionOrMasterClassParams } from '../utils/classScope'
 
 export default function ManualEntryPage() {
@@ -14,7 +15,10 @@ export default function ManualEntryPage() {
   const [attendanceData, setAttendanceData] = useState([])
   const [saveMsg, setSaveMsg] = useState('')
 
+  const { sessionClasses, isLoading: sessionClassesLoading } = useSessionClasses(activeAcademicYear?.id)
+
   const {
+    isTeacher,
     showAllOption,
     classOptions,
     isLoadingTeacherClasses: classesLoading,
@@ -26,21 +30,26 @@ export default function ManualEntryPage() {
     queryKey: 'myAttendanceClasses',
   })
 
-  const effectiveClassOptions = classOptions || []
-  const useSessionClassFilter = !!activeAcademicYear?.id && effectiveClassOptions.some((opt) => opt.class_obj)
+  const effectiveClassOptions = classOptions ?? []
+  // Admins/principals: session-scoped list only when this AY has SessionClass rows (classOptions is undefined for them).
+  // Teachers: session API params only when the scoped dropdown uses session rows (options carry class_obj); master fallback keeps master ids.
+  const useSessionClassFilter = !!activeAcademicYear?.id && (
+    (!isTeacher && sessionClasses.length > 0) ||
+    (isTeacher && effectiveClassOptions.some((opt) => opt.class_obj))
+  )
 
   const classFilterParams = buildSessionOrMasterClassParams({
     classId,
     activeAcademicYearId: useSessionClassFilter ? activeAcademicYear?.id : null,
-    sessionClasses: effectiveClassOptions,
+    sessionClasses: useSessionClassFilter ? sessionClasses : [],
   })
 
   const selectedMasterClassId = useMemo(() => {
     if (!classId) return ''
     if (!useSessionClassFilter) return classId
-    const selectedSessionClass = effectiveClassOptions.find(sc => String(sc.id) === String(classId))
+    const selectedSessionClass = sessionClasses.find(sc => String(sc.id) === String(classId))
     return selectedSessionClass?.class_obj || ''
-  }, [classId, useSessionClassFilter, effectiveClassOptions])
+  }, [classId, useSessionClassFilter, sessionClasses])
 
   const { data: selectedDayStatusRes } = useQuery({
     queryKey: ['manualEntryDayStatus', date, selectedMasterClassId, activeAcademicYear?.id],
@@ -179,10 +188,19 @@ export default function ManualEntryPage() {
               value={classId}
               onChange={e => { setClassId(e.target.value); setAttendanceData([]); setSaveMsg('') }}
               className="input w-full"
-              disabled={classesLoading}
+              disabled={
+                classesLoading
+                || (classOptions === undefined && !!activeAcademicYear?.id && sessionClassesLoading)
+              }
               classes={classOptions}
               showAllOption={showAllOption}
-              placeholder={classesLoading ? 'Loading classes...' : 'Select Class'}
+              placeholder={
+                classesLoading || (classOptions === undefined && !!activeAcademicYear?.id && sessionClassesLoading)
+                  ? 'Loading classes...'
+                  : 'Select Class'
+              }
+              scope={useSessionClassFilter ? 'session' : 'master'}
+              academicYearId={activeAcademicYear?.id}
             />
             {useSessionClassFilter && (
               <p className="text-[11px] text-blue-600 mt-1">Using session classes for {activeAcademicYear?.name}</p>

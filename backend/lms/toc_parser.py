@@ -13,6 +13,57 @@ import re
 
 from .models import Chapter, Topic
 
+# Topic.content_kind values accepted from TOC / apply_toc payloads (matches curriculum UI).
+_APPLY_TOC_CONTENT_KINDS = frozenset({'general', 'exercise'})
+
+
+def _coerce_page_int(value):
+    """
+    Return a positive integer suitable for page_start/page_end, or None.
+
+    Ignores zero, negatives, and non-numeric values.
+    """
+    if value is None or value == '':
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        n = value
+    elif isinstance(value, float) and value == int(value):
+        n = int(value)
+    else:
+        try:
+            n = int(str(value).strip())
+        except (TypeError, ValueError):
+            return None
+    if n < 1:
+        return None
+    return n
+
+
+def _normalize_page_range(page_start, page_end):
+    """
+    Return (page_start, page_end) with invalid pairs corrected.
+
+    If both are set and start > end, values are swapped so data matches
+    the same rule as ChapterCreateSerializer / TopicSerializer validation.
+    """
+    a = _coerce_page_int(page_start)
+    b = _coerce_page_int(page_end)
+    if a is not None and b is not None and a > b:
+        return b, a
+    return a, b
+
+
+def _normalize_content_kind(value):
+    """Map payload content_kind to a safe stored value (default general)."""
+    if value is None or value == '':
+        return 'general'
+    key = str(value).strip().lower()
+    if key in _APPLY_TOC_CONTENT_KINDS:
+        return key
+    return 'general'
+
 
 # Patterns for chapter detection (non-indented lines with a leading number)
 CHAPTER_PATTERN = re.compile(
@@ -114,6 +165,11 @@ def apply_toc_structure(book, chapters):
 
     Chapter/topic numbers are normalized sequentially to avoid collisions and
     keep ordering deterministic.
+
+    For each chapter, optional ``page_start`` / ``page_end`` are persisted.
+    For each topic, optional page range and ``content_kind`` (``general`` or
+    ``exercise``) are persisted. Invalid page values are ignored; if both
+    pages are set but ``page_start`` > ``page_end``, the pair is swapped.
     """
     chapters_created = 0
     topics_created = 0
@@ -128,11 +184,17 @@ def apply_toc_structure(book, chapters):
             continue
 
         chapter_number += 1
+        ch_page_start, ch_page_end = _normalize_page_range(
+            chapter_payload.get('page_start'),
+            chapter_payload.get('page_end'),
+        )
         try:
             chapter = Chapter.objects.create(
                 book=book,
                 chapter_number=chapter_number,
                 title=title,
+                page_start=ch_page_start,
+                page_end=ch_page_end,
             )
             chapters_created += 1
         except Exception as e:
@@ -145,11 +207,19 @@ def apply_toc_structure(book, chapters):
             if not topic_title:
                 continue
             topic_number += 1
+            tp_page_start, tp_page_end = _normalize_page_range(
+                topic_payload.get('page_start'),
+                topic_payload.get('page_end'),
+            )
+            content_kind = _normalize_content_kind(topic_payload.get('content_kind'))
             try:
                 Topic.objects.create(
                     chapter=chapter,
                     topic_number=topic_number,
                     title=topic_title,
+                    page_start=tp_page_start,
+                    page_end=tp_page_end,
+                    content_kind=content_kind,
                 )
                 topics_created += 1
             except Exception as e:

@@ -1,6 +1,6 @@
 from django.contrib import admin
 from .models import (
-    Book, Chapter, Topic,
+    Book, Chapter, Topic, SubTopic,
     LessonPlan, LessonAttachment,
     Assignment, AssignmentAttachment, AssignmentSubmission,
 )
@@ -20,6 +20,12 @@ class TopicInline(admin.TabularInline):
     model = Topic
     extra = 0
     fields = ['topic_number', 'title', 'estimated_periods', 'is_active']
+
+
+class SubTopicInline(admin.TabularInline):
+    model = SubTopic
+    extra = 0
+    fields = ['subtopic_number', 'title', 'is_active']
 
 
 @admin.register(Book)
@@ -46,6 +52,15 @@ class TopicAdmin(admin.ModelAdmin):
     list_filter = ['is_active']
     search_fields = ['title']
     raw_id_fields = ['chapter']
+    inlines = [SubTopicInline]
+
+
+@admin.register(SubTopic)
+class SubTopicAdmin(admin.ModelAdmin):
+    list_display = ['title', 'topic', 'subtopic_number', 'is_active']
+    list_filter = ['is_active']
+    search_fields = ['title']
+    raw_id_fields = ['topic']
 
 
 # ---------------------------------------------------------------------------

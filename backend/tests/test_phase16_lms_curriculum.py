@@ -448,6 +448,109 @@ class TestTocParser:
         assert 3 in numbers
         assert 4 in numbers
 
+    def test_apply_toc_structure_persists_chapter_pages_topic_pages_and_content_kind(
+        self, seed_data,
+    ):
+        """apply_toc must persist page ranges and topic content_kind from API/UI payload."""
+        from lms.models import Book, Chapter, Topic
+        from lms.toc_parser import apply_toc_structure
+
+        book = Book.objects.create(
+            school=seed_data["school_a"],
+            class_obj=seed_data["classes"][0],
+            subject=seed_data["subjects"][0],
+            title=f"{P16}Apply Structure Metadata",
+            language="en",
+        )
+        chapters_payload = [
+            {
+                "title": "Unit One",
+                "page_start": 1,
+                "page_end": 20,
+                "topics": [
+                    {
+                        "title": "Intro",
+                        "page_start": 1,
+                        "page_end": 5,
+                        "content_kind": "general",
+                    },
+                    {
+                        "title": "Review Exercises",
+                        "page_start": 15,
+                        "page_end": 20,
+                        "content_kind": "exercise",
+                    },
+                ],
+            },
+        ]
+        result = apply_toc_structure(book, chapters_payload)
+        assert result["chapters_created"] == 1
+        assert result["topics_created"] == 2
+        assert result["errors"] == []
+
+        ch = Chapter.objects.get(book=book, title="Unit One")
+        assert ch.page_start == 1
+        assert ch.page_end == 20
+
+        topics = list(Topic.objects.filter(chapter=ch).order_by("topic_number"))
+        assert topics[0].title == "Intro"
+        assert topics[0].page_start == 1
+        assert topics[0].page_end == 5
+        assert topics[0].content_kind == "general"
+        assert topics[1].title == "Review Exercises"
+        assert topics[1].page_start == 15
+        assert topics[1].page_end == 20
+        assert topics[1].content_kind == "exercise"
+
+    def test_apply_toc_structure_swaps_inverted_page_range(self, seed_data):
+        """When page_start > page_end, values are swapped before save."""
+        from lms.models import Book, Chapter, Topic
+        from lms.toc_parser import apply_toc_structure
+
+        book = Book.objects.create(
+            school=seed_data["school_a"],
+            class_obj=seed_data["classes"][0],
+            subject=seed_data["subjects"][0],
+            title=f"{P16}Swap Pages",
+            language="en",
+        )
+        apply_toc_structure(book, [
+            {
+                "title": "Ch",
+                "page_start": 30,
+                "page_end": 10,
+                "topics": [
+                    {"title": "T", "page_start": 8, "page_end": 2},
+                ],
+            },
+        ])
+        ch = Chapter.objects.get(book=book)
+        assert ch.page_start == 10
+        assert ch.page_end == 30
+        tp = Topic.objects.get(chapter=ch)
+        assert tp.page_start == 2
+        assert tp.page_end == 8
+
+    def test_apply_toc_structure_unknown_content_kind_defaults_general(self, seed_data):
+        from lms.models import Book, Topic
+        from lms.toc_parser import apply_toc_structure
+
+        book = Book.objects.create(
+            school=seed_data["school_a"],
+            class_obj=seed_data["classes"][0],
+            subject=seed_data["subjects"][0],
+            title=f"{P16}Unknown Kind",
+            language="en",
+        )
+        apply_toc_structure(book, [
+            {
+                "title": "Ch",
+                "topics": [{"title": "T", "content_kind": "not_a_real_kind"}],
+            },
+        ])
+        tp = Topic.objects.get(chapter__book=book)
+        assert tp.content_kind == "general"
+
     def test_rtl_urdu_text(self, seed_data):
         """Urdu TOC text should be stored as Unicode correctly."""
         from lms.toc_parser import parse_toc_text
@@ -544,6 +647,60 @@ class TestTocParser:
         assert body["topics_created"] == 3
         assert Chapter.objects.filter(book=book).count() == 2
         assert Topic.objects.filter(chapter__book=book).count() == 3
+
+    def test_apply_toc_endpoint_persists_pages_and_content_kind(self, seed_data, api):
+        """POST apply_toc should persist chapter/topic pages and topic content_kind."""
+        from lms.models import Book, Chapter, Topic
+
+        token = seed_data["tokens"]["admin"]
+        sid = seed_data["SID_A"]
+        book = Book.objects.create(
+            school=seed_data["school_a"],
+            class_obj=seed_data["classes"][0],
+            subject=seed_data["subjects"][0],
+            title=f"{P16}Apply TOC Metadata API",
+            language="en",
+        )
+
+        resp = api.post(
+            f"/api/lms/books/{book.id}/apply_toc/",
+            {
+                "chapters": [
+                    {
+                        "title": "Chapter A",
+                        "page_start": 1,
+                        "page_end": 50,
+                        "topics": [
+                            {
+                                "title": "Topic 1",
+                                "page_start": 1,
+                                "page_end": 10,
+                                "content_kind": "general",
+                            },
+                            {
+                                "title": "Topic 2",
+                                "page_start": 40,
+                                "page_end": 50,
+                                "content_kind": "exercise",
+                            },
+                        ],
+                    },
+                ],
+            },
+            token,
+            sid,
+        )
+        assert resp.status_code == 201, resp.content
+        ch = Chapter.objects.get(book=book, title="Chapter A")
+        assert ch.page_start == 1
+        assert ch.page_end == 50
+        topics = list(Topic.objects.filter(chapter=ch).order_by("topic_number"))
+        assert topics[0].content_kind == "general"
+        assert topics[0].page_start == 1
+        assert topics[0].page_end == 10
+        assert topics[1].content_kind == "exercise"
+        assert topics[1].page_start == 40
+        assert topics[1].page_end == 50
 
     def test_suggest_toc_endpoint_fallback(self, seed_data, api):
         from lms.models import Book
@@ -1974,3 +2131,151 @@ class TestPhase6AIRetrieval:
         assert body.get("success") is True
         assert body.get("title") == "Test Quiz"
         assert len(body.get("questions", [])) == 1
+
+
+# ==========================================================================
+# LEVEL F2: BULK LESSON PLAN CREATE
+# ==========================================================================
+
+
+@pytest.mark.phase16
+@pytest.mark.django_db
+class TestLessonPlanBulkCreate:
+
+    def test_bulk_skips_calendar_off_day(self, seed_data, api, lms_book):
+        from academic_sessions.models import SchoolCalendarEntry
+
+        token = seed_data["tokens"]["admin"]
+        sid = seed_data["SID_A"]
+        ay = seed_data["academic_year"]
+        school = seed_data["school_a"]
+        cls = seed_data["classes"][0]
+
+        SchoolCalendarEntry.objects.create(
+            school=school,
+            academic_year=ay,
+            name="Midweek off",
+            entry_kind=SchoolCalendarEntry.EntryKind.OFF_DAY,
+            off_day_type=SchoolCalendarEntry.OffDayType.NATIONAL_HOLIDAY,
+            scope=SchoolCalendarEntry.Scope.SCHOOL,
+            start_date=date(2026, 6, 3),
+            end_date=date(2026, 6, 3),
+        )
+
+        body = {
+            "date_from": "2026-06-01",
+            "date_to": "2026-06-05",
+            "skip_saturday": True,
+            "on_conflict": "skip",
+            "school": sid,
+            "academic_year": ay.id,
+            "class_obj": cls.id,
+            "subject": lms_book["subject"].id,
+            "teacher": seed_data["staff"][0].id,
+            "duration_minutes": 40,
+            "content_mode": "FREEFORM",
+        }
+        resp = api.post("/api/lms/lesson-plans/bulk_create/", body, token, sid)
+        assert resp.status_code in (200, 201), resp.content
+        data = resp.json()
+        assert data["created_count"] == 4
+        off_skipped = {x["date"] for x in data.get("skipped_off_days", []) if x.get("reason") == "off_day"}
+        assert "2026-06-03" in off_skipped
+
+    def test_bulk_on_conflict_error(self, seed_data, api, lms_book):
+        from lms.models import LessonPlan
+
+        token = seed_data["tokens"]["admin"]
+        sid = seed_data["SID_A"]
+        cls = seed_data["classes"][0]
+        LessonPlan.objects.create(
+            school=seed_data["school_a"],
+            academic_year=seed_data["academic_year"],
+            class_obj=cls,
+            subject=lms_book["subject"],
+            teacher=seed_data["staff"][0],
+            title="Existing",
+            description="d",
+            lesson_date=date(2026, 6, 2),
+            status="DRAFT",
+        )
+        body = {
+            "date_from": "2026-06-01",
+            "date_to": "2026-06-03",
+            "skip_saturday": True,
+            "on_conflict": "error",
+            "school": sid,
+            "class_obj": cls.id,
+            "subject": lms_book["subject"].id,
+            "teacher": seed_data["staff"][0].id,
+        }
+        resp = api.post("/api/lms/lesson-plans/bulk_create/", body, token, sid)
+        assert resp.status_code == 400
+
+    def test_bulk_on_conflict_skip(self, seed_data, api, lms_book):
+        from lms.models import LessonPlan
+
+        token = seed_data["tokens"]["admin"]
+        sid = seed_data["SID_A"]
+        cls = seed_data["classes"][0]
+        LessonPlan.objects.create(
+            school=seed_data["school_a"],
+            academic_year=seed_data["academic_year"],
+            class_obj=cls,
+            subject=lms_book["subject"],
+            teacher=seed_data["staff"][0],
+            title="Existing",
+            description="d",
+            lesson_date=date(2026, 6, 2),
+            status="DRAFT",
+        )
+        body = {
+            "date_from": "2026-06-01",
+            "date_to": "2026-06-03",
+            "skip_saturday": True,
+            "on_conflict": "skip",
+            "school": sid,
+            "class_obj": cls.id,
+            "subject": lms_book["subject"].id,
+            "teacher": seed_data["staff"][0].id,
+        }
+        resp = api.post("/api/lms/lesson-plans/bulk_create/", body, token, sid)
+        assert resp.status_code in (200, 201)
+        data = resp.json()
+        assert data["created_count"] == 2
+        assert "2026-06-02" in data.get("skipped_dates", [])
+
+    def test_bulk_range_exceeds_max_days(self, seed_data, api, lms_book):
+        token = seed_data["tokens"]["admin"]
+        sid = seed_data["SID_A"]
+        body = {
+            "date_from": "2026-06-01",
+            "date_to": "2026-07-10",
+            "school": sid,
+            "class_obj": seed_data["classes"][0].id,
+            "subject": lms_book["subject"].id,
+            "teacher": seed_data["staff"][0].id,
+        }
+        resp = api.post("/api/lms/lesson-plans/bulk_create/", body, token, sid)
+        assert resp.status_code == 400
+
+    def test_bulk_skips_saturday_when_enabled(self, seed_data, api, lms_book):
+        token = seed_data["tokens"]["admin"]
+        sid = seed_data["SID_A"]
+        cls = seed_data["classes"][0]
+        body = {
+            "date_from": "2026-06-01",
+            "date_to": "2026-06-07",
+            "skip_saturday": True,
+            "on_conflict": "skip",
+            "school": sid,
+            "class_obj": cls.id,
+            "subject": lms_book["subject"].id,
+            "teacher": seed_data["staff"][0].id,
+        }
+        resp = api.post("/api/lms/lesson-plans/bulk_create/", body, token, sid)
+        assert resp.status_code in (200, 201)
+        data = resp.json()
+        assert data["created_count"] == 5
+        sat = [x for x in data.get("skipped_off_days", []) if x.get("reason") == "saturday"]
+        assert any(x["date"] == "2026-06-06" for x in sat)

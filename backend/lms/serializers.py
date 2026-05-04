@@ -5,7 +5,7 @@ Uses Read + Create serializer pattern for each model.
 
 from rest_framework import serializers
 from .models import (
-    Book, Chapter, Topic,
+    Book, Chapter, Topic, SubTopic,
     LessonPlan, LessonAttachment,
     Assignment, AssignmentAttachment, AssignmentSubmission,
 )
@@ -40,11 +40,23 @@ def _validate_content_blocks(content_blocks):
 
 
 # ---------------------------------------------------------------------------
-# Curriculum: Book → Chapter → Topic
+# Curriculum: Book → Chapter → Topic → SubTopic
 # ---------------------------------------------------------------------------
+
+class SubTopicSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SubTopic
+        fields = [
+            'id', 'topic', 'title', 'subtopic_number',
+            'description', 'is_active',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
 
 class TopicSerializer(serializers.ModelSerializer):
     is_covered = serializers.SerializerMethodField()
+    subtopics = SubTopicSerializer(many=True, read_only=True)
 
     class Meta:
         model = Topic
@@ -53,7 +65,7 @@ class TopicSerializer(serializers.ModelSerializer):
             'page_start', 'page_end', 'content_kind',
             'description', 'content_blocks', 'content_text',
             'content_blocks_schema_version', 'content_version', 'needs_migration',
-            'estimated_periods', 'is_active', 'is_covered',
+            'estimated_periods', 'is_active', 'is_covered', 'subtopics',
             'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
@@ -74,7 +86,9 @@ class TopicSerializer(serializers.ModelSerializer):
 
 class TopicDetailedSerializer(serializers.ModelSerializer):
     """Topic with teaching and testing coverage status."""
-    
+
+    subtopics = SubTopicSerializer(many=True, read_only=True)
+
     is_covered = serializers.BooleanField(read_only=True)
     is_tested = serializers.BooleanField(read_only=True)
     test_question_count = serializers.IntegerField(read_only=True)
@@ -110,7 +124,7 @@ class TopicDetailedSerializer(serializers.ModelSerializer):
             'page_start', 'page_end', 'content_kind',
             'description', 'content_blocks', 'content_text',
             'content_blocks_schema_version', 'content_version', 'needs_migration',
-            'estimated_periods', 'is_active',
+            'estimated_periods', 'is_active', 'subtopics',
             'is_covered',          # NEW
             'is_tested',           # NEW
             'test_question_count', # NEW
@@ -198,7 +212,15 @@ class BookChapterOnlyReadSerializer(serializers.ModelSerializer):
         ]
 
 
+class SubTopicLessonPlanSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SubTopic
+        fields = ['id', 'title', 'subtopic_number', 'description']
+
+
 class TopicLessonPlanSerializer(serializers.ModelSerializer):
+    subtopics = SubTopicLessonPlanSerializer(many=True, read_only=True)
+
     class Meta:
         model = Topic
         fields = [
@@ -207,6 +229,7 @@ class TopicLessonPlanSerializer(serializers.ModelSerializer):
             'estimated_periods',
             'content_kind',
             'description',
+            'subtopics',
         ]
 
 
@@ -324,6 +347,7 @@ class LessonPlanReadSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     attachments = LessonAttachmentSerializer(many=True, read_only=True)
     planned_topics = TopicSerializer(many=True, read_only=True)
+    planned_subtopics = SubTopicSerializer(many=True, read_only=True)
     display_text = serializers.CharField(read_only=True)
     content_mode = serializers.CharField(read_only=True)
     ai_generated = serializers.BooleanField(read_only=True)
@@ -339,7 +363,7 @@ class LessonPlanReadSerializer(serializers.ModelSerializer):
             'title', 'description', 'objectives',
             'lesson_date', 'duration_minutes',
             'materials_needed', 'teaching_methods',
-            'planned_topics', 'display_text',
+            'planned_topics', 'planned_subtopics', 'display_text',
             'content_mode', 'ai_generated',
             'status', 'status_display',
             'is_active', 'attachments',
@@ -350,7 +374,14 @@ class LessonPlanReadSerializer(serializers.ModelSerializer):
 
 class LessonPlanCreateSerializer(serializers.ModelSerializer):
     """Write serializer with flat FK fields for creation/update."""
+    # Model field has blank=False but drafts often omit body text; allow API empty string.
+    description = serializers.CharField(allow_blank=True, required=False, default='')
     planned_topic_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        write_only=True,
+    )
+    planned_subtopic_ids = serializers.ListField(
         child=serializers.IntegerField(),
         required=False,
         write_only=True,
@@ -365,16 +396,30 @@ class LessonPlanCreateSerializer(serializers.ModelSerializer):
             'lesson_date', 'duration_minutes',
             'materials_needed', 'teaching_methods',
             'content_mode', 'ai_generated',
-            'planned_topic_ids',
+            'planned_topic_ids', 'planned_subtopic_ids',
             'status', 'is_active',
         ]
         read_only_fields = ['id']
 
+    def _merge_topic_ids_from_subtopics(self, topic_ids, subtopic_ids):
+        tid_set = {int(x) for x in (topic_ids or []) if x is not None}
+        if subtopic_ids:
+            for parent_id in SubTopic.objects.filter(
+                id__in=subtopic_ids,
+            ).values_list('topic_id', flat=True):
+                tid_set.add(int(parent_id))
+        return list(tid_set)
+
     def create(self, validated_data):
-        topic_ids = validated_data.pop('planned_topic_ids', [])
+        topic_ids = validated_data.pop('planned_topic_ids', []) or []
+        subtopic_ids = validated_data.pop('planned_subtopic_ids', []) or []
+        merged_topics = self._merge_topic_ids_from_subtopics(topic_ids, subtopic_ids)
         instance = super().create(validated_data)
-        if topic_ids:
-            instance.planned_topics.set(topic_ids)
+        if merged_topics:
+            instance.planned_topics.set(merged_topics)
+        if subtopic_ids:
+            instance.planned_subtopics.set(subtopic_ids)
+        if merged_topics or subtopic_ids:
             instance.content_mode = 'TOPICS'
             instance.save(update_fields=['content_mode'])
             instance.compute_display_text()
@@ -382,11 +427,80 @@ class LessonPlanCreateSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         topic_ids = validated_data.pop('planned_topic_ids', None)
+        subtopic_ids = validated_data.pop('planned_subtopic_ids', None)
         instance = super().update(instance, validated_data)
-        if topic_ids is not None:
-            instance.planned_topics.set(topic_ids)
+        if topic_ids is not None or subtopic_ids is not None:
+            t_list = topic_ids if topic_ids is not None else list(
+                instance.planned_topics.values_list('id', flat=True),
+            )
+            s_list = subtopic_ids if subtopic_ids is not None else list(
+                instance.planned_subtopics.values_list('id', flat=True),
+            )
+            merged = self._merge_topic_ids_from_subtopics(t_list, s_list)
+            instance.planned_topics.set(merged)
+            instance.planned_subtopics.set(s_list or [])
             instance.compute_display_text()
         return instance
+
+
+class LessonPlanBulkCreateSerializer(serializers.Serializer):
+    """
+    Validate payload for POST /api/lms/lesson-plans/bulk_create/.
+    Creates one LessonPlan per teaching day in [date_from, date_to], excluding
+    school OFF days (calendar_rules) and optionally Saturdays.
+    """
+
+    BULK_MAX_DAYS = 35
+
+    date_from = serializers.DateField()
+    date_to = serializers.DateField()
+    skip_saturday = serializers.BooleanField(default=True)
+    on_conflict = serializers.ChoiceField(
+        choices=('skip', 'error'),
+        default='skip',
+    )
+    title_template = serializers.CharField(
+        required=False, allow_blank=True, max_length=200, default='',
+    )
+
+    school = serializers.IntegerField()
+    academic_year = serializers.IntegerField(required=False, allow_null=True)
+    class_obj = serializers.IntegerField()
+    subject = serializers.IntegerField()
+    teacher = serializers.IntegerField()
+    duration_minutes = serializers.IntegerField(default=45, min_value=1, max_value=600)
+    content_mode = serializers.ChoiceField(
+        choices=('TOPICS', 'FREEFORM'),
+        default='FREEFORM',
+    )
+    planned_topic_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        default=list,
+    )
+    planned_subtopic_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        default=list,
+    )
+    description = serializers.CharField(required=False, allow_blank=True, default='')
+    objectives = serializers.CharField(required=False, allow_blank=True, default='')
+    materials_needed = serializers.CharField(required=False, allow_blank=True, default='')
+    teaching_methods = serializers.CharField(required=False, allow_blank=True, default='')
+    ai_generated = serializers.BooleanField(default=False)
+
+    def validate(self, attrs):
+        d0, d1 = attrs['date_from'], attrs['date_to']
+        if d1 < d0:
+            raise serializers.ValidationError({
+                'date_to': 'Must be on or after date_from.',
+            })
+        span = (d1 - d0).days + 1
+        if span > self.BULK_MAX_DAYS:
+            raise serializers.ValidationError({
+                'date_to': f'Date range must not exceed {self.BULK_MAX_DAYS} days.',
+            })
+        return attrs
 
 
 # ---------------------------------------------------------------------------

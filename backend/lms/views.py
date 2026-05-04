@@ -6,6 +6,7 @@ import logging
 import hashlib
 import json
 from django.conf import settings
+from datetime import timedelta
 from django.utils import timezone
 from django.db import transaction
 from django.db.models import Count, Q
@@ -24,7 +25,8 @@ from core.permissions import (
 )
 from core.mixins import TenantQuerySetMixin, ensure_tenant_school_id
 from core.class_scope import resolve_class_scope
-from .models import Book, Chapter, Topic, LessonPlan, Assignment, AssignmentSubmission
+from academic_sessions.calendar_rules import is_off_day_for_date
+from .models import Book, Chapter, Topic, SubTopic, LessonPlan, Assignment, AssignmentSubmission
 from .content_retrieval import retrieve_topics_for_ai, build_prompt, extract_text_from_blocks
 from .serializers import (
     BookReadSerializer, BookCreateSerializer,
@@ -34,7 +36,8 @@ from .serializers import (
     ChapterReadSerializer, ChapterCreateSerializer,
     TopicLessonPlanSerializer,
     TopicSerializer,
-    LessonPlanReadSerializer, LessonPlanCreateSerializer,
+    SubTopicSerializer,
+    LessonPlanReadSerializer, LessonPlanCreateSerializer, LessonPlanBulkCreateSerializer,
     AssignmentReadSerializer, AssignmentCreateSerializer,
     AssignmentSubmissionReadSerializer, AssignmentSubmissionCreateSerializer,
 )
@@ -125,7 +128,7 @@ class BookViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
     def get_queryset(self):
         queryset = super().get_queryset().select_related(
             'school', 'class_obj', 'subject',
-        ).prefetch_related('chapters__topics')
+        ).prefetch_related('chapters__topics__subtopics')
 
         queryset = _apply_teacher_dual_scope(queryset, self.request)
 
@@ -214,7 +217,17 @@ class BookViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
         """
         Apply reviewed chapter/topic payload and create DB rows.
         POST /api/lms/books/{id}/apply_toc/
-        Body: { "chapters": [{"title": "...", "topics": [{"title": "..."}]}] }
+        Body: {
+          "chapters": [{
+            "title": "...",
+            "page_start": optional int, "page_end": optional int,
+            "topics": [{
+              "title": "...",
+              "page_start": optional int, "page_end": optional int,
+              "content_kind": "general" | "exercise" (optional),
+            }]
+          }]
+        }
         """
         book = self.get_object()
         chapters = request.data.get('chapters', [])
@@ -557,7 +570,7 @@ class ChapterViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         return ChapterReadSerializer
 
     def get_queryset(self):
-        queryset = super().get_queryset().select_related('book').prefetch_related('topics')
+        queryset = super().get_queryset().select_related('book').prefetch_related('topics__subtopics')
 
         book_id = self.request.query_params.get('book_id')
         if book_id:
@@ -591,7 +604,7 @@ class TopicViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet
     def get_queryset(self):
         queryset = super().get_queryset().select_related(
             'chapter', 'chapter__book'
-        ).prefetch_related('lesson_plans', 'test_questions')
+        ).prefetch_related('lesson_plans', 'test_questions', 'subtopics')
 
         queryset = _apply_teacher_dual_scope(
             queryset,
@@ -657,6 +670,31 @@ class TopicViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet
         serializer.save()
 
 
+class SubTopicViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
+    """CRUD for sub-topics under curriculum topics."""
+
+    required_module = 'lms'
+    queryset = SubTopic.objects.all()
+    permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
+    tenant_field = 'topic__chapter__book__school_id'
+    serializer_class = SubTopicSerializer
+
+    def get_queryset(self):
+        queryset = super().get_queryset().select_related(
+            'topic', 'topic__chapter', 'topic__chapter__book',
+        )
+        topic_id = self.request.query_params.get('topic_id')
+        if topic_id:
+            queryset = queryset.filter(topic_id=topic_id)
+        book_id = self.request.query_params.get('book_id')
+        if book_id:
+            queryset = queryset.filter(topic__chapter__book_id=book_id)
+        return queryset
+
+    def perform_create(self, serializer):
+        serializer.save()
+
+
 # ---------------------------------------------------------------------------
 # AI Lesson Plan Generation
 # ---------------------------------------------------------------------------
@@ -670,23 +708,33 @@ def generate_lesson_plan_ai(request):
     POST /api/lms/generate-lesson-plan/
     Body: {
         "topic_ids": [1, 2, 3],
+        "subtopic_ids": [10, 11],
         "lesson_date": "2026-03-15",
         "duration_minutes": 45
     }
     """
     from .ai_generator import generate_lesson_plan
 
-    topic_ids = request.data.get('topic_ids', [])
+    topic_ids = list(request.data.get('topic_ids') or [])
+    subtopic_ids = list(request.data.get('subtopic_ids') or [])
     lesson_date = request.data.get('lesson_date', '')
     duration_minutes = request.data.get('duration_minutes', 45)
 
-    if not topic_ids:
+    if not topic_ids and not subtopic_ids:
         return Response(
-            {'error': 'topic_ids is required.'},
+            {'error': 'Provide topic_ids and/or subtopic_ids.'},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    topics = Topic.objects.filter(id__in=topic_ids).select_related(
+    st_qs = SubTopic.objects.filter(id__in=subtopic_ids).select_related(
+        'topic', 'topic__chapter', 'topic__chapter__book', 'topic__chapter__book__class_obj',
+        'topic__chapter__book__subject', 'topic__chapter__book__school',
+    )
+    topic_id_set = {int(x) for x in topic_ids if x is not None}
+    for st in st_qs:
+        topic_id_set.add(st.topic_id)
+
+    topics = Topic.objects.filter(id__in=list(topic_id_set)).select_related(
         'chapter', 'chapter__book', 'chapter__book__class_obj',
         'chapter__book__subject', 'chapter__book__school',
     )
@@ -696,7 +744,6 @@ def generate_lesson_plan_ai(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    # Derive context from the first topic's book
     first_topic = topics.first()
     book = first_topic.chapter.book
 
@@ -708,6 +755,7 @@ def generate_lesson_plan_ai(request):
         topics=topics,
         lesson_date=lesson_date,
         duration_minutes=duration_minutes,
+        subtopics=st_qs if subtopic_ids else None,
     )
     return Response(result)
 
@@ -840,7 +888,7 @@ class LessonPlanViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
     def get_queryset(self):
         queryset = super().get_queryset().select_related(
             'school', 'academic_year', 'class_obj', 'subject', 'teacher',
-        ).prefetch_related('attachments', 'planned_topics')
+        ).prefetch_related('attachments', 'planned_topics', 'planned_subtopics')
 
         queryset = _apply_teacher_dual_scope(queryset, self.request)
 
@@ -929,6 +977,147 @@ class LessonPlanViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
 
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
+
+    @action(detail=False, methods=['post'], url_path='bulk_create')
+    def bulk_create(self, request):
+        """
+        Create many lesson plans for teaching days in [date_from, date_to].
+
+        Excludes school OFF days (academic calendar + Sundays) via
+        academic_sessions.calendar_rules.is_off_day_for_date.
+        Optionally excludes Saturdays when skip_saturday is true.
+
+        POST /api/lms/lesson-plans/bulk_create/
+        """
+        bulk_serializer = LessonPlanBulkCreateSerializer(
+            data=request.data,
+            context={'request': request},
+        )
+        bulk_serializer.is_valid(raise_exception=True)
+        vd = bulk_serializer.validated_data
+
+        school_id = vd['school']
+        class_obj_id = vd['class_obj']
+        subject_id = vd['subject']
+
+        teaching_dates = []
+        skipped_off_days = []
+        cursor = vd['date_from']
+        end_d = vd['date_to']
+        while cursor <= end_d:
+            if is_off_day_for_date(school_id, cursor, class_id=class_obj_id):
+                skipped_off_days.append({
+                    'date': cursor.isoformat(),
+                    'reason': 'off_day',
+                })
+                cursor += timedelta(days=1)
+                continue
+            if vd['skip_saturday'] and cursor.weekday() == 5:
+                skipped_off_days.append({
+                    'date': cursor.isoformat(),
+                    'reason': 'saturday',
+                })
+                cursor += timedelta(days=1)
+                continue
+            teaching_dates.append(cursor)
+            cursor += timedelta(days=1)
+
+        if vd['on_conflict'] == 'error' and teaching_dates:
+            conflicts = LessonPlan.objects.filter(
+                school_id=school_id,
+                class_obj_id=class_obj_id,
+                subject_id=subject_id,
+                lesson_date__in=teaching_dates,
+                is_active=True,
+            ).values_list('lesson_date', flat=True)
+            if conflicts:
+                conflict_list = sorted({d.isoformat() for d in conflicts})
+                return Response(
+                    {
+                        'error': (
+                            'One or more dates already have a lesson plan for '
+                            'this class and subject.'
+                        ),
+                        'conflict_dates': conflict_list,
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        title_template = (vd.get('title_template') or '').strip()
+        planned_topic_ids = vd.get('planned_topic_ids') or []
+        planned_subtopic_ids = vd.get('planned_subtopic_ids') or []
+        skipped_dates = []
+        created_ids = []
+
+        with transaction.atomic():
+            for d in teaching_dates:
+                if vd['on_conflict'] == 'skip':
+                    exists = LessonPlan.objects.filter(
+                        school_id=school_id,
+                        class_obj_id=class_obj_id,
+                        subject_id=subject_id,
+                        lesson_date=d,
+                        is_active=True,
+                    ).exists()
+                    if exists:
+                        skipped_dates.append(d.isoformat())
+                        continue
+
+                if title_template:
+                    title = title_template.replace('{{date}}', d.isoformat())
+                else:
+                    title = f'Lesson – {d.isoformat()}'
+                title = title[:200]
+
+                payload = {
+                    'school': school_id,
+                    'academic_year': vd.get('academic_year'),
+                    'class_obj': class_obj_id,
+                    'subject': subject_id,
+                    'teacher': vd['teacher'],
+                    'title': title,
+                    'description': vd.get('description', ''),
+                    'objectives': vd.get('objectives', ''),
+                    'lesson_date': d.isoformat(),
+                    'duration_minutes': vd['duration_minutes'],
+                    'materials_needed': vd.get('materials_needed', ''),
+                    'teaching_methods': vd.get('teaching_methods', ''),
+                    'content_mode': vd['content_mode'],
+                    'ai_generated': vd['ai_generated'],
+                    'planned_topic_ids': planned_topic_ids,
+                    'planned_subtopic_ids': planned_subtopic_ids,
+                    'status': 'DRAFT',
+                    'is_active': True,
+                }
+                create_serializer = LessonPlanCreateSerializer(
+                    data=payload,
+                    context={'request': request},
+                )
+                create_serializer.is_valid(raise_exception=True)
+                self.perform_create(create_serializer)
+                created_ids.append(create_serializer.instance.pk)
+
+        created_qs = (
+            LessonPlan.objects.filter(id__in=created_ids)
+            .select_related(
+                'school', 'academic_year', 'class_obj', 'subject', 'teacher',
+            )
+            .prefetch_related('attachments', 'planned_topics', 'planned_subtopics')
+            .order_by('lesson_date')
+        )
+        out = LessonPlanReadSerializer(created_qs, many=True)
+        http_status = (
+            status.HTTP_201_CREATED if created_ids else status.HTTP_200_OK
+        )
+        return Response(
+            {
+                'created': out.data,
+                'created_count': len(created_ids),
+                'skipped_dates': skipped_dates,
+                'skipped_off_days': skipped_off_days,
+            },
+            status=http_status,
+        )
 
     @action(detail=True, methods=['post'])
     def publish(self, request, pk=None):
