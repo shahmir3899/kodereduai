@@ -26,7 +26,6 @@ class NotificationTemplate(models.Model):
 
     CHANNEL_CHOICES = [
         ('WHATSAPP', 'WhatsApp'),
-        ('SMS', 'SMS'),
         ('IN_APP', 'In-App'),
         ('EMAIL', 'Email'),
         ('PUSH', 'Push Notification'),
@@ -226,10 +225,12 @@ class SchoolNotificationConfig(models.Model):
         related_name='notification_config',
     )
     whatsapp_enabled = models.BooleanField(default=False)
-    sms_enabled = models.BooleanField(default=False)
     in_app_enabled = models.BooleanField(default=True)
     email_enabled = models.BooleanField(default=False)
-    push_enabled = models.BooleanField(default=True)
+    push_enabled = models.BooleanField(
+        default=True,
+        help_text='Deprecated: push delivery is now coupled with in-app notifications.',
+    )
     quiet_hours_start = models.TimeField(
         null=True,
         blank=True,
@@ -257,7 +258,10 @@ class SchoolNotificationConfig(models.Model):
     # Automated trigger toggles
     absence_notification_enabled = models.BooleanField(
         default=True,
-        help_text='Send notifications to parents when a student is marked absent',
+        help_text=(
+            'Scheduled in-app absence digests (8–10 AM school time): staff see one message '
+            'per class once attendance is complete; parents see their child only when absent.'
+        ),
     )
     fee_reminder_enabled = models.BooleanField(
         default=True,
@@ -305,3 +309,40 @@ class SchoolNotificationConfig(models.Model):
 
     def __str__(self):
         return f"Notification Config - {self.school.name}"
+
+
+class AttendanceAbsenceInAppDigestMarker(models.Model):
+    """Ensures absence digest scans notify each cohort/student at most once per local day."""
+
+    class DigestType(models.TextChoices):
+        STAFF_CLASS = 'staff_class', 'Staff class digest'
+        PARENT_STUDENT = 'parent_student', 'Parent absent student'
+
+    school = models.ForeignKey(
+        'schools.School',
+        on_delete=models.CASCADE,
+        related_name='absence_in_app_digest_markers',
+    )
+    date = models.DateField(db_index=True)
+    digest_type = models.CharField(max_length=32, choices=DigestType.choices)
+    scope_key = models.CharField(
+        max_length=160,
+        help_text='Stable key: class cohort (class id + session id) or parent scope (student id)',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Absence In-App Digest Marker'
+        verbose_name_plural = 'Absence In-App Digest Markers'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['school', 'date', 'digest_type', 'scope_key'],
+                name='uniq_absence_in_app_digest_marker',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['school', 'date', 'digest_type']),
+        ]
+
+    def __str__(self):
+        return f'{self.school_id} {self.date} {self.digest_type} {self.scope_key}'

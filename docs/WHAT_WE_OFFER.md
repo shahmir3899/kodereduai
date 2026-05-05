@@ -64,7 +64,7 @@ KoderEduAI is a **complete, AI-powered School ERP** that replaces 10+ disconnect
 | **88+ Frontend Pages** | A dedicated interface for every workflow |
 | **9 Role Levels** | From Super Admin to Student — everyone sees exactly what they need |
 | **4 AI Chat Agents** | 54 tools across Finance, Academics, Parent Communication & Study Helper |
-| **5 Notification Channels** | In-App, SMS, Email, WhatsApp, Push — reach anyone, anywhere |
+| **4 Notification Channels** | In-App (+ mobile push), Email, WhatsApp, Push templates — reach anyone, anywhere |
 | **0 Hardware Required** | For attendance — just a smartphone camera |
 
 ---

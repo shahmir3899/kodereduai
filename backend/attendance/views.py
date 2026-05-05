@@ -28,11 +28,6 @@ from .serializers import (
     AttendanceConfirmSerializer,
     AttendanceRecordSerializer,
 )
-from .absence_notifications import (
-    filter_transitioned_absent_records,
-    is_transition_to_absent,
-    dispatch_in_app_absence_notifications,
-)
 from students.models import Student
 
 logger = logging.getLogger(__name__)
@@ -530,17 +525,8 @@ class AttendanceUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
             except Exception as e:
                 logger.warning(f"Could not queue WhatsApp notifications: {e}")
 
-        transitioned_absent_records = filter_transitioned_absent_records(
-            created_records,
-            existing_status_by_student_id,
-        )
-        in_app_failures = dispatch_in_app_absence_notifications(transitioned_absent_records)
-        if in_app_failures:
-            logger.warning(
-                "In-app absence notifications had %s failures for upload %s",
-                in_app_failures,
-                upload.id,
-            )
+        # In-app absence alerts run on a schedule (see notifications.tasks
+        # run_scheduled_absence_in_app_digest); not on confirm.
 
         return Response({
             'success': True,
@@ -1628,16 +1614,6 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
         created = 0
         updated = 0
         errors = []
-        transitioned_absent_records = []
-
-        existing_status_by_student_id = {
-            r.student_id: r.status
-            for r in AttendanceRecord.objects.filter(
-                student_id__in=[entry['student_id'] for entry in entries],
-                date=date,
-            )
-        }
-
         for entry in entries:
             student_id = entry['student_id']
             att_status = entry['status']
@@ -1663,23 +1639,13 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
                 else:
                     updated += 1
 
-                if is_transition_to_absent(
-                    record,
-                    existing_status_by_student_id.get(student_id),
-                ):
-                    transitioned_absent_records.append(record)
             except Exception as e:
                 errors.append({'student_id': student_id, 'error': str(e)})
-
-        absence_notification_failures = dispatch_in_app_absence_notifications(
-            transitioned_absent_records
-        )
 
         return Response({
             'created': created,
             'updated': updated,
             'errors': errors,
-            'absence_notification_failures': absence_notification_failures,
             'message': f'{created + updated} attendance records saved.',
         })
 

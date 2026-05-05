@@ -7,12 +7,14 @@ Falls back to deterministic parser when AI is unavailable or fails.
 
 import json
 import logging
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 
 from django.conf import settings
 
 from .toc_parser import parse_toc_preview
 
 logger = logging.getLogger(__name__)
+TOC_AI_TIMEOUT_SECONDS = 45
 
 
 TOC_SUGGESTION_PROMPT = """You are a curriculum assistant. Convert the provided textbook TOC text into a JSON structure.
@@ -140,21 +142,30 @@ def suggest_toc_structure(raw_text, language='en'):
         model_name = getattr(settings, 'GROQ_MODEL', 'llama-3.3-70b-versatile')
 
         prompt = TOC_SUGGESTION_PROMPT.format(raw_text=text)
-        response = client.chat.completions.create(
-            model=model_name,
-            messages=[
-                {
-                    'role': 'system',
-                    'content': (
-                        'You extract textbook TOC into structured curriculum JSON. '
-                        'Do not add markdown fences.'
-                    ),
-                },
-                {'role': 'user', 'content': prompt},
-            ],
-            temperature=0.1,
-            max_tokens=2000,
-        )
+        def _run_completion():
+            return client.chat.completions.create(
+                model=model_name,
+                messages=[
+                    {
+                        'role': 'system',
+                        'content': (
+                            'You extract textbook TOC into structured curriculum JSON. '
+                            'Do not add markdown fences.'
+                        ),
+                    },
+                    {'role': 'user', 'content': prompt},
+                ],
+                temperature=0.1,
+                max_tokens=2000,
+            )
+
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(_run_completion)
+            try:
+                response = future.result(timeout=TOC_AI_TIMEOUT_SECONDS)
+            except FuturesTimeoutError as exc:
+                future.cancel()
+                raise TimeoutError('TOC AI suggestion timed out.') from exc
 
         content = response.choices[0].message.content
         if '```json' in content:
@@ -184,6 +195,8 @@ def suggest_toc_structure(raw_text, language='en'):
             'warnings': normalized['warnings'],
         }
 
+    except TimeoutError:
+        raise
     except Exception as exc:
         logger.warning('TOC AI suggestion failed, falling back to rule-based parser: %s', exc)
         return _fallback_preview(

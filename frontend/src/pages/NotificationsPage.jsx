@@ -3,8 +3,10 @@ import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { notificationsApi } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
+import { useAcademicYear } from '../contexts/AcademicYearContext'
 import { useToast } from '../components/Toast'
 import { formatDistanceToNow } from 'date-fns'
+import { useSessionClasses } from '../hooks/useSessionClasses'
 
 // === CONSTANTS (mirrored from backend model choices) ===
 
@@ -27,10 +29,10 @@ const EVENT_TYPE_LABEL = Object.fromEntries(
 const CHANNELS = [
   { value: 'IN_APP', label: 'In-App' },
   { value: 'WHATSAPP', label: 'WhatsApp' },
-  { value: 'SMS', label: 'SMS' },
   { value: 'EMAIL', label: 'Email' },
   { value: 'PUSH', label: 'Push Notification' },
 ]
+const SEND_CHANNELS = CHANNELS.filter((c) => c.value !== 'PUSH')
 
 const CHANNEL_LABEL = Object.fromEntries(
   CHANNELS.map(({ value, label }) => [value, label])
@@ -47,8 +49,22 @@ const RECIPIENT_TYPES = [
   { value: 'STUDENT', label: 'All Students' },
 ]
 
-const SMS_CHAR_LIMIT = 160
 const WHATSAPP_CHAR_LIMIT = 4096
+const TEMPLATE_PREVIEW_CONTEXT = {
+  student_name: 'Ayaan Khan',
+  class_name: 'Class 5A',
+  date: '2026-05-05',
+  amount: '7890',
+  exam_name: 'Mid Term',
+  school_name: 'Your School',
+  month: 'May 2026',
+  due_date: '2026-05-08',
+  attendance_rate: '92%',
+  roll_number: '23',
+  section_name: 'A',
+}
+const SUPPORTED_PLACEHOLDERS = Object.keys(TEMPLATE_PREVIEW_CONTEXT)
+const PLACEHOLDER_PATTERN = /\{\{\s*([^}]+)\s*\}\}/g
 
 const TABS = ['Inbox', 'Templates', 'Send', 'Analytics', 'Settings']
 
@@ -117,21 +133,27 @@ export default function NotificationsPage() {
 function InboxTab() {
   const queryClient = useQueryClient()
   const { showSuccess } = useToast()
+  const { user, activeSchool } = useAuth()
   const [filter, setFilter] = useState('')
+  const [schoolFilter, setSchoolFilter] = useState('')
   const [page, setPage] = useState(1)
   const [confirmMarkAll, setConfirmMarkAll] = useState(false)
+  const schoolOptions = user?.schools || []
 
   const { data, isLoading } = useQuery({
-    queryKey: ['myNotifications', filter, page],
+    queryKey: ['myNotifications', filter, schoolFilter, page],
     queryFn: () => notificationsApi.getMyNotifications({
       event_type: filter || undefined,
+      school_id: schoolFilter || undefined,
       page,
       page_size: 20,
     }),
   })
 
   const markAllMutation = useMutation({
-    mutationFn: () => notificationsApi.markAllRead(),
+    mutationFn: () => notificationsApi.markAllRead({
+      school_id: schoolFilter || undefined,
+    }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['myNotifications'] })
       queryClient.invalidateQueries({ queryKey: ['notificationUnreadCount'] })
@@ -156,17 +178,29 @@ function InboxTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <select
-          value={filter}
-          onChange={(e) => { setFilter(e.target.value); setPage(1) }}
-          className="text-sm border-gray-300 rounded-lg"
-        >
-          <option value="">All Types</option>
-          {EVENT_TYPES.map(({ value, label }) => (
-            <option key={value} value={value}>{label}</option>
-          ))}
-        </select>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <select
+            value={schoolFilter}
+            onChange={(e) => { setSchoolFilter(e.target.value); setPage(1) }}
+            className="text-sm border-gray-300 rounded-lg"
+          >
+            <option value="">All Schools</option>
+            {schoolOptions.map((school) => (
+              <option key={school.id} value={school.id}>{school.name}</option>
+            ))}
+          </select>
+          <select
+            value={filter}
+            onChange={(e) => { setFilter(e.target.value); setPage(1) }}
+            className="text-sm border-gray-300 rounded-lg"
+          >
+            <option value="">All Types</option>
+            {EVENT_TYPES.map(({ value, label }) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
+          </select>
+        </div>
         <button
           onClick={() => setConfirmMarkAll(true)}
           className="text-sm text-primary-600 hover:text-primary-800"
@@ -198,6 +232,11 @@ function InboxTab() {
                     {n.channel && (
                       <span className="px-1.5 py-0.5 rounded text-xs bg-blue-50 text-blue-600">
                         {CHANNEL_LABEL[n.channel] || n.channel}
+                      </span>
+                    )}
+                    {n.school_name && (
+                      <span className="px-1.5 py-0.5 rounded text-xs bg-emerald-50 text-emerald-700">
+                        {n.school_name}
                       </span>
                     )}
                   </div>
@@ -272,6 +311,7 @@ function TemplatesTab() {
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
+  const [previewTemplate, setPreviewTemplate] = useState(null)
   const [form, setForm] = useState({
     name: '', event_type: 'GENERAL', channel: 'IN_APP', subject_template: '', body_template: '', is_active: true,
   })
@@ -327,10 +367,36 @@ function TemplatesTab() {
     setShowForm(true)
   }
 
+  const renderTemplatePreview = (template) => {
+    if (!template?.body_template) return ''
+    return template.body_template.replace(/\{\{\s*([^}]+)\s*\}\}/g, (match, key) => {
+      const clean = String(key || '').trim()
+      return TEMPLATE_PREVIEW_CONTEXT[clean] ?? match
+    })
+  }
+
+  const duplicateTemplate = (template) => {
+    setEditingTemplate(null)
+    setForm({
+      name: `${template.name} (Copy)`,
+      event_type: template.event_type,
+      channel: template.channel,
+      subject_template: template.subject_template || '',
+      body_template: template.body_template || '',
+      is_active: template.is_active,
+    })
+    setShowForm(true)
+  }
+
   if (isLoading) return <Spinner />
 
   return (
     <div className="space-y-4">
+      <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-xs text-blue-800">
+        Templates are reusable message drafts for manual sends and broadcast workflows.
+        You can use placeholders like <code>{'{{student_name}}'}</code>, <code>{'{{class_name}}'}</code>, <code>{'{{date}}'}</code>, <code>{'{{amount}}'}</code>, <code>{'{{month}}'}</code>, <code>{'{{due_date}}'}</code>, <code>{'{{exam_name}}'}</code>, <code>{'{{school_name}}'}</code>, <code>{'{{roll_number}}'}</code>, <code>{'{{section_name}}'}</code>, and <code>{'{{attendance_rate}}'}</code>.
+        Any <code>{'{{key}}'}</code> works when that key is provided by trigger/manual context.
+      </div>
       <div className="flex items-center justify-between gap-3">
         <input
           type="text"
@@ -374,7 +440,7 @@ function TemplatesTab() {
             className="w-full text-sm border-gray-300 rounded-lg"
           />
           <textarea
-            placeholder="Message body (use {{student_name}}, {{class_name}}, {{date}} placeholders)"
+            placeholder="Message body (for example: Hi {{student_name}}, {{amount}} is pending for {{class_name}} as of {{date}}.)"
             value={form.body_template}
             onChange={(e) => setForm({ ...form, body_template: e.target.value })}
             rows={3}
@@ -419,6 +485,8 @@ function TemplatesTab() {
               </div>
               <div className="flex items-center gap-2">
                 <button onClick={() => openEdit(t)} className="text-xs text-primary-600 hover:text-primary-800">Edit</button>
+                <button onClick={() => duplicateTemplate(t)} className="text-xs text-indigo-600 hover:text-indigo-800">Duplicate</button>
+                <button onClick={() => setPreviewTemplate(t)} className="text-xs text-emerald-600 hover:text-emerald-800">Preview</button>
                 <button onClick={() => setDeleteConfirm(t)} className="text-xs text-red-600 hover:text-red-800">Delete</button>
               </div>
             </div>
@@ -470,6 +538,39 @@ function TemplatesTab() {
           </div>
         </div>
       )}
+
+      {previewTemplate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-xl mx-4">
+            <h2 className="text-lg font-bold text-gray-900 mb-1">Template Preview</h2>
+            <p className="text-xs text-gray-500 mb-4">
+              Sample placeholder values are used for this preview.
+            </p>
+            <div className="space-y-3 text-sm">
+              <div>
+                <p className="text-xs font-medium text-gray-500">Template</p>
+                <p className="text-gray-900">{previewTemplate.name}</p>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-gray-500">Subject</p>
+                <p className="text-gray-900">{previewTemplate.subject_template || '(No subject)'}</p>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-gray-500">Rendered Body</p>
+                <p className="text-gray-900 whitespace-pre-wrap">{renderTemplatePreview(previewTemplate)}</p>
+              </div>
+            </div>
+            <div className="flex justify-end mt-5">
+              <button
+                onClick={() => setPreviewTemplate(null)}
+                className="px-4 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -478,11 +579,18 @@ function TemplatesTab() {
 
 function SendTab() {
   const { showError, showSuccess } = useToast()
+  const { user, activeSchool } = useAuth()
+  const { activeAcademicYear } = useAcademicYear()
+  const { sessionClasses } = useSessionClasses(activeAcademicYear?.id, activeSchool?.id)
   const [mode, setMode] = useState('broadcast')
   const [selectedTemplate, setSelectedTemplate] = useState(null)
+  const [confirmSendOpen, setConfirmSendOpen] = useState(false)
+  const [audiencePreview, setAudiencePreview] = useState(null)
+  const [placeholderWarning, setPlaceholderWarning] = useState(null)
   const [form, setForm] = useState({
     event_type: 'GENERAL', channel: 'IN_APP', title: '', body: '',
     recipient_type: 'PARENT', recipient_identifier: '',
+    session_class_id: '',
   })
 
   // Fetch templates for the template picker
@@ -502,6 +610,12 @@ function SendTab() {
     onError: (err) => showError(err.response?.data?.detail || 'Failed to send broadcast'),
   })
 
+  const previewMutation = useMutation({
+    mutationFn: (d) => notificationsApi.previewBroadcastRecipients(d),
+    onSuccess: (res) => setAudiencePreview(res.data),
+    onError: (err) => showError(err.response?.data?.detail || 'Failed to preview recipients'),
+  })
+
   const sendMutation = useMutation({
     mutationFn: (d) => notificationsApi.send(d),
     onSuccess: () => {
@@ -511,12 +625,28 @@ function SendTab() {
     onError: (err) => showError(err.response?.data?.detail || err.response?.data?.recipient_identifier?.[0] || 'Failed to send notification'),
   })
 
+  const testSendMutation = useMutation({
+    mutationFn: () => notificationsApi.send({
+      event_type: form.event_type,
+      channel: 'IN_APP',
+      recipient_identifier: String(user?.id || ''),
+      recipient_type: 'STAFF',
+      title: form.title || 'Test Notification',
+      body: form.body || 'This is a test notification sent to your own inbox.',
+    }),
+    onSuccess: () => showSuccess('Test notification sent to your account'),
+    onError: (err) => showError(err.response?.data?.detail || 'Test send failed'),
+  })
+
   const resetForm = () => {
     setForm({
       event_type: 'GENERAL', channel: 'IN_APP', title: '', body: '',
       recipient_type: 'PARENT', recipient_identifier: '',
+      session_class_id: '',
     })
     setSelectedTemplate(null)
+    setAudiencePreview(null)
+    setConfirmSendOpen(false)
   }
 
   const applyTemplate = (template) => {
@@ -530,6 +660,35 @@ function SendTab() {
     })
   }
 
+  const extractPlaceholders = (text) => {
+    const keys = new Set()
+    if (!text) return []
+    let match = PLACEHOLDER_PATTERN.exec(text)
+    while (match) {
+      keys.add(String(match[1] || '').trim())
+      match = PLACEHOLDER_PATTERN.exec(text)
+    }
+    PLACEHOLDER_PATTERN.lastIndex = 0
+    return [...keys]
+  }
+
+  const buildPlaceholderWarning = () => {
+    const found = [
+      ...extractPlaceholders(form.title),
+      ...extractPlaceholders(form.body),
+    ]
+    const uniqueFound = [...new Set(found)]
+    if (!uniqueFound.length) return null
+
+    const unknown = uniqueFound.filter((key) => !SUPPORTED_PLACEHOLDERS.includes(key))
+    const unresolved = uniqueFound.filter((key) => SUPPORTED_PLACEHOLDERS.includes(key))
+    return {
+      found: uniqueFound,
+      unknown,
+      unresolved,
+    }
+  }
+
   const handleSend = () => {
     if (mode === 'broadcast') {
       broadcastMutation.mutate({
@@ -538,6 +697,7 @@ function SendTab() {
         recipient_type: form.recipient_type,
         title: form.title,
         body: form.body,
+        session_class_id: form.session_class_id || undefined,
       })
     } else {
       sendMutation.mutate({
@@ -551,14 +711,38 @@ function SendTab() {
     }
   }
 
-  const isPending = broadcastMutation.isPending || sendMutation.isPending
+  const runPreview = () => {
+    previewMutation.mutate({
+      channel: form.channel,
+      recipient_type: form.recipient_type,
+      session_class_id: form.session_class_id || undefined,
+    })
+  }
+
+  const openConfirm = () => {
+    const warning = buildPlaceholderWarning()
+    if (warning) {
+      setPlaceholderWarning(warning)
+      return
+    }
+    if (mode === 'broadcast') {
+      runPreview()
+      setConfirmSendOpen(true)
+      return
+    }
+    handleSend()
+  }
+
+  const isPending = broadcastMutation.isPending || sendMutation.isPending || previewMutation.isPending
   const canSend = form.title && form.body && (mode === 'broadcast' || form.recipient_identifier)
 
-  const charLimit = form.channel === 'SMS' ? SMS_CHAR_LIMIT
-    : form.channel === 'WHATSAPP' ? WHATSAPP_CHAR_LIMIT : null
+  const charLimit = form.channel === 'WHATSAPP' ? WHATSAPP_CHAR_LIMIT : null
 
   return (
     <div className="max-w-xl space-y-4">
+      <div className="rounded-lg border border-amber-100 bg-amber-50 p-3 text-xs text-amber-800">
+        <strong>In-App</strong> already includes mobile push fanout. Push is not a separate send channel here.
+      </div>
       {/* Mode Switcher */}
       <div className="flex bg-gray-100 rounded-lg p-0.5">
         <button
@@ -609,7 +793,7 @@ function SendTab() {
 
         <div className="grid grid-cols-2 gap-3">
           <select value={form.channel} onChange={(e) => setForm({ ...form, channel: e.target.value })} className="text-sm border-gray-300 rounded-lg">
-            {CHANNELS.map(({ value, label }) => (
+            {SEND_CHANNELS.map(({ value, label }) => (
               <option key={value} value={value}>{label}</option>
             ))}
           </select>
@@ -629,6 +813,26 @@ function SendTab() {
             />
           )}
         </div>
+        {mode === 'broadcast' && (
+          <div>
+            <label className="text-xs font-medium text-gray-600 mb-1 block">Session Class Filter (optional)</label>
+            <select
+              value={form.session_class_id}
+              onChange={(e) => setForm({ ...form, session_class_id: e.target.value })}
+              className="text-sm border-gray-300 rounded-lg w-full"
+              disabled={!activeAcademicYear?.id}
+            >
+              <option value="">
+                {activeAcademicYear?.id ? 'All Session Classes' : 'Select active academic year first'}
+              </option>
+              {sessionClasses.map((sc) => (
+                <option key={sc.id} value={sc.id}>
+                  {sc.label || `${sc.display_name}${sc.section ? ` - ${sc.section}` : ''}`}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         <select value={form.event_type} onChange={(e) => setForm({ ...form, event_type: e.target.value })} className="w-full text-sm border-gray-300 rounded-lg">
           {EVENT_TYPES.map(({ value, label }) => (
@@ -659,13 +863,108 @@ function SendTab() {
         </div>
 
         <button
-          onClick={handleSend}
+          onClick={openConfirm}
           disabled={isPending || !canSend}
           className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50"
         >
-          {isPending ? 'Sending...' : mode === 'broadcast' ? 'Send Broadcast' : 'Send Notification'}
+          {isPending ? 'Sending...' : mode === 'broadcast' ? 'Review & Send Broadcast' : 'Send Notification'}
+        </button>
+        <button
+          onClick={() => testSendMutation.mutate()}
+          disabled={testSendMutation.isPending || !user?.id}
+          className="ml-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm disabled:opacity-50"
+        >
+          {testSendMutation.isPending ? 'Sending Test...' : 'Test Send to Me'}
         </button>
       </div>
+
+      {placeholderWarning && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-xl mx-4">
+            <h2 className="text-lg font-bold text-gray-900 mb-2">Placeholder Warning</h2>
+            <p className="text-sm text-gray-600 mb-3">
+              This send contains placeholders. Manual sends do not auto-populate student-specific values unless you replace them before sending.
+            </p>
+            <div className="text-sm space-y-2">
+              <p><strong>Detected:</strong> {placeholderWarning.found.map((k) => `{{${k}}}`).join(', ')}</p>
+              {placeholderWarning.unknown.length > 0 && (
+                <p className="text-red-700">
+                  <strong>Unknown placeholders:</strong> {placeholderWarning.unknown.map((k) => `{{${k}}}`).join(', ')}
+                </p>
+              )}
+              {placeholderWarning.unresolved.length > 0 && (
+                <p className="text-amber-700">
+                  <strong>Missing values (will likely stay as-is):</strong> {placeholderWarning.unresolved.map((k) => `{{${k}}}`).join(', ')}
+                </p>
+              )}
+              <p className="text-xs text-gray-500">
+                Supported keys: {SUPPORTED_PLACEHOLDERS.map((k) => `{{${k}}}`).join(', ')}
+              </p>
+            </div>
+            <div className="flex justify-end gap-3 mt-5">
+              <button
+                onClick={() => setPlaceholderWarning(null)}
+                className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800"
+              >
+                Edit Message
+              </button>
+              <button
+                onClick={() => {
+                  setPlaceholderWarning(null)
+                  if (mode === 'broadcast') {
+                    runPreview()
+                    setConfirmSendOpen(true)
+                  } else {
+                    handleSend()
+                  }
+                }}
+                className="px-4 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm"
+              >
+                Send Anyway
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmSendOpen && mode === 'broadcast' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-lg mx-4">
+            <h2 className="text-lg font-bold text-gray-900 mb-2">Confirm Broadcast</h2>
+            <p className="text-sm text-gray-600 mb-4">
+              Review audience size before sending this broadcast.
+            </p>
+            <div className="rounded-lg border border-gray-200 p-3 text-sm space-y-1">
+              <p><strong>Recipient group:</strong> {RECIPIENT_TYPES.find((x) => x.value === form.recipient_type)?.label || form.recipient_type}</p>
+              <p><strong>Channel:</strong> {CHANNEL_LABEL[form.channel] || form.channel}</p>
+              <p><strong>Estimated recipients:</strong> {previewMutation.isPending ? 'Checking...' : (audiencePreview?.count ?? 0)}</p>
+            </div>
+            {!previewMutation.isPending && audiencePreview?.count === 0 && (
+              <p className="text-xs text-red-600 mt-3">No recipients match this filter. Update filters before sending.</p>
+            )}
+            {Array.isArray(audiencePreview?.samples) && audiencePreview.samples.length > 0 && (
+              <div className="mt-3">
+                <p className="text-xs font-medium text-gray-500 mb-1">Sample recipients</p>
+                <div className="text-xs text-gray-700 space-y-1 max-h-24 overflow-auto">
+                  {audiencePreview.samples.map((s) => (
+                    <p key={s.id}>{s.name}{s.email ? ` - ${s.email}` : ''}</p>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="flex justify-end gap-3 mt-5">
+              <button onClick={() => setConfirmSendOpen(false)} className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800">Cancel</button>
+              <button
+                onClick={handleSend}
+                disabled={previewMutation.isPending || (audiencePreview?.count ?? 0) === 0 || broadcastMutation.isPending}
+                className="px-4 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50"
+              >
+                {broadcastMutation.isPending ? 'Sending...' : 'Confirm Send'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -684,6 +983,9 @@ function AnalyticsTab() {
 
   const analytics = data?.data || {}
   const channels = analytics.delivery_analytics?.channels || {}
+  const eventTypes = analytics.event_type_analytics || {}
+  const trend = analytics.trend || []
+  const failures = analytics.top_failure_reasons || []
   const optimalTime = analytics.optimal_send_time || {}
 
   return (
@@ -725,6 +1027,60 @@ function AnalyticsTab() {
         ))}
         {Object.keys(channels).length === 0 && (
           <p className="text-sm text-gray-500 col-span-full">No notification data yet</p>
+        )}
+      </div>
+
+      <div>
+        <h3 className="text-sm font-semibold text-gray-900 mb-3">Event Type Performance</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {Object.entries(eventTypes).map(([eventType, stats]) => (
+            <div key={eventType} className="bg-white rounded-xl border border-gray-200 p-4">
+              <p className="text-xs text-gray-500 uppercase">{EVENT_TYPE_LABEL[eventType] || eventType}</p>
+              <p className="text-xl font-bold text-gray-900 mt-1">{stats.total}</p>
+              <div className="mt-2 space-y-1 text-xs">
+                <div className="flex justify-between"><span className="text-gray-500">Delivery</span><span className="text-green-600 font-medium">{stats.delivery_rate}%</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">Read</span><span className="text-blue-600 font-medium">{stats.read_rate}%</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">Failed</span><span className="text-red-600 font-medium">{stats.failed}</span></div>
+              </div>
+            </div>
+          ))}
+          {Object.keys(eventTypes).length === 0 && (
+            <p className="text-sm text-gray-500 col-span-full">No event-level data yet</p>
+          )}
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-200 p-4">
+        <h3 className="text-sm font-semibold text-gray-900 mb-3">Delivery Trend</h3>
+        {trend.length === 0 ? (
+          <p className="text-sm text-gray-500">No trend data yet</p>
+        ) : (
+          <div className="space-y-2">
+            {trend.slice(-10).map((row) => (
+              <div key={row.day} className="grid grid-cols-4 text-xs border-b border-gray-100 pb-1">
+                <span className="text-gray-600">{row.day}</span>
+                <span className="text-gray-900">Total: {row.total}</span>
+                <span className="text-green-600">Sent: {row.sent}</span>
+                <span className="text-red-600">Failed: {row.failed}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-200 p-4">
+        <h3 className="text-sm font-semibold text-gray-900 mb-3">Top Failure Reasons</h3>
+        {failures.length === 0 ? (
+          <p className="text-sm text-gray-500">No failure records in selected range</p>
+        ) : (
+          <div className="space-y-2">
+            {failures.map((item, idx) => (
+              <div key={`${item.channel}-${item.reason_code}-${idx}`} className="flex items-center justify-between text-xs border-b border-gray-100 pb-1">
+                <span className="text-gray-700">{CHANNEL_LABEL[item.channel] || item.channel} - {item.reason_code}</span>
+                <span className="font-medium text-red-600">{item.count}</span>
+              </div>
+            ))}
+          </div>
         )}
       </div>
 
@@ -815,10 +1171,6 @@ function SettingsTab() {
             <ToggleSwitch checked={config.whatsapp_enabled || false} onChange={(v) => updateConfig({ whatsapp_enabled: v })} />
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-700">SMS Notifications</span>
-            <ToggleSwitch checked={config.sms_enabled || false} onChange={(v) => updateConfig({ sms_enabled: v })} />
-          </div>
-          <div className="flex items-center justify-between">
             <span className="text-sm text-gray-700">Email Notifications</span>
             <ToggleSwitch checked={config.email_enabled || false} onChange={(v) => updateConfig({ email_enabled: v })} />
           </div>
@@ -826,10 +1178,7 @@ function SettingsTab() {
             <span className="text-sm text-gray-700">In-App Notifications</span>
             <ToggleSwitch checked={config.in_app_enabled !== false} onChange={(v) => updateConfig({ in_app_enabled: v })} />
           </div>
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-700">Push Notifications</span>
-            <ToggleSwitch checked={config.push_enabled || false} onChange={(v) => updateConfig({ push_enabled: v })} />
-          </div>
+          <p className="text-[11px] text-gray-500">In-App toggle also controls mobile push delivery.</p>
         </div>
       </div>
 
@@ -845,10 +1194,10 @@ function SettingsTab() {
               <div className="min-w-0">
                 <p className="text-sm font-medium text-gray-800">Absence Alerts</p>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  Sends WhatsApp to parents when a student is marked absent. Also notifies admins in-app.
+                  Sends in-app absence summaries after each class register is complete for the day.
                 </p>
                 <p className="text-[11px] text-amber-700 bg-amber-50 rounded px-2 py-0.5 mt-1.5 inline-block">
-                  Sent each time attendance is confirmed with absent students
+                  In-app scans at 8:00, 9:00, and 10:00 — one message per class for admins/teachers; parents only if their child is absent
                 </p>
               </div>
               <ToggleSwitch
@@ -862,36 +1211,17 @@ function SettingsTab() {
           {isModuleEnabled('finance') && (
             <div className="flex items-start justify-between gap-4 pb-4 border-b border-gray-100">
               <div className="min-w-0">
-                <p className="text-sm font-medium text-gray-800">Fee Reminders</p>
+                <p className="text-sm font-medium text-gray-800">Fee Pending Notifications</p>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  Sends WhatsApp reminders to parents of students with pending or partially paid fees.
+                  Sends in-app fee pending alerts to admins/principal per class, class teachers for assigned classes, and parent/student self notifications.
                 </p>
                 <p className="text-[11px] text-amber-700 bg-amber-50 rounded px-2 py-0.5 mt-1.5 inline-block">
-                  Sent monthly on day {config.fee_reminder_day || 5} of each month
+                  Runs on day 5 and day 8 of each month
                 </p>
               </div>
               <ToggleSwitch
                 checked={config.fee_reminder_enabled !== false}
                 onChange={(v) => updateConfig({ fee_reminder_enabled: v })}
-              />
-            </div>
-          )}
-
-          {/* Fee Overdue — requires finance module */}
-          {isModuleEnabled('finance') && (
-            <div className="flex items-start justify-between gap-4 pb-4 border-b border-gray-100">
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-gray-800">Fee Overdue Alerts</p>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  Sends WhatsApp alerts to parents whose fees are completely unpaid for the previous month.
-                </p>
-                <p className="text-[11px] text-amber-700 bg-amber-50 rounded px-2 py-0.5 mt-1.5 inline-block">
-                  Checked weekly (automated)
-                </p>
-              </div>
-              <ToggleSwitch
-                checked={config.fee_overdue_enabled !== false}
-                onChange={(v) => updateConfig({ fee_overdue_enabled: v })}
               />
             </div>
           )}
@@ -902,34 +1232,15 @@ function SettingsTab() {
               <div className="min-w-0">
                 <p className="text-sm font-medium text-gray-800">Exam Result Notifications</p>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  Sends WhatsApp notification to parents when exam results are published for their child.
+                  Sends in-app notifications to admins/principal, assigned class teachers, and parent/student when exam results are published.
                 </p>
                 <p className="text-[11px] text-amber-700 bg-amber-50 rounded px-2 py-0.5 mt-1.5 inline-block">
-                  Sent when results are published
+                  Sent when an exam is published
                 </p>
               </div>
               <ToggleSwitch
                 checked={config.exam_result_enabled !== false}
                 onChange={(v) => updateConfig({ exam_result_enabled: v })}
-              />
-            </div>
-          )}
-
-          {/* Daily Absence Summary — requires attendance module */}
-          {isModuleEnabled('attendance') && (
-            <div className="flex items-start justify-between gap-4 pb-4 border-b border-gray-100">
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-gray-800">Daily Absence Summary</p>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  Sends a summary of the day's absent/present counts to school admins via in-app notification.
-                </p>
-                <p className="text-[11px] text-amber-700 bg-amber-50 rounded px-2 py-0.5 mt-1.5 inline-block">
-                  Sent daily{config.daily_absence_summary_time ? ` at ${config.daily_absence_summary_time}` : ' at configured time'}
-                </p>
-              </div>
-              <ToggleSwitch
-                checked={config.daily_report_enabled !== false}
-                onChange={(v) => updateConfig({ daily_report_enabled: v })}
               />
             </div>
           )}
@@ -952,65 +1263,6 @@ function SettingsTab() {
               />
             </div>
           )}
-        </div>
-      </div>
-
-      {/* Scheduling & Timing */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5">
-        <h3 className="text-sm font-semibold text-gray-900 mb-4">Scheduling & Timing</h3>
-
-        <div className="flex items-start justify-between gap-4 mb-4 pb-4 border-b border-gray-100">
-          <div>
-            <p className="text-sm font-medium text-gray-800">Smart Notification Scheduling</p>
-            <p className="text-xs text-gray-500 mt-0.5 max-w-sm">
-              AI analyzes when parents are most likely to read messages and schedules non-urgent notifications
-              for optimal delivery times. In-app notifications are always immediate.
-            </p>
-            {config.smart_scheduling_enabled && (
-              <p className="text-xs text-green-700 bg-green-50 rounded px-2 py-1 mt-2 inline-block">
-                Learning from read patterns. Best results after 2-4 weeks of data.
-              </p>
-            )}
-          </div>
-          <ToggleSwitch
-            checked={config.smart_scheduling_enabled || false}
-            onChange={(v) => updateConfig({ smart_scheduling_enabled: v })}
-          />
-        </div>
-
-        <div className="grid grid-cols-3 gap-4">
-          <div>
-            <label className="text-xs font-medium text-gray-600">Fee Reminder Day</label>
-            <input
-              type="number"
-              min={1}
-              max={28}
-              value={config.fee_reminder_day || 5}
-              onChange={(e) => updateConfig({ fee_reminder_day: parseInt(e.target.value) || 5 })}
-              className="w-full text-sm border-gray-300 rounded-lg mt-1"
-            />
-            <p className="text-[11px] text-gray-400 mt-0.5">Day of month (1-28)</p>
-          </div>
-          <div>
-            <label className="text-xs font-medium text-gray-600">Quiet Hours Start</label>
-            <input
-              type="time"
-              value={config.quiet_hours_start || ''}
-              onChange={(e) => updateConfig({ quiet_hours_start: e.target.value || null })}
-              className="w-full text-sm border-gray-300 rounded-lg mt-1"
-            />
-            <p className="text-[11px] text-gray-400 mt-0.5">No notifications after this time</p>
-          </div>
-          <div>
-            <label className="text-xs font-medium text-gray-600">Quiet Hours End</label>
-            <input
-              type="time"
-              value={config.quiet_hours_end || ''}
-              onChange={(e) => updateConfig({ quiet_hours_end: e.target.value || null })}
-              className="w-full text-sm border-gray-300 rounded-lg mt-1"
-            />
-            <p className="text-[11px] text-gray-400 mt-0.5">Resume notifications after this time</p>
-          </div>
         </div>
       </div>
 

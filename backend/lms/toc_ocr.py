@@ -12,6 +12,7 @@ from typing import Tuple, Optional
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
+VISION_TIMEOUT_SECONDS = 60
 
 # Map Book.language choices to Google Vision BCP-47 language hint codes
 LANGUAGE_HINT_MAP = {
@@ -127,7 +128,7 @@ def _call_with_api_key(api_key: str, image_bytes: bytes, language: str) -> Tuple
 
     try:
         logger.info(f"[TOC-OCR] Calling Google Vision API (language={language})...")
-        response = requests.post(url, json=payload, timeout=60)
+        response = requests.post(url, json=payload, timeout=VISION_TIMEOUT_SECONDS)
 
         try:
             result = response.json()
@@ -174,7 +175,11 @@ def _call_with_service_account(image_bytes: bytes, language: str) -> Tuple[Optio
         context = vision.ImageContext(language_hints=hints)
 
         logger.info(f"[TOC-OCR] Calling Vision API via service account (language={language})...")
-        response = client.document_text_detection(image=image, image_context=context)
+        response = client.document_text_detection(
+            image=image,
+            image_context=context,
+            timeout=VISION_TIMEOUT_SECONDS,
+        )
 
         if response.error.message:
             return None, f"OCR error: {response.error.message}"
@@ -200,6 +205,9 @@ def _call_with_service_account(image_bytes: bytes, language: str) -> Tuple[Optio
 
     except ImportError:
         return None, "google-cloud-vision package not installed for service account auth."
+    except TimeoutError:
+        logger.error("[TOC-OCR] Service account call timed out")
+        return None, "OCR request timed out. Please try again."
     except Exception as e:
         logger.error(f"[TOC-OCR] Service account call failed: {e}")
         return None, f"OCR failed: {str(e)}"

@@ -76,6 +76,170 @@ def reverse_backfill_classsubject_session_class(apps, schema_editor):
     ClassSubject.objects.update(session_class_id=None)
 
 
+def _classsubject_add_session_class_column_forward(apps, schema_editor):
+    """Postgres-specific SQL from the original migration; SQLite-safe DDL for tests."""
+    connection = schema_editor.connection
+    if connection.vendor == 'postgresql':
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                ALTER TABLE academics_classsubject
+                ADD COLUMN IF NOT EXISTS session_class_id bigint NULL;
+                """
+            )
+            cursor.execute(
+                """
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1
+                        FROM pg_constraint
+                        WHERE conname = 'academics_classsubject_session_class_id_fk'
+                    ) THEN
+                        ALTER TABLE academics_classsubject
+                        ADD CONSTRAINT academics_classsubject_session_class_id_fk
+                        FOREIGN KEY (session_class_id)
+                        REFERENCES academic_sessions_sessionclass(id)
+                        DEFERRABLE INITIALLY DEFERRED;
+                    END IF;
+                END
+                $$;
+                """
+            )
+            cursor.execute(
+                """
+                CREATE INDEX IF NOT EXISTS academics_classsubject_session_class_id_idx
+                ON academics_classsubject (session_class_id);
+                """
+            )
+    elif connection.vendor == 'sqlite':
+        with connection.cursor() as cursor:
+            cursor.execute("PRAGMA table_info(academics_classsubject)")
+            column_names = {row[1] for row in cursor.fetchall()}
+            if 'session_class_id' not in column_names:
+                cursor.execute(
+                    """
+                    ALTER TABLE academics_classsubject
+                    ADD COLUMN session_class_id bigint NULL
+                    REFERENCES academic_sessions_sessionclass(id);
+                    """
+                )
+            cursor.execute(
+                """
+                CREATE INDEX IF NOT EXISTS academics_classsubject_session_class_id_idx
+                ON academics_classsubject (session_class_id);
+                """
+            )
+    else:
+        raise NotImplementedError(
+            f'academics.0009 session_class column: unsupported database {connection.vendor!r}'
+        )
+
+
+def _classsubject_add_session_class_column_reverse(apps, schema_editor):
+    connection = schema_editor.connection
+    if connection.vendor == 'postgresql':
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "DROP INDEX IF EXISTS academics_classsubject_session_class_id_idx;"
+            )
+            cursor.execute(
+                "ALTER TABLE academics_classsubject DROP CONSTRAINT IF EXISTS "
+                "academics_classsubject_session_class_id_fk;"
+            )
+            cursor.execute(
+                "ALTER TABLE academics_classsubject DROP COLUMN IF EXISTS session_class_id;"
+            )
+    elif connection.vendor == 'sqlite':
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "DROP INDEX IF EXISTS academics_classsubject_session_class_id_idx;"
+            )
+            try:
+                cursor.execute(
+                    "ALTER TABLE academics_classsubject DROP COLUMN session_class_id;"
+                )
+            except Exception:
+                # Older SQLite without DROP COLUMN support — best-effort reverse.
+                pass
+
+
+def _classsubject_drop_old_unique_forward(apps, schema_editor):
+    """Remove unique (school, class_obj, subject); Postgres uses pg_catalog, SQLite introspects indexes."""
+    connection = schema_editor.connection
+    if connection.vendor == 'postgresql':
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                DO $$
+                DECLARE
+                    school_attnum smallint;
+                    class_attnum smallint;
+                    subject_attnum smallint;
+                    constraint_name text;
+                BEGIN
+                    SELECT attnum INTO school_attnum
+                    FROM pg_attribute
+                    WHERE attrelid = 'academics_classsubject'::regclass
+                      AND attname = 'school_id'
+                      AND NOT attisdropped;
+
+                    SELECT attnum INTO class_attnum
+                    FROM pg_attribute
+                    WHERE attrelid = 'academics_classsubject'::regclass
+                      AND attname = 'class_obj_id'
+                      AND NOT attisdropped;
+
+                    SELECT attnum INTO subject_attnum
+                    FROM pg_attribute
+                    WHERE attrelid = 'academics_classsubject'::regclass
+                      AND attname = 'subject_id'
+                      AND NOT attisdropped;
+
+                    FOR constraint_name IN
+                        SELECT conname
+                        FROM pg_constraint
+                        WHERE conrelid = 'academics_classsubject'::regclass
+                          AND contype = 'u'
+                          AND conkey = ARRAY[school_attnum, class_attnum, subject_attnum]
+                    LOOP
+                        EXECUTE format(
+                            'ALTER TABLE academics_classsubject DROP CONSTRAINT %I',
+                            constraint_name
+                        );
+                    END LOOP;
+                END
+                $$;
+                """
+            )
+    elif connection.vendor == 'sqlite':
+        target = {'school_id', 'class_obj_id', 'subject_id'}
+        with connection.cursor() as cursor:
+            # Django's default name on SQLite (when present as a standalone unique index).
+            cursor.execute(
+                'DROP INDEX IF EXISTS "academics_classsubject_school_id_class_obj_id_subject_id_uniq"'
+            )
+            cursor.execute("PRAGMA index_list('academics_classsubject')")
+            for row in cursor.fetchall():
+                name = row[1]
+                is_unique = row[2]
+                if not is_unique:
+                    continue
+                cursor.execute(f'PRAGMA index_info("{name}")')
+                cols = {r[2] for r in cursor.fetchall()}
+                if cols == target:
+                    cursor.execute(f'DROP INDEX IF EXISTS "{name}"')
+    else:
+        raise NotImplementedError(
+            f'academics.0009 drop old ClassSubject unique: unsupported DB {connection.vendor!r}'
+        )
+
+
+def _classsubject_drop_old_unique_reverse(apps, schema_editor):
+    # Forward-only / expensive to recreate exactly — noop for migrations rollback.
+    pass
+
+
 class Migration(migrations.Migration):
 
     atomic = False
@@ -95,35 +259,9 @@ class Migration(migrations.Migration):
         ),
         migrations.SeparateDatabaseAndState(
             database_operations=[
-                migrations.RunSQL(
-                    sql="""
-                    ALTER TABLE academics_classsubject
-                    ADD COLUMN IF NOT EXISTS session_class_id bigint NULL;
-
-                    DO $$
-                    BEGIN
-                        IF NOT EXISTS (
-                            SELECT 1
-                            FROM pg_constraint
-                            WHERE conname = 'academics_classsubject_session_class_id_fk'
-                        ) THEN
-                            ALTER TABLE academics_classsubject
-                            ADD CONSTRAINT academics_classsubject_session_class_id_fk
-                            FOREIGN KEY (session_class_id)
-                            REFERENCES academic_sessions_sessionclass(id)
-                            DEFERRABLE INITIALLY DEFERRED;
-                        END IF;
-                    END
-                    $$;
-
-                    CREATE INDEX IF NOT EXISTS academics_classsubject_session_class_id_idx
-                    ON academics_classsubject (session_class_id);
-                    """,
-                    reverse_sql="""
-                    DROP INDEX IF EXISTS academics_classsubject_session_class_id_idx;
-                    ALTER TABLE academics_classsubject DROP CONSTRAINT IF EXISTS academics_classsubject_session_class_id_fk;
-                    ALTER TABLE academics_classsubject DROP COLUMN IF EXISTS session_class_id;
-                    """,
+                migrations.RunPython(
+                    _classsubject_add_session_class_column_forward,
+                    _classsubject_add_session_class_column_reverse,
                 ),
             ],
             state_operations=[
@@ -136,46 +274,9 @@ class Migration(migrations.Migration):
         ),
         migrations.SeparateDatabaseAndState(
             database_operations=[
-                migrations.RunSQL(
-                    sql="""
-                    DO $$
-                    DECLARE
-                        school_attnum smallint;
-                        class_attnum smallint;
-                        subject_attnum smallint;
-                        constraint_name text;
-                    BEGIN
-                        SELECT attnum INTO school_attnum
-                        FROM pg_attribute
-                        WHERE attrelid = 'academics_classsubject'::regclass
-                          AND attname = 'school_id'
-                          AND NOT attisdropped;
-
-                        SELECT attnum INTO class_attnum
-                        FROM pg_attribute
-                        WHERE attrelid = 'academics_classsubject'::regclass
-                          AND attname = 'class_obj_id'
-                          AND NOT attisdropped;
-
-                        SELECT attnum INTO subject_attnum
-                        FROM pg_attribute
-                        WHERE attrelid = 'academics_classsubject'::regclass
-                          AND attname = 'subject_id'
-                          AND NOT attisdropped;
-
-                        FOR constraint_name IN
-                            SELECT conname
-                            FROM pg_constraint
-                            WHERE conrelid = 'academics_classsubject'::regclass
-                              AND contype = 'u'
-                              AND conkey = ARRAY[school_attnum, class_attnum, subject_attnum]
-                        LOOP
-                            EXECUTE format('ALTER TABLE academics_classsubject DROP CONSTRAINT %I', constraint_name);
-                        END LOOP;
-                    END
-                    $$;
-                    """,
-                    reverse_sql=migrations.RunSQL.noop,
+                migrations.RunPython(
+                    _classsubject_drop_old_unique_forward,
+                    _classsubject_drop_old_unique_reverse,
                 ),
             ],
             state_operations=[

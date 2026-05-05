@@ -29,6 +29,8 @@ const LANGUAGES = [
 const MAX_TOC_TEXT_SIZE = 500 * 1024 // 500KB to match backend limit
 const TOC_WARN_TEXT_SIZE = 50 * 1024  // Warn at 50KB
 const MAX_UNDO_DEPTH = 20             // Cap undo history stack
+const OCR_HARD_TIMEOUT_MS = 120000
+const OCR_POLL_INTERVAL_MS = 1500
 
 const EMPTY_BOOK_FORM = {
   title: '',
@@ -227,6 +229,7 @@ export default function CurriculumPage() {
   const [showTocModal, setShowTocModal] = useState(false)
   const [tocText, setTocText] = useState('')
   const [tocMode, setTocMode] = useState('paste')
+  const [isMobileViewport, setIsMobileViewport] = useState(() => window.innerWidth < 768)
   const [tocStep, setTocStep] = useState('input')
   const [tocChapters, setTocChapters] = useState([])
   const [tocSuggestionItems, setTocSuggestionItems] = useState([])
@@ -237,7 +240,7 @@ export default function CurriculumPage() {
   const [tocImageRotation, setTocImageRotation] = useState(0)
   const [tocImageSkewX, setTocImageSkewX] = useState(0)
   const [tocImageSkewY, setTocImageSkewY] = useState(0)
-  const [tocSkewUiMode, setTocSkewUiMode] = useState('basic')
+  const [tocShowAdvancedFixes, setTocShowAdvancedFixes] = useState(false)
   const [tocImageWizardStep, setTocImageWizardStep] = useState(1)
   const [tocCropAspect, setTocCropAspect] = useState('free')
   const [tocPerspectiveCorners, setTocPerspectiveCorners] = useState(createDefaultPerspectiveCorners)
@@ -254,6 +257,10 @@ export default function CurriculumPage() {
   const tocModalBodyRef = useRef(null)
   const tocRawTextAreaRef = useRef(null)
   const [ocrLoading, setOcrLoading] = useState(false)
+  const [ocrStatusText, setOcrStatusText] = useState('')
+  const [ocrElapsedSeconds, setOcrElapsedSeconds] = useState(0)
+  const [ocrCanRetry, setOcrCanRetry] = useState(false)
+  const activeOcrAbortRef = useRef(null)
   const [tocOcrLines, setTocOcrLines] = useState([])
   const [selectedOcrLineId, setSelectedOcrLineId] = useState(null)
   const [targetChapterIndex, setTargetChapterIndex] = useState(0)
@@ -338,6 +345,31 @@ export default function CurriculumPage() {
       setTocSuggestionItems([])
       setTocSuggestionMeta(null)
     }
+  }
+
+  useEffect(() => {
+    const handleResize = () => setIsMobileViewport(window.innerWidth < 768)
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
+  useEffect(() => {
+    if (!ocrLoading) return undefined
+    const interval = window.setInterval(() => {
+      setOcrElapsedSeconds((prev) => prev + 1)
+    }, 1000)
+    return () => window.clearInterval(interval)
+  }, [ocrLoading])
+
+  const cancelOcrRequest = () => {
+    if (activeOcrAbortRef.current) {
+      activeOcrAbortRef.current.abort()
+      activeOcrAbortRef.current = null
+    }
+    setOcrLoading(false)
+    setOcrStatusText('')
+    setOcrCanRetry(true)
+    showError('OCR request cancelled. You can retry or switch to Manual Entry.')
   }
 
   const syncRawText = (nextText) => {
@@ -783,7 +815,7 @@ export default function CurriculumPage() {
 
   const openTocModal = () => {
     setTocText('')
-    setTocMode('paste')
+    setTocMode(isMobileViewport ? 'upload' : 'paste')
     setTocStep('input')
     setTocChapters([{ title: '', topics: [{ title: '', page_start: null, page_end: null, content_kind: 'general' }], page_start: null, page_end: null }])
     setTocSuggestionItems([])
@@ -794,7 +826,7 @@ export default function CurriculumPage() {
     setTocImageRotation(0)
     setTocImageSkewX(0)
     setTocImageSkewY(0)
-    setTocSkewUiMode('basic')
+    setTocShowAdvancedFixes(false)
     setTocImageWizardStep(1)
     setTocCropAspect('free')
     setTocPerspectiveCorners(createDefaultPerspectiveCorners())
@@ -807,13 +839,20 @@ export default function CurriculumPage() {
     setTocFinalPreviewUrl(null)
     setTocFinalPreviewLoading(false)
     setOcrLoading(false)
+    setOcrStatusText('')
+    setOcrElapsedSeconds(0)
+    setOcrCanRetry(false)
     setShowTocModal(true)
   }
 
   const closeTocModal = () => {
+    if (activeOcrAbortRef.current) {
+      activeOcrAbortRef.current.abort()
+      activeOcrAbortRef.current = null
+    }
     setShowTocModal(false)
     setTocText('')
-    setTocMode('paste')
+    setTocMode(isMobileViewport ? 'upload' : 'paste')
     setTocStep('input')
     setTocChapters([{ title: '', topics: [{ title: '', page_start: null, page_end: null, content_kind: 'general' }], page_start: null, page_end: null }])
     setTocSuggestionItems([])
@@ -837,6 +876,9 @@ export default function CurriculumPage() {
     setTocFinalPreviewUrl(null)
     setTocFinalPreviewLoading(false)
     setOcrLoading(false)
+    setOcrStatusText('')
+    setOcrElapsedSeconds(0)
+    setOcrCanRetry(false)
   }
 
   // ---- Submit Handlers ----
@@ -1664,6 +1706,7 @@ export default function CurriculumPage() {
     setTocCropModalOpen(false)
     setTocRawExtractedText('')
     setTocShowCleanupEditor(false)
+    setOcrCanRetry(false)
   }
 
   const handleRotateTocImage = (delta) => {
@@ -1821,7 +1864,13 @@ export default function CurriculumPage() {
       showError('Please select an image first')
       return
     }
+    const abortController = new AbortController()
+    activeOcrAbortRef.current = abortController
+    const requestStartedAt = Date.now()
     setOcrLoading(true)
+    setOcrStatusText('Preparing image...')
+    setOcrElapsedSeconds(0)
+    setOcrCanRetry(false)
     try {
       const processedFile = await buildProcessedTocImageFile(tocImageFile)
       if (processedFile !== tocImageFile) {
@@ -1831,7 +1880,39 @@ export default function CurriculumPage() {
         setTocImageSkewY(0)
       }
 
-      const response = await lmsApi.ocrTOC(selectedBookId, processedFile)
+      let response = null
+      setOcrStatusText('Uploading photo...')
+
+      const asyncResponse = await lmsApi.createTocJob(selectedBookId, processedFile, {
+        signal: abortController.signal,
+      })
+      const asyncJobId = asyncResponse?.data?.job_id
+
+      if (asyncResponse?.status === 202 && asyncJobId) {
+        setOcrStatusText('Extracting text...')
+        while (Date.now() - requestStartedAt < OCR_HARD_TIMEOUT_MS) {
+          const jobResponse = await lmsApi.getTocJob(asyncJobId, { signal: abortController.signal })
+          const jobData = jobResponse?.data || {}
+          if (jobData.status === 'SUCCEEDED') {
+            response = { data: jobData.result || {} }
+            break
+          }
+          if (jobData.status === 'FAILED' || jobData.status === 'TIMED_OUT') {
+            throw new Error(jobData.error_message || 'OCR job failed. Please retry.')
+          }
+          setOcrStatusText('Still working...')
+          await new Promise((resolve) => window.setTimeout(resolve, OCR_POLL_INTERVAL_MS))
+        }
+        if (!response) {
+          throw new Error('OCR is taking too long. Please retry or use Manual Entry.')
+        }
+      } else {
+        setOcrStatusText('Extracting text...')
+        response = await lmsApi.ocrTOC(selectedBookId, processedFile, {
+          signal: abortController.signal,
+        })
+      }
+
       const rawExtractedText = response?.data?.text || ''
       setTocText(rawExtractedText)
       const responseLines = Array.isArray(response?.data?.lines)
@@ -1853,11 +1934,19 @@ export default function CurriculumPage() {
       setTocImageWizardStep(4)
       setTocSuggestionItems([])
       setTocSuggestionMeta(null)
+      setOcrStatusText('')
       showSuccess('Text extracted! Review and edit before importing Table of Contents.')
     } catch (error) {
-      showError(error.response?.data?.error || 'Failed to extract text from image')
+      if (error.name === 'CanceledError' || error.name === 'AbortError') {
+        showError('OCR request cancelled.')
+      } else {
+        showError(error.response?.data?.error || error.message || 'Failed to extract text from image')
+      }
+      setOcrCanRetry(true)
     } finally {
+      activeOcrAbortRef.current = null
       setOcrLoading(false)
+      setOcrStatusText('')
     }
   }
 
@@ -2655,35 +2744,6 @@ export default function CurriculumPage() {
                                 />
                               )}
 
-                              {tocImageWizardStep === 1 && (
-                                <>
-                                  {/* Rotate Left G�� left edge */}
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRotateTocImage(-90)}
-                                    disabled={ocrLoading || tocImageProcessing}
-                                    className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center shadow-lg transition-colors z-10"
-                                    title="Rotate Left 90 degrees"
-                                  >
-                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
-                                      <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                                    </svg>
-                                  </button>
-                                  {/* Rotate Right G�� right edge */}
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRotateTocImage(90)}
-                                    disabled={ocrLoading || tocImageProcessing}
-                                    className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center shadow-lg transition-colors z-10"
-                                    title="Rotate Right 90 degrees"
-                                  >
-                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
-                                      <path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                                    </svg>
-                                  </button>
-                                </>
-                              )}
-
                               {tocImageWizardStep === 3 && !hasPendingLinearTransforms && (
                                 <>
                                   <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
@@ -2745,7 +2805,7 @@ export default function CurriculumPage() {
                               setTocImageRotation(0)
                               setTocImageSkewX(0)
                               setTocImageSkewY(0)
-                              setTocSkewUiMode('basic')
+                              setTocShowAdvancedFixes(false)
                               setTocImageWizardStep(1)
                               if (tocFinalPreviewUrl) URL.revokeObjectURL(tocFinalPreviewUrl)
                               setTocFinalPreviewUrl(null)
@@ -2763,22 +2823,80 @@ export default function CurriculumPage() {
                         </div>
 
                         <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-3">
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                          <div className="grid grid-cols-3 gap-2">
                             {[
-                              { id: 1, label: '1. Rotate + Crop' },
-                              { id: 3, label: '2. Skew' },
-                              { id: 4, label: '3. OCR' },
-                            ].map((step) => (
-                              <div
+                              {
+                                id: 1,
+                                shortLabel: 'Rotate',
+                                fullLabel: 'Rotate + Crop',
+                                icon: (
+                                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v6h6" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M20 20v-6h-6" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M20 9A8 8 0 0 0 6.3 5.3L4 7" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 15a8 8 0 0 0 13.7 3.7L20 17" />
+                                  </svg>
+                                ),
+                              },
+                              {
+                                id: 3,
+                                shortLabel: 'Skew',
+                                fullLabel: 'Skew',
+                                icon: (
+                                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h12l4 12H8z" />
+                                  </svg>
+                                ),
+                              },
+                              {
+                                id: 4,
+                                shortLabel: 'OCR',
+                                fullLabel: 'OCR',
+                                icon: (
+                                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <rect x="3" y="4" width="18" height="14" rx="2" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M7 8h10M7 12h6" />
+                                  </svg>
+                                ),
+                              },
+                            ].map((step, index) => (
+                              <button
+                                type="button"
                                 key={`wiz-step-${step.id}`}
-                                className={`text-xs px-2 py-1.5 rounded border text-center ${
+                                onClick={() => {
+                                  if (step.id === 1) {
+                                    setTocImageWizardStep(1)
+                                    return
+                                  }
+                                  if (step.id === 3) {
+                                    handleProceedToSkew()
+                                    return
+                                  }
+                                  if (step.id === 4) {
+                                    setTocImageWizardStep(4)
+                                  }
+                                }}
+                                className={`text-xs px-2 py-1.5 rounded-lg border text-center transition-colors ${
                                   tocImageWizardStep === step.id
                                     ? 'bg-blue-600 text-white border-blue-600'
-                                    : 'bg-white text-gray-600 border-gray-200'
+                                    : 'bg-white text-gray-700 border-gray-200 hover:border-blue-300'
                                 }`}
                               >
-                                {step.label}
-                              </div>
+                                <span className="inline-flex items-center gap-1.5">
+                                  <span className={`inline-flex items-center justify-center w-5 h-5 rounded-full border text-[10px] font-semibold ${
+                                    tocImageWizardStep === step.id
+                                      ? 'border-white/70 bg-white/20 text-white'
+                                      : 'border-gray-300 bg-gray-100 text-gray-700'
+                                  }`}>
+                                    {index + 1}
+                                  </span>
+                                  <span className={tocImageWizardStep === step.id ? 'text-white' : 'text-gray-600'}>
+                                    {step.icon}
+                                  </span>
+                                  <span className="hidden sm:inline">{step.fullLabel}</span>
+                                  <span className="sm:hidden">{step.shortLabel}</span>
+                                </span>
+                              </button>
                             ))}
                           </div>
 
@@ -2786,7 +2904,7 @@ export default function CurriculumPage() {
                             <div className="space-y-2">
                               <p className="text-xs font-medium text-gray-700">Step 1: Rotate + Crop</p>
                               <p className="text-xs text-gray-500">Adjust rotation and crop. Changes are applied automatically when you click Next.</p>
-                              <div className="grid grid-cols-1 sm:grid-cols-[auto_1fr_auto] gap-2 items-center">
+                              <div className="flex items-center justify-center gap-2 rounded-md bg-gray-100 px-2 py-2">
                                 <button
                                   type="button"
                                   onClick={() => handleRotateTocImage(-90)}
@@ -2795,16 +2913,6 @@ export default function CurriculumPage() {
                                 >
                                   -90°
                                 </button>
-                                <input
-                                  type="range"
-                                  min={-360}
-                                  max={360}
-                                  step={1}
-                                  value={tocImageRotation}
-                                  onChange={(e) => handleSetTocImageRotation(e.target.value)}
-                                  className="w-full"
-                                  disabled={ocrLoading || tocImageProcessing}
-                                />
                                 <button
                                   type="button"
                                   onClick={() => handleRotateTocImage(90)}
@@ -2814,16 +2922,18 @@ export default function CurriculumPage() {
                                   +90°
                                 </button>
                               </div>
+                              <input
+                                type="range"
+                                min={-360}
+                                max={360}
+                                step={1}
+                                value={tocImageRotation}
+                                onChange={(e) => handleSetTocImageRotation(e.target.value)}
+                                className="w-full"
+                                disabled={ocrLoading || tocImageProcessing}
+                              />
                               <p className="text-xs text-gray-500">Current rotation: {tocImageRotation}deg</p>
                               <div className="flex flex-wrap gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => handleSetTocImageRotation(0)}
-                                  disabled={ocrLoading || tocImageProcessing || tocImageRotation === 0}
-                                  className="btn btn-secondary text-sm"
-                                >
-                                  Reset Rotation
-                                </button>
                                 <button
                                   type="button"
                                   onClick={() => { setTocCrop(undefined); setTocCompletedCrop(null) }}
@@ -2834,11 +2944,11 @@ export default function CurriculumPage() {
                                 </button>
                                 <button
                                   type="button"
-                                  onClick={(e) => handleProceedToSkew(e)}
-                                  disabled={ocrLoading || tocImageProcessing}
-                                  className="btn btn-primary text-sm"
+                                  onClick={() => handleSetTocImageRotation(0)}
+                                  disabled={ocrLoading || tocImageProcessing || tocImageRotation === 0}
+                                  className="btn btn-secondary text-sm"
                                 >
-                                  {tocImageProcessing ? 'Applying...' : 'Next: Skew'}
+                                  Reset Rotation
                                 </button>
                               </div>
                             </div>
@@ -2847,24 +2957,15 @@ export default function CurriculumPage() {
                           {tocImageWizardStep === 3 && (
                             <div className="space-y-2">
                               <p className="text-xs font-medium text-gray-700">Step 2: Perspective / Skew</p>
-                              <div className="inline-flex rounded-lg border border-gray-200 bg-white p-0.5">
-                                <button
-                                  type="button"
-                                  onClick={() => setTocSkewUiMode('basic')}
-                                  className={`px-3 py-1 text-xs rounded-md ${tocSkewUiMode === 'basic' ? 'bg-blue-600 text-white' : 'text-gray-600'}`}
-                                >
-                                  Basic
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setTocSkewUiMode('advanced')}
-                                  className={`px-3 py-1 text-xs rounded-md ${tocSkewUiMode === 'advanced' ? 'bg-blue-600 text-white' : 'text-gray-600'}`}
-                                >
-                                  Advanced
-                                </button>
-                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setTocShowAdvancedFixes((prev) => !prev)}
+                                className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-1 text-xs text-gray-700"
+                              >
+                                {tocShowAdvancedFixes ? 'Hide Advanced Fixes' : 'Show Advanced Fixes'}
+                              </button>
 
-                              {tocSkewUiMode === 'advanced' && (
+                              {tocShowAdvancedFixes && (
                                 <>
                                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                     <label className="text-xs text-gray-600 space-y-1 block">
@@ -2930,23 +3031,17 @@ export default function CurriculumPage() {
                               <p className="text-xs text-gray-500">
                                 Perspective: drag the 4 blue handles to page corners, then apply perspective correction.
                               </p>
-                              {tocSkewUiMode === 'basic' && (
-                                <p className="text-xs text-gray-500">
-                                  Basic mode keeps controls minimal. Use Next: OCR after corner alignment.
-                                </p>
-                              )}
+                              <p className="text-xs text-gray-500">
+                                Keep it simple: align the 4 corners first. Open Advanced Fixes only if needed.
+                              </p>
                               <p className="text-xs text-gray-500">
                                 Handles snap to edges when close to image bounds for easier alignment.
                               </p>
-                              {tocSkewUiMode === 'advanced' && hasPendingLinearTransforms && (
+                              {tocShowAdvancedFixes && hasPendingLinearTransforms && (
                                 <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
                                   Apply or reset rotate/skew before applying perspective correction.
                                 </p>
                               )}
-                              <div className="flex flex-wrap gap-2">
-                                <button type="button" onClick={() => setTocImageWizardStep(1)} className="btn btn-secondary text-sm">Back</button>
-                                <button type="button" onClick={() => setTocImageWizardStep(4)} className="btn btn-primary text-sm">Next: OCR</button>
-                              </div>
                             </div>
                           )}
 
@@ -2956,28 +3051,78 @@ export default function CurriculumPage() {
                               <p className="text-xs text-gray-500">
                                 The preview above is the final processed area that will be sent to OCR, not the full original photo.
                               </p>
-                              <button
-                                onClick={handleOcrExtract}
-                                disabled={ocrLoading || tocImageProcessing}
-                                className="btn btn-primary w-full"
-                              >
-                                {ocrLoading ? (
-                                  <span className="flex items-center justify-center gap-2">
-                                    <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                                    </svg>
-                                    Extracting text...
-                                  </span>
-                                ) : tocImageProcessing ? (
-                                  'Processing image...'
-                                ) : 'Extract Text from Image'}
-                              </button>
+                              {ocrLoading && (
+                                <div className="rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-800">
+                                  <p>{ocrStatusText || 'Extracting text...'}</p>
+                                  <p className="mt-1">Elapsed: {ocrElapsedSeconds}s</p>
+                                </div>
+                              )}
                               <div className="flex flex-wrap gap-2">
-                                <button type="button" onClick={() => setTocImageWizardStep(3)} className="btn btn-secondary text-sm">Back</button>
+                                {ocrLoading && (
+                                  <button type="button" onClick={cancelOcrRequest} className="btn btn-secondary text-sm">
+                                    Cancel
+                                  </button>
+                                )}
+                                {!ocrLoading && ocrCanRetry && (
+                                  <button type="button" onClick={handleOcrExtract} className="btn btn-secondary text-sm">
+                                    Retry OCR
+                                  </button>
+                                )}
+                                {!ocrLoading && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setTocMode('paste')
+                                      setTocStep('input')
+                                    }}
+                                    className="btn btn-secondary text-sm"
+                                  >
+                                    Switch to Manual Entry
+                                  </button>
+                                )}
                               </div>
                             </div>
                           )}
+
+                          <div className="border-t border-gray-200 pt-3 mt-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (tocImageWizardStep === 3) setTocImageWizardStep(1)
+                                  if (tocImageWizardStep === 4) setTocImageWizardStep(3)
+                                }}
+                                disabled={ocrLoading || tocImageProcessing || tocImageWizardStep === 1}
+                                className="btn btn-secondary text-sm"
+                              >
+                                Back
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  if (tocImageWizardStep === 1) {
+                                    handleProceedToSkew(e)
+                                    return
+                                  }
+                                  if (tocImageWizardStep === 3) {
+                                    setTocImageWizardStep(4)
+                                    return
+                                  }
+                                  if (tocImageWizardStep === 4) {
+                                    handleOcrExtract()
+                                  }
+                                }}
+                                disabled={ocrLoading || tocImageProcessing}
+                                className="btn btn-primary text-sm"
+                              >
+                                {tocImageWizardStep === 1
+                                  ? (tocImageProcessing ? 'Applying...' : 'Next: Skew')
+                                  : tocImageWizardStep === 3
+                                    ? 'Next: OCR'
+                                    : (ocrLoading ? 'Extracting...' : 'Extract Text')}
+                              </button>
+                            </div>
+                          </div>
 
                         </div>
                       </div>

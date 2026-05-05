@@ -4,6 +4,7 @@ from .models import (
     NotificationLog,
     NotificationPreference,
     SchoolNotificationConfig,
+    AttendanceAbsenceInAppDigestMarker,
 )
 
 
@@ -30,4 +31,10 @@ class NotificationPreferenceAdmin(admin.ModelAdmin):
 
 @admin.register(SchoolNotificationConfig)
 class SchoolNotificationConfigAdmin(admin.ModelAdmin):
-    list_display = ['school', 'whatsapp_enabled', 'sms_enabled', 'in_app_enabled']
+    list_display = ['school', 'whatsapp_enabled', 'in_app_enabled', 'email_enabled']
+
+
+@admin.register(AttendanceAbsenceInAppDigestMarker)
+class AttendanceAbsenceInAppDigestMarkerAdmin(admin.ModelAdmin):
+    list_display = ['school', 'date', 'digest_type', 'scope_key', 'created_at']
+    list_filter = ['digest_type', 'date']

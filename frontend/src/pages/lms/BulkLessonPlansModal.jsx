@@ -65,6 +65,7 @@ function pickTeacherId(classSubjects, subjectId, sessionClassId) {
 
 function emptyRow() {
   return {
+    chapterIds: [],
     topicIds: [],
     subtopicIds: [],
     title: '',
@@ -334,7 +335,12 @@ export default function BulkLessonPlansModal({ onClose, onSuccess }) {
 
   const rowCurriculumCount = (d) => {
     const r = rowByDate[d] || emptyRow()
-    return (r.topicIds || []).length + (r.subtopicIds || []).length
+    return (r.chapterIds || []).length + (r.topicIds || []).length + (r.subtopicIds || []).length
+  }
+
+  const rowAiEligibleCount = (d) => {
+    const r = rowByDate[d] || emptyRow()
+    return (r.chapterIds || []).length + (r.topicIds || []).length + (r.subtopicIds || []).length
   }
 
   const toggleDateCurriculumSelect = (d) => {
@@ -548,7 +554,7 @@ export default function BulkLessonPlansModal({ onClose, onSuccess }) {
                           {!skipRow && (
                             <div className="flex flex-col gap-1">
                               <span className="text-xs text-gray-600">
-                                {rowCurriculumCount(d)} item(s) (topics + sub-topics)
+                                {rowCurriculumCount(d)} item(s) (chapters + topics + sub-topics)
                               </span>
                               <button
                                 type="button"
@@ -587,10 +593,10 @@ export default function BulkLessonPlansModal({ onClose, onSuccess }) {
                             <button
                               type="button"
                               className="btn btn-secondary text-xs py-1 px-2"
-                              disabled={!r.topicIds?.length && !r.subtopicIds?.length}
+                              disabled={rowAiEligibleCount(d) === 0}
                               title={
-                                !r.topicIds?.length && !r.subtopicIds?.length
-                                  ? 'Select curriculum first'
+                                rowAiEligibleCount(d) === 0
+                                  ? 'Select at least one chapter, topic, or sub-topic to use AI'
                                   : 'Open AI generator for this date'
                               }
                               onClick={() => setAiModalDate(d)}
@@ -673,14 +679,15 @@ export default function BulkLessonPlansModal({ onClose, onSuccess }) {
         }}
         classId={parseInt(resolvedClass, 10)}
         subjectId={parseInt(selectedSubject, 10)}
+        initialChapterIds={topicsPickerDate ? rowByDate[topicsPickerDate]?.chapterIds || [] : []}
         initialTopicIds={topicsPickerDate ? rowByDate[topicsPickerDate]?.topicIds || [] : []}
         initialSubtopicIds={topicsPickerDate ? rowByDate[topicsPickerDate]?.subtopicIds || [] : []}
-        onApply={({ topicIds, subtopicIds }) => {
+        onApply={({ chapterIds, topicIds, subtopicIds }) => {
           if (topicsPickerDate) {
-            updateRow(topicsPickerDate, { topicIds, subtopicIds })
+            updateRow(topicsPickerDate, { chapterIds, topicIds, subtopicIds })
           } else {
             datesSelectedForBulkCurriculum.forEach((iso) => {
-              if (!existingDateSet.has(iso)) updateRow(iso, { topicIds, subtopicIds })
+              if (!existingDateSet.has(iso)) updateRow(iso, { chapterIds, topicIds, subtopicIds })
             })
             setDatesSelectedForBulkCurriculum([])
           }
@@ -692,6 +699,7 @@ export default function BulkLessonPlansModal({ onClose, onSuccess }) {
       <LessonPlanAIModal
         open={!!aiModalDate}
         onClose={() => setAiModalDate(null)}
+        chapterIds={aiModalDate ? rowByDate[aiModalDate]?.chapterIds || [] : []}
         topicIds={aiModalDate ? rowByDate[aiModalDate]?.topicIds || [] : []}
         subtopicIds={aiModalDate ? rowByDate[aiModalDate]?.subtopicIds || [] : []}
         lessonDate={aiModalDate || ''}

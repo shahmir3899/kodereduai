@@ -294,6 +294,194 @@ def trigger_fee_reminder(school, month, year):
     return sent
 
 
+def trigger_fee_pending_in_app(school, month, year):
+    """
+    Consolidated in-app fee pending notifications.
+
+    Recipients:
+    - SCHOOL_ADMIN / PRINCIPAL: one message per class with pending total
+    - Class teacher: one message for each assigned class with pending total
+    - Parent users linked to student: self-only pending amount
+    - Student user (if linked): self-only pending amount
+    """
+    config = _get_config(school)
+    if config and not config.fee_reminder_enabled:
+        logger.info(f"Fee pending notifications disabled for {school.name}, skipping")
+        return 0
+
+    from finance.models import FeePayment
+    from academics.models import ClassTeacherAssignment
+    from .engine import NotificationEngine
+
+    engine = NotificationEngine(school)
+    pending_payments = (
+        FeePayment.objects
+        .filter(
+            school=school,
+            month=month,
+            year=year,
+            status__in=['PENDING', 'PARTIAL'],
+            student__is_active=True,
+        )
+        .select_related('student', 'student__class_obj')
+    )
+    if not pending_payments.exists():
+        return 0
+
+    class_totals = {}
+    student_totals = {}
+    student_by_id = {}
+    for payment in pending_payments:
+        student = payment.student
+        due = float(payment.amount_due or 0)
+        paid = float(payment.amount_paid or 0)
+        balance = max(due - paid, 0)
+        if balance <= 0:
+            continue
+        class_totals.setdefault(student.class_obj_id, {'class_name': student.class_obj.name, 'amount': 0.0})
+        class_totals[student.class_obj_id]['amount'] += balance
+        student_totals[student.id] = student_totals.get(student.id, 0.0) + balance
+        student_by_id[student.id] = student
+
+    if not class_totals and not student_totals:
+        return 0
+
+    sent = 0
+    # Admin/principal: one message per class.
+    admin_users = _get_admin_users(school)
+    for class_id, payload in class_totals.items():
+        class_name = payload['class_name']
+        amount_label = f"{payload['amount']:,.0f}"
+        title = f"Fee Pending — {class_name}"
+        body = f"An amount of Rs {amount_label} is pending for {class_name}."
+        for admin_user in admin_users:
+            if _monthly_notification_already_sent(
+                school=school,
+                event_type='FEE_DUE',
+                channel='IN_APP',
+                recipient_user=admin_user,
+                title=title,
+                body=body,
+                month=month,
+                year=year,
+            ):
+                continue
+            engine.send(
+                event_type='FEE_DUE',
+                channel='IN_APP',
+                context={},
+                recipient_identifier=str(admin_user.id),
+                recipient_type='ADMIN',
+                recipient_user=admin_user,
+                title=title,
+                body=body,
+            )
+            sent += 1
+
+    # Class teachers: only assigned classes.
+    teacher_assignments = (
+        ClassTeacherAssignment.objects
+        .filter(school=school, is_active=True)
+        .filter(Q(academic_year__is_current=True) | Q(academic_year__isnull=True))
+        .select_related('teacher__user', 'class_obj')
+    )
+    for assignment in teacher_assignments:
+        teacher_user = getattr(getattr(assignment, 'teacher', None), 'user', None)
+        if not teacher_user:
+            continue
+        payload = class_totals.get(assignment.class_obj_id)
+        if not payload:
+            continue
+        class_name = payload['class_name']
+        amount_label = f"{payload['amount']:,.0f}"
+        title = f"Fee Pending — {class_name}"
+        body = f"An amount of Rs {amount_label} is pending for {class_name}."
+        if _monthly_notification_already_sent(
+            school=school,
+            event_type='FEE_DUE',
+            channel='IN_APP',
+            recipient_user=teacher_user,
+            title=title,
+            body=body,
+            month=month,
+            year=year,
+        ):
+            continue
+        engine.send(
+            event_type='FEE_DUE',
+            channel='IN_APP',
+            context={},
+            recipient_identifier=str(teacher_user.id),
+            recipient_type='STAFF',
+            recipient_user=teacher_user,
+            title=title,
+            body=body,
+        )
+        sent += 1
+
+    # Parent + student self notifications.
+    for student_id, amount in student_totals.items():
+        student = student_by_id.get(student_id)
+        if not student:
+            continue
+        amount_label = f"{amount:,.0f}"
+        title = f"Fee Pending — {student.name}"
+        body = f"Dear {student.name}, your fee amounting to Rs {amount_label} is pending."
+        for parent_user in get_parent_users_for_student(student):
+            if _monthly_notification_already_sent(
+                school=school,
+                event_type='FEE_DUE',
+                channel='IN_APP',
+                recipient_user=parent_user,
+                title=title,
+                body=body,
+                month=month,
+                year=year,
+                student=student,
+            ):
+                continue
+            engine.send(
+                event_type='FEE_DUE',
+                channel='IN_APP',
+                context={},
+                recipient_identifier=str(parent_user.id),
+                recipient_type='PARENT',
+                recipient_user=parent_user,
+                student=student,
+                title=title,
+                body=body,
+            )
+            sent += 1
+
+        student_user = get_student_user(student)
+        if student_user and not _monthly_notification_already_sent(
+            school=school,
+            event_type='FEE_DUE',
+            channel='IN_APP',
+            recipient_user=student_user,
+            title=title,
+            body=body,
+            month=month,
+            year=year,
+            student=student,
+        ):
+            engine.send(
+                event_type='FEE_DUE',
+                channel='IN_APP',
+                context={},
+                recipient_identifier=str(student_user.id),
+                recipient_type='PARENT',
+                recipient_user=student_user,
+                student=student,
+                title=title,
+                body=body,
+            )
+            sent += 1
+
+    logger.info(f"Fee pending in-app notifications sent: {sent} for {school.name} ({month}/{year})")
+    return sent
+
+
 def trigger_fee_overdue(school, month, year):
     """
     Send overdue fee alerts for payments not received after the due period.
@@ -346,7 +534,7 @@ def trigger_fee_overdue(school, month, year):
 
 def trigger_exam_result(student, exam):
     """
-    Notify parent when exam results are published.
+    Backward-compatible per-student exam result notification.
     """
     from .engine import NotificationEngine
 
@@ -357,26 +545,176 @@ def trigger_exam_result(student, exam):
         logger.info(f"Exam result notifications disabled for {school.name}, skipping")
         return None
 
-    if not student.parent_phone:
-        return None
-
     engine = NotificationEngine(school)
+    exam_name = exam.name if hasattr(exam, 'name') else str(exam)
+    title = f"Exam Results Published — {exam_name}"
+    body = f"Result for {exam_name} exam has been published. Please log in to see more details."
 
-    context = {
-        'student_name': student.name,
-        'class_name': student.class_obj.name,
-        'exam_name': exam.name if hasattr(exam, 'name') else str(exam),
-        'school_name': school.name,
-    }
+    sent_log = None
+    for parent_user in get_parent_users_for_student(student):
+        sent_log = engine.send(
+            event_type='EXAM_RESULT',
+            channel='IN_APP',
+            context={},
+            recipient_identifier=str(parent_user.id),
+            recipient_type='PARENT',
+            recipient_user=parent_user,
+            student=student,
+            title=title,
+            body=body,
+        )
+    student_user = get_student_user(student)
+    if student_user:
+        sent_log = engine.send(
+            event_type='EXAM_RESULT',
+            channel='IN_APP',
+            context={},
+            recipient_identifier=str(student_user.id),
+            recipient_type='PARENT',
+            recipient_user=student_user,
+            student=student,
+            title=title,
+            body=body,
+        )
+    return sent_log
 
-    return engine.send(
-        event_type='EXAM_RESULT',
-        channel='WHATSAPP',
-        context=context,
-        recipient_identifier=student.parent_phone,
-        recipient_type='PARENT',
-        student=student,
+
+def trigger_exam_result_published(exam):
+    """
+    Notify admins, principals, assigned class teachers, parents, and students
+    when an exam is published.
+    """
+    from students.models import Student
+    from academics.models import ClassTeacherAssignment
+    from .engine import NotificationEngine
+
+    school = exam.school
+    config = _get_config(school)
+    if config and not config.exam_result_enabled:
+        logger.info(f"Exam result notifications disabled for {school.name}, skipping")
+        return 0
+
+    exam_name = exam.name if hasattr(exam, 'name') else str(exam)
+    title = "Exam Results Published"
+    body = f"Result for {exam_name} exam has been published. Please log in to see more details."
+    engine = NotificationEngine(school)
+    sent = 0
+    today = timezone.localdate()
+
+    # Admin + principal
+    for admin_user in _get_admin_users(school):
+        if _daily_notification_already_sent(
+            school=school,
+            event_type='EXAM_RESULT',
+            channel='IN_APP',
+            recipient_user=admin_user,
+            title=title,
+            body=body,
+            target_date=today,
+        ):
+            continue
+        engine.send(
+            event_type='EXAM_RESULT',
+            channel='IN_APP',
+            context={},
+            recipient_identifier=str(admin_user.id),
+            recipient_type='ADMIN',
+            recipient_user=admin_user,
+            title=title,
+            body=body,
+        )
+        sent += 1
+
+    # Assigned class teachers
+    teacher_assignments = (
+        ClassTeacherAssignment.objects
+        .filter(school=school, class_obj=exam.class_obj, is_active=True)
+        .filter(Q(academic_year__isnull=True) | Q(academic_year_id=exam.academic_year_id))
+        .select_related('teacher__user')
     )
+    for assignment in teacher_assignments:
+        teacher_user = getattr(getattr(assignment, 'teacher', None), 'user', None)
+        if not teacher_user:
+            continue
+        if _daily_notification_already_sent(
+            school=school,
+            event_type='EXAM_RESULT',
+            channel='IN_APP',
+            recipient_user=teacher_user,
+            title=title,
+            body=body,
+            target_date=today,
+        ):
+            continue
+        engine.send(
+            event_type='EXAM_RESULT',
+            channel='IN_APP',
+            context={},
+            recipient_identifier=str(teacher_user.id),
+            recipient_type='STAFF',
+            recipient_user=teacher_user,
+            title=title,
+            body=body,
+        )
+        sent += 1
+
+    # Parents + students in this class
+    students = Student.objects.filter(
+        school=school,
+        class_obj=exam.class_obj,
+        is_active=True,
+    ).select_related('user_profile__user')
+    for student in students:
+        for parent_user in get_parent_users_for_student(student):
+            if _daily_notification_already_sent(
+                school=school,
+                event_type='EXAM_RESULT',
+                channel='IN_APP',
+                recipient_user=parent_user,
+                title=title,
+                body=body,
+                target_date=today,
+                student=student,
+            ):
+                continue
+            engine.send(
+                event_type='EXAM_RESULT',
+                channel='IN_APP',
+                context={},
+                recipient_identifier=str(parent_user.id),
+                recipient_type='PARENT',
+                recipient_user=parent_user,
+                student=student,
+                title=title,
+                body=body,
+            )
+            sent += 1
+
+        student_user = get_student_user(student)
+        if student_user and not _daily_notification_already_sent(
+            school=school,
+            event_type='EXAM_RESULT',
+            channel='IN_APP',
+            recipient_user=student_user,
+            title=title,
+            body=body,
+            target_date=today,
+            student=student,
+        ):
+            engine.send(
+                event_type='EXAM_RESULT',
+                channel='IN_APP',
+                context={},
+                recipient_identifier=str(student_user.id),
+                recipient_type='PARENT',
+                recipient_user=student_user,
+                student=student,
+                title=title,
+                body=body,
+            )
+            sent += 1
+
+    return sent
 
 
 def trigger_general(school, title, body, recipient_users=None):

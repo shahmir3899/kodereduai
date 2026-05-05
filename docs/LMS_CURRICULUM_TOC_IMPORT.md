@@ -280,9 +280,11 @@ APPLY
 ```
 POST /api/lms/books/{id}/ocr_toc/
 ├─ Input: FormData { image }
-├─ Google Vision OCR
+├─ If `?async=1`: queues TOCImportJob and returns 202 + job_id
+├─ Background worker runs Google Vision OCR
 ├─ extract_toc_payload() → {text, lines}
-└─ Response: {text, lines: [{id, line_number, text, confidence, mappedAs: null}], language}
+├─ Poll: GET /api/lms/toc-jobs/{job_id}/
+└─ Final response: {result: {text, lines, language}, status: SUCCEEDED}
 
 POST /api/lms/books/{id}/suggest_toc/
 ├─ Input: {raw_text}
@@ -354,6 +356,7 @@ useEffect(() => {
 ### Manual Testing Checklist
 
 - [ ] Phase 1: Upload image → OCR extracts text → AI suggests chapters/topics → Apply
+- [ ] Async OCR: `/ocr_toc/?async=1` returns `202` and polling endpoint reaches `SUCCEEDED`
 - [ ] Phase 2: Selected OCR line highlights blue → Map as chapter → Green badge → Undo works
 - [ ] Phase 3: E-key enters edit mode → Type → Esc/Enter to save/cancel → Ctrl+Z undoes
 - [ ] Merge: Select non-last line → Merge button → Combines with next → Undo restores
@@ -368,7 +371,7 @@ useEffect(() => {
 | Metric | Value |
 |--------|-------|
 | Frontend Build | 9.01s (1708 modules) |
-| OCR Extract (image → text) | ~2–5s (Google Vision API) |
+| OCR Extract (image → text) | ~2–5s via async job (Google Vision API) |
 | AI Suggest (text → suggestions) | ~3–8s (Groq LLM or fallback) |
 | Apply TOC (chapters → DB) | ~1–2s (bulk create) |
 | Edit/Undo/Redo | <100ms (state operations) |

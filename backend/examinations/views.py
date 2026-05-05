@@ -589,6 +589,12 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
         exam = self.get_object()
         exam.status = Exam.Status.PUBLISHED
         exam.save(update_fields=['status'])
+        try:
+            from notifications.triggers import trigger_exam_result_published
+            trigger_exam_result_published(exam)
+        except Exception:
+            # Do not block publish if notification fanout fails.
+            pass
         return Response(ExamSerializer(exam).data)
 
     @action(detail=True, methods=['post'], url_path='generate-comments')

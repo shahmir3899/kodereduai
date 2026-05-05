@@ -1,3 +1,4 @@
+import uuid
 from django.db import models
 
 
@@ -611,3 +612,56 @@ class AssignmentSubmission(models.Model):
 
     def __str__(self):
         return f"{self.student.name} - {self.assignment.title} ({self.get_status_display()})"
+
+
+class TOCImportJob(models.Model):
+    """Background job state for OCR-based TOC extraction."""
+
+    class Status(models.TextChoices):
+        QUEUED = 'QUEUED', 'Queued'
+        PROCESSING = 'PROCESSING', 'Processing'
+        SUCCEEDED = 'SUCCEEDED', 'Succeeded'
+        FAILED = 'FAILED', 'Failed'
+        TIMED_OUT = 'TIMED_OUT', 'Timed Out'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    school = models.ForeignKey(
+        'schools.School',
+        on_delete=models.CASCADE,
+        related_name='toc_import_jobs',
+    )
+    book = models.ForeignKey(
+        Book,
+        on_delete=models.CASCADE,
+        related_name='toc_import_jobs',
+    )
+    requested_by = models.ForeignKey(
+        'users.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='toc_import_jobs',
+    )
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.QUEUED)
+    image_file_name = models.CharField(max_length=255, blank=True)
+    image_content_type = models.CharField(max_length=100, blank=True)
+    image_size_bytes = models.PositiveIntegerField(default=0)
+    image_payload_b64 = models.TextField(blank=True, help_text='Base64-encoded image payload for worker processing')
+    result_payload = models.JSONField(default=dict, blank=True)
+    error_message = models.TextField(blank=True)
+    attempt_count = models.PositiveSmallIntegerField(default=0)
+    started_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['school', 'status']),
+            models.Index(fields=['book', 'created_at']),
+            models.Index(fields=['created_at']),
+        ]
+
+    def __str__(self):
+        return f"TOC Job {self.id} ({self.status})"

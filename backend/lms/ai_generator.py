@@ -57,6 +57,7 @@ def generate_lesson_plan(
     school, class_obj, subject, book, topics,
     lesson_date, duration_minutes=45,
     subtopics=None,
+    chapter_titles=None,
 ):
     """
     Generate lesson plan content from selected topics using Groq LLM.
@@ -85,8 +86,14 @@ def generate_lesson_plan(
 
         client = Groq(api_key=settings.GROQ_API_KEY)
 
-        # Format topics (and optional sub-topics)
+        # Format chapter/topic context (and optional sub-topics)
         topics_lines = []
+        if chapter_titles:
+            topics_lines.append('## Selected chapters')
+            for chapter_title in chapter_titles:
+                if chapter_title:
+                    topics_lines.append(f"- Chapter: {chapter_title}")
+
         for t in topics.select_related('chapter'):
             topics_lines.append(
                 f"- Ch {t.chapter.chapter_number}: {t.chapter.title} > "

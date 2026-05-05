@@ -29,11 +29,12 @@ class NotificationLogSerializer(serializers.ModelSerializer):
     event_type_display = serializers.CharField(source='get_event_type_display', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     student_name = serializers.CharField(source='student.name', read_only=True, default=None)
+    school_name = serializers.CharField(source='school.name', read_only=True, default=None)
 
     class Meta:
         model = NotificationLog
         fields = [
-            'id', 'school', 'template', 'channel', 'channel_display',
+            'id', 'school', 'school_name', 'template', 'channel', 'channel_display',
             'event_type', 'event_type_display',
             'recipient_type', 'recipient_identifier', 'recipient_user',
             'student', 'student_name',
@@ -60,8 +61,8 @@ class SchoolNotificationConfigSerializer(serializers.ModelSerializer):
         model = SchoolNotificationConfig
         fields = [
             'id', 'school', 'school_name',
-            'whatsapp_enabled', 'sms_enabled', 'in_app_enabled', 'email_enabled',
-            'push_enabled', 'quiet_hours_start', 'quiet_hours_end',
+            'whatsapp_enabled', 'in_app_enabled', 'email_enabled',
+            'quiet_hours_start', 'quiet_hours_end',
             'fee_reminder_day', 'daily_absence_summary_time',
             'smart_scheduling_enabled',
             'absence_notification_enabled', 'fee_reminder_enabled',
@@ -108,3 +109,15 @@ class BroadcastNotificationSerializer(serializers.Serializer):
     title = serializers.CharField(max_length=200)
     body = serializers.CharField()
     context = serializers.DictField(required=False, default=dict)
+    class_obj_id = serializers.IntegerField(required=False, allow_null=True)
+    session_class_id = serializers.IntegerField(required=False, allow_null=True)
+    academic_year_id = serializers.IntegerField(required=False, allow_null=True)
+
+
+class PreviewRecipientsSerializer(serializers.Serializer):
+    """Serializer for broadcast recipient preview."""
+    channel = serializers.ChoiceField(choices=NotificationTemplate.CHANNEL_CHOICES)
+    recipient_type = serializers.ChoiceField(choices=BroadcastNotificationSerializer.ROLE_CHOICES)
+    class_obj_id = serializers.IntegerField(required=False, allow_null=True)
+    session_class_id = serializers.IntegerField(required=False, allow_null=True)
+    academic_year_id = serializers.IntegerField(required=False, allow_null=True)

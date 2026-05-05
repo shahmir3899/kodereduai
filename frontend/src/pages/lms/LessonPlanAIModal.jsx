@@ -10,6 +10,7 @@ import { normalizeLessonPlanText } from './lessonPlanTextUtils'
 export default function LessonPlanAIModal({
   open,
   onClose,
+  chapterIds = [],
   topicIds = [],
   subtopicIds = [],
   lessonDate,
@@ -22,8 +23,8 @@ export default function LessonPlanAIModal({
   if (!open) return null
 
   const handleGenerate = async () => {
-    if (!topicIds?.length && !subtopicIds?.length) {
-      showError('Select at least one topic or sub-topic before using AI.')
+    if (!chapterIds?.length && !topicIds?.length && !subtopicIds?.length) {
+      showError('Select at least one chapter, topic, or sub-topic before using AI.')
       return
     }
     if (!lessonDate) {
@@ -33,6 +34,7 @@ export default function LessonPlanAIModal({
     setLoading(true)
     try {
       const res = await lmsApi.generateLessonPlan({
+        chapter_ids: chapterIds,
         topic_ids: topicIds,
         subtopic_ids: subtopicIds,
         lesson_date: lessonDate,
@@ -44,11 +46,11 @@ export default function LessonPlanAIModal({
         return
       }
       onApply?.({
-        title: normalizeLessonPlanText(data.title),
-        objectives: normalizeLessonPlanText(data.objectives),
-        description: normalizeLessonPlanText(data.description),
-        teaching_methods: normalizeLessonPlanText(data.teaching_methods),
-        materials_needed: normalizeLessonPlanText(data.materials_needed),
+        title: normalizeLessonPlanText(data.title) || 'Lesson Plan',
+        objectives: normalizeLessonPlanText(data.objectives) || 'Teacher to complete.',
+        description: normalizeLessonPlanText(data.description) || 'Teacher to complete.',
+        teaching_methods: normalizeLessonPlanText(data.teaching_methods) || 'Teacher to complete.',
+        materials_needed: normalizeLessonPlanText(data.materials_needed) || 'Teacher to complete.',
       })
       showSuccess('AI content generated — review and edit if needed.')
       onClose?.()
@@ -72,9 +74,9 @@ export default function LessonPlanAIModal({
           </button>
         </div>
         <p className="text-sm text-gray-600 mb-4">
-          Sends <strong>{topicIds?.length || 0}</strong> topic(s), <strong>{subtopicIds?.length || 0}</strong>{' '}
-          sub-topic(s), and date <strong>{lessonDate}</strong> to draft title, objectives, description, methods, and
-          materials.
+          Sends <strong>{chapterIds?.length || 0}</strong> chapter(s), <strong>{topicIds?.length || 0}</strong>{' '}
+          topic(s), <strong>{subtopicIds?.length || 0}</strong> sub-topic(s), and date <strong>{lessonDate}</strong>{' '}
+          to draft title, objectives, description, methods, and materials.
         </p>
         <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
           <button type="button" className="btn btn-secondary" onClick={onClose} disabled={loading}>

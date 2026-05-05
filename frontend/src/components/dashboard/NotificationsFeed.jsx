@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { notificationsApi } from '../../services/api'
+import { useAuth } from '../../contexts/AuthContext'
 
 function timeAgo(dateStr) {
   if (!dateStr) return ''
@@ -19,9 +20,13 @@ function timeAgo(dateStr) {
  * @param {number} [props.limit=5]
  */
 export default function NotificationsFeed({ limit = 5 }) {
+  const { activeSchool } = useAuth()
   const { data, isLoading } = useQuery({
-    queryKey: ['dashboardNotifications', limit],
-    queryFn: () => notificationsApi.getMyNotifications({ limit }),
+    queryKey: ['dashboardNotifications', limit, activeSchool?.id || 'all'],
+    queryFn: () => notificationsApi.getMyNotifications({
+      limit,
+      school_id: activeSchool?.id || undefined,
+    }),
     staleTime: 2 * 60 * 1000,
   })
 
@@ -60,6 +65,9 @@ export default function NotificationsFeed({ limit = 5 }) {
               <p className={`text-sm leading-snug ${!n.is_read ? 'text-gray-900 font-medium' : 'text-gray-600'}`}>
                 {n.title || n.message || n.event_type}
               </p>
+              {n.school_name ? (
+                <p className="text-[11px] text-gray-500 mt-0.5">{n.school_name}</p>
+              ) : null}
               <p className="text-xs text-gray-400 mt-0.5">{timeAgo(n.created_at)}</p>
             </div>
           </div>

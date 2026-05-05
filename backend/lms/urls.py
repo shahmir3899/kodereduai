@@ -8,7 +8,7 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     BookViewSet, ChapterViewSet, TopicViewSet, SubTopicViewSet,
     LessonPlanViewSet, AssignmentViewSet, AssignmentSubmissionViewSet,
-    generate_lesson_plan_ai, generate_exam_questions_ai,
+    generate_lesson_plan_ai, generate_exam_questions_ai, TOCImportJobStatusView,
 )
 
 router = DefaultRouter()
@@ -21,6 +21,11 @@ router.register(r'assignments', AssignmentViewSet, basename='assignment')
 router.register(r'submissions', AssignmentSubmissionViewSet, basename='submission')
 
 urlpatterns = [
+    path(
+        'toc-jobs/<uuid:job_id>/',
+        TOCImportJobStatusView.as_view({'get': 'retrieve'}),
+        name='toc-import-job-status',
+    ),
     # Nested route: submissions scoped under a specific assignment
     path(
         'assignments/<int:assignment_id>/submissions/',

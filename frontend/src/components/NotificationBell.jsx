@@ -2,11 +2,13 @@ import { useState, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { notificationsApi } from '../services/api'
+import { useAuth } from '../contexts/AuthContext'
 
 export default function NotificationBell() {
   const [open, setOpen] = useState(false)
   const dropdownRef = useRef(null)
   const queryClient = useQueryClient()
+  const { activeSchool } = useAuth()
 
   // Unread count
   const { data: countData } = useQuery({
@@ -17,8 +19,10 @@ export default function NotificationBell() {
 
   // Recent notifications (when dropdown open)
   const { data: notifData } = useQuery({
-    queryKey: ['myNotifications'],
-    queryFn: () => notificationsApi.getMyNotifications({ limit: 8 }),
+    queryKey: ['myNotifications', 'all'],
+    queryFn: () => notificationsApi.getMyNotifications({
+      limit: 8,
+    }),
     enabled: open,
   })
 
@@ -82,6 +86,7 @@ export default function NotificationBell() {
         className={`relative p-2 rounded-lg hover:bg-gray-100 transition-colors ${
           hasNewNotification ? 'animate-bounce' : ''
         }`}
+        title="Notifications across all schools"
       >
         <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
@@ -92,11 +97,17 @@ export default function NotificationBell() {
           </span>
         )}
       </button>
+      <p className="mt-1 text-[10px] text-gray-500 text-right pr-0.5">Scope: All schools</p>
 
       {open && (
         <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-xl border border-gray-200 z-50">
           <div className="flex items-center justify-between p-3 border-b border-gray-100">
-            <h3 className="text-sm font-semibold text-gray-900">Notifications</h3>
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900">Notifications</h3>
+              <p className="text-[11px] text-gray-500 mt-0.5">
+                Showing all schools{activeSchool?.name ? ` (current: ${activeSchool.name})` : ''}
+              </p>
+            </div>
             {unread > 0 && (
               <button
                 onClick={() => markAllMutation.mutate()}
@@ -123,6 +134,11 @@ export default function NotificationBell() {
                 >
                   <p className="text-sm font-medium text-gray-900 truncate">{n.title}</p>
                   <p className="text-xs text-gray-600 line-clamp-2 mt-0.5">{n.body}</p>
+                  {n.school_name ? (
+                    <span className="inline-block mt-1 px-1.5 py-0.5 rounded text-[10px] bg-gray-100 text-gray-700">
+                      {n.school_name}
+                    </span>
+                  ) : null}
                   <p className="text-xs text-gray-400 mt-1">{timeAgo(n.created_at)}</p>
                 </div>
               ))

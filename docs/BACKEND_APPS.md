@@ -395,13 +395,22 @@ enquiry(FK), note, created_by(FK), created_at
 ## notifications — Communication System
 
 ### NotificationTemplate
-school(FK), name, event_type (FEE_DUE/ABSENCE/EXAM/GENERAL), channel (IN_APP/SMS/EMAIL/WHATSAPP/PUSH), subject_template, body_template (supports `{{amount}}`, `{{month}}`), is_active
+school(FK), name, event_type (FEE_DUE/ABSENCE/EXAM/GENERAL), channel (IN_APP/EMAIL/WHATSAPP/PUSH), subject_template, body_template (supports `{{amount}}`, `{{month}}`), is_active
+
+**Usage notes:**
+- Manual Send/Broadcast endpoints accept explicit `title`/`body`; these take priority over template rendering.
+- Template rendering is fallback behavior in `NotificationEngine` when explicit body is not provided.
+- Templates are primarily authored for manual sends and reusable admin broadcasts; automation flows may optionally reuse them.
 
 ### NotificationLog
 school(FK), template(FK nullable), channel, event_type, recipient_type, recipient_identifier, title, body, status (PENDING/SENT/DELIVERED/FAILED/READ), metadata(JSON), sent_at
 
+**Operational APIs:**
+- `POST /api/notifications/broadcast/preview/` returns filtered recipient count + samples before send.
+- `POST /api/notifications/broadcast/` supports optional targeting filters: `class_obj_id`, `session_class_id`, `academic_year_id`.
+
 ### SchoolNotificationConfig
-school(OneToOne), whatsapp_enabled, sms_enabled, in_app_enabled, email_enabled, push_enabled, quiet_hours_start/end, fee_reminder_day, daily_absence_summary_time, smart_scheduling_enabled
+school(OneToOne), whatsapp_enabled, in_app_enabled, email_enabled, push_enabled(deprecated — push follows in_app_enabled), quiet_hours_start/end, fee_reminder_day, daily_absence_summary_time, smart_scheduling_enabled
 
 **Trigger toggles (all BooleanField, default=True unless noted):**
 - `absence_notification_enabled` — WhatsApp to parent + IN_APP to admins when student marked absent

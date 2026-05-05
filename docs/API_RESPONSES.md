@@ -2061,7 +2061,6 @@ Query params: `status`, `source`, `applying_for_grade_level`, `search`, `page_si
   "school": 1,
   "school_name": "The Focus Montessori and School - Branch 1",
   "whatsapp_enabled": true,
-  "sms_enabled": false,
   "in_app_enabled": true,
   "email_enabled": false,
   "quiet_hours_start": null,
@@ -2093,7 +2092,7 @@ _(No data — expected fields from serializer)_
     {
       "id": 0, "school": 0, "name": "",
       "event_type": "FEE_DUE|ABSENCE|EXAM|GENERAL",
-      "channel": "IN_APP|SMS|EMAIL|WHATSAPP|PUSH",
+      "channel": "IN_APP|EMAIL|WHATSAPP|PUSH",
       "subject_template": "", "body_template": "",
       "is_active": true, "created_at": "", "updated_at": ""
     }
@@ -2534,6 +2533,39 @@ _(Expected fields from serializers)_
 ### POST /api/lms/books/{id}/ocr_toc/
 ```json
 {"text": "Chapter 1: Introduction\n  1.1 Overview\n  1.2 Background\nChapter 2: Fundamentals", "language": "en"}
+```
+
+### POST /api/lms/books/{id}/ocr_toc/?async=1
+```json
+{
+  "job_id": "9f3f39b8-58f9-44d6-8a85-a297f50ca84b",
+  "status": "QUEUED",
+  "poll_url": "/api/lms/toc-jobs/9f3f39b8-58f9-44d6-8a85-a297f50ca84b/",
+  "request_id": "f31d58af-5aef-4eb4-9228-f96fdc7ec413"
+}
+```
+
+### GET /api/lms/toc-jobs/{job_id}/
+```json
+{
+  "id": "9f3f39b8-58f9-44d6-8a85-a297f50ca84b",
+  "book": 1,
+  "requested_by": 4,
+  "status": "SUCCEEDED",
+  "error_message": "",
+  "result": {
+    "text": "Chapter 1: Introduction\n1.1 Overview",
+    "lines": [
+      {"id": "line-1", "line_number": 1, "text": "Chapter 1: Introduction", "confidence": 0.92}
+    ],
+    "language": "en"
+  },
+  "attempt_count": 1,
+  "started_at": "2026-05-05T08:11:10.761Z",
+  "completed_at": "2026-05-05T08:11:14.402Z",
+  "created_at": "2026-05-05T08:11:10.541Z",
+  "updated_at": "2026-05-05T08:11:14.402Z"
+}
 ```
 
 ### GET /api/lms/books/syllabus_progress/?class_id=5&subject_id=3

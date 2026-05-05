@@ -11,6 +11,30 @@ from .observability import REASON_FAILED_DISPATCH, bump_retry_count, mark_log_fa
 logger = logging.getLogger(__name__)
 
 
+@shared_task
+def run_scheduled_absence_in_app_digest():
+    """
+    Three daily scans at 08:00, 09:00, and 10:00 (Asia/Karachi — see CELERY_TIMEZONE).
+
+    For each class cohort, sends consolidated staff digests and parent absent notices
+    only after every enrolled student has an attendance row for today.
+    """
+    from django.utils import timezone
+
+    from notifications.absence_digest import process_absence_digest_all_schools
+
+    local_now = timezone.localtime()
+    if local_now.hour not in (8, 9, 10):
+        return {'skipped': True, 'reason': 'outside_digest_hours', 'hour': local_now.hour}
+
+    summary = process_absence_digest_all_schools(local_now.date())
+    logger.info(
+        'Scheduled absence in-app digest finished',
+        extra={'date': summary.get('date'), 'schools': len(summary.get('schools', []))},
+    )
+    return summary
+
+
 def _get_daily_report_send_time(config):
     """Return configured report send time or the historical default (17:00)."""
     if config and config.daily_absence_summary_time:
@@ -97,6 +121,35 @@ def send_fee_overdue_alerts():
 
     logger.info(f"Fee overdue alerts complete: {total_sent} sent")
     return {'total_sent': total_sent}
+
+
+@shared_task
+def send_fee_pending_in_app_notifications():
+    """
+    Consolidated fee pending in-app notifications.
+    Runs on the 5th and 8th of each month.
+    """
+    from schools.models import School
+    from .triggers import trigger_fee_pending_in_app
+
+    now = timezone.localtime()
+    if now.day not in (5, 8):
+        return {'skipped': True, 'reason': 'outside_fee_pending_days', 'day': now.day}
+
+    schools = School.objects.filter(is_active=True)
+    total_sent = 0
+    processed_schools = 0
+    for school in schools:
+        try:
+            total_sent += trigger_fee_pending_in_app(school, now.month, now.year)
+            processed_schools += 1
+        except Exception as e:
+            logger.error(f"Fee pending in-app notifications failed for {school.name}: {e}")
+
+    logger.info(
+        f"Fee pending in-app notifications complete: {total_sent} sent across {processed_schools} schools"
+    )
+    return {'total_sent': total_sent, 'processed_schools': processed_schools, 'date': str(now.date())}
 
 
 @shared_task

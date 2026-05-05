@@ -21,6 +21,8 @@ from datetime import date
 from decimal import Decimal
 
 import pytest
+from django.core import mail
+from django.test import override_settings
 from django.utils import timezone
 
 
@@ -81,6 +83,7 @@ class TestNotificationTemplates:
             is_active=True,
         )
         assert tpl.channel == 'IN_APP', "Template channel should be IN_APP"
+
 
     def test_template_render_returns_dict(self, seed_data, api):
         from notifications.models import NotificationTemplate
@@ -464,12 +467,47 @@ class TestNotificationEngine:
         whatsapp = WhatsAppChannel(school)
         assert whatsapp is not None, "WhatsAppChannel should be instantiable"
 
-    def test_sms_channel_instantiable(self, seed_data, api):
-        from notifications.channels.sms import SMSChannel
+    def test_email_channel_instantiable(self, seed_data, api):
+        from notifications.channels.email import EmailChannel
 
         school = seed_data['school_a']
-        sms = SMSChannel(school)
-        assert sms is not None, "SMSChannel should be instantiable"
+        email_channel = EmailChannel(school)
+        assert email_channel is not None, "EmailChannel should be instantiable"
+
+    @override_settings(
+        EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend',
+        DEFAULT_FROM_EMAIL='noreply@example.com',
+    )
+    def test_engine_send_email_delivers(self, seed_data, api):
+        from notifications.engine import NotificationEngine
+        from notifications.models import SchoolNotificationConfig
+
+        school = seed_data['school_a']
+        admin_user = seed_data['users']['admin']
+        SchoolNotificationConfig.objects.update_or_create(
+            school=school,
+            defaults={
+                'email_enabled': True,
+            },
+        )
+        mail.outbox = []
+
+        engine = NotificationEngine(school)
+        result = engine.send(
+            event_type='GENERAL',
+            channel='EMAIL',
+            context={},
+            recipient_identifier=admin_user.email,
+            recipient_type='ADMIN',
+            title='Email Channel Test',
+            body='Engine email delivery test.',
+            recipient_user=admin_user,
+        )
+
+        assert result is not None, "Engine.send() should return NotificationLog for EMAIL"
+        assert result.status == 'SENT', "EMAIL log status should be SENT"
+        assert len(mail.outbox) == 1, "One email should be sent via locmem backend"
+        assert mail.outbox[0].to == [admin_user.email], "Recipient email should match"
 
 
 # ---------------------------------------------------------------------------
@@ -1336,3 +1374,41 @@ class TestDataIntegrity:
         assert actual_count == expected_count, (
             f"School A should have {expected_count} seeded classes, found {actual_count}"
         )
+
+
+@pytest.mark.django_db
+@pytest.mark.phase2
+class TestNotificationBroadcastPreviewAndFilters:
+
+    def test_preview_recipients_returns_count_and_samples(self, seed_data, api):
+        student = seed_data['students'][0]
+        resp = api.post(
+            '/api/notifications/broadcast/preview/',
+            {
+                'channel': 'IN_APP',
+                'recipient_type': 'PARENT',
+                'class_obj_id': student.class_obj_id,
+            },
+            seed_data['tokens']['admin'],
+            seed_data['SID_A'],
+        )
+        assert resp.status_code == 200
+        payload = resp.json()
+        assert 'count' in payload
+        assert 'samples' in payload
+
+    def test_broadcast_with_unmatched_filter_returns_404(self, seed_data, api):
+        resp = api.post(
+            '/api/notifications/broadcast/',
+            {
+                'event_type': 'GENERAL',
+                'channel': 'IN_APP',
+                'recipient_type': 'PARENT',
+                'title': 'Filtered send',
+                'body': 'No recipients expected',
+                'class_obj_id': 999999,
+            },
+            seed_data['tokens']['admin'],
+            seed_data['SID_A'],
+        )
+        assert resp.status_code == 404

@@ -305,19 +305,22 @@ if CELERY_BROKER_URL.startswith('rediss://'):
 from celery.schedules import crontab
 
 CELERY_BEAT_SCHEDULE = {
-    'monthly-fee-reminders': {
-        'task': 'notifications.tasks.send_fee_reminders',
-        # Runtime checks per-school fee_reminder_day; run daily at 09:00.
-        'schedule': crontab(hour='9', minute='0'),
+    'fee-pending-in-app-5th': {
+        'task': 'notifications.tasks.send_fee_pending_in_app_notifications',
+        'schedule': crontab(day_of_month='5', hour='9', minute='0'),
     },
-    'weekly-overdue-alerts': {
-        'task': 'notifications.tasks.send_fee_overdue_alerts',
-        'schedule': crontab(day_of_week='monday', hour='10', minute='0'),
+    'fee-pending-in-app-8th': {
+        'task': 'notifications.tasks.send_fee_pending_in_app_notifications',
+        'schedule': crontab(day_of_month='8', hour='9', minute='0'),
     },
     'daily-absence-summary': {
         'task': 'notifications.tasks.send_daily_absence_summary',
         # Runtime checks per-school daily_absence_summary_time; run every minute.
         'schedule': crontab(minute='*'),
+    },
+    'scheduled-absence-in-app-digest': {
+        'task': 'notifications.tasks.run_scheduled_absence_in_app_digest',
+        'schedule': crontab(hour=[8, 9, 10], minute=0),
     },
     'process-notification-queue': {
         'task': 'notifications.tasks.process_notification_queue',
@@ -351,17 +354,14 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'notifications.tasks.dispatch_scheduled_notifications',
         'schedule': crontab(minute='*/5'),
     },
+    'mark-stale-toc-jobs-timed-out': {
+        'task': 'lms.tasks.mark_stale_toc_jobs_timed_out',
+        'schedule': crontab(minute='*/5'),
+        'kwargs': {'max_age_minutes': 5},
+    },
     # Accuracy drift + anomaly detection tasks intentionally unscheduled —
     # too noisy for daily in-app alerts. Tasks kept in attendance/tasks.py
     # and can be re-enabled manually or per-school as needed.
-    'class-teacher-fee-reminder-10th': {
-        'task': 'notifications.tasks.send_class_teacher_fee_reminders',
-        'schedule': crontab(day_of_month='10', hour='9', minute='0'),
-    },
-    'class-teacher-fee-reminder-15th': {
-        'task': 'notifications.tasks.send_class_teacher_fee_reminders',
-        'schedule': crontab(day_of_month='15', hour='9', minute='0'),
-    },
     'class-teacher-attendance-reminder-11am': {
         'task': 'notifications.tasks.send_class_teacher_attendance_reminders',
         'schedule': crontab(hour='11', minute='0'),

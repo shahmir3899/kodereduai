@@ -31,10 +31,15 @@ function collectTopicIds(topic) {
 }
 
 /** Human-readable lines for diary / notes (appended to onApply payload). */
-function buildCurriculumSummary(topicIds, subtopicIds, topicMap, subtopicMap) {
+function buildCurriculumSummary(chapterItems, topicIds, subtopicIds, topicMap, subtopicMap) {
   const tSet = new Set(topicIds || [])
   const sSet = new Set(subtopicIds || [])
   const lines = []
+
+  for (const chapter of chapterItems || []) {
+    if (!chapter?.title) continue
+    lines.push(`• ${chapter.bookTitle} › ${chapter.title}`)
+  }
 
   for (const sid of sSet) {
     const st = subtopicMap[sid]
@@ -57,17 +62,19 @@ function buildCurriculumSummary(topicIds, subtopicIds, topicMap, subtopicMap) {
 
 /**
  * Book → Chapter → Topic → Sub-topic picker.
- * onApply receives { topicIds, subtopicIds } (parent topics are merged on save by the API).
+ * onApply receives { chapterIds, topicIds, subtopicIds }.
  */
 export default function LessonPlanTopicsPickerModal({
   open,
   onClose,
   classId,
   subjectId,
+  initialChapterIds = [],
   initialTopicIds = [],
   initialSubtopicIds = [],
   onApply,
 }) {
+  const [selectedChapters, setSelectedChapters] = useState(() => new Set(initialChapterIds))
   const [selectedTopics, setSelectedTopics] = useState(() => new Set(initialTopicIds))
   const [selectedSubtopics, setSelectedSubtopics] = useState(() => new Set(initialSubtopicIds))
   const [expandedBooks, setExpandedBooks] = useState({})
@@ -76,10 +83,11 @@ export default function LessonPlanTopicsPickerModal({
 
   useEffect(() => {
     if (open) {
+      setSelectedChapters(new Set(initialChapterIds))
       setSelectedTopics(new Set(initialTopicIds))
       setSelectedSubtopics(new Set(initialSubtopicIds))
     }
-  }, [open, initialTopicIds, initialSubtopicIds])
+  }, [open, initialChapterIds, initialTopicIds, initialSubtopicIds])
 
   const { data: booksData, isLoading } = useQuery({
     queryKey: ['booksForClassSubjectPicker', classId, subjectId],
@@ -121,12 +129,18 @@ export default function LessonPlanTopicsPickerModal({
       ? booksData.data
       : []
 
-  const { topicMap, subtopicMap } = useMemo(() => {
+  const { chapterMap, topicMap, subtopicMap } = useMemo(() => {
+    const cMap = {}
     const tMap = {}
     const sMap = {}
-    if (!Array.isArray(books)) return { topicMap: tMap, subtopicMap: sMap }
+    if (!Array.isArray(books)) return { chapterMap: cMap, topicMap: tMap, subtopicMap: sMap }
     books.forEach((book) => {
       ;(book.chapters || []).forEach((chapter) => {
+        cMap[chapter.id] = {
+          ...chapter,
+          bookTitle: book.title,
+          language: book.language,
+        }
         ;(chapter.topics || []).forEach((topic) => {
           tMap[topic.id] = {
             ...topic,
@@ -146,7 +160,7 @@ export default function LessonPlanTopicsPickerModal({
         })
       })
     })
-    return { topicMap: tMap, subtopicMap: sMap }
+    return { chapterMap: cMap, topicMap: tMap, subtopicMap: sMap }
   }, [books])
 
   if (!open) return null
@@ -170,6 +184,7 @@ export default function LessonPlanTopicsPickerModal({
   }
 
   const chapterFullySelected = (chapter) => {
+    if (selectedChapters.has(chapter.id)) return true
     const { topicIds, subtopicIds } = collectChapterIds(chapter)
     if (topicIds.length === 0) return false
     return topicIds.every((id) => selectedTopics.has(id)) && subtopicIds.every((id) => selectedSubtopics.has(id))
@@ -178,6 +193,12 @@ export default function LessonPlanTopicsPickerModal({
   const toggleChapterSelection = (chapter) => {
     const { topicIds, subtopicIds } = collectChapterIds(chapter)
     const allOn = chapterFullySelected(chapter)
+    setSelectedChapters((prev) => {
+      const next = new Set(prev)
+      if (allOn) next.delete(chapter.id)
+      else next.add(chapter.id)
+      return next
+    })
     setSelectedTopics((prev) => {
       const next = new Set(prev)
       topicIds.forEach((id) => {
@@ -236,10 +257,13 @@ export default function LessonPlanTopicsPickerModal({
   const totalCount = selectedTopics.size + selectedSubtopics.size
 
   const handleSave = () => {
+    const chapterIds = Array.from(selectedChapters)
+    const chapterItems = chapterIds.map((id) => chapterMap[id]).filter(Boolean)
     const topicIds = Array.from(selectedTopics)
     const subtopicIds = Array.from(selectedSubtopics)
-    const curriculumSummary = buildCurriculumSummary(topicIds, subtopicIds, topicMap, subtopicMap)
+    const curriculumSummary = buildCurriculumSummary(chapterItems, topicIds, subtopicIds, topicMap, subtopicMap)
     onApply?.({
+      chapterIds,
       topicIds,
       subtopicIds,
       curriculumSummary,
@@ -301,14 +325,22 @@ export default function LessonPlanTopicsPickerModal({
                           </label>
                           <button
                             type="button"
-                            onClick={() => toggleChapter(chapter.id)}
-                            className="flex-1 min-w-0 w-full self-stretch flex items-center gap-2 py-2 pr-2 text-left text-sm text-gray-700 cursor-pointer hover:bg-gray-100/80 rounded-r-md"
+                            onClick={() => toggleChapterSelection(chapter)}
+                            className="flex-1 min-w-0 w-full self-stretch flex items-center gap-2 py-2 pr-1 text-left text-sm text-gray-700 cursor-pointer hover:bg-gray-100/80 rounded-r-md"
+                            title="Select or unselect this chapter"
                           >
-                            <span className="text-gray-400 shrink-0">{expandedChapters[chapter.id] ? '▼' : '▶'}</span>
                             <span className="font-medium min-w-0 flex-1 truncate">{chapter.title}</span>
                             <span className="text-xs text-gray-400 shrink-0">
                               {(chapter.topics || []).length} topic(s)
                             </span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => toggleChapter(chapter.id)}
+                            className="px-2 py-2 text-gray-400 hover:text-gray-600"
+                            title={expandedChapters[chapter.id] ? 'Collapse chapter' : 'Expand chapter'}
+                          >
+                            {expandedChapters[chapter.id] ? '▼' : '▶'}
                           </button>
                         </div>
                         {expandedChapters[chapter.id] &&
@@ -384,12 +416,17 @@ export default function LessonPlanTopicsPickerModal({
             </div>
           )}
         </div>
-        {totalCount > 0 && (
+        {(selectedChapters.size + totalCount) > 0 && (
           <div className="px-4 py-2 border-t border-gray-100 bg-gray-50 max-h-28 overflow-y-auto">
             <p className="text-xs font-medium text-gray-600 mb-1">
-              Selected: {selectedTopics.size} topic(s), {selectedSubtopics.size} sub-topic(s)
+              Selected: {selectedChapters.size} chapter(s), {selectedTopics.size} topic(s), {selectedSubtopics.size} sub-topic(s)
             </p>
             <div className="flex flex-wrap gap-1">
+              {Array.from(selectedChapters).map((id) => (
+                <span key={`c-${id}`} className="text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded">
+                  {chapterMap[id]?.title || `Chapter #${id}`}
+                </span>
+              ))}
               {Array.from(selectedTopics).map((id) => (
                 <span key={`t-${id}`} className="text-xs bg-primary-100 text-primary-800 px-2 py-0.5 rounded">
                   {topicMap[id]?.title || `Topic #${id}`}
@@ -408,7 +445,7 @@ export default function LessonPlanTopicsPickerModal({
             Cancel
           </button>
           <button type="button" className="btn btn-primary" onClick={handleSave}>
-            Apply ({totalCount})
+            Apply ({selectedChapters.size + totalCount})
           </button>
         </div>
       </div>

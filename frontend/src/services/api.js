@@ -19,6 +19,9 @@ const api = axios.create({
   },
 })
 
+const LMS_OCR_TIMEOUT_MS = 45000
+const LMS_JOB_POLL_TIMEOUT_MS = 15000
+
 // Request interceptor - add auth token + active school header
 api.interceptors.request.use(
   (config) => {
@@ -716,13 +719,16 @@ export const notificationsApi = {
 
   // My notifications (in-app)
   getMyNotifications: (params) => api.get('/api/notifications/my/', { params }),
-  getUnreadCount: () => api.get('/api/notifications/unread-count/'),
+  /** Optional params: `{ school_id }` for unread in one branch only. */
+  getUnreadCount: (params) => api.get('/api/notifications/unread-count/', { params }),
   markRead: (id) => api.post(`/api/notifications/${id}/mark-read/`),
-  markAllRead: () => api.post('/api/notifications/mark-all-read/'),
+  /** Optional body: `{ school_id }` marks read only that school's notifications. */
+  markAllRead: (body) => api.post('/api/notifications/mark-all-read/', body ?? {}),
 
   // Send
   send: (data) => api.post('/api/notifications/send/', data),
   broadcast: (data) => api.post('/api/notifications/broadcast/', data),
+  previewBroadcastRecipients: (data) => api.post('/api/notifications/broadcast/preview/', data),
 
   // Analytics
   getAnalytics: (params) => api.get('/api/notifications/analytics/', { params }),
@@ -947,12 +953,30 @@ export const lmsApi = {
   parseTOCStream: (id, data) => api.post(`/api/lms/books/${id}/parse_toc_stream/`, data),
   suggestTOC: (id, data) => api.post(`/api/lms/books/${id}/suggest_toc/`, data),
   applyTOC: (id, data) => api.post(`/api/lms/books/${id}/apply_toc/`, data),
-  ocrTOC: (bookId, imageFile) => {
+  ocrTOC: (bookId, imageFile, options = {}) => {
+    const { timeout = LMS_OCR_TIMEOUT_MS, signal } = options
     const formData = new FormData()
     formData.append('image', imageFile)
     return api.post(`/api/lms/books/${bookId}/ocr_toc/`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      timeout,
+      signal,
     })
+  },
+  createTocJob: (bookId, imageFile, options = {}) => {
+    const { timeout = LMS_OCR_TIMEOUT_MS, signal } = options
+    const formData = new FormData()
+    formData.append('image', imageFile)
+    return api.post(`/api/lms/books/${bookId}/ocr_toc/`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      params: { async: '1' },
+      timeout,
+      signal,
+    })
+  },
+  getTocJob: (jobId, options = {}) => {
+    const { timeout = LMS_JOB_POLL_TIMEOUT_MS, signal } = options
+    return api.get(`/api/lms/toc-jobs/${jobId}/`, { timeout, signal })
   },
   getBooksForClassSubject: (params) => api.get('/api/lms/books/for_class_subject/', { params }),
   getSyllabusProgress: (params) => api.get('/api/lms/books/syllabus_progress/', { params }),

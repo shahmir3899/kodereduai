@@ -7,7 +7,7 @@ from rest_framework import serializers
 from .models import (
     Book, Chapter, Topic, SubTopic,
     LessonPlan, LessonAttachment,
-    Assignment, AssignmentAttachment, AssignmentSubmission,
+    Assignment, AssignmentAttachment, AssignmentSubmission, TOCImportJob,
 )
 
 ALLOWED_CONTENT_BLOCK_TYPES = {'paragraph', 'list', 'note', 'exercise'}
@@ -674,3 +674,15 @@ class AssignmentSubmissionCreateSerializer(serializers.ModelSerializer):
             })
 
         return attrs
+
+
+class TOCImportJobSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TOCImportJob
+        fields = [
+            'id', 'book', 'requested_by',
+            'status', 'error_message', 'result_payload',
+            'attempt_count', 'started_at', 'completed_at',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = fields

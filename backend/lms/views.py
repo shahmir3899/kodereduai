@@ -5,6 +5,8 @@ LMS views for lesson plans, assignments, submissions, and curriculum management.
 import logging
 import hashlib
 import json
+import base64
+import uuid
 from django.conf import settings
 from datetime import timedelta
 from django.utils import timezone
@@ -26,7 +28,10 @@ from core.permissions import (
 from core.mixins import TenantQuerySetMixin, ensure_tenant_school_id
 from core.class_scope import resolve_class_scope
 from academic_sessions.calendar_rules import is_off_day_for_date
-from .models import Book, Chapter, Topic, SubTopic, LessonPlan, Assignment, AssignmentSubmission
+from .models import (
+    Book, Chapter, Topic, SubTopic, LessonPlan, Assignment,
+    AssignmentSubmission, TOCImportJob,
+)
 from .content_retrieval import retrieve_topics_for_ai, build_prompt, extract_text_from_blocks
 from .serializers import (
     BookReadSerializer, BookCreateSerializer,
@@ -40,7 +45,9 @@ from .serializers import (
     LessonPlanReadSerializer, LessonPlanCreateSerializer, LessonPlanBulkCreateSerializer,
     AssignmentReadSerializer, AssignmentCreateSerializer,
     AssignmentSubmissionReadSerializer, AssignmentSubmissionCreateSerializer,
+    TOCImportJobSerializer,
 )
+from .tasks import process_toc_import_job
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +68,7 @@ class AIRateThrottle(UserRateThrottle):
 # Phase 5: Safeguards for large text processing
 MAX_TOC_TEXT_SIZE = 500 * 1024  # 500KB max
 CHUNK_SIZE = 50 * 1024  # 50KB per chunk for streaming parse
+MAX_OCR_SYNC_WAIT_SECONDS = 60
 
 
 def _apply_teacher_dual_scope(queryset, request, class_field='class_obj_id', subject_field='subject_id', school_id=None):
@@ -294,8 +302,20 @@ class BookViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
             )
 
         from .toc_ai_suggester import suggest_toc_structure
-        result = suggest_toc_structure(str(raw_text), language=book.language)
-        return Response(result)
+        try:
+            result = suggest_toc_structure(str(raw_text), language=book.language)
+            return Response(result)
+        except TimeoutError:
+            return Response(
+                {'error': 'AI suggestion timed out. Please retry with shorter text or use parser preview.'},
+                status=status.HTTP_504_GATEWAY_TIMEOUT,
+            )
+        except Exception as exc:
+            logger.exception('suggest_toc failed: %s', exc)
+            return Response(
+                {'error': 'Unable to generate TOC suggestion right now. Please try again.'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
 
     @action(detail=True, methods=['post'], url_path='ocr_toc',
             parser_classes=[MultiPartParser, FormParser], throttle_classes=[OCRRateThrottle])
@@ -331,9 +351,47 @@ class BookViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
             )
 
         image_bytes = image.read()
+        async_requested = str(request.query_params.get('async', '')).lower() in ('1', 'true', 'yes')
+        request_id = request.headers.get('X-Request-ID') or str(uuid.uuid4())
+
+        if async_requested:
+            encoded_payload = base64.b64encode(image_bytes).decode('utf-8')
+            job = TOCImportJob.objects.create(
+                school=book.school,
+                book=book,
+                requested_by=request.user if request.user.is_authenticated else None,
+                status=TOCImportJob.Status.QUEUED,
+                image_file_name=image.name or '',
+                image_content_type=image.content_type or '',
+                image_size_bytes=image.size or 0,
+                image_payload_b64=encoded_payload,
+            )
+            logger.info('[TOC-OCR] queued job=%s request_id=%s book_id=%s', job.id, request_id, book.id)
+            process_toc_import_job.delay(str(job.id))
+            return Response(
+                {
+                    'job_id': str(job.id),
+                    'status': job.status,
+                    'poll_url': f'/api/lms/toc-jobs/{job.id}/',
+                    'request_id': request_id,
+                },
+                status=status.HTTP_202_ACCEPTED,
+            )
 
         from .toc_ocr import extract_toc_payload
-        extracted_payload, error = extract_toc_payload(image_bytes, language=book.language)
+        try:
+            extracted_payload, error = extract_toc_payload(image_bytes, language=book.language)
+        except TimeoutError:
+            return Response(
+                {'error': f'OCR timed out after {MAX_OCR_SYNC_WAIT_SECONDS}s. Please retry.'},
+                status=status.HTTP_504_GATEWAY_TIMEOUT,
+            )
+        except Exception as exc:
+            logger.exception('ocr_toc failed: %s', exc)
+            return Response(
+                {'error': 'OCR service unavailable. Please retry shortly.'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
 
         if error:
             return Response(
@@ -345,6 +403,7 @@ class BookViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
             'text': extracted_payload.get('text', '') if extracted_payload else '',
             'lines': extracted_payload.get('lines', []) if extracted_payload else [],
             'language': book.language,
+            'request_id': request_id,
         })
 
     @action(detail=True, methods=['post'], url_path='parse_toc_stream')
@@ -370,6 +429,20 @@ class BookViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
             return Response(
                 {'error': f'Text too large. Maximum size is {MAX_TOC_TEXT_SIZE // 1024}KB.'},
                 status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            )
+
+        try:
+            chunk_size = int(chunk_size)
+        except (TypeError, ValueError):
+            return Response(
+                {'error': 'chunk_size must be a valid integer.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if chunk_size < 1024 or chunk_size > CHUNK_SIZE:
+            return Response(
+                {'error': f'chunk_size must be between 1024 and {CHUNK_SIZE} bytes.'},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         from .toc_parser import parse_toc_preview
@@ -557,6 +630,22 @@ class BookViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
         })
 
 
+class TOCImportJobStatusView(viewsets.ViewSet):
+    permission_classes = [IsAuthenticated, HasSchoolAccess]
+
+    def retrieve(self, request, job_id=None):
+        school_id = ensure_tenant_school_id(request) or request.user.school_id
+        try:
+            job = TOCImportJob.objects.get(id=job_id, school_id=school_id)
+        except TOCImportJob.DoesNotExist:
+            return Response({'error': 'TOC job not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = TOCImportJobSerializer(job)
+        data = serializer.data
+        data['result'] = data.pop('result_payload', {})
+        return Response(data)
+
+
 class ChapterViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     """CRUD for chapters within books."""
     required_module = 'lms'
@@ -707,6 +796,7 @@ def generate_lesson_plan_ai(request):
 
     POST /api/lms/generate-lesson-plan/
     Body: {
+        "chapter_ids": [7, 8],
         "topic_ids": [1, 2, 3],
         "subtopic_ids": [10, 11],
         "lesson_date": "2026-03-15",
@@ -715,22 +805,32 @@ def generate_lesson_plan_ai(request):
     """
     from .ai_generator import generate_lesson_plan
 
+    chapter_ids = list(request.data.get('chapter_ids') or [])
     topic_ids = list(request.data.get('topic_ids') or [])
     subtopic_ids = list(request.data.get('subtopic_ids') or [])
     lesson_date = request.data.get('lesson_date', '')
     duration_minutes = request.data.get('duration_minutes', 45)
 
-    if not topic_ids and not subtopic_ids:
+    if not chapter_ids and not topic_ids and not subtopic_ids:
         return Response(
-            {'error': 'Provide topic_ids and/or subtopic_ids.'},
+            {'error': 'Provide chapter_ids and/or topic_ids and/or subtopic_ids.'},
             status=status.HTTP_400_BAD_REQUEST,
         )
+
+    chapter_qs = Chapter.objects.filter(id__in=[int(x) for x in chapter_ids if x is not None]).select_related(
+        'book', 'book__class_obj', 'book__subject', 'book__school',
+    ) if chapter_ids else Chapter.objects.none()
 
     st_qs = SubTopic.objects.filter(id__in=subtopic_ids).select_related(
         'topic', 'topic__chapter', 'topic__chapter__book', 'topic__chapter__book__class_obj',
         'topic__chapter__book__subject', 'topic__chapter__book__school',
     )
     topic_id_set = {int(x) for x in topic_ids if x is not None}
+    if chapter_ids:
+        chapter_topic_ids = Topic.objects.filter(
+            chapter_id__in=[int(x) for x in chapter_ids if x is not None]
+        ).values_list('id', flat=True)
+        topic_id_set.update(int(tid) for tid in chapter_topic_ids)
     for st in st_qs:
         topic_id_set.add(st.topic_id)
 
@@ -738,14 +838,19 @@ def generate_lesson_plan_ai(request):
         'chapter', 'chapter__book', 'chapter__book__class_obj',
         'chapter__book__subject', 'chapter__book__school',
     )
-    if not topics.exists():
+    chapter_titles = [ch.title for ch in chapter_qs]
+
+    if topics.exists():
+        first_topic = topics.first()
+        book = first_topic.chapter.book
+    elif chapter_qs.exists():
+        first_chapter = chapter_qs.first()
+        book = first_chapter.book
+    else:
         return Response(
-            {'error': 'No valid topics found.'},
+            {'error': 'No valid curriculum found from selected chapter/topic/sub-topic IDs.'},
             status=status.HTTP_400_BAD_REQUEST,
         )
-
-    first_topic = topics.first()
-    book = first_topic.chapter.book
 
     result = generate_lesson_plan(
         school=book.school,
@@ -756,6 +861,7 @@ def generate_lesson_plan_ai(request):
         lesson_date=lesson_date,
         duration_minutes=duration_minutes,
         subtopics=st_qs if subtopic_ids else None,
+        chapter_titles=chapter_titles,
     )
     return Response(result)
 

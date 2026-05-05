@@ -94,10 +94,10 @@ class NotificationEngine:
 
         channel_map = {
             'WHATSAPP': config.whatsapp_enabled,
-            'SMS': config.sms_enabled,
             'IN_APP': config.in_app_enabled,
             'EMAIL': config.email_enabled,
-            'PUSH': config.push_enabled,
+            # Push is coupled with in-app notifications (single setting).
+            'PUSH': config.in_app_enabled,
         }
         return channel_map.get(channel, False)
 
@@ -110,6 +110,10 @@ class NotificationEngine:
         if channel == 'WHATSAPP':
             from .channels.whatsapp import WhatsAppChannel
             return WhatsAppChannel(self.school)
+
+        if channel == 'EMAIL':
+            from .channels.email import EmailChannel
+            return EmailChannel(self.school)
 
         if channel == 'PUSH':
             from .channels.expo import ExpoChannel
@@ -296,6 +300,23 @@ class NotificationEngine:
             if success:
                 log.status = 'SENT'
                 log.sent_at = timezone.now()
+                # Merge behavior: every successful in-app send also fans out to push.
+                if channel == 'IN_APP':
+                    push_handler = self._get_channel_handler('PUSH')
+                    if push_handler:
+                        try:
+                            push_handler.send(
+                                recipient=recipient_identifier,
+                                title=title,
+                                body=body,
+                                metadata={'source_channel': 'IN_APP', 'source_log_id': log.id},
+                            )
+                        except Exception as push_exc:
+                            logger.warning(
+                                "Push fanout failed for in-app notification %s: %s",
+                                log.id,
+                                push_exc,
+                            )
             else:
                 mark_log_failed(
                     log,

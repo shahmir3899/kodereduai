@@ -39,7 +39,7 @@ class NotificationOptimizerService:
         from .models import NotificationLog
 
         channels = {}
-        for channel in ['WHATSAPP', 'SMS', 'IN_APP', 'EMAIL']:
+        for channel in ['WHATSAPP', 'IN_APP', 'EMAIL']:
             qs = NotificationLog.objects.filter(
                 school_id=self.school_id,
                 channel=channel,

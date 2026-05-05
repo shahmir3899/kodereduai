@@ -17,11 +17,6 @@ from core.mixins import TenantQuerySetMixin, ensure_tenant_school_id
 from core.class_scope import resolve_class_scope
 from students.models import Student
 from attendance.models import AttendanceRecord
-from attendance.absence_notifications import (
-    is_transition_to_absent,
-    dispatch_in_app_absence_notifications,
-)
-
 from .models import FaceAttendanceSession, StudentFaceEmbedding, FaceDetectionResult
 from .serializers import (
     FaceAttendanceSessionListSerializer,
@@ -312,15 +307,6 @@ class FaceAttendanceSessionViewSet(ModuleAccessMixin, TenantQuerySetMixin, views
         created_count = 0
         updated_count = 0
         errors = []
-        transitioned_absent_records = []
-
-        existing_status_by_student_id = {
-            r.student_id: r.status
-            for r in AttendanceRecord.objects.filter(
-                student_id__in=class_students.values_list('id', flat=True),
-                date=session.date,
-            )
-        }
 
         for student in class_students:
             student_status = (
@@ -345,17 +331,8 @@ class FaceAttendanceSessionViewSet(ModuleAccessMixin, TenantQuerySetMixin, views
                 else:
                     updated_count += 1
 
-                if is_transition_to_absent(
-                    record,
-                    existing_status_by_student_id.get(student.id),
-                ):
-                    transitioned_absent_records.append(record)
             except Exception as e:
                 errors.append(f'{student.name}: {str(e)}')
-
-        absence_notification_failures = dispatch_in_app_absence_notifications(
-            transitioned_absent_records
-        )
 
         # Update session
         session.status = FaceAttendanceSession.Status.CONFIRMED
@@ -371,7 +348,6 @@ class FaceAttendanceSessionViewSet(ModuleAccessMixin, TenantQuerySetMixin, views
             'absent_count': class_students.count() - len(present_ids),
             'created': created_count,
             'updated': updated_count,
-            'absence_notification_failures': absence_notification_failures,
             'errors': errors,
         })
 
