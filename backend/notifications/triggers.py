@@ -15,6 +15,8 @@ from notifications.recipients import (
 
 logger = logging.getLogger(__name__)
 
+FEE_PENDING_STATUSES = ['UNPAID', 'PARTIAL', 'PENDING']
+
 
 def _daily_notification_already_sent(
     *,
@@ -241,7 +243,7 @@ def trigger_absence_notification(attendance_record):
 
 def trigger_fee_reminder(school, month, year):
     """
-    Send fee reminders to parents of students with unpaid fees.
+    Send monthly in-app fee reminders to parents, class teachers, and admins.
 
     Args:
         school: School instance
@@ -253,42 +255,162 @@ def trigger_fee_reminder(school, month, year):
         logger.info(f"Fee reminders disabled for {school.name}, skipping")
         return 0
 
+    from academics.models import ClassTeacherAssignment
     from finance.models import FeePayment
     from .engine import NotificationEngine
 
     engine = NotificationEngine(school)
+    month_label = timezone.datetime(year, month, 1).strftime('%B %Y')
 
     unpaid = FeePayment.objects.filter(
         school=school,
         month=month,
         year=year,
-        status__in=['PENDING', 'PARTIAL'],
+        status__in=FEE_PENDING_STATUSES,
+        student__is_active=True,
     ).select_related('student', 'student__class_obj')
 
-    sent = 0
+    class_totals = {}
+    student_totals = {}
+    student_by_id = {}
     for payment in unpaid:
         student = payment.student
-        if not student.parent_phone:
+        due = float(payment.amount_due or 0)
+        paid = float(payment.amount_paid or 0)
+        balance = max(due - paid, 0)
+        if balance <= 0:
             continue
-
-        context = {
-            'student_name': student.name,
+        class_totals.setdefault(student.class_obj_id, {
             'class_name': student.class_obj.name,
-            'month': timezone.datetime(year, month, 1).strftime('%B %Y'),
-            'amount_due': str(payment.amount_due),
-            'amount_paid': str(payment.amount_paid),
-            'school_name': school.name,
-        }
+            'amount': 0.0,
+            'students': [],
+        })
+        class_totals[student.class_obj_id]['amount'] += balance
+        class_totals[student.class_obj_id]['students'].append(student.name)
+        student_totals[student.id] = student_totals.get(student.id, 0.0) + balance
+        student_by_id[student.id] = student
 
-        engine.send(
+    if not class_totals and not student_totals:
+        return 0
+
+    sent = 0
+
+    # 1) Admin/principal: one consolidated summary across all classes.
+    admin_users = _get_admin_users(school)
+    class_lines = []
+    grand_total = 0.0
+    for class_payload in sorted(class_totals.values(), key=lambda x: x['class_name']):
+        class_name = class_payload['class_name']
+        class_amount = class_payload['amount']
+        grand_total += class_amount
+        class_lines.append(f"{class_name}: Rs {class_amount:,.0f}")
+    admin_title = f"Fee Pending Summary - {month_label}"
+    admin_body = (
+        f"Total pending fee: Rs {grand_total:,.0f}\n"
+        + "\n".join(class_lines)
+    )
+    for admin_user in admin_users:
+        if _monthly_notification_already_sent(
+            school=school,
             event_type='FEE_DUE',
-            channel='WHATSAPP',
-            context=context,
-            recipient_identifier=student.parent_phone,
-            recipient_type='PARENT',
-            student=student,
+            channel='IN_APP',
+            recipient_user=admin_user,
+            title=admin_title,
+            body=admin_body,
+            month=month,
+            year=year,
+        ):
+            continue
+        log = engine.send(
+            event_type='FEE_DUE',
+            channel='IN_APP',
+            context={},
+            recipient_identifier=str(admin_user.id),
+            recipient_type='ADMIN',
+            recipient_user=admin_user,
+            title=admin_title,
+            body=admin_body,
         )
-        sent += 1
+        if log and log.status in ('SENT', 'SCHEDULED'):
+            sent += 1
+
+    # 2) Class teachers: one summary for each assigned class with pending dues.
+    teacher_assignments = (
+        ClassTeacherAssignment.objects
+        .filter(school=school, is_active=True)
+        .filter(Q(academic_year__is_current=True) | Q(academic_year__isnull=True))
+        .select_related('teacher__user', 'class_obj')
+    )
+    for assignment in teacher_assignments:
+        teacher_user = getattr(getattr(assignment, 'teacher', None), 'user', None)
+        if not teacher_user or not assignment.class_obj_id:
+            continue
+        payload = class_totals.get(assignment.class_obj_id)
+        if not payload:
+            continue
+        class_name = payload['class_name']
+        class_amount = payload['amount']
+        names = ', '.join(sorted(set(payload['students'])))
+        teacher_title = f"{class_name} — Fee Pending Summary - {month_label}"
+        teacher_body = f"Total pending in {class_name}: Rs {class_amount:,.0f}\n{names}"
+        if _monthly_notification_already_sent(
+            school=school,
+            event_type='FEE_DUE',
+            channel='IN_APP',
+            recipient_user=teacher_user,
+            title=teacher_title,
+            body=teacher_body,
+            month=month,
+            year=year,
+        ):
+            continue
+        log = engine.send(
+            event_type='FEE_DUE',
+            channel='IN_APP',
+            context={},
+            recipient_identifier=str(teacher_user.id),
+            recipient_type='STAFF',
+            recipient_user=teacher_user,
+            title=teacher_title,
+            body=teacher_body,
+        )
+        if log and log.status in ('SENT', 'SCHEDULED'):
+            sent += 1
+
+    # 3) Parent in-app reminders: self-only student pending amount.
+    for student_id, amount in student_totals.items():
+        student = student_by_id.get(student_id)
+        if not student:
+            continue
+        amount_label = f"{amount:,.0f}"
+        title = f"Fee Pending — {student.name} - {month_label}"
+        body = f"{student.name}: Rs {amount_label} pending."
+        for parent_user in get_parent_users_for_student(student):
+            if _monthly_notification_already_sent(
+                school=school,
+                event_type='FEE_DUE',
+                channel='IN_APP',
+                recipient_user=parent_user,
+                title=title,
+                body=body,
+                month=month,
+                year=year,
+                student=student,
+            ):
+                continue
+            log = engine.send(
+                event_type='FEE_DUE',
+                channel='IN_APP',
+                context={},
+                recipient_identifier=str(parent_user.id),
+                recipient_type='PARENT',
+                recipient_user=parent_user,
+                student=student,
+                title=title,
+                body=body,
+            )
+            if log and log.status in ('SENT', 'SCHEDULED'):
+                sent += 1
 
     logger.info(f"Fee reminders sent: {sent} for {school.name} ({month}/{year})")
     return sent
@@ -320,7 +442,7 @@ def trigger_fee_pending_in_app(school, month, year):
             school=school,
             month=month,
             year=year,
-            status__in=['PENDING', 'PARTIAL'],
+            status__in=FEE_PENDING_STATUSES,
             student__is_active=True,
         )
         .select_related('student', 'student__class_obj')
@@ -943,7 +1065,7 @@ def trigger_class_teacher_fee_pending(school, month, year):
                 school=school,
                 month=month,
                 year=year,
-                status__in=['PENDING', 'PARTIAL'],
+                status__in=FEE_PENDING_STATUSES,
                 student__class_obj=class_obj,
                 student__is_active=True,
             )

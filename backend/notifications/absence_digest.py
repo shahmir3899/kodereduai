@@ -74,6 +74,7 @@ def _active_enrollment_student_ids(
         class_obj_id=class_obj_id,
         is_active=True,
         status=StudentEnrollment.Status.ACTIVE,
+        student__is_active=True,
     )
     if session_class_id:
         qs = qs.filter(session_class_id=session_class_id)
@@ -91,6 +92,7 @@ def _iter_cohort_keys(
             academic_year_id=academic_year_id,
             is_active=True,
             status=StudentEnrollment.Status.ACTIVE,
+            student__is_active=True,
         )
         .values_list('class_obj_id', 'session_class_id')
         .distinct()
@@ -238,18 +240,26 @@ def process_absence_digest_for_school(school, target_date) -> Dict[str, int]:
         )
 
         if not _staff_marker_exists(school.id, target_date, scope_key):
-            absent_count = sum(
-                1
+            absent_records = [
+                by_student[sid]
                 for sid in student_ids
-                if by_student[sid].status
-                == AttendanceRecord.AttendanceStatus.ABSENT
-            )
+                if by_student[sid].status == AttendanceRecord.AttendanceStatus.ABSENT
+            ]
+            absent_count = len(absent_records)
             label = _cohort_class_label(class_obj_id, session_class_id)
-            title = f'{label} — {absent_count} absent'
-            body = (
-                f'Attendance complete for {label} on '
-                f'{target_date.strftime("%d %B %Y")}: {absent_count} student(s) absent.'
-            )
+            date_with_day = target_date.strftime('%d %B %Y (%A)')
+            absent_names = ', '.join(
+                sorted(
+                    {
+                        (rec.student.name or '').strip()
+                        for rec in absent_records
+                        if getattr(rec, 'student', None)
+                        and getattr(rec.student, 'name', None)
+                    }
+                )
+            ) or 'None'
+            title = f'{label} — {absent_count} absent - {date_with_day}'
+            body = absent_names
 
             if _create_marker(
                 school.id,

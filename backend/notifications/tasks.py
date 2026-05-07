@@ -4,6 +4,7 @@ Celery tasks for scheduled notifications.
 
 import logging
 from datetime import time as dt_time
+from datetime import datetime as dt_datetime
 from celery import shared_task
 from django.utils import timezone
 from .observability import REASON_FAILED_DISPATCH, bump_retry_count, mark_log_failed, should_retry_log
@@ -12,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 @shared_task
-def run_scheduled_absence_in_app_digest():
+def run_scheduled_absence_in_app_digest(force: bool = False, now_iso: str | None = None):
     """
     Three daily scans at 08:00, 09:00, and 10:00 (Asia/Karachi — see CELERY_TIMEZONE).
 
@@ -23,8 +24,12 @@ def run_scheduled_absence_in_app_digest():
 
     from notifications.absence_digest import process_absence_digest_all_schools
 
-    local_now = timezone.localtime()
-    if local_now.hour not in (8, 9, 10):
+    if now_iso:
+        local_now = timezone.localtime(dt_datetime.fromisoformat(now_iso))
+    else:
+        local_now = timezone.localtime()
+
+    if not force and local_now.hour not in (8, 9, 10):
         return {'skipped': True, 'reason': 'outside_digest_hours', 'hour': local_now.hour}
 
     summary = process_absence_digest_all_schools(local_now.date())
@@ -76,9 +81,6 @@ def send_fee_reminders():
                         'current_day': now.day,
                     },
                 )
-                continue
-
-            if config and not config.whatsapp_enabled:
                 continue
 
             sent = trigger_fee_reminder(school, month, year)

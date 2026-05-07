@@ -97,7 +97,6 @@ export default function NotificationBell() {
           </span>
         )}
       </button>
-      <p className="mt-1 text-[10px] text-gray-500 text-right pr-0.5">Scope: All schools</p>
 
       {open && (
         <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-xl border border-gray-200 z-50">

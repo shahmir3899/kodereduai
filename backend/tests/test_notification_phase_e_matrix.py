@@ -2,12 +2,18 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 import pytest
+from django.utils import timezone
 
 from academics.models import ClassTeacherAssignment
 from finance.models import Account, FeePayment
 from notifications.models import NotificationLog, SchoolNotificationConfig
 from notifications.recipients import get_school_membership_users
-from notifications.triggers import trigger_class_teacher_fee_pending, trigger_general
+from notifications.triggers import (
+    trigger_class_teacher_fee_pending,
+    trigger_fee_reminder,
+    trigger_general,
+)
+from parents.models import ParentChild, ParentProfile
 from schools.models import UserSchoolMembership
 from users.models import User
 
@@ -171,3 +177,89 @@ class TestNotificationPhaseEMatrix:
 
         sent = trigger_class_teacher_fee_pending(school, month=9, year=2026)
         assert sent == 0
+
+    def test_fee_reminder_in_app_fanout_parent_teacher_admin(self, seed_data):
+        school = seed_data['school_a']
+        academic_year = seed_data['academic_year']
+        class_obj = seed_data['classes'][0]
+        student = seed_data['students'][0]
+        teacher_staff = seed_data['staff'][0]
+        month = 9
+        year = 2026
+
+        SchoolNotificationConfig.objects.update_or_create(
+            school=school,
+            defaults={
+                'in_app_enabled': True,
+                'whatsapp_enabled': False,
+                'fee_reminder_enabled': True,
+            },
+        )
+
+        ClassTeacherAssignment.objects.create(
+            school=school,
+            academic_year=academic_year,
+            class_obj=class_obj,
+            session_class=None,
+            teacher=teacher_staff,
+            is_active=True,
+        )
+
+        parent_user = User.objects.create_user(
+            username=f"{seed_data['prefix']}fee_parent",
+            email=f"{seed_data['prefix']}fee_parent@test.com",
+            password=seed_data['password'],
+            role='PARENT',
+            school=school,
+            organization=seed_data['org'],
+        )
+        UserSchoolMembership.objects.create(
+            user=parent_user,
+            school=school,
+            role=UserSchoolMembership.Role.PARENT,
+            is_default=True,
+            is_active=True,
+        )
+        parent_profile = ParentProfile.objects.create(user=parent_user, phone='+923001111111')
+        ParentChild.objects.create(
+            parent=parent_profile,
+            student=student,
+            school=school,
+            relation='MOTHER',
+            is_primary=True,
+        )
+
+        account = Account.objects.create(
+            school=school,
+            organization=seed_data['org'],
+            name=f"{seed_data['prefix']}fee_reminder_account",
+            account_type=Account.AccountType.CASH,
+            opening_balance=Decimal('0.00'),
+            is_active=True,
+        )
+        FeePayment.objects.create(
+            school=school,
+            academic_year=academic_year,
+            student=student,
+            fee_type='MONTHLY',
+            month=month,
+            year=year,
+            amount_due=Decimal('3000.00'),
+            amount_paid=Decimal('0.00'),
+            account=account,
+        )
+
+        started_at = timezone.now()
+        sent = trigger_fee_reminder(school, month=month, year=year)
+        assert sent >= 3  # admin + teacher + parent at minimum
+
+        logs = NotificationLog.objects.filter(
+            school=school,
+            event_type='FEE_DUE',
+            channel='IN_APP',
+            created_at__gte=started_at,
+        )
+
+        assert logs.filter(recipient_user=seed_data['users']['admin']).exists()
+        assert logs.filter(recipient_user=teacher_staff.user).exists()
+        assert logs.filter(recipient_user=parent_user, student=student).exists()

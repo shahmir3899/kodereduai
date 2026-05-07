@@ -2,7 +2,10 @@ from datetime import datetime, time
 from unittest.mock import patch
 
 import pytest
+from django.conf import settings
+from django.core.management import call_command
 from django.utils import timezone
+from django_celery_beat.models import PeriodicTask
 
 from notifications.models import SchoolNotificationConfig
 from notifications.tasks import send_daily_absence_summary, send_fee_reminders
@@ -16,6 +19,27 @@ def _aware(year, month, day, hour, minute):
 @pytest.mark.django_db
 class TestNotificationSchedulerContract:
 
+    def test_code_schedule_includes_absence_digest_task(self):
+        entry = settings.CELERY_BEAT_SCHEDULE.get('scheduled-absence-in-app-digest')
+        assert entry is not None
+        assert entry.get('task') == 'notifications.tasks.run_scheduled_absence_in_app_digest'
+
+    def test_sync_scheduler_command_upserts_absence_digest_periodic_task(self):
+        # Validate create path.
+        PeriodicTask.objects.filter(name='scheduled-absence-in-app-digest').delete()
+        call_command('sync_notification_scheduler')
+
+        task = PeriodicTask.objects.get(name='scheduled-absence-in-app-digest')
+        assert task.task == 'notifications.tasks.run_scheduled_absence_in_app_digest'
+        assert task.enabled is True
+        assert task.crontab is not None
+        assert task.crontab.minute == '0'
+        assert task.crontab.hour == '8,9,10'
+
+        # Validate idempotent update path.
+        call_command('sync_notification_scheduler')
+        assert PeriodicTask.objects.filter(name='scheduled-absence-in-app-digest').count() == 1
+
     def test_fee_reminders_respect_fee_reminder_day(self, seed_data):
         school_a = seed_data['school_a']
         school_b = seed_data['school_b']
@@ -23,7 +47,8 @@ class TestNotificationSchedulerContract:
         SchoolNotificationConfig.objects.update_or_create(
             school=school_a,
             defaults={
-                'whatsapp_enabled': True,
+                'whatsapp_enabled': False,
+                'in_app_enabled': True,
                 'fee_reminder_enabled': True,
                 'fee_reminder_day': 10,
             },
@@ -31,7 +56,8 @@ class TestNotificationSchedulerContract:
         SchoolNotificationConfig.objects.update_or_create(
             school=school_b,
             defaults={
-                'whatsapp_enabled': True,
+                'whatsapp_enabled': False,
+                'in_app_enabled': True,
                 'fee_reminder_enabled': True,
                 'fee_reminder_day': 11,
             },

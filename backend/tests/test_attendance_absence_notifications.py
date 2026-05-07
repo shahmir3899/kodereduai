@@ -9,6 +9,7 @@ from attendance.models import AttendanceRecord, AttendanceUpload
 from face_attendance.models import FaceAttendanceSession
 from notifications.absence_digest import process_absence_digest_for_school
 from notifications.models import NotificationLog, SchoolNotificationConfig
+from notifications.tasks import run_scheduled_absence_in_app_digest
 from parents.models import ParentChild, ParentProfile
 from academics.models import ClassTeacherAssignment
 from students.models import StudentProfile
@@ -209,6 +210,15 @@ class TestScheduledAbsenceInAppDigests:
         parent_logs = logs.filter(recipient_user=parent_user, student=student)
         assert parent_logs.exists()
 
+        admin_staff_log = logs.filter(
+            recipient_user=seed_data['users']['admin'],
+            student__isnull=True,
+        ).first()
+        assert admin_staff_log is not None
+        expected_date_with_day = target_date.strftime('%d %B %Y (%A)')
+        assert expected_date_with_day in admin_staff_log.title
+        assert student.name in admin_staff_log.body
+
     def test_ocr_confirm_does_not_send_immediate_in_app_absence(self, seed_data, api):
         class_obj = seed_data['classes'][0]
         student_absent_already = seed_data['students'][0]
@@ -278,3 +288,112 @@ class TestScheduledAbsenceInAppDigests:
         )
         assert resp.status_code == 200, resp.content
         assert self._absence_log_count(seed_data['school_a']) == before
+
+    def test_digest_treats_inactive_students_as_out_of_scope(self, seed_data):
+        """
+        Regression: UI and daily-report totals are based on Student.is_active=True.
+        The absence digest should not block on enrollments for inactive students.
+        """
+        class_obj = seed_data['classes'][0]
+        active_student = seed_data['students'][0]
+        inactive_student = seed_data['students'][1]
+        target_date = date.today() + timedelta(days=12)
+
+        # Ensure both have ACTIVE enrollments, but mark one student inactive.
+        self._ensure_enrollments(seed_data, class_obj, [active_student, inactive_student])
+        inactive_student.is_active = False
+        inactive_student.save(update_fields=['is_active'])
+
+        SchoolNotificationConfig.objects.update_or_create(
+            school=seed_data['school_a'],
+            defaults={'in_app_enabled': True, 'absence_notification_enabled': True},
+        )
+
+        # Only create a record for the active student.
+        AttendanceRecord.objects.update_or_create(
+            student_id=active_student.id,
+            date=target_date,
+            defaults={
+                'school': seed_data['school_a'],
+                'academic_year': seed_data['academic_year'],
+                'status': AttendanceRecord.AttendanceStatus.PRESENT,
+                'source': AttendanceRecord.Source.MANUAL,
+            },
+        )
+
+        started_at = timezone.now()
+        with patch('notifications.absence_digest.is_off_day_for_date', return_value=False):
+            stats = process_absence_digest_for_school(seed_data['school_a'], target_date)
+
+        assert stats['cohorts_staff_digest'] >= 1
+        assert NotificationLog.objects.filter(
+            school=seed_data['school_a'],
+            event_type='ABSENCE',
+            channel='IN_APP',
+            created_at__gte=started_at,
+        ).exists()
+
+    def test_scheduled_task_can_be_forced_now_in_tests(self, seed_data):
+        """
+        The scheduled digest task normally runs only at 08/09/10 local time.
+        Tests can force-run it at any time to validate behavior without time coupling.
+        """
+        # 11:28 local time, but force=True should still run.
+        now = timezone.localtime().replace(hour=11, minute=28, second=0, microsecond=0)
+        result = run_scheduled_absence_in_app_digest(force=True, now_iso=now.isoformat())
+        assert isinstance(result, dict)
+        assert result.get('date') == str(now.date())
+
+    def test_digest_includes_legacy_admin_user_without_membership(self, seed_data, api):
+        """
+        Safety fallback: if an admin user has User.school set correctly but membership
+        rows are missing/misaligned, they should still receive school digest alerts.
+        """
+        class_obj = seed_data['classes'][0]
+        s1, s2 = seed_data['students'][0], seed_data['students'][1]
+        target_date = date.today() + timedelta(days=13)
+
+        self._ensure_enrollments(seed_data, class_obj, [s1, s2])
+        SchoolNotificationConfig.objects.update_or_create(
+            school=seed_data['school_a'],
+            defaults={'in_app_enabled': True, 'absence_notification_enabled': True},
+        )
+
+        legacy_admin = User.objects.create_user(
+            username=f"{seed_data['prefix']}legacy_admin_no_membership",
+            email=f"{seed_data['prefix']}legacy_admin_no_membership@test.com",
+            password=seed_data['password'],
+            role='SCHOOL_ADMIN',
+            school=seed_data['school_a'],
+            organization=seed_data['org'],
+        )
+        # Intentionally no UserSchoolMembership row for legacy_admin.
+
+        payload = {
+            'class_id': class_obj.id,
+            'academic_year': seed_data['academic_year'].id,
+            'date': str(target_date),
+            'entries': [
+                {'student_id': s1.id, 'status': 'ABSENT'},
+                {'student_id': s2.id, 'status': 'PRESENT'},
+            ],
+        }
+        resp = api.post(
+            '/api/attendance/records/bulk_entry/',
+            payload,
+            seed_data['tokens']['admin'],
+            seed_data['SID_A'],
+        )
+        assert resp.status_code == 200, resp.content
+
+        started_at = timezone.now()
+        with patch('notifications.absence_digest.is_off_day_for_date', return_value=False):
+            process_absence_digest_for_school(seed_data['school_a'], target_date)
+
+        assert NotificationLog.objects.filter(
+            school=seed_data['school_a'],
+            event_type='ABSENCE',
+            channel='IN_APP',
+            recipient_user=legacy_admin,
+            created_at__gte=started_at,
+        ).exists()

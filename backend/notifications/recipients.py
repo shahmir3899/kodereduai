@@ -3,6 +3,7 @@ Shared recipient resolution helpers for notification triggers.
 """
 
 from schools.models import UserSchoolMembership
+from users.models import User
 
 
 def get_school_membership_users(school, roles):
@@ -24,14 +25,29 @@ def get_school_membership_users(school, roles):
 
 
 def get_admin_users(school):
-    """Return school admins and principals using membership mapping."""
-    return get_school_membership_users(
+    """Return school admins/principals using membership mapping with legacy fallback."""
+    membership_users = get_school_membership_users(
         school,
         roles=[
             UserSchoolMembership.Role.SCHOOL_ADMIN,
             UserSchoolMembership.Role.PRINCIPAL,
         ],
     )
+
+    # Safety fallback for legacy/misaligned data:
+    # include active users tied to this school via User.school + admin role.
+    fallback_users = User.objects.filter(
+        school=school,
+        is_active=True,
+        role__in=['SCHOOL_ADMIN', 'PRINCIPAL'],
+    )
+
+    users_by_id = {u.id: u for u in membership_users if getattr(u, 'id', None)}
+    for user in fallback_users:
+        if user.id:
+            users_by_id[user.id] = user
+
+    return list(users_by_id.values())
 
 
 def get_parent_users_for_student(student):
