@@ -301,9 +301,8 @@ class ClassSubjectViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Model
         )
 
     def perform_destroy(self, instance):
-        """Soft-delete class-subject assignments to preserve history."""
-        instance.is_active = False
-        instance.save(update_fields=['is_active', 'updated_at'])
+        """Hard-delete class-subject assignments."""
+        instance.delete()
 
     @action(detail=False, methods=['post'], url_path='bulk-assign')
     def bulk_assign(self, request):
