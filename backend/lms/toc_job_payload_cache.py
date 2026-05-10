@@ -17,8 +17,9 @@ CACHE_TIMEOUT_SEC = 15 * 60  # must cover slow Vision + retries
 
 
 def toc_job_blob_cache_allowed() -> bool:
+    """True when default cache uses django-redis (shared across web + Celery)."""
     backend = settings.CACHES.get("default", {}).get("BACKEND", "")
-    return backend == "django_redis.cache.RedisCache"
+    return "django_redis" in backend and "RedisCache" in backend
 
 
 def toc_job_blob_cache_key(job_id) -> str:

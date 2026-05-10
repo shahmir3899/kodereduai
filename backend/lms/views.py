@@ -7,6 +7,7 @@ import hashlib
 import json
 import base64
 import uuid
+import time
 from django.conf import settings
 from datetime import timedelta
 from django.utils import timezone
@@ -456,6 +457,7 @@ class BookViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
             # If Celery is available use it; otherwise spawn a daemon thread.
             # This fixes mobile "Network Error" caused by idle TCP connections being
             # killed by the OS / proxy while waiting for Google Vision to respond.
+            _accept_t0 = time.perf_counter()
             job_uid = uuid.uuid4()
             store_blob_in_redis = try_put_job_blob(job_uid, image_bytes)
             encoded_payload = '' if store_blob_in_redis else base64.b64encode(image_bytes).decode('utf-8')
@@ -476,6 +478,16 @@ class BookViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
             else:
                 logger.info('[TOC-OCR] spawned thread job=%s request_id=%s book_id=%s', job.id, request_id, book.id)
                 _process_toc_job_in_background(str(job.id))
+            _accept_ms = (time.perf_counter() - _accept_t0) * 1000
+            logger.info(
+                '[TOC-OCR] async_accept_done job=%s book=%s image_bytes=%s redis_blob=%s celery=%s elapsed_ms=%.1f',
+                job.id,
+                book.id,
+                len(image_bytes),
+                store_blob_in_redis,
+                async_allowed,
+                _accept_ms,
+            )
             return Response(
                 {
                     'job_id': str(job.id),

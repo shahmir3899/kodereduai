@@ -163,10 +163,10 @@ class TestOcrJobCreation:
         mock_thread.assert_not_called()
 
     def test_missing_image_returns_400(self, seed_data, api, ocr_book):
-        """Uploading without an image file must return 400."""
+        """Multipart without an image field must return 400."""
         token = seed_data["tokens"]["admin"]
         sid = seed_data["SID_A"]
-        resp = api.post(
+        resp = api.post_multipart(
             f"/api/lms/books/{ocr_book.id}/ocr_toc/?async=1",
             {},
             token,
@@ -346,12 +346,12 @@ class TestBackgroundThreadWorker:
             if ctx2:
                 with ctx2 as mock_ocr:
                     _process_toc_job_in_background(job_id)
+                    if thread_ref:
+                        thread_ref[0].join(timeout=5)
             else:
                 _process_toc_job_in_background(job_id)
-
-        # Join the actual thread to wait for completion
-        if thread_ref:
-            thread_ref[0].join(timeout=5)
+                if thread_ref:
+                    thread_ref[0].join(timeout=5)
 
         return mock_ocr
 
