@@ -291,6 +291,13 @@ if ENVIRONMENT == 'local':
     CELERY_TASK_ALWAYS_EAGER = True
     CELERY_TASK_EAGER_PROPAGATES = True
 
+# Set ENABLE_CELERY=true in production when start.sh spawns a Celery worker (see render.yaml).
+ENABLE_CELERY = os.getenv('ENABLE_CELERY', 'false').lower() in ('1', 'true', 'yes')
+# If true, POST ocr_toc/?async=1 always runs OCR in the web worker (ignores async queue).
+LMS_TOC_OCR_FORCE_SYNC = os.getenv('LMS_TOC_OCR_FORCE_SYNC', '').lower() in ('1', 'true', 'yes')
+# Async TOC jobs need a real worker; Render default is ENABLE_CELERY=false — avoid orphaned QUEUED jobs.
+LMS_TOC_OCR_ASYNC_JOBS_ENABLED = (not LMS_TOC_OCR_FORCE_SYNC) and ENABLE_CELERY
+
 # Disable throttling if Redis is using localhost (not properly configured on Render)
 if CELERY_BROKER_URL.startswith('redis://localhost'):
     REST_FRAMEWORK['DEFAULT_THROTTLE_CLASSES'] = []

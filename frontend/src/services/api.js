@@ -19,7 +19,8 @@ const api = axios.create({
   },
 })
 
-const LMS_OCR_TIMEOUT_MS = 45000
+// TOC OCR: multipart upload + server accept can exceed 45s on slow mobile uplinks; align with CurriculumPage poll budget
+const LMS_OCR_TIMEOUT_MS = 120000
 const LMS_JOB_POLL_TIMEOUT_MS = 15000
 
 // Request interceptor - add auth token + active school header
@@ -954,17 +955,18 @@ export const lmsApi = {
   suggestTOC: (id, data) => api.post(`/api/lms/books/${id}/suggest_toc/`, data),
   applyTOC: (id, data) => api.post(`/api/lms/books/${id}/apply_toc/`, data),
   ocrTOC: (bookId, imageFile, options = {}) => {
-    const { timeout = LMS_OCR_TIMEOUT_MS, signal } = options
+    const { timeout = LMS_OCR_TIMEOUT_MS, signal, onUploadProgress } = options
     const formData = new FormData()
     formData.append('image', imageFile)
     return api.post(`/api/lms/books/${bookId}/ocr_toc/`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
       timeout,
       signal,
+      onUploadProgress,
     })
   },
   createTocJob: (bookId, imageFile, options = {}) => {
-    const { timeout = LMS_OCR_TIMEOUT_MS, signal } = options
+    const { timeout = LMS_OCR_TIMEOUT_MS, signal, onUploadProgress } = options
     const formData = new FormData()
     formData.append('image', imageFile)
     return api.post(`/api/lms/books/${bookId}/ocr_toc/`, formData, {
@@ -972,6 +974,7 @@ export const lmsApi = {
       params: { async: '1' },
       timeout,
       signal,
+      onUploadProgress,
     })
   },
   getTocJob: (jobId, options = {}) => {

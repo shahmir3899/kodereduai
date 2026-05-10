@@ -503,6 +503,15 @@ export const handlers = [
     ] : []
     return HttpResponse.json({ count: subjects.length, results: subjects })
   }),
+  http.get('/api/academics/class-subjects/by_class/', ({ request }) => {
+    const url = new URL(request.url)
+    const classId = url.searchParams.get('class_id')
+    const subjects = classId ? [
+      { id: 1, class_obj: parseInt(classId), subject: 1, subject_name: 'Mathematics', teacher: 1, teacher_name: 'Ali Khan' },
+      { id: 2, class_obj: parseInt(classId), subject: 2, subject_name: 'Urdu', teacher: null, teacher_name: null },
+    ] : []
+    return HttpResponse.json({ count: subjects.length, results: subjects })
+  }),
 
   // Auth
   http.get('/api/auth/me/', () =>
@@ -705,6 +714,29 @@ export const handlers = [
   // Sessions
   http.get('/api/sessions/years/', () => HttpResponse.json([])),
   http.get('/api/sessions/terms/', () => HttpResponse.json([])),
+  http.get('/api/sessions/session-classes/', () =>
+    HttpResponse.json({
+      count: 1,
+      next: null,
+      previous: null,
+      results: [{
+        id: 1,
+        school: 1,
+        academic_year: 1,
+        academic_year_name: '2025-2026',
+        class_obj: 1,
+        class_obj_name: 'Class 1A',
+        display_name: 'Class 1A',
+        section: 'A',
+        grade_level: 1,
+        label: 'Class 1A - A',
+        enrollment_count: 0,
+        unassigned_count: 0,
+        is_active: true,
+        created_at: '2026-01-01T00:00:00Z',
+        updated_at: '2026-01-01T00:00:00Z',
+      }],
+    })),
 
   // Classes & Students
   http.get('/api/students/classes/', () => HttpResponse.json([

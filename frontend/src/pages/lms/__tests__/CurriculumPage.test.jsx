@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi } from 'vitest'
 import { renderWithProviders } from '../../../test/utils'
@@ -20,6 +20,13 @@ vi.mock('../../../components/Toast', () => ({
   useToast: () => ({ showSuccess: vi.fn(), showError: vi.fn() }),
 }))
 
+vi.mock('../../../contexts/AcademicYearContext', () => ({
+  useAcademicYear: () => ({
+    activeAcademicYear: { id: 1, name: '2025-2026' },
+    academicYears: [{ id: 1, name: '2025-2026' }],
+  }),
+}))
+
 const WAIT_OPTS = { timeout: 3000 }
 
 describe('CurriculumPage', () => {
@@ -34,7 +41,7 @@ describe('CurriculumPage', () => {
 
     it('shows placeholder before filters selected', () => {
       renderWithProviders(<CurriculumPage />)
-      expect(screen.getByText(/Select a class and subject/)).toBeInTheDocument()
+      expect(screen.getByText(/Start by selecting a class/)).toBeInTheDocument()
     })
 
     it('does not show Add Book button before filters', () => {
@@ -47,15 +54,16 @@ describe('CurriculumPage', () => {
     async function renderWithFilters() {
       const user = userEvent.setup()
       renderWithProviders(<CurriculumPage />)
-      // Wait for classes and subjects to load as select options
       await waitFor(() => {
-        expect(screen.getByText('Class 1A')).toBeInTheDocument()
-        expect(screen.getByText('Mathematics')).toBeInTheDocument()
+        expect(screen.getByText(/Class 1A/)).toBeInTheDocument()
       }, WAIT_OPTS)
-      // Select class and subject using userEvent
       const selects = screen.getAllByRole('combobox')
       await user.selectOptions(selects[0], '1')
-      await user.selectOptions(selects[1], '1')
+      await waitFor(() => {
+        const both = screen.getAllByRole('combobox')
+        expect(within(both[1]).getByRole('option', { name: 'Mathematics' })).toBeInTheDocument()
+      }, WAIT_OPTS)
+      await user.selectOptions(screen.getAllByRole('combobox')[1], '1')
       return user
     }
 
@@ -87,12 +95,16 @@ describe('CurriculumPage', () => {
       renderWithProviders(<CurriculumPage />)
       // Wait for data to load
       await waitFor(() => {
-        expect(screen.getByText('Class 1A')).toBeInTheDocument()
+        expect(screen.getByText(/Class 1A/)).toBeInTheDocument()
       }, WAIT_OPTS)
       // Select filters to enable Add Book button
       const selects = screen.getAllByRole('combobox')
       await user.selectOptions(selects[0], '1')
-      await user.selectOptions(selects[1], '1')
+      await waitFor(() => {
+        const both = screen.getAllByRole('combobox')
+        expect(within(both[1]).getByRole('option', { name: 'Mathematics' })).toBeInTheDocument()
+      }, WAIT_OPTS)
+      await user.selectOptions(screen.getAllByRole('combobox')[1], '1')
       await waitFor(() => {
         expect(screen.getByText('Add Book')).toBeInTheDocument()
       }, WAIT_OPTS)

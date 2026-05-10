@@ -29,6 +29,13 @@ vi.mock('../../../hooks/useClasses', () => ({
   }),
 }))
 
+vi.mock('../../../contexts/AcademicYearContext', () => ({
+  useAcademicYear: () => ({
+    activeAcademicYear: { id: 1, name: '2025-2026' },
+    academicYears: [{ id: 1, name: '2025-2026' }],
+  }),
+}))
+
 const defaultProps = {
   onClose: vi.fn(),
   onSuccess: vi.fn(),

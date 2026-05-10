@@ -353,8 +353,15 @@ class BookViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
         image_bytes = image.read()
         async_requested = str(request.query_params.get('async', '')).lower() in ('1', 'true', 'yes')
         request_id = request.headers.get('X-Request-ID') or str(uuid.uuid4())
+        async_allowed = getattr(settings, 'LMS_TOC_OCR_ASYNC_JOBS_ENABLED', False)
 
-        if async_requested:
+        if async_requested and not async_allowed:
+            logger.info(
+                '[TOC-OCR] async=1 ignored (no Celery worker or LMS_TOC_OCR_FORCE_SYNC); sync OCR book_id=%s',
+                book.id,
+            )
+
+        if async_requested and async_allowed:
             encoded_payload = base64.b64encode(image_bytes).decode('utf-8')
             job = TOCImportJob.objects.create(
                 school=book.school,

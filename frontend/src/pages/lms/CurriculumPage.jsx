@@ -14,6 +14,7 @@ import SubjectSelector from '../../components/SubjectSelector'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
+import { compressImageForTocOcr } from '../../utils/compressImageForUpload'
 
 const LANGUAGES = [
   { value: 'en', label: 'English' },
@@ -29,8 +30,6 @@ const LANGUAGES = [
 const MAX_TOC_TEXT_SIZE = 500 * 1024 // 500KB to match backend limit
 const TOC_WARN_TEXT_SIZE = 50 * 1024  // Warn at 50KB
 const MAX_UNDO_DEPTH = 20             // Cap undo history stack
-const OCR_HARD_TIMEOUT_MS = 120000
-const OCR_POLL_INTERVAL_MS = 1500
 
 const EMPTY_BOOK_FORM = {
   title: '',
@@ -1646,7 +1645,13 @@ export default function CurriculumPage() {
         tocImageFile.name.replace(/\.[^/.]+$/, '.jpg'),
         { type: 'image/jpeg' },
       )
-      replaceTocImageFile(croppedFile)
+      let fileToSet = croppedFile
+      try {
+        fileToSet = await compressImageForTocOcr(croppedFile)
+      } catch {
+        fileToSet = croppedFile
+      }
+      replaceTocImageFile(fileToSet)
       setTocCrop(undefined)
       setTocCompletedCrop(null)
       showSuccess('Crop applied.')
@@ -1679,34 +1684,47 @@ export default function CurriculumPage() {
     setTocImageWizardStep(3)
   }
 
-  const handleTocImageSelect = (e) => {
-    const file = e.target.files?.[0]
+  const handleTocImageSelect = async (e) => {
+    const input = e.target
+    const file = input.files?.[0]
     if (!file) return
     const allowed = ['image/jpeg', 'image/png', 'image/webp']
     if (!allowed.includes(file.type)) {
       showError('Please select a JPEG, PNG, or WebP image')
+      input.value = ''
       return
     }
     if (file.size > 10 * 1024 * 1024) {
       showError('Image too large. Maximum size is 10MB.')
+      input.value = ''
       return
     }
-    replaceTocImageFile(file)
-    setTocImageRotation(0)
-    setTocImageSkewX(0)
-    setTocImageSkewY(0)
-    setTocImageWizardStep(1)
-    setTocCropAspect('free')
-    if (tocFinalPreviewUrl) URL.revokeObjectURL(tocFinalPreviewUrl)
-    setTocFinalPreviewUrl(null)
-    setTocFinalPreviewLoading(false)
-    resetTocPerspectiveCorners()
-    setTocCrop(undefined)
-    setTocCompletedCrop(null)
-    setTocCropModalOpen(false)
-    setTocRawExtractedText('')
-    setTocShowCleanupEditor(false)
-    setOcrCanRetry(false)
+    let imageFile = file
+    setTocImageProcessing(true)
+    try {
+      try {
+        imageFile = await compressImageForTocOcr(file)
+      } catch {
+        imageFile = file
+      }
+      replaceTocImageFile(imageFile)
+      setTocImageRotation(0)
+      setTocImageSkewX(0)
+      setTocImageSkewY(0)
+      setTocImageWizardStep(1)
+      setTocCropAspect('free')
+      if (tocFinalPreviewUrl) URL.revokeObjectURL(tocFinalPreviewUrl)
+      setTocFinalPreviewUrl(null)
+      setTocFinalPreviewLoading(false)
+      resetTocPerspectiveCorners()
+      setTocCrop(undefined)
+      setTocCompletedCrop(null)
+      setTocCropModalOpen(false)
+      setOcrCanRetry(false)
+    } finally {
+      setTocImageProcessing(false)
+      input.value = ''
+    }
   }
 
   const handleRotateTocImage = (delta) => {
@@ -1866,7 +1884,6 @@ export default function CurriculumPage() {
     }
     const abortController = new AbortController()
     activeOcrAbortRef.current = abortController
-    const requestStartedAt = Date.now()
     setOcrLoading(true)
     setOcrStatusText('Preparing image...')
     setOcrElapsedSeconds(0)
@@ -1880,38 +1897,33 @@ export default function CurriculumPage() {
         setTocImageSkewY(0)
       }
 
-      let response = null
-      setOcrStatusText('Uploading photo...')
-
-      const asyncResponse = await lmsApi.createTocJob(selectedBookId, processedFile, {
-        signal: abortController.signal,
-      })
-      const asyncJobId = asyncResponse?.data?.job_id
-
-      if (asyncResponse?.status === 202 && asyncJobId) {
-        setOcrStatusText('Extracting text...')
-        while (Date.now() - requestStartedAt < OCR_HARD_TIMEOUT_MS) {
-          const jobResponse = await lmsApi.getTocJob(asyncJobId, { signal: abortController.signal })
-          const jobData = jobResponse?.data || {}
-          if (jobData.status === 'SUCCEEDED') {
-            response = { data: jobData.result || {} }
-            break
-          }
-          if (jobData.status === 'FAILED' || jobData.status === 'TIMED_OUT') {
-            throw new Error(jobData.error_message || 'OCR job failed. Please retry.')
-          }
-          setOcrStatusText('Still working...')
-          await new Promise((resolve) => window.setTimeout(resolve, OCR_POLL_INTERVAL_MS))
-        }
-        if (!response) {
-          throw new Error('OCR is taking too long. Please retry or use Manual Entry.')
-        }
-      } else {
-        setOcrStatusText('Extracting text...')
-        response = await lmsApi.ocrTOC(selectedBookId, processedFile, {
-          signal: abortController.signal,
-        })
+      let fileToUpload = processedFile
+      setOcrStatusText('Optimizing image...')
+      try {
+        fileToUpload = await compressImageForTocOcr(processedFile)
+      } catch {
+        fileToUpload = processedFile
       }
+
+      const onUploadProgress = (evt) => {
+        if (!evt.total) {
+          setOcrStatusText('Uploading photo…')
+          return
+        }
+        const pct = Math.min(100, Math.round((evt.loaded * 100) / evt.total))
+        if (pct < 100) {
+          setOcrStatusText(`Uploading photo… ${pct}%`)
+        } else {
+          // Body sent; server runs Vision OCR in the same request (no Celery queue on typical deploy).
+          setOcrStatusText('Extracting text…')
+        }
+      }
+
+      setOcrStatusText('Uploading photo…')
+      const response = await lmsApi.ocrTOC(selectedBookId, fileToUpload, {
+        signal: abortController.signal,
+        onUploadProgress,
+      })
 
       const rawExtractedText = response?.data?.text || ''
       setTocText(rawExtractedText)
@@ -2681,21 +2693,39 @@ export default function CurriculumPage() {
                 {tocMode === 'upload' && (
                   <div>
                     {!tocImagePreview ? (
-                      <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors">
-                        <svg className="w-10 h-10 text-gray-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                        </svg>
-                        <span className="text-sm text-gray-500">Click to select or take a photo of the Table of Contents page</span>
-                        <span className="text-xs text-gray-400 mt-1">JPEG, PNG, or WebP (max 10MB)</span>
-                        <input
-                          type="file"
-                          accept="image/jpeg,image/png,image/webp"
-                          capture="environment"
-                          onChange={handleTocImageSelect}
-                          className="hidden"
-                        />
-                      </label>
+                      <div className="w-full space-y-3">
+                        <div className="flex flex-col sm:flex-row gap-3">
+                          <label className="flex flex-1 flex-col items-center justify-center min-h-[7.5rem] px-4 py-4 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors text-center">
+                            <svg className="w-9 h-9 text-gray-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                            <span className="text-sm font-medium text-gray-700">Take photo</span>
+                            <span className="text-xs text-gray-500 mt-1">Opens camera on phones</span>
+                            <input
+                              type="file"
+                              accept="image/jpeg,image/png,image/webp"
+                              capture="environment"
+                              onChange={handleTocImageSelect}
+                              className="hidden"
+                            />
+                          </label>
+                          <label className="flex flex-1 flex-col items-center justify-center min-h-[7.5rem] px-4 py-4 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors text-center">
+                            <svg className="w-9 h-9 text-gray-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                            <span className="text-sm font-medium text-gray-700">Gallery / files</span>
+                            <span className="text-xs text-gray-500 mt-1">Pick an existing image</span>
+                            <input
+                              type="file"
+                              accept="image/jpeg,image/png,image/webp"
+                              onChange={handleTocImageSelect}
+                              className="hidden"
+                            />
+                          </label>
+                        </div>
+                        <p className="text-xs text-gray-400 text-center">JPEG, PNG, or WebP — max 10MB</p>
+                      </div>
                     ) : (
                       <div className="space-y-3">
                         <div className="relative rounded-lg overflow-hidden border border-gray-200">
@@ -3045,6 +3075,12 @@ export default function CurriculumPage() {
                             </div>
                           )}
 
+                          {tocImageWizardStep === 4 && tocFinalPreviewLoading && (
+                            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                              Building the exact image that will be uploaded…
+                            </p>
+                          )}
+
                           {tocImageWizardStep === 4 && (
                             <div className="space-y-2">
                               <p className="text-xs font-medium text-gray-700">Step 3: Run OCR</p>
@@ -3112,7 +3148,11 @@ export default function CurriculumPage() {
                                     handleOcrExtract()
                                   }
                                 }}
-                                disabled={ocrLoading || tocImageProcessing}
+                                disabled={
+                                  ocrLoading
+                                  || tocImageProcessing
+                                  || (tocImageWizardStep === 4 && tocFinalPreviewLoading)
+                                }
                                 className="btn btn-primary text-sm"
                               >
                                 {tocImageWizardStep === 1
