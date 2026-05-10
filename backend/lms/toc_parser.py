@@ -171,11 +171,18 @@ def apply_toc_structure(book, chapters):
     ``exercise``) are persisted. Invalid page values are ignored; if both
     pages are set but ``page_start`` > ``page_end``, the pair is swapped.
     """
+    import logging
+    from django.db.models import Max
+    logger = logging.getLogger(__name__)
+    
     chapters_created = 0
     topics_created = 0
     errors = []
 
-    chapter_number = Chapter.objects.filter(book=book).count()
+    # Get the MAX chapter_number, not count - this avoids duplicate key errors
+    max_chapter_result = Chapter.objects.filter(book=book).aggregate(Max('chapter_number'))
+    chapter_number = max_chapter_result.get('chapter_number__max') or 0
+    logger.info(f'[apply_toc_structure] Starting for book {book.id}, max chapter_number: {chapter_number}, incoming: {len(chapters or [])}')
 
     for chapter_payload in chapters or []:
         title = (chapter_payload.get('title') or '').strip()
@@ -197,8 +204,11 @@ def apply_toc_structure(book, chapters):
                 page_end=ch_page_end,
             )
             chapters_created += 1
+            logger.info(f'[apply_toc_structure] Created chapter #{chapter_number}: "{title}" for book {book.id}')
         except Exception as e:
-            errors.append(f"Chapter '{title}': {str(e)}")
+            error_msg = f"Chapter '{title}': {str(e)}"
+            errors.append(error_msg)
+            logger.error(f'[apply_toc_structure] Error creating chapter: {error_msg}')
             continue
 
         topic_number = 0
@@ -225,6 +235,10 @@ def apply_toc_structure(book, chapters):
             except Exception as e:
                 errors.append(f"Topic '{topic_title}': {str(e)}")
 
+    logger.info(f'[apply_toc_structure] Completed for book {book.id}: created {chapters_created} chapters, {topics_created} topics, {len(errors)} errors')
+    if errors:
+        logger.warning(f'[apply_toc_structure] Errors: {errors}')
+    
     return {
         'chapters_created': chapters_created,
         'topics_created': topics_created,

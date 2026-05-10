@@ -1172,6 +1172,14 @@ export const bootstrapApi = {
    * @param {string} [params.sections]      Comma-separated: attendance,hr,finance
    */
   getAdminDashboard: (params) => api.get('/api/bootstrap/admin-dashboard/', { params }),
+  /**
+   * Leadership roster + curriculum aggregates (SCHOOL_ADMIN / PRINCIPAL only).
+   * @param {Object} [params]
+   * @param {number} [params.academic_year]  Academic year ID (defaults to school current year)
+   * @param {string} [params.reference_date] YYYY-MM-DD (default: today)
+   */
+  getLeadershipAcademicInsights: (params) =>
+    api.get('/api/bootstrap/leadership-academic-insights/', { params }),
 }
 
 // ─── Face Attendance (Camera-Based) ──────────────────────────────────────────

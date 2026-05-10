@@ -326,7 +326,10 @@ class BookViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
             or ''
         ).strip()
 
+        logger.info(f'[apply_toc] Received request for book {book.id}, chapters={len(chapters)}, idempotency_key={idempotency_key}')
+
         if not isinstance(chapters, list) or not chapters:
+            logger.warning(f'[apply_toc] Invalid chapters input: {chapters}')
             return Response(
                 {'error': 'chapters must be a non-empty list.'},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -342,11 +345,21 @@ class BookViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
             if not existing:
                 existing = TOC_APPLY_IDEMPOTENCY_FALLBACK.get(cache_key)
             if existing and existing.get('payload_hash') == payload_hash:
+                logger.info(f'[apply_toc] Idempotency cache hit for key {cache_key}')
                 return Response(existing.get('result', {}), status=status.HTTP_200_OK)
 
         from .toc_parser import apply_toc_structure
-        with transaction.atomic():
-            result = apply_toc_structure(book, chapters)
+        logger.info(f'[apply_toc] Calling apply_toc_structure for book {book.id}')
+        try:
+            with transaction.atomic():
+                result = apply_toc_structure(book, chapters)
+            logger.info(f'[apply_toc] Result: {result}')
+        except Exception as e:
+            logger.error(f'[apply_toc] Exception during apply_toc_structure: {str(e)}', exc_info=True)
+            return Response(
+                {'error': f'Failed to apply TOC: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
         if idempotency_key:
             record = {

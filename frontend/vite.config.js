@@ -19,6 +19,7 @@ export default defineConfig({
     sourcemap: false,
   },
   server: {
+    host: true,          // expose on all network interfaces → accessible from mobile on same WiFi
     proxy: {
       '/api': {
         target: 'http://localhost:8000',

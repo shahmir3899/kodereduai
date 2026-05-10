@@ -60,7 +60,14 @@
           // School subdomain (e.g., focus.kodereduai.pk, focus2.kodereduai.pk)
           appToLoad = 'school';
           detectedSubdomain = parts[0];
-        } else if (hostname === 'localhost' || hostname.startsWith('127.0.0.1')) {
+        } else {
+          // Development / LAN mode - check URL params first, then localStorage.
+          // Treat direct IP access as dev too so mobile devices on WiFi can load
+          // the school app via ?subdomain=focus instead of falling back to portal.
+          const isLocalDevHost = hostname === 'localhost' || hostname.startsWith('127.') || /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname)
+          if (!isLocalDevHost) {
+            appToLoad = 'portal'
+          } else {
           // Development mode - check URL params first, then localStorage
           const params = new URLSearchParams(window.location.search);
           let subdomainParam = params.get('subdomain');
@@ -94,6 +101,7 @@
               window.history.replaceState({}, '', newUrl);
             } else {
               appToLoad = 'portal'; // Default to portal for local dev
+            }
             }
           }
         }

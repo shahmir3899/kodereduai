@@ -11,6 +11,11 @@
 export function useSubdomainSchool() {
   const hostname = typeof window !== 'undefined' ? window.location.hostname : ''
   const parts = hostname.split('.')
+  const isLocalHost =
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname.startsWith('127.') ||
+    /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname)
 
   let subdomain = null
   let isSubdomain = false
@@ -34,8 +39,8 @@ export function useSubdomainSchool() {
     isSubdomain = true
     subdomain = parts[0]
   }
-  // Dev: localhost or 127.0.0.1
-  else if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname.startsWith('127.0.0.1')) {
+  // Dev / LAN: localhost, loopback, or direct IP address
+  else if (isLocalHost) {
     // For dev, try to get subdomain from ?subdomain=focus query param OR localStorage
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search)
@@ -90,12 +95,17 @@ export function useSubdomainSchool() {
  */
 export function detectAppType(hostname = '') {
   const parts = hostname.split('.')
+  const isLocalHost =
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname.startsWith('127.') ||
+    /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname)
 
   if (hostname.startsWith('portal.')) return 'portal'
   if (hostname === 'www.kodereduai.pk' || hostname === 'kodereduai.pk')
     return 'static'
   if (hostname.endsWith('.kodereduai.pk')) return 'school'
-  if (hostname === 'localhost' || hostname === '127.0.0.1') return 'dev'
+  if (isLocalHost) return 'dev'
 
   return 'unknown'
 }

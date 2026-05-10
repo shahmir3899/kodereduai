@@ -255,6 +255,7 @@ export default function CurriculumPage() {
   const tocPreviewImageRef = useRef(null)
   const tocModalBodyRef = useRef(null)
   const tocRawTextAreaRef = useRef(null)
+  const tocRawSelectionRef = useRef({ start: 0, end: 0 })
   const [ocrLoading, setOcrLoading] = useState(false)
   const [ocrStatusText, setOcrStatusText] = useState('')
   const [ocrElapsedSeconds, setOcrElapsedSeconds] = useState(0)
@@ -396,8 +397,13 @@ export default function CurriculumPage() {
     if (!textarea) return
 
     const value = tocText || ''
-    const selectionStart = textarea.selectionStart ?? value.length
-    const selectionEnd = textarea.selectionEnd ?? value.length
+    const isTextAreaFocused = document.activeElement === textarea
+    const selectionStart = isTextAreaFocused
+      ? (textarea.selectionStart ?? value.length)
+      : (tocRawSelectionRef.current.start ?? 0)
+    const selectionEnd = isTextAreaFocused
+      ? (textarea.selectionEnd ?? value.length)
+      : (tocRawSelectionRef.current.end ?? selectionStart)
     const textAreaScrollTop = textarea.scrollTop
     const modalScrollTop = tocModalBodyRef.current?.scrollTop ?? 0
     const lineStart = value.lastIndexOf('\n', Math.max(0, selectionStart - 1)) + 1
@@ -412,6 +418,7 @@ export default function CurriculumPage() {
     requestAnimationFrame(() => {
       if (!tocRawTextAreaRef.current) return
       const caret = lineStart + nextLine.length
+      tocRawSelectionRef.current = { start: caret, end: caret }
       if (tocModalBodyRef.current) {
         tocModalBodyRef.current.scrollTop = modalScrollTop
       }
@@ -632,6 +639,7 @@ export default function CurriculumPage() {
       setTocWarnings(response?.data?.warnings || [])
       setTocSuggestionMeta({ source: 'rule_based', confidence: null })
       setTocStep('review')
+      setTocImageWizardStep(6)
       showSuccess('Table of Contents parsed. Review and adjust chapters/topics before applying.')
     },
     onError: (error) => {
@@ -654,6 +662,7 @@ export default function CurriculumPage() {
       setTocWarnings(response?.data?.warnings || [])
       setTocSuggestionMeta({ source: 'rule_based', confidence: null })
       setTocStep('review')
+      setTocImageWizardStep(6)
       showSuccess(`Large text parsed in ${chunkCount} chunk${chunkCount > 1 ? 's' : ''}. Review and adjust before applying.`)
     },
     onError: (error) => {
@@ -664,7 +673,7 @@ export default function CurriculumPage() {
   const applyTocMutation = useMutation({
     mutationFn: ({ id, data }) => lmsApi.applyTOC(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['lmsBookTree'] })
+      queryClient.invalidateQueries({ queryKey: ['lmsBookTree', selectedBookId] })
       closeTocModal()
       showSuccess('Table of contents imported')
     },
@@ -717,13 +726,25 @@ export default function CurriculumPage() {
           return [...chapterItem, ...topicItems]
         })
 
+      // If direct chapters were returned, populate tocChapters immediately
+      if (chapters.length > 0) {
+        const normalizedChapters = chapters.map((chapter) => ({
+          title: chapter.title || '',
+          topics: (chapter.topics || []).map((topic) => ({ title: topic.title || '', page_start: null, page_end: null, content_kind: 'general' })),
+          page_start: null,
+          page_end: null,
+        }))
+        setTocChapters(normalizedChapters)
+      }
       setTocSuggestionItems(normalizedSuggestions)
       setTocWarnings(response?.data?.warnings || [])
       setTocSuggestionMeta({
         source: response?.data?.source || 'ai',
         confidence,
       })
-      showSuccess('AI suggestions are ready. Use each suggestion explicitly before review.')
+      setTocStep('review')
+      setTocImageWizardStep(6)
+      showSuccess('Structure built. Review chapters and topics below.')
     },
     onError: (error) => {
       showError(error.response?.data?.detail || error.response?.data?.error || 'Failed to generate AI suggestion')
@@ -880,6 +901,25 @@ export default function CurriculumPage() {
     setOcrCanRetry(false)
   }
 
+  const resetTocSelectedImage = () => {
+    setTocImageFile(null)
+    if (tocImagePreview) URL.revokeObjectURL(tocImagePreview)
+    setTocImagePreview(null)
+    setTocImageRotation(0)
+    setTocImageSkewX(0)
+    setTocImageSkewY(0)
+    setTocShowAdvancedFixes(false)
+    setTocImageWizardStep(1)
+    if (tocFinalPreviewUrl) URL.revokeObjectURL(tocFinalPreviewUrl)
+    setTocFinalPreviewUrl(null)
+    setTocFinalPreviewLoading(false)
+    resetTocPerspectiveCorners()
+    setTocCrop(undefined)
+    setTocCompletedCrop(null)
+    setTocCropModalOpen(false)
+    setOcrCanRetry(false)
+  }
+
   // ---- Submit Handlers ----
 
   const handleBookSubmit = () => {
@@ -973,6 +1013,13 @@ export default function CurriculumPage() {
   }
 
   const handleApplyToc = () => {
+    if (!selectedBookId) {
+      showError('No book selected. Please go back and select a book.')
+      return
+    }
+
+    console.log('[handleApplyToc] Current tocChapters state:', JSON.stringify(tocChapters, null, 2))
+
     const chapters = tocChapters
       .map((chapter) => {
         const chapterData = {
@@ -1003,8 +1050,10 @@ export default function CurriculumPage() {
       })
       .filter((chapter) => !!chapter.title)
 
+    console.log('[handleApplyToc] After processing:', chapters.length, 'chapters with titles')
+
     if (chapters.length === 0) {
-      showError('Add at least one chapter before applying.')
+      showError('Add at least one chapter with a title before applying.')
       return
     }
 
@@ -1013,6 +1062,8 @@ export default function CurriculumPage() {
       idempotency_key: generateUUID(),
     }
 
+    console.log('[handleApplyToc] Applying TOC with', chapters.length, 'chapters to book', selectedBookId)
+    console.log('[handleApplyToc] Full payload:', JSON.stringify(payload, null, 2))
     applyTocMutation.mutate({ id: selectedBookId, data: payload })
   }
 
@@ -1048,6 +1099,7 @@ export default function CurriculumPage() {
       setTocWarnings(labeledResult.warnings)
       setTocSuggestionMeta({ source: 'manual', confidence: 1 })
       setTocStep('review')
+      setTocImageWizardStep(6)
       showSuccess('Labeled lines converted directly to structure.')
       return
     }
@@ -1681,6 +1733,8 @@ export default function CurriculumPage() {
       await handleSaveTocCrop()
     }
 
+    setTocMode('upload')
+    setTocStep('input')
     setTocImageWizardStep(3)
   }
 
@@ -1888,12 +1942,15 @@ export default function CurriculumPage() {
     }
     const abortController = new AbortController()
     activeOcrAbortRef.current = abortController
+
     setOcrLoading(true)
-    setOcrStatusText('Preparing image…')
+    setOcrStatusText('Getting the image ready…')
     setOcrElapsedSeconds(0)
     setOcrCanRetry(false)
+
     try {
       const processedFile = await buildProcessedTocImageFile(tocImageFile)
+
       if (processedFile !== tocImageFile) {
         replaceTocImageFile(processedFile)
         setTocImageRotation(0)
@@ -1902,7 +1959,7 @@ export default function CurriculumPage() {
       }
 
       let fileToUpload = processedFile
-      setOcrStatusText('Optimizing image…')
+      setOcrStatusText('Making the image smaller for upload…')
       try {
         fileToUpload = await compressImageForTocOcr(processedFile)
       } catch {
@@ -1915,12 +1972,12 @@ export default function CurriculumPage() {
           setOcrStatusText(
             kb
               ? `Uploading photo… (${kb} KB sent)`
-              : 'Uploading photo… (connecting)',
+              : 'Connecting to upload…',
           )
           return
         }
         const pct = Math.min(100, Math.round((evt.loaded * 100) / evt.total))
-        setOcrStatusText(pct < 100 ? `Uploading photo… ${pct}%` : 'Upload complete — starting OCR…')
+        setOcrStatusText(pct < 100 ? `Uploading photo… ${pct}%` : 'Upload complete. Reading the image…')
       }
 
       setOcrStatusText('Uploading photo…')
@@ -1931,9 +1988,10 @@ export default function CurriculumPage() {
         signal: abortController.signal,
         onUploadProgress,
       })
+
       const jobId = jobResponse?.data?.job_id
       if (!jobId) {
-        throw new Error('No job ID returned from server. Please retry.')
+        throw new Error('We could not start text extraction. Please try again.')
       }
 
       // Poll the job status every 3 s until done (short requests, no idle hold).
@@ -1950,24 +2008,33 @@ export default function CurriculumPage() {
       })
 
       let ocrResult = null
+      let pollCount = 0
       while (!ocrResult) {
         const elapsed = Math.floor((Date.now() - pollStartedAt) / 1000)
-        setOcrStatusText(`Extracting text… ${elapsed}s (Google Vision processing)`)
+        setOcrStatusText(`Reading the image… ${elapsed}s`)
 
         if (Date.now() - pollStartedAt > MAX_POLL_MS) {
-          throw new Error('OCR is taking too long. Please retry.')
+          throw new Error('Text extraction is taking longer than usual. Please try again in a moment.')
         }
 
         await waitOrAbort(POLL_INTERVAL_MS)
+        pollCount++
 
-        const pollResponse = await lmsApi.getTocJob(jobId, { signal: abortController.signal })
+        let pollResponse
+        try {
+          pollResponse = await lmsApi.getTocJob(jobId, { signal: abortController.signal })
+        } catch (pollErr) {
+          throw pollErr
+        }
+
         const jobData = pollResponse?.data
+
         if (jobData?.status === 'SUCCEEDED') {
           ocrResult = jobData.result || {}
         } else if (jobData?.status === 'FAILED') {
-          throw new Error(jobData.error_message || 'OCR failed on server. Please retry.')
+          throw new Error('Text extraction could not complete. Please try a clearer image.')
         } else if (jobData?.status === 'TIMED_OUT') {
-          throw new Error('OCR timed out on server. Please retry with a clearer image.')
+          throw new Error('Text extraction timed out. Please try a clearer image.')
         }
         // QUEUED / PROCESSING -> keep polling
       }
@@ -1990,16 +2057,16 @@ export default function CurriculumPage() {
       setSelectedOcrLineId(responseLines[0]?.id || null)
       setTocMode('upload')
       setTocStep('input')
-      setTocImageWizardStep(4)
+      setTocImageWizardStep(5)
       setTocSuggestionItems([])
       setTocSuggestionMeta(null)
       setOcrStatusText('')
       showSuccess('Text extracted! Review and edit before importing Table of Contents.')
     } catch (error) {
       if (error.name === 'CanceledError' || error.name === 'AbortError') {
-        showError('OCR request cancelled.')
+        showError('Text extraction was cancelled.')
       } else {
-        showError(error.response?.data?.error || error.message || 'Failed to extract text from image')
+        showError('We could not extract text from the image. Please try again with a clearer photo.')
       }
       setOcrCanRetry(true)
     } finally {
@@ -2704,37 +2771,44 @@ export default function CurriculumPage() {
       {/* ============ Table of Contents Import Modal ============ */}
       {showTocModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-          <div ref={tocModalBodyRef} className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-xl font-bold text-gray-900 mb-2">Import Table of Contents</h2>
-            <p className="text-sm text-gray-500 mb-4">
-              Upload a photo of the book's Table of Contents page, or enter chapters and topics manually.
-            </p>
+          <div ref={tocModalBodyRef} className="bg-white rounded-xl shadow-xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="p-4 sm:p-6 border-b border-gray-200">
+              <h2 className="text-xl font-bold text-gray-900 mb-2">Import Table of Contents</h2>
+              <p className="text-sm text-gray-500 mb-4">
+                Upload a photo of the book's Table of Contents page, or enter chapters and topics manually.
+              </p>
 
-            {tocStep === 'input' && (
-              <>
-                {/* Mode Toggle Tabs */}
-                <div className="flex border-b border-gray-200 mb-4">
-                  <button
-                    onClick={() => setTocMode('paste')}
-                    className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                      tocMode === 'paste'
-                        ? 'border-blue-500 text-blue-600'
-                        : 'border-transparent text-gray-500 hover:text-gray-700'
-                    }`}
-                  >
-                    Manual Entry
-                  </button>
-                  <button
-                    onClick={() => setTocMode('upload')}
-                    className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                      tocMode === 'upload'
-                        ? 'border-blue-500 text-blue-600'
-                        : 'border-transparent text-gray-500 hover:text-gray-700'
-                    }`}
-                  >
-                    Upload Photo
-                  </button>
-                </div>
+              {tocStep === 'input' && (
+                <>
+                  {/* Mode Toggle Tabs */}
+                  <div className="flex border-b border-gray-200 -mx-4 sm:-mx-6 px-4 sm:px-6">
+                    <button
+                      onClick={() => setTocMode('paste')}
+                      className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                        tocMode === 'paste'
+                          ? 'border-blue-500 text-blue-600'
+                          : 'border-transparent text-gray-500 hover:text-gray-700'
+                      }`}
+                    >
+                      Manual Entry
+                    </button>
+                    <button
+                      onClick={() => setTocMode('upload')}
+                      className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                        tocMode === 'upload'
+                          ? 'border-blue-500 text-blue-600'
+                          : 'border-transparent text-gray-500 hover:text-gray-700'
+                      }`}
+                    >
+                      Upload Photo
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Scrollable content area */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6">
 
                 {/* Upload Photo Mode */}
                 {tocMode === 'upload' && (
@@ -2875,21 +2949,7 @@ export default function CurriculumPage() {
                             </div>
                           </div>
                           <button
-                            onClick={() => {
-                              setTocImageFile(null)
-                              if (tocImagePreview) URL.revokeObjectURL(tocImagePreview)
-                              setTocImagePreview(null)
-                              setTocImageRotation(0)
-                              setTocImageSkewX(0)
-                              setTocImageSkewY(0)
-                              setTocShowAdvancedFixes(false)
-                              setTocImageWizardStep(1)
-                              if (tocFinalPreviewUrl) URL.revokeObjectURL(tocFinalPreviewUrl)
-                              setTocFinalPreviewUrl(null)
-                              setTocFinalPreviewLoading(false)
-                              resetTocPerspectiveCorners()
-                              setTocCropModalOpen(false)
-                            }}
+                            onClick={resetTocSelectedImage}
                             className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
                             title="Remove image"
                           >
@@ -2899,318 +2959,466 @@ export default function CurriculumPage() {
                           </button>
                         </div>
 
-                        <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-3">
-                          <div className="grid grid-cols-3 gap-2">
-                            {[
-                              {
-                                id: 1,
-                                shortLabel: 'Rotate',
-                                fullLabel: 'Rotate + Crop',
-                                icon: (
-                                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v6h6" />
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M20 20v-6h-6" />
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M20 9A8 8 0 0 0 6.3 5.3L4 7" />
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 15a8 8 0 0 0 13.7 3.7L20 17" />
-                                  </svg>
-                                ),
-                              },
-                              {
-                                id: 3,
-                                shortLabel: 'Skew',
-                                fullLabel: 'Skew',
-                                icon: (
-                                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h12l4 12H8z" />
-                                  </svg>
-                                ),
-                              },
-                              {
-                                id: 4,
-                                shortLabel: 'OCR',
-                                fullLabel: 'OCR',
-                                icon: (
-                                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                    <rect x="3" y="4" width="18" height="14" rx="2" />
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M7 8h10M7 12h6" />
-                                  </svg>
-                                ),
-                              },
-                            ].map((step, index) => (
-                              <button
-                                type="button"
-                                key={`wiz-step-${step.id}`}
-                                onClick={() => {
-                                  if (step.id === 1) {
-                                    setTocImageWizardStep(1)
-                                    return
-                                  }
-                                  if (step.id === 3) {
-                                    handleProceedToSkew()
-                                    return
-                                  }
-                                  if (step.id === 4) {
-                                    setTocImageWizardStep(4)
-                                  }
-                                }}
-                                className={`text-xs px-2 py-1.5 rounded-lg border text-center transition-colors ${
-                                  tocImageWizardStep === step.id
-                                    ? 'bg-blue-600 text-white border-blue-600'
-                                    : 'bg-white text-gray-700 border-gray-200 hover:border-blue-300'
-                                }`}
-                              >
-                                <span className="inline-flex items-center gap-1.5">
-                                  <span className={`inline-flex items-center justify-center w-5 h-5 rounded-full border text-[10px] font-semibold ${
-                                    tocImageWizardStep === step.id
-                                      ? 'border-white/70 bg-white/20 text-white'
-                                      : 'border-gray-300 bg-gray-100 text-gray-700'
-                                  }`}>
-                                    {index + 1}
-                                  </span>
-                                  <span className={tocImageWizardStep === step.id ? 'text-white' : 'text-gray-600'}>
-                                    {step.icon}
-                                  </span>
-                                  <span className="hidden sm:inline">{step.fullLabel}</span>
-                                  <span className="sm:hidden">{step.shortLabel}</span>
-                                </span>
-                              </button>
-                            ))}
-                          </div>
-
-                          {tocImageWizardStep === 1 && (
-                            <div className="space-y-2">
-                              <p className="text-xs font-medium text-gray-700">Step 1: Rotate + Crop</p>
-                              <p className="text-xs text-gray-500">Adjust rotation and crop. Changes are applied automatically when you click Next.</p>
-                              <div className="flex items-center justify-center gap-2 rounded-md bg-gray-100 px-2 py-2">
-                                <button
-                                  type="button"
-                                  onClick={() => handleRotateTocImage(-90)}
+                        {/* Wizard Step Indicator & Navigation */}
+                        <div className="rounded-lg border border-gray-200 bg-gray-50 flex flex-col h-[350px]">
+                          {/* Scrollable Carousel Content */}
+                          <div className="flex-1 overflow-hidden rounded-t-lg border-b border-gray-200 bg-white">
+                            <div
+                              className="flex transition-transform duration-300 ease-in-out h-full"
+                              style={{
+                                transform: `translateX(-${
+                                  tocImageWizardStep === 1 ? 0 : tocImageWizardStep === 3 ? 100 : tocImageWizardStep === 4 ? 200 : tocImageWizardStep === 5 ? 300 : 400
+                                }%)`,
+                              }}
+                            >
+                              {/* Step 1: Rotate + Crop */}
+                              <div className="w-full flex-shrink-0 p-3 space-y-2 overflow-y-auto">
+                                <p className="text-xs font-medium text-gray-700">Step 1: Rotate + Crop</p>
+                                <p className="text-xs text-gray-500">Adjust rotation and crop. Changes are applied automatically when you click Next.</p>
+                                <div className="flex items-center justify-center gap-2 rounded-md bg-gray-100 px-2 py-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRotateTocImage(-90)}
+                                    disabled={ocrLoading || tocImageProcessing}
+                                    className="btn btn-secondary text-xs"
+                                  >
+                                    -90°
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRotateTocImage(90)}
+                                    disabled={ocrLoading || tocImageProcessing}
+                                    className="btn btn-secondary text-xs"
+                                  >
+                                    +90°
+                                  </button>
+                                </div>
+                                <input
+                                  type="range"
+                                  min={-360}
+                                  max={360}
+                                  step={1}
+                                  value={tocImageRotation}
+                                  onChange={(e) => handleSetTocImageRotation(e.target.value)}
+                                  className="w-full"
                                   disabled={ocrLoading || tocImageProcessing}
-                                  className="btn btn-secondary text-xs"
-                                >
-                                  -90°
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleRotateTocImage(90)}
-                                  disabled={ocrLoading || tocImageProcessing}
-                                  className="btn btn-secondary text-xs"
-                                >
-                                  +90°
-                                </button>
+                                />
+                                <p className="text-xs text-gray-500">Current rotation: {tocImageRotation}deg</p>
+                                <div className="flex flex-wrap gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => { setTocCrop(undefined); setTocCompletedCrop(null) }}
+                                    disabled={ocrLoading || tocImageProcessing}
+                                    className="btn btn-secondary text-xs"
+                                  >
+                                    Clear Selection
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSetTocImageRotation(0)}
+                                    disabled={ocrLoading || tocImageProcessing || tocImageRotation === 0}
+                                    className="btn btn-secondary text-sm"
+                                  >
+                                    Reset Rotation
+                                  </button>
+                                </div>
                               </div>
-                              <input
-                                type="range"
-                                min={-360}
-                                max={360}
-                                step={1}
-                                value={tocImageRotation}
-                                onChange={(e) => handleSetTocImageRotation(e.target.value)}
-                                className="w-full"
-                                disabled={ocrLoading || tocImageProcessing}
-                              />
-                              <p className="text-xs text-gray-500">Current rotation: {tocImageRotation}deg</p>
-                              <div className="flex flex-wrap gap-2">
+
+                              {/* Step 2: Perspective / Skew */}
+                              <div className="w-full flex-shrink-0 p-3 space-y-2 overflow-y-auto">
+                                <p className="text-xs font-medium text-gray-700">Step 2: Perspective / Skew</p>
                                 <button
                                   type="button"
-                                  onClick={() => { setTocCrop(undefined); setTocCompletedCrop(null) }}
-                                  disabled={ocrLoading || tocImageProcessing}
-                                  className="btn btn-secondary text-xs"
+                                  onClick={() => setTocShowAdvancedFixes((prev) => !prev)}
+                                  className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-1 text-xs text-gray-700"
                                 >
-                                  Clear Selection
+                                  {tocShowAdvancedFixes ? 'Hide Advanced Fixes' : 'Show Advanced Fixes'}
                                 </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleSetTocImageRotation(0)}
-                                  disabled={ocrLoading || tocImageProcessing || tocImageRotation === 0}
-                                  className="btn btn-secondary text-sm"
-                                >
-                                  Reset Rotation
-                                </button>
+
+                                {tocShowAdvancedFixes && (
+                                  <>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                      <label className="text-xs text-gray-600 space-y-1 block">
+                                        <span>Corner Skew X ({tocImageSkewX}deg)</span>
+                                        <input
+                                          type="range"
+                                          min={-20}
+                                          max={20}
+                                          step={1}
+                                          value={tocImageSkewX}
+                                          onChange={(e) => setTocImageSkewX(parseInt(e.target.value, 10) || 0)}
+                                          className="w-full"
+                                          disabled={ocrLoading || tocImageProcessing}
+                                        />
+                                      </label>
+                                      <label className="text-xs text-gray-600 space-y-1 block">
+                                        <span>Corner Skew Y ({tocImageSkewY}deg)</span>
+                                        <input
+                                          type="range"
+                                          min={-20}
+                                          max={20}
+                                          step={1}
+                                          value={tocImageSkewY}
+                                          onChange={(e) => setTocImageSkewY(parseInt(e.target.value, 10) || 0)}
+                                          className="w-full"
+                                          disabled={ocrLoading || tocImageProcessing}
+                                        />
+                                      </label>
+                                    </div>
+
+                                    <div className="flex flex-wrap gap-2">
+                                      <button type="button" onClick={handleApplyTocSkew} disabled={ocrLoading || tocImageProcessing} className="btn btn-secondary text-sm">
+                                        Apply Skew Correction
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={handleApplyTocPerspective}
+                                        disabled={ocrLoading || tocImageProcessing || hasPendingLinearTransforms}
+                                        className="btn btn-secondary text-sm"
+                                        title={hasPendingLinearTransforms ? 'Apply/reset rotate-skew first, then perspective.' : 'Apply 4-corner perspective correction'}
+                                      >
+                                        Apply Perspective
+                                      </button>
+                                      <button type="button" onClick={resetTocPerspectiveCorners} disabled={ocrLoading || tocImageProcessing} className="btn btn-secondary text-sm">
+                                        Reset Corners
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setTocImageRotation(0)
+                                          setTocImageSkewX(0)
+                                          setTocImageSkewY(0)
+                                        }}
+                                        disabled={ocrLoading || tocImageProcessing}
+                                        className="btn btn-secondary text-sm"
+                                      >
+                                        Reset Transforms
+                                      </button>
+                                    </div>
+                                  </>
+                                )}
+
+                                <p className="text-xs text-gray-500">
+                                  Perspective: drag the 4 blue handles to page corners, then apply perspective correction.
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  Keep it simple: align the 4 corners first. Open Advanced Fixes only if needed.
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  Handles snap to edges when close to image bounds for easier alignment.
+                                </p>
+                                {tocShowAdvancedFixes && hasPendingLinearTransforms && (
+                                  <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                                    Apply or reset rotate/skew before applying perspective correction.
+                                  </p>
+                                )}
                               </div>
-                            </div>
-                          )}
 
-                          {tocImageWizardStep === 3 && (
-                            <div className="space-y-2">
-                              <p className="text-xs font-medium text-gray-700">Step 2: Perspective / Skew</p>
-                              <button
-                                type="button"
-                                onClick={() => setTocShowAdvancedFixes((prev) => !prev)}
-                                className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-1 text-xs text-gray-700"
-                              >
-                                {tocShowAdvancedFixes ? 'Hide Advanced Fixes' : 'Show Advanced Fixes'}
-                              </button>
-
-                              {tocShowAdvancedFixes && (
-                                <>
-                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                    <label className="text-xs text-gray-600 space-y-1 block">
-                                      <span>Corner Skew X ({tocImageSkewX}deg)</span>
-                                      <input
-                                        type="range"
-                                        min={-20}
-                                        max={20}
-                                        step={1}
-                                        value={tocImageSkewX}
-                                        onChange={(e) => setTocImageSkewX(parseInt(e.target.value, 10) || 0)}
-                                        className="w-full"
-                                        disabled={ocrLoading || tocImageProcessing}
-                                      />
-                                    </label>
-                                    <label className="text-xs text-gray-600 space-y-1 block">
-                                      <span>Corner Skew Y ({tocImageSkewY}deg)</span>
-                                      <input
-                                        type="range"
-                                        min={-20}
-                                        max={20}
-                                        step={1}
-                                        value={tocImageSkewY}
-                                        onChange={(e) => setTocImageSkewY(parseInt(e.target.value, 10) || 0)}
-                                        className="w-full"
-                                        disabled={ocrLoading || tocImageProcessing}
-                                      />
-                                    </label>
+                              {/* Step 3: Run OCR */}
+                              <div className="w-full flex-shrink-0 p-3 space-y-2 overflow-y-auto">
+                                {tocFinalPreviewLoading && (
+                                  <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                                    Building the exact image that will be uploaded…
+                                  </p>
+                                )}
+                                <p className="text-xs font-medium text-gray-700">Step 3: Run OCR</p>
+                                <p className="text-xs text-gray-500">
+                                  The preview above is the final processed area that will be sent to OCR, not the full original photo.
+                                </p>
+                                {ocrLoading && (
+                                  <div className="rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-800">
+                                    <p>{ocrStatusText || 'Starting…'}</p>
+                                    <p className="mt-1">Elapsed: {ocrElapsedSeconds}s</p>
                                   </div>
-
-                                  <div className="flex flex-wrap gap-2">
-                                    <button type="button" onClick={handleApplyTocSkew} disabled={ocrLoading || tocImageProcessing} className="btn btn-secondary text-sm">
-                                      Apply Skew Correction
+                                )}
+                                <div className="flex flex-wrap gap-2">
+                                  {ocrLoading && (
+                                    <button type="button" onClick={cancelOcrRequest} className="btn btn-secondary text-sm">
+                                      Cancel
                                     </button>
-                                    <button
-                                      type="button"
-                                      onClick={handleApplyTocPerspective}
-                                      disabled={ocrLoading || tocImageProcessing || hasPendingLinearTransforms}
-                                      className="btn btn-secondary text-sm"
-                                      title={hasPendingLinearTransforms ? 'Apply/reset rotate-skew first, then perspective.' : 'Apply 4-corner perspective correction'}
-                                    >
-                                      Apply Perspective
+                                  )}
+                                  {!ocrLoading && ocrCanRetry && (
+                                    <button type="button" onClick={handleOcrExtract} className="btn btn-secondary text-sm">
+                                      Retry OCR
                                     </button>
-                                    <button type="button" onClick={resetTocPerspectiveCorners} disabled={ocrLoading || tocImageProcessing} className="btn btn-secondary text-sm">
-                                      Reset Corners
-                                    </button>
+                                  )}
+                                  {!ocrLoading && (
                                     <button
                                       type="button"
                                       onClick={() => {
-                                        setTocImageRotation(0)
-                                        setTocImageSkewX(0)
-                                        setTocImageSkewY(0)
+                                        setTocMode('paste')
+                                        setTocStep('input')
                                       }}
-                                      disabled={ocrLoading || tocImageProcessing}
                                       className="btn btn-secondary text-sm"
                                     >
-                                      Reset Transforms
+                                      Switch to Manual Entry
                                     </button>
-                                  </div>
-                                </>
-                              )}
-
-                              <p className="text-xs text-gray-500">
-                                Perspective: drag the 4 blue handles to page corners, then apply perspective correction.
-                              </p>
-                              <p className="text-xs text-gray-500">
-                                Keep it simple: align the 4 corners first. Open Advanced Fixes only if needed.
-                              </p>
-                              <p className="text-xs text-gray-500">
-                                Handles snap to edges when close to image bounds for easier alignment.
-                              </p>
-                              {tocShowAdvancedFixes && hasPendingLinearTransforms && (
-                                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
-                                  Apply or reset rotate/skew before applying perspective correction.
-                                </p>
-                              )}
-                            </div>
-                          )}
-
-                          {tocImageWizardStep === 4 && tocFinalPreviewLoading && (
-                            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
-                              Building the exact image that will be uploaded…
-                            </p>
-                          )}
-
-                          {tocImageWizardStep === 4 && (
-                            <div className="space-y-2">
-                              <p className="text-xs font-medium text-gray-700">Step 3: Run OCR</p>
-                              <p className="text-xs text-gray-500">
-                                The preview above is the final processed area that will be sent to OCR, not the full original photo.
-                              </p>
-                              {ocrLoading && (
-                                <div className="rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-800">
-                                  <p>{ocrStatusText || 'Starting…'}</p>
-                                  <p className="mt-1">Elapsed: {ocrElapsedSeconds}s</p>
+                                  )}
                                 </div>
-                              )}
-                              <div className="flex flex-wrap gap-2">
-                                {ocrLoading && (
-                                  <button type="button" onClick={cancelOcrRequest} className="btn btn-secondary text-sm">
-                                    Cancel
-                                  </button>
+                              </div>
+
+                              {/* Step 4: Review Extracted Text */}
+                              <div className="w-full flex-shrink-0 p-3 space-y-2 overflow-y-auto">
+                                <p className="text-xs font-medium text-gray-700">Step 4: Review & Edit</p>
+                                <p className="text-xs text-gray-500">Clean up and organize the extracted text below.</p>
+                                
+                                {tocText.trim() && (
+                                  <>
+                                    <div className="rounded-md border border-blue-200 bg-blue-50 px-2 py-1.5 text-[11px]">
+                                      <p className="text-blue-800 font-medium mb-1">Quick tips</p>
+                                      <p className="text-blue-700">Use CHAPTER:, TOPIC:, NOTE: labels. Example: CHAPTER: Unit 1 | TOPIC: 1.1</p>
+                                    </div>
+
+                                    <div className="flex flex-wrap gap-1 mb-2">
+                                      <button type="button" onMouseDown={handleRawLabelButtonMouseDown} onClick={(e) => handleApplyLabelToCurrentLine('chapter', e)} className="btn btn-secondary text-[11px] px-2 py-1">+ Chapter</button>
+                                      <button type="button" onMouseDown={handleRawLabelButtonMouseDown} onClick={(e) => handleApplyLabelToCurrentLine('topic', e)} className="btn btn-secondary text-[11px] px-2 py-1">+ Topic</button>
+                                      <button type="button" onMouseDown={handleRawLabelButtonMouseDown} onClick={(e) => handleApplyLabelToCurrentLine('note', e)} className="btn btn-secondary text-[11px] px-2 py-1">+ Note</button>
+                                      <button type="button" onMouseDown={handleRawLabelButtonMouseDown} onClick={(e) => handleApplyLabelToCurrentLine('none', e)} className="btn btn-secondary text-[11px] px-2 py-1">Clear Label</button>
+                                    </div>
+
+                                    <textarea
+                                      ref={tocRawTextAreaRef}
+                                      className="input font-mono text-xs w-full resize-none"
+                                      data-rawarea="true"
+                                      rows={8}
+                                      dir={isRTLLanguage(bookTree?.language) ? 'rtl' : 'ltr'}
+                                      placeholder="Extracted text..."
+                                      value={tocText}
+                                      onChange={(e) => syncRawText(e.target.value)}
+                                      onSelect={(e) => {
+                                        tocRawSelectionRef.current = {
+                                          start: e.target.selectionStart ?? 0,
+                                          end: e.target.selectionEnd ?? 0,
+                                        }
+                                      }}
+                                      onKeyUp={(e) => {
+                                        tocRawSelectionRef.current = {
+                                          start: e.target.selectionStart ?? 0,
+                                          end: e.target.selectionEnd ?? 0,
+                                        }
+                                      }}
+                                      onClick={(e) => {
+                                        tocRawSelectionRef.current = {
+                                          start: e.target.selectionStart ?? 0,
+                                          end: e.target.selectionEnd ?? 0,
+                                        }
+                                      }}
+                                    />
+
+                                    {tocText.length > 0 && (
+                                      <div className="text-[10px] text-gray-500">
+                                        {Math.round(tocText.length / 1024)}KB / {Math.round(MAX_TOC_TEXT_SIZE / 1024)}KB max
+                                      </div>
+                                    )}
+                                  </>
                                 )}
-                                {!ocrLoading && ocrCanRetry && (
-                                  <button type="button" onClick={handleOcrExtract} className="btn btn-secondary text-sm">
-                                    Retry OCR
-                                  </button>
+
+                                {!tocText.trim() && (
+                                  <p className="text-xs text-gray-500 text-center py-4">Run OCR to extract text, then review it here.</p>
                                 )}
-                                {!ocrLoading && (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setTocMode('paste')
-                                      setTocStep('input')
-                                    }}
-                                    className="btn btn-secondary text-sm"
-                                  >
-                                    Switch to Manual Entry
-                                  </button>
+                              </div>
+
+                              {/* Step 5: Review Structure */}
+                              <div className="w-full flex-shrink-0 p-3 space-y-2 overflow-y-auto">
+                                <div className="flex items-center justify-between mb-1">
+                                  <p className="text-xs font-medium text-gray-700">Step 5: Review Structure</p>
+                                  {tocSuggestionMeta && (
+                                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
+                                      {tocSuggestionMeta.source === 'ai' ? 'AI' : tocSuggestionMeta.source === 'manual' ? 'Manual' : 'Rule-based'}
+                                      {typeof tocSuggestionMeta.confidence === 'number' && ` · ${Math.round(tocSuggestionMeta.confidence * 100)}%`}
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-xs text-gray-500">Edit titles then click Apply to Book.</p>
+
+                                {tocWarnings.length > 0 && (
+                                  <div className="rounded border border-amber-200 bg-amber-50 px-2 py-1">
+                                    <p className="text-[10px] text-amber-700">{tocWarnings.length} parser note{tocWarnings.length !== 1 ? 's' : ''} — check unusual lines.</p>
+                                  </div>
+                                )}
+
+                                {/* AI Suggestions inline panel */}
+                                {tocSuggestionItems.length > 0 && (
+                                  <div className="rounded border border-blue-200 bg-blue-50 overflow-hidden">
+                                    <div className="flex items-center justify-between px-2 py-1.5 bg-blue-100">
+                                      <span className="text-[10px] font-semibold text-blue-800">
+                                        {pendingSuggestionCount} AI suggestion{pendingSuggestionCount !== 1 ? 's' : ''} pending
+                                      </span>
+                                      <button
+                                        onClick={handleUseHighConfidenceSuggestions}
+                                        disabled={pendingSuggestionCount === 0}
+                                        className="text-[10px] font-medium text-blue-700 hover:text-blue-900 disabled:opacity-40"
+                                      >
+                                        Use High Confidence
+                                      </button>
+                                    </div>
+                                    <div className="max-h-36 overflow-y-auto divide-y divide-blue-100">
+                                      {tocSuggestionItems.map((item) => (
+                                        <div key={item.id} className="flex items-center justify-between gap-2 px-2 py-1.5 bg-white">
+                                          <div className="min-w-0">
+                                            <p className="text-[10px] font-medium text-gray-800 truncate">
+                                              {item.kind === 'chapter' ? '📁' : '·'} {item.title}
+                                            </p>
+                                            {item.kind === 'topic' && !!item.chapterTitle && (
+                                              <p className="text-[9px] text-gray-500 truncate">in: {item.chapterTitle}</p>
+                                            )}
+                                            <p className="text-[9px] text-gray-400">{Math.round((item.confidence || 0) * 100)}% confidence</p>
+                                          </div>
+                                          {item.status === 'pending' ? (
+                                            <div className="flex items-center gap-1 shrink-0">
+                                              <button
+                                                onClick={() => handleUseSuggestion(item)}
+                                                className="text-[9px] px-1.5 py-0.5 rounded bg-blue-600 text-white hover:bg-blue-700"
+                                              >
+                                                {item.kind === 'chapter' ? 'Chapter' : 'Topic'}
+                                              </button>
+                                              <button
+                                                onClick={() => handleIgnoreSuggestion(item)}
+                                                className="text-[9px] px-1.5 py-0.5 rounded bg-gray-200 text-gray-600 hover:bg-gray-300"
+                                              >
+                                                Ignore
+                                              </button>
+                                            </div>
+                                          ) : (
+                                            <span className={`text-[9px] px-1.5 py-0.5 rounded-full shrink-0 ${
+                                              item.status === 'used' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                                            }`}>
+                                              {item.status === 'used' ? '✓ Used' : 'Ignored'}
+                                            </span>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                <button onClick={addTocChapter} className="btn btn-secondary text-[10px] px-2 py-1 w-full">
+                                  + Add Chapter
+                                </button>
+
+                                {tocChapters.length === 0 ? (
+                                  <div className="rounded border border-dashed border-gray-300 p-4 text-xs text-gray-500 text-center">
+                                    No chapters parsed yet. Go back and label lines with CHAPTER: / TOPIC:.
+                                  </div>
+                                ) : (
+                                  <div className="space-y-2">
+                                    {tocChapters.map((chapter, chapterIndex) => (
+                                      <div key={chapterIndex} className="rounded-lg border border-gray-200 p-2 bg-gray-50">
+                                        <div className="flex items-center gap-1 mb-1">
+                                          <span className="text-[10px] font-semibold text-gray-500 w-8">Ch {chapterIndex + 1}</span>
+                                          <input
+                                            type="text"
+                                            className="input flex-1 text-xs py-0.5"
+                                            placeholder="Chapter title"
+                                            value={chapter.title}
+                                            onChange={(e) => updateTocChapterTitle(chapterIndex, e.target.value)}
+                                          />
+                                          <button onClick={() => removeTocChapter(chapterIndex)} className="text-[10px] text-red-500 hover:text-red-700 ml-1">✕</button>
+                                        </div>
+                                        <div className="space-y-1 ml-8">
+                                          {(chapter.topics || []).map((topic, topicIndex) => (
+                                            <div key={topicIndex} className="flex items-center gap-1">
+                                              <span className="text-[10px] text-gray-400 w-8 shrink-0">{chapterIndex + 1}.{topicIndex + 1}</span>
+                                              <input
+                                                type="text"
+                                                className="input flex-1 text-xs py-0.5"
+                                                placeholder="Topic title"
+                                                value={topic.title}
+                                                onChange={(e) => updateTocTopicTitle(chapterIndex, topicIndex, e.target.value)}
+                                              />
+                                              <button onClick={() => removeTocTopic(chapterIndex, topicIndex)} className="text-[10px] text-red-400 hover:text-red-600 ml-1">✕</button>
+                                            </div>
+                                          ))}
+                                        </div>
+                                        <button onClick={() => addTocTopic(chapterIndex)} className="mt-1 ml-8 text-[10px] text-primary-600 hover:text-primary-800 font-medium">+ topic</button>
+                                      </div>
+                                    ))}
+                                  </div>
                                 )}
                               </div>
                             </div>
-                          )}
+                          </div>
 
-                          <div className="border-t border-gray-200 pt-3 mt-2">
+                          {/* Fixed Footer with Step Indicator and Navigation */}
+                          <div className="border-t border-gray-200 bg-gray-50 p-3 space-y-2 flex-shrink-0">
+                            {/* Step Dots/Indicator at Bottom - Simple Circles */}
+                            <div className="flex justify-center items-center gap-2 mb-1">
+                              {[
+                                { id: 1, label: 'Crop' },
+                                { id: 3, label: 'Skew' },
+                                { id: 4, label: 'OCR' },
+                                { id: 5, label: 'Text' },
+                                { id: 6, label: 'Structure' },
+                              ].map((step, index) => (
+                                <button
+                                  type="button"
+                                  key={`wiz-step-dot-${step.id}`}
+                                  onClick={() => {
+                                    if (step.id === 1) { setTocImageWizardStep(1); return }
+                                    if (step.id === 3) { handleProceedToSkew(); return }
+                                    if (step.id === 4) { setTocImageWizardStep(4); return }
+                                    if (step.id === 5) { setTocImageWizardStep(5); return }
+                                    if (step.id === 6) { setTocImageWizardStep(6) }
+                                  }}
+                                  className={`w-2.5 h-2.5 rounded-full transition-all ${
+                                    tocImageWizardStep === step.id
+                                      ? 'bg-blue-600 scale-125'
+                                      : 'bg-gray-300 hover:bg-gray-400'
+                                  }`}
+                                  title={step.label}
+                                />
+                              ))}
+                            </div>
+
+                            {/* Navigation Buttons */}
                             <div className="flex items-center justify-between gap-2">
                               <button
                                 type="button"
                                 onClick={() => {
+                                  if (tocImageWizardStep === 1) { resetTocSelectedImage(); return }
                                   if (tocImageWizardStep === 3) setTocImageWizardStep(1)
                                   if (tocImageWizardStep === 4) setTocImageWizardStep(3)
+                                  if (tocImageWizardStep === 5) setTocImageWizardStep(4)
+                                  if (tocImageWizardStep === 6) setTocImageWizardStep(5)
                                 }}
-                                disabled={ocrLoading || tocImageProcessing || tocImageWizardStep === 1}
-                                className="btn btn-secondary text-sm"
+                                disabled={ocrLoading || tocImageProcessing}
+                                className="btn btn-secondary text-xs px-3 py-1"
                               >
-                                Back
+                                ← Back
                               </button>
+                              <span className="text-[10px] text-gray-400 font-medium">
+                                Step {tocImageWizardStep === 1 ? 1 : tocImageWizardStep === 3 ? 2 : tocImageWizardStep === 4 ? 3 : tocImageWizardStep === 5 ? 4 : 5} / 5
+                              </span>
                               <button
                                 type="button"
                                 onClick={(e) => {
-                                  if (tocImageWizardStep === 1) {
-                                    handleProceedToSkew(e)
-                                    return
-                                  }
-                                  if (tocImageWizardStep === 3) {
-                                    setTocImageWizardStep(4)
-                                    return
-                                  }
-                                  if (tocImageWizardStep === 4) {
-                                    handleOcrExtract()
-                                  }
+                                  if (tocImageWizardStep === 1) { handleProceedToSkew(e); return }
+                                  if (tocImageWizardStep === 3) { setTocImageWizardStep(4); return }
+                                  if (tocImageWizardStep === 4) { handleOcrExtract(); return }
+                                  if (tocImageWizardStep === 5) { handleSuggestToc(); return }
+                                  if (tocImageWizardStep === 6) { handleApplyToc() }
                                 }}
                                 disabled={
                                   ocrLoading
                                   || tocImageProcessing
                                   || (tocImageWizardStep === 4 && tocFinalPreviewLoading)
+                                  || (tocImageWizardStep === 5 && (suggestTocMutation.isPending || parseTocMutation.isPending || parseTocStreamMutation.isPending))
+                                  || (tocImageWizardStep === 6 && applyTocMutation.isPending)
                                 }
-                                className="btn btn-primary text-sm"
+                                className="btn btn-primary text-xs px-3 py-1"
                               >
                                 {tocImageWizardStep === 1
-                                  ? (tocImageProcessing ? 'Applying...' : 'Next: Skew')
+                                  ? (tocImageProcessing ? 'Applying...' : 'Next →')
                                   : tocImageWizardStep === 3
-                                    ? 'Next: OCR'
-                                    : (ocrLoading ? 'Working…' : 'Extract Text')}
+                                    ? 'Next →'
+                                    : tocImageWizardStep === 4
+                                      ? (ocrLoading ? 'Working…' : 'Extract')
+                                      : tocImageWizardStep === 5
+                                        ? ((suggestTocMutation.isPending || parseTocMutation.isPending || parseTocStreamMutation.isPending) ? 'Building…' : 'Build Structure →')
+                                        : (applyTocMutation.isPending ? 'Applying…' : 'Apply to Book')}
                               </button>
                             </div>
                           </div>
-
                         </div>
                       </div>
                     )}
@@ -3290,348 +3498,22 @@ export default function CurriculumPage() {
                   </div>
                 )}
 
-                {tocMode === 'upload' && tocText.trim() && (
-                  <div className="mt-4">
-                    <label className="label">Extracted Text (clean up here)</label>
-                    <div className="mb-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2">
-                      <p className="text-xs text-blue-800 font-medium">Quick format tips</p>
-                      <p className="text-xs text-blue-700 mt-1">
-                        You can use labeled lines like CHAPTER:, TOPIC:, and NOTE:. If labels are present, the parser maps chapters and topics directly.
-                      </p>
-                      <p className="text-xs text-blue-700 mt-1">
-                        Example: CHAPTER: Unit 1 Whole Numbers | TOPIC: 1.1 Whole Numbers | NOTE: Exercise (1a)
-                      </p>
-                    </div>
-                    <div className="mb-2 flex flex-wrap gap-2">
-                      <button type="button" onMouseDown={handleRawLabelButtonMouseDown} onClick={(e) => handleApplyLabelToCurrentLine('chapter', e)} className="btn btn-secondary text-xs">Set Current Line as Chapter</button>
-                      <button type="button" onMouseDown={handleRawLabelButtonMouseDown} onClick={(e) => handleApplyLabelToCurrentLine('topic', e)} className="btn btn-secondary text-xs">Set Current Line as Topic</button>
-                      <button type="button" onMouseDown={handleRawLabelButtonMouseDown} onClick={(e) => handleApplyLabelToCurrentLine('note', e)} className="btn btn-secondary text-xs">Set Current Line as Note</button>
-                      <button type="button" onMouseDown={handleRawLabelButtonMouseDown} onClick={(e) => handleApplyLabelToCurrentLine('none', e)} className="btn btn-secondary text-xs">Clear Line Label</button>
-                    </div>
-                    <div className="mt-3 rounded-md border border-gray-200 bg-gray-50 p-2">
-                      <p className="text-xs font-medium text-gray-700 mb-2">Notepad-style editor</p>
-                      <p className="text-xs text-gray-500 mb-2">
-                        Place cursor in any line and use the buttons above to label that line quickly.
-                      </p>
-                      <textarea
-                        ref={tocRawTextAreaRef}
-                        className="input font-mono text-sm"
-                        data-rawarea="true"
-                        rows={12}
-                        dir={isRTLLanguage(bookTree?.language) ? 'rtl' : 'ltr'}
-                        placeholder="OCR output will appear here..."
-                        value={tocText}
-                        onChange={(e) => syncRawText(e.target.value)}
-                      />
-                      {tocText.length > 0 && (
-                        <div className={`flex items-center justify-between mt-1 text-xs ${
-                          tocText.length > TOC_WARN_TEXT_SIZE
-                            ? tocText.length > MAX_TOC_TEXT_SIZE * 0.9
-                              ? 'text-red-600'
-                              : 'text-amber-600'
-                            : 'text-gray-400'
-                        }`}>
-                          <span>
-                            {tocText.length > TOC_WARN_TEXT_SIZE && (
-                              <span className="font-medium">Large text detected. </span>
-                            )}
-                            {Math.round(tocText.length / 1024)}KB / {Math.round(MAX_TOC_TEXT_SIZE / 1024)}KB max
-                          </span>
-                          {tocText.length > TOC_WARN_TEXT_SIZE && (
-                            <span className="font-medium">Consider using Build Structure to test before applying.</span>
-                          )}
-                        </div>
-                      )}
-                    </div>
+            </div>
 
-                    <button
-                      onClick={handleSuggestToc}
-                      disabled={suggestTocMutation.isPending || !tocText.trim()}
-                      className="btn btn-secondary mt-2"
-                    >
-                      {suggestTocMutation.isPending ? 'Building Structure...' : 'Build Structure from Text'}
-                    </button>
-                  </div>
-                )}
-
-                {tocSuggestionItems.length > 0 && (
-                  <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-3 space-y-3">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                      <div>
-                        <p className="text-sm font-semibold text-blue-900">AI Suggestions</p>
-                        <p className="text-xs text-blue-700">
-                          Suggestions are staged separately. Use or ignore each one before review.
-                        </p>
-                      </div>
-                      <button
-                        onClick={handleUseHighConfidenceSuggestions}
-                        className="btn btn-secondary text-sm"
-                        disabled={pendingSuggestionCount === 0}
-                      >
-                        Use High Confidence
-                      </button>
-                    </div>
-
-                    <div className="max-h-60 overflow-y-auto space-y-2">
-                      {tocSuggestionItems.map((item) => (
-                        <div key={item.id} className="rounded-md border border-blue-100 bg-white p-2">
-                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                            <div>
-                              <p className="text-sm text-gray-900">
-                                {item.kind === 'chapter' ? 'Chapter:' : 'Topic:'} {item.title}
-                              </p>
-                              {item.kind === 'topic' && !!item.chapterTitle && (
-                                <p className="text-xs text-gray-500">Suggested chapter: {item.chapterTitle}</p>
-                              )}
-                              <p className="text-xs text-gray-500">
-                                Confidence: {Math.round((item.confidence || 0) * 100)}%
-                              </p>
-                            </div>
-
-                            {item.status === 'pending' ? (
-                              <div className="flex items-center gap-2">
-                                <button
-                                  onClick={() => handleUseSuggestion(item)}
-                                  className="btn btn-primary text-xs px-3 py-1"
-                                >
-                                  {item.kind === 'chapter' ? 'Use as Chapter' : 'Use as Topic'}
-                                </button>
-                                <button
-                                  onClick={() => handleIgnoreSuggestion(item)}
-                                  className="btn btn-secondary text-xs px-3 py-1"
-                                >
-                                  Ignore
-                                </button>
-                              </div>
-                            ) : (
-                              <span className={`text-xs font-medium px-2 py-1 rounded-full ${
-                                item.status === 'used'
-                                  ? 'bg-green-100 text-green-700'
-                                  : 'bg-gray-100 text-gray-600'
-                              }`}>
-                                {item.status === 'used' ? 'Used' : 'Ignored'}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
-
-            {tocStep === 'review' && (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm text-gray-600">
-                    Review and correct structure before saving.
-                  </p>
-                  <div className="flex items-center gap-2">
-                    {tocSuggestionMeta && (
-                      <span className="text-xs px-2 py-1 rounded-full bg-blue-100 text-blue-700">
-                        {tocSuggestionMeta.source === 'ai' ? 'AI suggested' : tocSuggestionMeta.source === 'manual' ? 'Manual' : 'Rule-based'}
-                        {typeof tocSuggestionMeta.confidence === 'number' && ` - ${Math.round(tocSuggestionMeta.confidence * 100)}%`}
-                      </span>
-                    )}
-                    <button onClick={addTocChapter} className="btn btn-secondary text-sm">
-                      Add Chapter
-                    </button>
-                  </div>
-                </div>
-
-                {tocWarnings.length > 0 && (
-                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
-                    <p className="text-xs font-semibold text-amber-800 mb-1">Parser notes</p>
-                    <div className="max-h-28 overflow-y-auto space-y-1">
-                      {tocWarnings.map((warning, idx) => (
-                        <p key={idx} className="text-xs text-amber-700">- {warning}</p>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {tocSuggestionItems.length > 0 && (
-                  <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs font-semibold text-blue-800">
-                        Pending AI suggestions: {pendingSuggestionCount}
-                      </p>
-                      <button
-                        onClick={handleUseHighConfidenceSuggestions}
-                        className="text-xs text-blue-700 hover:text-blue-900 font-medium"
-                        disabled={pendingSuggestionCount === 0}
-                      >
-                        Use High Confidence
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {tocChapters.length === 0 ? (
-                  <div className="rounded-lg border border-dashed border-gray-300 p-4 text-sm text-gray-500 text-center">
-                    No chapters parsed yet. Add chapters manually.
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {tocChapters.map((chapter, chapterIndex) => (
-                      <div key={chapterIndex} className="rounded-lg border border-gray-200 p-3 bg-gray-50">
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="text-xs font-semibold text-gray-500 w-14">Ch {chapterIndex + 1}</span>
-                          <input
-                            type="text"
-                            className="input flex-1"
-                            placeholder="Chapter title"
-                            value={chapter.title}
-                            onChange={(e) => updateTocChapterTitle(chapterIndex, e.target.value)}
-                          />
-                          <button
-                            onClick={() => removeTocChapter(chapterIndex)}
-                            className="text-xs text-red-600 hover:text-red-800 font-medium"
-                          >
-                            Delete
-                          </button>
-                        </div>
-
-                        <div className="ml-2 mb-2 flex gap-2">
-                          <div className="flex-1">
-                            <label className="text-xs text-gray-600">Page Start</label>
-                            <input
-                              type="number"
-                              className="input w-full"
-                              placeholder="e.g. 1"
-                              value={chapter.page_start !== null && chapter.page_start !== undefined ? chapter.page_start : ''}
-                              onChange={(e) => updateTocChapterPageRange(chapterIndex, parseInt(e.target.value) || null, chapter.page_end)}
-                            />
-                          </div>
-                          <div className="flex-1">
-                            <label className="text-xs text-gray-600">Page End</label>
-                            <input
-                              type="number"
-                              className="input w-full"
-                              placeholder="e.g. 10"
-                              value={chapter.page_end !== null && chapter.page_end !== undefined ? chapter.page_end : ''}
-                              onChange={(e) => updateTocChapterPageRange(chapterIndex, chapter.page_start, parseInt(e.target.value) || null)}
-                            />
-                          </div>
-                        </div>
-
-                        <div className="space-y-2 ml-2">
-                          {(chapter.topics || []).map((topic, topicIndex) => (
-                            <div key={topicIndex}>
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs text-gray-500 w-20">
-                                  {chapterIndex + 1}.{topicIndex + 1}
-                                </span>
-                                <input
-                                  type="text"
-                                  className="input flex-1"
-                                  placeholder="Topic title"
-                                  value={topic.title}
-                                  onChange={(e) => updateTocTopicTitle(chapterIndex, topicIndex, e.target.value)}
-                                />
-                                <select
-                                  className="input text-xs w-24"
-                                  value={topic.content_kind || 'general'}
-                                  onChange={(e) => updateTocTopicContentKind(chapterIndex, topicIndex, e.target.value)}
-                                >
-                                  <option value="general">General</option>
-                                  <option value="exercise">Exercise</option>
-                                </select>
-                                <button
-                                  onClick={() => removeTocTopic(chapterIndex, topicIndex)}
-                                  className="text-xs text-red-600 hover:text-red-800 font-medium"
-                                >
-                                  Remove
-                                </button>
-                              </div>
-                              <div className="ml-20 flex gap-2 mt-1">
-                                <div className="flex-1">
-                                  <label className="text-xs text-gray-600">Page Start</label>
-                                  <input
-                                    type="number"
-                                    className="input w-full text-xs"
-                                    placeholder="e.g. 1"
-                                    value={topic.page_start !== null && topic.page_start !== undefined ? topic.page_start : ''}
-                                    onChange={(e) => updateTocTopicPageRange(chapterIndex, topicIndex, parseInt(e.target.value) || null, topic.page_end)}
-                                  />
-                                </div>
-                                <div className="flex-1">
-                                  <label className="text-xs text-gray-600">Page End</label>
-                                  <input
-                                    type="number"
-                                    className="input w-full text-xs"
-                                    placeholder="e.g. 5"
-                                    value={topic.page_end !== null && topic.page_end !== undefined ? topic.page_end : ''}
-                                    onChange={(e) => updateTocTopicPageRange(chapterIndex, topicIndex, topic.page_start, parseInt(e.target.value) || null)}
-                                  />
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-
-                        <button
-                          onClick={() => addTocTopic(chapterIndex)}
-                          className="mt-2 text-sm text-primary-600 hover:text-primary-800 font-medium"
-                        >
-                          + Add Topic
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Action Buttons */}
-            <div className="flex justify-end space-x-3 mt-6">
-              <button onClick={closeTocModal} className="btn btn-secondary">
-                Cancel
-              </button>
-
-              {tocStep === 'review' && (
-                <button
-                  onClick={() => setTocStep('input')}
-                  className="btn btn-secondary"
-                >
-                  Back
+            {/* Action Buttons - Only for Manual Entry mode (upload wizard uses its own footer) */}
+            {tocMode === 'paste' && (
+              <div className="flex justify-end space-x-3 mt-6">
+                <button onClick={closeTocModal} className="btn btn-secondary">
+                  Cancel
                 </button>
-              )}
-
-              {tocStep === 'input' && tocMode === 'upload' && !!tocText.trim() && (
-                <>
-                  <button
-                    onClick={handleTocSubmit}
-                    disabled={parseTocMutation.isPending || parseTocStreamMutation.isPending || !tocText.trim()}
-                    className="btn btn-primary"
-                  >
-                    {parseTocMutation.isPending || parseTocStreamMutation.isPending
-                      ? (parseTocStreamMutation.isPending ? 'Parsing large text...' : 'Parsing...')
-                      : 'Next: Review'}
-                  </button>
-                </>
-              )}
-
-              {tocStep === 'input' && tocMode === 'paste' && (
                 <button
                   onClick={handleManualTocReview}
                   className="btn btn-primary"
                 >
                   Next: Review
                 </button>
-              )}
-
-              {tocStep === 'review' && (
-                <button
-                  onClick={handleApplyToc}
-                  disabled={applyTocMutation.isPending}
-                  className="btn btn-primary"
-                >
-                  {applyTocMutation.isPending ? 'Applying...' : 'Apply to Book'}
-                </button>
-              )}
-            </div>
+              </div>
+            )}
           </div>
 
 
