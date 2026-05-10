@@ -67,6 +67,20 @@ const parseOcrLinesFromText = (text) => {
     .filter((line) => !!line.text)
 }
 
+/** Axios / API error → user-facing string (poll 404, network, etc.) */
+const formatTocJobClientError = (error) => {
+  const d = error?.response?.data
+  if (typeof d === 'string') return d
+  if (d?.error && typeof d.error === 'string') return d.error
+  if (typeof d?.detail === 'string') return d.detail
+  if (Array.isArray(d?.detail)) {
+    const parts = d.detail.map((x) => (typeof x === 'string' ? x : x?.message)).filter(Boolean)
+    if (parts.length) return parts.join(' ')
+  }
+  if (typeof error?.message === 'string' && error.message !== 'Network Error') return error.message
+  return ''
+}
+
 const parseLabeledRawLines = (text) => {
   return (text || '')
     .split('\n')
@@ -479,7 +493,7 @@ export default function CurriculumPage() {
   const { data: classSubjectsData } = useQuery({
     queryKey: ['classSubjects', resolvedSelectedClass],
     queryFn: () => academicsApi.getClassSubjectsByClass(resolvedSelectedClass),
-    enabled: !!resolvedSelectedClass,
+    enabled: !!resolvedSelectedClass && !ocrLoading,
   })
 
   const classSubjects = (classSubjectsData?.data?.results || classSubjectsData?.data || [])
@@ -488,7 +502,7 @@ export default function CurriculumPage() {
   const { data: booksData, isLoading: booksLoading } = useQuery({
     queryKey: ['lmsBooks', resolvedSelectedClass, selectedSubject],
     queryFn: () => lmsApi.getBooks({ class_id: resolvedSelectedClass, subject_id: selectedSubject }),
-    enabled: !!resolvedSelectedClass && !!selectedSubject,
+    enabled: !!resolvedSelectedClass && !!selectedSubject && !ocrLoading,
   })
 
   const books = booksData?.data?.results || booksData?.data || []
@@ -496,7 +510,7 @@ export default function CurriculumPage() {
   const { data: bookTreeData, isLoading: treeLoading } = useQuery({
     queryKey: ['lmsBookTree', selectedBookId],
     queryFn: () => lmsApi.getBookTree(selectedBookId),
-    enabled: !!selectedBookId,
+    enabled: !!selectedBookId && !ocrLoading,
   })
 
   const bookTree = bookTreeData?.data || null
@@ -504,7 +518,7 @@ export default function CurriculumPage() {
   const { data: progressData } = useQuery({
     queryKey: ['syllabusProgress', resolvedSelectedClass, selectedSubject],
     queryFn: () => lmsApi.getSyllabusProgress({ class_id: resolvedSelectedClass, subject_id: selectedSubject }),
-    enabled: !!resolvedSelectedClass && !!selectedSubject,
+    enabled: !!resolvedSelectedClass && !!selectedSubject && !ocrLoading,
   })
 
   const progress = progressData?.data || null
@@ -1989,12 +2003,25 @@ export default function CurriculumPage() {
         onUploadProgress,
       })
 
-      const jobId = jobResponse?.data?.job_id
+      const payload = jobResponse?.data
+      const jobId = String(payload?.job_id ?? payload?.jobId ?? '').trim()
       if (!jobId) {
         throw new Error('We could not start text extraction. Please try again.')
       }
 
-      // Poll the job status every 3 s until done (short requests, no idle hold).
+      const ocrCancelQueryRoots = new Set([
+        'classSubjects',
+        'lmsBooks',
+        'lmsBookTree',
+        'syllabusProgress',
+        'session-classes',
+        'teacherCurriculumClasses',
+      ])
+      await queryClient.cancelQueries({
+        predicate: (q) => ocrCancelQueryRoots.has(String(q.queryKey[0])),
+      })
+
+      // Poll job status until done. Poll immediately first (no 3s blind wait) so fast jobs finish on first GET.
       const pollStartedAt = Date.now()
       const MAX_POLL_MS = 120000
       const POLL_INTERVAL_MS = 3000
@@ -2008,7 +2035,6 @@ export default function CurriculumPage() {
       })
 
       let ocrResult = null
-      let pollCount = 0
       while (!ocrResult) {
         const elapsed = Math.floor((Date.now() - pollStartedAt) / 1000)
         setOcrStatusText(`Reading the image… ${elapsed}s`)
@@ -2016,9 +2042,6 @@ export default function CurriculumPage() {
         if (Date.now() - pollStartedAt > MAX_POLL_MS) {
           throw new Error('Text extraction is taking longer than usual. Please try again in a moment.')
         }
-
-        await waitOrAbort(POLL_INTERVAL_MS)
-        pollCount++
 
         let pollResponse
         try {
@@ -2028,15 +2051,23 @@ export default function CurriculumPage() {
         }
 
         const jobData = pollResponse?.data
+        const st = (jobData?.status != null ? String(jobData.status) : '').toUpperCase()
 
-        if (jobData?.status === 'SUCCEEDED') {
+        if (st === 'SUCCEEDED') {
           ocrResult = jobData.result || {}
-        } else if (jobData?.status === 'FAILED') {
-          throw new Error('Text extraction could not complete. Please try a clearer image.')
-        } else if (jobData?.status === 'TIMED_OUT') {
+          break
+        }
+        if (st === 'FAILED') {
+          const serverMsg = (jobData.error_message || '').trim()
+          throw new Error(
+            serverMsg || 'Text extraction could not complete. Please try a clearer image.',
+          )
+        }
+        if (st === 'TIMED_OUT') {
           throw new Error('Text extraction timed out. Please try a clearer image.')
         }
-        // QUEUED / PROCESSING -> keep polling
+
+        await waitOrAbort(POLL_INTERVAL_MS)
       }
 
       const rawExtractedText = ocrResult?.text || ''
@@ -2063,10 +2094,28 @@ export default function CurriculumPage() {
       setOcrStatusText('')
       showSuccess('Text extracted! Review and edit before importing Table of Contents.')
     } catch (error) {
-      if (error.name === 'CanceledError' || error.name === 'AbortError') {
+      if (import.meta.env.DEV) {
+        // eslint-disable-next-line no-console
+        console.error('[TOC OCR] extract failed', error, error?.response?.status, error?.response?.data)
+      }
+      const isCancelled =
+        error?.name === 'CanceledError'
+        || error?.name === 'AbortError'
+        || error?.code === 'ERR_CANCELED'
+      if (isCancelled) {
         showError('Text extraction was cancelled.')
       } else {
-        showError('We could not extract text from the image. Please try again with a clearer photo.')
+        let msg = formatTocJobClientError(error)
+        const raw = typeof error?.message === 'string' ? error.message.trim() : ''
+        if (!msg && raw && !/^Request failed with status code \d+$/i.test(raw)) {
+          msg = raw
+        }
+        if (!msg || msg === 'Network Error') {
+          msg = 'We could not extract text from the image. Please try again with a clearer photo.'
+        } else if (msg.length > 800) {
+          msg = 'We could not extract text from the image. Please try again with a clearer photo.'
+        }
+        showError(msg)
       }
       setOcrCanRetry(true)
     } finally {

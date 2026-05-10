@@ -460,7 +460,10 @@ class BookViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
             _accept_t0 = time.perf_counter()
             job_uid = uuid.uuid4()
             store_blob_in_redis = try_put_job_blob(job_uid, image_bytes)
-            encoded_payload = '' if store_blob_in_redis else base64.b64encode(image_bytes).decode('utf-8')
+            # Always persist base64 on the job row. Celery runs in another process; Redis may use a
+            # different socket/DB than the web dyno or ignore_exceptions may swallow cache reads —
+            # an empty DB column + cache miss produced "Job image payload is empty."
+            encoded_payload = base64.b64encode(image_bytes).decode('utf-8')
             job = TOCImportJob.objects.create(
                 id=job_uid,
                 school=book.school,

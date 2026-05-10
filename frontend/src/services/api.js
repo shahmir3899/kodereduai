@@ -21,11 +21,22 @@ const api = axios.create({
 
 // TOC OCR: multipart upload + server accept can exceed 45s on slow mobile uplinks; align with CurriculumPage poll budget
 const LMS_OCR_TIMEOUT_MS = 120000
-const LMS_JOB_POLL_TIMEOUT_MS = 15000
+// Poll can wait on a cold DB / busy worker; avoid failing the whole OCR flow on first slow GET
+const LMS_JOB_POLL_TIMEOUT_MS = 30000
 
 // Request interceptor - add auth token + active school header
 api.interceptors.request.use(
   (config) => {
+    const m = String(config.method || 'get').toLowerCase()
+    // Default instance sets Content-Type: application/json — carrying that on GET/HEAD breaks some
+    // proxies and is invalid per HTTP; polling toc-jobs must not send a JSON Content-Type.
+    if ((m === 'get' || m === 'head') && config.headers) {
+      if (typeof config.headers.delete === 'function') {
+        config.headers.delete('Content-Type')
+      } else {
+        delete config.headers['Content-Type']
+      }
+    }
     const token = getAccessToken()
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
