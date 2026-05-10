@@ -2,12 +2,12 @@
 Celery tasks for LMS TOC import jobs.
 """
 
-import base64
 import logging
 from celery import shared_task
 from django.utils import timezone
 
 from .models import TOCImportJob
+from .toc_job_payload_cache import purge_job_blob_cache, read_job_image_bytes
 from .toc_ocr import extract_toc_payload
 
 logger = logging.getLogger(__name__)
@@ -30,7 +30,7 @@ def process_toc_import_job(self, job_id: str):
     job.save(update_fields=['status', 'started_at', 'attempt_count', 'updated_at'])
 
     try:
-        image_bytes = base64.b64decode(job.image_payload_b64.encode('utf-8')) if job.image_payload_b64 else b''
+        image_bytes = read_job_image_bytes(job)
         if not image_bytes:
             raise ValueError('Job image payload is empty.')
 
@@ -51,6 +51,7 @@ def process_toc_import_job(self, job_id: str):
             'status', 'result_payload', 'error_message', 'image_payload_b64',
             'completed_at', 'updated_at',
         ])
+        purge_job_blob_cache(job.id)
         return {'success': True, 'job_id': str(job.id), 'status': job.status}
     except Exception as exc:
         logger.exception("TOC job %s failed", job_id)
@@ -61,6 +62,7 @@ def process_toc_import_job(self, job_id: str):
         job.error_message = str(exc)
         job.completed_at = timezone.now()
         job.save(update_fields=['status', 'error_message', 'completed_at', 'updated_at'])
+        purge_job_blob_cache(job.id)
         return {'success': False, 'job_id': str(job.id), 'status': job.status, 'error': str(exc)}
 
 

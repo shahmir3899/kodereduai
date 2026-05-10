@@ -48,6 +48,11 @@ from .serializers import (
     TOCImportJobSerializer,
 )
 from .tasks import process_toc_import_job
+from .toc_job_payload_cache import (
+    purge_job_blob_cache,
+    read_job_image_bytes,
+    try_put_job_blob,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -116,7 +121,6 @@ def _process_toc_job_in_background(job_id: str) -> None:
     connection cleanly when done. Used as a fallback when ENABLE_CELERY is false.
     """
     import threading
-    import base64
     from django.utils import timezone
     from django.db import connection as _db_conn
 
@@ -140,11 +144,7 @@ def _process_toc_job_in_background(job_id: str) -> None:
         job.save(update_fields=['status', 'started_at', 'attempt_count', 'updated_at'])
 
         try:
-            image_bytes = (
-                base64.b64decode(job.image_payload_b64.encode('utf-8'))
-                if job.image_payload_b64
-                else b''
-            )
+            image_bytes = read_job_image_bytes(job)
             if not image_bytes:
                 raise ValueError('Job image payload is empty.')
 
@@ -167,6 +167,7 @@ def _process_toc_job_in_background(job_id: str) -> None:
                 'image_payload_b64', 'completed_at', 'updated_at',
             ])
             logger.info('[TOC-OCR-THREAD] Job %s succeeded', job_id)
+            purge_job_blob_cache(job.id)
         except Exception as exc:
             logger.exception('[TOC-OCR-THREAD] Job %s failed: %s', job_id, exc)
             try:
@@ -176,6 +177,7 @@ def _process_toc_job_in_background(job_id: str) -> None:
                 job.save(update_fields=['status', 'error_message', 'completed_at', 'updated_at'])
             except Exception:
                 pass
+            purge_job_blob_cache(job.id)
         finally:
             try:
                 _db_conn.close()
@@ -454,8 +456,11 @@ class BookViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
             # If Celery is available use it; otherwise spawn a daemon thread.
             # This fixes mobile "Network Error" caused by idle TCP connections being
             # killed by the OS / proxy while waiting for Google Vision to respond.
-            encoded_payload = base64.b64encode(image_bytes).decode('utf-8')
+            job_uid = uuid.uuid4()
+            store_blob_in_redis = try_put_job_blob(job_uid, image_bytes)
+            encoded_payload = '' if store_blob_in_redis else base64.b64encode(image_bytes).decode('utf-8')
             job = TOCImportJob.objects.create(
+                id=job_uid,
                 school=book.school,
                 book=book,
                 requested_by=request.user if request.user.is_authenticated else None,

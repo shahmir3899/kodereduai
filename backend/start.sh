@@ -6,8 +6,13 @@ set -euo pipefail
 
 ENABLE_CELERY="${ENABLE_CELERY:-false}"
 ENABLE_CELERY_BEAT="${ENABLE_CELERY_BEAT:-false}"
-GUNICORN_TIMEOUT="${GUNICORN_TIMEOUT:-90}"
+GUNICORN_TIMEOUT="${GUNICORN_TIMEOUT:-120}"
 GUNICORN_GRACEFUL_TIMEOUT="${GUNICORN_GRACEFUL_TIMEOUT:-30}"
+# One sync worker serializes all HTTP on small instances — unrelated XHR queues behind slow views.
+# gthread shares one process with multiple threads so I/O-bound DB/API work can overlap (Render-friendly).
+GUNICORN_WORKERS="${GUNICORN_WORKERS:-1}"
+GUNICORN_WORKER_CLASS="${GUNICORN_WORKER_CLASS:-gthread}"
+GUNICORN_THREADS="${GUNICORN_THREADS:-4}"
 
 CELERY_LOOP_PID=""
 CELERY_BEAT_LOOP_PID=""
@@ -51,8 +56,19 @@ else
 fi
 
 # Start Gunicorn in foreground
-echo "==> Starting Gunicorn (timeout=${GUNICORN_TIMEOUT}s, graceful_timeout=${GUNICORN_GRACEFUL_TIMEOUT}s)..."
-gunicorn config.wsgi:application --timeout "$GUNICORN_TIMEOUT" --graceful-timeout "$GUNICORN_GRACEFUL_TIMEOUT"
+GTHREAD_ARGS=()
+if [ "$GUNICORN_WORKER_CLASS" = "gthread" ]; then
+  GTHREAD_ARGS=(--threads "${GUNICORN_THREADS}")
+fi
+echo "==> Starting Gunicorn (workers=${GUNICORN_WORKERS} class=${GUNICORN_WORKER_CLASS} threads=${GUNICORN_THREADS}, timeout=${GUNICORN_TIMEOUT}s, bind=:${PORT:-8000})..."
+gunicorn \
+  --bind "0.0.0.0:${PORT:-8000}" \
+  --timeout "$GUNICORN_TIMEOUT" \
+  --graceful-timeout "$GUNICORN_GRACEFUL_TIMEOUT" \
+  --workers "$GUNICORN_WORKERS" \
+  --worker-class "$GUNICORN_WORKER_CLASS" \
+  "${GTHREAD_ARGS[@]}" \
+  config.wsgi:application
 
 # If Gunicorn exits, also stop the Celery restart loop
 if [ -n "$CELERY_LOOP_PID" ]; then
