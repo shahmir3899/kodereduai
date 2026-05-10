@@ -26,19 +26,36 @@
 | SUPABASE_BUCKET | No | atten-reg | Supabase storage bucket name |
 | RESET_PASSWORD | No | Abcd1234 | Default password for user creation |
 
+### Public demo visitor email (backend)
+
+When `DEMO_ACCESS_EMAIL_ENABLED` is true, a successful `POST /api/public/forms/demo-request/` also emails **the submitter** demo login instructions (in addition to the internal team notification). Values must be set in the deployment environment — never commit real passwords. Example: `DEMO_ACCESS_LOGIN_URL=https://demo.kodereduai.pk/login` with username/password matching the **`demo`** tenant admin (`qaisar` / shared demo password you set via `seed_demo_portal`).
+
+| Variable | Required when enabled | Default | Purpose |
+|----------|----------------------|---------|---------|
+| DEMO_ACCESS_EMAIL_ENABLED | — | false | Enable second email to the visitor |
+| DEMO_ACCESS_LOGIN_URL | Yes | — | Full URL to the demo login page |
+| DEMO_ACCESS_USERNAME | Yes | — | Demo account username |
+| DEMO_ACCESS_PASSWORD | Yes | — | Demo account password |
+| DEMO_ACCESS_EMAIL_SUBJECT | No | Your Education AI demo access | Subject line for visitor email |
+| DEMO_ACCESS_EMAIL_SENDER | No | same as `LANDING_FORMS_EMAIL_SENDER` | From address for visitor email |
+
 ### Frontend (.env)
 
 | Variable | Required | Default | Purpose |
 |----------|----------|---------|---------|
 | VITE_API_URL | Prod only | - | Backend API URL. Dev uses proxy to localhost:8000 |
 
-### Standalone Landing App (`frontend/apps/koderkids-landing/.env`)
+### Standalone Landing App (`frontend/apps/koderkids-landing-astro/.env`)
 
 | Variable | Required | Default | Purpose |
 |----------|----------|---------|---------|
-| VITE_MAIN_APP_API_BASE_URL | No | http://localhost:8000 | Base URL for optional public metrics API |
-| VITE_LANDING_METRICS_PATH | No | /api/public/landing-metrics/ | Endpoint path returning landing metrics JSON |
-| VITE_PUBLIC_SCHOOL_ID | No | 37 | Optional `X-School-ID` header for multi-tenant public metrics requests |
+| SITE_URL | No | — | Canonical site URL (build-time SEO, sitemap) |
+| PUBLIC_MAIN_APP_API_BASE_URL | No | empty in dev (Astro proxy); prod API URL in build | Base URL for public form POSTs and metrics |
+| PUBLIC_LANDING_METRICS_PATH | No | `/api/public/landing-metrics/` | Landing metrics JSON path |
+| PUBLIC_SCHOOL_ID | No | — | Optional `X-School-ID` for public metrics (use **42** when metrics should reflect the `demo` subdomain school) |
+| PUBLIC_DEMO_FORM_ENDPOINT | No | `{API}/api/public/forms/demo-request/` | Demo request JSON endpoint |
+| PUBLIC_CONTACT_FORM_ENDPOINT | No | `{API}/api/public/forms/contact-enquiry/` | Contact form endpoint |
+| PUBLIC_CAREERS_FORM_ENDPOINT | No | `{API}/api/public/careers/apply/` | Careers form endpoint |
 
 ### Mobile Build Environment (EAS)
 
@@ -71,10 +88,10 @@
 - SPA Rewrite: /* → /index.html
 - Headers: X-Frame-Options: DENY, X-Content-Type-Options: nosniff
 
-**3. koderkids-landing (Optional standalone marketing site)**
+**3. koderkids-landing-astro (Optional standalone marketing site)**
 
 - Runtime: Static site
-- Root: `frontend/apps/koderkids-landing/`
+- Root: `frontend/apps/koderkids-landing-astro/`
 - Build: `npm install && npm run build`
 - Publish: `dist/`
 - Notes: deploy separately from the authenticated ERP SPA when you want an isolated marketing surface or different domain/subdomain
@@ -237,8 +254,8 @@ npm install
 cp .env.example .env  # Usually empty for local
 npm run dev  # Port 3000, proxies /api to :8000
 
-# 2b. Standalone landing app
-cd frontend/apps/koderkids-landing
+# 2b. Standalone landing app (Astro)
+cd frontend/apps/koderkids-landing-astro
 npm install
 cp .env.example .env
 npm run dev
@@ -255,14 +272,15 @@ npx expo start
 2. Set all env vars in Render dashboard
 3. Ensure Redis (Upstash) is configured
 4. Set VITE_API_URL in frontend service
-5. If deploying the standalone landing app, set its `VITE_MAIN_APP_API_BASE_URL`, `VITE_LANDING_METRICS_PATH`, and optional `VITE_PUBLIC_SCHOOL_ID`
-6. Set `CORS_ALLOWED_ORIGINS` to explicit HTTPS frontend URLs, including the landing app domain if it fetches public metrics from the backend
-7. If hosting frontend on Apache/cPanel, verify HTTP requests redirect to HTTPS
-8. Confirm web login behavior:
+5. If deploying the standalone Astro landing app, set `PUBLIC_MAIN_APP_API_BASE_URL`, optional `PUBLIC_LANDING_METRICS_PATH` / `PUBLIC_SCHOOL_ID`, and form endpoint overrides if needed
+6. If enabling automated demo login emails, set `DEMO_ACCESS_EMAIL_ENABLED` and related `DEMO_ACCESS_*` variables on the backend (never commit passwords)
+7. Set `CORS_ALLOWED_ORIGINS` to explicit HTTPS frontend URLs, including the landing app domain if it calls the backend
+8. If hosting frontend on Apache/cPanel, verify HTTP requests redirect to HTTPS
+9. Confirm web login behavior:
 	- Remember me unchecked: login ends on browser close
 	- Remember me checked: login persists until token expiry
-9. Confirm inactivity logout still triggers after 30 minutes idle
-10. For mobile EAS builds, set profile env vars for API URL and HTTP policy
-11. Verify Celery worker is running (check Render logs)
-12. Test login at frontend URL
-13. Test landing app metrics/cards if the standalone marketing site is deployed
+10. Confirm inactivity logout still triggers after 30 minutes idle
+11. For mobile EAS builds, set profile env vars for API URL and HTTP policy
+12. Verify Celery worker is running (check Render logs)
+13. Test login at frontend URL
+14. Test landing app metrics/cards if the standalone marketing site is deployed

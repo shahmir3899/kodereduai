@@ -84,7 +84,7 @@ Replace browser `mailto:` behavior in the Astro landing app with backend-deliver
 
 ## Validation Performed
 
-- Backend: `pytest tests/test_public_form_emails.py -q`
+- Backend: `pytest tests/test_public_form_emails.py -q` (requires DB; tests use `@pytest.mark.django_db`)
 - Frontend: `npm run build` in the Astro app
 
 ## Deployment Notes
@@ -98,3 +98,10 @@ Replace browser `mailto:` behavior in the Astro landing app with backend-deliver
 - Confirm production recipient inboxes for demo, contact, and careers routing.
 - Decide whether demo/contact submissions should also be saved to DB in a later phase.
 - If inbox volume increases, split recipients by form type or add CRM/webhook fan-out behind the shared helper.
+
+## Visitor demo credentials email (optional)
+
+- When `DEMO_ACCESS_EMAIL_ENABLED` is true and `DEMO_ACCESS_LOGIN_URL`, `DEMO_ACCESS_USERNAME`, and `DEMO_ACCESS_PASSWORD` are set, `POST /api/public/forms/demo-request/` sends a **second** email to the submitter with those login details (HTML template `brochure/emails/demo_credentials_visitor.html`).
+- JSON response includes `visitor_credentials_email_sent` (boolean). Internal team notification behaviour is unchanged.
+- `DemoRequest` stores `visitor_credentials_email_sent` and `visitor_credentials_email_error` for support/debugging.
+- Environment variables are documented in `docs/ENV_AND_DEPLOYMENT.md` under **Public demo visitor email**.

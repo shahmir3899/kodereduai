@@ -82,6 +82,20 @@ class APIHelper:
             content_type='application/json',
         )
 
+    def post_multipart(self, url, data, token, school_id):
+        """POST multipart/form-data (for file uploads)."""
+        return self.client.post(
+            url,
+            data=data,
+            HTTP_AUTHORIZATION=f'Bearer {token}',
+            HTTP_X_SCHOOL_ID=str(school_id),
+            # Django test client sets the correct Content-Type when data contains files
+        )
+
+    def get_no_auth(self, url):
+        """GET without any authentication header."""
+        return self.client.get(url)
+
     def safe_get(self, url, token, school_id):
         try:
             return self.get(url, token, school_id)

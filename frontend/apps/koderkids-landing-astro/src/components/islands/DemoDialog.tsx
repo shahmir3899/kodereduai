@@ -65,6 +65,7 @@ export default function DemoDialog() {
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<'idle' | 'submitting' | 'submitted' | 'error'>('idle');
   const [message, setMessage] = useState('');
+  const [visitorCredentialsSent, setVisitorCredentialsSent] = useState(false);
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   /* Listen for the custom event dispatched by static buttons */
@@ -97,6 +98,7 @@ export default function DemoDialog() {
     setOpen(false);
     setStatus('idle');
     setMessage('');
+    setVisitorCredentialsSent(false);
     document.body.style.overflow = '';
   };
 
@@ -147,7 +149,16 @@ export default function DemoDialog() {
         throw new Error(detail || `Demo request failed with status ${response.status}.`);
       }
 
+      let visitorCredSent = false;
+      try {
+        const body = (await response.json()) as { visitor_credentials_email_sent?: boolean };
+        visitorCredSent = Boolean(body?.visitor_credentials_email_sent);
+      } catch {
+        /* 201 with empty body — treat as no visitor email */
+      }
+
       formEl.reset();
+      setVisitorCredentialsSent(visitorCredSent);
       setStatus('submitted');
       trackConversion('landing_demo_submit_success', {
         method: 'api',
@@ -204,7 +215,14 @@ export default function DemoDialog() {
               </div>
               <h3 className="font-display font-bold text-brand-dark text-lg">Request sent!</h3>
               <p className="text-brand-gray text-sm max-w-xs">
-                Your request has been emailed to the Education AI team. We'll confirm your demo slot within 1 business day.
+                Your request has been emailed to the Education AI team. We&apos;ll confirm your demo slot within
+                1 business day.
+                {visitorCredentialsSent ? (
+                  <>
+                    {' '}
+                    Check your inbox for demo login instructions (sent automatically when enabled on our server).
+                  </>
+                ) : null}
               </p>
               <button onClick={close} className="btn-primary mt-2">
                 Close

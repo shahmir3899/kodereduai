@@ -52,9 +52,23 @@ def resend_demo_request_emails(modeladmin, request, queryset):
 
 @admin.register(DemoRequest)
 class DemoRequestAdmin(admin.ModelAdmin):
-    list_display = ['name', 'school', 'email', 'preferred_date', 'email_sent', 'created_at']
-    list_filter = ['email_sent']
-    readonly_fields = ['created_at', 'ip_address', 'email_sent']
+    list_display = [
+        'name',
+        'school',
+        'email',
+        'preferred_date',
+        'email_sent',
+        'visitor_credentials_email_sent',
+        'created_at',
+    ]
+    list_filter = ['email_sent', 'visitor_credentials_email_sent']
+    readonly_fields = [
+        'created_at',
+        'ip_address',
+        'email_sent',
+        'visitor_credentials_email_sent',
+        'visitor_credentials_email_error',
+    ]
     ordering = ['-created_at']
     actions = [resend_demo_request_emails]
 

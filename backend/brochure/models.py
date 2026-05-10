@@ -61,6 +61,8 @@ class DemoRequest(models.Model):
     email = models.EmailField()
     preferred_date = models.DateField(null=True, blank=True)
     email_sent = models.BooleanField(default=False)
+    visitor_credentials_email_sent = models.BooleanField(default=False)
+    visitor_credentials_email_error = models.TextField(blank=True, default='')
     source = models.CharField(max_length=50, default='landing-page')
     ip_address = models.GenericIPAddressField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

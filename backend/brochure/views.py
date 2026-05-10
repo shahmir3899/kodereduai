@@ -81,6 +81,64 @@ def send_landing_form_email(*, subject, template_name, context, reply_to=None, a
         return False
 
 
+def send_demo_credentials_email(*, to_email: str, name: str) -> tuple[bool, str]:
+    """
+    Send demo login instructions to the visitor email.
+
+    Returns (success, error_message) where error_message is empty on success.
+    """
+    if not getattr(settings, 'DEMO_ACCESS_EMAIL_ENABLED', False):
+        return False, ''
+
+    login_url = getattr(settings, 'DEMO_ACCESS_LOGIN_URL', '') or ''
+    username = getattr(settings, 'DEMO_ACCESS_USERNAME', '') or ''
+    password = getattr(settings, 'DEMO_ACCESS_PASSWORD', '') or ''
+    sender = getattr(settings, 'DEMO_ACCESS_EMAIL_SENDER', '') or getattr(
+        settings, 'LANDING_FORMS_EMAIL_SENDER', ''
+    )
+    if not to_email.strip():
+        return False, 'Visitor email address is empty.'
+    if not login_url or not username or not password:
+        return False, 'Demo access is enabled but login URL, username, or password is not configured.'
+    if not sender.strip():
+        return False, 'DEMO_ACCESS_EMAIL_SENDER / LANDING_FORMS_EMAIL_SENDER is not configured.'
+
+    subject = getattr(settings, 'DEMO_ACCESS_EMAIL_SUBJECT', 'Your Education AI demo access')
+    context = {
+        'title': subject,
+        'accent_color': '#2563eb',
+        'accent_soft': '#dbeafe',
+        'name': name or 'there',
+        'login_url': login_url,
+        'username': username,
+        'password': password,
+    }
+    html_body = render_to_string('brochure/emails/demo_credentials_visitor.html', context)
+    text_body = strip_tags(html_body)
+
+    email = EmailMultiAlternatives(
+        subject=subject,
+        body=text_body,
+        from_email=sender.strip(),
+        to=[to_email.strip()],
+        reply_to=None,
+    )
+    email.attach_alternative(html_body, 'text/html')
+
+    start = time.monotonic()
+    try:
+        email.send(fail_silently=False)
+        logger.info(
+            'Demo credentials email sent: to=%s elapsed_ms=%s',
+            to_email,
+            int((time.monotonic() - start) * 1000),
+        )
+        return True, ''
+    except Exception as exc:
+        logger.exception('Failed to send demo credentials email to=%s', to_email)
+        return False, str(exc)[:500]
+
+
 class BrochureSectionViewSet(viewsets.ModelViewSet):
     """
     CRUD for brochure sections. Super-admins only.
@@ -265,9 +323,32 @@ class PublicDemoRequestCreateView(APIView):
         if not email_sent:
             logger.warning('Public demo request email delivery failed (saved to DB id=%s): school=%s email_present=%s', submission.pk, bool(submission.school), bool(submission.email))
 
+        cred_ok = False
+        cred_err = ''
+        if getattr(settings, 'DEMO_ACCESS_EMAIL_ENABLED', False) and submission.email:
+            cred_ok, cred_err = send_demo_credentials_email(
+                to_email=submission.email,
+                name=submission.name or '',
+            )
+            submission.visitor_credentials_email_sent = cred_ok
+            submission.visitor_credentials_email_error = '' if cred_ok else cred_err
+            submission.save(
+                update_fields=['visitor_credentials_email_sent', 'visitor_credentials_email_error']
+            )
+            if not cred_ok and cred_err:
+                logger.warning(
+                    'Demo credentials email not sent for demo request id=%s: %s',
+                    submission.pk,
+                    cred_err,
+                )
+
         logger.info('Public demo request completed: id=%s email_sent=%s', submission.pk, email_sent)
         return Response(
-            {'message': 'Demo request submitted successfully.', 'email_sent': email_sent},
+            {
+                'message': 'Demo request submitted successfully.',
+                'email_sent': email_sent,
+                'visitor_credentials_email_sent': cred_ok,
+            },
             status=status.HTTP_201_CREATED,
         )
 

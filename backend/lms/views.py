@@ -109,6 +109,87 @@ def _apply_teacher_dual_scope(queryset, request, class_field='class_obj_id', sub
 # Curriculum: Books, Chapters, Topics
 # ---------------------------------------------------------------------------
 
+def _process_toc_job_in_background(job_id: str) -> None:
+    """
+    Spawn a daemon thread to run a TOC import job synchronously (no Celery needed).
+    The thread calls Google Vision, updates the TOCImportJob record, and closes the DB
+    connection cleanly when done. Used as a fallback when ENABLE_CELERY is false.
+    """
+    import threading
+    import base64
+    from django.utils import timezone
+    from django.db import connection as _db_conn
+
+    def _worker():
+        try:
+            job = TOCImportJob.objects.select_related('book').get(id=job_id)
+        except TOCImportJob.DoesNotExist:
+            logger.error('[TOC-OCR-THREAD] Job %s not found', job_id)
+            return
+
+        if job.status in (
+            TOCImportJob.Status.SUCCEEDED,
+            TOCImportJob.Status.FAILED,
+            TOCImportJob.Status.TIMED_OUT,
+        ):
+            return
+
+        job.status = TOCImportJob.Status.PROCESSING
+        job.started_at = job.started_at or timezone.now()
+        job.attempt_count = (job.attempt_count or 0) + 1
+        job.save(update_fields=['status', 'started_at', 'attempt_count', 'updated_at'])
+
+        try:
+            image_bytes = (
+                base64.b64decode(job.image_payload_b64.encode('utf-8'))
+                if job.image_payload_b64
+                else b''
+            )
+            if not image_bytes:
+                raise ValueError('Job image payload is empty.')
+
+            from .toc_ocr import extract_toc_payload
+            payload, error = extract_toc_payload(image_bytes, language=job.book.language)
+            if error:
+                raise ValueError(error)
+
+            job.status = TOCImportJob.Status.SUCCEEDED
+            job.result_payload = {
+                'text': payload.get('text', '') if payload else '',
+                'lines': payload.get('lines', []) if payload else [],
+                'language': job.book.language,
+            }
+            job.error_message = ''
+            job.image_payload_b64 = ''
+            job.completed_at = timezone.now()
+            job.save(update_fields=[
+                'status', 'result_payload', 'error_message',
+                'image_payload_b64', 'completed_at', 'updated_at',
+            ])
+            logger.info('[TOC-OCR-THREAD] Job %s succeeded', job_id)
+        except Exception as exc:
+            logger.exception('[TOC-OCR-THREAD] Job %s failed: %s', job_id, exc)
+            try:
+                job.status = TOCImportJob.Status.FAILED
+                job.error_message = str(exc)
+                job.completed_at = timezone.now()
+                job.save(update_fields=['status', 'error_message', 'completed_at', 'updated_at'])
+            except Exception:
+                pass
+        finally:
+            try:
+                _db_conn.close()
+            except Exception:
+                pass
+
+    thread = threading.Thread(
+        target=_worker,
+        daemon=True,
+        name=f'toc-ocr-{str(job_id)[:8]}',
+    )
+    thread.start()
+
+
 class BookViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     """
     CRUD for curriculum books.
@@ -355,13 +436,11 @@ class BookViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
         request_id = request.headers.get('X-Request-ID') or str(uuid.uuid4())
         async_allowed = getattr(settings, 'LMS_TOC_OCR_ASYNC_JOBS_ENABLED', False)
 
-        if async_requested and not async_allowed:
-            logger.info(
-                '[TOC-OCR] async=1 ignored (no Celery worker or LMS_TOC_OCR_FORCE_SYNC); sync OCR book_id=%s',
-                book.id,
-            )
-
-        if async_requested and async_allowed:
+        if async_requested:
+            # Always honour async=1: create a job and process it in the background.
+            # If Celery is available use it; otherwise spawn a daemon thread.
+            # This fixes mobile "Network Error" caused by idle TCP connections being
+            # killed by the OS / proxy while waiting for Google Vision to respond.
             encoded_payload = base64.b64encode(image_bytes).decode('utf-8')
             job = TOCImportJob.objects.create(
                 school=book.school,
@@ -373,8 +452,12 @@ class BookViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
                 image_size_bytes=image.size or 0,
                 image_payload_b64=encoded_payload,
             )
-            logger.info('[TOC-OCR] queued job=%s request_id=%s book_id=%s', job.id, request_id, book.id)
-            process_toc_import_job.delay(str(job.id))
+            if async_allowed:
+                logger.info('[TOC-OCR] queued job=%s request_id=%s book_id=%s (Celery)', job.id, request_id, book.id)
+                process_toc_import_job.delay(str(job.id))
+            else:
+                logger.info('[TOC-OCR] spawned thread job=%s request_id=%s book_id=%s', job.id, request_id, book.id)
+                _process_toc_job_in_background(str(job.id))
             return Response(
                 {
                     'job_id': str(job.id),

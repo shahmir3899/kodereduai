@@ -1882,10 +1882,14 @@ export default function CurriculumPage() {
       showError('Please select an image first')
       return
     }
+    if (!selectedBookId) {
+      showError('Select a book first, then run OCR.')
+      return
+    }
     const abortController = new AbortController()
     activeOcrAbortRef.current = abortController
     setOcrLoading(true)
-    setOcrStatusText('Preparing image...')
+    setOcrStatusText('Preparing image…')
     setOcrElapsedSeconds(0)
     setOcrCanRetry(false)
     try {
@@ -1898,7 +1902,7 @@ export default function CurriculumPage() {
       }
 
       let fileToUpload = processedFile
-      setOcrStatusText('Optimizing image...')
+      setOcrStatusText('Optimizing image…')
       try {
         fileToUpload = await compressImageForTocOcr(processedFile)
       } catch {
@@ -1907,28 +1911,71 @@ export default function CurriculumPage() {
 
       const onUploadProgress = (evt) => {
         if (!evt.total) {
-          setOcrStatusText('Uploading photo…')
+          const kb = evt.loaded ? Math.max(1, Math.round(evt.loaded / 1024)) : 0
+          setOcrStatusText(
+            kb
+              ? `Uploading photo… (${kb} KB sent)`
+              : 'Uploading photo… (connecting)',
+          )
           return
         }
         const pct = Math.min(100, Math.round((evt.loaded * 100) / evt.total))
-        if (pct < 100) {
-          setOcrStatusText(`Uploading photo… ${pct}%`)
-        } else {
-          // Body sent; server runs Vision OCR in the same request (no Celery queue on typical deploy).
-          setOcrStatusText('Extracting text…')
-        }
+        setOcrStatusText(pct < 100 ? `Uploading photo… ${pct}%` : 'Upload complete — starting OCR…')
       }
 
       setOcrStatusText('Uploading photo…')
-      const response = await lmsApi.ocrTOC(selectedBookId, fileToUpload, {
+      // Upload image and create a background job (returns immediately with a job_id).
+      // The server processes OCR in a background thread so the mobile browser
+      // is never stuck holding a silent connection for 20-90 s.
+      const jobResponse = await lmsApi.createTocJob(selectedBookId, fileToUpload, {
         signal: abortController.signal,
         onUploadProgress,
       })
+      const jobId = jobResponse?.data?.job_id
+      if (!jobId) {
+        throw new Error('No job ID returned from server. Please retry.')
+      }
 
-      const rawExtractedText = response?.data?.text || ''
+      // Poll the job status every 3 s until done (short requests, no idle hold).
+      const pollStartedAt = Date.now()
+      const MAX_POLL_MS = 120000
+      const POLL_INTERVAL_MS = 3000
+
+      const waitOrAbort = (ms) => new Promise((resolve, reject) => {
+        const timer = setTimeout(resolve, ms)
+        abortController.signal.addEventListener('abort', () => {
+          clearTimeout(timer)
+          reject(Object.assign(new Error('Cancelled'), { name: 'AbortError' }))
+        }, { once: true })
+      })
+
+      let ocrResult = null
+      while (!ocrResult) {
+        const elapsed = Math.floor((Date.now() - pollStartedAt) / 1000)
+        setOcrStatusText(`Extracting text… ${elapsed}s (Google Vision processing)`)
+
+        if (Date.now() - pollStartedAt > MAX_POLL_MS) {
+          throw new Error('OCR is taking too long. Please retry.')
+        }
+
+        await waitOrAbort(POLL_INTERVAL_MS)
+
+        const pollResponse = await lmsApi.getTocJob(jobId, { signal: abortController.signal })
+        const jobData = pollResponse?.data
+        if (jobData?.status === 'SUCCEEDED') {
+          ocrResult = jobData.result || {}
+        } else if (jobData?.status === 'FAILED') {
+          throw new Error(jobData.error_message || 'OCR failed on server. Please retry.')
+        } else if (jobData?.status === 'TIMED_OUT') {
+          throw new Error('OCR timed out on server. Please retry with a clearer image.')
+        }
+        // QUEUED / PROCESSING -> keep polling
+      }
+
+      const rawExtractedText = ocrResult?.text || ''
       setTocText(rawExtractedText)
-      const responseLines = Array.isArray(response?.data?.lines)
-        ? response.data.lines
+      const responseLines = Array.isArray(ocrResult?.lines)
+        ? ocrResult.lines
           .map((line, index) => ({
             id: line.id || `line-${index + 1}`,
             line_number: line.line_number || index + 1,
@@ -3089,7 +3136,7 @@ export default function CurriculumPage() {
                               </p>
                               {ocrLoading && (
                                 <div className="rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-800">
-                                  <p>{ocrStatusText || 'Extracting text...'}</p>
+                                  <p>{ocrStatusText || 'Starting…'}</p>
                                   <p className="mt-1">Elapsed: {ocrElapsedSeconds}s</p>
                                 </div>
                               )}
@@ -3159,7 +3206,7 @@ export default function CurriculumPage() {
                                   ? (tocImageProcessing ? 'Applying...' : 'Next: Skew')
                                   : tocImageWizardStep === 3
                                     ? 'Next: OCR'
-                                    : (ocrLoading ? 'Extracting...' : 'Extract Text')}
+                                    : (ocrLoading ? 'Working…' : 'Extract Text')}
                               </button>
                             </div>
                           </div>

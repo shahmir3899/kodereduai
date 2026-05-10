@@ -114,8 +114,7 @@ For deeper reference, read these files from `docs/`:
 - `docs/FRONTEND_PAGES.md` — All 88 routes with components and API calls
 - `docs/FRONTEND_COMPONENTS.md` — Components, contexts, hooks, state management
 - `docs/ATTENDANCE_PIPELINE.md` — Complete AI OCR flow with code references
-- `docs/ENV_AND_DEPLOYMENT.md` — Environment variables, Render config, Celery
-- `frontend/apps/koderkids-landing/README.md` — Standalone landing app run/build/metrics integration notes
+- `docs/DEMO_SHOWCASE_DATA.md` — Demo/chart showcase seed command and cleanup rules
 
 ### Test Accounts (Dev)
 | Username | Role | Password |
@@ -124,12 +123,26 @@ For deeper reference, read these files from `docs/`:
 | focus3899 | SCHOOL_ADMIN (Branch 1) | Abcd1234 |
 | SEED_TEST_admin | SCHOOL_ADMIN (School Alpha, id=37) | Abcd1234 |
 
-### Test School (All Modules Enabled)
-School ID: **37** (SEED_TEST_School_Alpha) — has all modules enabled, seed data for students, staff, attendance, inventory.
+### Public demo (`demo.kodereduai.pk`)
+| Item | Value |
+|------|--------|
+| School | **Demo School** — ID **42**, subdomain **`demo`** (serves `https://demo.kodereduai.pk`) |
+| Admin login | **Username:** `qaisar` — **Password:** `Abcd1234` |
+| API header | `X-School-ID: 42` |
+| Demo teacher accounts (optional) | `demoportal42t1`, `demoportal42t2`, `demoportal42t3` — password **Abcd1234** |
+
+From `backend/`, (re)create minimal classes/students/terms/HR if missing **and** apply showcase graph data:
+
+`python manage.py seed_demo_portal` — add `--reset-showcase` to clear prior `SHOWCASE_` rows on that school first. See [docs/DEMO_SHOWCASE_DATA.md](docs/DEMO_SHOWCASE_DATA.md).
+
+### Test School (dev seed — not the public demo host)
+School ID: **37** (SEED_TEST_School_Alpha) — automated test / local seed environment. To add **only** showcase graph layers (expects existing roster from `seed_test_data.py`):
+
+`python manage.py seed_showcase_graphs --school-id=37` (add `--reset` to remove prior showcase-tagged rows first). See [docs/DEMO_SHOWCASE_DATA.md](docs/DEMO_SHOWCASE_DATA.md).
 
 ### Important Notes
 - Frontend is Vite + React (NOT Next.js) — no SSR, client-side routing only
-- Main authenticated app lives in `frontend/`; the standalone marketing site lives in `frontend/apps/koderkids-landing`
+- Main authenticated app lives in `frontend/`; the standalone marketing site lives in `frontend/apps/koderkids-landing-astro` (Astro; older `koderkids-landing` Vite app may be absent in this tree)
 - Attendance URLs use underscores in Django (e.g., `pending_review`, `daily_report`) not hyphens
 - Finance gateway config endpoint is `gateway-config/` not `payment-gateways/`
 - Reports endpoint is `reports/list/` and `reports/generate/` not just `reports/`

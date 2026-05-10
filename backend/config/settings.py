@@ -499,6 +499,24 @@ LANDING_FORMS_EMAIL_SENDER = os.getenv(
     CAREERS_EMAIL_SENDER,
 ).strip()
 
+# Optional: after a public demo form submission, email the visitor demo login details.
+DEMO_ACCESS_EMAIL_ENABLED = os.getenv('DEMO_ACCESS_EMAIL_ENABLED', 'false').lower() in (
+    'true',
+    '1',
+    'yes',
+)
+DEMO_ACCESS_LOGIN_URL = os.getenv('DEMO_ACCESS_LOGIN_URL', '').strip()
+DEMO_ACCESS_USERNAME = os.getenv('DEMO_ACCESS_USERNAME', '').strip()
+DEMO_ACCESS_PASSWORD = os.getenv('DEMO_ACCESS_PASSWORD', '').strip()
+DEMO_ACCESS_EMAIL_SUBJECT = os.getenv(
+    'DEMO_ACCESS_EMAIL_SUBJECT',
+    'Your Education AI demo access',
+).strip()
+DEMO_ACCESS_EMAIL_SENDER = os.getenv(
+    'DEMO_ACCESS_EMAIL_SENDER',
+    LANDING_FORMS_EMAIL_SENDER,
+).strip()
+
 # =============================================================================
 # Attendance AI Settings
 # =============================================================================
