@@ -227,17 +227,28 @@ SIMPLE_JWT = {
 # Comma-separated explicit origins from env (useful on Render dashboard)
 _env_cors_origins = [o.strip() for o in os.getenv('CORS_ALLOWED_ORIGINS', '').split(',') if o.strip()]
 
+# Production HTTPS fronts not always present in dashboard env vars; merge so school subdomains
+# (e.g. focus.kodereduai.pk) still work if regex matching ever fails upstream.
+_DEFAULT_PRODUCTION_SCHOOL_FRONTENDS = (
+    'https://demo.kodereduai.pk',
+    'https://focus.kodereduai.pk',
+)
+
 if IS_PRODUCTION:
     # Production must only trust explicit HTTPS origins.
-    CORS_ALLOWED_ORIGINS = [o for o in _env_cors_origins if o.startswith('https://')]
+    _explicit_https_origins = [o for o in _env_cors_origins if o.startswith('https://')]
+    CORS_ALLOWED_ORIGINS = list(
+        dict.fromkeys(_explicit_https_origins + list(_DEFAULT_PRODUCTION_SCHOOL_FRONTENDS)),
+    )
 
     # Allow HTTPS regex patterns for multi-subdomain and migration paths.
     CORS_ALLOWED_ORIGIN_REGEXES = [
-        r'^https://.*\.kodereduai\.pk$',      # Any subdomain (*.kodereduai.pk)
-        r'^https://kodereduai\.pk$',           # Root domain
-        r'^https://www\.kodereduai\.pk$',     # www subdomain
-        r'^https://portal\.kodereduai\.pk$',  # Portal subdomain
-        r'^https://.*\.onrender\.com$',       # Any Render app URL (migration support)
+        # Subdomains: at least one label before .kodereduai.pk (hyphens allowed in labels)
+        r'^https://[a-z0-9][a-z0-9.-]*\.kodereduai\.pk$',
+        r'^https://kodereduai\.pk$',           # Apex
+        r'^https://www\.kodereduai\.pk$',     # www
+        r'^https://portal\.kodereduai\.pk$',   # Portal
+        r'^https://[a-z0-9][a-z0-9.-]*\.onrender\.com$',  # Render preview / service URLs
     ]
 else:
     # Local development supports HTTP localhost clients.
