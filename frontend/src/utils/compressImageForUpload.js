@@ -33,10 +33,13 @@ export function compressImageForUpload(file, options = {}) {
 
 /** Smaller payload for TOC OCR — mobile uplink + async job DB payload are sensitive to size. */
 export function compressImageForTocOcr(file) {
+  const prod = import.meta.env.PROD
+  // Production API must base64+INSERT the image before returning 202; smaller JPEG keeps Render/web
+  // workers from sitting 60–120s on one request (browser shows ocr_toc "Pending" after upload completes).
   return compressImageForUpload(file, {
-    quality: 0.76,
-    maxWidth: 1800,
-    maxHeight: 1800,
+    quality: prod ? 0.66 : 0.76,
+    maxWidth: prod ? 1400 : 1800,
+    maxHeight: prod ? 1400 : 1800,
     mimeType: 'image/jpeg',
   })
 }

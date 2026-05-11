@@ -405,22 +405,30 @@ else:
     _cache_location = ''
 
 if _cache_location:
+    import ssl as _ssl
+
+    # Without short socket timeouts, a misconfigured or unreachable Redis (common when
+    # CELERY_BROKER_URL points to a dead URL) can block cache.get/set for many minutes.
+    # That stalls views that use the cache (e.g. OCRRateThrottle, TOC job blob staging).
+    _redis_pool_kwargs = {
+        'socket_connect_timeout': int(os.getenv('REDIS_SOCKET_CONNECT_TIMEOUT', '3')),
+        'socket_timeout': int(os.getenv('REDIS_SOCKET_TIMEOUT', '3')),
+        'health_check_interval': int(os.getenv('REDIS_HEALTH_CHECK_INTERVAL', '30')),
+    }
+    if _cache_location.startswith('rediss://'):
+        _redis_pool_kwargs['ssl_cert_reqs'] = _ssl.CERT_NONE
     CACHES = {
         'default': {
             'BACKEND': 'django_redis.cache.RedisCache',
             'LOCATION': _cache_location,
             'OPTIONS': {
                 'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+                'CONNECTION_POOL_KWARGS': _redis_pool_kwargs,
             },
             'KEY_PREFIX': 'eduai',
             'TIMEOUT': 300,
         }
     }
-    if _cache_location.startswith('rediss://'):
-        import ssl as _ssl
-        CACHES['default']['OPTIONS']['CONNECTION_POOL_KWARGS'] = {
-            'ssl_cert_reqs': _ssl.CERT_NONE,
-        }
     DJANGO_REDIS_IGNORE_EXCEPTIONS = True
 else:
     CACHES = {
