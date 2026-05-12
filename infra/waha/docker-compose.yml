@@ -1,6 +1,8 @@
 # Local WAHA (WhatsApp HTTP API) — Core image (free).
 # Docs: https://waha.devlike.pro/docs/how-to/install/
 # Use `waha-plus` only if you have a DevLikePro license.
+#
+# HTTP: http://127.0.0.1:3080 → WAHA :3000 (host 3080 avoids clashing with Vite on 3000).
 services:
   waha:
     image: devlikeapro/waha:latest
@@ -13,7 +15,6 @@ services:
       options:
         max-size: 100m
         max-file: "10"
-    # Host 3080 avoids clashing with the Vite app (port 3000). Container still listens on 3000.
     ports:
       - "127.0.0.1:3080:3000"
     volumes:

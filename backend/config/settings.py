@@ -303,11 +303,14 @@ if ENVIRONMENT == 'local':
     CELERY_TASK_EAGER_PROPAGATES = True
 
 # Set ENABLE_CELERY=true in production when start.sh spawns a Celery worker (see render.yaml).
+# Notification beat tasks (absence digests, fee reminders, scheduled in-app dispatch, etc.)
+# require ENABLE_CELERY=true + ENABLE_CELERY_BEAT=true to fire.
 ENABLE_CELERY = os.getenv('ENABLE_CELERY', 'false').lower() in ('1', 'true', 'yes')
-# If true, POST ocr_toc/?async=1 always runs OCR in the web worker (ignores async queue).
+# If true, POST ocr_toc/?async=1 runs OCR synchronously inside the request instead of returning
+# a 202 + job (use for debugging). The default async path always uses an in-process daemon
+# thread (see lms.views._process_toc_job_in_background) so TOC OCR is independent of Celery
+# worker health — flipping ENABLE_CELERY no longer changes how OCR is dispatched.
 LMS_TOC_OCR_FORCE_SYNC = os.getenv('LMS_TOC_OCR_FORCE_SYNC', '').lower() in ('1', 'true', 'yes')
-# Async TOC jobs need a real worker; Render default is ENABLE_CELERY=false — avoid orphaned QUEUED jobs.
-LMS_TOC_OCR_ASYNC_JOBS_ENABLED = (not LMS_TOC_OCR_FORCE_SYNC) and ENABLE_CELERY
 
 # Disable throttling if Redis is using localhost (not properly configured on Render)
 if CELERY_BROKER_URL.startswith('redis://localhost'):

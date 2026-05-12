@@ -135,10 +135,16 @@ services:
         sync: false
       - key: LANDING_FORMS_EMAIL_SENDER
         sync: false
+      # Notification scheduling lives entirely on Celery Beat (daily-absence-summary,
+      # scheduled-absence-in-app-digest, fee-pending-in-app-*, class-teacher-attendance-reminder,
+      # process-notification-queue, dispatch-scheduled-notifications, mark-stale-toc-jobs-timed-out).
+      # With these off, /notifications?tab=Settings looks alive but no automated
+      # notification ever fires. Curriculum TOC OCR no longer reads ENABLE_CELERY —
+      # it always runs in an in-process daemon thread (see backend/lms/views.py).
       - key: ENABLE_CELERY
-        value: "false"
+        value: "true"
       - key: ENABLE_CELERY_BEAT
-        value: "false"
+        value: "true"
       - key: PYTHON_VERSION
         value: "3.12.0"
       - key: WEB_CONCURRENCY

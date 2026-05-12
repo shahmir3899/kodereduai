@@ -48,7 +48,6 @@ from .serializers import (
     AssignmentSubmissionReadSerializer, AssignmentSubmissionCreateSerializer,
     TOCImportJobSerializer,
 )
-from .tasks import process_toc_import_job
 from .toc_job_payload_cache import (
     purge_job_blob_cache,
     read_job_image_bytes,
@@ -449,20 +448,22 @@ class BookViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
 
         image_bytes = image.read()
         async_requested = str(request.query_params.get('async', '')).lower() in ('1', 'true', 'yes')
+        force_sync = getattr(settings, 'LMS_TOC_OCR_FORCE_SYNC', False)
         request_id = request.headers.get('X-Request-ID') or str(uuid.uuid4())
-        async_allowed = getattr(settings, 'LMS_TOC_OCR_ASYNC_JOBS_ENABLED', False)
 
-        if async_requested:
-            # Always honour async=1: create a job and process it in the background.
-            # If Celery is available use it; otherwise spawn a daemon thread.
-            # This fixes mobile "Network Error" caused by idle TCP connections being
-            # killed by the OS / proxy while waiting for Google Vision to respond.
+        if async_requested and not force_sync:
+            # TOC OCR always runs in a daemon thread inside the gunicorn worker:
+            #   - Independent of Celery worker health. On small instances the Celery worker can
+            #     OOM/restart and leave Celery-queued jobs stuck in QUEUED forever, while the
+            #     thread runs in-process and finishes in the same web dyno.
+            #   - Avoids competing with notification beat tasks for the single Celery worker slot.
+            #   - Still asynchronous from the client's perspective: returns 202 + poll URL so
+            #     mobile browsers don't hold an idle TCP connection through slow Google Vision.
             _accept_t0 = time.perf_counter()
             job_uid = uuid.uuid4()
             store_blob_in_redis = try_put_job_blob(job_uid, image_bytes)
-            # Always persist base64 on the job row. Celery runs in another process; Redis may use a
-            # different socket/DB than the web dyno or ignore_exceptions may swallow cache reads —
-            # an empty DB column + cache miss produced "Job image payload is empty."
+            # Persist base64 on the job row as a fallback for the daemon thread when the Redis
+            # cache is unavailable (e.g. ignore_exceptions swallowed a transient read).
             encoded_payload = base64.b64encode(image_bytes).decode('utf-8')
             job = TOCImportJob.objects.create(
                 id=job_uid,
@@ -475,20 +476,15 @@ class BookViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
                 image_size_bytes=image.size or 0,
                 image_payload_b64=encoded_payload,
             )
-            if async_allowed:
-                logger.info('[TOC-OCR] queued job=%s request_id=%s book_id=%s (Celery)', job.id, request_id, book.id)
-                process_toc_import_job.delay(str(job.id))
-            else:
-                logger.info('[TOC-OCR] spawned thread job=%s request_id=%s book_id=%s', job.id, request_id, book.id)
-                _process_toc_job_in_background(str(job.id))
+            logger.info('[TOC-OCR] spawned thread job=%s request_id=%s book_id=%s', job.id, request_id, book.id)
+            _process_toc_job_in_background(str(job.id))
             _accept_ms = (time.perf_counter() - _accept_t0) * 1000
             logger.info(
-                '[TOC-OCR] async_accept_done job=%s book=%s image_bytes=%s redis_blob=%s celery=%s elapsed_ms=%.1f',
+                '[TOC-OCR] async_accept_done job=%s book=%s image_bytes=%s redis_blob=%s elapsed_ms=%.1f',
                 job.id,
                 book.id,
                 len(image_bytes),
                 store_blob_in_redis,
-                async_allowed,
                 _accept_ms,
             )
             return Response(

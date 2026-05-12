@@ -105,11 +105,8 @@ class TestOcrJobCreation:
         token = seed_data["tokens"]["admin"]
         sid = seed_data["SID_A"]
 
-        with patch("lms.views._process_toc_job_in_background") as mock_thread, \
-             patch("lms.views.process_toc_import_job") as mock_celery:
+        with patch("lms.views._process_toc_job_in_background") as mock_thread:
             mock_thread.return_value = None
-            mock_celery.delay = MagicMock()
-
             resp = _upload_ocr_async(api, token, sid, ocr_book.id)
 
         assert resp.status_code == 202, f"Expected 202, got {resp.status_code}: {resp.content}"
@@ -123,8 +120,7 @@ class TestOcrJobCreation:
         token = seed_data["tokens"]["admin"]
         sid = seed_data["SID_A"]
 
-        with patch("lms.views._process_toc_job_in_background"), \
-             patch("lms.views.process_toc_import_job"):
+        with patch("lms.views._process_toc_job_in_background"):
             resp = _upload_ocr_async(api, token, sid, ocr_book.id)
 
         job_id = resp.json()["job_id"]
@@ -132,35 +128,41 @@ class TestOcrJobCreation:
         assert job.book_id == ocr_book.id
         assert job.school_id == seed_data["SID_A"]
 
-    def test_async_without_celery_calls_thread_worker(self, seed_data, api, ocr_book):
-        """When ENABLE_CELERY is false, _process_toc_job_in_background must be called."""
+    def test_async_always_uses_thread_worker(self, seed_data, api, ocr_book):
+        """async=1 must dispatch the in-process daemon thread, never Celery.
+
+        TOC OCR is decoupled from Celery so that flipping ENABLE_CELERY (which
+        controls notification beat tasks) cannot break curriculum imports. The
+        view no longer imports the Celery task at all.
+        """
         token = seed_data["tokens"]["admin"]
         sid = seed_data["SID_A"]
 
-        with patch("lms.views.process_toc_import_job") as mock_celery, \
-             patch("lms.views._process_toc_job_in_background") as mock_thread, \
-             patch("django.conf.settings.LMS_TOC_OCR_ASYNC_JOBS_ENABLED", False):
+        with patch("lms.views._process_toc_job_in_background") as mock_thread, \
+             patch("lms.tasks.process_toc_import_job.delay") as mock_celery_delay:
             mock_thread.return_value = None
             resp = _upload_ocr_async(api, token, sid, ocr_book.id)
 
         assert resp.status_code == 202
         mock_thread.assert_called_once()
-        mock_celery.delay.assert_not_called()
+        mock_celery_delay.assert_not_called()
 
-    def test_async_with_celery_calls_celery_task(self, seed_data, api, ocr_book):
-        """When ENABLE_CELERY is true, Celery task must be dispatched."""
+    def test_async_force_sync_runs_inline_ocr(self, seed_data, api, ocr_book):
+        """LMS_TOC_OCR_FORCE_SYNC=True must bypass the 202 path and run OCR inline."""
         token = seed_data["tokens"]["admin"]
         sid = seed_data["SID_A"]
+        mock_payload = {"text": "Chapter 1", "lines": []}
 
-        with patch("lms.views.process_toc_import_job") as mock_celery, \
-             patch("lms.views._process_toc_job_in_background") as mock_thread, \
-             patch("django.conf.settings.LMS_TOC_OCR_ASYNC_JOBS_ENABLED", True):
-            mock_celery.delay = MagicMock()
+        with patch("lms.views._process_toc_job_in_background") as mock_thread, \
+             patch("lms.toc_ocr.extract_toc_payload", return_value=(mock_payload, None)), \
+             patch("django.conf.settings.LMS_TOC_OCR_FORCE_SYNC", True):
             resp = _upload_ocr_async(api, token, sid, ocr_book.id)
 
-        assert resp.status_code == 202
-        mock_celery.delay.assert_called_once()
+        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.content}"
         mock_thread.assert_not_called()
+        body = resp.json()
+        assert "text" in body
+        assert "Chapter 1" in body["text"]
 
     def test_missing_image_returns_400(self, seed_data, api, ocr_book):
         """Multipart without an image field must return 400."""
