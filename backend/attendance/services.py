@@ -331,18 +331,12 @@ Regards,
     def __init__(self, school):
         """Initialize with a School instance."""
         self.school = school
-        self.api_url = settings.WHATSAPP_API_URL
-        self.api_key = settings.WHATSAPP_API_KEY
-        self.sender_id = school.whatsapp_sender_id
 
     def is_configured(self) -> bool:
         """Check if WhatsApp is properly configured for this school."""
-        return bool(
-            self.api_url and
-            self.api_key and
-            self.sender_id and
-            self.school.get_enabled_module('whatsapp')
-        )
+        from core.whatsapp_delivery import whatsapp_is_configured
+
+        return whatsapp_is_configured(self.school, require_whatsapp_module=True)
 
     def send_absence_notification(
         self,
@@ -374,31 +368,9 @@ Regards,
             school_name=self.school.name
         )
 
-        try:
-            response = requests.post(
-                self.api_url,
-                json={
-                    'sender_id': self.sender_id,
-                    'phone': phone,
-                    'message': message
-                },
-                headers={
-                    'Authorization': f'Bearer {self.api_key}',
-                    'Content-Type': 'application/json'
-                },
-                timeout=30
-            )
+        from core.whatsapp_delivery import send_whatsapp
 
-            if response.status_code == 200:
-                logger.info(f"WhatsApp notification sent to {phone}")
-                return True
-            else:
-                logger.error(f"WhatsApp API error: {response.status_code} - {response.text}")
-                return False
-
-        except Exception as e:
-            logger.error(f"WhatsApp notification failed: {e}")
-            return False
+        return send_whatsapp(self.school, phone, message)
 
     def send_bulk_notifications(
         self,

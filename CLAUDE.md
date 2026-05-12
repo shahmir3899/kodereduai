@@ -62,6 +62,8 @@ python manage.py runserver 8000
 # Main frontend (from frontend/)
 npm run dev          # Runs on port 3000, proxies /api to :8000
 
+# Local WAHA (WhatsApp): Docker maps host http://127.0.0.1:3080 -> WAHA; see infra/waha/README.md. Set WHATSAPP_API_URL to match.
+
 # Standalone landing app (from frontend/apps/koderkids-landing/)
 npm install
 npm run dev

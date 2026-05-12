@@ -481,6 +481,10 @@ SUPABASE_BUCKET = os.getenv('SUPABASE_BUCKET', 'atten-reg').strip()
 # =============================================================================
 # WhatsApp Configuration
 # =============================================================================
+# Provider: "http" = POST to WHATSAPP_API_URL (legacy JSON + Bearer).
+#           "waha" = POST to {WHATSAPP_API_URL}/api/sendText + X-Api-Key;
+#           School.whatsapp_sender_id = WAHA session name (e.g. default).
+WHATSAPP_PROVIDER = os.getenv('WHATSAPP_PROVIDER', 'http').strip().lower()
 WHATSAPP_API_URL = os.getenv('WHATSAPP_API_URL', '')
 WHATSAPP_API_KEY = os.getenv('WHATSAPP_API_KEY', '')
 

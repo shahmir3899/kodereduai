@@ -4,8 +4,8 @@
 
 set -euo pipefail
 
-ENABLE_CELERY="${ENABLE_CELERY:-false}"
-ENABLE_CELERY_BEAT="${ENABLE_CELERY_BEAT:-false}"
+ENABLE_CELERY="${ENABLE_CELERY:-true}"
+ENABLE_CELERY_BEAT="${ENABLE_CELERY_BEAT:-true}"
 GUNICORN_TIMEOUT="${GUNICORN_TIMEOUT:-120}"
 GUNICORN_GRACEFUL_TIMEOUT="${GUNICORN_GRACEFUL_TIMEOUT:-30}"
 # One sync worker serializes all HTTP on small instances — unrelated XHR queues behind slow views.

@@ -2,7 +2,7 @@
 Shared recipient resolution helpers for notification triggers.
 """
 
-from schools.models import UserSchoolMembership
+from schools.models import School, UserSchoolMembership
 from users.models import User
 
 
@@ -25,24 +25,51 @@ def get_school_membership_users(school, roles):
 
 
 def get_admin_users(school):
-    """Return school admins/principals using membership mapping with legacy fallback."""
-    membership_users = get_school_membership_users(
-        school,
-        roles=[
-            UserSchoolMembership.Role.SCHOOL_ADMIN,
-            UserSchoolMembership.Role.PRINCIPAL,
-        ],
-    )
+    """Return school admins/principals for in-app and scheduled notifications.
 
-    # Safety fallback for legacy/misaligned data:
-    # include active users tied to this school via User.school + admin role.
+    Primary source is ``UserSchoolMembership`` with roles SCHOOL_ADMIN or
+    PRINCIPAL. When ``school`` belongs to an :class:`~schools.models.Organization`,
+    the same roles on **any active sibling school** in that org are included.
+    That way branch-scoped work (e.g. ``NotificationEngine(branch_school)``)
+    still reaches org-level admins whose membership row may sit on another
+    branch (common for "Branch 1" in the UI vs membership on head office).
+
+    Legacy fallback: active users with ``User.school_id`` in that school set
+    and global role SCHOOL_ADMIN / PRINCIPAL (deprecated FK, still used in data).
+    """
+    roles = [
+        UserSchoolMembership.Role.SCHOOL_ADMIN,
+        UserSchoolMembership.Role.PRINCIPAL,
+    ]
+
+    org_id = getattr(school, 'organization_id', None)
+    if org_id:
+        school_ids = list(
+            School.objects.filter(
+                organization_id=org_id,
+                is_active=True,
+            ).values_list('id', flat=True)
+        )
+    else:
+        school_ids = [school.pk]
+
+    users_by_id = {}
+    memberships = (
+        UserSchoolMembership.objects.filter(
+            school_id__in=school_ids,
+            role__in=roles,
+            is_active=True,
+        ).select_related('user')
+    )
+    for membership in memberships:
+        if membership.user_id:
+            users_by_id[membership.user_id] = membership.user
+
     fallback_users = User.objects.filter(
-        school=school,
+        school_id__in=school_ids,
         is_active=True,
         role__in=['SCHOOL_ADMIN', 'PRINCIPAL'],
     )
-
-    users_by_id = {u.id: u for u in membership_users if getattr(u, 'id', None)}
     for user in fallback_users:
         if user.id:
             users_by_id[user.id] = user

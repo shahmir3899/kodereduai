@@ -80,3 +80,6 @@ nul
 htmlcov/
 .tox/
 .pytest_cache/
+
+# WAHA (local WhatsApp stack) — session store must not be committed
+infra/waha/sessions/

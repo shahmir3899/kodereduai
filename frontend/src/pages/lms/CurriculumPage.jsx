@@ -2822,10 +2822,28 @@ export default function CurriculumPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
           <div ref={tocModalBodyRef} className="bg-white rounded-xl shadow-xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
             <div className="p-4 sm:p-6 border-b border-gray-200">
-              <h2 className="text-xl font-bold text-gray-900 mb-2">Import Table of Contents</h2>
-              <p className="text-sm text-gray-500 mb-4">
-                Upload a photo of the book's Table of Contents page, or enter chapters and topics manually.
-              </p>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <h2 className="text-xl font-bold text-gray-900">Import Table of Contents</h2>
+                  <p className="text-sm text-gray-500 mt-2 mb-4">
+                    Upload a photo of the book's Table of Contents page, or enter chapters and topics manually.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeTocModal}
+                  className="-mr-1 -mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-blue-50 hover:text-blue-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                  aria-label="Close"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
+                    <path
+                      fillRule="evenodd"
+                      d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                </button>
+              </div>
 
               {tocStep === 'input' && (
                 <>
