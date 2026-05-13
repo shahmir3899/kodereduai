@@ -146,7 +146,24 @@ class AttendanceUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
         return AttendanceUploadSerializer
 
     def create(self, request, *args, **kwargs):
-        """Override create to add detailed logging."""
+        """
+        Register OCR upload — PAUSED (2026-05-13).
+        The AI OCR pipeline has been parked. Use manual attendance entry instead.
+        To re-enable, see: attendance/_deprecated_ocr/README.md
+        """
+        from django.conf import settings
+        if not getattr(settings, 'OCR_ENABLED', False):
+            return Response(
+                {
+                    'detail': (
+                        'Register OCR upload is currently paused. '
+                        'Please use manual attendance entry.'
+                    )
+                },
+                status=status.HTTP_410_GONE,
+            )
+
+        # OCR_ENABLED=true path (preserved for re-activation)
         logger.info(f"=== ATTENDANCE UPLOAD CREATE ===")
         logger.info(f"User: {request.user} (school_id: {ensure_tenant_school_id(request) or request.user.school_id})")
         logger.info(f"Request data: {request.data}")
@@ -282,14 +299,12 @@ class AttendanceUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
             self._process_upload_sync(upload.id)
 
     def _process_upload_sync(self, upload_id: int):
-        """Process attendance upload synchronously (fallback when Celery unavailable).
-
-        Note: For now, just mark as REVIEW_REQUIRED and skip AI processing
-        since Tesseract/Groq may not be configured.
+        """
+        Synchronous upload processing — STUB (OCR pipeline parked 2026-05-13).
+        Marks upload as FAILED so user is directed to manual entry.
+        To restore AI processing, see attendance/_deprecated_ocr/README.md
         """
         from .models import AttendanceUpload
-        import logging
-        logger = logging.getLogger(__name__)
 
         try:
             upload = AttendanceUpload.objects.get(id=upload_id)
@@ -297,36 +312,13 @@ class AttendanceUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
             logger.error(f"AttendanceUpload {upload_id} not found")
             return
 
-        logger.info(f"Processing attendance upload {upload_id}")
-
-        # Use the new processing pipeline: OCR → Table → LLM Reasoning
-        try:
-            from .attendance_processor import AttendanceProcessor
-            processor = AttendanceProcessor(upload)
-            result = processor.process()
-
-            if result.success:
-                upload.ai_output_json = result.to_ai_output_json()
-                upload.confidence_score = result.confidence
-                upload.status = AttendanceUpload.Status.REVIEW_REQUIRED
-                upload.save()
-                logger.info(f"Upload {upload_id} processed successfully with AI pipeline")
-            else:
-                # AI failed, but still allow manual review
-                upload.status = AttendanceUpload.Status.REVIEW_REQUIRED
-                upload.error_message = f"AI processing failed at {result.error_stage}: {result.error}"
-                upload.ai_output_json = {'matched': [], 'unmatched': [], 'notes': 'AI processing unavailable'}
-                upload.save()
-                logger.warning(f"Upload {upload_id} AI failed, set for manual review: {result.error}")
-
-        except Exception as e:
-            logger.warning(f"AI processing error for upload {upload_id}: {e}")
-            # Still allow manual review even if AI fails
-            upload.status = AttendanceUpload.Status.REVIEW_REQUIRED
-            upload.error_message = f"AI unavailable: {str(e)[:200]}"
-            upload.ai_output_json = {'matched': [], 'unmatched': [], 'notes': 'AI processing unavailable'}
-            upload.save()
-            logger.info(f"Upload {upload_id} set for manual review (AI unavailable)")
+        upload.status = AttendanceUpload.Status.FAILED
+        upload.error_message = (
+            "Register OCR upload is currently paused. "
+            "Please use manual attendance entry."
+        )
+        upload.save(update_fields=['status', 'error_message'])
+        logger.warning(f"Upload {upload_id}: OCR pipeline is parked, marked as FAILED")
 
     def destroy(self, request, *args, **kwargs):
         """
@@ -517,16 +509,9 @@ class AttendanceUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
             logger.warning(f"Failed to record learning feedback: {e}")
             learning_stats = {}
 
-        # Trigger WhatsApp notifications for absent students
-        if upload.school.get_enabled_module('whatsapp'):
-            try:
-                from .tasks import send_whatsapp_notifications
-                send_whatsapp_notifications.delay(upload.id)
-            except Exception as e:
-                logger.warning(f"Could not queue WhatsApp notifications: {e}")
-
+        # DEPRECATED (2026-05-13): WhatsApp notifications removed.
         # In-app absence alerts run on a schedule (see notifications.tasks
-        # run_scheduled_absence_in_app_digest); not on confirm.
+        # run_scheduled_absence_in_app_digest); not triggered on confirm.
 
         return Response({
             'success': True,

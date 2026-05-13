@@ -13,6 +13,9 @@
 | CORS_ALLOWED_ORIGINS | Yes | http://localhost:3000 | Comma-separated frontend URLs |
 | CELERY_BROKER_URL | Optional | redis://localhost:6379/0 | Redis URL for Celery broker |
 | CELERY_RESULT_BACKEND | Optional | redis://localhost:6379/0 | Redis URL for Celery results |
+| ENABLE_CELERY | Prod | false (settings) / true (start.sh) | Whether `start.sh` spawns a Celery **worker** in the web container. Required for retries (`process_notification_queue`), scheduled in-app dispatch, deferred sends, and stale-OCR cleanup. **Must be `true` in `render.yaml` for notifications to function.** |
+| ENABLE_CELERY_BEAT | Prod | false (settings) / true (start.sh) | Whether `start.sh` spawns Celery **Beat** (the cron-style scheduler) in the web container. Required for all timed tasks listed in `CELERY_BEAT_SCHEDULE` (absence digests, fee reminders, etc.). |
+| LMS_TOC_OCR_FORCE_SYNC | No | false | If true, `POST /api/lms/books/{id}/ocr_toc/?async=1` runs OCR inline instead of returning `202 + poll_url`. Debug-only escape hatch. The async path always uses an in-process daemon thread (independent of `ENABLE_CELERY`). |
 | GROQ_API_KEY | Yes | - | Groq API key (console.groq.com) |
 | GROQ_MODEL | No | llama-3.3-70b-versatile | Groq LLM model ID |
 | GROQ_VISION_MODEL | No | llama-3.2-11b-vision-preview | Groq vision model ID |
@@ -73,10 +76,10 @@ When `DEMO_ACCESS_EMAIL_ENABLED` is true, a successful `POST /api/public/forms/d
 
 - Runtime: Python 3.12.0
 - Region: Oregon
-- Plan: Free tier
+- Plan: Starter
 - Root: backend/
 - Build: `./build.sh` — pip install, collectstatic, migrate
-- Start: `bash start.sh` — Celery worker + Gunicorn (single process on free tier)
+- Start: `bash start.sh` — runs Gunicorn (foreground) plus Celery worker + Beat in auto-restart loops, all gated by `ENABLE_CELERY` / `ENABLE_CELERY_BEAT` (both set to `"true"` in `render.yaml`)
 - Health check: /api/ endpoint
 
 **2. kodereduai (Frontend)**
@@ -117,26 +120,48 @@ python manage.py migrate --no-input
 
 ### start.sh (Backend)
 
+Single-container deployment: Gunicorn + Celery worker + Celery Beat all run inside the same Render service, gated by `ENABLE_CELERY` / `ENABLE_CELERY_BEAT`. Worker and Beat each run in an auto-restart loop so a crash (OOM, transient broker error) does not stop scheduled tasks.
+
 ```bash
-# Start Celery worker in background (2 concurrency for free tier)
-celery -A config worker -l info --concurrency=2 &
-# Start Gunicorn
-gunicorn config.wsgi:application
+# Conditional: worker only starts when ENABLE_CELERY=true
+restart_celery() {
+  while true; do
+    celery -A config worker -l info --concurrency=1
+    sleep 5
+  done
+}
+[ "$ENABLE_CELERY" = "true" ] && restart_celery &
+
+# Conditional: beat only starts when ENABLE_CELERY_BEAT=true
+restart_celery_beat() {
+  while true; do
+    celery -A config beat -l info
+    sleep 5
+  done
+}
+[ "$ENABLE_CELERY_BEAT" = "true" ] && restart_celery_beat &
+
+# Gunicorn runs in foreground (gthread, 1 worker × 4 threads by default)
+gunicorn --worker-class gthread --workers 1 --threads 4 config.wsgi:application
 ```
 
 ## Celery Configuration
 
 ### Task Queue
 
-- Broker: Redis
+- Broker: Redis (Upstash on production; `rediss://` triggers SSL with `CERT_NONE`)
 - Serializer: JSON
-- Timezone: Asia/Karachi
+- Timezone: `Asia/Karachi` (Beat cron entries use local time)
 - Time limit: 30 minutes per task
-- Concurrency: 2 workers (free tier)
+- Concurrency: 1 worker × 1 process (Starter plan); the single gthread Gunicorn worker is what serves HTTP
+
+### Curriculum OCR is NOT routed through Celery
+
+`POST /api/lms/books/{id}/ocr_toc/?async=1` spawns an in-process daemon thread (`lms.views._process_toc_job_in_background`) and returns `202` + `poll_url`. The view does **not** call `process_toc_import_job.delay()` anymore, so flipping `ENABLE_CELERY` cannot break TOC OCR. The `lms.tasks.process_toc_import_job` task remains in the codebase only as a fallback used by the periodic `mark-stale-toc-jobs-timed-out` cleanup. Set `LMS_TOC_OCR_FORCE_SYNC=true` to skip the async path entirely (debug only).
 
 ### Smart Sync/Async Dispatch
 
-On-demand background tasks use a smart sync/async pattern via `run_task_sync()` and `dispatch_background_task()` in `core/task_utils.py`. Small workloads run synchronously for instant results; large workloads dispatch to Celery.
+On-demand background tasks use a smart sync/async pattern via `run_task_sync()` and `dispatch_background_task()` in `core/task_utils.py`. Small workloads run synchronously for instant results; large workloads dispatch to Celery. When no worker responds to `ping()` within 2s, `dispatch_background_task` falls back to synchronous execution so the request still completes.
 
 | Task | Sync Threshold | Async Trigger |
 |------|---------------|---------------|
@@ -149,16 +174,26 @@ On-demand background tasks use a smart sync/async pattern via `run_task_sync()` 
 
 ### Scheduled Tasks (Celery Beat)
 
+All entries below live in `CELERY_BEAT_SCHEDULE` in `backend/config/settings.py` and are reconciled into `django_celery_beat`'s `DatabaseScheduler` (so manual edits via Django admin persist across redeploys). Times below are Asia/Karachi.
+
 | Task | Schedule | Purpose |
 |------|----------|---------|
-| monthly-fee-reminders | 5th of month, 9:00 AM | Send fee reminders |
-| weekly-overdue-alerts | Mondays, 10:00 AM | Alert overdue payments |
-| daily-absence-summary | Daily, 5:00 PM | Absence notification digest |
-| process-notification-queue | Every 5 minutes | Send queued notifications |
-| cleanup-old-uploads | Sundays, 2:00 AM | Delete uploads older than 90 days |
-| retry-failed-uploads | Every 6 hours | Retry failed AI processing |
-| cleanup-location-data | Sundays, 3:00 AM | Clean old GPS data |
-| auto-end-stale-journeys | Every hour | Close stale transport journeys |
+| `fee-pending-in-app-5th` | Day 5, 09:00 | In-app fee pending alerts (admins/principal per class, class teachers, parent/student self) |
+| `fee-pending-in-app-8th` | Day 8, 09:00 | Second-pass in-app fee pending alerts |
+| `daily-absence-summary` | Every minute (gated per school) | Daily school report (attendance, lesson plans, pending fees, staff leave) at each school's configured `daily_absence_summary_time` |
+| `scheduled-absence-in-app-digest` | 08:00, 09:00, 10:00 | Consolidated absence digest per class once that class's register is complete |
+| `process-notification-queue` | Every 5 minutes | Retry `PENDING` / retriable `FAILED` `NotificationLog` rows |
+| `cleanup-old-uploads` | Sundays, 02:00 | Delete attendance uploads older than 90 days |
+| `retry-failed-uploads` | Every 6 hours | Re-run failed AI attendance processing in the last 24h |
+| `cleanup-location-data` | Sundays, 03:00 | Purge transport GPS pings older than 7 days |
+| `auto-end-stale-journeys` | Every hour | Auto-close transport journeys idle > 2h |
+| `weekly-auto-tune-thresholds` | Sundays, 03:00 | Recompute per-school accuracy/anomaly thresholds |
+| `dispatch-scheduled-notifications` | Every 5 minutes | Send deferred `SCHEDULED` `NotificationLog` rows whose `scheduled_for` time has arrived |
+| `mark-stale-toc-jobs-timed-out` | Every 5 minutes | Mark TOC OCR jobs stuck in QUEUED/PROCESSING > 5 min as `TIMED_OUT` (safety net for in-process thread death) |
+| `class-teacher-attendance-reminder-11am` | Daily, 11:00 | Nudge class teachers who haven't marked attendance (skips off-days and teachers who are themselves absent) |
+| `nightly-sibling-detection` | Daily, 02:30 | Scan students and surface potential sibling links for finance discount workflows |
+
+`send_fee_reminders` and `send_fee_overdue_alerts` exist in `notifications/tasks.py` but are intentionally **not** in `CELERY_BEAT_SCHEDULE` — fee pending fans out via the in-app tasks above instead.
 
 ## Django Settings Summary
 

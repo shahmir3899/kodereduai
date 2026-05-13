@@ -412,8 +412,6 @@ class BroadcastNotificationView(ModuleAccessMixin, APIView):
         for user in recipients:
             if data['channel'] == 'IN_APP':
                 identifier = str(user.id)
-            elif data['channel'] == 'WHATSAPP':
-                identifier = getattr(user, 'phone', None) or str(user.id)
             elif data['channel'] == 'EMAIL':
                 identifier = user.email or str(user.id)
             else:

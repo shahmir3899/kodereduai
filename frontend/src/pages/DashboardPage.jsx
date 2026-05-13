@@ -134,13 +134,8 @@ export default function DashboardPage({ variant }) {
     enabled: !!activeSchool?.id && isModuleEnabled('attendance'),
   })
 
-  const { data: pendingReviews } = useQuery({
-    queryKey: ['pendingReviews', activeAcademicYear?.id],
-    queryFn: () => attendanceApi.getPendingReviews({
-      ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
-    }),
-    enabled: isModuleEnabled('attendance'),
-  })
+  // Pending OCR reviews query removed 2026-05-13 — OCR feature discontinued
+  // const { data: pendingReviews } = useQuery({ ... })
 
   // Finance
   const { data: financeSummary, isLoading: loadingFinance } = useQuery({
@@ -217,7 +212,7 @@ export default function DashboardPage({ variant }) {
   const report = dailyReport?.data
   const fin = financeSummary?.data
   const hr = hrStats?.data
-  const pendingCount = pendingReviews?.data?.length || 0
+  const pendingCount = 0 // OCR pending reviews removed 2026-05-13
   const admissionsCount = admissionsData?.data?.count || 0
   const examsCount = examsData?.data?.count || 0
   const attendanceIsOffDay = !!report?.is_off_day
@@ -240,7 +235,7 @@ export default function DashboardPage({ variant }) {
     if (isModuleEnabled('examinations')) quickActions.push({ label: 'Examinations', href: '/academics/exams', icon: icons.exams })
     quickActions.push({ label: 'Classes', href: '/classes', icon: icons.academics })
   } else {
-    if (isModuleEnabled('attendance')) quickActions.push({ label: 'Upload Attendance', href: '/attendance', icon: icons.upload, badge: pendingCount })
+    if (isModuleEnabled('attendance')) quickActions.push({ label: 'Mark Attendance', href: '/attendance/manual-entry', icon: icons.upload })
     if (isModuleEnabled('finance')) quickActions.push({ label: 'Record Payment', href: '/finance/fee-payments', icon: icons.payment })
     quickActions.push({ label: 'Add Student', href: '/students', icon: icons.students })
   }
@@ -487,12 +482,7 @@ export default function DashboardPage({ variant }) {
                       <span className="w-2.5 h-2.5 rounded-full bg-gray-400" />
                       Not Marked: {notMarkedCount}
                     </span>
-                    {pendingCount > 0 && (
-                      <Link to="/attendance?tab=review" className="flex items-center gap-1.5 text-amber-600 hover:text-amber-700 font-medium">
-                        <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
-                        {pendingCount} pending review
-                      </Link>
-                    )}
+                    {/* pending OCR review link removed 2026-05-13 */}
                   </div>
                 </>
               ) : (

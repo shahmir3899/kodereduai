@@ -9,142 +9,36 @@ from django.utils import timezone
 logger = logging.getLogger(__name__)
 
 
-@shared_task(bind=True, max_retries=3, default_retry_delay=60)
+@shared_task(bind=True, max_retries=0)
 def process_attendance_upload(self, upload_id: int):
     """
-    Process an attendance upload through the AI pipeline.
+    OCR attendance register pipeline — PARKED (2026-05-13).
 
-    New Pipeline (Image → OCR → Structured Table → LLM Reasoning):
-    1. OCR with Tesseract - extract text with confidence scores
-    2. Table Extraction - build structured table from OCR output
-    3. LLM Reasoning - validate and reason on structured data
-    4. Student Matching - match to enrolled students
-    5. Update upload with results for human review
-
-    Args:
-        upload_id: ID of the AttendanceUpload to process
+    The AI OCR pipeline has been parked. This task stub marks uploads as FAILED
+    so they fall back to manual entry. To re-enable, see:
+    attendance/_deprecated_ocr/README.md
     """
     from .models import AttendanceUpload
-    from .attendance_processor import AttendanceProcessor
 
+    logger.warning(
+        f"process_attendance_upload called for upload {upload_id} but OCR pipeline is parked. "
+        "Marking upload as FAILED. Use manual attendance entry instead."
+    )
     try:
         upload = AttendanceUpload.objects.get(id=upload_id)
+        upload.status = AttendanceUpload.Status.FAILED
+        upload.error_message = (
+            "Register OCR upload is currently paused. "
+            "Please use manual attendance entry."
+        )
+        upload.save(update_fields=['status', 'error_message'])
     except AttendanceUpload.DoesNotExist:
         logger.error(f"AttendanceUpload {upload_id} not found")
-        return {'success': False, 'error': 'Upload not found'}
+    return {'success': False, 'error': 'OCR pipeline is parked'}
 
-    logger.info(f"Processing attendance upload {upload_id} for {upload.class_obj.name}")
-
-    try:
-        processor = AttendanceProcessor(upload)
-        result = processor.process()
-
-        if result.success:
-            # Update upload with results
-            upload.ai_output_json = result.to_ai_output_json()
-            upload.confidence_score = result.confidence
-            upload.status = AttendanceUpload.Status.REVIEW_REQUIRED
-            upload.save()
-
-            logger.info(
-                f"Upload {upload_id} processed successfully. "
-                f"Matched: {result.matched_count}, "
-                f"Unmatched: {result.unmatched_count}, "
-                f"Uncertain: {len(result.uncertain)}"
-            )
-
-            return {
-                'success': True,
-                'upload_id': upload_id,
-                'matched_count': result.matched_count,
-                'unmatched_count': result.unmatched_count,
-                'uncertain_count': len(result.uncertain),
-                'confidence': result.confidence,
-                'pipeline_stages': result.pipeline_stages
-            }
-        else:
-            # Processing failed
-            upload.status = AttendanceUpload.Status.FAILED
-            upload.error_message = f"[{result.error_stage}] {result.error}"
-            upload.save()
-
-            logger.error(f"Upload {upload_id} processing failed: {upload.error_message}")
-
-            return {
-                'success': False,
-                'upload_id': upload_id,
-                'error': upload.error_message,
-                'error_stage': result.error_stage
-            }
-
-    except Exception as e:
-        logger.exception(f"Error processing upload {upload_id}")
-
-        # Update upload status on error
-        try:
-            upload.status = AttendanceUpload.Status.FAILED
-            upload.error_message = str(e)
-            upload.save()
-        except Exception:
-            pass
-
-        # Retry the task
-        raise self.retry(exc=e)
-
-
-@shared_task
-def send_whatsapp_notifications(upload_id: int):
-    """
-    Send WhatsApp notifications to parents of absent students.
-
-    This task runs ONLY after attendance is confirmed.
-
-    Args:
-        upload_id: ID of the confirmed AttendanceUpload
-    """
-    from .models import AttendanceUpload, AttendanceRecord
-    from .services import WhatsAppService
-
-    try:
-        upload = AttendanceUpload.objects.get(
-            id=upload_id,
-            status=AttendanceUpload.Status.CONFIRMED
-        )
-    except AttendanceUpload.DoesNotExist:
-        logger.error(f"Confirmed AttendanceUpload {upload_id} not found")
-        return {'success': False, 'error': 'Upload not found or not confirmed'}
-
-    # Get absent records that haven't been notified yet
-    absent_records = AttendanceRecord.objects.filter(
-        upload=upload,
-        status=AttendanceRecord.AttendanceStatus.ABSENT,
-        notification_sent=False
-    ).select_related('student', 'student__class_obj')
-
-    if not absent_records.exists():
-        logger.info(f"No notifications to send for upload {upload_id}")
-        return {'success': True, 'sent': 0, 'failed': 0}
-
-    # Send notifications
-    whatsapp_service = WhatsAppService(upload.school)
-
-    if not whatsapp_service.is_configured():
-        logger.warning(f"WhatsApp not configured for school {upload.school.name}")
-        return {'success': False, 'error': 'WhatsApp not configured'}
-
-    result = whatsapp_service.send_bulk_notifications(list(absent_records))
-
-    logger.info(
-        f"WhatsApp notifications for upload {upload_id}: "
-        f"Sent: {result['sent']}, Failed: {result['failed']}"
-    )
-
-    return {
-        'success': True,
-        'upload_id': upload_id,
-        'sent': result['sent'],
-        'failed': result['failed']
-    }
+# DEPRECATED (2026-05-13): WhatsApp notifications removed.
+# Moved to: attendance/_deprecated_ocr/ and core/_deprecated_whatsapp/
+# Re-enable instructions in core/_deprecated_whatsapp/README.md
 
 
 @shared_task

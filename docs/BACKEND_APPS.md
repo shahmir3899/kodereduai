@@ -394,6 +394,14 @@ enquiry(FK), note, created_by(FK), created_at
 
 ## notifications — Communication System
 
+### Dispatch architecture
+
+Inline (request-time) sends go through `NotificationEngine.send()` in `notifications/engine.py`: render template → check `SchoolNotificationConfig` + per-user `NotificationPreference` → dispatch to the channel handler (`channels/in_app.py`, `channels/whatsapp.py`, `channels/email.py`, `channels/expo.py`) → write a `NotificationLog` row. Successful `IN_APP` sends fan out to `PUSH` automatically.
+
+Scheduled / batched sends are Celery Beat tasks defined in `CELERY_BEAT_SCHEDULE` (see `config/settings.py`). They iterate active schools and call into the same trigger functions, so all per-school config toggles and recipient resolvers apply uniformly. **Production needs `ENABLE_CELERY=true` and `ENABLE_CELERY_BEAT=true` in `render.yaml`** — otherwise none of the scheduled tasks below fire and the `/notifications?tab=Settings` toggles do nothing automated.
+
+Admin/principal recipient resolution (`notifications/recipients.py::get_admin_users`) spans the **entire Organization**: branch-scoped notifications still reach org-level admins whose `UserSchoolMembership` row sits on a sibling school. Per-student parent resolution goes through `ParentChild` links; per-student user resolution goes through `StudentProfile.user_profile`.
+
 ### NotificationTemplate
 school(FK), name, event_type (FEE_DUE/ABSENCE/EXAM/GENERAL), channel (IN_APP/EMAIL/WHATSAPP/PUSH), subject_template, body_template (supports `{{amount}}`, `{{month}}`), is_active
 
@@ -429,7 +437,7 @@ school(OneToOne), whatsapp_enabled, in_app_enabled, email_enabled, push_enabled(
 
 | Trigger function | Recipients | Who receives (selection rule) | Event type | When fired | Config flag |
 |---|---|---|---|---|---|
-| `trigger_absence_notification` | SCHOOL_ADMIN, PRINCIPAL (up to 5) | Active school memberships with role in SCHOOL_ADMIN/PRINCIPAL, limited to first 5 users | `ABSENCE` | Whenever attendance record is saved as ABSENT (upload, manual bulk entry, face attendance); per absent student | `absence_notification_enabled` |
+| `trigger_absence_notification` | SCHOOL_ADMIN, PRINCIPAL (org-wide) | All active SCHOOL_ADMIN/PRINCIPAL memberships across sibling schools in the same Organization (deduped by user) | `ABSENCE` | Whenever attendance record is saved as ABSENT (upload confirm, manual bulk entry, face attendance). The per-student fan-out is suppressed at request time when smart scheduling is enabled — the `scheduled-absence-in-app-digest` Beat task consolidates them at 08:00/09:00/10:00. | `absence_notification_enabled` |
 | `trigger_class_teacher_fee_pending` | Class teacher (one per class) | Active `ClassTeacherAssignment` users for that school/class; one notification per assignment with pending fees | `FEE_DUE` | Celery beat: 10th & 15th of month at 09:00 | `class_teacher_fee_reminder_enabled` |
 | `trigger_class_teacher_attendance_pending` | Class teacher (one per class) | Active `ClassTeacherAssignment` users where teacher has staff status PRESENT and class attendance is still unmarked by 11:00 on non-OFF day | `GENERAL` | Celery beat: daily at 11:00 | — |
 | `trigger_lesson_plan_published` | All students in the class (with user accounts) | Active students in lesson plan class where linked user account exists | `GENERAL` | LessonPlan publish action (`POST /api/lms/lesson-plans/{id}/publish/`) | `lesson_plan_notification_enabled` |

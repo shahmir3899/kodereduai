@@ -341,7 +341,7 @@ CELERY_BEAT_SCHEDULE = {
     },
     'scheduled-absence-in-app-digest': {
         'task': 'notifications.tasks.run_scheduled_absence_in_app_digest',
-        'schedule': crontab(hour=[8, 9, 10], minute=0),
+        'schedule': crontab(hour='8,9,10', minute='0'),
     },
     'process-notification-queue': {
         'task': 'notifications.tasks.process_notification_queue',
@@ -454,8 +454,14 @@ logging.getLogger(__name__).info("REDIS_URL=%r", REDIS_URL)
 GROQ_API_KEY = os.getenv('GROQ_API_KEY', '')
 GROQ_MODEL = os.getenv('GROQ_MODEL', 'llama-3.3-70b-versatile')
 
+# Attendance Register OCR — PARKED (2026-05-13)
+# Set OCR_ENABLED=true only to re-activate the AI register scan feature.
+# See: backend/attendance/_deprecated_ocr/README.md
+OCR_ENABLED = os.getenv('OCR_ENABLED', 'False').lower() in ('true', '1', 'yes')
+
 # Vision Pipeline: Use vision AI instead of OCR for handwritten registers
 # Set to False to use legacy Tesseract OCR pipeline
+# NOTE: Unused while OCR_ENABLED=False. Kept for future re-activation.
 USE_VISION_PIPELINE = os.getenv('USE_VISION_PIPELINE', 'True').lower() in ('true', '1', 'yes')
 
 # Vision provider: 'google' (recommended), 'groq'
@@ -482,14 +488,14 @@ SUPABASE_KEY = os.getenv('SUPABASE_KEY', '').strip()
 SUPABASE_BUCKET = os.getenv('SUPABASE_BUCKET', 'atten-reg').strip()
 
 # =============================================================================
-# WhatsApp Configuration
+# WhatsApp Configuration — DEPRECATED (2026-05-13)
+# WhatsApp integration removed. In-app notifications and future push notifications
+# are now the primary alert channels. See: backend/core/_deprecated_whatsapp/README.md
+# Uncomment and configure ONLY if re-enabling the integration.
 # =============================================================================
-# Provider: "http" = POST to WHATSAPP_API_URL (legacy JSON + Bearer).
-#           "waha" = POST to {WHATSAPP_API_URL}/api/sendText + X-Api-Key;
-#           School.whatsapp_sender_id = WAHA session name (e.g. default).
-WHATSAPP_PROVIDER = os.getenv('WHATSAPP_PROVIDER', 'http').strip().lower()
-WHATSAPP_API_URL = os.getenv('WHATSAPP_API_URL', '')
-WHATSAPP_API_KEY = os.getenv('WHATSAPP_API_KEY', '')
+# WHATSAPP_PROVIDER = os.getenv('WHATSAPP_PROVIDER', 'http').strip().lower()
+# WHATSAPP_API_URL = os.getenv('WHATSAPP_API_URL', '')
+# WHATSAPP_API_KEY = os.getenv('WHATSAPP_API_KEY', '')
 
 # =============================================================================
 # Email / SMTP Configuration

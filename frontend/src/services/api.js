@@ -211,8 +211,9 @@ export const schoolsApi = {
 
   // Module management
   getModuleRegistry: () => api.get('/api/admin/modules/'),
-  getBundles: () => api.get('/api/admin/schools/bundles/'),
-  applyBundle: (schoolId, bundle) => api.post(`/api/admin/schools/${schoolId}/apply_bundle/`, { bundle }),
+  // DEPRECATED 2026-05-13: Bundle presets removed (flat pricing model)
+  // getBundles: () => api.get('/api/admin/schools/bundles/'),
+  // applyBundle: (schoolId, bundle) => api.post(`/api/admin/schools/${schoolId}/apply_bundle/`, { bundle }),
 
   // Regular endpoints
   getMySchool: () => api.get('/api/schools/current/'),
@@ -779,7 +780,8 @@ export const parentsApi = {
   getChildOverview: (studentId) => api.get(`/api/parents/children/${studentId}/overview/`),
   getChildAttendance: (studentId, params) => api.get(`/api/parents/children/${studentId}/attendance/`, { params }),
   getChildFees: (studentId, params) => api.get(`/api/parents/children/${studentId}/fees/`, { params }),
-  getPaymentGateways: (studentId) => api.get(`/api/parents/children/${studentId}/pay-fee/`),
+  // DEPRECATED 2026-05-13: Payment gateway removed
+  // getPaymentGateways: (studentId) => api.get(`/api/parents/children/${studentId}/pay-fee/`),
   initiatePayment: (studentId, data) => api.post(`/api/parents/children/${studentId}/pay-fee/`, data),
   getChildTimetable: (studentId) => api.get(`/api/parents/children/${studentId}/timetable/`),
   getChildExamResults: (studentId, params) => api.get(`/api/parents/children/${studentId}/exam-results/`, { params }),
@@ -878,26 +880,11 @@ export const discountApi = {
   getSiblings: (studentId) => api.get(`/api/finance/siblings/${studentId}/`),
 }
 
-// Payment Gateway API (extends financeApi)
-export const paymentApi = {
-  getGatewayConfigs: (params) => api.get('/api/finance/gateway-config/', { params }),
-  createGatewayConfig: (data) => api.post('/api/finance/gateway-config/', data),
-  updateGatewayConfig: (id, data) => api.patch(`/api/finance/gateway-config/${id}/`, data),
-  deleteGatewayConfig: (id) => api.delete(`/api/finance/gateway-config/${id}/`),
-
-  getOnlinePayments: (params) => api.get('/api/finance/online-payments/', { params }),
-  initiatePayment: (data) => api.post('/api/finance/online-payments/initiate/', data),
-  verifyPayment: (data) => api.post('/api/finance/online-payments/verify/', data),
-  getReconciliation: (params) => api.get('/api/finance/online-payments/reconcile/', { params }),
-
-  // Phase 6: test connection, toggle, set default
-  testConnection: (id) => api.post(`/api/finance/gateway-config/${id}/test-connection/`),
-  toggleGatewayStatus: (id) => api.post(`/api/finance/gateway-config/${id}/toggle-status/`),
-  setDefaultGateway: (id) => api.post(`/api/finance/gateway-config/${id}/set-default/`),
-
-  // Payment status
-  getPaymentStatus: (orderId) => api.get(`/api/finance/payment-status/${orderId}/`),
-}
+// DEPRECATED 2026-05-13: Payment Gateway API removed.
+// School-level payment gateway integration has been discontinued.
+// See: backend/finance/_deprecated_payment_gateway/README.md
+// export const paymentApi = { ... }
+export const paymentApi = {}
 
 // Transport API
 export const transportApi = {

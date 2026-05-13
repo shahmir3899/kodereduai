@@ -10,6 +10,7 @@ from rest_framework.test import APIClient
 
 from academic_sessions.models import AcademicYear, SessionClass, StudentEnrollment
 from finance.models import (
+    Account,
     AnnualFeeCategory,
     FeePayment,
     FeeStructure,
@@ -70,8 +71,15 @@ class TestSingleFeeGenerationEndpoint(TestCase):
             is_active=True,
         )
 
+        cls.account = Account.objects.create(
+            school=cls.school,
+            name='Cash Box',
+            account_type=Account.AccountType.CASH,
+        )
+
         cls.user = get_user_model().objects.create_superuser(
             username='single_fee_admin',
+            email='single_fee_admin@test.com',
             password='test12345',
         )
 
@@ -92,6 +100,8 @@ class TestSingleFeeGenerationEndpoint(TestCase):
             amount_paid=Decimal('300'),
             previous_balance=Decimal('0'),
             base_monthly_fee=Decimal('500'),
+            payment_date=date(2026, 3, 10),
+            account=self.account,
         )
 
         response = self.client.post(

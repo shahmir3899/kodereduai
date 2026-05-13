@@ -185,14 +185,13 @@ class TestNotificationCorrectnessTriggers:
         first = trigger_daily_school_report(school, target_date)
         second = trigger_daily_school_report(school, target_date)
 
-        expected_admins = UserSchoolMembership.objects.filter(
-            school=school,
-            is_active=True,
-            role__in=[
-                UserSchoolMembership.Role.SCHOOL_ADMIN,
-                UserSchoolMembership.Role.PRINCIPAL,
-            ],
-        ).count()
+        # Expected recipients mirror notifications.recipients.get_admin_users(school):
+        # SCHOOL_ADMIN / PRINCIPAL memberships across ANY active sibling school in the
+        # same Organization, deduplicated by user id. The recipient resolver also folds
+        # in legacy users where User.school_id is in that org set and User.role is admin.
+        from notifications.recipients import get_admin_users
+
+        expected_recipient_count = len(get_admin_users(school))
 
         title = f"Daily Report — {target_date.strftime('%d %B %Y')}"
         logs = NotificationLog.objects.filter(
@@ -202,6 +201,6 @@ class TestNotificationCorrectnessTriggers:
             title=title,
         )
 
-        assert first == expected_admins
+        assert first == expected_recipient_count
         assert second == 0
-        assert logs.count() == expected_admins
+        assert logs.count() == expected_recipient_count

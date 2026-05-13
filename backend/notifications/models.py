@@ -25,7 +25,7 @@ class NotificationTemplate(models.Model):
     ]
 
     CHANNEL_CHOICES = [
-        ('WHATSAPP', 'WhatsApp'),
+        # ('WHATSAPP', 'WhatsApp'),  # DEPRECATED 2026-05-13 — see core/_deprecated_whatsapp/
         ('IN_APP', 'In-App'),
         ('EMAIL', 'Email'),
         ('PUSH', 'Push Notification'),

@@ -21,7 +21,7 @@ export default function NotificationBell() {
   const { data: notifData } = useQuery({
     queryKey: ['myNotifications', 'all'],
     queryFn: () => notificationsApi.getMyNotifications({
-      limit: 8,
+      page_size: 8,
     }),
     enabled: open,
   })

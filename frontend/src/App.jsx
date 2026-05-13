@@ -17,7 +17,7 @@ import ResetPasswordPage from './pages/ResetPasswordPage'
 
 // Lazy-loaded pages
 const DashboardRouter = lazy(() => import('./pages/DashboardRouter'))
-const CaptureReviewPage = lazy(() => import('./pages/CaptureReviewPage'))
+// CaptureReviewPage removed 2026-05-13 — Register OCR attendance feature discontinued
 const AttendanceRecordsPage = lazy(() => import('./pages/AttendanceRecordsPage'))
 const ManualEntryPage = lazy(() => import('./pages/ManualEntryPage'))
 const AnomaliesPage = lazy(() => import('./pages/attendance/AnomaliesPage'))
@@ -88,7 +88,7 @@ const EnquiryForm = lazy(() => import('./pages/admissions/EnquiryForm'))
 
 // Finance additions
 const DiscountsPage = lazy(() => import('./pages/finance/DiscountsPage'))
-const PaymentGatewayPage = lazy(() => import('./pages/finance/PaymentGatewayPage'))
+// const PaymentGatewayPage = lazy(() => import('./pages/finance/PaymentGatewayPage'))  // DEPRECATED 2026-05-13
 
 // LMS pages
 const CurriculumPage = lazy(() => import('./pages/lms/CurriculumPage'))
@@ -137,7 +137,7 @@ const MessagesPage = lazy(() => import('./pages/messaging/MessagesPage'))
 // User Guide
 const UserGuidePage = lazy(() => import('./pages/UserGuidePage'))
 
-// Face Attendance pages
+// Face Attendance pages (camera-based — enrollment + live recognition)
 const FaceAttendancePage = lazy(() => import('./pages/face-attendance/FaceAttendancePage'))
 const FaceReviewPage = lazy(() => import('./pages/face-attendance/FaceReviewPage'))
 const FaceEnrollmentPage = lazy(() => import('./pages/face-attendance/FaceEnrollmentPage'))
@@ -244,19 +244,9 @@ function ModuleRoute({ module, children }) {
   return children
 }
 
-// Guard: block access to premium capabilities not included in the school's bundle
+// CapabilityRoute: entitlements system removed (2026-05-13, flat pricing model).
+// Now just renders children directly. Kept as pass-through to avoid touching every usage site.
 function CapabilityRoute({ module, capability, children }) {
-  const { isCapabilityEnabled, isSuperAdmin } = useAuth()
-  if (isSuperAdmin) return children
-  if (!isCapabilityEnabled(module, capability)) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20 text-center">
-        <div className="text-5xl mb-4">⭐</div>
-        <h2 className="text-xl font-semibold text-gray-900 mb-2">Premium Feature</h2>
-        <p className="text-gray-500 max-w-md">This feature is not included in your current plan. Contact your administrator to upgrade your bundle.</p>
-      </div>
-    )
-  }
   return children
 }
 
@@ -381,9 +371,10 @@ function App() {
             <Route path="profile" element={<ProfilePage />} />
             <Route path="dashboard" element={<SchoolRoute><DashboardRouter /></SchoolRoute>} />
 
-            {/* Attendance — consolidated into 2 pages */}
-            <Route path="attendance" element={<SchoolRoute><ModuleRoute module="attendance"><CaptureReviewPage /></ModuleRoute></SchoolRoute>} />
-            <Route path="attendance/review/:id" element={<SchoolRoute><ModuleRoute module="attendance"><CaptureReviewPage /></ModuleRoute></SchoolRoute>} />
+            {/* Attendance */}
+            {/* CaptureReviewPage (OCR register) removed 2026-05-13 — /attendance now redirects to manual-entry */}
+            <Route path="attendance" element={<Navigate to="/attendance/manual-entry" replace />} />
+            <Route path="attendance/review/:id" element={<Navigate to="/attendance/manual-entry" replace />} />
             <Route path="attendance/register" element={<SchoolRoute><ModuleRoute module="attendance"><AttendanceRecordsPage /></ModuleRoute></SchoolRoute>} />
             <Route path="attendance/manual-entry" element={<SchoolRoute><ModuleRoute module="attendance"><ManualEntryPage /></ModuleRoute></SchoolRoute>} />
             <Route path="attendance/anomalies" element={<SchoolRoute><ModuleRoute module="attendance"><AnomaliesPage /></ModuleRoute></SchoolRoute>} />
@@ -394,8 +385,8 @@ function App() {
             <Route path="face-attendance/enrollment" element={<SchoolRoute><CapabilityRoute module="attendance" capability="face_recognition"><FaceEnrollmentPage /></CapabilityRoute></SchoolRoute>} />
 
             {/* Redirects from old routes */}
-            <Route path="attendance/upload" element={<Navigate to="/attendance" replace />} />
-            <Route path="attendance/review" element={<Navigate to="/attendance?tab=review" replace />} />
+            <Route path="attendance/upload" element={<Navigate to="/attendance/manual-entry" replace />} />
+            <Route path="attendance/review" element={<Navigate to="/attendance/manual-entry" replace />} />
             <Route path="attendance/records" element={<Navigate to="/attendance/register" replace />} />
             <Route path="settings" element={<SchoolRoute><SettingsPage /></SchoolRoute>} />
             <Route path="school-setup" element={<SchoolRoute><SchoolSetupPage /></SchoolRoute>} />
@@ -458,7 +449,7 @@ function App() {
             <Route path="finance/expenses" element={<SchoolRoute><ModuleRoute module="finance"><FinanceRoute><ExpensesPage /></FinanceRoute></ModuleRoute></SchoolRoute>} />
             <Route path="finance/reports" element={<Navigate to="/finance" replace />} />
             <Route path="finance/discounts" element={<SchoolRoute><ModuleRoute module="finance"><FinanceRoute><DiscountsPage /></FinanceRoute></ModuleRoute></SchoolRoute>} />
-            <Route path="finance/payment-gateways" element={<SchoolRoute><ModuleRoute module="finance"><FinanceRoute><PaymentGatewayPage /></FinanceRoute></ModuleRoute></SchoolRoute>} />
+            {/* PaymentGatewayPage route removed 2026-05-13 — payment gateway integration discontinued */}
 
             {/* Parent Portal routes */}
             <Route path="parent/dashboard" element={<ParentRoute><ParentDashboard /></ParentRoute>} />

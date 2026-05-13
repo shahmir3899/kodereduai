@@ -137,7 +137,7 @@ export default function AttendanceRiskWidget() {
       {result.at_risk_count > 5 && (
         <div className="mt-3 pt-3 border-t border-gray-100">
           <Link
-            to="/attendance"
+            to="/attendance/register"
             className="text-sm text-primary-600 hover:text-primary-700 font-medium inline-flex items-center"
           >
             View all {result.at_risk_count} at-risk students

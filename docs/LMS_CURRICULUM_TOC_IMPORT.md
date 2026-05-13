@@ -280,11 +280,21 @@ APPLY
 ```
 POST /api/lms/books/{id}/ocr_toc/
 ├─ Input: FormData { image }
-├─ If `?async=1`: queues TOCImportJob and returns 202 + job_id
-├─ Background worker runs Google Vision OCR
-├─ extract_toc_payload() → {text, lines}
+├─ If `?async=1`: creates TOCImportJob (status=QUEUED), spawns an in-process
+│   daemon thread (lms.views._process_toc_job_in_background) inside the
+│   gunicorn worker, returns 202 + { job_id, poll_url }.
+│   NOTE: independent of ENABLE_CELERY — TOC OCR never goes to the Celery
+│   queue, so notification beat tasks and OCR cannot block each other.
+├─ Daemon thread calls extract_toc_payload() → {text, lines} via Google Vision
 ├─ Poll: GET /api/lms/toc-jobs/{job_id}/
 └─ Final response: {result: {text, lines, language}, status: SUCCEEDED}
+
+Safety net: the Celery Beat task `mark-stale-toc-jobs-timed-out` (every 5 min)
+marks any job stuck in QUEUED/PROCESSING > 5 min as TIMED_OUT, so a worker
+restart mid-OCR surfaces as a clean failure rather than a perpetual spinner.
+
+Escape hatch: LMS_TOC_OCR_FORCE_SYNC=true bypasses async entirely and runs
+OCR inline in the request (returns 200 with text/lines). Debug only.
 
 POST /api/lms/books/{id}/suggest_toc/
 ├─ Input: {raw_text}

@@ -1,6 +1,6 @@
 from django.db import models
 
-from core.module_registry import get_default_modules, get_default_entitlements, ALL_MODULE_KEYS
+from core.module_registry import get_default_modules, ALL_MODULE_KEYS
 
 
 class Organization(models.Model):
@@ -201,11 +201,13 @@ class School(models.Model):
         help_text="Per-school module toggles: {'attendance': true, 'finance': true, ...}"
     )
 
-    # Fine-grained capability entitlements per module
+    # Fine-grained capability entitlements per module — DEPRECATED (2026-05-13)
+    # Field kept in DB to avoid migration; no longer used as a commercial gate.
+    # All capabilities are now available to all schools on the flat plan.
     module_entitlements = models.JSONField(
-        default=get_default_entitlements,
+        default=dict,
         blank=True,
-        help_text="Per-school capability lists: {'attendance': ['manual_entry', 'ocr_review'], ...}"
+        help_text="DEPRECATED: Per-school capability lists. No longer used as a commercial gate."
     )
 
     # AI pipeline configuration (per-school thresholds, pipeline settings, auto-tuning)

@@ -82,10 +82,8 @@ export default function SuperAdminDashboard() {
     queryFn: () => schoolsApi.getModuleRegistry(),
   })
 
-  const { data: bundlesData } = useQuery({
-    queryKey: ['bundlePresets'],
-    queryFn: () => schoolsApi.getBundles(),
-  })
+  // DEPRECATED 2026-05-13: Bundle presets removed (flat pricing). Query removed.
+  // const { data: bundlesData } = useQuery({ queryKey: ['bundlePresets'], queryFn: () => schoolsApi.getBundles() })
 
   // ── Mutations ─────────────────────────────────────────────────────────────
 
@@ -270,18 +268,7 @@ export default function SuperAdminDashboard() {
     },
   })
 
-  const applyBundleMutation = useMutation({
-    mutationFn: ({ id, bundle }) => schoolsApi.applyBundle(id, bundle),
-    onSuccess: (res) => {
-      queryClient.invalidateQueries({ queryKey: ['adminSchools'] })
-      const label = res.data?.message || 'Bundle applied'
-      setModuleMsg({ type: 'success', text: label })
-    },
-    onError: (err) => {
-      const detail = err.response?.data?.error || err.response?.data?.detail || err.message
-      setModuleMsg({ type: 'error', text: `Failed: ${detail}` })
-    },
-  })
+  // DEPRECATED 2026-05-13: applyBundleMutation removed with bundle presets.
 
   // ── Handlers ──────────────────────────────────────────────────────────────
   const handleSaveSchool = () => {
@@ -395,7 +382,7 @@ export default function SuperAdminDashboard() {
   const orgs = orgsData?.data?.results || orgsData?.data || []
   const memberships = membershipsData?.data?.results || membershipsData?.data || []
   const moduleRegistry = moduleRegistryData?.data || []
-  const bundlePresets = bundlesData?.data || []
+  // const bundlePresets = bundlesData?.data || []  // DEPRECATED 2026-05-13
 
   // ── Module toggle handlers ──────────────────────────────────────────────
   const handleOrgModuleToggle = (org, moduleKey) => {
@@ -983,59 +970,7 @@ export default function SuperAdminDashboard() {
             </div>
           )}
 
-          {/* Bundle Presets — Apply commercial plan to a school */}
-          {bundlePresets.length > 0 && (
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <div className="px-5 py-4 border-b border-gray-100 bg-indigo-50/50">
-                <div className="flex items-center gap-2">
-                  <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10" />
-                  </svg>
-                  <div>
-                    <h2 className="text-base font-semibold text-gray-900">Apply Bundle Preset</h2>
-                    <p className="text-xs text-gray-500">Instantly configure a school's modules and capabilities for a commercial plan</p>
-                  </div>
-                </div>
-              </div>
-              <div className="p-5">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {bundlePresets.map((bundle) => {
-                    const colorMap = { STARTER: 'sky', GROWTH: 'violet', ENTERPRISE: 'amber' }
-                    const color = colorMap[bundle.key] || 'gray'
-                    return (
-                      <div key={bundle.key} className={`border-2 rounded-xl p-4 flex flex-col gap-3 border-${color}-200 bg-${color}-50/30`}>
-                        <div>
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className={`text-sm font-bold text-${color}-700`}>{bundle.label}</span>
-                            <span className={`text-xs px-1.5 py-0.5 rounded bg-${color}-100 text-${color}-600`}>{bundle.modules.length} modules</span>
-                          </div>
-                          <p className="text-xs text-gray-500">{bundle.description}</p>
-                        </div>
-                        <div className="mt-auto">
-                          <label className="text-xs font-medium text-gray-600 block mb-1">Apply to school:</label>
-                          <select
-                            className="input text-sm w-full"
-                            defaultValue=""
-                            onChange={(e) => {
-                              const schoolId = e.target.value
-                              if (!schoolId) return
-                              applyBundleMutation.mutate({ id: Number(schoolId), bundle: bundle.key })
-                              e.target.value = ''
-                            }}
-                          >
-                            <option value="">— select school —</option>
-                            {schools.map((s) => (
-                              <option key={s.id} value={s.id}>{s.name}</option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            </div>
-          )}
+          {/* Bundle Presets section removed 2026-05-13 — flat pricing model, no more bundle presets */}
 
           {/* Module Matrix — Org Ceiling */}
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">

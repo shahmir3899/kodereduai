@@ -89,6 +89,12 @@ const mutation = useMutation({ mutationFn: (d) => api.post(d), onSuccess: () => 
 
 **Module gating:** Schools have `enabled_modules` object. Frontend checks `isModuleEnabled('finance')` before rendering routes. Backend uses `ModuleAccessMixin`.
 
+**Background work — Celery vs threads (important):**
+
+- **Notification scheduling** (`daily-absence-summary`, `scheduled-absence-in-app-digest`, `fee-pending-in-app-5th/8th`, `class-teacher-attendance-reminder-11am`, `process-notification-queue`, `dispatch-scheduled-notifications`, `mark-stale-toc-jobs-timed-out`, `nightly-sibling-detection`, etc.) lives entirely on **Celery Beat**. Production needs `ENABLE_CELERY=true` and `ENABLE_CELERY_BEAT=true` in `render.yaml` so `start.sh` actually launches the worker + scheduler (both with auto-restart loops). Local dev uses `CELERY_TASK_ALWAYS_EAGER` so tasks run inline.
+- **Curriculum TOC OCR** does NOT use Celery. `POST /api/lms/books/{id}/ocr_toc/?async=1` returns 202 + `poll_url` after spawning an in-process daemon thread (`lms.views._process_toc_job_in_background`) inside the gunicorn worker. This is intentional — it keeps OCR working regardless of Celery worker health on the Starter plan, and prevents OCR from competing with notification scheduling for the single Celery worker slot. Do **not** re-couple OCR to `ENABLE_CELERY`. Set `LMS_TOC_OCR_FORCE_SYNC=true` only for debugging.
+- **Smart sync/async heavy tasks** (payslip generation, timetable generation, bulk promotion, monthly fee generation, PDF report rendering) go through `core/task_utils.py::dispatch_background_task`, which pings Celery and falls back to sync execution if no worker responds.
+
 ### Attendance AI Pipeline (Core Feature)
 1. Upload image → Supabase storage
 2. Google Vision OCR → raw text + bounding boxes

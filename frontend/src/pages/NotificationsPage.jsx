@@ -28,7 +28,7 @@ const EVENT_TYPE_LABEL = Object.fromEntries(
 
 const CHANNELS = [
   { value: 'IN_APP', label: 'In-App' },
-  { value: 'WHATSAPP', label: 'WhatsApp' },
+  // { value: 'WHATSAPP', label: 'WhatsApp' },  // DEPRECATED 2026-05-13
   { value: 'EMAIL', label: 'Email' },
   { value: 'PUSH', label: 'Push Notification' },
 ]
@@ -49,7 +49,7 @@ const RECIPIENT_TYPES = [
   { value: 'STUDENT', label: 'All Students' },
 ]
 
-const WHATSAPP_CHAR_LIMIT = 4096
+// const WHATSAPP_CHAR_LIMIT = 4096  // DEPRECATED 2026-05-13
 const TEMPLATE_PREVIEW_CONTEXT = {
   student_name: 'Ayaan Khan',
   class_name: 'Class 5A',
@@ -736,7 +736,7 @@ function SendTab() {
   const isPending = broadcastMutation.isPending || sendMutation.isPending || previewMutation.isPending
   const canSend = form.title && form.body && (mode === 'broadcast' || form.recipient_identifier)
 
-  const charLimit = form.channel === 'WHATSAPP' ? WHATSAPP_CHAR_LIMIT : null
+  const charLimit = null  // WhatsApp removed 2026-05-13
 
   return (
     <div className="max-w-xl space-y-4">
@@ -1166,10 +1166,7 @@ function SettingsTab() {
       <div className="bg-white rounded-xl border border-gray-200 p-5">
         <h3 className="text-sm font-semibold text-gray-900 mb-4">Notification Channels</h3>
         <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-700">WhatsApp Notifications</span>
-            <ToggleSwitch checked={config.whatsapp_enabled || false} onChange={(v) => updateConfig({ whatsapp_enabled: v })} />
-          </div>
+          {/* WhatsApp Notifications toggle removed 2026-05-13 — see core/_deprecated_whatsapp/ */}
           <div className="flex items-center justify-between">
             <span className="text-sm text-gray-700">Email Notifications</span>
             <ToggleSwitch checked={config.email_enabled || false} onChange={(v) => updateConfig({ email_enabled: v })} />

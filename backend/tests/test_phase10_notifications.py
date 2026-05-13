@@ -91,7 +91,8 @@ class TestNotificationTemplates:
         resp = api.get('/api/notifications/templates/', seed_data['tokens']['admin'], seed_data['SID_A'])
         assert resp.status_code == 200, f"A5 List templates: status={resp.status_code}"
         data = resp.json()
-        p10_templates = [t for t in data if t.get('name', '').startswith(prefix)]
+        results = data.get('results', data) if isinstance(data, dict) else data
+        p10_templates = [t for t in results if t.get('name', '').startswith(prefix)]
         assert len(p10_templates) >= 3, f"A5 List templates: expected >= 3, got {len(p10_templates)}"
 
     def test_a6_retrieve_template(self, seed_data, api):
@@ -160,7 +161,8 @@ class TestNotificationTemplates:
         resp = api.get('/api/notifications/templates/', seed_data['tokens']['admin_b'], seed_data['SID_B'])
         assert resp.status_code == 200, f"A10 School B isolation: status={resp.status_code}"
         data = resp.json()
-        p10_in_b = [t for t in data if t.get('name', '').startswith(prefix)]
+        results = data.get('results', data) if isinstance(data, dict) else data
+        p10_in_b = [t for t in results if t.get('name', '').startswith(prefix)]
         assert len(p10_in_b) == 0, f"A10 School B isolation (templates): found {len(p10_in_b)} in school B"
 
 
@@ -196,7 +198,6 @@ class TestSchoolNotificationConfig:
             data=json.dumps({
                 'in_app_enabled': True,
                 'whatsapp_enabled': True,
-                'sms_enabled': False,
                 'email_enabled': False,
                 'fee_reminder_day': 10,
             }),
@@ -544,7 +545,8 @@ class TestMyNotificationsAndReadStatus:
         resp = api.get('/api/notifications/my/', seed_data['tokens']['admin'], seed_data['SID_A'])
         assert resp.status_code == 200, f"E1 My notifications: status={resp.status_code}"
         data = resp.json()
-        p10_my = [n for n in data if n.get('title', '').startswith(prefix)]
+        results = data.get('results', data) if isinstance(data, dict) else data
+        p10_my = [n for n in results if n.get('title', '').startswith(prefix)]
         assert len(p10_my) >= 3, f"E1 My notifications: expected >= 3, got {len(p10_my)}"
 
     def test_e2_unread_count(self, seed_data, api):
@@ -628,7 +630,8 @@ class TestMyNotificationsAndReadStatus:
         resp = api.get('/api/notifications/my/', seed_data['tokens']['teacher'], seed_data['SID_A'])
         assert resp.status_code == 200, f"E7 Teacher sees own: status={resp.status_code}"
         data = resp.json()
-        teacher_p10 = [n for n in data if n.get('title', '').startswith(prefix)]
+        results = data.get('results', data) if isinstance(data, dict) else data
+        teacher_p10 = [n for n in results if n.get('title', '').startswith(prefix)]
         assert len(teacher_p10) == 1, f"E7 Teacher sees own notifications: count={len(teacher_p10)}"
 
 
@@ -736,7 +739,6 @@ class TestCrossCuttingAndSecurity:
             data=json.dumps({
                 'in_app_enabled': True,
                 'whatsapp_enabled': True,
-                'sms_enabled': False,
                 'email_enabled': False,
                 'fee_reminder_day': 10,
             }),
@@ -767,7 +769,8 @@ class TestCrossCuttingAndSecurity:
         resp = api.get('/api/notifications/my/', seed_data['tokens']['teacher'], seed_data['SID_A'])
         assert resp.status_code == 200
         data = resp.json()
-        admin_notifs = [n for n in data if n.get('recipient_user') == admin_user.id]
+        results = data.get('results', data) if isinstance(data, dict) else data
+        admin_notifs = [n for n in results if n.get('recipient_user') == admin_user.id]
         assert len(admin_notifs) == 0, f"G5 My notifications only current user's: admin_notif_count={len(admin_notifs)}"
 
     def test_g6_mark_read_only_works_for_recipient(self, seed_data, api):

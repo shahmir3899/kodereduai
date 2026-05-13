@@ -392,7 +392,7 @@ class TestSchoolNotificationConfig:
             school=school,
             defaults={
                 'whatsapp_enabled': True,
-                'sms_enabled': False,
+                'email_enabled': False,
                 'in_app_enabled': True,
                 'fee_reminder_day': 5,
             },
@@ -408,7 +408,7 @@ class TestSchoolNotificationConfig:
             school=school,
             defaults={
                 'whatsapp_enabled': True,
-                'sms_enabled': False,
+                'email_enabled': False,
                 'in_app_enabled': True,
                 'fee_reminder_day': 5,
             },

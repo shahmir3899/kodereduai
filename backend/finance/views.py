@@ -3668,72 +3668,50 @@ class StudentDiscountViewSet(ModuleAccessMixin, viewsets.ModelViewSet):
 # =============================================================================
 
 class PaymentGatewayConfigViewSet(ModuleAccessMixin, viewsets.ModelViewSet):
-    """CRUD for payment gateway configurations (admin only)."""
+    """Payment gateway configuration — DEPRECATED (2026-05-13).
+    School-level gateway configuration is no longer supported.
+    See: backend/finance/_deprecated_payment_gateway/README.md
+    """
     required_module = 'finance'
-    queryset = PaymentGatewayConfig.objects.all()
+    queryset = PaymentGatewayConfig.objects.none()
     serializer_class = PaymentGatewayConfigSerializer
     permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
 
+    def list(self, request, *args, **kwargs):
+        return Response(
+            {'detail': 'School-level payment gateway integration has been discontinued.'},
+            status=status.HTTP_410_GONE,
+        )
 
-    def get_queryset(self):
-        queryset = PaymentGatewayConfig.objects.select_related('school')
-        school_id = _resolve_school_id(self.request)
-        if school_id:
-            queryset = queryset.filter(school_id=school_id)
-        elif not self.request.user.is_super_admin:
-            tenant_schools = ensure_tenant_schools(self.request)
-            if tenant_schools:
-                queryset = queryset.filter(school_id__in=tenant_schools)
-            else:
-                return queryset.none()
-        return queryset
+    def retrieve(self, request, *args, **kwargs):
+        return Response(
+            {'detail': 'School-level payment gateway integration has been discontinued.'},
+            status=status.HTTP_410_GONE,
+        )
 
-    def perform_create(self, serializer):
-        school_id = _resolve_school_id(self.request)
-        if not school_id:
-            from rest_framework.exceptions import ValidationError
-            raise ValidationError({'detail': 'No school associated with your account.'})
-        serializer.save(school_id=school_id)
+    def create(self, request, *args, **kwargs):
+        return Response(
+            {'detail': 'School-level payment gateway integration has been discontinued.'},
+            status=status.HTTP_410_GONE,
+        )
 
-    def perform_update(self, serializer):
-        serializer.save()
+    def update(self, request, *args, **kwargs):
+        return Response(
+            {'detail': 'School-level payment gateway integration has been discontinued.'},
+            status=status.HTTP_410_GONE,
+        )
 
-    @action(detail=True, methods=['post'], url_path='test-connection')
-    def test_connection(self, request, pk=None):
-        """Test if gateway credentials are valid."""
-        from .payment_gateway_service import get_gateway, PaymentGatewayError
+    def partial_update(self, request, *args, **kwargs):
+        return Response(
+            {'detail': 'School-level payment gateway integration has been discontinued.'},
+            status=status.HTTP_410_GONE,
+        )
 
-        gateway_config = self.get_object()
-        try:
-            gw = get_gateway(gateway_config)
-            result = gw.test_connection()
-        except PaymentGatewayError as e:
-            result = {'success': False, 'message': str(e)}
-        return Response(result)
-
-    @action(detail=True, methods=['post'], url_path='toggle-status')
-    def toggle_status(self, request, pk=None):
-        """Toggle gateway active/inactive."""
-        gateway_config = self.get_object()
-        gateway_config.is_active = not gateway_config.is_active
-        gateway_config.save(update_fields=['is_active'])
-        return Response(PaymentGatewayConfigSerializer(
-            gateway_config, context={'request': request},
-        ).data)
-
-    @action(detail=True, methods=['post'], url_path='set-default')
-    def set_default(self, request, pk=None):
-        """Set this gateway as the default for the school."""
-        gateway_config = self.get_object()
-        # Un-default all others for this school
-        PaymentGatewayConfig.objects.filter(
-            school=gateway_config.school,
-        ).update(is_default=False)
-        gateway_config.is_default = True
-        gateway_config.save(update_fields=['is_default'])
-        return Response(PaymentGatewayConfigSerializer(
-            gateway_config, context={'request': request},
-        ).data)
+    def destroy(self, request, *args, **kwargs):
+        return Response(
+            {'detail': 'School-level payment gateway integration has been discontinued.'},
+            status=status.HTTP_410_GONE,
+        )
 
 
 class OnlinePaymentViewSet(ModuleAccessMixin, viewsets.ReadOnlyModelViewSet):
@@ -3775,98 +3753,23 @@ class OnlinePaymentViewSet(ModuleAccessMixin, viewsets.ReadOnlyModelViewSet):
 
     @action(detail=False, methods=['post'])
     def initiate(self, request):
-        """Initiate an online payment: create OnlinePayment with INITIATED status."""
-        import uuid
-
-        serializer = OnlinePaymentInitiateSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-
-        school_id = _resolve_school_id(request)
-        if not school_id:
-            return Response({'detail': 'No school associated with your account.'}, status=400)
-
-        fee_payment_id = serializer.validated_data['fee_payment_id']
-        amount = serializer.validated_data['amount']
-        gateway = serializer.validated_data['gateway']
-
-        # Validate fee_payment belongs to this school
-        try:
-            fee_payment = FeePayment.objects.get(id=fee_payment_id, school_id=school_id)
-        except FeePayment.DoesNotExist:
-            return Response({'detail': 'Fee payment not found.'}, status=404)
-
-        # Validate gateway is configured and active for this school
-        gateway_config = PaymentGatewayConfig.objects.filter(
-            school_id=school_id, gateway=gateway, is_active=True,
-        ).first()
-        if not gateway_config:
-            return Response(
-                {'detail': f'Gateway {gateway} is not active for this school.'},
-                status=400,
-            )
-
-        gateway_order_id = f"ORD-{uuid.uuid4().hex[:16].upper()}"
-
-        online_payment = OnlinePayment.objects.create(
-            school_id=school_id,
-            fee_payment=fee_payment,
-            student=fee_payment.student,
-            gateway=gateway,
-            gateway_order_id=gateway_order_id,
-            amount=amount,
-            currency=gateway_config.currency,
-            status='INITIATED',
-            initiated_by=request.user,
-        )
-
+        """Online payment initiation — DEPRECATED (2026-05-13).
+        School-level payment gateway integration has been discontinued.
+        """
         return Response(
-            OnlinePaymentSerializer(online_payment).data,
-            status=status.HTTP_201_CREATED,
+            {'detail': 'School-level payment gateway integration has been discontinued.'},
+            status=status.HTTP_410_GONE,
         )
 
     @action(detail=True, methods=['post'])
     def verify(self, request, pk=None):
-        """Verify a payment (stub implementation - marks as SUCCESS and updates FeePayment)."""
-        from django.utils import timezone as tz
-
-        school_id = _resolve_school_id(request)
-        if not school_id:
-            return Response({'detail': 'No school associated with your account.'}, status=400)
-
-        try:
-            online_payment = OnlinePayment.objects.get(id=pk, school_id=school_id)
-        except OnlinePayment.DoesNotExist:
-            return Response({'detail': 'Online payment not found.'}, status=404)
-
-        if online_payment.status == 'SUCCESS':
-            return Response({'detail': 'Payment already verified.'}, status=400)
-
-        if online_payment.status not in ('INITIATED', 'PENDING'):
-            return Response(
-                {'detail': f'Cannot verify payment with status {online_payment.status}.'},
-                status=400,
-            )
-
-        # Stub: mark as SUCCESS
-        gateway_payment_id = request.data.get('gateway_payment_id', '')
-        gateway_signature = request.data.get('gateway_signature', '')
-
-        with transaction.atomic():
-            online_payment.status = 'SUCCESS'
-            online_payment.gateway_payment_id = gateway_payment_id
-            online_payment.gateway_signature = gateway_signature
-            online_payment.completed_at = tz.now()
-            online_payment.gateway_response = request.data.get('gateway_response', {})
-            online_payment.save()
-
-            # Update the linked FeePayment
-            fee_payment = online_payment.fee_payment
-            fee_payment.amount_paid = fee_payment.amount_paid + online_payment.amount
-            fee_payment.payment_date = tz.now().date()
-            fee_payment.payment_method = 'ONLINE'
-            fee_payment.save()
-
-        return Response(OnlinePaymentSerializer(online_payment).data)
+        """Online payment verification — DEPRECATED (2026-05-13).
+        School-level payment gateway integration has been discontinued.
+        """
+        return Response(
+            {'detail': 'School-level payment gateway integration has been discontinued.'},
+            status=status.HTTP_410_GONE,
+        )
 
     @action(detail=False, methods=['get'])
     def reconcile(self, request):
@@ -4246,138 +4149,32 @@ class SiblingGroupListView(ModuleAccessMixin, APIView):
 
 class JazzCashCallbackView(APIView):
     """
-    POST callback from JazzCash after payment.
-    Public endpoint (no auth) — verified via HMAC signature.
+    JazzCash callback — DEPRECATED (2026-05-13).
+    Payment gateway integration has been discontinued.
     """
     permission_classes = []
     authentication_classes = []
 
     def post(self, request):
-        from .payment_gateway_service import get_gateway, PaymentGatewayError
-        from django.utils import timezone as tz
-
-        order_id = request.data.get('pp_TxnRefNo', '')
-        if not order_id:
-            return Response({'detail': 'Missing pp_TxnRefNo.'}, status=400)
-
-        try:
-            online_payment = OnlinePayment.objects.select_related(
-                'fee_payment', 'school',
-            ).get(gateway_order_id=order_id, gateway='JAZZCASH')
-        except OnlinePayment.DoesNotExist:
-            logger.warning(f'JazzCash callback: unknown order {order_id}')
-            return Response({'detail': 'Payment not found.'}, status=404)
-
-        gateway_config = PaymentGatewayConfig.objects.filter(
-            school=online_payment.school, gateway='JAZZCASH', is_active=True,
-        ).first()
-        if not gateway_config:
-            logger.error(f'JazzCash callback: no active config for school {online_payment.school_id}')
-            return Response({'detail': 'Gateway not configured.'}, status=400)
-
-        try:
-            gw = get_gateway(gateway_config)
-            result = gw.verify_callback(request.data)
-        except PaymentGatewayError as e:
-            logger.error(f'JazzCash callback error: {e}')
-            return Response({'detail': str(e)}, status=400)
-
-        with transaction.atomic():
-            online_payment.gateway_response = result.get('raw', {})
-            online_payment.gateway_payment_id = result.get('gateway_payment_id', '')
-
-            if result['status'] == 'SUCCESS' and result.get('verified'):
-                online_payment.status = 'SUCCESS'
-                online_payment.completed_at = tz.now()
-
-                fee_payment = online_payment.fee_payment
-                fee_payment.amount_paid = fee_payment.amount_paid + online_payment.amount
-                fee_payment.payment_date = tz.now().date()
-                fee_payment.payment_method = 'ONLINE'
-                
-                # Extract account_id from gateway config
-                account_id = gateway_config.config.get('account_id') if gateway_config.config else None
-                if account_id:
-                    fee_payment.account_id = account_id
-                
-                fee_payment.save()
-            elif result['status'] == 'PENDING':
-                online_payment.status = 'PENDING'
-            else:
-                online_payment.status = 'FAILED'
-                online_payment.failure_reason = result.get('response_message', 'Verification failed')
-
-            online_payment.save()
-
-        return Response({'status': online_payment.status, 'order_id': order_id})
+        return Response(
+            {'detail': 'Payment gateway integration has been discontinued.'},
+            status=status.HTTP_410_GONE,
+        )
 
 
 class EasypaisaCallbackView(APIView):
     """
-    POST callback from Easypaisa after payment.
-    Public endpoint (no auth) — verified via postback URL.
+    Easypaisa callback — DEPRECATED (2026-05-13).
+    Payment gateway integration has been discontinued.
     """
     permission_classes = []
     authentication_classes = []
 
     def post(self, request):
-        from .payment_gateway_service import get_gateway, PaymentGatewayError
-        from django.utils import timezone as tz
-
-        order_id = request.data.get('orderRefNumber', '')
-        if not order_id:
-            return Response({'detail': 'Missing orderRefNumber.'}, status=400)
-
-        try:
-            online_payment = OnlinePayment.objects.select_related(
-                'fee_payment', 'school',
-            ).get(gateway_order_id=order_id, gateway='EASYPAISA')
-        except OnlinePayment.DoesNotExist:
-            logger.warning(f'Easypaisa callback: unknown order {order_id}')
-            return Response({'detail': 'Payment not found.'}, status=404)
-
-        gateway_config = PaymentGatewayConfig.objects.filter(
-            school=online_payment.school, gateway='EASYPAISA', is_active=True,
-        ).first()
-        if not gateway_config:
-            logger.error(f'Easypaisa callback: no active config for school {online_payment.school_id}')
-            return Response({'detail': 'Gateway not configured.'}, status=400)
-
-        try:
-            gw = get_gateway(gateway_config)
-            result = gw.verify_callback(request.data)
-        except PaymentGatewayError as e:
-            logger.error(f'Easypaisa callback error: {e}')
-            return Response({'detail': str(e)}, status=400)
-
-        with transaction.atomic():
-            online_payment.gateway_response = result.get('raw', {})
-            online_payment.gateway_payment_id = result.get('gateway_payment_id', '')
-
-            if result['status'] == 'SUCCESS':
-                online_payment.status = 'SUCCESS'
-                online_payment.completed_at = tz.now()
-
-                fee_payment = online_payment.fee_payment
-                fee_payment.amount_paid = fee_payment.amount_paid + online_payment.amount
-                fee_payment.payment_date = tz.now().date()
-                fee_payment.payment_method = 'ONLINE'
-                
-                # Extract account_id from gateway config
-                account_id = gateway_config.config.get('account_id') if gateway_config.config else None
-                if account_id:
-                    fee_payment.account_id = account_id
-                
-                fee_payment.save()
-            elif result['status'] == 'PENDING':
-                online_payment.status = 'PENDING'
-            else:
-                online_payment.status = 'FAILED'
-                online_payment.failure_reason = result.get('response_message', 'Payment failed')
-
-            online_payment.save()
-
-        return Response({'status': online_payment.status, 'order_id': order_id})
+        return Response(
+            {'detail': 'Payment gateway integration has been discontinued.'},
+            status=status.HTTP_410_GONE,
+        )
 
 
 class PaymentStatusView(APIView):

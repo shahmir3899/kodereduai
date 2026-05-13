@@ -1,10 +1,12 @@
 ---
-import { landingContent, siteConfig } from '../../content/landing';
+import { landingContent } from '../../content/landing';
+import { pricingDetails } from '../../content/pricingDetails';
 const { pricing } = landingContent;
+const plan = pricingDetails.flat;
 ---
 
 <section id="pricing" class="py-24 bg-brand-light">
-  <div class="max-w-6xl mx-auto px-6">
+  <div class="max-w-3xl mx-auto px-6">
 
     <!-- Header -->
     <div class="text-center mb-14">
@@ -15,87 +17,58 @@ const { pricing } = landingContent;
       <p class="text-brand-gray text-lg max-w-xl mx-auto">{pricing.subheading}</p>
     </div>
 
-    <!-- Plan cards -->
-    <div class="grid md:grid-cols-3 gap-6 items-stretch">
-      {pricing.plans.map((plan) => (
-        <div class={[
-          'relative flex flex-col rounded-2xl p-8 border transition-shadow hover:shadow-hover',
-          plan.highlight
-            ? 'bg-brand-dark border-primary/40 shadow-dashboard'
-            : 'bg-white border-gray-200 shadow-card',
-        ].join(' ')}>
+    <!-- Single flat plan card -->
+    <div class="relative flex flex-col rounded-2xl p-10 border bg-brand-dark border-primary/40 shadow-dashboard mx-auto max-w-xl">
 
-          {/* Badge */}
-          {plan.badge && (
-            <span class={`absolute top-5 right-5 text-xs font-semibold px-3 py-1 rounded-full ${plan.badgeBg}`}>
-              {plan.badge}
-            </span>
-          )}
+      <!-- Badge -->
+      <span class="absolute top-5 right-5 text-xs font-semibold px-3 py-1 rounded-full bg-primary/20 text-primary-300">
+        All-Inclusive
+      </span>
 
-          {/* Tier */}
-          <div class={`text-sm font-bold uppercase tracking-wider mb-1 ${plan.accentClass}`}>
-            {plan.tier}
-          </div>
+      <!-- Label -->
+      <div class="text-sm font-bold uppercase tracking-wider mb-1 text-primary-300">
+        {plan.label}
+      </div>
 
-          {/* Title */}
-          <h3 class={`font-display text-xl font-bold mb-2 ${plan.highlight ? 'text-white' : 'text-brand-dark'}`}>
-            {plan.title}
-          </h3>
+      <!-- Summary -->
+      <p class="text-sm leading-relaxed mb-6 text-brand-gray">{plan.summary}</p>
 
-          {/* Desc */}
-          <p class={`text-sm leading-relaxed mb-6 ${plan.highlight ? 'text-brand-gray' : 'text-brand-gray'}`}>
-            {plan.desc}
-          </p>
+      <!-- Price -->
+      <div class="mb-6">
+        <p class="font-display text-3xl font-bold text-white">{plan.monthlyPrice}</p>
+        <p class="text-xs mt-1 text-gray-300">{plan.annualPrice}</p>
+      </div>
 
-          {/* Price */}
-          <div class="mb-6">
-            <p class={`font-display text-2xl font-bold ${plan.highlight ? 'text-white' : 'text-brand-dark'}`}>
-              {plan.monthlyPrice}
-            </p>
-            <p class={`text-xs mt-1 ${plan.highlight ? 'text-gray-300' : 'text-brand-gray'}`}>
-              {plan.annualPrice}
-            </p>
-          </div>
-
-          {/* Features */}
-          <ul class="space-y-2.5 flex-1 mb-8">
-            {plan.features.map((f) => (
-              <li class="flex items-start gap-2.5">
-                <svg
-                  class={`w-4 h-4 mt-0.5 flex-shrink-0 ${plan.highlight ? 'text-primary-300' : 'text-primary'}`}
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  stroke-width="2.5"
-                  aria-hidden="true"
-                >
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
-                </svg>
-                <span class={`text-sm ${plan.highlight ? 'text-gray-300' : 'text-brand-dark'}`}>{f}</span>
-              </li>
-            ))}
-          </ul>
-
-          {/* CTA */}
-          <div>
-            <a
-              href={`/pricing/${String(plan.tier).toLowerCase()}`}
-              class={`block w-full text-center text-sm font-semibold rounded-full py-2.5 px-6 transition-all hover:-translate-y-0.5 ${
-                plan.highlight
-                  ? 'bg-primary text-white hover:bg-primary-600 hover:shadow-[0_6px_20px_rgba(43,106,255,0.4)]'
-                  : 'bg-brand-light text-brand-dark border border-gray-200 hover:bg-gray-100'
-              }`}
+      <!-- Modules included -->
+      <ul class="space-y-2 mb-8">
+        {plan.modules.map((mod) => (
+          <li class="flex items-start gap-2.5">
+            <svg
+              class="w-4 h-4 mt-0.5 flex-shrink-0 text-primary-300"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              stroke-width="2.5"
+              aria-hidden="true"
             >
-              View Full Details
-            </a>
-          </div>
+              <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+            </svg>
+            <span class="text-sm text-gray-300">{mod}</span>
+          </li>
+        ))}
+      </ul>
 
-        </div>
-      ))}
+      <!-- CTA -->
+      <a
+        href="/contact"
+        class="block w-full text-center text-sm font-semibold rounded-full py-3 px-6 transition-all hover:-translate-y-0.5 bg-primary text-white hover:bg-primary-600 hover:shadow-[0_6px_20px_rgba(43,106,255,0.4)]"
+      >
+        Get Started — Contact Us
+      </a>
     </div>
 
     <p class="text-center text-sm text-brand-gray mt-8">
-      All plans include onboarding support. Annual billing includes a 10% discount.
+      One plan. All modules. No hidden tiers. Annual billing saves 10%.
     </p>
   </div>
 </section>
