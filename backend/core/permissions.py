@@ -265,6 +265,26 @@ class IsSchoolAdminOrReadOnly(permissions.BasePermission):
         return role in ADMIN_ROLES
 
 
+class CanEditCurriculum(permissions.BasePermission):
+    """
+    Curriculum edit policy:
+    - SUPER_ADMIN/SCHOOL_ADMIN/PRINCIPAL: full access
+    - TEACHER: full access for curriculum workflows
+    - Others: read-only
+    """
+    message = "Only admins, principals, or teachers can modify curriculum data."
+
+    def has_permission(self, request, view):
+        if not request.user.is_authenticated:
+            return False
+
+        if request.method in permissions.SAFE_METHODS:
+            return True
+
+        role = get_effective_role(request)
+        return role in ADMIN_ROLES or role == 'TEACHER'
+
+
 class HasSchoolAccess(permissions.BasePermission):
     """
     Permission class that checks if user has access to a specific school.

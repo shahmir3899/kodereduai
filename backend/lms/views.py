@@ -22,7 +22,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.throttling import UserRateThrottle
 
 from core.permissions import (
-    IsSchoolAdminOrReadOnly, HasSchoolAccess, ModuleAccessMixin,
+    IsSchoolAdminOrReadOnly, CanEditCurriculum, HasSchoolAccess, ModuleAccessMixin,
     get_effective_role, ADMIN_ROLES, STAFF_LEVEL_ROLES,
     get_teacher_combined_scope,
 )
@@ -204,7 +204,7 @@ class BookViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
     """
     required_module = 'lms'
     queryset = Book.objects.all()
-    permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, CanEditCurriculum, HasSchoolAccess]
 
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):
@@ -769,7 +769,7 @@ class ChapterViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
     """CRUD for chapters within books."""
     required_module = 'lms'
     queryset = Chapter.objects.all()
-    permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, CanEditCurriculum, HasSchoolAccess]
     tenant_field = 'book__school_id'
 
     def get_serializer_class(self):
@@ -795,7 +795,7 @@ class TopicViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet
     """CRUD for topics within chapters."""
     required_module = 'lms'
     queryset = Topic.objects.all()
-    permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, CanEditCurriculum, HasSchoolAccess]
     tenant_field = 'chapter__book__school_id'
 
     def get_serializer_class(self):
@@ -883,7 +883,7 @@ class SubTopicViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelView
 
     required_module = 'lms'
     queryset = SubTopic.objects.all()
-    permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, CanEditCurriculum, HasSchoolAccess]
     tenant_field = 'topic__chapter__book__school_id'
     serializer_class = SubTopicSerializer
 

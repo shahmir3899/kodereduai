@@ -209,8 +209,7 @@ export const schoolsApi = {
   activateSchool: (id) => api.post(`/api/admin/schools/${id}/activate/`),
   deactivateSchool: (id) => api.post(`/api/admin/schools/${id}/deactivate/`),
 
-  // Module management
-  getModuleRegistry: () => api.get('/api/admin/modules/'),
+  // DEPRECATED 2026-05-13: Module management removed (all schools get all modules now)
   // DEPRECATED 2026-05-13: Bundle presets removed (flat pricing model)
   // getBundles: () => api.get('/api/admin/schools/bundles/'),
   // applyBundle: (schoolId, bundle) => api.post(`/api/admin/schools/${schoolId}/apply_bundle/`, { bundle }),

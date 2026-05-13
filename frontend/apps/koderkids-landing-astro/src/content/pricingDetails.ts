@@ -19,9 +19,9 @@ export const pricingDetails: Record<PricingTierKey, TierDetail> = {
   flat: {
     key: 'flat',
     label: 'All-Inclusive Plan',
-    monthlyPrice: 'PKR 8,000 / month',
-    annualPrice: 'PKR 86,400 / year (10% off)',
-    summary: 'Every module. Every feature. One simple price. No tiers, no gates.',
+    monthlyPrice: 'Rs 25 / student / month',
+    annualPrice: 'Rs 20 / student / month (billed annually)',
+    summary: 'Every module. Every feature. One simple per-student price. No tiers, no gates.',
     bestFor: 'Schools of any size that want a complete digital school management platform without choosing a plan.',
     modules: [
       'Students & Classes',
@@ -64,5 +64,4 @@ export const pricingDetails: Record<PricingTierKey, TierDetail> = {
       'Mobile app for teachers and parents (Android)',
     ],
   },
-};
 };

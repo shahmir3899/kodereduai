@@ -77,13 +77,8 @@ export default function SuperAdminDashboard() {
     queryFn: () => membershipsApi.getAll({ page_size: 9999 }),
   })
 
-  const { data: moduleRegistryData } = useQuery({
-    queryKey: ['moduleRegistry'],
-    queryFn: () => schoolsApi.getModuleRegistry(),
-  })
-
+  // DEPRECATED 2026-05-13: Module toggling removed (all schools get all modules now).
   // DEPRECATED 2026-05-13: Bundle presets removed (flat pricing). Query removed.
-  // const { data: bundlesData } = useQuery({ queryKey: ['bundlePresets'], queryFn: () => schoolsApi.getBundles() })
 
   // ── Mutations ─────────────────────────────────────────────────────────────
 
@@ -216,60 +211,6 @@ export default function SuperAdminDashboard() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['adminMemberships'] }),
   })
 
-  // Module toggles — optimistic updates for instant UI feel
-  const [moduleMsg, setModuleMsg] = useState(null)
-
-  const setQueryItem = (queryKey, id, patch) => {
-    queryClient.setQueryData(queryKey, (old) => {
-      if (!old?.data) return old
-      const list = Array.isArray(old.data) ? old.data : old.data.results
-      if (!list) return old
-      const updated = list.map(item => item.id === id ? { ...item, ...patch } : item)
-      return { ...old, data: Array.isArray(old.data) ? updated : { ...old.data, results: updated } }
-    })
-  }
-
-  const toggleOrgModuleMutation = useMutation({
-    mutationFn: ({ id, allowed_modules }) =>
-      organizationsApi.update(id, { allowed_modules }),
-    onMutate: async ({ id, allowed_modules }) => {
-      await queryClient.cancelQueries({ queryKey: ['adminOrgs'] })
-      const prev = queryClient.getQueryData(['adminOrgs'])
-      setQueryItem(['adminOrgs'], id, { allowed_modules })
-      return { prev }
-    },
-    onError: (err, _vars, ctx) => {
-      if (ctx?.prev) queryClient.setQueryData(['adminOrgs'], ctx.prev)
-      const detail = err.response?.data?.allowed_modules || err.response?.data?.detail || err.message
-      setModuleMsg({ type: 'error', text: `Failed: ${detail}` })
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['adminOrgs'] })
-      queryClient.invalidateQueries({ queryKey: ['adminSchools'] })
-    },
-  })
-
-  const toggleSchoolModuleMutation = useMutation({
-    mutationFn: ({ id, enabled_modules }) =>
-      schoolsApi.updateSchool(id, { enabled_modules }),
-    onMutate: async ({ id, enabled_modules }) => {
-      await queryClient.cancelQueries({ queryKey: ['adminSchools'] })
-      const prev = queryClient.getQueryData(['adminSchools'])
-      setQueryItem(['adminSchools'], id, { enabled_modules })
-      return { prev }
-    },
-    onError: (err, _vars, ctx) => {
-      if (ctx?.prev) queryClient.setQueryData(['adminSchools'], ctx.prev)
-      const detail = err.response?.data?.enabled_modules || err.response?.data?.detail || err.message
-      setModuleMsg({ type: 'error', text: `Failed: ${detail}` })
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['adminSchools'] })
-    },
-  })
-
-  // DEPRECATED 2026-05-13: applyBundleMutation removed with bundle presets.
-
   // ── Handlers ──────────────────────────────────────────────────────────────
   const handleSaveSchool = () => {
     const payload = { ...newSchool }
@@ -277,10 +218,6 @@ export default function SuperAdminDashboard() {
     if (editingSchool) {
       updateSchoolMutation.mutate({ id: editingSchool.id, data: payload })
     } else {
-      // Set all modules enabled by default for new schools
-      const defaultModules = {}
-      moduleRegistry.forEach(mod => { defaultModules[mod.key] = true })
-      payload.enabled_modules = defaultModules
       createSchoolMutation.mutate(payload)
     }
   }
@@ -381,21 +318,7 @@ export default function SuperAdminDashboard() {
   const users = usersData?.data?.results || usersData?.data || []
   const orgs = orgsData?.data?.results || orgsData?.data || []
   const memberships = membershipsData?.data?.results || membershipsData?.data || []
-  const moduleRegistry = moduleRegistryData?.data || []
-  // const bundlePresets = bundlesData?.data || []  // DEPRECATED 2026-05-13
-
-  // ── Module toggle handlers ──────────────────────────────────────────────
-  const handleOrgModuleToggle = (org, moduleKey) => {
-    const current = org.allowed_modules || {}
-    const updated = { ...current, [moduleKey]: !current[moduleKey] }
-    toggleOrgModuleMutation.mutate({ id: org.id, allowed_modules: updated })
-  }
-
-  const handleSchoolModuleToggle = (school, moduleKey) => {
-    const current = school.enabled_modules || {}
-    const updated = { ...current, [moduleKey]: !current[moduleKey] }
-    toggleSchoolModuleMutation.mutate({ id: school.id, enabled_modules: updated })
-  }
+  // DEPRECATED 2026-05-13: moduleRegistry removed (all schools get all modules now).
 
   const tabs = [
     { key: 'overview', label: 'Overview' },
@@ -403,7 +326,6 @@ export default function SuperAdminDashboard() {
     { key: 'users', label: 'Users' },
     { key: 'organizations', label: 'Organizations' },
     { key: 'memberships', label: 'Memberships' },
-    { key: 'modules', label: 'Modules' },
   ]
 
   return (
@@ -539,14 +461,14 @@ export default function SuperAdminDashboard() {
                 </div>
                 <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                 <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-gray-100 text-gray-400">
-                  <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-gray-300 text-white">3</span>
-                  Configure Modules
+                  <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-gray-300 text-white">✓</span>
+                  All Set!
                 </div>
               </div>
               <p className="text-sm text-gray-500 mt-3">No schools yet. Click "Add School" to create your first one.</p>
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-3">
                 <p className="text-xs text-blue-700">
-                  <span className="font-semibold">Tip:</span> Each school gets its own isolated data, users, and module settings.
+                  <span className="font-semibold">Info:</span> Each school automatically gets access to all platform features. No module configuration needed.
                 </p>
               </div>
             </div>
@@ -944,223 +866,6 @@ export default function SuperAdminDashboard() {
               </div>
             </>
           )}
-        </div>
-      )}
-
-      {/* ════════════════════ Modules Tab ════════════════════ */}
-      {activeTab === 'modules' && (
-        <div className="space-y-6">
-          {/* Error banner */}
-          {moduleMsg?.type === 'error' && (
-            <div className="flex items-center gap-2 px-4 py-3 rounded-lg text-sm bg-red-50 text-red-700 border border-red-200">
-              <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span className="flex-1 font-medium">{moduleMsg.text}</span>
-              <button onClick={() => setModuleMsg(null)} className="text-red-400 hover:text-red-600 p-0.5">&times;</button>
-            </div>
-          )}
-          {moduleMsg?.type === 'success' && (
-            <div className="flex items-center gap-2 px-4 py-3 rounded-lg text-sm bg-green-50 text-green-700 border border-green-200">
-              <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-              <span className="flex-1 font-medium">{moduleMsg.text}</span>
-              <button onClick={() => setModuleMsg(null)} className="text-green-400 hover:text-green-600 p-0.5">&times;</button>
-            </div>
-          )}
-
-          {/* Bundle Presets section removed 2026-05-13 — flat pricing model, no more bundle presets */}
-
-          {/* Module Matrix — Org Ceiling */}
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <div className="px-5 py-4 border-b border-gray-100 bg-purple-50/50">
-              <div className="flex items-center gap-2">
-                <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                </svg>
-                <div>
-                  <h2 className="text-base font-semibold text-gray-900">Organization Module Ceiling</h2>
-                  <p className="text-xs text-gray-500">Disabling a module here removes it from all schools in the organization</p>
-                </div>
-              </div>
-            </div>
-
-            {orgsLoading ? (
-              <div className="p-6"><Spinner /></div>
-            ) : orgs.length === 0 ? (
-              <div className="p-6"><Empty text="No organizations yet. Create one in the Organizations tab." /></div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full">
-                  <thead>
-                    <tr className="bg-gray-50 border-b border-gray-200">
-                      <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-5 py-3 sticky left-0 bg-gray-50 z-10 min-w-[180px]">Organization</th>
-                      {moduleRegistry.map((mod) => (
-                        <th key={mod.key} className="text-center text-xs font-medium text-gray-500 px-2 py-3 min-w-[80px]">
-                          <span className="block truncate" title={mod.description || mod.label}>{mod.label}</span>
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {orgs.map((org) => {
-                      const enabledCount = moduleRegistry.filter(m => org.allowed_modules?.[m.key] ?? true).length
-                      return (
-                        <tr key={org.id} className="hover:bg-gray-50/50">
-                          <td className="px-5 py-3 sticky left-0 bg-white z-10">
-                            <div className="flex items-center gap-2">
-                              <div>
-                                <p className="text-sm font-medium text-gray-900">{org.name}</p>
-                                <p className="text-xs text-gray-400">{enabledCount}/{moduleRegistry.length} modules · {org.school_count || 0} schools</p>
-                              </div>
-                              <StatusBadge active={org.is_active} />
-                            </div>
-                          </td>
-                          {moduleRegistry.map((mod) => {
-                            const isOn = org.allowed_modules?.[mod.key] ?? true
-                            return (
-                              <td key={mod.key} className="text-center px-2 py-3">
-                                <button
-                                  onClick={() => handleOrgModuleToggle(org, mod.key)}
-                                  className={`w-7 h-7 rounded-md inline-flex items-center justify-center transition-all ${
-                                    isOn
-                                      ? 'bg-green-100 text-green-600 hover:bg-green-200'
-                                      : 'bg-gray-100 text-gray-300 hover:bg-gray-200 hover:text-gray-500'
-                                  }`}
-                                  title={`${isOn ? 'Disable' : 'Enable'} ${mod.label} for ${org.name}`}
-                                >
-                                  {isOn ? (
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                                    </svg>
-                                  ) : (
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
-                                  )}
-                                </button>
-                              </td>
-                            )
-                          })}
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-
-          {/* Module Matrix — Per School */}
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <div className="px-5 py-4 border-b border-gray-100 bg-sky-50/50">
-              <div className="flex items-center gap-2">
-                <svg className="w-5 h-5 text-sky-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z" />
-                </svg>
-                <div>
-                  <h2 className="text-base font-semibold text-gray-900">Per-School Modules</h2>
-                  <p className="text-xs text-gray-500">
-                    Enable or disable modules per school.
-                    <span className="inline-flex items-center gap-1 ml-2 text-amber-600">
-                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" /></svg>
-                      = blocked by org ceiling
-                    </span>
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {schoolsLoading ? (
-              <div className="p-6"><Spinner /></div>
-            ) : schools.length === 0 ? (
-              <div className="p-6"><Empty text="No schools yet." /></div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full">
-                  <thead>
-                    <tr className="bg-gray-50 border-b border-gray-200">
-                      <th className="text-left text-xs font-medium text-gray-500 uppercase tracking-wider px-5 py-3 sticky left-0 bg-gray-50 z-10 min-w-[200px]">School</th>
-                      {moduleRegistry.map((mod) => (
-                        <th key={mod.key} className="text-center text-xs font-medium text-gray-500 px-2 py-3 min-w-[80px]">
-                          <span className="block truncate" title={mod.description || mod.label}>{mod.label}</span>
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {schools.map((school) => {
-                      const org = orgs.find(o => o.id === school.organization)
-                      const enabledCount = moduleRegistry.filter(m => {
-                        const orgBlocked = org && !(org.allowed_modules?.[m.key] ?? true)
-                        return !orgBlocked && (school.enabled_modules?.[m.key] ?? false)
-                      }).length
-                      return (
-                        <tr key={school.id} className="hover:bg-gray-50/50">
-                          <td className="px-5 py-3 sticky left-0 bg-white z-10">
-                            <div className="flex items-center gap-2">
-                              <div className="min-w-0">
-                                <p className="text-sm font-medium text-gray-900 truncate">{school.name}</p>
-                                <div className="flex items-center gap-2 text-xs text-gray-400">
-                                  <span>{enabledCount}/{moduleRegistry.length} active</span>
-                                  {school.organization_name ? (
-                                    <span className="text-purple-500">{school.organization_name}</span>
-                                  ) : (
-                                    <span>Standalone</span>
-                                  )}
-                                </div>
-                              </div>
-                              <StatusBadge active={school.is_active} />
-                            </div>
-                          </td>
-                          {moduleRegistry.map((mod) => {
-                            const orgBlocked = org && !(org.allowed_modules?.[mod.key] ?? true)
-                            const isOn = school.enabled_modules?.[mod.key] ?? false
-                            const effectiveOn = isOn && !orgBlocked
-                            return (
-                              <td key={mod.key} className="text-center px-2 py-3">
-                                {orgBlocked ? (
-                                  <span
-                                    className="w-7 h-7 rounded-md inline-flex items-center justify-center bg-amber-50 text-amber-400 cursor-not-allowed"
-                                    title={`Blocked by ${org?.name} organization`}
-                                  >
-                                    <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                                      <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
-                                    </svg>
-                                  </span>
-                                ) : (
-                                  <button
-                                    onClick={() => handleSchoolModuleToggle(school, mod.key)}
-                                    className={`w-7 h-7 rounded-md inline-flex items-center justify-center transition-all ${
-                                      effectiveOn
-                                        ? 'bg-green-100 text-green-600 hover:bg-green-200'
-                                        : 'bg-gray-100 text-gray-300 hover:bg-gray-200 hover:text-gray-500'
-                                    }`}
-                                    title={`${effectiveOn ? 'Disable' : 'Enable'} ${mod.label} for ${school.name}`}
-                                  >
-                                    {effectiveOn ? (
-                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                                      </svg>
-                                    ) : (
-                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                      </svg>
-                                    )}
-                                  </button>
-                                )}
-                              </td>
-                            )
-                          })}
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
         </div>
       )}
 
