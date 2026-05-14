@@ -293,8 +293,21 @@ CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'Asia/Karachi'
-CELERY_TASK_TRACK_STARTED = True
+# Progress for long tasks is tracked in PostgreSQL via core.task_utils
+# (BackgroundTask model), not via Celery's result backend. Storing results /
+# STARTED states in Redis costs ~3–4 extra ops per task and serves no consumer
+# in this codebase. Disable both to cut Upstash request usage substantially.
+# If a future feature needs result.get() / result.ready(), opt-in per task
+# with @shared_task(ignore_result=False).
+CELERY_TASK_IGNORE_RESULT = True
+CELERY_TASK_TRACK_STARTED = False
+# Short result TTL for the rare tasks that DO store a result (opt-in).
+CELERY_RESULT_EXPIRES = 60 * 60  # 1 hour
 CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minutes
+# Silence "broker will retry on startup" deprecation warning and quiet a few
+# noisy idle-time round trips to Redis.
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+CELERY_WORKER_SEND_TASK_EVENTS = False
 
 # Local dev: run tasks synchronously inside Django (no worker/Redis needed)
 # Production: tasks run in separate Celery worker via start.sh
@@ -336,8 +349,12 @@ CELERY_BEAT_SCHEDULE = {
     },
     'daily-absence-summary': {
         'task': 'notifications.tasks.send_daily_absence_summary',
-        # Runtime checks per-school daily_absence_summary_time; run every minute.
-        'schedule': crontab(minute='*'),
+        # Runtime checks per-school daily_absence_summary_time against a
+        # 5-minute window aligned to the cron tick (00, 05, 10, ...). The task
+        # itself dedupes via _daily_notification_already_sent so re-running
+        # within the window is harmless. Every-minute polling was costing
+        # ~1,440 Beat publishes/day to Upstash; every 5 min is ~288/day.
+        'schedule': crontab(minute='*/5'),
     },
     'scheduled-absence-in-app-digest': {
         'task': 'notifications.tasks.run_scheduled_absence_in_app_digest',

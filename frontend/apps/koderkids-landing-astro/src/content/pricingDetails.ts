@@ -12,6 +12,8 @@ type TierDetail = {
   bestFor: string;
   modules: string[];
   capabilities: string[];
+  notIncluded: string[];
+  expensiveFeatures: string[];
   highlights: string[];
 };
 
@@ -54,6 +56,17 @@ export const pricingDetails: Record<PricingTierKey, TierDetail> = {
       'Book catalog, issue/return, overdue fines',
       'Room management, allocations, gate passes',
       'Item tracking, procurement, staff/student assignments',
+    ],
+    notIncluded: [
+      'No free forever plan',
+      'No module-level pricing by default',
+      'No built-in biometric hardware included in subscription',
+      'No telecom/SMS carrier charges included',
+    ],
+    expensiveFeatures: [
+      'OCR-based register digitization is billed separately when enabled',
+      'Custom one-off development requests are quoted separately',
+      'On-site training or deployment visits are available as paid add-ons',
     ],
     highlights: [
       'AI-powered curriculum question paper builder',

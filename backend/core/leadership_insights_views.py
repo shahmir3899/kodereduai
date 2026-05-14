@@ -63,7 +63,7 @@ def build_leadership_academic_insights(
     """
     from examinations.models import Question
     from lms.models import Book, LessonPlan, Topic
-    from academic_sessions.models import StudentEnrollment
+    from academic_sessions.models import SessionClass, StudentEnrollment
     from students.models import Student
 
     ref = reference_date or date.today()
@@ -139,6 +139,30 @@ def build_leadership_academic_insights(
             }
         departures['session'] = None
 
+    # Books and lesson plans are attached to master Class rows, but schools often
+    # rename classes per session (e.g. master "Nursery" → 2026-27 session
+    # "Junior 1"). When a current academic year exists, prefer the SessionClass
+    # label so the dashboard matches the rest of the session-aware UI.
+    session_label_by_master: dict[int, str] = {}
+    if academic_year:
+        for sc in SessionClass.objects.filter(
+            school_id=school_id,
+            academic_year_id=academic_year.id,
+            is_active=True,
+            class_obj_id__isnull=False,
+        ).values('class_obj_id', 'display_name', 'section'):
+            section = (sc.get('section') or '').strip()
+            display = sc.get('display_name') or ''
+            label = f"{display} - {section}" if section else display
+            # If multiple sessions share a master class (e.g. Class 2 A / B),
+            # keep the first; the master fallback still indicates ambiguity.
+            session_label_by_master.setdefault(sc['class_obj_id'], label)
+
+    def _resolve_class_label(master_id: int | None, master_name: str | None) -> str:
+        if master_id and master_id in session_label_by_master:
+            return session_label_by_master[master_id]
+        return master_name or ''
+
     # --- LMS: books / topics ---
     lms_books_by_class = []
     lms_topics_by_book = []
@@ -146,7 +170,7 @@ def build_leadership_academic_insights(
         lms_books_by_class = [
             {
                 'class_id': r['class_obj_id'],
-                'class_name': r['class_obj__name'] or '',
+                'class_name': _resolve_class_label(r['class_obj_id'], r['class_obj__name']),
                 'book_count': r['book_count'],
             }
             for r in Book.objects.filter(school_id=school_id, is_active=True)
@@ -154,6 +178,10 @@ def build_leadership_academic_insights(
             .annotate(book_count=Count('id'))
             .order_by('class_obj__name')
         ]
+        # Re-sort by the resolved label so chips render alphabetically by what
+        # the user actually sees.
+        lms_books_by_class.sort(key=lambda row: (row['class_name'] or '').lower())
+
         topic_rows = (
             Topic.objects.filter(
                 chapter__book__school_id=school_id,
@@ -163,6 +191,7 @@ def build_leadership_academic_insights(
             .values(
                 'chapter__book_id',
                 'chapter__book__title',
+                'chapter__book__class_obj_id',
                 'chapter__book__class_obj__name',
             )
             .annotate(topic_count=Count('id'))
@@ -172,11 +201,17 @@ def build_leadership_academic_insights(
             {
                 'book_id': r['chapter__book_id'],
                 'book_title': r['chapter__book__title'],
-                'class_name': r['chapter__book__class_obj__name'] or '',
+                'class_name': _resolve_class_label(
+                    r['chapter__book__class_obj_id'],
+                    r['chapter__book__class_obj__name'],
+                ),
                 'topic_count': r['topic_count'],
             }
             for r in topic_rows
         ]
+        lms_topics_by_book.sort(
+            key=lambda row: ((row['class_name'] or '').lower(), (row['book_title'] or '').lower())
+        )
 
     question_bank = {'total': 0, 'by_subject': []}
     if _module_on(enabled, 'examinations'):
@@ -239,7 +274,9 @@ def build_leadership_academic_insights(
             from students.models import Class as SchoolClass
 
             for c in SchoolClass.objects.filter(id__in=class_ids).only('id', 'name'):
-                classes[c.id] = c.name
+                # Prefer current-year session label when available (consistent
+                # with lms_books_by_class above).
+                classes[c.id] = _resolve_class_label(c.id, c.name)
 
         grid = []
         for tid, cid in sorted(keys, key=lambda x: (classes.get(x[1], ''), teachers.get(x[0], ''))):

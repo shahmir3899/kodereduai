@@ -184,10 +184,13 @@ def send_daily_absence_summary():
                 continue
 
             configured_time = _get_daily_report_send_time(config)
-            if (local_now.hour, local_now.minute) != (
-                configured_time.hour,
-                configured_time.minute,
-            ):
+            # Beat fires this task every 5 minutes (settings.CELERY_BEAT_SCHEDULE).
+            # Match if the configured time falls inside the current 5-minute bucket
+            # for the same hour. trigger_daily_school_report() dedupes via
+            # _daily_notification_already_sent so re-runs within the window are safe.
+            same_hour = local_now.hour == configured_time.hour
+            same_bucket = (local_now.minute // 5) == (configured_time.minute // 5)
+            if not (same_hour and same_bucket):
                 logger.info(
                     "Skipped daily school report",
                     extra={

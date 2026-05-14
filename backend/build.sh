@@ -19,6 +19,12 @@ python manage.py collectstatic --no-input
 echo "==> Running database migrations..."
 python manage.py migrate --no-input
 
+echo "==> Syncing notification scheduler (django_celery_beat DB rows)..."
+# Beat uses DatabaseScheduler — it seeds new periodic tasks from
+# settings.CELERY_BEAT_SCHEDULE on startup but does NOT update existing rows
+# when cron changes. This sync ensures DB matches settings for managed tasks.
+python manage.py sync_notification_scheduler || echo "WARN: sync_notification_scheduler failed (non-fatal)"
+
 echo "==> Checking database..."
 python manage.py shell -c "
 from django.contrib.auth import get_user_model
