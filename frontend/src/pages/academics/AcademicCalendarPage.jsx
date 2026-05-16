@@ -33,6 +33,8 @@ const EMPTY_FORM = {
   end_date: '',
   color: '#f97316',
   class_ids: [],
+  affects_students: true,
+  affects_staff: true,
 }
 
 function isoDate(year, month, day) {
@@ -316,6 +318,10 @@ export default function AcademicCalendarPage() {
       showError('Select an academic year first')
       return
     }
+    if (form.entry_kind === 'OFF_DAY' && !form.affects_students && !form.affects_staff) {
+      showError('An OFF day must apply to at least Students or Staff.')
+      return
+    }
 
     const payload = {
       academic_year: activeAcademicYear.id,
@@ -327,6 +333,8 @@ export default function AcademicCalendarPage() {
       start_date: form.start_date,
       end_date: form.end_date,
       color: form.color,
+      affects_students: form.entry_kind === 'OFF_DAY' ? form.affects_students : true,
+      affects_staff: form.entry_kind === 'OFF_DAY' ? form.affects_staff : true,
       class_ids: form.scope === 'CLASS'
         ? form.class_ids.map((id) => {
             const masterClassId = getResolvedMasterClassId(id, activeAcademicYear?.id, sessionClasses)
@@ -358,6 +366,10 @@ export default function AcademicCalendarPage() {
     const offDayEntries = (dayInfo?.entries || []).filter((entry) => entry.entry_kind === 'OFF_DAY')
     const offDayTitles = [...new Set(offDayEntries.map((entry) => entry.name).filter(Boolean))]
     const hasSundayOnlyOff = isOff && offDayTitles.length === 0 && (dayInfo?.is_sunday || false)
+    // Determine OFF day audience for badge display
+    const allOffStaff = offDayEntries.every((e) => e.affects_staff !== false)
+    const anyOffStudents = offDayEntries.some((e) => e.affects_students !== false)
+    const isStudentsOnlyOff = isOff && !hasSundayOnlyOff && anyOffStudents && !allOffStaff
     const examNames = examGroupsByDate[dateKey] || []
     const isAnchor = isRangeSelecting && rangeAnchorDate === dateKey
     const isWithinPendingRange = !!previewStart && dateKey >= previewStart && dateKey <= previewEnd
@@ -380,23 +392,31 @@ export default function AcademicCalendarPage() {
       >
         <div className="flex items-center justify-between">
           <p className="text-sm font-semibold text-gray-900">{day}</p>
-          {isOff && <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-rose-100 text-rose-700">OFF</span>}
+          {isOff && !isStudentsOnlyOff && <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-rose-100 text-rose-700">OFF</span>}
+          {isStudentsOnlyOff && <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">OFF (Students)</span>}
         </div>
         {(offDayTitles.length > 0 || hasSundayOnlyOff) && (
           <div className="mt-2">
-            <p className="text-[11px] text-rose-700 line-clamp-1">{offDayTitles[0] || 'Sunday'}</p>
+            <span
+              className="text-[10px] font-medium px-1.5 py-0.5 rounded block truncate text-white"
+              style={{ backgroundColor: offDayEntries[0]?.color || '#e11d48' }}
+            >{offDayTitles[0] || 'Sunday'}</span>
             {offDayTitles.length > 1 && (
-              <p className="mt-0.5 text-[10px] text-rose-700">+{offDayTitles.length - 1} more</p>
+              <p className="mt-0.5 text-[10px]" style={{ color: offDayEntries[0]?.color || '#e11d48' }}>+{offDayTitles.length - 1} more</p>
             )}
           </div>
         )}
         {eventsCount > 0 && (
           <div className="mt-2">
-            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 block truncate" title={events[0]?.name || ''}>
+            <span
+              className="text-[10px] font-medium px-1.5 py-0.5 rounded block truncate text-white"
+              style={{ backgroundColor: events[0]?.color || '#3b82f6' }}
+              title={events[0]?.name || ''}
+            >
               {events[0]?.name || 'Event'}
             </span>
             {eventsCount > 1 && (
-              <p className="mt-1 text-[10px] text-blue-700">+{eventsCount - 1} more</p>
+              <p className="mt-1 text-[10px]" style={{ color: events[0]?.color || '#3b82f6' }}>+{eventsCount - 1} more</p>
             )}
           </div>
         )}
@@ -497,7 +517,8 @@ export default function AcademicCalendarPage() {
         </div>
 
         <div className="mb-3 flex flex-wrap items-center gap-3 text-xs text-gray-600">
-          <span className="inline-flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-rose-300" /> OFF day</span>
+          <span className="inline-flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-rose-300" /> OFF day (all)</span>
+          <span className="inline-flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-amber-300" /> OFF (students only)</span>
           <span className="inline-flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-blue-300" /> Event</span>
           <span className="inline-flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-indigo-300" /> Exam period</span>
           <span className="inline-flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-gray-200" /> Sunday auto OFF</span>
@@ -618,6 +639,38 @@ export default function AcademicCalendarPage() {
                     <option value="OFF_DAY">OFF Day</option>
                   </select>
                 </div>
+
+                {/* Right of Type: checkboxes when OFF_DAY, empty otherwise */}
+                {form.entry_kind === 'OFF_DAY' ? (
+                  <div>
+                    <label className="text-xs font-medium text-gray-600">Applies To</label>
+                    <div className="mt-2 flex flex-col gap-2">
+                      <label className="inline-flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={form.affects_students}
+                          onChange={(e) => setForm((cur) => ({ ...cur, affects_students: e.target.checked }))}
+                          className="rounded"
+                        />
+                        <span>Students <span className="text-xs text-gray-500">(attendance N/A)</span></span>
+                      </label>
+                      <label className="inline-flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={form.affects_staff}
+                          onChange={(e) => setForm((cur) => ({ ...cur, affects_staff: e.target.checked }))}
+                          className="rounded"
+                        />
+                        <span>Staff <span className="text-xs text-gray-500">(auto ON_LEAVE)</span></span>
+                      </label>
+                      {!form.affects_students && !form.affects_staff && (
+                        <p className="mt-0.5 text-xs text-amber-600">Select at least one.</p>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div />
+                )}
 
                 <div>
                   <label className="text-xs font-medium text-gray-600">Scope</label>

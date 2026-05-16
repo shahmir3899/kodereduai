@@ -323,6 +323,8 @@ class SchoolCalendarEntryViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
                 'start_date': entry.start_date,
                 'end_date': entry.end_date,
                 'color': entry.color,
+                'affects_students': entry.affects_students,
+                'affects_staff': entry.affects_staff,
             })
 
         for entry in normalized_entries:

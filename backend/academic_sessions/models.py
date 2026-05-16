@@ -143,6 +143,14 @@ class SchoolCalendarEntry(models.Model):
     end_date = models.DateField()
     color = models.CharField(max_length=20, blank=True, default='')
     is_active = models.BooleanField(default=True)
+    affects_students = models.BooleanField(
+        default=True,
+        help_text="If True, this OFF day applies to student attendance (students get NA).",
+    )
+    affects_staff = models.BooleanField(
+        default=True,
+        help_text="If True, this OFF day applies to staff attendance (staff auto-marked ON_LEAVE).",
+    )
     created_by = models.ForeignKey(
         'users.User',
         on_delete=models.SET_NULL,

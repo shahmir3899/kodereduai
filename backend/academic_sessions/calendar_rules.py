@@ -16,19 +16,27 @@ def _normalize_class_ids(class_id=None, class_ids=None):
     return ids
 
 
-def off_day_types_for_date(school_id, target_date, class_id=None, class_ids=None):
-    """Return off-day type labels for a date including derived Sunday."""
+def off_day_types_for_date(school_id, target_date, class_id=None, class_ids=None, for_staff=False):
+    """Return off-day type labels for a date including derived Sunday.
+
+    Args:
+        for_staff: When True, only entries where affects_staff=True are returned.
+                   When False (default/students), only entries where affects_students=True are returned.
+                   Sundays are always included regardless.
+    """
     labels = []
     if target_date.weekday() == 6:
         labels.append('SUNDAY')
 
     selected_class_ids = _normalize_class_ids(class_id=class_id, class_ids=class_ids)
+    audience_filter = {'affects_staff': True} if for_staff else {'affects_students': True}
     entries = SchoolCalendarEntry.objects.filter(
         school_id=school_id,
         is_active=True,
         entry_kind=SchoolCalendarEntry.EntryKind.OFF_DAY,
         start_date__lte=target_date,
         end_date__gte=target_date,
+        **audience_filter,
     )
 
     if selected_class_ids:
@@ -56,16 +64,17 @@ def off_day_types_for_date(school_id, target_date, class_id=None, class_ids=None
     return sorted(set(labels))
 
 
-def is_off_day_for_date(school_id, target_date, class_id=None, class_ids=None):
+def is_off_day_for_date(school_id, target_date, class_id=None, class_ids=None, for_staff=False):
     return len(off_day_types_for_date(
         school_id=school_id,
         target_date=target_date,
         class_id=class_id,
         class_ids=class_ids,
+        for_staff=for_staff,
     )) > 0
 
 
-def build_off_day_date_set(school_id, date_from, date_to, class_id=None, class_ids=None):
+def build_off_day_date_set(school_id, date_from, date_to, class_id=None, class_ids=None, for_staff=False):
     """Return a set of dates marked as OFF in the given date window."""
     off_dates = set()
     cursor = date_from
@@ -75,6 +84,7 @@ def build_off_day_date_set(school_id, date_from, date_to, class_id=None, class_i
             target_date=cursor,
             class_id=class_id,
             class_ids=class_ids,
+            for_staff=for_staff,
         ):
             off_dates.add(cursor)
         cursor += timedelta(days=1)

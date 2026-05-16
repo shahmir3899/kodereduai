@@ -198,6 +198,7 @@ class SchoolCalendarEntrySerializer(serializers.ModelSerializer):
             'name', 'description', 'entry_kind', 'off_day_type',
             'scope', 'class_ids', 'class_names',
             'start_date', 'end_date', 'color', 'is_active',
+            'affects_students', 'affects_staff',
             'created_by', 'updated_by', 'created_at', 'updated_at',
         ]
         read_only_fields = [
@@ -230,6 +231,7 @@ class SchoolCalendarEntryCreateSerializer(serializers.ModelSerializer):
             'entry_kind', 'off_day_type',
             'scope', 'class_ids',
             'start_date', 'end_date', 'color', 'is_active',
+            'affects_students', 'affects_staff',
         ]
 
     def validate(self, data):

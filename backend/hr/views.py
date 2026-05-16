@@ -1414,8 +1414,8 @@ class StaffAttendanceViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mo
         status_value = serializer.validated_data.get('status')
 
         class_ids = self._resolve_teacher_class_ids(staff_member)
-        if is_off_day_for_date(school_id, att_date, class_ids=class_ids):
-            off_types = off_day_types_for_date(school_id, att_date, class_ids=class_ids)
+        if is_off_day_for_date(school_id, att_date, class_ids=class_ids, for_staff=True):
+            off_types = off_day_types_for_date(school_id, att_date, class_ids=class_ids, for_staff=True)
             if status_value != StaffAttendance.Status.ON_LEAVE:
                 serializer.validated_data['status'] = StaffAttendance.Status.ON_LEAVE
             note = serializer.validated_data.get('notes') or ''
@@ -1491,9 +1491,9 @@ class StaffAttendanceViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mo
                         teacher_class_cache[member.user_id] = self._resolve_teacher_class_ids(member)
                     class_ids = teacher_class_cache[member.user_id]
 
-                if is_off_day_for_date(school_id, att_date, class_ids=class_ids):
+                if is_off_day_for_date(school_id, att_date, class_ids=class_ids, for_staff=True):
                     payload['status'] = StaffAttendance.Status.ON_LEAVE
-                    off_types = off_day_types_for_date(school_id, att_date, class_ids=class_ids)
+                    off_types = off_day_types_for_date(school_id, att_date, class_ids=class_ids, for_staff=True)
                     extra_note = f"Auto-marked ON_LEAVE (OFF day: {', '.join(off_types)})"
                     payload['notes'] = f"{payload['notes']} | {extra_note}".strip(' |')
         existing_records = StaffAttendance.objects.filter(
@@ -1604,6 +1604,7 @@ class StaffAttendanceViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mo
 
             class_ids = self._resolve_teacher_class_ids(staff)
             off_days = build_off_day_date_set(
+                for_staff=True,
                 school_id=school_id,
                 date_from=date_from,
                 date_to=date_to,
