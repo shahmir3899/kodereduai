@@ -18,6 +18,7 @@ export default function MarksEntryPage() {
   // Selection state
   const [selectedExamId, setSelectedExamId] = useState('')
   const [selectedSubjectId, setSelectedSubjectId] = useState('')
+  const [selectedExamType, setSelectedExamType] = useState('')
   const [yearFilter, setYearFilter] = useState('')
   const [classFilter, setClassFilter] = useState('')
 
@@ -49,19 +50,44 @@ export default function MarksEntryPage() {
   const [saveMsg, setSaveMsg] = useState('')
   const [downloading, setDownloading] = useState(false)
 
+  const sortByRollNumber = (rows) => {
+    const parseRoll = (value) => {
+      const text = String(value || '').trim()
+      if (!text) return { empty: true, num: Number.POSITIVE_INFINITY, text: '' }
+      const num = Number.parseInt(text, 10)
+      if (Number.isNaN(num)) return { empty: false, num: Number.POSITIVE_INFINITY, text: text.toLowerCase() }
+      return { empty: false, num, text: text.toLowerCase() }
+    }
+
+    return [...rows].sort((a, b) => {
+      const ra = parseRoll(a.student_roll)
+      const rb = parseRoll(b.student_roll)
+      if (ra.empty !== rb.empty) return ra.empty ? 1 : -1
+      if (ra.num !== rb.num) return ra.num - rb.num
+      return ra.text.localeCompare(rb.text)
+    })
+  }
+
   // Queries
   const { data: yearsRes } = useQuery({
     queryKey: ['academicYears'],
     queryFn: () => sessionsApi.getAcademicYears({ page_size: 9999 }),
   })
 
+  const { data: examTypesRes } = useQuery({
+    queryKey: ['examTypesForMarksEntry'],
+    queryFn: () => examinationsApi.getExamTypes({ page_size: 9999, is_active: true }),
+  })
+
   const { data: examsRes } = useQuery({
-    queryKey: ['exams', yearFilter, classFilter, resolvedClassFilter],
+    queryKey: ['exams', yearFilter, classFilter, resolvedClassFilter, selectedExamType],
     queryFn: () => examinationsApi.getExams({
       academic_year: yearFilter || undefined,
       class_obj: resolvedClassFilter || undefined,
+      exam_type: selectedExamType || undefined,
       page_size: 9999,
     }),
+    enabled: !!selectedExamType,
   })
 
   const { data: examSubjectsRes, isLoading: examSubjectsLoading } = useQuery({
@@ -77,6 +103,7 @@ export default function MarksEntryPage() {
   })
 
   const years = yearsRes?.data?.results || yearsRes?.data || []
+  const examTypes = examTypesRes?.data?.results || examTypesRes?.data || []
 
   const exams = examsRes?.data?.results || examsRes?.data || []
   const examSubjects = examSubjectsRes?.data?.results || examSubjectsRes?.data || []
@@ -85,6 +112,29 @@ export default function MarksEntryPage() {
   // Selected exam and subject details
   const selectedExam = exams.find(e => String(e.id) === selectedExamId)
   const selectedSubject = examSubjects.find(s => s.id === parseInt(selectedSubjectId))
+
+  const inferSubjectIdFromExamName = (examName, subjects) => {
+    const normalizedExamName = String(examName || '').toLowerCase()
+    if (!normalizedExamName) return ''
+    const match = subjects.find((subject) => normalizedExamName.includes(String(subject.subject_name || '').toLowerCase()))
+    return match ? String(match.id) : ''
+  }
+
+  useEffect(() => {
+    if (!selectedExamId || selectedSubjectId || examSubjectsLoading || examSubjects.length === 0) return
+
+    // Standalone tests usually have a single subject; preselect it.
+    if (examSubjects.length === 1) {
+      setSelectedSubjectId(String(examSubjects[0].id))
+      return
+    }
+
+    // If multiple subjects exist, attempt a best-effort name match.
+    const inferredId = inferSubjectIdFromExamName(selectedExam?.name, examSubjects)
+    if (inferredId) {
+      setSelectedSubjectId(inferredId)
+    }
+  }, [selectedExamId, selectedSubjectId, selectedExam?.name, examSubjects, examSubjectsLoading])
 
   // Fetch students from the exam's class (filtered by academic year enrollment)
   const { data: classStudentsRes, isLoading: studentsLoading } = useQuery({
@@ -104,24 +154,24 @@ export default function MarksEntryPage() {
     if (!selectedSubjectId) return
     if (existingMarks.length > 0) {
       // Populate from existing marks
-      setMarksData(existingMarks.map(m => ({
+      setMarksData(sortByRollNumber(existingMarks.map(m => ({
         student_id: m.student,
         student_name: m.student_name,
         student_roll: m.student_roll_number,
         marks_obtained: m.marks_obtained !== null ? String(m.marks_obtained) : '',
         is_absent: m.is_absent,
         remarks: m.remarks || '',
-      })))
+      }))))
     } else if (!marksLoading && classStudents.length > 0) {
       // No marks yet — pre-populate grid with students from the class
-      setMarksData(classStudents.map(s => ({
+      setMarksData(sortByRollNumber(classStudents.map(s => ({
         student_id: s.id,
         student_name: s.name,
         student_roll: s.roll_number || '',
         marks_obtained: '',
         is_absent: false,
         remarks: '',
-      })))
+      }))))
     }
   }, [selectedSubjectId, existingMarks.length, classStudents.length, marksLoading])
 
@@ -246,7 +296,7 @@ export default function MarksEntryPage() {
           // Merge with existing marksData (update by student_id, keep new entries)
           if (marksData.length > 0) {
             const uploadMap = new Map(uploadedMarks.map(m => [m.student_id, m]))
-            setMarksData(prev => prev.map(existing => {
+            setMarksData(prev => sortByRollNumber(prev.map(existing => {
               const uploaded = uploadMap.get(existing.student_id)
               if (uploaded) {
                 return {
@@ -257,9 +307,9 @@ export default function MarksEntryPage() {
                 }
               }
               return existing
-            }))
+            })))
           } else {
-            setMarksData(uploadedMarks)
+            setMarksData(sortByRollNumber(uploadedMarks))
           }
           setSaveMsg(`Imported ${uploadedMarks.length} rows from Excel. Review and click "Save All Marks".`)
           setTimeout(() => setSaveMsg(''), 5000)
@@ -285,7 +335,7 @@ export default function MarksEntryPage() {
 
       {/* Selection Bar */}
       <div className="card mb-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">Academic Year</label>
             <select value={yearFilter} onChange={e => { setYearFilter(e.target.value); setSelectedExamId(''); setSelectedSubjectId(''); setMarksData([]) }} className="input w-full text-sm">
@@ -306,8 +356,24 @@ export default function MarksEntryPage() {
             />
           </div>
           <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Exam Type</label>
+            <select
+              value={selectedExamType}
+              onChange={e => { setSelectedExamType(e.target.value); setSelectedExamId(''); setSelectedSubjectId(''); setMarksData([]) }}
+              className="input w-full text-sm"
+            >
+              <option value="">Select exam type...</option>
+              {examTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </div>
+          <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">Exam</label>
-            <select value={selectedExamId} onChange={e => { setSelectedExamId(e.target.value); setSelectedSubjectId(''); setMarksData([]) }} className="input w-full text-sm">
+            <select
+              value={selectedExamId}
+              onChange={e => { setSelectedExamId(e.target.value); setSelectedSubjectId(''); setMarksData([]) }}
+              className="input w-full text-sm"
+              disabled={!selectedExamType}
+            >
               <option value="">Select exam...</option>
               {exams.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
             </select>
@@ -389,38 +455,50 @@ export default function MarksEntryPage() {
               Select Class
             </div>
             <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-            {/* Step 2: Exam */}
+            {/* Step 2: Exam Type */}
             <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${
-              selectedExamId ? 'bg-green-100 text-green-700' : classFilter ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-300' : 'bg-gray-100 text-gray-400'
+              selectedExamType ? 'bg-green-100 text-green-700' : classFilter ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-300' : 'bg-gray-100 text-gray-400'
             }`}>
               <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${
-                selectedExamId ? 'bg-green-500 text-white' : classFilter ? 'bg-blue-500 text-white' : 'bg-gray-300 text-white'
-              }`}>{selectedExamId ? '\u2713' : '2'}</span>
+                selectedExamType ? 'bg-green-500 text-white' : classFilter ? 'bg-blue-500 text-white' : 'bg-gray-300 text-white'
+              }`}>{selectedExamType ? '\u2713' : '2'}</span>
+              Select Exam Type
+            </div>
+            <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+            {/* Step 3: Exam */}
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${
+              selectedExamId ? 'bg-green-100 text-green-700' : selectedExamType ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-300' : 'bg-gray-100 text-gray-400'
+            }`}>
+              <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${
+                selectedExamId ? 'bg-green-500 text-white' : selectedExamType ? 'bg-blue-500 text-white' : 'bg-gray-300 text-white'
+              }`}>{selectedExamId ? '\u2713' : '3'}</span>
               Select Exam
             </div>
             <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-            {/* Step 3: Subject */}
+            {/* Step 4: Subject */}
             <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${
               selectedExamId ? 'bg-blue-100 text-blue-700 ring-2 ring-blue-300' : 'bg-gray-100 text-gray-400'
             }`}>
               <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${
                 selectedExamId ? 'bg-blue-500 text-white' : 'bg-gray-300 text-white'
-              }`}>3</span>
+              }`}>4</span>
               Select Subject
             </div>
             <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-            {/* Step 4: Enter */}
+            {/* Step 5: Enter */}
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-gray-100 text-gray-400">
-              <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-gray-300 text-white">4</span>
+              <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-gray-300 text-white">5</span>
               Enter Marks
             </div>
           </div>
           <p className="text-sm text-gray-500 mt-3">
             {!classFilter
-              ? 'Start by selecting a class to see available exams.'
-              : !selectedExamId
-                ? 'Now pick an exam to see its subjects.'
-                : 'Select a subject to start entering marks.'}
+              ? 'Start by selecting a class to see available exam types.'
+              : !selectedExamType
+                ? 'Now select an exam type.'
+                : !selectedExamId
+                  ? 'Now pick an exam from the selected exam type.'
+                  : 'Select a subject to start entering marks.'}
           </p>
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-3">
             <p className="text-xs text-blue-700">

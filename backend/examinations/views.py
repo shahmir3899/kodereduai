@@ -1,16 +1,18 @@
 import io
+import re
 from decimal import Decimal
+from django.db import IntegrityError, transaction
 from django.db.models import Count, Q
 from django.http import HttpResponse
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core.mixins import TenantQuerySetMixin, ensure_tenant_school_id
-from core.permissions import IsSchoolAdmin, IsSchoolAdminOrReadOnly, HasSchoolAccess, ModuleAccessMixin, get_effective_role, get_teacher_combined_scope
+from core.permissions import ADMIN_ROLES, IsSchoolAdmin, IsSchoolAdminOrReadOnly, HasSchoolAccess, ModuleAccessMixin, get_effective_role, get_teacher_combined_scope
 from core.class_scope import resolve_class_scope
 
 from .models import (
@@ -20,6 +22,7 @@ from .models import (
 from .serializers import (
     ExamTypeSerializer, ExamTypeCreateSerializer,
     ExamSerializer, ExamCreateSerializer,
+    BulkTestRequestSerializer,
     ExamSubjectSerializer, ExamSubjectCreateSerializer,
     StudentMarkSerializer, StudentMarkCreateSerializer,
     StudentMarkBulkEntrySerializer,
@@ -121,6 +124,221 @@ def _is_teacher_allowed_for_class_subject(request, class_id, subject_id, school_
     except (TypeError, ValueError):
         return False
     return subject_id in class_subject_map.get(class_id, set())
+
+
+def _short_academic_year_name(name):
+    return re.sub(r'^academic\s+year\s*', '', name or '', flags=re.IGNORECASE).strip()
+
+
+def _generate_bulk_test_name(subject_name, term_name=None, academic_year_name=None):
+    name = f'Test - {subject_name}'
+    if term_name and term_name.lower() not in name.lower():
+        name += f' - {term_name}'
+    year_short = _short_academic_year_name(academic_year_name)
+    if year_short:
+        name += f' {year_short}'
+    return name
+
+
+def _assert_bulk_test_role(request):
+    role = get_effective_role(request)
+    if role not in ADMIN_ROLES and role != 'TEACHER':
+        raise PermissionDenied('You do not have permission to manage tests.')
+
+
+def _build_bulk_test_plan(request, data):
+    school_id = _resolve_school_id(request)
+    if not school_id:
+        raise ValidationError({'detail': 'No school context.'})
+
+    _assert_bulk_test_role(request)
+
+    from academic_sessions.models import AcademicYear, Term
+    from academics.models import ClassSubject, Subject
+    from students.models import Class
+
+    academic_year = AcademicYear.objects.filter(
+        school_id=school_id,
+        id=data['academic_year'],
+        is_active=True,
+    ).only('id', 'name').first()
+    if not academic_year:
+        raise ValidationError({'academic_year': 'Academic year is invalid for the active school.'})
+
+    term = None
+    if data.get('term'):
+        term = Term.objects.filter(
+            school_id=school_id,
+            academic_year_id=academic_year.id,
+            id=data['term'],
+        ).only('id', 'name').first()
+        if not term:
+            raise ValidationError({'term': 'Term is invalid for the selected academic year.'})
+
+    exam_type = ExamType.objects.filter(
+        school_id=school_id,
+        id=data['exam_type'],
+        is_active=True,
+    ).only('id', 'name').first()
+    if not exam_type:
+        raise ValidationError({'exam_type': 'Exam type is invalid for the active school.'})
+
+    class_obj = Class.objects.filter(
+        school_id=school_id,
+        id=data['class_obj'],
+        is_active=True,
+    ).only('id', 'name').first()
+    if not class_obj:
+        raise ValidationError({'class_obj': 'Class is invalid for the active school.'})
+
+    role = get_effective_role(request)
+    teacher_scope = get_teacher_combined_scope(
+        request,
+        school_id=school_id,
+        academic_year_id=academic_year.id,
+    )
+    if role == 'TEACHER' and class_obj.id not in teacher_scope['all_class_ids']:
+        raise PermissionDenied('You do not have access to this class.')
+
+    requested_subject_ids = [row['subject_id'] for row in data['tests']]
+    subjects_by_id = {
+        subject.id: subject
+        for subject in Subject.objects.filter(
+            school_id=school_id,
+            id__in=requested_subject_ids,
+            is_active=True,
+        ).only('id', 'name', 'code')
+    }
+
+    class_subjects_qs = ClassSubject.objects.filter(
+        school_id=school_id,
+        class_obj_id=class_obj.id,
+        subject_id__in=requested_subject_ids,
+        is_active=True,
+    ).filter(
+        Q(academic_year_id=academic_year.id) | Q(academic_year__isnull=True)
+    ).select_related('subject')
+
+    if role == 'TEACHER':
+        class_subjects_qs = class_subjects_qs.filter(teacher__user=request.user)
+
+    assigned_subjects = {}
+    for class_subject in class_subjects_qs.order_by('-academic_year_id', '-id'):
+        assigned_subjects.setdefault(class_subject.subject_id, class_subject)
+
+    existing_tests_qs = ExamSubject.objects.filter(
+        school_id=school_id,
+        subject_id__in=requested_subject_ids,
+        is_active=True,
+        exam__school_id=school_id,
+        exam__academic_year_id=academic_year.id,
+        exam__class_obj_id=class_obj.id,
+        exam__exam_type_id=exam_type.id,
+        exam__exam_group__isnull=True,
+        exam__is_active=True,
+    ).select_related('exam', 'subject')
+    if term:
+        existing_tests_qs = existing_tests_qs.filter(exam__term_id=term.id)
+    else:
+        existing_tests_qs = existing_tests_qs.filter(exam__term__isnull=True)
+
+    existing_by_subject = {}
+    for exam_subject in existing_tests_qs:
+        existing_by_subject.setdefault(exam_subject.subject_id, exam_subject)
+
+    items = []
+    for row in data['tests']:
+        subject = subjects_by_id.get(row['subject_id'])
+        class_subject = assigned_subjects.get(row['subject_id'])
+        existing_exam_subject = existing_by_subject.get(row['subject_id'])
+
+        if not subject:
+            items.append({
+                'subject_id': row['subject_id'],
+                'subject_name': None,
+                'subject_code': None,
+                'name': row.get('name', '').strip(),
+                'exam_date': row['exam_date'],
+                'total_marks': row['total_marks'],
+                'start_time': row.get('start_time'),
+                'end_time': row.get('end_time'),
+                'status': 'invalid',
+                'reason': 'Subject is invalid for the active school.',
+            })
+            continue
+
+        resolved_name = row.get('name', '').strip() or _generate_bulk_test_name(
+            subject.name,
+            term_name=term.name if term else None,
+            academic_year_name=academic_year.name,
+        )
+
+        if not class_subject:
+            reason = 'You are not assigned to this class-subject pair.' if role == 'TEACHER' else 'Subject is not assigned to the selected class.'
+            items.append({
+                'subject_id': subject.id,
+                'subject_name': subject.name,
+                'subject_code': subject.code,
+                'name': resolved_name,
+                'exam_date': row['exam_date'],
+                'total_marks': row['total_marks'],
+                'start_time': row.get('start_time'),
+                'end_time': row.get('end_time'),
+                'status': 'forbidden' if role == 'TEACHER' else 'invalid',
+                'reason': reason,
+            })
+            continue
+
+        if existing_exam_subject:
+            items.append({
+                'subject_id': subject.id,
+                'subject_name': subject.name,
+                'subject_code': subject.code,
+                'name': resolved_name,
+                'exam_date': row['exam_date'],
+                'total_marks': row['total_marks'],
+                'start_time': row.get('start_time'),
+                'end_time': row.get('end_time'),
+                'status': 'conflict',
+                'reason': f'Active test "{existing_exam_subject.exam.name}" already exists for this subject.',
+                'existing_exam_id': existing_exam_subject.exam_id,
+            })
+            continue
+
+        items.append({
+            'subject_id': subject.id,
+            'subject_name': subject.name,
+            'subject_code': subject.code,
+            'name': resolved_name,
+            'exam_date': row['exam_date'],
+            'total_marks': row['total_marks'],
+            'start_time': row.get('start_time'),
+            'end_time': row.get('end_time'),
+            'status': 'create',
+            'reason': '',
+        })
+
+    counts = {
+        'requested': len(items),
+        'create': sum(1 for item in items if item['status'] == 'create'),
+        'conflict': sum(1 for item in items if item['status'] == 'conflict'),
+        'forbidden': sum(1 for item in items if item['status'] == 'forbidden'),
+        'invalid': sum(1 for item in items if item['status'] == 'invalid'),
+    }
+
+    return {
+        'class_obj': class_obj.id,
+        'class_name': class_obj.name,
+        'academic_year': academic_year.id,
+        'academic_year_name': academic_year.name,
+        'term': term.id if term else None,
+        'term_name': term.name if term else None,
+        'exam_type': exam_type.id,
+        'exam_type_name': exam_type.name,
+        'counts': counts,
+        'can_apply': counts['create'] > 0 and counts['conflict'] == 0 and counts['forbidden'] == 0 and counts['invalid'] == 0,
+        'tests': items,
+    }
 
 
 class ExamTypeViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
@@ -512,6 +730,11 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
             return ExamCreateSerializer
         return ExamSerializer
 
+    def get_permissions(self):
+        if self.action in ('bulk_test_preview', 'bulk_test_apply'):
+            return [IsAuthenticated(), HasSchoolAccess()]
+        return super().get_permissions()
+
     def get_serializer_context(self):
         ctx = super().get_serializer_context()
         ctx['school_id'] = _resolve_school_id(self.request)
@@ -580,6 +803,94 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
         ]
         if exam_subjects:
             ExamSubject.objects.bulk_create(exam_subjects, ignore_conflicts=True)
+
+    @action(detail=False, methods=['post'], url_path='bulk-test-preview')
+    def bulk_test_preview(self, request):
+        serializer = BulkTestRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        preview = _build_bulk_test_plan(request, serializer.validated_data)
+        return Response(preview)
+
+    @action(detail=False, methods=['post'], url_path='bulk-test-apply')
+    def bulk_test_apply(self, request):
+        serializer = BulkTestRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        preview = _build_bulk_test_plan(request, serializer.validated_data)
+        if not preview['can_apply']:
+            return Response(
+                {
+                    **preview,
+                    'detail': 'Preview contains conflicts or inaccessible subjects. Resolve them before applying.',
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        school_id = _resolve_school_id(request)
+        created_tests = []
+        try:
+            with transaction.atomic():
+                for item in preview['tests']:
+                    exam = Exam.objects.create(
+                        school_id=school_id,
+                        academic_year_id=preview['academic_year'],
+                        term_id=preview['term'],
+                        exam_type_id=preview['exam_type'],
+                        class_obj_id=preview['class_obj'],
+                        exam_group=None,
+                        name=item['name'],
+                        start_date=item['exam_date'],
+                        end_date=item['exam_date'],
+                        status=Exam.Status.SCHEDULED,
+                    )
+                    ExamSubject.objects.create(
+                        school_id=school_id,
+                        exam=exam,
+                        subject_id=item['subject_id'],
+                        total_marks=item.get('total_marks') or Decimal('100.00'),
+                        passing_marks=((item.get('total_marks') or Decimal('100.00')) * Decimal('0.33')).quantize(Decimal('0.01')),
+                        exam_date=item['exam_date'],
+                        start_time=item.get('start_time'),
+                        end_time=item.get('end_time'),
+                    )
+                    created_tests.append({
+                        'exam_id': exam.id,
+                        'name': exam.name,
+                        'subject_id': item['subject_id'],
+                        'subject_name': item['subject_name'],
+                        'exam_date': item['exam_date'],
+                        'total_marks': item.get('total_marks') or Decimal('100.00'),
+                    })
+        except IntegrityError as exc:
+            message = str(exc)
+            legacy_constraint = 'examinations_exam_school_id_exam_type_id_c_bf67c535_uniq'
+            if legacy_constraint in message:
+                return Response(
+                    {
+                        **preview,
+                        'detail': (
+                            'Your database still enforces the legacy standalone-test uniqueness constraint. '
+                            'Run examinations migrations (including 0015+) and retry.'
+                        ),
+                        'constraint': legacy_constraint,
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
+            return Response(
+                {
+                    **preview,
+                    'detail': 'A database integrity error occurred while creating tests. Please retry.',
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        return Response({
+            'created_count': len(created_tests),
+            'created_tests': created_tests,
+            'class_name': preview['class_name'],
+            'exam_type_name': preview['exam_type_name'],
+            'academic_year_name': preview['academic_year_name'],
+            'term_name': preview['term_name'],
+        }, status=status.HTTP_201_CREATED)
 
     def perform_destroy(self, instance):
         instance.delete()  # Cascades to ExamSubject → StudentMark

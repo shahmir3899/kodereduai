@@ -14,7 +14,7 @@ from decimal import Decimal
 
 from examinations.models import ExamType, Exam, ExamSubject, StudentMark, GradeScale
 from academic_sessions.models import AcademicYear, StudentEnrollment
-from academics.models import Subject
+from academics.models import ClassSubject, Subject
 
 
 # ---- Prefix used by this phase (unique to avoid collisions) ----
@@ -426,8 +426,8 @@ class TestExams:
         exam_temp.refresh_from_db()
         assert exam_temp.is_active is False, f"is_active={exam_temp.is_active}"
 
-    def test_b13_duplicate_exam_type_class_term_rejected(self, exam_prereqs, api):
-        """B13: Duplicate exam_type+class+term -> 400."""
+    def test_b13_duplicate_standalone_tests_allowed(self, exam_prereqs, api):
+        """B13: Standalone tests can share exam_type+class+term when they differ by subject."""
         d = exam_prereqs
         token = d['tokens']['admin']
         sid = d['SID_A']
@@ -446,7 +446,7 @@ class TestExams:
             'name': f'{P6}Duplicate Exam',
             'start_date': '2026-03-15', 'end_date': '2026-03-20',
         }, token, sid)
-        assert resp.status_code == 400, f"status={resp.status_code}"
+        assert resp.status_code == 201, f"status={resp.status_code} body={resp.content[:200]}"
 
     def test_b14_school_b_isolation(self, exam_prereqs, api):
         """B14: School B sees no School A exams."""
@@ -616,6 +616,185 @@ class TestExamSubjects:
         assert resp.status_code == 200
         data = resp.json()
         assert len(data) >= 3, f"count={len(data)}"
+
+
+@pytest.mark.django_db
+@pytest.mark.phase6
+class TestBulkStandaloneTests:
+
+    def _create_exam_type(self, seed_data, api):
+        api.post('/api/examinations/exam-types/', {
+            'name': f'{P6}Unit Test',
+            'weight': '10.00',
+        }, seed_data['tokens']['admin'], seed_data['SID_A'])
+        exam_type = ExamType.objects.get(school=seed_data['school_a'], name=f'{P6}Unit Test')
+        return exam_type.id
+
+    def _teacher_token(self, seed_data, api, index=0):
+        return api.login(f"{seed_data['prefix']}staff_teacher{index + 1}")
+
+    def _assign_subjects(self, d):
+        ClassSubject.objects.create(
+            school=d['school_a'],
+            academic_year=d['academic_year'],
+            class_obj=d['class_1'],
+            subject=d['subj_math'],
+            teacher=d['staff'][0],
+            is_active=True,
+        )
+        ClassSubject.objects.create(
+            school=d['school_a'],
+            academic_year=d['academic_year'],
+            class_obj=d['class_1'],
+            subject=d['subj_eng'],
+            teacher=d['staff'][0],
+            is_active=True,
+        )
+        ClassSubject.objects.create(
+            school=d['school_a'],
+            academic_year=d['academic_year'],
+            class_obj=d['class_1'],
+            subject=d['subj_sci'],
+            teacher=d['staff'][1],
+            is_active=True,
+        )
+
+    def test_bt1_preview_admin_sees_multiple_subject_tests(self, exam_prereqs, api):
+        d = exam_prereqs
+        self._assign_subjects(d)
+        exam_type_id = self._create_exam_type(d, api)
+        resp = api.post('/api/examinations/exams/bulk-test-preview/', {
+            'academic_year': d['academic_year'].id,
+            'term': d['term_1'].id,
+            'exam_type': exam_type_id,
+            'class_obj': d['class_1'].id,
+            'tests': [
+                {'subject_id': d['subj_math'].id, 'exam_date': '2026-03-02'},
+                {'subject_id': d['subj_eng'].id, 'exam_date': '2026-03-03', 'start_time': '09:00:00', 'end_time': '10:00:00'},
+            ],
+        }, d['tokens']['admin'], d['SID_A'])
+        assert resp.status_code == 200, f"status={resp.status_code} body={resp.content[:200]}"
+        payload = resp.json()
+        assert payload['counts']['create'] == 2
+        assert payload['can_apply'] is True
+        assert all(item['status'] == 'create' for item in payload['tests'])
+
+    def test_bt2_apply_admin_creates_standalone_tests(self, exam_prereqs, api):
+        d = exam_prereqs
+        self._assign_subjects(d)
+        exam_type_id = self._create_exam_type(d, api)
+        resp = api.post('/api/examinations/exams/bulk-test-apply/', {
+            'academic_year': d['academic_year'].id,
+            'term': d['term_1'].id,
+            'exam_type': exam_type_id,
+            'class_obj': d['class_1'].id,
+            'tests': [
+                {'subject_id': d['subj_math'].id, 'exam_date': '2026-03-02'},
+                {'subject_id': d['subj_eng'].id, 'exam_date': '2026-03-03'},
+            ],
+        }, d['tokens']['admin'], d['SID_A'])
+        assert resp.status_code == 201, f"status={resp.status_code} body={resp.content[:200]}"
+        payload = resp.json()
+        assert payload['created_count'] == 2
+
+        exams = list(Exam.objects.filter(
+            school=d['school_a'],
+            class_obj=d['class_1'],
+            exam_type_id=exam_type_id,
+            term=d['term_1'],
+            exam_group__isnull=True,
+        ).order_by('name'))
+        assert len(exams) == 2
+        assert all(exam.start_date == exam.end_date for exam in exams)
+        assert all(exam.exam_subjects.filter(is_active=True).count() == 1 for exam in exams)
+
+    def test_bt3_preview_teacher_blocks_unassigned_subjects(self, exam_prereqs, api):
+        d = exam_prereqs
+        self._assign_subjects(d)
+        exam_type_id = self._create_exam_type(d, api)
+        teacher_token = self._teacher_token(d, api, index=0)
+        resp = api.post('/api/examinations/exams/bulk-test-preview/', {
+            'academic_year': d['academic_year'].id,
+            'term': d['term_1'].id,
+            'exam_type': exam_type_id,
+            'class_obj': d['class_1'].id,
+            'tests': [
+                {'subject_id': d['subj_math'].id, 'exam_date': '2026-03-02'},
+                {'subject_id': d['subj_sci'].id, 'exam_date': '2026-03-04'},
+            ],
+        }, teacher_token, d['SID_A'])
+        assert resp.status_code == 200, f"status={resp.status_code} body={resp.content[:200]}"
+        payload = resp.json()
+        assert payload['counts']['create'] == 1
+        assert payload['counts']['forbidden'] == 1
+        assert payload['can_apply'] is False
+        forbidden = next(item for item in payload['tests'] if item['subject_id'] == d['subj_sci'].id)
+        assert forbidden['status'] == 'forbidden'
+
+    def test_bt4_apply_teacher_allowed_subject_only(self, exam_prereqs, api):
+        d = exam_prereqs
+        self._assign_subjects(d)
+        exam_type_id = self._create_exam_type(d, api)
+        teacher_token = self._teacher_token(d, api, index=0)
+        resp = api.post('/api/examinations/exams/bulk-test-apply/', {
+            'academic_year': d['academic_year'].id,
+            'term': d['term_1'].id,
+            'exam_type': exam_type_id,
+            'class_obj': d['class_1'].id,
+            'tests': [
+                {'subject_id': d['subj_math'].id, 'exam_date': '2026-03-02'},
+            ],
+        }, teacher_token, d['SID_A'])
+        assert resp.status_code == 201, f"status={resp.status_code} body={resp.content[:200]}"
+        exam = Exam.objects.filter(
+            school=d['school_a'],
+            class_obj=d['class_1'],
+            exam_type_id=exam_type_id,
+            term=d['term_1'],
+            exam_group__isnull=True,
+        ).first()
+        assert exam is not None
+        assert exam.exam_subjects.filter(subject=d['subj_math']).count() == 1
+
+    def test_bt5_preview_detects_existing_subject_conflict(self, exam_prereqs, api):
+        d = exam_prereqs
+        self._assign_subjects(d)
+        exam_type_id = self._create_exam_type(d, api)
+        existing_exam = Exam.objects.create(
+            school=d['school_a'],
+            academic_year=d['academic_year'],
+            term=d['term_1'],
+            exam_type_id=exam_type_id,
+            class_obj=d['class_1'],
+            name=f'{P6}Existing Math Test',
+            start_date='2026-03-01',
+            end_date='2026-03-01',
+        )
+        ExamSubject.objects.create(
+            school=d['school_a'],
+            exam=existing_exam,
+            subject=d['subj_math'],
+            exam_date='2026-03-01',
+        )
+
+        resp = api.post('/api/examinations/exams/bulk-test-preview/', {
+            'academic_year': d['academic_year'].id,
+            'term': d['term_1'].id,
+            'exam_type': exam_type_id,
+            'class_obj': d['class_1'].id,
+            'tests': [
+                {'subject_id': d['subj_math'].id, 'exam_date': '2026-03-02'},
+            ],
+        }, d['tokens']['admin'], d['SID_A'])
+        assert resp.status_code == 200
+        payload = resp.json()
+        assert payload['counts']['conflict'] == 1
+        assert payload['tests'][0]['status'] == 'conflict'
+
+
+@pytest.mark.django_db
+@pytest.mark.phase6
+class TestExamSubjectsContinuation(TestExamSubjects):
 
     def test_c8_update_exam_subject(self, exam_prereqs, api):
         """C8: Update exam subject passing marks."""

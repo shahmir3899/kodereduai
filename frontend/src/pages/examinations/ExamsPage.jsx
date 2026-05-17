@@ -6,12 +6,19 @@ import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 import ExamWizard from './ExamWizard'
+import BulkTestModal from './BulkTestModal'
 import { useConfirmModal } from '../../components/ConfirmModal'
 
-const EMPTY_FORM = {
-  academic_year: '', term: '', exam_type: '', class_obj: '',
-  name: '', start_date: '', end_date: '', status: 'SCHEDULED',
-}
+const createEmptyForm = (academicYearId = '', termId = '') => ({
+  academic_year: academicYearId ? String(academicYearId) : '',
+  term: termId ? String(termId) : '',
+  exam_type: '',
+  class_obj: '',
+  name: '',
+  start_date: '',
+  end_date: '',
+  status: 'SCHEDULED',
+})
 
 const STATUS_STYLES = {
   SCHEDULED: 'bg-gray-100 text-gray-700',
@@ -24,15 +31,18 @@ const STATUS_STYLES = {
 export default function ExamsPage() {
   const queryClient = useQueryClient()
   const { confirm, ConfirmModalRoot } = useConfirmModal()
-  const { activeAcademicYear } = useAcademicYear()
+  const { activeAcademicYear, currentTerm } = useAcademicYear()
+  const getDefaultForm = () => createEmptyForm(activeAcademicYear?.id, currentTerm?.id)
 
   // UI state
   const [showWizard, setShowWizard] = useState(false)
+  const [showBulkTestModal, setShowBulkTestModal] = useState(false)
   const [showModal, setShowModal] = useState(false)
   const [editId, setEditId] = useState(null)
-  const [form, setForm] = useState(EMPTY_FORM)
+  const [form, setForm] = useState(() => createEmptyForm())
   const [errors, setErrors] = useState({})
   const [selectedSubjects, setSelectedSubjects] = useState([])
+  const [testScheduleRows, setTestScheduleRows] = useState([])
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [listError, setListError] = useState(null)
   const [expandedGroupId, setExpandedGroupId] = useState(null)
@@ -51,6 +61,52 @@ export default function ExamsPage() {
     })
     return map
   }, [sessionClasses])
+
+  const { data: allSessionClassesRes } = useQuery({
+    queryKey: ['sessionClassesForExamList'],
+    queryFn: () => sessionsApi.getSessionClasses({ page_size: 9999, is_active: true }),
+  })
+
+  const allSessionClasses = allSessionClassesRes?.data?.results || allSessionClassesRes?.data || []
+
+  const sessionClassesByYearMaster = useMemo(() => {
+    const map = {}
+    allSessionClasses.forEach((sc) => {
+      if (!sc?.academic_year || !sc?.class_obj) return
+      const key = `${sc.academic_year}:${sc.class_obj}`
+      if (!map[key]) map[key] = []
+      map[key].push(sc)
+    })
+    return map
+  }, [allSessionClasses])
+
+  const sessionClassIdByYearMaster = useMemo(() => {
+    const map = {}
+    allSessionClasses.forEach((sc) => {
+      if (!sc?.academic_year || !sc?.class_obj || !sc?.id) return
+      const key = `${sc.academic_year}:${sc.class_obj}`
+      if (!map[key]) map[key] = String(sc.id)
+    })
+    return map
+  }, [allSessionClasses])
+
+  const getExamClassLabel = (exam) => {
+    if (!exam?.academic_year || !exam?.class_obj) return exam?.class_name || '—'
+    const key = `${exam.academic_year}:${exam.class_obj}`
+    const variants = sessionClassesByYearMaster[key] || []
+    if (variants.length === 0) return exam.class_name || '—'
+    if (variants.length === 1) {
+      const only = variants[0]
+      return only.label || only.display_name || exam.class_name || '—'
+    }
+    const sections = [...new Set(
+      variants
+        .map((row) => String(row.section || '').trim())
+        .filter(Boolean),
+    )]
+    const baseName = variants[0]?.display_name || exam.class_name || 'Class'
+    return sections.length > 0 ? `${baseName} (Sections: ${sections.join(', ')})` : `${baseName} (${variants.length} session classes)`
+  }
 
   // Sync year filter with global session switcher
   useEffect(() => {
@@ -122,9 +178,33 @@ export default function ExamsPage() {
   })
   const allSubjects = allSubjectsRes?.data?.results || allSubjectsRes?.data || []
 
+  const { data: testScheduleRes } = useQuery({
+    queryKey: ['testScheduleRows', editId],
+    queryFn: () => examinationsApi.getExamSubjects({ exam: editId, page_size: 9999 }),
+    enabled: !!showModal && !!editId && activeTab === 'tests',
+  })
+
   const years = yearsRes?.data?.results || yearsRes?.data || []
   const terms = termsRes?.data?.results || termsRes?.data || []
   const examTypes = examTypesRes?.data?.results || examTypesRes?.data || []
+
+  useEffect(() => {
+    if (!showModal || !editId || activeTab !== 'tests') {
+      setTestScheduleRows([])
+      return
+    }
+    const rows = testScheduleRes?.data?.results || testScheduleRes?.data || []
+    setTestScheduleRows(
+      rows.map((row) => ({
+        id: row.id,
+        subject_name: row.subject_name,
+        subject_code: row.subject_code,
+        exam_date: row.exam_date || '',
+        start_time: row.start_time || '',
+        end_time: row.end_time || '',
+      })),
+    )
+  }, [testScheduleRes, showModal, editId, activeTab])
 
   // ── Mutations ──
 
@@ -166,10 +246,10 @@ export default function ExamsPage() {
 
   // ── Modal helpers (Quick Create / Edit) ──
 
-  const openCreate = () => { setForm(EMPTY_FORM); setEditId(null); setErrors({}); setSelectedSubjects([]); setShowModal(true) }
+  const openCreate = () => { setForm(getDefaultForm()); setEditId(null); setErrors({}); setSelectedSubjects([]); setTestScheduleRows([]); setShowModal(true) }
   const openEdit = (item) => {
     const mappedClassObj = classSelectorScope === 'session'
-      ? (sessionClassIdByMaster[String(item.class_obj)] || '')
+      ? (sessionClassIdByYearMaster[`${item.academic_year}:${item.class_obj}`] || sessionClassIdByMaster[String(item.class_obj)] || '')
       : item.class_obj
 
     setForm({
@@ -178,9 +258,9 @@ export default function ExamsPage() {
       name: item.name, start_date: item.start_date || '',
       end_date: item.end_date || '', status: item.status,
     })
-    setEditId(item.id); setErrors({}); setShowModal(true)
+    setEditId(item.id); setErrors({}); setTestScheduleRows([]); setShowModal(true)
   }
-  const closeModal = () => { setShowModal(false); setEditId(null); setForm(EMPTY_FORM); setErrors({}); setSelectedSubjects([]) }
+  const closeModal = () => { setShowModal(false); setEditId(null); setForm(getDefaultForm()); setErrors({}); setSelectedSubjects([]); setTestScheduleRows([]) }
 
   // Find editing exam in either standalone list or inside group exams
   const editingExam = editId ? (
@@ -197,21 +277,43 @@ export default function ExamsPage() {
     }
 
     if (editId) {
+      const isTestEdit = activeTab === 'tests'
       const needsBulkAssign = classSubjects.length === 0 && selectedSubjects.length > 0
       const needsPopulate = editingExam?.subjects_count === 0 && classSubjects.length > 0
 
       setIsSubmitting(true)
       setErrors({})
       try {
-        if (needsBulkAssign) {
+        if (!isTestEdit && needsBulkAssign) {
           await academicsApi.bulkAssignSubjects({ class_obj: parseInt(resolvedFormClassObj), subjects: selectedSubjects })
         }
-        if (needsBulkAssign || needsPopulate) {
+        if (!isTestEdit && (needsBulkAssign || needsPopulate)) {
           await examinationsApi.populateExamSubjects(editId)
         }
-        const payload = { ...form, class_obj: resolvedFormClassObj, term: form.term || null }
+        let payload = { ...form, class_obj: resolvedFormClassObj, term: form.term || null }
+        if (isTestEdit) {
+          const datedRows = testScheduleRows.filter(r => !!r.exam_date)
+          if (datedRows.length > 0) {
+            const orderedDates = datedRows.map(r => r.exam_date).sort()
+            payload = {
+              ...payload,
+              start_date: orderedDates[0],
+              end_date: orderedDates[orderedDates.length - 1],
+            }
+          }
+        }
         await examinationsApi.updateExam(editId, payload)
+        if (isTestEdit) {
+          for (const row of testScheduleRows) {
+            await examinationsApi.updateExamSubject(row.id, {
+              exam_date: row.exam_date || null,
+              start_time: row.start_time || null,
+              end_time: row.end_time || null,
+            })
+          }
+        }
         queryClient.invalidateQueries({ queryKey: ['exams'] })
+        queryClient.invalidateQueries({ queryKey: ['testScheduleRows', editId] })
         closeModal()
       } catch (err) {
         const errData = err.response?.data || {}
@@ -418,7 +520,7 @@ export default function ExamsPage() {
             + Create Exam
           </button>
         ) : (
-          <button onClick={openCreate} className="btn-primary text-sm px-4 py-2">
+          <button onClick={() => setShowBulkTestModal(true)} className="btn-primary text-sm px-4 py-2">
             + Create Test
           </button>
         )}
@@ -550,7 +652,7 @@ export default function ExamsPage() {
                                   <tbody className="divide-y divide-gray-50">
                                     {exams.map(exam => (
                                       <tr key={exam.id} className={exam.is_active ? 'hover:bg-gray-50/50' : 'bg-gray-50 text-gray-400 opacity-75'}>
-                                        <td className="px-4 py-2 text-gray-900 font-medium">{exam.class_name}</td>
+                                        <td className="px-4 py-2 text-gray-900 font-medium">{getExamClassLabel(exam)}</td>
                                         <td className="px-4 py-2 text-center">
                                           {exam.subjects_count === 0 ? (
                                             <span className="text-amber-600 text-xs">0</span>
@@ -591,7 +693,7 @@ export default function ExamsPage() {
                                 {exams.map(exam => (
                                   <div key={exam.id} className={`px-4 py-2 flex items-center justify-between ${exam.is_active ? '' : 'opacity-75'}`}>
                                     <div>
-                                      <p className="text-sm font-medium text-gray-900">{exam.class_name}</p>
+                                      <p className="text-sm font-medium text-gray-900">{getExamClassLabel(exam)}</p>
                                       <p className="text-xs text-gray-500">
                                         {exam.subjects_count} subjects ·{' '}
                                         <span className={`${exam.is_active ? (STATUS_STYLES[exam.status]?.includes('text-') ? STATUS_STYLES[exam.status].split(' ').find(c => c.startsWith('text-')) : 'text-gray-600') : 'text-gray-500'}`}>
@@ -674,7 +776,7 @@ export default function ExamsPage() {
                       <tr key={exam.id} className={exam.is_active ? 'hover:bg-gray-50' : 'bg-gray-50 text-gray-400 opacity-75'}>
                         <td className="px-4 py-2 text-sm font-medium text-gray-900">{exam.name}</td>
                         <td className="px-4 py-2 text-sm text-gray-600">{exam.exam_type_name}</td>
-                        <td className="px-4 py-2 text-sm text-gray-600">{exam.class_name}</td>
+                        <td className="px-4 py-2 text-sm text-gray-600">{getExamClassLabel(exam)}</td>
                         <td className="px-4 py-2 text-sm text-gray-600">
                           {exam.academic_year_name}
                           {exam.term_name && <span className="text-xs text-gray-400 ml-1">({exam.term_name})</span>}
@@ -730,7 +832,7 @@ export default function ExamsPage() {
                     <div className="flex items-start justify-between mb-2">
                       <div>
                         <p className="font-medium text-gray-900 text-sm">{exam.name}</p>
-                        <p className="text-xs text-gray-500">{exam.exam_type_name} · {exam.class_name}</p>
+                        <p className="text-xs text-gray-500">{exam.exam_type_name} · {getExamClassLabel(exam)}</p>
                       </div>
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${exam.is_active ? (STATUS_STYLES[exam.status] || 'bg-gray-100 text-gray-700') : 'bg-gray-100 text-gray-500'}`}>
                         {exam.is_active ? exam.status.replace('_', ' ') : 'Inactive'}
@@ -775,7 +877,7 @@ export default function ExamsPage() {
                 </div>
               </div>
               <p className="text-sm text-gray-500 mt-3">No tests yet. Tests are quick assessments — no wizard needed.</p>
-              <button onClick={openCreate} className="btn-primary text-sm px-4 py-2 mt-3">
+              <button onClick={() => setShowBulkTestModal(true)} className="btn-primary text-sm px-4 py-2 mt-3">
                 + Create Test
               </button>
             </div>
@@ -792,6 +894,16 @@ export default function ExamsPage() {
             queryClient.invalidateQueries({ queryKey: ['examGroups'] })
             queryClient.invalidateQueries({ queryKey: ['exams'] })
             setShowWizard(false)
+          }}
+        />
+      )}
+
+      {showBulkTestModal && (
+        <BulkTestModal
+          onClose={() => setShowBulkTestModal(false)}
+          onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ['exams'] })
+            setShowBulkTestModal(false)
           }}
         />
       )}
@@ -940,14 +1052,72 @@ export default function ExamsPage() {
               )}
 
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
-                  <input type="date" value={form.start_date} onChange={e => setForm(p => ({ ...p, start_date: e.target.value }))} className="input w-full" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
-                  <input type="date" value={form.end_date} onChange={e => setForm(p => ({ ...p, end_date: e.target.value }))} className="input w-full" />
-                </div>
+                {activeTab === 'tests' && editId ? (
+                  <div className="col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Test Schedule (Per Subject)</label>
+                    {testScheduleRows.length === 0 ? (
+                      <p className="text-xs text-gray-500">No subject rows found for this test.</p>
+                    ) : (
+                      <div className="border border-gray-200 rounded-lg overflow-hidden">
+                        <table className="min-w-full text-sm">
+                          <thead>
+                            <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
+                              <th className="px-3 py-2 text-left">Subject</th>
+                              <th className="px-3 py-2 text-left">Date</th>
+                              <th className="px-3 py-2 text-left">Start</th>
+                              <th className="px-3 py-2 text-left">End</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {testScheduleRows.map((row) => (
+                              <tr key={row.id}>
+                                <td className="px-3 py-2">
+                                  <span className="font-medium text-gray-900">{row.subject_name}</span>
+                                  {row.subject_code && <span className="text-xs text-gray-400 ml-1">({row.subject_code})</span>}
+                                </td>
+                                <td className="px-3 py-2">
+                                  <input
+                                    type="date"
+                                    value={row.exam_date}
+                                    onChange={(e) => setTestScheduleRows(prev => prev.map(item => item.id === row.id ? { ...item, exam_date: e.target.value } : item))}
+                                    className="input w-full"
+                                  />
+                                </td>
+                                <td className="px-3 py-2">
+                                  <input
+                                    type="time"
+                                    value={row.start_time}
+                                    onChange={(e) => setTestScheduleRows(prev => prev.map(item => item.id === row.id ? { ...item, start_time: e.target.value } : item))}
+                                    className="input w-full"
+                                  />
+                                </td>
+                                <td className="px-3 py-2">
+                                  <input
+                                    type="time"
+                                    value={row.end_time}
+                                    onChange={(e) => setTestScheduleRows(prev => prev.map(item => item.id === row.id ? { ...item, end_time: e.target.value } : item))}
+                                    className="input w-full"
+                                  />
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+                      <input type="date" value={form.start_date} onChange={e => setForm(p => ({ ...p, start_date: e.target.value }))} className="input w-full" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+                      <input type="date" value={form.end_date} onChange={e => setForm(p => ({ ...p, end_date: e.target.value }))} className="input w-full" />
+                    </div>
+                  </>
+                )}
               </div>
               {editId && (
                 <div>

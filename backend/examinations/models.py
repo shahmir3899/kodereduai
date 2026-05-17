@@ -140,11 +140,17 @@ class Exam(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = ('school', 'exam_type', 'class_obj', 'term')
         ordering = ['-start_date']
         indexes = [
             models.Index(fields=['school', 'academic_year']),
             models.Index(fields=['school', 'class_obj']),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['school', 'exam_group', 'class_obj'],
+                condition=models.Q(exam_group__isnull=False),
+                name='exam_group_class_unique',
+            ),
         ]
 
     def __str__(self):

@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from decimal import Decimal
 from core.mixins import ensure_tenant_school_id
 from core.permissions import get_effective_role, get_teacher_combined_scope
 from lms.models import Topic
@@ -73,22 +74,44 @@ class ExamCreateSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {'end_date': 'End date must be on or after start date.'}
                 )
-        # Check unique_together (school, exam_type, class_obj, term)
-        school_id = self.context.get('school_id')
-        exam_type = data.get('exam_type')
-        class_obj = data.get('class_obj')
-        term = data.get('term')
-        if school_id and exam_type and class_obj and term:
-            qs = Exam.objects.filter(
-                school_id=school_id, exam_type=exam_type,
-                class_obj=class_obj, term=term,
+        return data
+
+
+class BulkTestEntrySerializer(serializers.Serializer):
+    subject_id = serializers.IntegerField()
+    name = serializers.CharField(max_length=200, required=False, allow_blank=True)
+    exam_date = serializers.DateField()
+    total_marks = serializers.DecimalField(max_digits=6, decimal_places=2, required=False, min_value=Decimal('0.01'), default=Decimal('100.00'))
+    start_time = serializers.TimeField(required=False, allow_null=True)
+    end_time = serializers.TimeField(required=False, allow_null=True)
+
+    def validate(self, data):
+        if data.get('start_time') and data.get('end_time') and data['start_time'] > data['end_time']:
+            raise serializers.ValidationError(
+                {'end_time': 'End time must be on or after start time.'}
             )
-            if self.instance:
-                qs = qs.exclude(pk=self.instance.pk)
-            if qs.exists():
-                raise serializers.ValidationError(
-                    'An exam already exists for this type, class, and term.'
-                )
+        return data
+
+
+class BulkTestRequestSerializer(serializers.Serializer):
+    academic_year = serializers.IntegerField()
+    term = serializers.IntegerField(required=False, allow_null=True)
+    exam_type = serializers.IntegerField()
+    class_obj = serializers.IntegerField()
+    tests = BulkTestEntrySerializer(many=True, min_length=1)
+
+    def validate(self, data):
+        seen_subject_ids = set()
+        duplicates = []
+        for row in data['tests']:
+            subject_id = row['subject_id']
+            if subject_id in seen_subject_ids:
+                duplicates.append(subject_id)
+            seen_subject_ids.add(subject_id)
+        if duplicates:
+            raise serializers.ValidationError({
+                'tests': f'Duplicate subject selections are not allowed: {sorted(set(duplicates))}.'
+            })
         return data
 
 
