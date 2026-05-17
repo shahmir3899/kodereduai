@@ -31,6 +31,7 @@ from .serializers import (
     ExamGroupWizardCreateSerializer, DateSheetUpdateSerializer,
     QuestionSerializer, QuestionCreateUpdateSerializer,
     ExamPaperSerializer, ExamPaperCreateUpdateSerializer,
+    ExamPaperDraftEnsureSerializer, ExamPaperDraftAutosaveSerializer,
     PaperUploadSerializer, PaperUploadCreateSerializer,
     PaperFeedbackSerializer, QuestionReviewSerializer,
 )
@@ -124,6 +125,28 @@ def _is_teacher_allowed_for_class_subject(request, class_id, subject_id, school_
     except (TypeError, ValueError):
         return False
     return subject_id in class_subject_map.get(class_id, set())
+
+
+def _is_teacher_class_teacher_for_class(request, class_id, school_id=None):
+    """Check whether current teacher has class-teacher scope for this class."""
+    if get_effective_role(request) != 'TEACHER':
+        return False
+    try:
+        class_id = int(class_id)
+    except (TypeError, ValueError):
+        return False
+    scope = get_teacher_combined_scope(request, school_id=school_id)
+    return class_id in scope.get('full_class_ids', set())
+
+
+def _can_manage_exam_papers(request, class_id=None, subject_id=None, school_id=None):
+    """Return True when role is allowed to create/update exam papers."""
+    role = get_effective_role(request)
+    if role in ADMIN_ROLES:
+        return True
+    if role != 'TEACHER':
+        return False
+    return _is_teacher_class_teacher_for_class(request, class_id, school_id=school_id)
 
 
 def _short_academic_year_name(name):
@@ -2141,35 +2164,172 @@ class ExamPaperViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
 
     def perform_create(self, serializer):
         school_id = _resolve_school_id(self.request)
-        if get_effective_role(self.request) == 'TEACHER':
-            class_obj = serializer.validated_data.get('class_obj')
-            subject = serializer.validated_data.get('subject')
-            if not _is_teacher_allowed_for_class_subject(
-                self.request,
-                getattr(class_obj, 'id', None),
-                getattr(subject, 'id', None),
-                school_id=school_id,
-            ):
-                raise PermissionDenied('You can only create exam papers for your assigned class-subjects.')
+        class_obj = serializer.validated_data.get('class_obj')
+        subject = serializer.validated_data.get('subject')
+        if not _can_manage_exam_papers(
+            self.request,
+            class_id=getattr(class_obj, 'id', None),
+            subject_id=getattr(subject, 'id', None),
+            school_id=school_id,
+        ):
+            raise PermissionDenied('Only School Admin, Principal, or assigned class teachers can create exam papers.')
         serializer.save(school_id=school_id, generated_by=self.request.user)
 
     def perform_update(self, serializer):
         school_id = _resolve_school_id(self.request)
-        if get_effective_role(self.request) == 'TEACHER':
-            class_obj = serializer.validated_data.get('class_obj', serializer.instance.class_obj)
-            subject = serializer.validated_data.get('subject', serializer.instance.subject)
-            if not _is_teacher_allowed_for_class_subject(
-                self.request,
-                getattr(class_obj, 'id', None),
-                getattr(subject, 'id', None),
-                school_id=school_id,
-            ):
-                raise PermissionDenied('You can only edit exam papers for your assigned class-subjects.')
+        class_obj = serializer.validated_data.get('class_obj', serializer.instance.class_obj)
+        subject = serializer.validated_data.get('subject', serializer.instance.subject)
+        if not _can_manage_exam_papers(
+            self.request,
+            class_id=getattr(class_obj, 'id', None),
+            subject_id=getattr(subject, 'id', None),
+            school_id=school_id,
+        ):
+            raise PermissionDenied('Only School Admin, Principal, or assigned class teachers can edit exam papers.')
         serializer.save()
 
     def perform_destroy(self, instance):
         instance.is_active = False
         instance.save()
+
+    def _validate_paper_manage_scope(self, class_obj, subject):
+        school_id = _resolve_school_id(self.request)
+        if not _can_manage_exam_papers(
+            self.request,
+            class_id=getattr(class_obj, 'id', None),
+            subject_id=getattr(subject, 'id', None),
+            school_id=school_id,
+        ):
+            raise PermissionDenied('Only School Admin, Principal, or assigned class teachers can create or edit exam papers.')
+        return school_id
+
+    def _save_manual_draft_questions(self, exam_paper, manual_questions):
+        existing_assignments = {
+            paper_question.question_id: paper_question
+            for paper_question in exam_paper.paper_questions.select_related('question').all()
+        }
+        retained_assignment_ids = set()
+
+        for index, raw_question in enumerate(manual_questions, start=1):
+            question_payload = dict(raw_question)
+            question_id = question_payload.pop('question_id', None)
+            question_order = question_payload.pop('question_order', index)
+            marks_override = question_payload.pop('marks_override', None)
+            question_payload.pop('local_id', None)
+
+            assignment = None
+            question_instance = None
+            if question_id is not None:
+                assignment = existing_assignments.get(question_id)
+                if assignment is None:
+                    raise ValidationError({
+                        'manual_questions': [
+                            f'question_id {question_id} is not attached to this paper and cannot be autosaved yet.'
+                        ]
+                    })
+                question_instance = assignment.question
+
+            question_payload['subject'] = exam_paper.subject_id
+            serializer = QuestionCreateUpdateSerializer(
+                instance=question_instance,
+                data=question_payload,
+                partial=question_instance is not None,
+                context={'request': self.request},
+            )
+            serializer.is_valid(raise_exception=True)
+
+            if question_instance is None:
+                question = serializer.save(
+                    school=exam_paper.school,
+                    created_by=self.request.user,
+                )
+            else:
+                question = serializer.save()
+
+            if assignment is None:
+                assignment = PaperQuestion(
+                    exam_paper=exam_paper,
+                    question=question,
+                )
+
+            assignment.question_order = question_order
+            assignment.marks_override = marks_override
+            assignment.save()
+            assignment.sync_question_snapshot()
+            retained_assignment_ids.add(assignment.id)
+
+        exam_paper.paper_questions.exclude(id__in=retained_assignment_ids).delete()
+
+    @action(detail=False, methods=['post'], url_path='ensure-draft')
+    def ensure_draft(self, request):
+        """Create or refresh a server-backed draft paper before autosave begins."""
+        draft_id = request.data.get('draft_id') or request.data.get('id')
+        exam_paper = None
+
+        if draft_id:
+            exam_paper = self.get_queryset().filter(pk=draft_id).first()
+            if exam_paper is None:
+                return Response({'detail': 'Draft paper not found.'}, status=status.HTTP_404_NOT_FOUND)
+            if exam_paper.status != ExamPaper.Status.DRAFT:
+                return Response(
+                    {'detail': 'Only draft papers can be resumed for autosave.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        serializer = ExamPaperDraftEnsureSerializer(
+            instance=exam_paper,
+            data=request.data,
+            partial=exam_paper is not None,
+        )
+        serializer.is_valid(raise_exception=True)
+
+        class_obj = serializer.validated_data.get('class_obj', getattr(exam_paper, 'class_obj', None))
+        subject = serializer.validated_data.get('subject', getattr(exam_paper, 'subject', None))
+        school_id = self._validate_paper_manage_scope(class_obj, subject)
+
+        with transaction.atomic():
+            if exam_paper is None:
+                exam_paper = serializer.save(
+                    school_id=school_id,
+                    generated_by=request.user,
+                    status=ExamPaper.Status.DRAFT,
+                )
+                http_status = status.HTTP_201_CREATED
+            else:
+                exam_paper = serializer.save(status=ExamPaper.Status.DRAFT)
+                http_status = status.HTTP_200_OK
+
+        return Response(ExamPaperSerializer(exam_paper).data, status=http_status)
+
+    @action(detail=True, methods=['post'])
+    def autosave(self, request, pk=None):
+        """Autosave draft metadata and manual-entry questions into the question bank."""
+        exam_paper = self.get_object()
+        if exam_paper.status != ExamPaper.Status.DRAFT:
+            return Response(
+                {'detail': 'Only draft papers can be autosaved.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = ExamPaperDraftAutosaveSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        validated = serializer.validated_data
+        manual_questions = validated.pop('manual_questions', None)
+
+        class_obj = validated.get('class_obj', exam_paper.class_obj)
+        subject = validated.get('subject', exam_paper.subject)
+        self._validate_paper_manage_scope(class_obj, subject)
+
+        with transaction.atomic():
+            for attr, value in validated.items():
+                setattr(exam_paper, attr, value)
+            exam_paper.save()
+
+            if manual_questions is not None:
+                self._save_manual_draft_questions(exam_paper, manual_questions)
+
+        exam_paper.refresh_from_db()
+        return Response(ExamPaperSerializer(exam_paper).data)
 
     @action(detail=True, methods=['get'], url_path='generate-pdf')
     def generate_pdf(self, request, pk=None):
@@ -2193,6 +2353,33 @@ class ExamPaperViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
         except Exception as e:
             return Response(
                 {'detail': f'Error generating PDF: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    @action(detail=True, methods=['get'], url_path='generate-docx')
+    def generate_docx(self, request, pk=None):
+        """Generate and download DOCX for this exam paper."""
+        from .docx_generator import ExamPaperDOCXGenerator
+
+        exam_paper = self.get_object()
+
+        try:
+            generator = ExamPaperDOCXGenerator(exam_paper)
+            docx_bytes = generator.generate()
+
+            filename = f"{exam_paper.paper_title.replace(' ', '_')}.docx"
+
+            response = HttpResponse(
+                docx_bytes,
+                content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            )
+            response['Content-Disposition'] = f'attachment; filename="{filename}"'
+
+            return response
+
+        except Exception as e:
+            return Response(
+                {'detail': f'Error generating DOCX: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
@@ -2289,14 +2476,14 @@ class ExamPaperViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
             )
 
         school_id = _resolve_school_id(request)
-        if not _is_teacher_allowed_for_class_subject(
+        if not _can_manage_exam_papers(
             request,
-            class_id,
-            subject_id,
+            class_id=class_id,
+            subject_id=subject_id,
             school_id=school_id,
         ):
             return Response(
-                {'error': 'You can only create exam papers for your assigned class-subjects.'},
+                {'error': 'Only School Admin, Principal, or assigned class teachers can create exam papers.'},
                 status=status.HTTP_403_FORBIDDEN,
             )
         
@@ -2357,12 +2544,13 @@ class ExamPaperViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
         selected_questions = list(questions_qs[:15])  # Default: up to 15 questions
         
         for idx, q in enumerate(selected_questions):
-            PaperQuestion.objects.create(
+            paper_question = PaperQuestion.objects.create(
                 exam_paper=exam_paper,
                 question=q,
                 question_order=idx + 1,
                 marks_override=q.marks,
             )
+            paper_question.sync_question_snapshot()
         
         serializer = ExamPaperSerializer(exam_paper)
         return Response({
@@ -2492,6 +2680,16 @@ class PaperUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
         
         try:
             school_id = _resolve_school_id(request)
+            if not _can_manage_exam_papers(
+                request,
+                class_id=paper_metadata.get('class_obj'),
+                subject_id=paper_metadata.get('subject'),
+                school_id=school_id,
+            ):
+                return Response(
+                    {'detail': 'Only School Admin, Principal, or assigned class teachers can create exam papers.'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
             
             # Create ExamPaper
             exam_paper = ExamPaper.objects.create(
@@ -2526,12 +2724,13 @@ class PaperUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
                 )
                 
                 # Link question to paper
-                PaperQuestion.objects.create(
+                paper_question = PaperQuestion.objects.create(
                     exam_paper=exam_paper,
                     question=question,
                     question_order=idx,
                     marks_override=q_data.get('marks')
                 )
+                paper_question.sync_question_snapshot()
             
             # Create feedback record for learning loop
             PaperFeedback.objects.create(

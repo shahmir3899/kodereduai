@@ -8,9 +8,10 @@ import sys
 import django
 from decimal import Decimal
 from datetime import date
+from pathlib import Path
 
 # Setup Django
-sys.path.insert(0, '/d/Personal/smart-attendance/backend')
+sys.path.insert(0, str(Path(__file__).resolve().parent / 'backend'))
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 django.setup()
 

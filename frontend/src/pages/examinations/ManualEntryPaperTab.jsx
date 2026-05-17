@@ -1,35 +1,143 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import RichTextEditor from '../../components/RichTextEditor'
+import { questionPaperApi } from '../../services/api'
 
 /**
  * ManualEntryPaperTab - Manually create exam papers by typing
  */
-export default function ManualEntryPaperTab({ onPaperCreate, isLoading }) {
-  const [paperTitle, setPaperTitle] = useState('')
-  const [instructions, setInstructions] = useState('')
-  const [questions, setQuestions] = useState([])
-  const [totalMarks, setTotalMarks] = useState('100')
-  const [durationMinutes, setDurationMinutes] = useState('60')
+export default function ManualEntryPaperTab({
+  draftData,
+  onDraftDataChange,
+  onSubmitDraft,
+  isLoading,
+  saveState,
+  lastSavedAt,
+  draftReady,
+  classId,
+  subjectId,
+  readOnly = false,
+}) {
+  const questions = draftData?.questions || []
+
   const [currentQuestion, setCurrentQuestion] = useState({
+    local_id: null,
+    question_id: null,
     question_text: '',
     question_type: 'SHORT',
+    difficulty_level: 'MEDIUM',
     marks: 1,
+    correct_answer: '',
+    answer_text: '',
     options: { A: '', B: '', C: '', D: '' },
   })
   const [errors, setErrors] = useState({})
-  const [showReview, setShowReview] = useState(false)
+  const [showBankPicker, setShowBankPicker] = useState(false)
+  const [bankSearch, setBankSearch] = useState('')
+  const [bankType, setBankType] = useState('')
+  const [bankDifficulty, setBankDifficulty] = useState('')
+  const [selectedBankIds, setSelectedBankIds] = useState([])
 
   const questionTypes = [
     { value: 'MCQ', label: 'Multiple Choice' },
     { value: 'SHORT', label: 'Short Answer' },
+    { value: 'LONG', label: 'Long Answer' },
     { value: 'ESSAY', label: 'Essay' },
     { value: 'TRUE_FALSE', label: 'True/False' },
     { value: 'MATCHING', label: 'Matching' },
     { value: 'FILL_BLANK', label: 'Fill in the Blanks' },
   ]
 
+  const saveStateLabel = useMemo(() => {
+    if (isLoading || saveState === 'saving') return 'Saving...'
+    if (saveState === 'saved' && lastSavedAt) {
+      return `Saved ${new Date(lastSavedAt).toLocaleTimeString()}`
+    }
+    if (saveState === 'error') return 'Save failed'
+    return draftReady ? 'Draft ready' : 'Draft not created yet'
+  }, [draftReady, isLoading, lastSavedAt, saveState])
+
+  const bankQueryParams = useMemo(() => ({
+    ...(classId && { class_id: classId }),
+    ...(subjectId && { subject: subjectId }),
+    ...(bankSearch.trim() && { search: bankSearch.trim() }),
+    ...(bankType && { question_type: bankType }),
+    ...(bankDifficulty && { difficulty_level: bankDifficulty }),
+    page_size: 50,
+  }), [bankDifficulty, bankSearch, bankType, classId, subjectId])
+
+  const { data: bankData, isLoading: bankLoading } = useQuery({
+    queryKey: ['paperBuilderQuestionBankPicker', bankQueryParams],
+    queryFn: () => questionPaperApi.getQuestions(bankQueryParams),
+    enabled: showBankPicker && !!classId && !!subjectId,
+  })
+
+  const bankQuestions = bankData?.data?.results || bankData?.data || []
+
+  const updateDraft = (updates) => {
+    if (readOnly) return
+    onDraftDataChange({
+      ...(draftData || {}),
+      ...updates,
+    })
+  }
+
+  const toggleBankQuestion = (questionId) => {
+    if (readOnly) return
+    const id = Number(questionId)
+    setSelectedBankIds((prev) => {
+      if (prev.includes(id)) return prev.filter((item) => item !== id)
+      return [...prev, id]
+    })
+  }
+
+  const attachSelectedBankQuestions = () => {
+    if (readOnly) return
+    const selectedQuestions = bankQuestions.filter((question) => selectedBankIds.includes(question.id))
+    if (selectedQuestions.length === 0) return
+
+    const existingIds = new Set(
+      questions
+        .map((question) => Number(question.question_id))
+        .filter((value) => !Number.isNaN(value) && value > 0),
+    )
+
+    const additions = selectedQuestions
+      .filter((question) => !existingIds.has(Number(question.id)))
+      .map((question) => ({
+        local_id: `bank_${question.id}_${Date.now()}_${Math.random()}`,
+        question_id: question.id,
+        question_text: question.question_text || '',
+        question_type: question.question_type || 'SHORT',
+        difficulty_level: question.difficulty_level || 'MEDIUM',
+        marks: Number(question.marks ?? 1) || 1,
+        marks_override: Number(question.marks ?? 1) || 1,
+        correct_answer: question.correct_answer || '',
+        answer_text: question.answer_text || '',
+        type_data: question.type_data || {},
+        tested_topics: Array.isArray(question.tested_topics) ? question.tested_topics : [],
+        options: {
+          A: question.option_a || '',
+          B: question.option_b || '',
+          C: question.option_c || '',
+          D: question.option_d || '',
+        },
+      }))
+
+    if (additions.length === 0) {
+      setShowBankPicker(false)
+      setSelectedBankIds([])
+      return
+    }
+
+    updateDraft({ questions: [...questions, ...additions] })
+    setShowBankPicker(false)
+    setSelectedBankIds([])
+  }
+
   // Add question to list
   const handleAddQuestion = () => {
+    if (readOnly) return
     const newErrors = {}
 
     if (!currentQuestion.question_text.trim()) {
@@ -47,44 +155,75 @@ export default function ManualEntryPaperTab({ onPaperCreate, isLoading }) {
       return
     }
 
-    setQuestions([...questions, { ...currentQuestion, id: Math.random() }])
+    const questionRecord = {
+      ...currentQuestion,
+      local_id: currentQuestion.local_id || `${Date.now()}_${Math.random()}`,
+      marks: Number(currentQuestion.marks) || 1,
+      marks_override: Number(currentQuestion.marks) || 1,
+    }
+
+    const nextQuestions = [...questions]
+    if (currentQuestion.local_id) {
+      const index = nextQuestions.findIndex((q) => q.local_id === currentQuestion.local_id)
+      if (index >= 0) {
+        nextQuestions[index] = questionRecord
+      } else {
+        nextQuestions.push(questionRecord)
+      }
+    } else {
+      nextQuestions.push(questionRecord)
+    }
+
+    updateDraft({ questions: nextQuestions })
     resetQuestion()
     setErrors({})
   }
 
   const resetQuestion = () => {
     setCurrentQuestion({
+      local_id: null,
+      question_id: null,
       question_text: '',
       question_type: 'SHORT',
+      difficulty_level: 'MEDIUM',
       marks: 1,
+      correct_answer: '',
+      answer_text: '',
       options: { A: '', B: '', C: '', D: '' },
     })
   }
 
   // Remove question from list
-  const handleRemoveQuestion = (id) => {
-    setQuestions(questions.filter((q) => q.id !== id))
+  const handleRemoveQuestion = (localId) => {
+    if (readOnly) return
+    updateDraft({ questions: questions.filter((q) => q.local_id !== localId) })
   }
 
   // Update question in list
-  const handleEditQuestion = (id) => {
-    const q = questions.find((q) => q.id === id)
-    setCurrentQuestion(q)
-    handleRemoveQuestion(id)
+  const handleEditQuestion = (localId) => {
+    if (readOnly) return
+    const q = questions.find((item) => item.local_id === localId)
+    if (!q) return
+    setCurrentQuestion({
+      ...q,
+      marks: Number(q.marks) || 1,
+      options: q.options || { A: q.option_a || '', B: q.option_b || '', C: q.option_c || '', D: q.option_d || '' },
+    })
   }
 
   // Calculate total from questions
   const calculateTotal = () => {
-    return questions.reduce((sum, q) => sum + (q.marks || 0), 0)
+    return questions.reduce((sum, q) => sum + (Number(q.marks_override ?? q.marks) || 0), 0)
   }
 
   // Handle form submission
   const handleCreatePaper = async (e) => {
     e.preventDefault()
+    if (readOnly) return
 
     const newErrors = {}
 
-    if (!paperTitle.trim()) newErrors.paperTitle = 'Paper title is required'
+    if (!(draftData?.paper_title || '').trim()) newErrors.paperTitle = 'Paper title is required'
     if (questions.length === 0) newErrors.questions = 'Add at least one question'
 
     if (Object.keys(newErrors).length > 0) {
@@ -92,25 +231,19 @@ export default function ManualEntryPaperTab({ onPaperCreate, isLoading }) {
       return
     }
 
-    const paperData = {
-      paper_title: paperTitle,
-      instructions,
-      total_marks: parseFloat(totalMarks),
-      duration_minutes: parseInt(durationMinutes),
-      questions_data: questions.map((q, idx) => ({
-        question_id: q.id,
-        question_order: idx + 1,
-        marks_override: q.marks,
-      })),
-    }
-
-    onPaperCreate(paperData, questions)
+    onSubmitDraft()
   }
 
   const currentTotal = calculateTotal()
 
   return (
     <div className="space-y-6">
+      {readOnly && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          This paper is finalized and is opened in read-only mode.
+        </div>
+      )}
+
       {/* Paper Metadata */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
@@ -119,9 +252,10 @@ export default function ManualEntryPaperTab({ onPaperCreate, isLoading }) {
           </label>
           <input
             type="text"
-            value={paperTitle}
-            onChange={(e) => setPaperTitle(e.target.value)}
+            value={draftData?.paper_title || ''}
+            onChange={(e) => updateDraft({ paper_title: e.target.value })}
             placeholder="e.g., Physics Mid-Term 2026"
+            disabled={readOnly}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
           {errors.paperTitle && <p className="text-red-500 text-sm mt-1">{errors.paperTitle}</p>}
@@ -133,8 +267,9 @@ export default function ManualEntryPaperTab({ onPaperCreate, isLoading }) {
           </label>
           <input
             type="number"
-            value={totalMarks}
-            onChange={(e) => setTotalMarks(e.target.value)}
+            value={draftData?.total_marks || '100'}
+            onChange={(e) => updateDraft({ total_marks: e.target.value })}
+            disabled={readOnly}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
@@ -145,8 +280,9 @@ export default function ManualEntryPaperTab({ onPaperCreate, isLoading }) {
           </label>
           <input
             type="number"
-            value={durationMinutes}
-            onChange={(e) => setDurationMinutes(e.target.value)}
+            value={draftData?.duration_minutes || '60'}
+            onChange={(e) => updateDraft({ duration_minutes: e.target.value })}
+            disabled={readOnly}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
@@ -165,19 +301,31 @@ export default function ManualEntryPaperTab({ onPaperCreate, isLoading }) {
           Instructions
         </label>
         <textarea
-          value={instructions}
-          onChange={(e) => setInstructions(e.target.value)}
+          value={draftData?.instructions || ''}
+          onChange={(e) => updateDraft({ instructions: e.target.value })}
           placeholder="Enter general instructions for students..."
           rows="4"
+          disabled={readOnly}
           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
         />
       </div>
 
       {/* Question Form */}
-      <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 bg-gray-50">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4">
-          Add Question {questions.length + 1}
-        </h3>
+      {!readOnly && (
+        <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 bg-gray-50">
+        <div className="flex items-center justify-between mb-4 gap-2">
+          <h3 className="text-lg font-semibold text-gray-800">
+            Add Question {questions.length + 1}
+          </h3>
+          <button
+            type="button"
+            onClick={() => setShowBankPicker(true)}
+            disabled={!classId || !subjectId}
+            className="px-3 py-1.5 border border-blue-300 text-blue-700 rounded-lg text-sm hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            Load from Question Bank
+          </button>
+        </div>
 
         {/* Question Type and Marks */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
@@ -283,6 +431,7 @@ export default function ManualEntryPaperTab({ onPaperCreate, isLoading }) {
           </button>
         </div>
       </div>
+      )}
 
       {/* Questions List */}
       {questions.length > 0 && (
@@ -306,18 +455,22 @@ export default function ManualEntryPaperTab({ onPaperCreate, isLoading }) {
                   />
                 </div>
                 <div className="flex gap-2">
-                  <button
-                    onClick={() => handleEditQuestion(q.id)}
-                    className="px-2 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => handleRemoveQuestion(q.id)}
-                    className="px-2 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200"
-                  >
-                    Delete
-                  </button>
+                  {!readOnly && (
+                    <>
+                      <button
+                        onClick={() => handleEditQuestion(q.local_id)}
+                        className="px-2 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleRemoveQuestion(q.local_id)}
+                        className="px-2 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200"
+                      >
+                        Delete
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             ))}
@@ -325,9 +478,120 @@ export default function ManualEntryPaperTab({ onPaperCreate, isLoading }) {
         </div>
       )}
 
+      {!readOnly && showBankPicker && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg w-full max-w-4xl max-h-[85vh] overflow-hidden border border-gray-200 shadow-xl">
+            <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+              <div>
+                <h4 className="text-lg font-semibold text-gray-900">Attach Questions from Bank</h4>
+                <p className="text-xs text-gray-500 mt-0.5">Select questions to add into this draft paper.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowBankPicker(false)
+                  setSelectedBankIds([])
+                }}
+                className="text-gray-500 hover:text-gray-700 text-sm"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="px-4 py-3 border-b border-gray-100 grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <input
+                type="text"
+                value={bankSearch}
+                onChange={(e) => setBankSearch(e.target.value)}
+                placeholder="Search questions"
+                className="input w-full"
+              />
+              <select value={bankType} onChange={(e) => setBankType(e.target.value)} className="input w-full">
+                <option value="">All Types</option>
+                {questionTypes.map((type) => (
+                  <option key={type.value} value={type.value}>{type.label}</option>
+                ))}
+              </select>
+              <select value={bankDifficulty} onChange={(e) => setBankDifficulty(e.target.value)} className="input w-full">
+                <option value="">All Difficulty</option>
+                <option value="EASY">Easy</option>
+                <option value="MEDIUM">Medium</option>
+                <option value="HARD">Hard</option>
+              </select>
+            </div>
+
+            <div className="overflow-y-auto max-h-[50vh] p-4 space-y-2">
+              {!classId || !subjectId ? (
+                <div className="text-sm text-gray-500">Select class and subject in paper metadata to load the bank.</div>
+              ) : bankLoading ? (
+                <div className="text-sm text-gray-500">Loading questions...</div>
+              ) : bankQuestions.length === 0 ? (
+                <div className="text-sm text-gray-500">No questions found for these filters.</div>
+              ) : (
+                bankQuestions.map((question) => {
+                  const checked = selectedBankIds.includes(Number(question.id))
+                  return (
+                    <label
+                      key={question.id}
+                      className={`block border rounded-lg p-3 cursor-pointer ${checked ? 'border-blue-300 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'}`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleBankQuestion(question.id)}
+                          className="mt-1"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 text-xs text-gray-500 mb-1">
+                            <span className="font-medium">{question.question_type}</span>
+                            <span>•</span>
+                            <span>{question.difficulty_level || 'MEDIUM'}</span>
+                            <span>•</span>
+                            <span>{question.marks} mark(s)</span>
+                          </div>
+                          <div className="text-sm text-gray-800 line-clamp-3" dangerouslySetInnerHTML={{ __html: question.question_text }} />
+                        </div>
+                      </div>
+                    </label>
+                  )
+                })
+              )}
+            </div>
+
+            <div className="px-4 py-3 border-t border-gray-200 flex items-center justify-between gap-2">
+              <p className="text-xs text-gray-500">{selectedBankIds.length} selected</p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowBankPicker(false)
+                    setSelectedBankIds([])
+                  }}
+                  className="px-3 py-1.5 border border-gray-300 rounded text-sm text-gray-700 hover:bg-gray-100"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={attachSelectedBankQuestions}
+                  disabled={selectedBankIds.length === 0}
+                  className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Attach Selected
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Submit */}
-      {questions.length > 0 && (
+      {!readOnly && questions.length > 0 && (
         <div className="flex gap-2 justify-end pt-4 border-t border-gray-200">
+          <div className={`mr-auto text-sm ${saveState === 'error' ? 'text-red-600' : 'text-gray-600'}`}>
+            {saveStateLabel}
+          </div>
           {errors.questions && <p className="text-red-500 text-sm">{errors.questions}</p>}
           <button
             onClick={handleCreatePaper}
@@ -338,7 +602,7 @@ export default function ManualEntryPaperTab({ onPaperCreate, isLoading }) {
                 : 'bg-green-600 text-white hover:bg-green-700'
             }`}
           >
-            {isLoading ? 'Creating...' : 'Create Paper'}
+            {isLoading ? 'Saving...' : draftReady ? 'Open Draft' : 'Create Draft'}
           </button>
         </div>
       )}

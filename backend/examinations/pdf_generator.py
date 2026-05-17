@@ -25,6 +25,13 @@ class ExamPaperPDFGenerator:
         """
         self.exam_paper = exam_paper
         self.school = exam_paper.school
+
+    def _exam_name(self):
+        if self.exam_paper.exam:
+            return self.exam_paper.exam.name
+        if self.exam_paper.exam_subject and self.exam_paper.exam_subject.exam:
+            return self.exam_paper.exam_subject.exam.name
+        return None
     
     def generate(self) -> bytes:
         """
@@ -158,8 +165,9 @@ class ExamPaperPDFGenerator:
                 ['Subject:', self.exam_paper.subject.name, 'Duration:', f"{self.exam_paper.duration_minutes} minutes"],
             ]
             
-            if self.exam_paper.exam:
-                metadata.append(['Exam:', self.exam_paper.exam.name, '', ''])
+            exam_name = self._exam_name()
+            if exam_name:
+                metadata.append(['Exam:', exam_name, '', ''])
             
             metadata_table = Table(metadata, colWidths=[1.5*inch, 2*inch, 1.5*inch, 1.5*inch])
             metadata_table.setStyle(TableStyle([
@@ -201,7 +209,7 @@ class ExamPaperPDFGenerator:
             paper_questions = self.exam_paper.paper_questions.select_related('question').order_by('question_order')
             
             for pq in paper_questions:
-                question = pq.question
+                question = pq.get_question_data()
                 marks = pq.get_marks()
                 
                 # Question number and marks
@@ -209,13 +217,13 @@ class ExamPaperPDFGenerator:
                 elements.append(Paragraph(q_header, question_style))
                 
                 # Question text (handle HTML from rich editor)
-                question_text = question.question_text
+                question_text = question.get('question_text') or ''
                 elements.append(Paragraph(question_text, question_style))
                 
                 # Question image (if any)
-                if question.question_image_url:
+                if question.get('question_image_url'):
                     try:
-                        q_image = Image(question.question_image_url, width=4*inch, height=3*inch)
+                        q_image = Image(question['question_image_url'], width=4*inch, height=3*inch)
                         q_image.hAlign = 'LEFT'
                         elements.append(Spacer(1, 6))
                         elements.append(q_image)
@@ -224,19 +232,19 @@ class ExamPaperPDFGenerator:
                         logger.warning(f"Could not load question image: {str(e)}")
                 
                 # MCQ options
-                if question.question_type == 'MCQ':
-                    if question.option_a:
-                        elements.append(Paragraph(f"<b>A.</b> {question.option_a}", option_style))
-                    if question.option_b:
-                        elements.append(Paragraph(f"<b>B.</b> {question.option_b}", option_style))
-                    if question.option_c:
-                        elements.append(Paragraph(f"<b>C.</b> {question.option_c}", option_style))
-                    if question.option_d:
-                        elements.append(Paragraph(f"<b>D.</b> {question.option_d}", option_style))
+                if question.get('question_type') == 'MCQ':
+                    if question.get('option_a'):
+                        elements.append(Paragraph(f"<b>A.</b> {question['option_a']}", option_style))
+                    if question.get('option_b'):
+                        elements.append(Paragraph(f"<b>B.</b> {question['option_b']}", option_style))
+                    if question.get('option_c'):
+                        elements.append(Paragraph(f"<b>C.</b> {question['option_c']}", option_style))
+                    if question.get('option_d'):
+                        elements.append(Paragraph(f"<b>D.</b> {question['option_d']}", option_style))
                     elements.append(Spacer(1, 10))
                 else:
                     # Add answer space for non-MCQ questions
-                    if question.question_type == 'ESSAY':
+                    if question.get('question_type') == 'ESSAY':
                         elements.append(Spacer(1, 1.5*inch))
                     else:
                         elements.append(Spacer(1, 0.75*inch))

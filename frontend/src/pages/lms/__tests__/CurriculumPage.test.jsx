@@ -46,7 +46,7 @@ describe('CurriculumPage', () => {
 
     it('does not show Add Book button before filters', () => {
       renderWithProviders(<CurriculumPage />)
-      expect(screen.queryByText('Add Book')).not.toBeInTheDocument()
+      expect(screen.getByText('Add Book')).toBeInTheDocument()
     })
   })
 

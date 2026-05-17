@@ -18,7 +18,7 @@ Multi-tenant school management SaaS with AI-powered attendance from handwritten 
 
 ### Directory Structure
 ```
-smart-attendance/
+EducationAI/
 ├── backend/                    # Django project
 │   ├── config/                 # settings.py, urls.py, celery.py
 │   ├── core/                   # middleware, permissions, mixins, storage

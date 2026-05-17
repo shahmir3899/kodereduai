@@ -15,6 +15,7 @@ import { useSessionClasses } from '../../hooks/useSessionClasses'
 import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 import { compressImageForTocOcr } from '../../utils/compressImageForUpload'
+import AddBookModal from './AddBookModal'
 
 const LANGUAGES = [
   { value: 'en', label: 'English' },
@@ -226,6 +227,7 @@ export default function CurriculumPage() {
   const [expandedChapters, setExpandedChapters] = useState(new Set())
 
   // Modals
+  const [showAddBookModal, setShowAddBookModal] = useState(false)
   const [showBookModal, setShowBookModal] = useState(false)
   const [editingBook, setEditingBook] = useState(null)
   const [bookForm, setBookForm] = useState({ ...EMPTY_BOOK_FORM })
@@ -525,18 +527,6 @@ export default function CurriculumPage() {
 
   // ---- Book Mutations ----
 
-  const createBookMutation = useMutation({
-    mutationFn: (data) => lmsApi.createBook(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['lmsBooks'] })
-      closeBookModal()
-      showSuccess('Book created')
-    },
-    onError: (error) => {
-      showError(error.response?.data?.detail || error.response?.data?.title?.[0] || 'Failed to create book')
-    },
-  })
-
   const updateBookMutation = useMutation({
     mutationFn: ({ id, data }) => lmsApi.updateBook(id, data),
     onSuccess: () => {
@@ -768,9 +758,7 @@ export default function CurriculumPage() {
   // ---- Modal Handlers ----
 
   const openAddBook = () => {
-    setEditingBook(null)
-    setBookForm({ ...EMPTY_BOOK_FORM })
-    setShowBookModal(true)
+    setShowAddBookModal(true)
   }
 
   const openEditBook = (book) => {
@@ -944,13 +932,9 @@ export default function CurriculumPage() {
     const payload = {
       ...bookForm,
       school: activeSchool?.id,
-      class_obj: parseInt(resolvedSelectedClass),
-      subject: parseInt(selectedSubject),
     }
     if (editingBook) {
       updateBookMutation.mutate({ id: editingBook.id, data: payload })
-    } else {
-      createBookMutation.mutate(payload)
     }
   }
 
@@ -2173,7 +2157,7 @@ export default function CurriculumPage() {
     ? undefined
     : { transform: `rotate(${tocImageRotation}deg) skew(${tocImageSkewX}deg, ${tocImageSkewY}deg)` }
 
-  const bookMutationPending = createBookMutation.isPending || updateBookMutation.isPending
+  const bookMutationPending = updateBookMutation.isPending
   const chapterMutationPending = createChapterMutation.isPending || updateChapterMutation.isPending
   const topicMutationPending = createTopicMutation.isPending || updateTopicMutation.isPending
 
@@ -2192,11 +2176,9 @@ export default function CurriculumPage() {
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Curriculum Management</h1>
           <p className="text-sm text-gray-600">Manage books, chapters, and topics for your classes</p>
         </div>
-        {filtersSelected && (
-          <button onClick={openAddBook} className="btn btn-primary">
-            Add Book
-          </button>
-        )}
+        <button onClick={openAddBook} className="btn btn-primary">
+          Add Book
+        </button>
       </div>
 
       {/* Filters */}
@@ -2630,7 +2612,6 @@ export default function CurriculumPage() {
                   />
                 </div>
               </div>
-
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="label">Edition</label>
@@ -2686,6 +2667,14 @@ export default function CurriculumPage() {
           </div>
         </div>
       )}
+
+      <AddBookModal
+        isOpen={showAddBookModal}
+        onClose={() => setShowAddBookModal(false)}
+        onSuccess={() => queryClient.invalidateQueries({ queryKey: ['lmsBooks'] })}
+        schoolId={activeSchool?.id}
+        activeAcademicYearId={activeAcademicYear?.id}
+      />
 
       {/* ============ Chapter Form Modal ============ */}
       {showChapterModal && (

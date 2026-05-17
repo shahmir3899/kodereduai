@@ -68,6 +68,7 @@ const ResultsPage = lazy(() => import('./pages/examinations/ResultsPage'))
 const ReportCardPage = lazy(() => import('./pages/examinations/ReportCardPage'))
 const GradeScalePage = lazy(() => import('./pages/examinations/GradeScalePage'))
 const QuestionPaperBuilderPage = lazy(() => import('./pages/examinations/QuestionPaperBuilderPage'))
+const ExamPapersPage = lazy(() => import('./pages/examinations/ExamPapersPage'))
 const CurriculumCoveragePage = lazy(() => import('./pages/examinations/CurriculumCoveragePage'))
 const QuestionsPage = lazy(() => import('./pages/examinations/QuestionsPage'))
 
@@ -325,6 +326,20 @@ function AdminPrincipalRoute({ children }) {
   return children
 }
 
+function PaperBuilderRoute({ children }) {
+  const { effectiveRole } = useAuth()
+  if (effectiveRole !== 'SCHOOL_ADMIN' && effectiveRole !== 'PRINCIPAL' && effectiveRole !== 'TEACHER') {
+    return (
+      <AccessRestrictedRedirect
+        to="/dashboard"
+        title="Paper Builder Access Limited"
+        message="Only School Admin, Principal, and class teachers can create question papers."
+      />
+    )
+  }
+  return children
+}
+
 function TimetableRoute() {
   const { effectiveRole } = useAuth()
   if (effectiveRole === 'TEACHER') {
@@ -423,7 +438,9 @@ function App() {
             <Route path="academics/results" element={<SchoolRoute><ModuleRoute module="examinations"><ResultsPage /></ModuleRoute></SchoolRoute>} />
             <Route path="academics/report-cards" element={<SchoolRoute><ModuleRoute module="examinations"><ReportCardPage /></ModuleRoute></SchoolRoute>} />
             <Route path="academics/grade-scale" element={<SchoolRoute><ModuleRoute module="examinations"><AssessmentManageRoute><GradeScalePage /></AssessmentManageRoute></ModuleRoute></SchoolRoute>} />
-            <Route path="academics/paper-builder" element={<SchoolRoute><CapabilityRoute module="examinations" capability="paper_builder"><QuestionPaperBuilderPage /></CapabilityRoute></SchoolRoute>} />
+            <Route path="academics/paper-builder" element={<SchoolRoute><CapabilityRoute module="examinations" capability="paper_builder"><PaperBuilderRoute><QuestionPaperBuilderPage /></PaperBuilderRoute></CapabilityRoute></SchoolRoute>} />
+            <Route path="academics/papers" element={<SchoolRoute><CapabilityRoute module="examinations" capability="paper_builder"><PaperBuilderRoute><ExamPapersPage /></PaperBuilderRoute></CapabilityRoute></SchoolRoute>} />
+            <Route path="examinations/papers/:paperId" element={<SchoolRoute><CapabilityRoute module="examinations" capability="paper_builder"><PaperBuilderRoute><QuestionPaperBuilderPage /></PaperBuilderRoute></CapabilityRoute></SchoolRoute>} />
             <Route path="academics/curriculum-coverage" element={<SchoolRoute><ModuleRoute module="examinations"><CurriculumCoveragePage /></ModuleRoute></SchoolRoute>} />
             <Route path="academics/questions" element={<SchoolRoute><ModuleRoute module="examinations"><QuestionsPage /></ModuleRoute></SchoolRoute>} />
 

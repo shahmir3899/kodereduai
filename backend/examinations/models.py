@@ -1,5 +1,6 @@
 from django.db import models
 from django.conf import settings
+from decimal import Decimal
 
 
 class ExamType(models.Model):
@@ -425,6 +426,38 @@ class Question(models.Model):
         preview = self.question_text[:50] + '...' if len(self.question_text) > 50 else self.question_text
         return f"Q:{preview} ({self.subject.name})"
 
+    def build_snapshot(self):
+        """Return a JSON-safe snapshot of question content for paper rendering/export."""
+        topics = self.tested_topics.select_related('chapter', 'chapter__book').all()
+        return {
+            'question_id': self.id,
+            'subject_id': self.subject_id,
+            'question_text': self.question_text,
+            'question_image_url': self.question_image_url,
+            'question_type': self.question_type,
+            'difficulty_level': self.difficulty_level,
+            'marks': str(self.marks),
+            'option_a': self.option_a,
+            'option_b': self.option_b,
+            'option_c': self.option_c,
+            'option_d': self.option_d,
+            'correct_answer': self.correct_answer,
+            'answer_text': self.answer_text,
+            'type_data': self.type_data or {},
+            'tested_topics': [topic.id for topic in topics],
+            'tested_topics_details': [
+                {
+                    'id': topic.id,
+                    'title': topic.title,
+                    'chapter_number': topic.chapter.chapter_number,
+                    'topic_number': topic.topic_number,
+                    'chapter_title': topic.chapter.title,
+                    'book_title': topic.chapter.book.title,
+                }
+                for topic in topics
+            ],
+        }
+
 
 class ExamPaper(models.Model):
     """A complete exam paper with multiple questions."""
@@ -551,7 +584,7 @@ class ExamPaper(models.Model):
         from lms.models import Topic, models as lms_models
         topics_qs = self.covered_topics.annotate(
             question_count=Count('test_questions', filter=Q(
-                test_questions__paper_questions__exam_paper=self
+                test_questions__paper_assignments__exam_paper=self
             ))
         )
         return {
@@ -586,6 +619,11 @@ class PaperQuestion(models.Model):
         blank=True,
         help_text="Override default marks for this specific paper"
     )
+    question_snapshot = models.JSONField(
+        blank=True,
+        default=dict,
+        help_text='Frozen copy of the question at the time it was attached or saved into the paper.',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -601,6 +639,34 @@ class PaperQuestion(models.Model):
     def get_marks(self):
         """Return override marks or default question marks."""
         return self.marks_override if self.marks_override is not None else self.question.marks
+
+    def build_question_snapshot(self):
+        """Build a snapshot payload from the linked question."""
+        def _decimal_str(value):
+            if value is None:
+                return None
+            return f"{Decimal(value):.2f}"
+
+        snapshot = self.question.build_snapshot()
+        snapshot.update({
+            'question_order': self.question_order,
+            'marks_override': _decimal_str(self.marks_override),
+            'effective_marks': _decimal_str(self.get_marks()),
+        })
+        return snapshot
+
+    def sync_question_snapshot(self, save=True):
+        """Refresh the stored question snapshot from the current linked question."""
+        self.question_snapshot = self.build_question_snapshot()
+        if save:
+            self.save(update_fields=['question_snapshot'])
+        return self.question_snapshot
+
+    def get_question_data(self):
+        """Return snapshot data when available, else live question data."""
+        if self.question_snapshot:
+            return self.question_snapshot
+        return self.build_question_snapshot()
 
 
 class PaperUpload(models.Model):

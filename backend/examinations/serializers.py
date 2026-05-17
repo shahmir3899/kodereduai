@@ -535,13 +535,18 @@ class QuestionCreateUpdateSerializer(serializers.ModelSerializer):
 
 class PaperQuestionSerializer(serializers.ModelSerializer):
     """Serializer for PaperQuestion through model."""
-    question_text = serializers.CharField(source='question.question_text', read_only=True)
-    question_type = serializers.CharField(source='question.question_type', read_only=True)
-    option_a = serializers.CharField(source='question.option_a', read_only=True)
-    option_b = serializers.CharField(source='question.option_b', read_only=True)
-    option_c = serializers.CharField(source='question.option_c', read_only=True)
-    option_d = serializers.CharField(source='question.option_d', read_only=True)
-    question_image_url = serializers.URLField(source='question.question_image_url', read_only=True, allow_null=True)
+    question_text = serializers.SerializerMethodField()
+    question_type = serializers.SerializerMethodField()
+    option_a = serializers.SerializerMethodField()
+    option_b = serializers.SerializerMethodField()
+    option_c = serializers.SerializerMethodField()
+    option_d = serializers.SerializerMethodField()
+    question_image_url = serializers.SerializerMethodField()
+    answer_text = serializers.SerializerMethodField()
+    correct_answer = serializers.SerializerMethodField()
+    difficulty_level = serializers.SerializerMethodField()
+    type_data = serializers.SerializerMethodField()
+    question_snapshot = serializers.JSONField(read_only=True)
     marks = serializers.SerializerMethodField()
 
     class Meta:
@@ -549,12 +554,50 @@ class PaperQuestionSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'question', 'question_order', 'marks_override', 'marks',
             'question_text', 'question_type', 'option_a', 'option_b',
-            'option_c', 'option_d', 'question_image_url', 'created_at',
+            'option_c', 'option_d', 'question_image_url', 'answer_text',
+            'correct_answer', 'difficulty_level', 'type_data',
+            'question_snapshot', 'created_at',
         ]
 
     def get_marks(self, obj):
         """Return override marks or default question marks."""
         return obj.get_marks()
+
+    def _snapshot_value(self, obj, key, fallback=''):
+        return obj.get_question_data().get(key, fallback)
+
+    def get_question_text(self, obj):
+        return self._snapshot_value(obj, 'question_text')
+
+    def get_question_type(self, obj):
+        return self._snapshot_value(obj, 'question_type')
+
+    def get_option_a(self, obj):
+        return self._snapshot_value(obj, 'option_a')
+
+    def get_option_b(self, obj):
+        return self._snapshot_value(obj, 'option_b')
+
+    def get_option_c(self, obj):
+        return self._snapshot_value(obj, 'option_c')
+
+    def get_option_d(self, obj):
+        return self._snapshot_value(obj, 'option_d')
+
+    def get_question_image_url(self, obj):
+        return self._snapshot_value(obj, 'question_image_url', None)
+
+    def get_answer_text(self, obj):
+        return self._snapshot_value(obj, 'answer_text')
+
+    def get_correct_answer(self, obj):
+        return self._snapshot_value(obj, 'correct_answer')
+
+    def get_difficulty_level(self, obj):
+        return self._snapshot_value(obj, 'difficulty_level')
+
+    def get_type_data(self, obj):
+        return self._snapshot_value(obj, 'type_data', {})
 
 
 class ExamPaperSerializer(serializers.ModelSerializer):
@@ -686,6 +729,64 @@ class ExamPaperCreateUpdateSerializer(serializers.ModelSerializer):
                 )
         
         return instance
+
+
+class ExamPaperDraftEnsureSerializer(serializers.ModelSerializer):
+    """Serializer for creating or refreshing server-backed draft papers."""
+
+    class Meta:
+        model = ExamPaper
+        fields = [
+            'exam', 'exam_subject', 'class_obj', 'subject',
+            'paper_title', 'instructions', 'total_marks',
+            'duration_minutes', 'status',
+        ]
+
+    def validate(self, data):
+        exam_subject = data.get('exam_subject') or getattr(self.instance, 'exam_subject', None)
+        exam = data.get('exam') or getattr(self.instance, 'exam', None)
+        if exam_subject and exam and exam_subject.exam != exam:
+            raise serializers.ValidationError('ExamSubject must belong to the specified Exam.')
+        return data
+
+
+class ExamPaperDraftAutosaveSerializer(serializers.Serializer):
+    """Serializer for autosaving editable paper metadata and manual questions."""
+
+    exam = serializers.PrimaryKeyRelatedField(
+        queryset=Exam.objects.filter(is_active=True),
+        required=False,
+        allow_null=True,
+    )
+    exam_subject = serializers.PrimaryKeyRelatedField(
+        queryset=ExamSubject.objects.filter(is_active=True),
+        required=False,
+        allow_null=True,
+    )
+    class_obj = serializers.PrimaryKeyRelatedField(
+        queryset=ExamPaper._meta.get_field('class_obj').remote_field.model.objects.all(),
+        required=False,
+    )
+    subject = serializers.PrimaryKeyRelatedField(
+        queryset=Question._meta.get_field('subject').remote_field.model.objects.filter(is_active=True),
+        required=False,
+    )
+    paper_title = serializers.CharField(required=False, allow_blank=False)
+    instructions = serializers.CharField(required=False, allow_blank=True)
+    total_marks = serializers.DecimalField(max_digits=6, decimal_places=2, required=False)
+    duration_minutes = serializers.IntegerField(min_value=1, required=False)
+    manual_questions = serializers.ListField(
+        child=serializers.DictField(),
+        required=False,
+        help_text='Full list of manual draft questions to upsert into the paper and question bank.',
+    )
+
+    def validate(self, data):
+        exam_subject = data.get('exam_subject')
+        exam = data.get('exam')
+        if exam_subject and exam and exam_subject.exam != exam:
+            raise serializers.ValidationError('ExamSubject must belong to the specified Exam.')
+        return data
 
 
 class PaperUploadSerializer(serializers.ModelSerializer):

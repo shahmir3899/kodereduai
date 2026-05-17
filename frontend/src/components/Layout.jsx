@@ -478,6 +478,7 @@ export default function Layout() {
         ...(isModuleEnabled('examinations') ? [
           { name: 'Question Bank', href: '/academics/questions', icon: PencilIcon },
           { name: 'Paper Builder', href: '/academics/paper-builder', icon: PencilIcon },
+          { name: 'Question Papers', href: '/academics/papers', icon: DocumentIcon },
         ] : []),
         ...(isModuleEnabled('lms') ? [
           { name: 'Curriculum', href: '/academics/curriculum', icon: BookOpenIcon },

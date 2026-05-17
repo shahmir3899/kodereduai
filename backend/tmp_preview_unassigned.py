@@ -1,8 +1,9 @@
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 import psycopg2
 
-load_dotenv('D:/Personal/smart-attendance/backend/.env')
+load_dotenv(Path(__file__).resolve().parent / '.env')
 dsn = os.getenv('DATABASE_URL')
 conn = psycopg2.connect(dsn)
 cur = conn.cursor()

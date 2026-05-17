@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { questionPaperApi, examinationsApi } from '../../services/api'
 import Toast from '../../components/Toast'
@@ -8,11 +8,72 @@ import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import { useClassSubjects } from '../../hooks/useClassSubjects'
+import { useDebounce } from '../../hooks/useDebounce'
 import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 import ImageCapturePaperTab from './ImageCapturePaperTab'
 import ManualEntryPaperTab from './ManualEntryPaperTab'
 import LessonPlanPaperTab from './LessonPlanPaperTab'
+
+const MANUAL_DRAFT_DEFAULT = {
+  paper_title: '',
+  instructions: '',
+  total_marks: '100',
+  duration_minutes: '60',
+  questions: [],
+}
+
+const MANUAL_QUESTION_DEFAULT_OPTIONS = {
+  A: '',
+  B: '',
+  C: '',
+  D: '',
+}
+
+function toQuestionDraft(paperQuestion) {
+  return {
+    local_id: `q_${paperQuestion.question}_${paperQuestion.question_order}`,
+    question_id: paperQuestion.question,
+    question_text: paperQuestion.question_text || '',
+    question_type: paperQuestion.question_type || 'SHORT',
+    difficulty_level: paperQuestion.difficulty_level || 'MEDIUM',
+    marks: Number(paperQuestion.marks_override ?? paperQuestion.marks ?? 1) || 1,
+    marks_override: Number(paperQuestion.marks_override ?? paperQuestion.marks ?? 1) || 1,
+    correct_answer: paperQuestion.correct_answer || '',
+    answer_text: paperQuestion.answer_text || '',
+    type_data: paperQuestion.type_data || {},
+    tested_topics: Array.isArray(paperQuestion.question_snapshot?.tested_topics)
+      ? paperQuestion.question_snapshot.tested_topics
+      : [],
+    options: {
+      A: paperQuestion.option_a || '',
+      B: paperQuestion.option_b || '',
+      C: paperQuestion.option_c || '',
+      D: paperQuestion.option_d || '',
+    },
+  }
+}
+
+function buildManualAutosaveQuestions(questions) {
+  return (questions || []).map((question, index) => ({
+    question_id: question.question_id || undefined,
+    question_order: index + 1,
+    marks_override: Number(question.marks_override ?? question.marks ?? 1) || 1,
+    question_text: question.question_text || '',
+    question_type: question.question_type || 'SHORT',
+    difficulty_level: question.difficulty_level || 'MEDIUM',
+    marks: Number(question.marks ?? 1) || 1,
+    option_a: question.options?.A || '',
+    option_b: question.options?.B || '',
+    option_c: question.options?.C || '',
+    option_d: question.options?.D || '',
+    correct_answer: question.correct_answer || '',
+    answer_text: question.answer_text || '',
+    type_data: question.type_data || {},
+    tested_topics: Array.isArray(question.tested_topics) ? question.tested_topics : [],
+    local_id: question.local_id,
+  }))
+}
 
 /**
  * QuestionPaperBuilderPage - Main Question Paper Builder
@@ -21,12 +82,20 @@ import LessonPlanPaperTab from './LessonPlanPaperTab'
  * 2. Manual entry - Type questions with rich editor
  */
 export default function QuestionPaperBuilderPage() {
-  const { isTeacher } = useAuth()
+  const { activeSchool, user } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
+  const { paperId: routePaperId } = useParams()
   const { activeAcademicYear } = useAcademicYear()
+  const resumePaperId = routePaperId || location.state?.paperId || location.state?.draftId || null
   const [activeTab, setActiveTab] = useState(location.state?.lessonPlanId ? 'lesson' : 'manual') // 'manual' | 'image' | 'lesson'
   const [toast, setToast] = useState(null)
+  const [draftId, setDraftId] = useState(resumePaperId)
+  const [manualDraft, setManualDraft] = useState(MANUAL_DRAFT_DEFAULT)
+  const [manualDirty, setManualDirty] = useState(false)
+  const [saveState, setSaveState] = useState('idle')
+  const [lastSavedAt, setLastSavedAt] = useState(null)
+  const [paperStatus, setPaperStatus] = useState('DRAFT')
   const [paperMetadata, setPaperMetadata] = useState({
     class_obj: '',
     subject: '',
@@ -53,7 +122,52 @@ export default function QuestionPaperBuilderPage() {
     queryFn: () => examinationsApi.getExams({ page_size: 999 }),
   })
 
+  useQuery({
+    queryKey: ['paperBuilderResumeDraft', resumePaperId],
+    queryFn: () => questionPaperApi.getExamPaper(resumePaperId),
+    enabled: !!resumePaperId,
+    onSuccess: (response) => {
+      const paper = response?.data
+      if (!paper?.id) return
+
+      setDraftId(paper.id)
+      setPaperStatus(paper.status || 'DRAFT')
+      setPaperMetadata({
+        class_obj: paper.class_obj ? String(paper.class_obj) : '',
+        subject: paper.subject ? String(paper.subject) : '',
+        exam: paper.exam ? String(paper.exam) : '',
+      })
+      setManualDraft({
+        paper_title: paper.paper_title || '',
+        instructions: paper.instructions || '',
+        total_marks: String(paper.total_marks ?? '100'),
+        duration_minutes: String(paper.duration_minutes ?? '60'),
+        questions: (paper.paper_questions || []).map(toQuestionDraft),
+      })
+      setManualDirty(false)
+      setSaveState('saved')
+      setLastSavedAt(paper.updated_at || new Date().toISOString())
+    },
+  })
+
+  const isReadOnlyPaper = Boolean(resumePaperId && paperStatus && paperStatus !== 'DRAFT')
+
+  useEffect(() => {
+    if (isReadOnlyPaper && activeTab !== 'manual') {
+      setActiveTab('manual')
+    }
+  }, [activeTab, isReadOnlyPaper])
+
   const exams = examsData?.data?.results || []
+  const recoveryKey = useMemo(() => {
+    const schoolId = activeSchool?.id || 'school'
+    const userId = user?.id || 'user'
+    return `paper_builder_manual_recovery_${schoolId}_${userId}`
+  }, [activeSchool?.id, user?.id])
+
+  const hasRestoredRecoveryRef = useRef(false)
+  const lastEnsurePayloadRef = useRef('')
+  const lastAutosavePayloadRef = useRef('')
 
   // Create exam paper mutation
   const createPaperMutation = useMutation({
@@ -77,8 +191,236 @@ export default function QuestionPaperBuilderPage() {
     },
   })
 
+  const ensureDraftMutation = useMutation({
+    mutationFn: (data) => questionPaperApi.ensureDraft(data),
+    onSuccess: (response) => {
+      const paper = response?.data
+      if (!paper?.id) return
+      setDraftId(paper.id)
+      setSaveState('saved')
+      setLastSavedAt(new Date().toISOString())
+      localStorage.removeItem(recoveryKey)
+    },
+    onError: (error) => {
+      setSaveState('error')
+      const msg = error?.response?.data?.detail || 'Failed to create draft'
+      setToast({ type: 'error', message: msg })
+    },
+  })
+
+  const autosaveMutation = useMutation({
+    mutationFn: ({ id, data }) => questionPaperApi.autosaveDraft(id, data),
+    onSuccess: (response, variables) => {
+      const paper = response?.data
+      if (!paper?.id) return
+      setDraftId(paper.id)
+      setPaperMetadata((prev) => ({
+        ...prev,
+        class_obj: paper.class_obj ? String(paper.class_obj) : prev.class_obj,
+        subject: paper.subject ? String(paper.subject) : prev.subject,
+        exam: paper.exam ? String(paper.exam) : '',
+      }))
+      setManualDraft((prev) => ({
+        ...prev,
+        paper_title: paper.paper_title || prev.paper_title,
+        instructions: paper.instructions || '',
+        total_marks: String(paper.total_marks ?? prev.total_marks),
+        duration_minutes: String(paper.duration_minutes ?? prev.duration_minutes),
+        questions: (paper.paper_questions || []).map(toQuestionDraft),
+      }))
+      setManualDirty(false)
+      setSaveState('saved')
+      setLastSavedAt(new Date().toISOString())
+      lastAutosavePayloadRef.current = variables?.payloadHash || lastAutosavePayloadRef.current
+      localStorage.removeItem(recoveryKey)
+    },
+    onError: (error) => {
+      setSaveState('error')
+      const msg = error?.response?.data?.detail || 'Autosave failed'
+      setToast({ type: 'error', message: msg })
+    },
+  })
+
+  useEffect(() => {
+    if (hasRestoredRecoveryRef.current) return
+    hasRestoredRecoveryRef.current = true
+
+    if (resumePaperId) return
+
+    try {
+      const raw = localStorage.getItem(recoveryKey)
+      if (!raw) return
+      const parsed = JSON.parse(raw)
+      if (!parsed || typeof parsed !== 'object') return
+
+      if (parsed.paperMetadata) {
+        setPaperMetadata((prev) => ({ ...prev, ...parsed.paperMetadata }))
+      }
+      if (parsed.manualDraft) {
+        setManualDraft((prev) => ({ ...prev, ...parsed.manualDraft }))
+      }
+      setSaveState('pending')
+      setToast({ type: 'success', message: 'Recovered unsaved manual draft from this browser.' })
+    } catch {
+      // Ignore corrupt recovery payloads.
+    }
+  }, [recoveryKey, resumePaperId])
+
+  const recoveryPayload = useDebounce({ paperMetadata, manualDraft }, 400)
+  useEffect(() => {
+    if (activeTab !== 'manual') return
+    if (draftId) {
+      localStorage.removeItem(recoveryKey)
+      return
+    }
+
+    try {
+      localStorage.setItem(
+        recoveryKey,
+        JSON.stringify({
+          paperMetadata: recoveryPayload.paperMetadata,
+          manualDraft: recoveryPayload.manualDraft,
+          savedAt: new Date().toISOString(),
+        }),
+      )
+    } catch {
+      // Recovery storage is best-effort.
+    }
+  }, [activeTab, draftId, recoveryKey, recoveryPayload])
+
+  const buildEnsurePayload = useCallback(() => {
+    const payload = {
+      class_obj: resolvedClassObj || undefined,
+      subject: paperMetadata.subject || undefined,
+      exam: paperMetadata.exam || undefined,
+      paper_title: (manualDraft.paper_title || '').trim() || undefined,
+      instructions: manualDraft.instructions || '',
+    }
+
+    const parsedTotal = Number(manualDraft.total_marks)
+    if (!Number.isNaN(parsedTotal) && parsedTotal > 0) {
+      payload.total_marks = parsedTotal
+    }
+
+    const parsedDuration = parseInt(manualDraft.duration_minutes, 10)
+    if (!Number.isNaN(parsedDuration) && parsedDuration > 0) {
+      payload.duration_minutes = parsedDuration
+    }
+
+    return payload
+  }, [manualDraft.duration_minutes, manualDraft.instructions, manualDraft.paper_title, manualDraft.total_marks, paperMetadata.exam, paperMetadata.subject, resolvedClassObj])
+
+  const buildAutosavePayload = useCallback(() => {
+    const payload = buildEnsurePayload()
+    payload.manual_questions = buildManualAutosaveQuestions(manualDraft.questions)
+    return payload
+  }, [buildEnsurePayload, manualDraft.questions])
+
+  useEffect(() => {
+    if (activeTab !== 'manual') return
+    if (draftId) return
+    if (ensureDraftMutation.isPending) return
+    if (!resolvedClassObj || !paperMetadata.subject || !(manualDraft.paper_title || '').trim()) return
+
+    const ensurePayload = buildEnsurePayload()
+    const payloadHash = JSON.stringify(ensurePayload)
+    if (!ensurePayload.class_obj || !ensurePayload.subject || !ensurePayload.paper_title) return
+    if (payloadHash === lastEnsurePayloadRef.current) return
+
+    lastEnsurePayloadRef.current = payloadHash
+    setSaveState('saving')
+    ensureDraftMutation.mutate(ensurePayload)
+  }, [
+    activeTab,
+    buildEnsurePayload,
+    draftId,
+    ensureDraftMutation,
+    manualDraft.paper_title,
+    paperMetadata.subject,
+    resolvedClassObj,
+  ])
+
+  const debouncedAutosavePayload = useDebounce(buildAutosavePayload(), 900)
+  useEffect(() => {
+    if (activeTab !== 'manual') return
+    if (!draftId) return
+    if (!manualDirty) return
+    if (autosaveMutation.isPending) return
+
+    const payloadHash = JSON.stringify(debouncedAutosavePayload)
+    if (payloadHash === lastAutosavePayloadRef.current) return
+
+    setSaveState('saving')
+    autosaveMutation.mutate({
+      id: draftId,
+      data: debouncedAutosavePayload,
+      payloadHash,
+    })
+  }, [activeTab, autosaveMutation, debouncedAutosavePayload, draftId, manualDirty])
+
+  const handleManualDraftChange = useCallback((nextDraft) => {
+    setManualDraft(nextDraft)
+    setManualDirty(true)
+    if (saveState !== 'saving') {
+      setSaveState('pending')
+    }
+  }, [saveState])
+
+  const handleManualSubmit = useCallback(async () => {
+    if (!(manualDraft.paper_title || '').trim()) {
+      setToast({ type: 'error', message: 'Paper title is required before opening draft.' })
+      return
+    }
+    if (!resolvedClassObj || !paperMetadata.subject) {
+      setToast({ type: 'error', message: 'Select class and subject before opening draft.' })
+      return
+    }
+    if ((manualDraft.questions || []).length === 0) {
+      setToast({ type: 'error', message: 'Add at least one question.' })
+      return
+    }
+
+    try {
+      let finalDraftId = draftId
+      if (!finalDraftId) {
+        setSaveState('saving')
+        const ensured = await ensureDraftMutation.mutateAsync(buildEnsurePayload())
+        finalDraftId = ensured?.data?.id
+      }
+
+      if (!finalDraftId) {
+        setSaveState('error')
+        setToast({ type: 'error', message: 'Draft could not be created.' })
+        return
+      }
+
+      const payload = buildAutosavePayload()
+      const payloadHash = JSON.stringify(payload)
+      await autosaveMutation.mutateAsync({
+        id: finalDraftId,
+        data: payload,
+        payloadHash,
+      })
+
+      navigate(`/examinations/papers/${finalDraftId}`)
+    } catch {
+      setSaveState('error')
+    }
+  }, [
+    autosaveMutation,
+    buildAutosavePayload,
+    buildEnsurePayload,
+    draftId,
+    ensureDraftMutation,
+    manualDraft.paper_title,
+    manualDraft.questions,
+    navigate,
+    paperMetadata.subject,
+    resolvedClassObj,
+  ])
+
   // Handle paper creation from either tab
-  const handlePaperCreate = (paperData, questionsData) => {
+  const handlePaperCreate = (paperData) => {
     // Ensure metadata is included
     const finalData = {
       ...paperMetadata,
@@ -142,6 +484,7 @@ export default function QuestionPaperBuilderPage() {
                 academicYearId={activeAcademicYear?.id}
                 showAllOption={showAllOption}
                 classes={teacherClassOptions || undefined}
+                disabled={isReadOnlyPaper}
                 required
               />
             </div>
@@ -156,7 +499,7 @@ export default function QuestionPaperBuilderPage() {
                   setPaperMetadata({ ...paperMetadata, subject: e.target.value })
                 }
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                disabled={!resolvedClassObj || classSubjectsLoading}
+                disabled={isReadOnlyPaper || !resolvedClassObj || classSubjectsLoading}
                 required
               >
                 <option value="">
@@ -186,7 +529,7 @@ export default function QuestionPaperBuilderPage() {
                   setPaperMetadata({ ...paperMetadata, exam: e.target.value })
                 }
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                disabled={examsLoading}
+                disabled={isReadOnlyPaper || examsLoading}
               >
                 <option value="">{examsLoading ? 'Loading exams...' : 'Select Exam (Optional)'}</option>
                 {exams.map((exam) => (
@@ -216,6 +559,7 @@ export default function QuestionPaperBuilderPage() {
             </button>
             <button
               onClick={() => setActiveTab('image')}
+              disabled={isReadOnlyPaper}
               className={`flex-1 px-6 py-4 font-medium text-center transition ${
                 activeTab === 'image'
                   ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600'
@@ -227,6 +571,7 @@ export default function QuestionPaperBuilderPage() {
             </button>
             <button
               onClick={() => setActiveTab('lesson')}
+              disabled={isReadOnlyPaper}
               className={`flex-1 px-6 py-4 font-medium text-center transition ${
                 activeTab === 'lesson'
                   ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600'
@@ -242,8 +587,20 @@ export default function QuestionPaperBuilderPage() {
           <div className="p-8">
             {activeTab === 'manual' && (
               <ManualEntryPaperTab
-                onPaperCreate={handlePaperCreate}
-                isLoading={createPaperMutation.isPending}
+                draftData={manualDraft}
+                onDraftDataChange={handleManualDraftChange}
+                onSubmitDraft={handleManualSubmit}
+                isLoading={
+                  saveState === 'saving'
+                  || ensureDraftMutation.isPending
+                  || autosaveMutation.isPending
+                }
+                saveState={saveState}
+                lastSavedAt={lastSavedAt}
+                draftReady={!!draftId}
+                classId={resolvedClassObj}
+                subjectId={paperMetadata.subject}
+                readOnly={isReadOnlyPaper}
               />
             )}
 

@@ -1250,6 +1250,8 @@ export const questionPaperApi = {
   // Exam Papers
   getExamPapers: (params) => api.get('/api/examinations/exam-papers/', { params }),
   getExamPaper: (id) => api.get(`/api/examinations/exam-papers/${id}/`),
+  ensureDraft: (data) => api.post('/api/examinations/exam-papers/ensure-draft/', data),
+  autosaveDraft: (id, data) => api.post(`/api/examinations/exam-papers/${id}/autosave/`, data),
   createExamPaper: (data) => api.post('/api/examinations/exam-papers/', data),
   updateExamPaper: (id, data) => api.patch(`/api/examinations/exam-papers/${id}/`, data),
   deleteExamPaper: (id) => api.delete(`/api/examinations/exam-papers/${id}/`),
@@ -1259,6 +1261,7 @@ export const questionPaperApi = {
   getCoverageStats: (paperId) =>
     api.get(`/api/examinations/exam-papers/${paperId}/coverage_stats/`),
   generatePDF: (id) => api.get(`/api/examinations/exam-papers/${id}/generate-pdf/`, { responseType: 'blob' }),
+  generateDOCX: (id) => api.get(`/api/examinations/exam-papers/${id}/generate-docx/`, { responseType: 'blob' }),
   reviewQuestions: (questions) => api.post('/api/examinations/exam-papers/review-questions/', { questions }),
 
   // Paper Uploads (image capture for OCR)
