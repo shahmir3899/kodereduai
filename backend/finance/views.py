@@ -32,7 +32,6 @@ from .models import (
     DEFAULT_EXPENSE_CATEGORIES, DEFAULT_INCOME_CATEGORIES, SUGGESTED_ANNUAL_CATEGORIES, SUGGESTED_MONTHLY_CATEGORIES,
     FinanceAIChatMessage, MonthlyClosing, AccountSnapshot,
     Discount, Scholarship, StudentDiscount, PaymentGatewayConfig, OnlinePayment,
-    SiblingGroup, SiblingGroupMember, SiblingSuggestion,
     resolve_fee_amount,
 )
 from .serializers import (
@@ -50,9 +49,7 @@ from .serializers import (
     StudentDiscountSerializer, StudentDiscountCreateSerializer,
     PaymentGatewayConfigSerializer,
     OnlinePaymentSerializer, OnlinePaymentInitiateSerializer,
-    FeeBreakdownSerializer, SiblingDetectionSerializer,
-    SiblingGroupMemberSerializer, SiblingGroupSerializer,
-    SiblingSuggestionSerializer,
+    FeeBreakdownSerializer,
 )
 from .generation_planner import build_preview_plan
 
@@ -3805,7 +3802,7 @@ class OnlinePaymentViewSet(ModuleAccessMixin, viewsets.ReadOnlyModelViewSet):
 
 
 # =============================================================================
-# Phase 3: Fee Breakdown & Sibling Detection Views
+# Phase 3: Fee Breakdown
 # =============================================================================
 
 class FeeBreakdownView(ModuleAccessMixin, APIView):
@@ -3905,242 +3902,7 @@ class FeeBreakdownView(ModuleAccessMixin, APIView):
         }).data)
 
 
-class SiblingDetectionView(ModuleAccessMixin, APIView):
-    """
-    GET: Detect siblings by matching guardian_phone or parent_phone in the same school.
-    Takes student_id from URL path.
-    """
-    required_module = 'finance'
-    permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
 
-    def get(self, request, student_id):
-        school_id = _resolve_school_id(request)
-        if not school_id:
-            return Response({'detail': 'No school associated with your account.'}, status=400)
-
-        try:
-            student = Student.objects.select_related('class_obj').get(
-                id=student_id, school_id=school_id,
-            )
-        except Student.DoesNotExist:
-            return Response({'detail': 'Student not found.'}, status=404)
-
-        # Collect phone numbers to match on
-        phones = set()
-        if student.parent_phone and student.parent_phone.strip():
-            phones.add(student.parent_phone.strip())
-        if student.guardian_phone and student.guardian_phone.strip():
-            phones.add(student.guardian_phone.strip())
-
-        if not phones:
-            return Response(SiblingDetectionSerializer({
-                'student_id': student.id,
-                'student_name': student.name,
-                'matched_phone': '',
-                'siblings': [],
-            }).data)
-
-        # Find other students in the same school with matching phone
-        phone_q = Q()
-        for phone in phones:
-            phone_q |= Q(parent_phone=phone) | Q(guardian_phone=phone)
-
-        siblings = Student.objects.filter(
-            phone_q,
-            school_id=school_id,
-            is_active=True,
-        ).exclude(id=student.id).select_related('class_obj').distinct()
-
-        sibling_list = [
-            {
-                'id': s.id,
-                'name': s.name,
-                'class_name': s.class_obj.name if s.class_obj else '',
-                'roll_number': s.roll_number,
-                'parent_phone': s.parent_phone,
-                'guardian_phone': s.guardian_phone,
-            }
-            for s in siblings
-        ]
-
-        matched_phone = ', '.join(sorted(phones))
-
-        # Confirmed sibling group info
-        membership = SiblingGroupMember.objects.filter(
-            student=student, group__is_active=True,
-        ).select_related('group').first()
-
-        sibling_group_info = None
-        if membership:
-            group = membership.group
-            members = group.members.select_related('student__class_obj').all()
-            sibling_group_info = {
-                'group_id': group.id,
-                'group_name': group.name,
-                'members': [
-                    {
-                        'id': m.student.id,
-                        'name': m.student.name,
-                        'class_name': m.student.class_obj.name if m.student.class_obj else '',
-                        'order_index': m.order_index,
-                    }
-                    for m in members
-                ],
-            }
-
-        # Pending suggestions count
-        pending_count = SiblingSuggestion.objects.filter(
-            Q(student_a=student) | Q(student_b=student),
-            school_id=school_id,
-            status='PENDING',
-        ).count()
-
-        return Response(SiblingDetectionSerializer({
-            'student_id': student.id,
-            'student_name': student.name,
-            'matched_phone': matched_phone,
-            'siblings': sibling_list,
-            'sibling_group': sibling_group_info,
-            'pending_suggestions_count': pending_count,
-        }).data)
-
-
-# =============================================================================
-# Phase 6a: Sibling Suggestion & Group Management
-# =============================================================================
-
-class SiblingSuggestionListView(ModuleAccessMixin, APIView):
-    """
-    GET: List sibling suggestions for the current school.
-    Query params: ?status=PENDING (default), ?page=1&page_size=20
-    """
-    required_module = 'finance'
-    permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
-
-    def get(self, request):
-        school_id = _resolve_school_id(request)
-        if not school_id:
-            return Response({'detail': 'No school associated with your account.'}, status=400)
-
-        status_filter = request.query_params.get('status', 'PENDING').upper()
-        suggestions = SiblingSuggestion.objects.filter(
-            school_id=school_id,
-            status=status_filter,
-        ).select_related(
-            'student_a__class_obj', 'student_b__class_obj', 'reviewed_by',
-            'sibling_group',
-        ).order_by('-confidence_score', '-created_at')
-
-        page = int(request.query_params.get('page', 1))
-        page_size = int(request.query_params.get('page_size', 20))
-        start = (page - 1) * page_size
-        end = start + page_size
-
-        total = suggestions.count()
-        results = suggestions[start:end]
-
-        return Response({
-            'count': total,
-            'results': SiblingSuggestionSerializer(results, many=True).data,
-        })
-
-
-class SiblingSuggestionActionView(ModuleAccessMixin, APIView):
-    """
-    POST /api/finance/sibling-suggestions/<id>/confirm/
-    POST /api/finance/sibling-suggestions/<id>/reject/
-    """
-    required_module = 'finance'
-    permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
-
-    def post(self, request, suggestion_id, action):
-        school_id = _resolve_school_id(request)
-        if not school_id:
-            return Response({'detail': 'No school associated with your account.'}, status=400)
-
-        try:
-            suggestion = SiblingSuggestion.objects.select_related(
-                'student_a__class_obj', 'student_b__class_obj',
-            ).get(id=suggestion_id, school_id=school_id, status='PENDING')
-        except SiblingSuggestion.DoesNotExist:
-            return Response(
-                {'detail': 'Suggestion not found or already reviewed.'},
-                status=404,
-            )
-
-        if action == 'reject':
-            suggestion.status = 'REJECTED'
-            suggestion.reviewed_by = request.user
-            suggestion.reviewed_at = timezone.now()
-            suggestion.save(update_fields=['status', 'reviewed_by', 'reviewed_at'])
-            return Response({'detail': 'Suggestion rejected.'})
-
-        if action == 'confirm':
-            from finance.sibling_confirmation import confirm_sibling_suggestion
-            group = confirm_sibling_suggestion(suggestion, request.user)
-            members = group.members.select_related('student__class_obj').all()
-            return Response({
-                'detail': 'Siblings confirmed.',
-                'sibling_group_id': group.id,
-                'sibling_group_name': group.name,
-                'members': SiblingGroupMemberSerializer(members, many=True).data,
-            })
-
-        return Response({'detail': f'Unknown action: {action}'}, status=400)
-
-
-class SiblingSuggestionSummaryView(ModuleAccessMixin, APIView):
-    """GET: Count of pending sibling suggestions (for dashboard badge)."""
-    required_module = 'finance'
-    permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
-
-    def get(self, request):
-        school_id = _resolve_school_id(request)
-        if not school_id:
-            return Response({'detail': 'No school associated with your account.'}, status=400)
-
-        pending_count = SiblingSuggestion.objects.filter(
-            school_id=school_id, status='PENDING',
-        ).count()
-
-        high_confidence_count = SiblingSuggestion.objects.filter(
-            school_id=school_id, status='PENDING', confidence_score__gte=70,
-        ).count()
-
-        return Response({
-            'pending_count': pending_count,
-            'high_confidence_count': high_confidence_count,
-        })
-
-
-class SiblingGroupListView(ModuleAccessMixin, APIView):
-    """GET: List confirmed sibling groups for the current school."""
-    required_module = 'finance'
-    permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
-
-    def get(self, request):
-        school_id = _resolve_school_id(request)
-        if not school_id:
-            return Response({'detail': 'No school associated with your account.'}, status=400)
-
-        groups = SiblingGroup.objects.filter(
-            school_id=school_id, is_active=True,
-        ).prefetch_related(
-            'members__student__class_obj',
-        ).select_related('confirmed_by').order_by('-created_at')
-
-        page = int(request.query_params.get('page', 1))
-        page_size = int(request.query_params.get('page_size', 20))
-        start = (page - 1) * page_size
-        end = start + page_size
-
-        total = groups.count()
-        results = groups[start:end]
-
-        return Response({
-            'count': total,
-            'results': SiblingGroupSerializer(results, many=True).data,
-        })
 
 
 # =============================================================================

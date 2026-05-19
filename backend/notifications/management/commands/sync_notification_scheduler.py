@@ -14,6 +14,10 @@ Usage (Render Shell):
 What it syncs:
     * 'daily-absence-summary'              (notifications.tasks.send_daily_absence_summary)
     * 'scheduled-absence-in-app-digest'    (notifications.tasks.run_scheduled_absence_in_app_digest)
+    * 'process-notification-queue'         (notifications.tasks.process_notification_queue)
+    * 'dispatch-scheduled-notifications'   (notifications.tasks.dispatch_scheduled_notifications)
+    * 'mark-stale-toc-jobs-timed-out'      (lms.tasks.mark_stale_toc_jobs_timed_out)
+    * 'retry-failed-uploads'               (attendance.tasks.retry_failed_uploads)
 
 Tasks not in this list are left untouched (Beat will auto-seed them if missing).
 """
@@ -31,6 +35,15 @@ from django_celery_beat.models import CrontabSchedule, PeriodicTask
 MANAGED_SCHEDULES = (
     'daily-absence-summary',
     'scheduled-absence-in-app-digest',
+    'process-notification-queue',
+    'dispatch-scheduled-notifications',
+    'mark-stale-toc-jobs-timed-out',
+    'retry-failed-uploads',
+)
+
+# Tasks removed from the codebase — disable their Beat DB rows on next deploy.
+TASKS_TO_DISABLE = (
+    'nightly-sibling-detection',
 )
 
 
@@ -132,3 +145,18 @@ class Command(BaseCommand):
                 existing.save(update_fields=list(updates.keys()))
 
             self.stdout.write(self.style.SUCCESS(f"{action.upper()} {label}"))
+
+        # Disable removed tasks so Beat stops trying to execute them.
+        for name in TASKS_TO_DISABLE:
+            try:
+                task = PeriodicTask.objects.get(name=name)
+            except PeriodicTask.DoesNotExist:
+                self.stdout.write(f"SKIP DISABLE {name}: not in DB")
+                continue
+            if not task.enabled:
+                self.stdout.write(f"ALREADY DISABLED {name}")
+                continue
+            if not dry_run:
+                task.enabled = False
+                task.save(update_fields=['enabled'])
+            self.stdout.write(self.style.SUCCESS(f"DISABLED {name}"))
