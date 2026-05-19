@@ -308,6 +308,16 @@ CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minutes
 # noisy idle-time round trips to Redis.
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 CELERY_WORKER_SEND_TASK_EVENTS = False
+# Increase BRPOP blocking timeout to reduce idle polling ops on Upstash Redis.
+# Default socket_timeout is 3s → ~28,800 ops/day per worker just from idle polls.
+# 30s → ~2,880 ops/day (10× reduction). Tasks queued between polls start within
+# ≤30s; acceptable for all scheduled and most user-triggered tasks.
+CELERY_BROKER_TRANSPORT_OPTIONS = {
+    'visibility_timeout': 3600,   # 1-hour redelivery window (same as default)
+    'socket_timeout': 30,         # BRPOP blocks 30s before reissuing; was 3s
+    'socket_keepalive': True,
+    'socket_connect_timeout': 10,
+}
 
 # Local dev: run tasks synchronously inside Django (no worker/Redis needed)
 # Production: tasks run in separate Celery worker via start.sh
@@ -350,11 +360,11 @@ CELERY_BEAT_SCHEDULE = {
     'daily-absence-summary': {
         'task': 'notifications.tasks.send_daily_absence_summary',
         # Runtime checks per-school daily_absence_summary_time against a
-        # 5-minute window aligned to the cron tick (00, 05, 10, ...). The task
+        # 10-minute window aligned to the cron tick (00, 10, 20, ...). The task
         # itself dedupes via _daily_notification_already_sent so re-running
         # within the window is harmless. Every-minute polling was costing
-        # ~1,440 Beat publishes/day to Upstash; every 5 min is ~288/day.
-        'schedule': crontab(minute='*/5'),
+        # ~1,440 Beat publishes/day to Upstash; every 10 min is ~144/day.
+        'schedule': crontab(minute='*/10'),
     },
     'scheduled-absence-in-app-digest': {
         'task': 'notifications.tasks.run_scheduled_absence_in_app_digest',
@@ -362,7 +372,7 @@ CELERY_BEAT_SCHEDULE = {
     },
     'process-notification-queue': {
         'task': 'notifications.tasks.process_notification_queue',
-        'schedule': crontab(minute='*/5'),
+        'schedule': crontab(minute='*/10'),
     },
     'cleanup-old-uploads': {
         'task': 'attendance.tasks.cleanup_old_uploads',
@@ -370,8 +380,10 @@ CELERY_BEAT_SCHEDULE = {
         'kwargs': {'days': 90},
     },
     'retry-failed-uploads': {
+        # Bug fix: crontab(hour='*/6') with no minute arg defaults to minute='*'
+        # (runs every minute of those hours = 240x/day). Explicit minute=0 = 4x/day.
         'task': 'attendance.tasks.retry_failed_uploads',
-        'schedule': crontab(hour='*/6'),
+        'schedule': crontab(hour='*/6', minute=0),
         'kwargs': {'hours': 24},
     },
     'cleanup-location-data': {
@@ -390,12 +402,14 @@ CELERY_BEAT_SCHEDULE = {
     },
     'dispatch-scheduled-notifications': {
         'task': 'notifications.tasks.dispatch_scheduled_notifications',
-        'schedule': crontab(minute='*/5'),
+        'schedule': crontab(minute='*/15'),
     },
     'mark-stale-toc-jobs-timed-out': {
+        # Safety-net sweep; staleness threshold is max_age_minutes kwarg (5 min)
+        # not this poll interval. Every 15 min is sufficient.
         'task': 'lms.tasks.mark_stale_toc_jobs_timed_out',
-        'schedule': crontab(minute='*/5'),
-        'kwargs': {'max_age_minutes': 5},
+        'schedule': crontab(minute='*/15'),
+        'kwargs': {'max_age_minutes': 15},
     },
     # Accuracy drift + anomaly detection tasks intentionally unscheduled —
     # too noisy for daily in-app alerts. Tasks kept in attendance/tasks.py

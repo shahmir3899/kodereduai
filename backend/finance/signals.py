@@ -37,4 +37,11 @@ def trigger_sibling_detection(sender, instance, created, **kwargs):
 
     if should_detect:
         from finance.tasks import detect_siblings_for_student_task
-        detect_siblings_for_student_task.delay(instance.id)
+        try:
+            detect_siblings_for_student_task.delay(instance.id)
+        except Exception:
+            logger.warning(
+                "Could not queue sibling detection for student %s "
+                "(broker unavailable — will run on next nightly job).",
+                instance.id,
+            )
