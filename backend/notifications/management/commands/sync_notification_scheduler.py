@@ -39,11 +39,14 @@ MANAGED_SCHEDULES = (
     'dispatch-scheduled-notifications',
     'mark-stale-toc-jobs-timed-out',
     'retry-failed-uploads',
+<<<<<<< HEAD
 )
 
 # Tasks removed from the codebase — disable their Beat DB rows on next deploy.
 TASKS_TO_DISABLE = (
     'nightly-sibling-detection',
+=======
+>>>>>>> 36421588127fc1deebcf1d5520419c3810cba43a
 )
 
 
