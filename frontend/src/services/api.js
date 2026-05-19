@@ -991,6 +991,8 @@ export const lmsApi = {
 
   // Topics
   getTopics: (params) => api.get('/api/lms/topics/', { params }),
+  getTopicObjectives: (topicId) => api.get(`/api/lms/topics/${topicId}/objectives/`),
+  getTopicStandards: (topicId) => api.get(`/api/lms/topics/${topicId}/standards/`),
   createTopic: (data) => api.post('/api/lms/topics/', data),
   updateTopic: (id, data) => api.patch(`/api/lms/topics/${id}/`, data),
   deleteTopic: (id) => api.delete(`/api/lms/topics/${id}/`),
@@ -1001,8 +1003,28 @@ export const lmsApi = {
   updateSubtopic: (id, data) => api.patch(`/api/lms/subtopics/${id}/`, data),
   deleteSubtopic: (id) => api.delete(`/api/lms/subtopics/${id}/`),
 
+  // Content blocks
+  getContentBlocks: (params) => api.get('/api/lms/content-blocks/', { params }),
+  getContentBlock: (id) => api.get(`/api/lms/content-blocks/${id}/`),
+  semanticSearchContentBlocks: (params) => api.get('/api/lms/content-blocks/semantic_search/', { params }),
+  createContentBlock: (data) => api.post('/api/lms/content-blocks/', data),
+  updateContentBlock: (id, data) => api.patch(`/api/lms/content-blocks/${id}/`, data),
+  deleteContentBlock: (id) => api.delete(`/api/lms/content-blocks/${id}/`),
+  getContentBlockRevisions: (id) => api.get(`/api/lms/content-blocks/${id}/revisions/`),
+  restoreContentBlockRevision: (id, revisionId) =>
+    api.post(`/api/lms/content-blocks/${id}/restore/`, {}, { params: { revision_id: revisionId } }),
+  addContentBlockTag: (contentBlockId, tagId, remove = false) =>
+    api.post(`/api/lms/content-blocks/${contentBlockId}/add_tag/`, {
+      tag_id: tagId,
+      ...(remove ? { remove: true } : {}),
+    }),
+
   // AI Generation
   generateLessonPlan: (data) => api.post('/api/lms/generate-lesson-plan/', data),
+
+  // Tags
+  getTags: (params) => api.get('/api/lms/tags/', { params }),
+  createTag: (data) => api.post('/api/lms/tags/', data),
 
   // Lesson Plans
   getLessonPlans: (params) => api.get('/api/lms/lesson-plans/', { params }),
@@ -1011,6 +1033,8 @@ export const lmsApi = {
   updateLessonPlan: (id, data) => api.patch(`/api/lms/lesson-plans/${id}/`, data),
   deleteLessonPlan: (id) => api.delete(`/api/lms/lesson-plans/${id}/`),
   publishLessonPlan: (id) => api.post(`/api/lms/lesson-plans/${id}/publish/`),
+  linkLessonPlanObjectives: (id, objectiveIds) =>
+    api.post(`/api/lms/lesson-plans/${id}/link_objectives/`, { objective_ids: objectiveIds }),
   bulkCreateLessonPlans: (data) => api.post('/api/lms/lesson-plans/bulk_create/', data),
 
   // Assignments
@@ -1239,12 +1263,19 @@ export const questionPaperApi = {
     api.get('/api/examinations/questions/by_lesson_plan/', {
       params: { lesson_plan_id: lessonPlanId },
     }),
+  semanticSearchQuestions: (params) =>
+    api.get('/api/examinations/questions/semantic_search/', { params }),
   generateFromLesson: (data) =>
     api.post('/api/examinations/questions/generate_from_lesson/', data),
   getQuestion: (id) => api.get(`/api/examinations/questions/${id}/`),
   createQuestion: (data) => api.post('/api/examinations/questions/', data),
   updateQuestion: (id, data) => api.patch(`/api/examinations/questions/${id}/`, data),
   deleteQuestion: (id) => api.delete(`/api/examinations/questions/${id}/`),
+  addQuestionTag: (questionId, tagId, remove = false) =>
+    api.post(`/api/examinations/questions/${questionId}/add_tag/`, {
+      tag_id: tagId,
+      ...(remove ? { remove: true } : {}),
+    }),
   search: (params) => api.get('/api/examinations/questions/', { params }),
 
   // Exam Papers
@@ -1263,6 +1294,8 @@ export const questionPaperApi = {
   generatePDF: (id) => api.get(`/api/examinations/exam-papers/${id}/generate-pdf/`, { responseType: 'blob' }),
   generateDOCX: (id) => api.get(`/api/examinations/exam-papers/${id}/generate-docx/`, { responseType: 'blob' }),
   reviewQuestions: (questions) => api.post('/api/examinations/exam-papers/review-questions/', { questions }),
+  getStudentResponses: (params) => api.get('/api/examinations/student-responses/', { params }),
+  submitStudentResponses: (data) => api.post('/api/examinations/student-responses/', data),
 
   // Paper Uploads (image capture for OCR)
   getPaperUploads: (params) => api.get('/api/examinations/paper-uploads/', { params }),
@@ -1280,6 +1313,11 @@ export const questionPaperApi = {
 
   // Paper Feedback (for learning loop)
   getPaperFeedback: (params) => api.get('/api/examinations/paper-feedback/', { params }),
+}
+
+export const aiJobsApi = {
+  getAIJobs: (params) => api.get('/api/core/ai-jobs/', { params }),
+  updateAIJob: (id, data) => api.patch(`/api/core/ai-jobs/${id}/`, data),
 }
 
 // Brochure CMS API (Super-admins only)

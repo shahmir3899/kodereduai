@@ -1,7 +1,7 @@
 from django.contrib import admin
 from .models import (
     ExamType, ExamGroup, Exam, ExamSubject, StudentMark, GradeScale,
-    Question, ExamPaper, PaperQuestion, PaperUpload, PaperFeedback
+    Question, QuestionRevision, ExamPaper, PaperQuestion, StudentResponse, QuestionStats, PaperUpload, PaperFeedback
 )
 
 
@@ -51,10 +51,36 @@ class GradeScaleAdmin(admin.ModelAdmin):
 
 @admin.register(Question)
 class QuestionAdmin(admin.ModelAdmin):
-    list_display = ('id', 'subject', 'question_type', 'difficulty_level', 'marks', 'created_by', 'is_active')
+    list_display = ('id', 'subject', 'question_type', 'difficulty_level', 'marks', 'paper_use_count', 'created_by', 'is_active')
     list_filter = ('school', 'subject', 'question_type', 'difficulty_level', 'is_active')
     search_fields = ('question_text',)
     readonly_fields = ('created_at', 'updated_at')
+    raw_id_fields = ('source_content_block', 'last_used_in', 'created_by', 'verified_by')
+
+
+@admin.register(QuestionRevision)
+class QuestionRevisionAdmin(admin.ModelAdmin):
+    list_display = ('id', 'question', 'changed_by', 'changed_at')
+    list_filter = ('changed_at',)
+    search_fields = ('question_text',)
+    raw_id_fields = ('question', 'changed_by')
+    readonly_fields = ('changed_at',)
+
+
+@admin.register(StudentResponse)
+class StudentResponseAdmin(admin.ModelAdmin):
+    list_display = ('id', 'student', 'question', 'exam_paper', 'marks_awarded', 'is_correct', 'submitted_at')
+    list_filter = ('exam_paper', 'is_correct', 'submitted_at')
+    search_fields = ('student__name', 'question__question_text', 'response_text')
+    raw_id_fields = ('student', 'question', 'exam_paper')
+    readonly_fields = ('submitted_at',)
+
+
+@admin.register(QuestionStats)
+class QuestionStatsAdmin(admin.ModelAdmin):
+    list_display = ('question', 'attempt_count', 'correct_count', 'avg_time_seconds', 'real_difficulty', 'last_computed_at')
+    raw_id_fields = ('question',)
+    readonly_fields = ('last_computed_at',)
 
 
 class PaperQuestionInline(admin.TabularInline):

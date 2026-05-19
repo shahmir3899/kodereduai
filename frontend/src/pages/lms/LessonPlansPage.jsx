@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query'
 import { lmsApi, hrApi, schoolsApi } from '../../services/api'
 import ClassSelector from '../../components/ClassSelector'
 import { useAuth } from '../../contexts/AuthContext'
@@ -13,16 +13,63 @@ import TeacherScopeSummary from '../../components/teacher/TeacherScopeSummary'
 import TeacherScopeBadge, { TeacherScopeHint, useTeacherScopeLookup } from '../../components/teacher/TeacherScopeBadge'
 import BulkLessonPlansModal from './BulkLessonPlansModal'
 import { exportLessonPlansPDF } from './lessonPlansExportPdf'
+import { normalizeLessonPlanText } from './lessonPlanTextUtils'
 
 const STATUS_BADGES = {
   DRAFT: 'bg-gray-100 text-gray-800',
   PUBLISHED: 'bg-green-100 text-green-800',
 }
 
+const OBJECTIVE_BLOOM_OPTIONS = [
+  { value: 'remember', label: 'Remember' },
+  { value: 'understand', label: 'Understand' },
+  { value: 'apply', label: 'Apply' },
+  { value: 'analyze', label: 'Analyze' },
+  { value: 'evaluate', label: 'Evaluate' },
+  { value: 'create', label: 'Create' },
+]
+
+const BLOOM_BADGE_CLASSES = {
+  remember: 'bg-gray-100 text-gray-700',
+  understand: 'bg-blue-100 text-blue-700',
+  apply: 'bg-green-100 text-green-700',
+  analyze: 'bg-yellow-100 text-yellow-800',
+  evaluate: 'bg-orange-100 text-orange-700',
+  create: 'bg-red-100 text-red-700',
+}
+
+function makeObjectiveRow(seed = {}) {
+  return {
+    rowId: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    objectiveId: seed.objectiveId ?? seed.id ?? null,
+    statement: seed.statement || '',
+    bloom_level: seed.bloom_level || '',
+  }
+}
+
+function parseObjectiveTextToRows(rawText) {
+  const text = normalizeLessonPlanText(rawText)
+  if (!text) return []
+  return text
+    .split('\n')
+    .map((line) => line.replace(/^[-*•\d.)\s]+/, '').trim())
+    .filter(Boolean)
+    .map((statement) => makeObjectiveRow({ statement }))
+}
+
+function objectiveRowsToPlainText(rows) {
+  return rows
+    .map((row) => String(row.statement || '').trim())
+    .filter(Boolean)
+    .map((line) => `- ${line}`)
+    .join('\n')
+}
+
 const EMPTY_FORM = {
   title: '',
   description: '',
   objectives: '',
+  objective_rows: [makeObjectiveRow()],
   class_obj: '',
   subject: '',
   teacher: '',
@@ -63,6 +110,38 @@ export default function LessonPlansPage() {
     return map
   }, [sessionClasses])
   const { classifyScope, isTeacherEnabled } = useTeacherScopeLookup({ academicYearId: activeAcademicYear?.id })
+
+  const modalTopicIds = useMemo(
+    () => (editingPlan?.planned_topics || []).map((topic) => topic.id),
+    [editingPlan],
+  )
+
+  const modalTopicObjectivesQueries = useQueries({
+    queries: modalTopicIds.map((topicId) => ({
+      queryKey: ['lesson-plan-modal-topic-objectives', topicId],
+      queryFn: () => lmsApi.getTopicObjectives(topicId),
+      enabled: showModal && !!topicId,
+    })),
+  })
+
+  const modalObjectivesLoading = modalTopicObjectivesQueries.some((query) => query.isLoading)
+  const modalObjectivesError = modalTopicObjectivesQueries.find((query) => query.isError)?.error
+  const modalAvailableObjectives = useMemo(() => {
+    const seen = new Set()
+    const rows = []
+    modalTopicObjectivesQueries.forEach((query) => {
+      const payload = query.data?.data
+      const items = Array.isArray(payload?.results)
+        ? payload.results
+        : (Array.isArray(payload) ? payload : [])
+      items.forEach((item) => {
+        if (seen.has(item.id)) return
+        seen.add(item.id)
+        rows.push(item)
+      })
+    })
+    return rows
+  }, [modalTopicObjectivesQueries])
 
   const {
     showAllOption,
@@ -126,7 +205,13 @@ export default function LessonPlansPage() {
   // -- Mutations --
 
   const createMutation = useMutation({
-    mutationFn: (data) => lmsApi.createLessonPlan(data),
+    mutationFn: async ({ data, objectiveIds }) => {
+      const response = await lmsApi.createLessonPlan(data)
+      if (objectiveIds.length > 0 && response?.data?.id) {
+        await lmsApi.linkLessonPlanObjectives(response.data.id, objectiveIds)
+      }
+      return response
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['lessonPlans'] })
       closeModal()
@@ -142,7 +227,13 @@ export default function LessonPlansPage() {
   })
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }) => lmsApi.updateLessonPlan(id, data),
+    mutationFn: async ({ id, data, objectiveIds }) => {
+      const response = await lmsApi.updateLessonPlan(id, data)
+      if (objectiveIds.length > 0 && response?.data?.id) {
+        await lmsApi.linkLessonPlanObjectives(response.data.id, objectiveIds)
+      }
+      return response
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['lessonPlans'] })
       closeModal()
@@ -188,16 +279,55 @@ export default function LessonPlansPage() {
     setShowModal(true)
   }
 
+  const addObjectiveRow = () => {
+    setForm((prev) => ({
+      ...prev,
+      objective_rows: [...(prev.objective_rows || []), makeObjectiveRow()],
+    }))
+  }
+
+  const updateObjectiveRow = (rowId, patch) => {
+    setForm((prev) => ({
+      ...prev,
+      objective_rows: (prev.objective_rows || []).map((row) =>
+        row.rowId === rowId ? { ...row, ...patch } : row,
+      ),
+    }))
+  }
+
+  const removeObjectiveRow = (rowId) => {
+    setForm((prev) => {
+      const nextRows = (prev.objective_rows || []).filter((row) => row.rowId !== rowId)
+      return {
+        ...prev,
+        objective_rows: nextRows.length > 0 ? nextRows : [makeObjectiveRow()],
+      }
+    })
+  }
+
   const openEditModal = (plan) => {
     const mappedClassObj = classSelectorScope === 'session'
       ? (sessionClassIdByMaster[String(plan.class_obj)] || '')
       : (plan.class_obj ? String(plan.class_obj) : '')
 
+    const linkedObjectiveRows = (plan.linked_objectives || []).map((objective) =>
+      makeObjectiveRow({
+        id: objective.id,
+        statement: objective.statement,
+        bloom_level: objective.bloom_level,
+      }),
+    )
+    const objectivesText = normalizeLessonPlanText(plan.objectives_text ?? plan.objectives)
+    const parsedObjectiveRows = parseObjectiveTextToRows(objectivesText)
+
     setEditingPlan(plan)
     setForm({
       title: plan.title || '',
       description: plan.description || '',
-      objectives: plan.objectives || '',
+      objectives: objectivesText,
+      objective_rows: linkedObjectiveRows.length > 0
+        ? linkedObjectiveRows
+        : (parsedObjectiveRows.length > 0 ? parsedObjectiveRows : [makeObjectiveRow()]),
       class_obj: mappedClassObj,
       subject: plan.subject ? String(plan.subject) : '',
       teacher: plan.teacher ? String(plan.teacher) : '',
@@ -230,18 +360,27 @@ export default function LessonPlansPage() {
       return
     }
 
+    const objectiveRows = form.objective_rows || []
     const payload = {
       ...form,
+      objectives: objectiveRowsToPlainText(objectiveRows) || form.objectives,
       class_obj: parseInt(resolvedFormClassObj),
       subject: parseInt(form.subject),
       teacher: form.teacher ? parseInt(form.teacher) : null,
       duration_minutes: parseInt(form.duration_minutes) || 45,
     }
+    const objectiveIds = Array.from(
+      new Set(
+        objectiveRows
+          .map((row) => row.objectiveId)
+          .filter((id) => Number.isInteger(id)),
+      ),
+    )
 
     if (editingPlan) {
-      updateMutation.mutate({ id: editingPlan.id, data: payload })
+      updateMutation.mutate({ id: editingPlan.id, data: payload, objectiveIds })
     } else {
-      createMutation.mutate(payload)
+      createMutation.mutate({ data: payload, objectiveIds })
     }
   }
 
@@ -469,6 +608,23 @@ export default function LessonPlansPage() {
                           {plan.description.trim()}
                         </p>
                       )}
+                      {Array.isArray(plan.linked_objectives) && plan.linked_objectives.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {plan.linked_objectives.slice(0, 2).map((objective) => (
+                            <span key={objective.id} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-teal-50 text-teal-700 text-xs">
+                              <span className="truncate max-w-[170px]">{objective.statement}</span>
+                              {objective.bloom_level && (
+                                <span className={`px-1 py-0.5 rounded-full ${BLOOM_BADGE_CLASSES[objective.bloom_level] || 'bg-gray-100 text-gray-700'}`}>
+                                  {OBJECTIVE_BLOOM_OPTIONS.find((option) => option.value === objective.bloom_level)?.label || objective.bloom_level}
+                                </span>
+                              )}
+                            </span>
+                          ))}
+                          {plan.linked_objectives.length > 2 && (
+                            <span className="text-xs text-gray-500">+{plan.linked_objectives.length - 2} objectives</span>
+                          )}
+                        </div>
+                      )}
                       <p className="text-xs text-gray-500 mt-0.5">
                         {plan.class_name || 'N/A'} | {plan.subject_name || 'N/A'}
                       </p>
@@ -570,6 +726,23 @@ export default function LessonPlansPage() {
                           <p className="text-xs text-gray-600 mt-0.5 line-clamp-2 whitespace-pre-wrap break-words">
                             {plan.description.trim()}
                           </p>
+                        )}
+                        {Array.isArray(plan.linked_objectives) && plan.linked_objectives.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {plan.linked_objectives.slice(0, 2).map((objective) => (
+                              <span key={objective.id} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-teal-50 text-teal-700 text-xs">
+                                <span className="truncate max-w-[180px]">{objective.statement}</span>
+                                {objective.bloom_level && (
+                                  <span className={`px-1 py-0.5 rounded-full ${BLOOM_BADGE_CLASSES[objective.bloom_level] || 'bg-gray-100 text-gray-700'}`}>
+                                    {OBJECTIVE_BLOOM_OPTIONS.find((option) => option.value === objective.bloom_level)?.label || objective.bloom_level}
+                                  </span>
+                                )}
+                              </span>
+                            ))}
+                            {plan.linked_objectives.length > 2 && (
+                              <span className="text-xs text-gray-500">+{plan.linked_objectives.length - 2} objectives</span>
+                            )}
+                          </div>
                         )}
                         {plan.planned_topics?.length > 0 && (
                           <div className="flex flex-wrap gap-1 mt-1">
@@ -787,13 +960,83 @@ export default function LessonPlansPage() {
               {/* Objectives */}
               <div>
                 <label className="label">Objectives</label>
-                <textarea
-                  className="input"
-                  rows={2}
-                  placeholder="Learning objectives for this lesson..."
-                  value={form.objectives}
-                  onChange={(e) => setForm({ ...form, objectives: e.target.value })}
-                />
+                <div className="space-y-2">
+                  {(form.objective_rows || []).map((row) => (
+                    <div key={row.rowId} className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                      <input
+                        type="text"
+                        className="input sm:col-span-8"
+                        placeholder="Students will be able to..."
+                        value={row.statement}
+                        onChange={(e) => updateObjectiveRow(row.rowId, { statement: e.target.value, objectiveId: null })}
+                      />
+                      <select
+                        className="input sm:col-span-3"
+                        value={row.bloom_level || ''}
+                        onChange={(e) => updateObjectiveRow(row.rowId, { bloom_level: e.target.value })}
+                      >
+                        <option value="">Bloom level</option>
+                        {OBJECTIVE_BLOOM_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => removeObjectiveRow(row.rowId)}
+                        className="sm:col-span-1 px-2 py-2 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50"
+                        title="Delete objective"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-2 flex items-center gap-2">
+                  <button type="button" onClick={addObjectiveRow} className="btn btn-secondary text-xs px-3 py-1.5">
+                    Add Objective
+                  </button>
+                </div>
+
+                <div className="mt-3">
+                  <p className="text-xs font-medium text-gray-600 mb-1">Topic objective suggestions (edit mode)</p>
+                  {modalObjectivesLoading ? (
+                    <p className="text-xs text-gray-500">Loading topic objectives...</p>
+                  ) : modalObjectivesError ? (
+                    <p className="text-xs text-red-600">Could not load topic objectives.</p>
+                  ) : modalAvailableObjectives.length === 0 ? (
+                    <p className="text-xs text-gray-500">No topic objectives available for this lesson plan yet.</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {modalAvailableObjectives.slice(0, 8).map((objective) => (
+                        <button
+                          key={objective.id}
+                          type="button"
+                          onClick={() => setForm((prev) => ({
+                            ...prev,
+                            objective_rows: [
+                              ...(prev.objective_rows || []),
+                              makeObjectiveRow({
+                                id: objective.id,
+                                statement: objective.statement,
+                                bloom_level: objective.bloom_level,
+                              }),
+                            ],
+                          }))}
+                          className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-blue-50 text-blue-700 hover:bg-blue-100"
+                          title={objective.statement}
+                        >
+                          <span className="truncate max-w-[220px]">{objective.statement}</span>
+                          {objective.bloom_level && (
+                            <span className={`px-1.5 py-0.5 rounded-full ${BLOOM_BADGE_CLASSES[objective.bloom_level] || 'bg-gray-100 text-gray-700'}`}>
+                              {OBJECTIVE_BLOOM_OPTIONS.find((option) => option.value === objective.bloom_level)?.label || objective.bloom_level}
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Materials Needed */}

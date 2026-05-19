@@ -1,20 +1,57 @@
-"""
-Celery tasks for LMS TOC import jobs.
-"""
+"""Celery tasks for LMS TOC import jobs and content embeddings."""
 
 import logging
 from celery import shared_task
 from django.utils import timezone
 
-from .models import TOCImportJob
-from .toc_job_payload_cache import purge_job_blob_cache, read_job_image_bytes
-from .toc_ocr import extract_toc_payload
+from core.embeddings import generate_text_embedding
+
+from .models import ContentBlock, TOCImportJob
 
 logger = logging.getLogger(__name__)
 
 
+@shared_task
+def embed_content_block(block_id: int):
+    try:
+        block = ContentBlock.objects.get(id=block_id)
+    except ContentBlock.DoesNotExist:
+        logger.warning('ContentBlock %s not found for embedding', block_id)
+        return {'success': False, 'error': 'ContentBlock not found'}
+
+    content_parts = [block.content_text or '']
+    if block.content_rich:
+        content_parts.append(str(block.content_rich))
+
+    block.embedding = generate_text_embedding('\n'.join(part for part in content_parts if part))
+    block.save(update_fields=['embedding', 'updated_at'])
+    return {'success': True, 'block_id': block_id}
+
+
+@shared_task
+def embed_all_content_blocks(chunk_size: int = 50):
+    pending_ids = list(
+        ContentBlock.objects.filter(embedding__isnull=True, is_active=True)
+        .order_by('id')
+        .values_list('id', flat=True)
+    )
+
+    processed = 0
+    for start in range(0, len(pending_ids), chunk_size):
+        chunk_ids = pending_ids[start:start + chunk_size]
+        for block_id in chunk_ids:
+            embed_content_block(block_id)
+            processed += 1
+        logger.info('Embedded %s/%s content blocks', processed, len(pending_ids))
+
+    return {'success': True, 'processed': processed}
+
+
 @shared_task(bind=True, max_retries=2, default_retry_delay=20)
 def process_toc_import_job(self, job_id: str):
+    from .toc_job_payload_cache import purge_job_blob_cache, read_job_image_bytes
+    from .toc_ocr import extract_toc_payload
+
     try:
         job = TOCImportJob.objects.select_related('book').get(id=job_id)
     except TOCImportJob.DoesNotExist:

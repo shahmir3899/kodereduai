@@ -14,6 +14,7 @@ from django.utils import timezone
 from django.db import transaction
 from django.db.models import Count, Q
 from django.core.cache import cache
+from pgvector.django import CosineDistance
 from rest_framework import viewsets, status
 from rest_framework.decorators import action, api_view, permission_classes as perm_classes
 from rest_framework.parsers import MultiPartParser, FormParser
@@ -26,11 +27,13 @@ from core.permissions import (
     get_effective_role, ADMIN_ROLES, STAFF_LEVEL_ROLES,
     get_teacher_combined_scope,
 )
-from core.mixins import TenantQuerySetMixin, ensure_tenant_school_id
+from core.ai_jobs import complete_ai_job, create_ai_job, fail_ai_job
+from core.embeddings import generate_text_embedding
+from core.mixins import TenantQuerySetMixin, ensure_tenant_school_id, ensure_tenant_schools
 from core.class_scope import resolve_class_scope
 from academic_sessions.calendar_rules import is_off_day_for_date
 from .models import (
-    Book, Chapter, Topic, SubTopic, LessonPlan, Assignment,
+    Book, Chapter, Topic, SubTopic, ContentBlock, Tag, ContentBlockTag, QuestionTag, LessonPlan, LearningObjective, LessonPlanObjective, CurriculumStandard, StandardObjective, TopicStandardAlignment, Assignment,
     AssignmentSubmission, TOCImportJob,
 )
 from .content_retrieval import retrieve_topics_for_ai, build_prompt, extract_text_from_blocks
@@ -43,6 +46,11 @@ from .serializers import (
     TopicLessonPlanSerializer,
     TopicSerializer,
     SubTopicSerializer,
+    ContentBlockSerializer,
+    ContentRevisionSerializer,
+    TagSerializer,
+    LearningObjectiveSerializer,
+    StandardObjectiveSerializer,
     LessonPlanReadSerializer, LessonPlanCreateSerializer, LessonPlanBulkCreateSerializer,
     AssignmentReadSerializer, AssignmentCreateSerializer,
     AssignmentSubmissionReadSerializer, AssignmentSubmissionCreateSerializer,
@@ -877,6 +885,22 @@ class TopicViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet
         """Topic has no school FK — skip tenant injection."""
         serializer.save()
 
+    @action(detail=True, methods=['get'], url_path='objectives')
+    def objectives(self, request, pk=None):
+        topic = self.get_object()
+        queryset = topic.objectives.filter(is_active=True)
+        serializer = LearningObjectiveSerializer(queryset, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['get'], url_path='standards')
+    def standards(self, request, pk=None):
+        topic = self.get_object()
+        objectives = StandardObjective.objects.filter(
+            topic_alignments__topic=topic,
+        ).select_related('standard', 'subject', 'grade').distinct()
+        serializer = StandardObjectiveSerializer(objectives, many=True)
+        return Response(serializer.data)
+
 
 class SubTopicViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     """CRUD for sub-topics under curriculum topics."""
@@ -901,6 +925,214 @@ class SubTopicViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelView
 
     def perform_create(self, serializer):
         serializer.save()
+
+
+class ContentBlockViewSet(ModuleAccessMixin, viewsets.ModelViewSet):
+    """CRUD for relational content blocks under chapters, topics, or subtopics."""
+
+    required_module = 'lms'
+    queryset = ContentBlock.objects.all()
+    permission_classes = [IsAuthenticated, CanEditCurriculum, HasSchoolAccess]
+    serializer_class = ContentBlockSerializer
+
+    def get_queryset(self):
+        queryset = self.queryset.select_related(
+            'chapter', 'chapter__book',
+            'topic', 'topic__chapter', 'topic__chapter__book',
+            'subtopic', 'subtopic__topic', 'subtopic__topic__chapter', 'subtopic__topic__chapter__book',
+        )
+
+        active_school_id = ensure_tenant_school_id(self.request)
+        if active_school_id:
+            queryset = queryset.filter(
+                Q(chapter__book__school_id=active_school_id)
+                | Q(topic__chapter__book__school_id=active_school_id)
+                | Q(subtopic__topic__chapter__book__school_id=active_school_id)
+            )
+        elif self.request.headers.get('X-School-ID'):
+            return queryset.none()
+        elif not self.request.user.is_super_admin:
+            tenant_schools = ensure_tenant_schools(self.request)
+            if not tenant_schools:
+                return queryset.none()
+            queryset = queryset.filter(
+                Q(chapter__book__school_id__in=tenant_schools)
+                | Q(topic__chapter__book__school_id__in=tenant_schools)
+                | Q(subtopic__topic__chapter__book__school_id__in=tenant_schools)
+            )
+
+        chapter_id = self.request.query_params.get('chapter_id')
+        if chapter_id:
+            queryset = queryset.filter(chapter_id=chapter_id)
+
+        topic_id = self.request.query_params.get('topic_id')
+        if topic_id:
+            queryset = queryset.filter(topic_id=topic_id)
+
+        subtopic_id = self.request.query_params.get('subtopic_id')
+        if subtopic_id:
+            queryset = queryset.filter(subtopic_id=subtopic_id)
+
+        block_type = self.request.query_params.get('block_type')
+        if block_type:
+            queryset = queryset.filter(block_type=block_type)
+
+        is_active = self.request.query_params.get('is_active')
+        if is_active is not None:
+            queryset = queryset.filter(is_active=is_active.lower() == 'true')
+        else:
+            queryset = queryset.filter(is_active=True)
+
+        return queryset.order_by('sequence_order', 'id')
+
+    def perform_create(self, serializer):
+        serializer.save()
+
+    def perform_update(self, serializer):
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        instance.is_active = False
+        instance.save(update_fields=['is_active', 'updated_at'])
+
+    @action(detail=True, methods=['get'], url_path='revisions')
+    def revisions(self, request, pk=None):
+        block = self.get_object()
+        serializer = ContentRevisionSerializer(block.revisions.all(), many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['post'], url_path='restore')
+    def restore(self, request, pk=None):
+        block = self.get_object()
+        revision_id = request.query_params.get('revision_id') or request.data.get('revision_id')
+        if not revision_id:
+            return Response({'detail': 'revision_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            revision = block.revisions.get(id=revision_id)
+        except block.revisions.model.DoesNotExist:
+            return Response({'detail': 'Revision not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        block._revision_changed_by = request.user if request.user.is_authenticated else None
+        block._revision_note = f'Restored from revision {revision.id}'
+        block.content_text = revision.content_text
+        block.content_rich = revision.content_rich
+        block.save(update_fields=['content_text', 'content_rich', 'updated_at'])
+
+        serializer = self.get_serializer(block)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['post'], url_path='add_tag')
+    def add_tag(self, request, pk=None):
+        block = self.get_object()
+        tag_id = request.data.get('tag_id')
+        if not tag_id:
+            return Response({'detail': 'tag_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            tag = Tag.objects.get(id=tag_id)
+        except Tag.DoesNotExist:
+            return Response({'detail': 'Tag not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        block_school_id = (
+            getattr(getattr(block.chapter, 'book', None), 'school_id', None)
+            or getattr(getattr(getattr(block.topic, 'chapter', None), 'book', None), 'school_id', None)
+            or getattr(getattr(getattr(getattr(block.subtopic, 'topic', None), 'chapter', None), 'book', None), 'school_id', None)
+        )
+        if tag.school_id and tag.school_id != block_school_id:
+            return Response({'detail': 'Tag does not belong to the same school.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if request.data.get('remove'):
+            deleted, _ = ContentBlockTag.objects.filter(content_block=block, tag=tag).delete()
+            return Response({'removed': bool(deleted)})
+
+        relation, created = ContentBlockTag.objects.get_or_create(content_block=block, tag=tag)
+        return Response({'created': created, 'id': relation.id}, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'], url_path='semantic_search')
+    def semantic_search(self, request):
+        query = (request.query_params.get('q') or '').strip()
+        if not query:
+            return Response([])
+
+        try:
+            limit = max(1, min(int(request.query_params.get('limit', 10)), 50))
+        except (TypeError, ValueError):
+            limit = 10
+
+        queryset = self.get_queryset().filter(embedding__isnull=False)
+        if not queryset.exists():
+            return Response([])
+
+        query_embedding = generate_text_embedding(query)
+        matches = list(
+            queryset.annotate(similarity_distance=CosineDistance('embedding', query_embedding))
+            .order_by('similarity_distance')[:limit]
+        )
+
+        results = []
+        for block in matches:
+            topic = block.topic or getattr(block.subtopic, 'topic', None)
+            chapter = block.chapter or getattr(topic, 'chapter', None)
+            book = getattr(chapter, 'book', None)
+            results.append({
+                'id': block.id,
+                'block_type': block.block_type,
+                'content_text': block.content_text,
+                'sequence_order': block.sequence_order,
+                'similarity_score': max(0.0, 1.0 - float(block.similarity_distance)),
+                'chapter_title': chapter.title if chapter else '',
+                'topic_title': topic.title if topic else '',
+                'book_title': book.title if book else '',
+                'hierarchy_path': ' > '.join(part for part in [
+                    book.title if book else '',
+                    chapter.title if chapter else '',
+                    topic.title if topic else '',
+                    getattr(block.subtopic, 'title', '') if block.subtopic_id else '',
+                ] if part),
+            })
+
+        return Response(results)
+
+
+class TagViewSet(ModuleAccessMixin, viewsets.ModelViewSet):
+    required_module = 'lms'
+    queryset = Tag.objects.all()
+    permission_classes = [IsAuthenticated, CanEditCurriculum, HasSchoolAccess]
+    serializer_class = TagSerializer
+
+    def get_queryset(self):
+        queryset = self.queryset.select_related('subject', 'school')
+        active_school_id = ensure_tenant_school_id(self.request)
+
+        if active_school_id:
+            queryset = queryset.filter(Q(school__isnull=True) | Q(school_id=active_school_id))
+        elif self.request.headers.get('X-School-ID'):
+            return queryset.none()
+        elif not self.request.user.is_superuser:
+            tenant_schools = ensure_tenant_schools(self.request)
+            if not tenant_schools:
+                return queryset.filter(school__isnull=True)
+            queryset = queryset.filter(Q(school__isnull=True) | Q(school_id__in=tenant_schools))
+
+        subject_id = self.request.query_params.get('subject_id')
+        if subject_id:
+            queryset = queryset.filter(subject_id=subject_id)
+
+        tag_type = self.request.query_params.get('tag_type')
+        if tag_type:
+            queryset = queryset.filter(tag_type=tag_type)
+
+        return queryset
+
+    def perform_create(self, serializer):
+        school_id = self.request.data.get('school') or self.request.data.get('school_id')
+        if school_id:
+            serializer.save(school_id=school_id)
+            return
+
+        active_school_id = ensure_tenant_school_id(self.request)
+        serializer.save(school_id=active_school_id)
 
 
 # ---------------------------------------------------------------------------
@@ -971,18 +1203,38 @@ def generate_lesson_plan_ai(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    result = generate_lesson_plan(
+    ai_job = create_ai_job(
+        job_type='generate_lesson',
+        triggered_by=request.user,
         school=book.school,
-        class_obj=book.class_obj,
-        subject=book.subject,
-        book=book,
-        topics=topics,
-        lesson_date=lesson_date,
-        duration_minutes=duration_minutes,
-        subtopics=st_qs if subtopic_ids else None,
-        chapter_titles=chapter_titles,
+        input_data={
+            'chapter_ids': chapter_ids,
+            'topic_ids': topic_ids,
+            'subtopic_ids': subtopic_ids,
+            'lesson_date': lesson_date,
+            'duration_minutes': duration_minutes,
+        },
+        model_used=getattr(settings, 'GROQ_MODEL', 'unknown'),
     )
-    return Response(result)
+
+    try:
+        result = generate_lesson_plan(
+            school=book.school,
+            class_obj=book.class_obj,
+            subject=book.subject,
+            book=book,
+            topics=topics,
+            lesson_date=lesson_date,
+            duration_minutes=duration_minutes,
+            subtopics=st_qs if subtopic_ids else None,
+            chapter_titles=chapter_titles,
+        )
+        complete_ai_job(ai_job, output_data=result)
+        result['ai_job_id'] = ai_job.id
+        return Response(result)
+    except Exception as exc:
+        fail_ai_job(ai_job, error_message=exc)
+        return Response({'error': str(exc), 'ai_job_id': ai_job.id}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['POST'])
@@ -1375,6 +1627,34 @@ class LessonPlanViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
 
         serializer = LessonPlanReadSerializer(plan)
         return Response(serializer.data)
+
+    @action(detail=True, methods=['post'], url_path='link_objectives')
+    def link_objectives(self, request, pk=None):
+        plan = self.get_object()
+        objective_ids = request.data.get('objective_ids') or []
+        if not isinstance(objective_ids, list) or not objective_ids:
+            return Response({'error': 'objective_ids must be a non-empty list.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        objectives = list(LearningObjective.objects.filter(id__in=objective_ids, is_active=True).select_related('topic'))
+        if len(objectives) != len(set(int(objective_id) for objective_id in objective_ids)):
+            return Response({'error': 'One or more objectives were not found.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        planned_topic_ids = set(plan.planned_topics.values_list('id', flat=True))
+        invalid_ids = [objective.id for objective in objectives if objective.topic_id not in planned_topic_ids]
+        if invalid_ids:
+            return Response(
+                {'error': 'Objectives must belong to the lesson plan topics.', 'invalid_objective_ids': invalid_ids},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        created = 0
+        for objective in objectives:
+            _, was_created = LessonPlanObjective.objects.get_or_create(lesson_plan=plan, objective=objective)
+            if was_created:
+                created += 1
+
+        serializer = LessonPlanReadSerializer(plan)
+        return Response({'linked_count': created, 'lesson_plan': serializer.data})
 
 
 class AssignmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):

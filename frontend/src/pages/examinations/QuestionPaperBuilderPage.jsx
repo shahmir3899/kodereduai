@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
-import { useMutation, useQuery } from '@tanstack/react-query'
-import { questionPaperApi, examinationsApi } from '../../services/api'
+import { useMutation, useQueries, useQuery } from '@tanstack/react-query'
+import { questionPaperApi, examinationsApi, lmsApi } from '../../services/api'
+import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import Toast from '../../components/Toast'
 import ClassSelector from '../../components/ClassSelector'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
@@ -30,6 +31,16 @@ const MANUAL_QUESTION_DEFAULT_OPTIONS = {
   D: '',
 }
 
+const BLOOM_LEVELS = [
+  { key: 'remember', label: 'Remember', color: '#6B7280' },
+  { key: 'understand', label: 'Understand', color: '#2563EB' },
+  { key: 'apply', label: 'Apply', color: '#16A34A' },
+  { key: 'analyze', label: 'Analyze', color: '#CA8A04' },
+  { key: 'evaluate', label: 'Evaluate', color: '#EA580C' },
+  { key: 'create', label: 'Create', color: '#DC2626' },
+  { key: 'unclassified', label: 'Unclassified', color: '#94A3B8' },
+]
+
 function toQuestionDraft(paperQuestion) {
   return {
     local_id: `q_${paperQuestion.question}_${paperQuestion.question_order}`,
@@ -37,6 +48,7 @@ function toQuestionDraft(paperQuestion) {
     question_text: paperQuestion.question_text || '',
     question_type: paperQuestion.question_type || 'SHORT',
     difficulty_level: paperQuestion.difficulty_level || 'MEDIUM',
+    bloom_level: paperQuestion.bloom_level || paperQuestion.question_snapshot?.bloom_level || '',
     marks: Number(paperQuestion.marks_override ?? paperQuestion.marks ?? 1) || 1,
     marks_override: Number(paperQuestion.marks_override ?? paperQuestion.marks ?? 1) || 1,
     correct_answer: paperQuestion.correct_answer || '',
@@ -62,6 +74,7 @@ function buildManualAutosaveQuestions(questions) {
     question_text: question.question_text || '',
     question_type: question.question_type || 'SHORT',
     difficulty_level: question.difficulty_level || 'MEDIUM',
+    bloom_level: question.bloom_level || undefined,
     marks: Number(question.marks ?? 1) || 1,
     option_a: question.options?.A || '',
     option_b: question.options?.B || '',
@@ -95,7 +108,9 @@ export default function QuestionPaperBuilderPage() {
   const [manualDirty, setManualDirty] = useState(false)
   const [saveState, setSaveState] = useState('idle')
   const [lastSavedAt, setLastSavedAt] = useState(null)
+  const [coverageCollapsed, setCoverageCollapsed] = useState(false)
   const [paperStatus, setPaperStatus] = useState('DRAFT')
+  const [overusedQuestionCounts, setOverusedQuestionCounts] = useState({})
   const [paperMetadata, setPaperMetadata] = useState({
     class_obj: '',
     subject: '',
@@ -122,6 +137,25 @@ export default function QuestionPaperBuilderPage() {
     queryFn: () => examinationsApi.getExams({ page_size: 999 }),
   })
 
+  const hydrateOverusedQuestionCounts = useCallback((paper) => {
+    const rows = Array.isArray(paper?.overused_questions) ? paper.overused_questions : []
+    if (rows.length === 0) {
+      setOverusedQuestionCounts({})
+      return
+    }
+
+    const nextCounts = rows.reduce((acc, row) => {
+      const questionId = Number(row?.question_id)
+      const useCount = Number(row?.paper_use_count)
+      if (Number.isFinite(questionId) && questionId > 0 && Number.isFinite(useCount)) {
+        acc[questionId] = useCount
+      }
+      return acc
+    }, {})
+
+    setOverusedQuestionCounts(nextCounts)
+  }, [])
+
   useQuery({
     queryKey: ['paperBuilderResumeDraft', resumePaperId],
     queryFn: () => questionPaperApi.getExamPaper(resumePaperId),
@@ -147,6 +181,7 @@ export default function QuestionPaperBuilderPage() {
       setManualDirty(false)
       setSaveState('saved')
       setLastSavedAt(paper.updated_at || new Date().toISOString())
+      hydrateOverusedQuestionCounts(paper)
     },
   })
 
@@ -159,6 +194,130 @@ export default function QuestionPaperBuilderPage() {
   }, [activeTab, isReadOnlyPaper])
 
   const exams = examsData?.data?.results || []
+
+  const { data: coverageStatsRes, isLoading: coverageLoading, isError: coverageError } = useQuery({
+    queryKey: ['paperCoverageStats', draftId, activeTab, manualDraft.questions.length],
+    queryFn: () => questionPaperApi.getCoverageStats(draftId),
+    enabled: !!draftId,
+    refetchInterval: draftId && !isReadOnlyPaper ? 4000 : false,
+  })
+  const coverageStats = coverageStatsRes?.data || null
+  const linkedLessonPlanIds = useMemo(
+    () => (coverageStats?.linked_lesson_plans || []).map((plan) => plan.id),
+    [coverageStats],
+  )
+
+  const linkedLessonPlanQueries = useQueries({
+    queries: linkedLessonPlanIds.map((lessonPlanId) => ({
+      queryKey: ['paper-coverage-lesson-plan', lessonPlanId],
+      queryFn: () => lmsApi.getLessonPlan(lessonPlanId),
+      enabled: !!draftId,
+    })),
+  })
+
+  const lessonPlanTopicIds = useMemo(() => {
+    const set = new Set()
+    linkedLessonPlanQueries.forEach((query) => {
+      const plan = query.data?.data
+      ;(plan?.planned_topics || []).forEach((topic) => set.add(topic.id))
+    })
+    return Array.from(set)
+  }, [linkedLessonPlanQueries])
+
+  const topicStandardsQueries = useQueries({
+    queries: lessonPlanTopicIds.map((topicId) => ({
+      queryKey: ['paper-coverage-topic-standards', topicId],
+      queryFn: () => lmsApi.getTopicStandards(topicId),
+      enabled: !!draftId,
+    })),
+  })
+
+  const allSLOs = useMemo(() => {
+    const byId = new Map()
+    topicStandardsQueries.forEach((query) => {
+      const payload = query.data?.data
+      const items = Array.isArray(payload?.results)
+        ? payload.results
+        : (Array.isArray(payload) ? payload : [])
+      items.forEach((slo) => {
+        if (!byId.has(slo.id)) {
+          byId.set(slo.id, slo)
+        }
+      })
+    })
+    return Array.from(byId.values())
+  }, [topicStandardsQueries])
+
+  const coveredTopicIds = useMemo(
+    () => new Set((coverageStats?.covered_topics || []).map((topic) => topic.id)),
+    [coverageStats],
+  )
+
+  const coveredSLOIds = useMemo(() => {
+    const set = new Set()
+    lessonPlanTopicIds.forEach((topicId, index) => {
+      if (!coveredTopicIds.has(topicId)) return
+      const payload = topicStandardsQueries[index]?.data?.data
+      const items = Array.isArray(payload?.results)
+        ? payload.results
+        : (Array.isArray(payload) ? payload : [])
+      items.forEach((slo) => set.add(slo.id))
+    })
+    return set
+  }, [coveredTopicIds, lessonPlanTopicIds, topicStandardsQueries])
+
+  const coveredSLOs = useMemo(
+    () => allSLOs.filter((slo) => coveredSLOIds.has(slo.id)),
+    [allSLOs, coveredSLOIds],
+  )
+  const uncoveredSLOs = useMemo(
+    () => allSLOs.filter((slo) => !coveredSLOIds.has(slo.id)),
+    [allSLOs, coveredSLOIds],
+  )
+
+  const totalSLOCount = allSLOs.length
+  const coveredSLOCount = coveredSLOs.length || Number(coverageStats?.slo_coverage_count || 0)
+  const coveragePercent = totalSLOCount > 0
+    ? Math.min(100, Math.round((coveredSLOCount / totalSLOCount) * 100))
+    : 0
+
+  const bloomDistribution = useMemo(() => {
+    const counts = {
+      remember: 0,
+      understand: 0,
+      apply: 0,
+      analyze: 0,
+      evaluate: 0,
+      create: 0,
+      unclassified: 0,
+    }
+    const questionRows = Array.isArray(manualDraft.questions) ? manualDraft.questions : []
+    questionRows.forEach((question) => {
+      const key = String(question?.bloom_level || '').toLowerCase()
+      if (counts[key] !== undefined) {
+        counts[key] += 1
+      } else {
+        counts.unclassified += 1
+      }
+    })
+
+    const total = questionRows.length
+    const percentages = BLOOM_LEVELS.reduce((acc, level) => {
+      acc[level.key] = total > 0 ? Number(((counts[level.key] / total) * 100).toFixed(1)) : 0
+      return acc
+    }, {})
+
+    const surfaceHeavyPercent = percentages.remember + percentages.understand
+
+    return {
+      total,
+      counts,
+      percentages,
+      surfaceHeavyPercent,
+      isSurfaceHeavy: surfaceHeavyPercent > 70,
+      stackData: [{ name: 'Bloom', ...percentages }],
+    }
+  }, [manualDraft.questions])
   const recoveryKey = useMemo(() => {
     const schoolId = activeSchool?.id || 'school'
     const userId = user?.id || 'user'
@@ -233,6 +392,7 @@ export default function QuestionPaperBuilderPage() {
       setLastSavedAt(new Date().toISOString())
       lastAutosavePayloadRef.current = variables?.payloadHash || lastAutosavePayloadRef.current
       localStorage.removeItem(recoveryKey)
+      hydrateOverusedQuestionCounts(paper)
     },
     onError: (error) => {
       setSaveState('error')
@@ -542,84 +702,207 @@ export default function QuestionPaperBuilderPage() {
           </div>
         </div>
 
-        {/* Tabs */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-          {/* Tab buttons */}
-          <div className="flex border-b border-gray-200">
-            <button
-              onClick={() => setActiveTab('manual')}
-              className={`flex-1 px-6 py-4 font-medium text-center transition ${
-                activeTab === 'manual'
-                  ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600'
-                  : 'text-gray-600 hover:text-gray-800'
-              }`}
-            >
-              <span className="text-xl mr-2">⌨️</span>
-              Manual Entry
-            </button>
-            <button
-              onClick={() => setActiveTab('image')}
-              disabled={isReadOnlyPaper}
-              className={`flex-1 px-6 py-4 font-medium text-center transition ${
-                activeTab === 'image'
-                  ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600'
-                  : 'text-gray-600 hover:text-gray-800'
-              }`}
-            >
-              <span className="text-xl mr-2">📸</span>
-              Capture from Image
-            </button>
-            <button
-              onClick={() => setActiveTab('lesson')}
-              disabled={isReadOnlyPaper}
-              className={`flex-1 px-6 py-4 font-medium text-center transition ${
-                activeTab === 'lesson'
-                  ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600'
-                  : 'text-gray-600 hover:text-gray-800'
-              }`}
-            >
-              <span className="text-xl mr-2">📚</span>
-              From Lesson Plans
-            </button>
+        {/* Builder + Coverage */}
+        <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
+          {/* Tabs */}
+          <div className="xl:col-span-3 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            {/* Tab buttons */}
+            <div className="flex border-b border-gray-200">
+              <button
+                onClick={() => setActiveTab('manual')}
+                className={`flex-1 px-6 py-4 font-medium text-center transition ${
+                  activeTab === 'manual'
+                    ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600'
+                    : 'text-gray-600 hover:text-gray-800'
+                }`}
+              >
+                <span className="text-xl mr-2">⌨️</span>
+                Manual Entry
+              </button>
+              <button
+                onClick={() => setActiveTab('image')}
+                disabled={isReadOnlyPaper}
+                className={`flex-1 px-6 py-4 font-medium text-center transition ${
+                  activeTab === 'image'
+                    ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600'
+                    : 'text-gray-600 hover:text-gray-800'
+                }`}
+              >
+                <span className="text-xl mr-2">📸</span>
+                Capture from Image
+              </button>
+              <button
+                onClick={() => setActiveTab('lesson')}
+                disabled={isReadOnlyPaper}
+                className={`flex-1 px-6 py-4 font-medium text-center transition ${
+                  activeTab === 'lesson'
+                    ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600'
+                    : 'text-gray-600 hover:text-gray-800'
+                }`}
+              >
+                <span className="text-xl mr-2">📚</span>
+                From Lesson Plans
+              </button>
+            </div>
+
+            {/* Tab content */}
+            <div className="p-8">
+              {activeTab === 'manual' && (
+                <ManualEntryPaperTab
+                  draftData={manualDraft}
+                  onDraftDataChange={handleManualDraftChange}
+                  onSubmitDraft={handleManualSubmit}
+                  isLoading={
+                    saveState === 'saving'
+                    || ensureDraftMutation.isPending
+                    || autosaveMutation.isPending
+                  }
+                  saveState={saveState}
+                  lastSavedAt={lastSavedAt}
+                  draftReady={!!draftId}
+                  classId={resolvedClassObj}
+                  subjectId={paperMetadata.subject}
+                  overusedQuestionCounts={overusedQuestionCounts}
+                  readOnly={isReadOnlyPaper}
+                />
+              )}
+
+              {activeTab === 'image' && (
+                <ImageCapturePaperTab
+                  onPaperCreate={handlePaperCreate}
+                  isLoading={createPaperMutation.isPending}
+                />
+              )}
+
+              {activeTab === 'lesson' && (
+                <LessonPlanPaperTab
+                  metadata={paperMetadata}
+                  onPaperCreated={handlePaperCreated}
+                  isLoading={createPaperMutation.isPending}
+                  initialLessonPlanId={location.state?.lessonPlanId}
+                />
+              )}
+            </div>
           </div>
 
-          {/* Tab content */}
-          <div className="p-8">
-            {activeTab === 'manual' && (
-              <ManualEntryPaperTab
-                draftData={manualDraft}
-                onDraftDataChange={handleManualDraftChange}
-                onSubmitDraft={handleManualSubmit}
-                isLoading={
-                  saveState === 'saving'
-                  || ensureDraftMutation.isPending
-                  || autosaveMutation.isPending
-                }
-                saveState={saveState}
-                lastSavedAt={lastSavedAt}
-                draftReady={!!draftId}
-                classId={resolvedClassObj}
-                subjectId={paperMetadata.subject}
-                readOnly={isReadOnlyPaper}
-              />
-            )}
+          {/* Curriculum Coverage Panel */}
+          <aside className="xl:col-span-1 bg-white rounded-lg shadow-sm border border-gray-200 h-fit">
+            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-gray-800">Curriculum Coverage</h3>
+              <button
+                type="button"
+                onClick={() => setCoverageCollapsed((prev) => !prev)}
+                className="text-xs text-gray-500 hover:text-gray-700"
+              >
+                {coverageCollapsed ? 'Expand' : 'Collapse'}
+              </button>
+            </div>
 
-            {activeTab === 'image' && (
-              <ImageCapturePaperTab
-                onPaperCreate={handlePaperCreate}
-                isLoading={createPaperMutation.isPending}
-              />
-            )}
+            {!coverageCollapsed && (
+              <div className="p-4 space-y-3">
+                {!draftId ? (
+                  <p className="text-xs text-gray-500">Start building a draft to see coverage stats.</p>
+                ) : coverageLoading ? (
+                  <p className="text-xs text-gray-500">Loading coverage data...</p>
+                ) : coverageError ? (
+                  <p className="text-xs text-red-600">Failed to load coverage stats.</p>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="rounded-md bg-gray-50 p-2">
+                        <p className="text-gray-500">Total SLOs</p>
+                        <p className="text-gray-900 font-semibold">{totalSLOCount}</p>
+                      </div>
+                      <div className="rounded-md bg-emerald-50 p-2">
+                        <p className="text-emerald-700">Covered</p>
+                        <p className="text-emerald-800 font-semibold">{coveredSLOCount}</p>
+                      </div>
+                    </div>
 
-            {activeTab === 'lesson' && (
-              <LessonPlanPaperTab
-                metadata={paperMetadata}
-                onPaperCreated={handlePaperCreated}
-                isLoading={createPaperMutation.isPending}
-                initialLessonPlanId={location.state?.lessonPlanId}
-              />
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-xs text-gray-600">Coverage</p>
+                        <p className="text-xs font-medium text-gray-700">{coveragePercent}%</p>
+                      </div>
+                      <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-2 bg-emerald-500 rounded-full transition-all duration-500"
+                          style={{ width: `${coveragePercent}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <p className="text-xs font-medium text-gray-700 mb-1">Covered SLOs</p>
+                      {coveredSLOs.length === 0 ? (
+                        <p className="text-xs text-gray-500">No covered SLOs yet.</p>
+                      ) : (
+                        <div className="space-y-1 max-h-28 overflow-y-auto">
+                          {coveredSLOs.map((slo) => (
+                            <div key={slo.id} className="text-xs text-emerald-700 flex items-start gap-1">
+                              <span className="mt-0.5">✓</span>
+                              <span className="truncate">{slo.code || `SLO-${slo.id}`} {slo.statement}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <p className="text-xs font-medium text-gray-700 mb-1">Uncovered SLOs</p>
+                      {uncoveredSLOs.length === 0 ? (
+                        <p className="text-xs text-gray-500">No uncovered SLOs in linked lesson-plan scope.</p>
+                      ) : (
+                        <div className="space-y-1 max-h-28 overflow-y-auto">
+                          {uncoveredSLOs.map((slo) => (
+                            <div key={slo.id} className="text-xs text-gray-600 flex items-start gap-1">
+                              <span className="mt-0.5">•</span>
+                              <span className="truncate">{slo.code || `SLO-${slo.id}`} {slo.statement}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="pt-2 border-t border-gray-100">
+                      <p className="text-xs font-medium text-gray-700 mb-2">Bloom Distribution</p>
+                      {bloomDistribution.total === 0 ? (
+                        <p className="text-xs text-gray-500">Add questions to view Bloom distribution.</p>
+                      ) : (
+                        <>
+                          <div className="h-20">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <BarChart data={bloomDistribution.stackData} layout="vertical" margin={{ top: 4, right: 8, left: 8, bottom: 4 }}>
+                                <XAxis type="number" domain={[0, 100]} hide />
+                                <YAxis type="category" dataKey="name" hide />
+                                <Tooltip formatter={(value, name) => [`${value}%`, BLOOM_LEVELS.find((level) => level.key === name)?.label || name]} />
+                                {BLOOM_LEVELS.map((level) => (
+                                  <Bar key={level.key} dataKey={level.key} stackId="bloom" fill={level.color} isAnimationActive />
+                                ))}
+                              </BarChart>
+                            </ResponsiveContainer>
+                          </div>
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {BLOOM_LEVELS.map((level) => (
+                              <span key={level.key} className="inline-flex items-center gap-1 text-[10px] text-gray-600">
+                                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: level.color }} />
+                                {level.label} ({bloomDistribution.counts[level.key]})
+                              </span>
+                            ))}
+                          </div>
+                          {bloomDistribution.isSurfaceHeavy && (
+                            <p className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                              Warning: {Math.round(bloomDistribution.surfaceHeavyPercent)}% of questions are Remember/Understand.
+                            </p>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
             )}
-          </div>
+          </aside>
         </div>
 
         {/* Help text */}

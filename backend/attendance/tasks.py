@@ -86,7 +86,8 @@ def retry_failed_uploads(hours: int = 24):
         upload.error_message = ''
         upload.save()
 
-        process_attendance_upload.delay(upload.id)
+        from core.task_utils import call_task
+        call_task(process_attendance_upload, upload.id)
         retried += 1
 
     logger.info(f"Retried {retried} failed uploads")

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query'
 import { lmsApi, academicsApi, hrApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
@@ -17,6 +17,51 @@ const STEPS = [
   { num: 3, label: 'AI assistant' },
   { num: 4, label: 'Review & Save' },
 ]
+
+const OBJECTIVE_BLOOM_OPTIONS = [
+  { value: 'remember', label: 'Remember' },
+  { value: 'understand', label: 'Understand' },
+  { value: 'apply', label: 'Apply' },
+  { value: 'analyze', label: 'Analyze' },
+  { value: 'evaluate', label: 'Evaluate' },
+  { value: 'create', label: 'Create' },
+]
+
+const BLOOM_BADGE_CLASSES = {
+  remember: 'bg-gray-100 text-gray-700',
+  understand: 'bg-blue-100 text-blue-700',
+  apply: 'bg-green-100 text-green-700',
+  analyze: 'bg-yellow-100 text-yellow-800',
+  evaluate: 'bg-orange-100 text-orange-700',
+  create: 'bg-red-100 text-red-700',
+}
+
+function makeObjectiveRow(seed = {}) {
+  return {
+    rowId: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    objectiveId: seed.objectiveId ?? seed.id ?? null,
+    statement: seed.statement || '',
+    bloom_level: seed.bloom_level || '',
+  }
+}
+
+function parseObjectiveTextToRows(rawText) {
+  const text = normalizeLessonPlanText(rawText)
+  if (!text) return []
+  const lines = text
+    .split('\n')
+    .map((line) => line.replace(/^[-*•\d.)\s]+/, '').trim())
+    .filter(Boolean)
+  return lines.map((statement) => makeObjectiveRow({ statement }))
+}
+
+function objectiveRowsToPlainText(rows) {
+  return rows
+    .map((row) => normalizeLessonPlanText(row.statement))
+    .filter(Boolean)
+    .map((line) => `- ${line}`)
+    .join('\n')
+}
 
 function collectChapterIds(chapter) {
   const topicIds = []
@@ -69,6 +114,7 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
 
   const [title, setTitle] = useState('')
   const [objectives, setObjectives] = useState('')
+  const [objectiveRows, setObjectiveRows] = useState([makeObjectiveRow()])
   const [description, setDescription] = useState('')
   const [teachingMethods, setTeachingMethods] = useState('')
   const [materialsNeeded, setMaterialsNeeded] = useState('')
@@ -86,7 +132,21 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
       setDuration(editingPlan.duration_minutes || 45)
       setMode(editingPlan.content_mode === 'FREEFORM' ? 'FREEFORM' : 'TOPICS')
       setTitle(editingPlan.title || '')
-      setObjectives(editingPlan.objectives || '')
+      const objectivesText = normalizeLessonPlanText(editingPlan.objectives_text ?? editingPlan.objectives)
+      setObjectives(objectivesText)
+      const linkedRows = (editingPlan.linked_objectives || []).map((objective) =>
+        makeObjectiveRow({
+          id: objective.id,
+          statement: objective.statement,
+          bloom_level: objective.bloom_level,
+        }),
+      )
+      if (linkedRows.length > 0) {
+        setObjectiveRows(linkedRows)
+      } else {
+        const parsedRows = parseObjectiveTextToRows(objectivesText)
+        setObjectiveRows(parsedRows.length > 0 ? parsedRows : [makeObjectiveRow()])
+      }
       setDescription(editingPlan.description || '')
       setTeachingMethods(editingPlan.teaching_methods || '')
       setMaterialsNeeded(editingPlan.materials_needed || '')
@@ -109,6 +169,33 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
     }
   }, [editingPlan, activeAcademicYear?.id, sessionClassIdByMaster])
 
+  const topicObjectivesQueries = useQueries({
+    queries: selectedTopicIds.map((topicId) => ({
+      queryKey: ['topic-objectives', topicId],
+      queryFn: () => lmsApi.getTopicObjectives(topicId),
+      enabled: mode === 'TOPICS' && !!topicId,
+    })),
+  })
+
+  const isTopicObjectivesLoading = topicObjectivesQueries.some((query) => query.isLoading)
+  const topicObjectivesError = topicObjectivesQueries.find((query) => query.isError)?.error
+  const availableObjectives = useMemo(() => {
+    const seen = new Set()
+    const rows = []
+    topicObjectivesQueries.forEach((query) => {
+      const payload = query.data?.data
+      const items = Array.isArray(payload?.results)
+        ? payload.results
+        : (Array.isArray(payload) ? payload : [])
+      items.forEach((item) => {
+        if (seen.has(item.id)) return
+        seen.add(item.id)
+        rows.push(item)
+      })
+    })
+    return rows
+  }, [topicObjectivesQueries])
+
   // Data fetching
   const { data: classSubjectsData } = useQuery({
     queryKey: ['classSubjects', resolvedSelectedClass],
@@ -130,6 +217,20 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
   const classSubjects = classSubjectsData?.data?.results || classSubjectsData?.data || []
   const staff = staffData?.data?.results || staffData?.data || []
   const books = booksData?.data || booksData?.data?.results || []
+
+  const syncObjectivesAfterSave = async (response) => {
+    const lessonPlanId = response?.data?.id
+    if (!lessonPlanId) return
+    const objectiveIds = Array.from(
+      new Set(
+        objectiveRows
+          .map((row) => row.objectiveId)
+          .filter((id) => Number.isInteger(id)),
+      ),
+    )
+    if (objectiveIds.length === 0) return
+    await lmsApi.linkLessonPlanObjectives(lessonPlanId, objectiveIds)
+  }
 
   const { topicMap, subtopicMap } = useMemo(() => {
     const tMap = {}
@@ -167,7 +268,12 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
   // Mutations
   const createMutation = useMutation({
     mutationFn: (data) => lmsApi.createLessonPlan(data),
-    onSuccess: () => {
+    onSuccess: async (response) => {
+      try {
+        await syncObjectivesAfterSave(response)
+      } catch (error) {
+        showError(error.response?.data?.error || 'Lesson plan saved, but linking objectives failed.')
+      }
       queryClient.invalidateQueries({ queryKey: ['lessonPlans'] })
       showSuccess('Lesson plan created successfully!')
       onSuccess?.()
@@ -180,7 +286,12 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => lmsApi.updateLessonPlan(id, data),
-    onSuccess: () => {
+    onSuccess: async (response) => {
+      try {
+        await syncObjectivesAfterSave(response)
+      } catch (error) {
+        showError(error.response?.data?.error || 'Lesson plan saved, but linking objectives failed.')
+      }
       queryClient.invalidateQueries({ queryKey: ['lessonPlans'] })
       showSuccess('Lesson plan updated successfully!')
       onSuccess?.()
@@ -298,8 +409,27 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
     setExpandedTopics((prev) => ({ ...prev, [topicId]: !prev[topicId] }))
   }
 
+  const addObjectiveRow = () => {
+    setObjectiveRows((prev) => [...prev, makeObjectiveRow()])
+  }
+
+  const updateObjectiveRow = (rowId, patch) => {
+    setObjectiveRows((prev) => prev.map((row) => (row.rowId === rowId ? { ...row, ...patch } : row)))
+  }
+
+  const removeObjectiveRow = (rowId) => {
+    setObjectiveRows((prev) => {
+      const next = prev.filter((row) => row.rowId !== rowId)
+      return next.length > 0 ? next : [makeObjectiveRow()]
+    })
+  }
+
   const applyAIGeneratedFields = (fields) => {
     setTitle(normalizeLessonPlanText(fields.title))
+    const aiRows = parseObjectiveTextToRows(fields.objectives)
+    if (aiRows.length > 0) {
+      setObjectiveRows(aiRows)
+    }
     setObjectives(normalizeLessonPlanText(fields.objectives))
     setDescription(normalizeLessonPlanText(fields.description))
     setTeachingMethods(normalizeLessonPlanText(fields.teaching_methods))
@@ -323,7 +453,7 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
       duration_minutes: parseInt(duration) || 45,
       title: normalizeLessonPlanText(title),
       description: normalizeLessonPlanText(description),
-      objectives: normalizeLessonPlanText(objectives),
+      objectives: objectiveRowsToPlainText(objectiveRows) || normalizeLessonPlanText(objectives),
       teaching_methods: normalizeLessonPlanText(teachingMethods),
       materials_needed: normalizeLessonPlanText(materialsNeeded),
       content_mode: mode === 'TOPICS' ? 'TOPICS' : 'FREEFORM',
@@ -786,14 +916,91 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
             </div>
 
             <div>
-              <label className="label">Objectives</label>
-              <textarea
-                className="input w-full"
-                rows={3}
-                placeholder="Learning objectives for this lesson..."
-                value={objectives}
-                onChange={(e) => setObjectives(e.target.value)}
-              />
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <label className="label mb-0">Objectives</label>
+                <button
+                  type="button"
+                  onClick={() => setShowAIModal(true)}
+                  className="text-xs px-2.5 py-1 rounded-md border border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100"
+                >
+                  Generate with AI
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                {objectiveRows.map((row) => (
+                  <div key={row.rowId} className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                    <input
+                      type="text"
+                      className="input sm:col-span-8"
+                      placeholder="Students will be able to..."
+                      value={row.statement}
+                      onChange={(e) => updateObjectiveRow(row.rowId, { statement: e.target.value, objectiveId: null })}
+                    />
+                    <select
+                      className="input sm:col-span-3"
+                      value={row.bloom_level}
+                      onChange={(e) => updateObjectiveRow(row.rowId, { bloom_level: e.target.value })}
+                    >
+                      <option value="">Bloom level</option>
+                      {OBJECTIVE_BLOOM_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => removeObjectiveRow(row.rowId)}
+                      className="sm:col-span-1 px-2 py-2 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50"
+                      title="Delete objective"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-2 flex items-center gap-2">
+                <button type="button" onClick={addObjectiveRow} className="btn btn-secondary text-xs px-3 py-1.5">
+                  Add Objective
+                </button>
+              </div>
+
+              <div className="mt-3">
+                <p className="text-xs font-medium text-gray-600 mb-1">Topic objective suggestions</p>
+                {isTopicObjectivesLoading ? (
+                  <p className="text-xs text-gray-500">Loading topic objectives...</p>
+                ) : topicObjectivesError ? (
+                  <p className="text-xs text-red-600">Could not load topic objectives.</p>
+                ) : availableObjectives.length === 0 ? (
+                  <p className="text-xs text-gray-500">No linked topic objectives found for current topic selection.</p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {availableObjectives.slice(0, 8).map((objective) => (
+                      <button
+                        type="button"
+                        key={objective.id}
+                        onClick={() => {
+                          const newRow = makeObjectiveRow({
+                            id: objective.id,
+                            statement: objective.statement,
+                            bloom_level: objective.bloom_level,
+                          })
+                          setObjectiveRows((prev) => [...prev, newRow])
+                        }}
+                        className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-blue-50 text-blue-700 hover:bg-blue-100"
+                        title={objective.statement}
+                      >
+                        <span className="truncate max-w-[220px]">{objective.statement}</span>
+                        {objective.bloom_level && (
+                          <span className={`px-1.5 py-0.5 rounded-full ${BLOOM_BADGE_CLASSES[objective.bloom_level] || 'bg-gray-100 text-gray-700'}`}>
+                            {OBJECTIVE_BLOOM_OPTIONS.find((opt) => opt.value === objective.bloom_level)?.label || objective.bloom_level}
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
             <div>

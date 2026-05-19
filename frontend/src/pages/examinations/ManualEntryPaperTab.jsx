@@ -16,6 +16,7 @@ export default function ManualEntryPaperTab({
   draftReady,
   classId,
   subjectId,
+  overusedQuestionCounts = {},
   readOnly = false,
 }) {
   const questions = draftData?.questions || []
@@ -26,6 +27,7 @@ export default function ManualEntryPaperTab({
     question_text: '',
     question_type: 'SHORT',
     difficulty_level: 'MEDIUM',
+    bloom_level: '',
     marks: 1,
     correct_answer: '',
     answer_text: '',
@@ -74,6 +76,17 @@ export default function ManualEntryPaperTab({
 
   const bankQuestions = bankData?.data?.results || bankData?.data || []
 
+  const getQuestionReuseCount = (question) => {
+    const directCount = Number(question?.paper_use_count)
+    if (Number.isFinite(directCount)) return directCount
+
+    const questionId = Number(question?.id ?? question?.question_id)
+    if (!Number.isFinite(questionId)) return 0
+
+    const mappedCount = Number(overusedQuestionCounts?.[questionId])
+    return Number.isFinite(mappedCount) ? mappedCount : 0
+  }
+
   const updateDraft = (updates) => {
     if (readOnly) return
     onDraftDataChange({
@@ -107,9 +120,11 @@ export default function ManualEntryPaperTab({
       .map((question) => ({
         local_id: `bank_${question.id}_${Date.now()}_${Math.random()}`,
         question_id: question.id,
+        paper_use_count: getQuestionReuseCount(question),
         question_text: question.question_text || '',
         question_type: question.question_type || 'SHORT',
         difficulty_level: question.difficulty_level || 'MEDIUM',
+        bloom_level: question.bloom_level || '',
         marks: Number(question.marks ?? 1) || 1,
         marks_override: Number(question.marks ?? 1) || 1,
         correct_answer: question.correct_answer || '',
@@ -186,6 +201,7 @@ export default function ManualEntryPaperTab({
       question_text: '',
       question_type: 'SHORT',
       difficulty_level: 'MEDIUM',
+      bloom_level: '',
       marks: 1,
       correct_answer: '',
       answer_text: '',
@@ -440,14 +456,23 @@ export default function ManualEntryPaperTab({
             Questions ({questions.length})
           </h3>
           <div className="space-y-2 max-h-96 overflow-y-auto">
-            {questions.map((q, idx) => (
+            {questions.map((q, idx) => {
+              const useCount = getQuestionReuseCount(q)
+              const isOverused = useCount >= 3
+
+              return (
               <div
-                key={q.id}
+                key={q.local_id || q.id || `${idx}`}
                 className="flex gap-3 p-3 bg-gray-50 border border-gray-200 rounded-lg"
               >
                 <div className="flex-1">
-                  <div className="font-semibold text-gray-800">
-                    Q{idx + 1}. {q.question_type} [{q.marks}M]
+                  <div className="font-semibold text-gray-800 flex flex-wrap items-center gap-2">
+                    <span>Q{idx + 1}. {q.question_type} [{q.marks}M]</span>
+                    {isOverused && (
+                      <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200">
+                        Used in {useCount} papers
+                      </span>
+                    )}
                   </div>
                   <div
                     className="text-sm text-gray-600 mt-1 line-clamp-2"
@@ -473,7 +498,8 @@ export default function ManualEntryPaperTab({
                   )}
                 </div>
               </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       )}
@@ -530,6 +556,8 @@ export default function ManualEntryPaperTab({
               ) : (
                 bankQuestions.map((question) => {
                   const checked = selectedBankIds.includes(Number(question.id))
+                  const useCount = getQuestionReuseCount(question)
+                  const isOverused = useCount >= 3
                   return (
                     <label
                       key={question.id}
@@ -549,6 +577,14 @@ export default function ManualEntryPaperTab({
                             <span>{question.difficulty_level || 'MEDIUM'}</span>
                             <span>•</span>
                             <span>{question.marks} mark(s)</span>
+                            {isOverused && (
+                              <>
+                                <span>•</span>
+                                <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200">
+                                  Used in {useCount} papers
+                                </span>
+                              </>
+                            )}
                           </div>
                           <div className="text-sm text-gray-800 line-clamp-3" dangerouslySetInnerHTML={{ __html: question.question_text }} />
                         </div>

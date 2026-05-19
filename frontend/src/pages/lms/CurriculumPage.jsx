@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query'
 import ReactCrop from 'react-image-crop'
 import 'react-image-crop/dist/ReactCrop.css'
 import { lmsApi, academicsApi } from '../../services/api'
@@ -52,6 +52,31 @@ const EMPTY_TOPIC_FORM = {
   topic_number: 1,
   estimated_periods: 1,
   description: '',
+}
+
+const EMPTY_SUBTOPIC_CONTENT_FORM = {
+  content_text: '',
+  estimated_minutes: '',
+}
+
+const CONTENT_BLOCK_TYPES = [
+  { value: 'text', label: 'Text Paragraph' },
+  { value: 'definition', label: 'Definition' },
+  { value: 'example', label: 'Worked Example' },
+  { value: 'exercise', label: 'Exercise' },
+  { value: 'formula', label: 'Formula / Equation' },
+  { value: 'diagram_desc', label: 'Diagram Description' },
+  { value: 'summary', label: 'Summary' },
+  { value: 'key_point', label: 'Key Point' },
+]
+
+const EMPTY_CONTENT_BLOCK_FORM = {
+  block_type: 'text',
+  content_text: '',
+  content_rich: '',
+  sequence_order: 1,
+  difficulty_level: '',
+  estimated_minutes: '',
 }
 
 const parseOcrLinesFromText = (text) => {
@@ -225,6 +250,14 @@ export default function CurriculumPage() {
 
   // Expanded chapters in tree view
   const [expandedChapters, setExpandedChapters] = useState(new Set())
+  const [expandedTopicContentBlocks, setExpandedTopicContentBlocks] = useState(new Set())
+  const [expandedContentBlockText, setExpandedContentBlockText] = useState(new Set())
+  const [contentSearchTerm, setContentSearchTerm] = useState('')
+  const [debouncedContentSearchTerm, setDebouncedContentSearchTerm] = useState('')
+  const [pendingScrollTopicId, setPendingScrollTopicId] = useState(null)
+  const [activeTagEditorBlockId, setActiveTagEditorBlockId] = useState(null)
+  const [tagSelectionByBlockId, setTagSelectionByBlockId] = useState({})
+  const topicRowRefs = useRef({})
 
   // Modals
   const [showAddBookModal, setShowAddBookModal] = useState(false)
@@ -240,6 +273,19 @@ export default function CurriculumPage() {
   const [editingTopic, setEditingTopic] = useState(null)
   const [topicParentChapterId, setTopicParentChapterId] = useState(null)
   const [topicForm, setTopicForm] = useState({ ...EMPTY_TOPIC_FORM })
+
+  const [showSubtopicContentModal, setShowSubtopicContentModal] = useState(false)
+  const [editingSubtopic, setEditingSubtopic] = useState(null)
+  const [subtopicContentForm, setSubtopicContentForm] = useState({ ...EMPTY_SUBTOPIC_CONTENT_FORM })
+
+  const [showContentBlockModal, setShowContentBlockModal] = useState(false)
+  const [editingContentBlock, setEditingContentBlock] = useState(null)
+  const [contentBlockTopicId, setContentBlockTopicId] = useState(null)
+  const [contentBlockForm, setContentBlockForm] = useState({ ...EMPTY_CONTENT_BLOCK_FORM })
+  const [showContentRichEditor, setShowContentRichEditor] = useState(false)
+  const [showContentRevisionDrawer, setShowContentRevisionDrawer] = useState(false)
+  const [revisionBlockContext, setRevisionBlockContext] = useState(null)
+  const [selectedRevisionId, setSelectedRevisionId] = useState(null)
 
   const [showTocModal, setShowTocModal] = useState(false)
   const [tocText, setTocText] = useState('')
@@ -523,7 +569,146 @@ export default function CurriculumPage() {
     enabled: !!resolvedSelectedClass && !!selectedSubject && !ocrLoading,
   })
 
+  const allBookTopicIds = useMemo(() => {
+    return (bookTree?.chapters || []).flatMap((chapter) => (chapter.topics || []).map((topic) => topic.id))
+  }, [bookTree])
+
+  const expandedTopicIds = Array.from(expandedTopicContentBlocks)
+  const contentBlockQueries = useQueries({
+    queries: allBookTopicIds.map((topicId) => ({
+      queryKey: ['content-blocks', topicId],
+      queryFn: () => lmsApi.getContentBlocks({ topic_id: topicId, is_active: true }),
+      enabled: !!selectedBookId && !ocrLoading,
+      staleTime: 60000,
+      cacheTime: 300000,
+    })),
+  })
+
+  const contentBlockQueryByTopicId = allBookTopicIds.reduce((acc, topicId, index) => {
+    acc[topicId] = contentBlockQueries[index]
+    return acc
+  }, {})
+
+  const totalBookContentBlocks = useMemo(() => {
+    return allBookTopicIds.reduce((sum, topicId) => {
+      const query = contentBlockQueryByTopicId[topicId]
+      const payload = query?.data?.data
+      const blocks = payload?.results || payload || []
+      const count = typeof payload?.count === 'number' ? payload.count : blocks.length
+      return sum + count
+    }, 0)
+  }, [allBookTopicIds, contentBlockQueries])
+
   const progress = progressData?.data || null
+
+  const {
+    data: curriculumTagsData,
+    isLoading: curriculumTagsLoading,
+  } = useQuery({
+    queryKey: ['curriculum-content-tags', selectedSubject],
+    queryFn: () => lmsApi.getTags({ subject_id: selectedSubject || undefined }),
+    enabled: !!selectedSubject,
+  })
+  const curriculumTags = curriculumTagsData?.data?.results || curriculumTagsData?.data || []
+
+  const {
+    data: contentBlockRevisionsData,
+    isLoading: contentBlockRevisionsLoading,
+    isError: contentBlockRevisionsError,
+    error: contentBlockRevisionsErrorObj,
+    refetch: refetchContentBlockRevisions,
+  } = useQuery({
+    queryKey: ['content-block-revisions', revisionBlockContext?.block?.id],
+    queryFn: () => lmsApi.getContentBlockRevisions(revisionBlockContext.block.id),
+    enabled: !!revisionBlockContext?.block?.id && showContentRevisionDrawer,
+  })
+
+  const contentBlockRevisionsPayload = contentBlockRevisionsData?.data
+  const contentBlockRevisions = Array.isArray(contentBlockRevisionsPayload?.results)
+    ? contentBlockRevisionsPayload.results
+    : (Array.isArray(contentBlockRevisionsPayload) ? contentBlockRevisionsPayload : [])
+
+  const selectedRevision = contentBlockRevisions.find((revision) => revision.id === selectedRevisionId) || null
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedContentSearchTerm(contentSearchTerm.trim())
+    }, 600)
+    return () => window.clearTimeout(timer)
+  }, [contentSearchTerm])
+
+  useEffect(() => {
+    if (!showContentRevisionDrawer) return
+    if (contentBlockRevisions.length === 0) {
+      setSelectedRevisionId(null)
+      return
+    }
+    if (!selectedRevisionId || !contentBlockRevisions.some((revision) => revision.id === selectedRevisionId)) {
+      setSelectedRevisionId(contentBlockRevisions[0].id)
+    }
+  }, [showContentRevisionDrawer, contentBlockRevisions, selectedRevisionId])
+
+  const semanticContentSearchParams = {
+    q: debouncedContentSearchTerm,
+    limit: 15,
+    ...(resolvedSelectedClass && { class_id: resolvedSelectedClass }),
+    ...(selectedSubject && { subject_id: selectedSubject }),
+  }
+
+  const {
+    data: semanticContentSearchData,
+    isLoading: semanticContentSearchLoading,
+    isError: semanticContentSearchError,
+    error: semanticContentSearchErrorObj,
+  } = useQuery({
+    queryKey: ['curriculum-content-semantic-search', semanticContentSearchParams],
+    queryFn: () => lmsApi.semanticSearchContentBlocks(semanticContentSearchParams),
+    enabled: !!resolvedSelectedClass && !!selectedSubject && !!debouncedContentSearchTerm,
+  })
+
+  const semanticContentSearchPayload = semanticContentSearchData?.data
+  const semanticContentResults = Array.isArray(semanticContentSearchPayload)
+    ? semanticContentSearchPayload
+    : semanticContentSearchPayload?.results || []
+
+  const findChapterIdByTopicId = (topicId) => {
+    for (const chapter of (bookTree?.chapters || [])) {
+      if ((chapter.topics || []).some((topic) => topic.id === topicId)) {
+        return chapter.id
+      }
+    }
+    return null
+  }
+
+  const getSearchResultMeta = (result) => {
+    const topicId = parseInt(result?.topic_id ?? result?.topic ?? result?.topic_obj, 10)
+    const chapterId = parseInt(result?.chapter_id ?? result?.chapter ?? result?.chapter_obj, 10)
+    const bookId = parseInt(result?.book_id ?? result?.book ?? result?.book_obj, 10)
+    return {
+      topicId: Number.isFinite(topicId) ? topicId : null,
+      chapterId: Number.isFinite(chapterId) ? chapterId : null,
+      bookId: Number.isFinite(bookId) ? bookId : null,
+    }
+  }
+
+  const handleSelectSemanticResult = (result) => {
+    const { topicId, chapterId, bookId } = getSearchResultMeta(result)
+    if (bookId && selectedBookId !== bookId) {
+      setSelectedBookId(bookId)
+    }
+
+    if (topicId) {
+      setPendingScrollTopicId(topicId)
+      const resolvedChapterId = chapterId || findChapterIdByTopicId(topicId)
+      if (resolvedChapterId) {
+        setExpandedChapters((prev) => {
+          const next = new Set(prev)
+          next.add(resolvedChapterId)
+          return next
+        })
+      }
+    }
+  }
 
   // ---- Book Mutations ----
 
@@ -625,6 +810,79 @@ export default function CurriculumPage() {
     },
     onError: (error) => {
       showError(error.response?.data?.detail || 'Failed to delete topic')
+    },
+  })
+
+  const updateSubtopicMutation = useMutation({
+    mutationFn: ({ id, data }) => lmsApi.updateSubtopic(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['lmsBookTree'] })
+      closeSubtopicContentModal()
+      showSuccess('Sub-topic content updated')
+    },
+    onError: (error) => {
+      showError(error.response?.data?.detail || 'Failed to update sub-topic content')
+    },
+  })
+
+  // ---- Content Block Mutations ----
+
+  const createContentBlockMutation = useMutation({
+    mutationFn: (data) => lmsApi.createContentBlock(data),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['content-blocks', variables.topic] })
+      closeContentBlockModal()
+      showSuccess('Content block created')
+    },
+    onError: (error) => {
+      showError(error.response?.data?.detail || 'Failed to create content block')
+    },
+  })
+
+  const updateContentBlockMutation = useMutation({
+    mutationFn: ({ id, data }) => lmsApi.updateContentBlock(id, data),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['content-blocks', variables.topicId] })
+      closeContentBlockModal()
+      showSuccess('Content block updated')
+    },
+    onError: (error) => {
+      showError(error.response?.data?.detail || 'Failed to update content block')
+    },
+  })
+
+  const deleteContentBlockMutation = useMutation({
+    mutationFn: ({ id }) => lmsApi.deleteContentBlock(id),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['content-blocks', variables.topicId] })
+      showSuccess('Content block deleted')
+    },
+    onError: (error) => {
+      showError(error.response?.data?.detail || 'Failed to delete content block')
+    },
+  })
+
+  const contentBlockTagMutation = useMutation({
+    mutationFn: ({ blockId, tagId, remove }) => lmsApi.addContentBlockTag(blockId, tagId, remove),
+    onSuccess: (_response, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['content-blocks', variables.topicId] })
+    },
+    onError: (error) => {
+      showError(error.response?.data?.detail || 'Failed to update tags for content block')
+    },
+  })
+
+  const restoreContentRevisionMutation = useMutation({
+    mutationFn: ({ blockId, revisionId }) => lmsApi.restoreContentBlockRevision(blockId, revisionId),
+    onSuccess: (_response, variables) => {
+      if (revisionBlockContext?.topicId) {
+        queryClient.invalidateQueries({ queryKey: ['content-blocks', revisionBlockContext.topicId] })
+      }
+      queryClient.invalidateQueries({ queryKey: ['content-block-revisions', variables.blockId] })
+      showSuccess('Revision restored successfully.')
+    },
+    onError: (error) => {
+      showError(error.response?.data?.detail || 'Failed to restore revision')
     },
   })
 
@@ -835,6 +1093,89 @@ export default function CurriculumPage() {
     setTopicForm({ ...EMPTY_TOPIC_FORM })
   }
 
+  const openSubtopicContentModal = (subtopic) => {
+    setEditingSubtopic(subtopic)
+    setSubtopicContentForm({
+      content_text: subtopic?.content_text || '',
+      estimated_minutes: subtopic?.estimated_minutes ?? '',
+    })
+    setShowSubtopicContentModal(true)
+  }
+
+  const closeSubtopicContentModal = () => {
+    setShowSubtopicContentModal(false)
+    setEditingSubtopic(null)
+    setSubtopicContentForm({ ...EMPTY_SUBTOPIC_CONTENT_FORM })
+  }
+
+  const openAddContentBlock = (topicId, existingBlocks = []) => {
+    const maxSequence = (existingBlocks || []).reduce((acc, block) => {
+      const value = parseInt(block?.sequence_order, 10)
+      return Number.isFinite(value) ? Math.max(acc, value) : acc
+    }, 0)
+    setEditingContentBlock(null)
+    setContentBlockTopicId(topicId)
+    setContentBlockForm({
+      ...EMPTY_CONTENT_BLOCK_FORM,
+      sequence_order: maxSequence + 1,
+    })
+    setShowContentRichEditor(false)
+    setShowContentBlockModal(true)
+  }
+
+  const openEditContentBlock = (block, topicId) => {
+    setEditingContentBlock(block)
+    setContentBlockTopicId(topicId)
+    setContentBlockForm({
+      block_type: block?.block_type || 'text',
+      content_text: block?.content_text || '',
+      content_rich: block?.content_rich ? JSON.stringify(block.content_rich, null, 2) : '',
+      sequence_order: Number.isFinite(Number(block?.sequence_order)) ? Number(block.sequence_order) : 1,
+      difficulty_level: block?.difficulty_level ?? '',
+      estimated_minutes: block?.estimated_minutes ?? '',
+    })
+    setShowContentRichEditor(!!block?.content_rich)
+    setShowContentBlockModal(true)
+  }
+
+  const closeContentBlockModal = () => {
+    setShowContentBlockModal(false)
+    setEditingContentBlock(null)
+    setContentBlockTopicId(null)
+    setContentBlockForm({ ...EMPTY_CONTENT_BLOCK_FORM })
+    setShowContentRichEditor(false)
+  }
+
+  const openContentRevisionDrawer = (block, topicId) => {
+    setRevisionBlockContext({ block, topicId })
+    setSelectedRevisionId(null)
+    setShowContentRevisionDrawer(true)
+  }
+
+  const closeContentRevisionDrawer = () => {
+    setShowContentRevisionDrawer(false)
+    setRevisionBlockContext(null)
+    setSelectedRevisionId(null)
+  }
+
+  const handleRestoreSelectedRevision = async () => {
+    if (!revisionBlockContext?.block?.id || !selectedRevisionId) {
+      showError('Select a revision to restore first.')
+      return
+    }
+
+    const ok = await confirm({
+      title: 'Restore Revision',
+      message: `Restore revision #${selectedRevisionId}? Current content will be replaced.`,
+    })
+    if (!ok) return
+
+    restoreContentRevisionMutation.mutate({
+      blockId: revisionBlockContext.block.id,
+      revisionId: selectedRevisionId,
+    })
+  }
+
   const openTocModal = () => {
     setTocText('')
     setTocMode(isMobileViewport ? 'upload' : 'paste')
@@ -971,6 +1312,68 @@ export default function CurriculumPage() {
     } else {
       createTopicMutation.mutate(payload)
     }
+  }
+
+  const handleContentBlockSubmit = () => {
+    if (!contentBlockTopicId) {
+      showError('Unable to determine topic for this content block.')
+      return
+    }
+    if (!contentBlockForm.block_type) {
+      showError('Block type is required')
+      return
+    }
+    if (!contentBlockForm.content_text || !contentBlockForm.content_text.trim()) {
+      showError('Content text is required')
+      return
+    }
+
+    let parsedRich = null
+    if (contentBlockForm.content_rich && contentBlockForm.content_rich.trim()) {
+      try {
+        parsedRich = JSON.parse(contentBlockForm.content_rich)
+      } catch {
+        showError('Content rich must be valid JSON')
+        return
+      }
+    }
+
+    const payload = {
+      topic: contentBlockTopicId,
+      block_type: contentBlockForm.block_type,
+      content_text: contentBlockForm.content_text.trim(),
+      content_rich: parsedRich,
+      sequence_order: Math.max(0, parseInt(contentBlockForm.sequence_order, 10) || 0),
+      difficulty_level: contentBlockForm.difficulty_level === '' ? null : parseInt(contentBlockForm.difficulty_level, 10),
+      estimated_minutes: contentBlockForm.estimated_minutes === '' ? null : parseInt(contentBlockForm.estimated_minutes, 10),
+    }
+
+    if (editingContentBlock?.id) {
+      updateContentBlockMutation.mutate({
+        id: editingContentBlock.id,
+        topicId: contentBlockTopicId,
+        data: payload,
+      })
+    } else {
+      createContentBlockMutation.mutate(payload)
+    }
+  }
+
+  const handleSubtopicContentSubmit = () => {
+    if (!editingSubtopic?.id) {
+      showError('Unable to update sub-topic right now.')
+      return
+    }
+
+    updateSubtopicMutation.mutate({
+      id: editingSubtopic.id,
+      data: {
+        content_text: (subtopicContentForm.content_text || '').trim(),
+        estimated_minutes: subtopicContentForm.estimated_minutes === ''
+          ? null
+          : parseInt(subtopicContentForm.estimated_minutes, 10),
+      },
+    })
   }
 
   const handleTocSubmit = () => {
@@ -2124,6 +2527,17 @@ export default function CurriculumPage() {
     if (ok) deleteTopicMutation.mutate(topic.id)
   }
 
+  const handleDeleteContentBlock = async (block, topicId) => {
+    const preview = (block?.content_text || '').trim().slice(0, 100)
+    const ok = await confirm({
+      title: 'Delete Content Block',
+      message: `Delete this content block?${preview ? `\n\n"${preview}${preview.length >= 100 ? '...' : ''}"` : ''}`,
+    })
+    if (ok) {
+      deleteContentBlockMutation.mutate({ id: block.id, topicId })
+    }
+  }
+
   // ---- Accordion ----
 
   const toggleChapter = (chapterId) => {
@@ -2136,6 +2550,106 @@ export default function CurriculumPage() {
       }
       return next
     })
+  }
+
+  const toggleTopicContentBlocks = (topicId) => {
+    setExpandedTopicContentBlocks((prev) => {
+      const next = new Set(prev)
+      if (next.has(topicId)) {
+        next.delete(topicId)
+      } else {
+        next.add(topicId)
+      }
+      return next
+    })
+  }
+
+  const toggleContentBlockText = (blockId) => {
+    setExpandedContentBlockText((prev) => {
+      const next = new Set(prev)
+      if (next.has(blockId)) {
+        next.delete(blockId)
+      } else {
+        next.add(blockId)
+      }
+      return next
+    })
+  }
+
+  const getTopicContentBlockState = (topicId) => {
+    const query = contentBlockQueryByTopicId[topicId]
+    const payload = query?.data?.data
+    const blocks = payload?.results || payload || []
+    const count = typeof payload?.count === 'number' ? payload.count : blocks.length
+
+    return {
+      query,
+      blocks,
+      count,
+      isLoading: !!query?.isLoading,
+      isError: !!query?.isError,
+      errorMessage: query?.error?.response?.data?.detail || 'Unable to load content blocks.',
+    }
+  }
+
+  const getContentBlockTypeBadgeClass = (type) => {
+    const toneByType = {
+      definition: 'bg-blue-100 text-blue-700',
+      example: 'bg-green-100 text-green-700',
+      exercise: 'bg-orange-100 text-orange-700',
+      summary: 'bg-purple-100 text-purple-700',
+      formula: 'bg-indigo-100 text-indigo-700',
+      key_point: 'bg-amber-100 text-amber-700',
+      diagram_desc: 'bg-cyan-100 text-cyan-700',
+      text: 'bg-gray-100 text-gray-700',
+    }
+    return toneByType[type] || 'bg-gray-100 text-gray-700'
+  }
+
+  const getContentBlockTypeLabel = (type) => {
+    if (!type) return 'Text'
+    return type.split('_').map((chunk) => chunk.charAt(0).toUpperCase() + chunk.slice(1)).join(' ')
+  }
+
+  const extractContentBlockTags = (block) => {
+    const raw = block?.tags || block?.content_block_tags || block?.tag_details || []
+    if (!Array.isArray(raw)) return []
+    return raw
+      .map((tag) => {
+        if (typeof tag === 'object' && tag !== null) {
+          return {
+            id: tag.id,
+            name: tag.name || `Tag #${tag.id}`,
+            tag_type: tag.tag_type || 'keyword',
+          }
+        }
+        const numericId = parseInt(tag, 10)
+        return Number.isFinite(numericId) ? { id: numericId, name: `Tag #${numericId}`, tag_type: 'keyword' } : null
+      })
+      .filter(Boolean)
+  }
+
+  const getContentBlockTagClass = (tagType) => {
+    const map = {
+      concept: 'bg-blue-100 text-blue-700',
+      skill: 'bg-green-100 text-green-700',
+      keyword: 'bg-amber-100 text-amber-700',
+      standard: 'bg-purple-100 text-purple-700',
+    }
+    return map[tagType] || 'bg-gray-100 text-gray-700'
+  }
+
+  const handleAddTagToContentBlock = (block, topicId) => {
+    const selectedTagId = parseInt(tagSelectionByBlockId[block.id], 10)
+    if (!Number.isFinite(selectedTagId)) {
+      showError('Choose a tag first.')
+      return
+    }
+    contentBlockTagMutation.mutate({ blockId: block.id, tagId: selectedTagId, remove: false, topicId })
+  }
+
+  const handleRemoveTagFromContentBlock = (block, topicId, tagId) => {
+    contentBlockTagMutation.mutate({ blockId: block.id, tagId, remove: true, topicId })
   }
 
   // ---- Helpers ----
@@ -2160,6 +2674,8 @@ export default function CurriculumPage() {
   const bookMutationPending = updateBookMutation.isPending
   const chapterMutationPending = createChapterMutation.isPending || updateChapterMutation.isPending
   const topicMutationPending = createTopicMutation.isPending || updateTopicMutation.isPending
+  const contentBlockMutationPending = createContentBlockMutation.isPending || updateContentBlockMutation.isPending
+  const subtopicContentMutationPending = updateSubtopicMutation.isPending
 
   const filtersSelected = selectedClass && selectedSubject
 
@@ -2167,6 +2683,19 @@ export default function CurriculumPage() {
   const progressPercent = progress?.total_topics > 0
     ? Math.round((progress.covered_topics / progress.total_topics) * 100)
     : 0
+
+  useEffect(() => {
+    if (!pendingScrollTopicId) return
+    const node = topicRowRefs.current[pendingScrollTopicId]
+    if (!node) return
+    node.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    setPendingScrollTopicId(null)
+  }, [pendingScrollTopicId, bookTree, expandedChapters])
+
+  useEffect(() => {
+    setExpandedTopicContentBlocks(new Set())
+    setExpandedContentBlockText(new Set())
+  }, [selectedBookId])
 
   return (
     <div>
@@ -2182,6 +2711,73 @@ export default function CurriculumPage() {
       </div>
 
       {/* Filters */}
+      <div className="card mb-4">
+        <label className="label">Search book content...</label>
+        <div className="relative">
+          <input
+            type="text"
+            value={contentSearchTerm}
+            onChange={(e) => setContentSearchTerm(e.target.value)}
+            placeholder="Search book content..."
+            className="input pr-24"
+            disabled={!resolvedSelectedClass || !selectedSubject}
+          />
+          {contentSearchTerm && (
+            <button
+              type="button"
+              onClick={() => { setContentSearchTerm(''); setDebouncedContentSearchTerm('') }}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-600 hover:text-gray-900"
+            >
+              Clear
+            </button>
+          )}
+
+          {contentSearchTerm.trim() && (
+            <div className="absolute z-20 mt-2 w-full rounded-lg border border-gray-200 bg-white shadow-lg max-h-80 overflow-y-auto">
+              {semanticContentSearchLoading && (
+                <div className="px-3 py-3 text-sm text-gray-500">Searching content blocks...</div>
+              )}
+
+              {!semanticContentSearchLoading && semanticContentSearchError && (
+                <div className="px-3 py-3 text-sm text-red-600">
+                  {semanticContentSearchErrorObj?.response?.data?.detail || 'Unable to search curriculum content right now.'}
+                </div>
+              )}
+
+              {!semanticContentSearchLoading && !semanticContentSearchError && semanticContentResults.length === 0 && (
+                <div className="px-3 py-3 text-sm text-gray-500">No matching content blocks found.</div>
+              )}
+
+              {!semanticContentSearchLoading && !semanticContentSearchError && semanticContentResults.length > 0 && (
+                <div className="divide-y divide-gray-100">
+                  {semanticContentResults.map((result, index) => {
+                    const resultBlockType = (result.block_type || 'text').replace(/_/g, ' ')
+                    const resultText = (result.content_text || '').trim()
+                    const chapterTitle = result.chapter_title || 'Chapter'
+                    const topicTitle = result.topic_title || 'Topic'
+                    const bookTitle = result.book_title || 'Book'
+                    return (
+                      <button
+                        key={result.id || `semantic-result-${index}`}
+                        type="button"
+                        onClick={() => handleSelectSemanticResult(result)}
+                        className="w-full text-left px-3 py-3 hover:bg-gray-50"
+                      >
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">{resultBlockType}</span>
+                        </div>
+                        <p className="text-sm text-gray-800 line-clamp-2">{resultText || 'No content text.'}</p>
+                        <p className="text-xs text-gray-500 mt-1">{bookTitle} › {chapterTitle} › {topicTitle}</p>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
       <div className="card mb-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
           <div>
@@ -2323,9 +2919,12 @@ export default function CurriculumPage() {
                       </div>
                     </RTLWrapper>
                     <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100">
-                      <span className="text-xs text-gray-500">
-                        {book.chapter_count ?? book.chapters?.length ?? 0} chapters
-                      </span>
+                      <div className="text-xs text-gray-500 flex items-center gap-2">
+                        <span>{book.chapter_count ?? book.chapters?.length ?? 0} chapters</span>
+                        {selectedBookId === book.id && (
+                          <span>{totalBookContentBlocks} Content Blocks</span>
+                        )}
+                      </div>
                       <div className="flex gap-2">
                         <button
                           onClick={(e) => {
@@ -2424,6 +3023,7 @@ export default function CurriculumPage() {
                     bookTree.chapters.map((chapter) => {
                       const isExpanded = expandedChapters.has(chapter.id)
                       const topics = chapter.topics || []
+                      const chapterContentBlockCount = topics.reduce((sum, topic) => sum + getTopicContentBlockState(topic.id).count, 0)
                       return (
                         <div key={chapter.id} className="border border-gray-200 rounded-lg overflow-hidden">
                           {/* Chapter header */}
@@ -2445,6 +3045,9 @@ export default function CurriculumPage() {
                               </span>
                               <span className="text-xs text-gray-500 flex-shrink-0">
                                 ({topics.length} {topics.length === 1 ? 'topic' : 'topics'})
+                              </span>
+                              <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 flex-shrink-0">
+                                {chapterContentBlockCount} blocks
                               </span>
                             </div>
                             <div className="flex gap-2 flex-shrink-0 ml-2">
@@ -2479,74 +3082,315 @@ export default function CurriculumPage() {
                                 <p className="text-sm text-gray-400 py-2">No topics in this chapter.</p>
                               ) : (
                                 <div className="space-y-1">
-                                  {topics.map((topic) => (
-                                    <div
-                                      key={topic.id}
-                                      className="flex items-center justify-between py-2 px-3 rounded hover:bg-gray-50 group"
-                                    >
-                                      <div className="flex items-center gap-2 min-w-0 flex-1">
-                                        {topic.is_covered ? (
-                                          <svg className="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                          </svg>
-                                        ) : (
-                                          <div className="w-4 h-4 rounded-full border-2 border-gray-300 flex-shrink-0" />
+                                  {topics.map((topic) => {
+                                    const isBlocksExpanded = expandedTopicContentBlocks.has(topic.id)
+                                    const topicContentBlockState = getTopicContentBlockState(topic.id)
+                                    const contentBlockCount = topicContentBlockState.count
+                                    const contentBlocks = topicContentBlockState.blocks
+                                    const subtopics = topic.subtopics || []
+                                    return (
+                                      <div
+                                        key={topic.id}
+                                        className="py-1"
+                                        ref={(node) => {
+                                          if (node) topicRowRefs.current[topic.id] = node
+                                        }}
+                                      >
+                                        <div className="flex items-center justify-between py-2 px-3 rounded hover:bg-gray-50 group">
+                                          <div className="flex items-center gap-2 min-w-0 flex-1 flex-wrap">
+                                            {topic.is_covered ? (
+                                              <svg className="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                              </svg>
+                                            ) : (
+                                              <div className="w-4 h-4 rounded-full border-2 border-gray-300 flex-shrink-0" />
+                                            )}
+                                            <span className={`text-sm truncate ${topic.is_covered ? 'text-gray-500' : 'text-gray-900'}`}>
+                                              {topic.topic_number}. {topic.title}
+                                            </span>
+                                            {topic.is_tested && (
+                                              <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700 flex-shrink-0">
+                                                Tested
+                                              </span>
+                                            )}
+                                            {!topic.is_tested && topic.is_covered && (
+                                              <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700 flex-shrink-0">
+                                                Not tested
+                                              </span>
+                                            )}
+                                            {typeof topic.test_question_count === 'number' && topic.test_question_count > 0 && (
+                                              <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700 flex-shrink-0">
+                                                {topic.test_question_count}Q
+                                              </span>
+                                            )}
+                                            {topic.estimated_periods && (
+                                              <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700 flex-shrink-0">
+                                                {topic.estimated_periods} {topic.estimated_periods === 1 ? 'period' : 'periods'}
+                                              </span>
+                                            )}
+                                            <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700 flex-shrink-0">
+                                              {contentBlockCount} blocks
+                                            </span>
+                                            <button
+                                              onClick={() => toggleTopicContentBlocks(topic.id)}
+                                              className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-gray-300 text-gray-700 hover:bg-gray-100"
+                                            >
+                                              <svg
+                                                className={`w-3 h-3 transition-transform ${isBlocksExpanded ? 'rotate-90' : ''}`}
+                                                fill="none"
+                                                stroke="currentColor"
+                                                viewBox="0 0 24 24"
+                                              >
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                              </svg>
+                                              Content Blocks ({contentBlockCount})
+                                            </button>
+                                          </div>
+                                          <div className="flex gap-2 flex-shrink-0 ml-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button
+                                              onClick={() => navigate('/academics/questions', {
+                                                state: {
+                                                  classId: resolvedSelectedClass,
+                                                  subject: selectedSubject,
+                                                  bookId: selectedBookId,
+                                                  chapterId: chapter.id,
+                                                  topicId: topic.id,
+                                                },
+                                              })}
+                                              className="text-xs text-emerald-600 hover:text-emerald-800 font-medium"
+                                              title="View / add questions for this topic"
+                                            >
+                                              +Q
+                                            </button>
+                                            <button
+                                              onClick={() => openEditTopic(topic, chapter.id)}
+                                              className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                                            >
+                                              Edit
+                                            </button>
+                                            <button
+                                              onClick={() => handleDeleteTopic(topic)}
+                                              className="text-xs text-red-600 hover:text-red-800 font-medium"
+                                            >
+                                              Delete
+                                            </button>
+                                          </div>
+                                        </div>
+
+                                        {isBlocksExpanded && (
+                                          <div className="ml-6 rounded-lg border border-gray-200 bg-gray-50 px-3 py-3">
+                                            {topicContentBlockState.isLoading && (
+                                              <div className="space-y-2">
+                                                {[1, 2, 3].map((line) => (
+                                                  <div key={line} className="rounded border border-gray-200 bg-white p-3 animate-pulse">
+                                                    <div className="h-3 w-24 rounded bg-gray-200 mb-2" />
+                                                    <div className="h-3 w-full rounded bg-gray-200 mb-1" />
+                                                    <div className="h-3 w-4/5 rounded bg-gray-200" />
+                                                  </div>
+                                                ))}
+                                              </div>
+                                            )}
+
+                                            {!topicContentBlockState.isLoading && topicContentBlockState.isError && (
+                                              <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                                                <p>{topicContentBlockState.errorMessage}</p>
+                                                <button
+                                                  onClick={() => topicContentBlockState.query?.refetch?.()}
+                                                  className="mt-2 text-xs font-medium text-red-700 underline"
+                                                >
+                                                  Retry
+                                                </button>
+                                              </div>
+                                            )}
+
+                                            {!topicContentBlockState.isLoading && !topicContentBlockState.isError && contentBlocks.length === 0 && (
+                                              <div className="rounded border border-dashed border-gray-300 bg-white px-3 py-4 text-center">
+                                                <p className="text-sm text-gray-600">No content blocks yet. Add the first one.</p>
+                                                <button
+                                                  onClick={() => openAddContentBlock(topic.id, contentBlocks)}
+                                                  className="mt-2 text-sm font-medium text-primary-600 hover:text-primary-800"
+                                                >
+                                                  Add Content Block
+                                                </button>
+                                              </div>
+                                            )}
+
+                                            {!topicContentBlockState.isLoading && !topicContentBlockState.isError && contentBlocks.length > 0 && (
+                                              <div className="space-y-2">
+                                                {contentBlocks.map((block) => {
+                                                  const isTextExpanded = expandedContentBlockText.has(block.id)
+                                                  const blockTags = extractContentBlockTags(block)
+                                                  const isTagEditorOpen = activeTagEditorBlockId === block.id
+                                                  return (
+                                                    <div key={block.id} className="rounded border border-gray-200 bg-white px-3 py-3">
+                                                      <div className="flex items-start justify-between gap-2">
+                                                        <div className="min-w-0 flex-1">
+                                                          <div className="flex items-center gap-2 flex-wrap">
+                                                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getContentBlockTypeBadgeClass(block.block_type)}`}>
+                                                              {getContentBlockTypeLabel(block.block_type)}
+                                                            </span>
+                                                            <span className="text-xs text-gray-500">#{block.sequence_order ?? 0}</span>
+                                                            {block.estimated_minutes ? (
+                                                              <span className="text-xs text-gray-500">~{block.estimated_minutes} min</span>
+                                                            ) : null}
+                                                          </div>
+                                                          <button
+                                                            onClick={() => toggleContentBlockText(block.id)}
+                                                            className="mt-2 text-left w-full"
+                                                          >
+                                                            <p
+                                                              className={`text-sm text-gray-700 ${isTextExpanded ? '' : 'overflow-hidden'}`}
+                                                              style={isTextExpanded ? undefined : {
+                                                                display: '-webkit-box',
+                                                                WebkitLineClamp: 2,
+                                                                WebkitBoxOrient: 'vertical',
+                                                              }}
+                                                            >
+                                                              {block.content_text}
+                                                            </p>
+                                                          </button>
+                                                        </div>
+                                                        <div className="flex items-center gap-1">
+                                                          <button
+                                                            onClick={() => openContentRevisionDrawer(block, topic.id)}
+                                                            className="p-1 rounded text-gray-700 hover:bg-gray-100"
+                                                            title="View revision history"
+                                                          >
+                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 2m6-2a9 9 0 11-3-6.7" />
+                                                            </svg>
+                                                          </button>
+                                                          <button
+                                                            onClick={() => setActiveTagEditorBlockId((prev) => (prev === block.id ? null : block.id))}
+                                                            className="p-1 rounded text-indigo-600 hover:bg-indigo-50"
+                                                            title="Manage tags"
+                                                          >
+                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5l9 9-8 8-9-9V3h3z" />
+                                                            </svg>
+                                                          </button>
+                                                          <button
+                                                            onClick={() => openEditContentBlock(block, topic.id)}
+                                                            className="p-1 rounded text-blue-600 hover:bg-blue-50"
+                                                            title="Edit content block"
+                                                          >
+                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5h2m2 0h2a2 2 0 012 2v2m0 2v2m0 2v2a2 2 0 01-2 2h-2m-2 0h-2m-2 0H7a2 2 0 01-2-2v-2m0-2v-2m0-2V7a2 2 0 012-2h2" />
+                                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536M9 17l6.768-6.768a1.5 1.5 0 112.121 2.121L11.121 19H9v-2z" />
+                                                            </svg>
+                                                          </button>
+                                                          <button
+                                                            onClick={() => handleDeleteContentBlock(block, topic.id)}
+                                                            className="p-1 rounded text-red-600 hover:bg-red-50"
+                                                            title="Delete content block"
+                                                          >
+                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 7h12M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2m-8 0l1 12h8l1-12" />
+                                                            </svg>
+                                                          </button>
+                                                        </div>
+                                                      </div>
+
+                                                      <div className="mt-2">
+                                                        {blockTags.length > 0 ? (
+                                                          <div className="flex flex-wrap gap-1.5">
+                                                            {blockTags.map((tag) => (
+                                                              <button
+                                                                key={tag.id}
+                                                                type="button"
+                                                                onClick={() => handleRemoveTagFromContentBlock(block, topic.id, tag.id)}
+                                                                className={`text-[11px] px-2 py-0.5 rounded-full ${getContentBlockTagClass(tag.tag_type)}`}
+                                                                title="Remove tag"
+                                                              >
+                                                                {tag.name} ×
+                                                              </button>
+                                                            ))}
+                                                          </div>
+                                                        ) : (
+                                                          <p className="text-[11px] text-gray-500">No tags linked.</p>
+                                                        )}
+                                                      </div>
+
+                                                      {isTagEditorOpen && (
+                                                        <div className="mt-2 rounded border border-gray-200 bg-gray-50 px-2 py-2">
+                                                          {curriculumTagsLoading ? (
+                                                            <p className="text-[11px] text-gray-500">Loading tags...</p>
+                                                          ) : curriculumTags.length === 0 ? (
+                                                            <p className="text-[11px] text-gray-500">No tags found for this subject.</p>
+                                                          ) : (
+                                                            <div className="flex items-center gap-2">
+                                                              <select
+                                                                className="input text-xs py-1"
+                                                                value={tagSelectionByBlockId[block.id] || ''}
+                                                                onChange={(e) => setTagSelectionByBlockId((prev) => ({ ...prev, [block.id]: e.target.value }))}
+                                                              >
+                                                                <option value="">Select tag...</option>
+                                                                {curriculumTags.map((tag) => (
+                                                                  <option key={tag.id} value={tag.id}>{tag.name}</option>
+                                                                ))}
+                                                              </select>
+                                                              <button
+                                                                type="button"
+                                                                onClick={() => handleAddTagToContentBlock(block, topic.id)}
+                                                                className="text-xs px-2 py-1 rounded bg-indigo-600 text-white hover:bg-indigo-700"
+                                                              >
+                                                                Add Tag
+                                                              </button>
+                                                            </div>
+                                                          )}
+                                                        </div>
+                                                      )}
+                                                    </div>
+                                                  )
+                                                })}
+                                              </div>
+                                            )}
+                                          </div>
                                         )}
-                                        <span className={`text-sm truncate ${topic.is_covered ? 'text-gray-500' : 'text-gray-900'}`}>
-                                          {topic.topic_number}. {topic.title}
-                                        </span>
-                                        {topic.is_tested && (
-                                          <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700 flex-shrink-0">
-                                            Tested
-                                          </span>
-                                        )}
-                                        {!topic.is_tested && topic.is_covered && (
-                                          <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700 flex-shrink-0">
-                                            Not tested
-                                          </span>
-                                        )}
-                                        {typeof topic.test_question_count === 'number' && topic.test_question_count > 0 && (
-                                          <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700 flex-shrink-0">
-                                            {topic.test_question_count}Q
-                                          </span>
-                                        )}
-                                        {topic.estimated_periods && (
-                                          <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-700 flex-shrink-0">
-                                            {topic.estimated_periods} {topic.estimated_periods === 1 ? 'period' : 'periods'}
-                                          </span>
-                                        )}
+
+                                        <div className="ml-6 mt-2 rounded-lg border border-gray-200 bg-white px-3 py-3">
+                                          <div className="flex items-center justify-between mb-2">
+                                            <p className="text-xs font-semibold text-gray-700">Sub-topic Content</p>
+                                            <span className="text-xs text-gray-500">
+                                              {subtopics.length} sub-topic{subtopics.length === 1 ? '' : 's'}
+                                            </span>
+                                          </div>
+
+                                          {subtopics.length === 0 ? (
+                                            <p className="text-xs text-gray-500">No sub-topics yet.</p>
+                                          ) : (
+                                            <div className="space-y-2">
+                                              {subtopics.map((subtopic) => (
+                                                <div key={subtopic.id} className="rounded border border-gray-200 bg-gray-50 px-2 py-2">
+                                                  <div className="flex items-start justify-between gap-2">
+                                                    <div className="min-w-0 flex-1">
+                                                      <p className="text-xs font-medium text-gray-700 truncate">
+                                                        {subtopic.subtopic_number ? `${subtopic.subtopic_number}. ` : ''}{subtopic.title}
+                                                      </p>
+                                                      {subtopic.content_text ? (
+                                                        <p className="text-xs text-gray-600 mt-1 line-clamp-2">{subtopic.content_text}</p>
+                                                      ) : (
+                                                        <p className="text-xs text-gray-400 mt-1">No content text yet.</p>
+                                                      )}
+                                                      {subtopic.estimated_minutes ? (
+                                                        <p className="text-xs text-gray-500 mt-1">~{subtopic.estimated_minutes} min</p>
+                                                      ) : null}
+                                                    </div>
+                                                    <button
+                                                      onClick={() => openSubtopicContentModal(subtopic)}
+                                                      className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                                                    >
+                                                      Edit
+                                                    </button>
+                                                  </div>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          )}
+                                        </div>
                                       </div>
-                                      <div className="flex gap-2 flex-shrink-0 ml-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button
-                                          onClick={() => navigate('/academics/questions', {
-                                            state: {
-                                              classId: resolvedSelectedClass,
-                                              subject: selectedSubject,
-                                              bookId: selectedBookId,
-                                              chapterId: chapter.id,
-                                              topicId: topic.id,
-                                            },
-                                          })}
-                                          className="text-xs text-emerald-600 hover:text-emerald-800 font-medium"
-                                          title="View / add questions for this topic"
-                                        >
-                                          +Q
-                                        </button>
-                                        <button
-                                          onClick={() => openEditTopic(topic, chapter.id)}
-                                          className="text-xs text-blue-600 hover:text-blue-800 font-medium"
-                                        >
-                                          Edit
-                                        </button>
-                                        <button
-                                          onClick={() => handleDeleteTopic(topic)}
-                                          className="text-xs text-red-600 hover:text-red-800 font-medium"
-                                        >
-                                          Delete
-                                        </button>
-                                      </div>
-                                    </div>
-                                  ))}
+                                    )
+                                  })}
                                 </div>
                               )}
                               <button
@@ -2676,6 +3520,107 @@ export default function CurriculumPage() {
         activeAcademicYearId={activeAcademicYear?.id}
       />
 
+      {showContentRevisionDrawer && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-black bg-opacity-30">
+          <div className="h-full w-full max-w-xl bg-white shadow-2xl border-l border-gray-200 overflow-y-auto">
+            <div className="sticky top-0 z-10 bg-white border-b border-gray-100 px-4 py-3 flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-base font-semibold text-gray-900">Content Block Revision History</h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {revisionBlockContext?.block?.content_text?.slice(0, 70) || 'Content block'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeContentRevisionDrawer}
+                className="text-sm text-gray-600 hover:text-gray-900"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="p-4 space-y-4">
+              {contentBlockRevisionsLoading ? (
+                <p className="text-sm text-gray-500">Loading revision history...</p>
+              ) : contentBlockRevisionsError ? (
+                <div className="rounded border border-red-200 bg-red-50 px-3 py-3">
+                  <p className="text-sm text-red-700">
+                    {contentBlockRevisionsErrorObj?.response?.data?.detail || 'Unable to load revision history.'}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => refetchContentBlockRevisions()}
+                    className="mt-2 text-xs font-medium text-red-700 underline"
+                  >
+                    Retry
+                  </button>
+                </div>
+              ) : contentBlockRevisions.length === 0 ? (
+                <p className="text-sm text-gray-500">No revisions found for this content block yet.</p>
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    {contentBlockRevisions.map((revision, index) => {
+                      const isSelected = selectedRevisionId === revision.id
+                      return (
+                        <button
+                          key={revision.id}
+                          type="button"
+                          onClick={() => setSelectedRevisionId(revision.id)}
+                          className={`w-full text-left rounded border px-3 py-2 transition-colors ${
+                            isSelected
+                              ? 'border-primary-400 bg-primary-50'
+                              : 'border-gray-200 hover:bg-gray-50'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-sm font-medium text-gray-800">Revision #{revision.id}</p>
+                            {index === 0 && (
+                              <span className="text-[11px] px-1.5 py-0.5 rounded bg-green-100 text-green-700">Current</span>
+                            )}
+                          </div>
+                          <p className="text-xs text-gray-500 mt-0.5">
+                            {new Date(revision.changed_at).toLocaleString()} • {revision.changed_by_name || 'System'}
+                          </p>
+                          {revision.revision_note && (
+                            <p className="text-xs text-gray-600 mt-1 line-clamp-2">{revision.revision_note}</p>
+                          )}
+                        </button>
+                      )
+                    })}
+                  </div>
+
+                  {selectedRevision && (
+                    <div className="rounded border border-gray-200 bg-gray-50 p-3">
+                      <p className="text-xs font-medium text-gray-700 mb-1">Snapshot Content</p>
+                      <div className="max-h-52 overflow-y-auto rounded border border-gray-200 bg-white p-2">
+                        <p className="text-sm text-gray-700 whitespace-pre-wrap">{selectedRevision.content_text || 'No content text.'}</p>
+                      </div>
+                      {selectedRevision.content_rich && (
+                        <div className="mt-2">
+                          <p className="text-xs font-medium text-gray-700 mb-1">Rich Content JSON</p>
+                          <pre className="text-[11px] bg-white border border-gray-200 rounded p-2 overflow-x-auto max-h-36">{JSON.stringify(selectedRevision.content_rich, null, 2)}</pre>
+                        </div>
+                      )}
+                      <div className="mt-3 flex justify-end">
+                        <button
+                          type="button"
+                          onClick={handleRestoreSelectedRevision}
+                          disabled={restoreContentRevisionMutation.isPending}
+                          className="btn btn-primary text-sm"
+                        >
+                          {restoreContentRevisionMutation.isPending ? 'Restoring...' : 'Restore this version'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ============ Chapter Form Modal ============ */}
       {showChapterModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
@@ -2800,6 +3745,172 @@ export default function CurriculumPage() {
                 className="btn btn-primary"
               >
                 {topicMutationPending ? 'Saving...' : editingTopic ? 'Save Changes' : 'Add Topic'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============ Content Block Form Modal ============ */}
+      {showContentBlockModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">
+              {editingContentBlock ? 'Edit Content Block' : 'Add Content Block'}
+            </h2>
+
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="label">Block Type *</label>
+                  <select
+                    className="input"
+                    value={contentBlockForm.block_type}
+                    onChange={(e) => setContentBlockForm({ ...contentBlockForm, block_type: e.target.value })}
+                  >
+                    {CONTENT_BLOCK_TYPES.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="label">Sequence Order</label>
+                  <input
+                    type="number"
+                    className="input"
+                    min="0"
+                    value={contentBlockForm.sequence_order}
+                    onChange={(e) => setContentBlockForm({ ...contentBlockForm, sequence_order: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="label">Content Text *</label>
+                <textarea
+                  className="input"
+                  rows={4}
+                  placeholder="Write the content block text..."
+                  value={contentBlockForm.content_text}
+                  onChange={(e) => setContentBlockForm({ ...contentBlockForm, content_text: e.target.value })}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="label">Difficulty Level</label>
+                  <select
+                    className="input"
+                    value={contentBlockForm.difficulty_level}
+                    onChange={(e) => setContentBlockForm({ ...contentBlockForm, difficulty_level: e.target.value })}
+                  >
+                    <option value="">Not set</option>
+                    {[1, 2, 3, 4, 5].map((level) => (
+                      <option key={level} value={level}>{level}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="label">Estimated Minutes</label>
+                  <input
+                    type="number"
+                    className="input"
+                    min="0"
+                    value={contentBlockForm.estimated_minutes}
+                    onChange={(e) => setContentBlockForm({ ...contentBlockForm, estimated_minutes: e.target.value })}
+                    placeholder="Optional"
+                  />
+                </div>
+              </div>
+
+              <div className="border border-gray-200 rounded-lg">
+                <button
+                  type="button"
+                  onClick={() => setShowContentRichEditor((prev) => !prev)}
+                  className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  <span>Advanced JSON Content (content_rich)</span>
+                  <svg
+                    className={`w-4 h-4 transition-transform ${showContentRichEditor ? 'rotate-90' : ''}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+                {showContentRichEditor && (
+                  <div className="px-3 pb-3">
+                    <textarea
+                      className="input font-mono text-xs"
+                      rows={6}
+                      placeholder="Optional JSON object"
+                      value={contentBlockForm.content_rich}
+                      onChange={(e) => setContentBlockForm({ ...contentBlockForm, content_rich: e.target.value })}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3 mt-6">
+              <button onClick={closeContentBlockModal} className="btn btn-secondary">
+                Cancel
+              </button>
+              <button
+                onClick={handleContentBlockSubmit}
+                disabled={contentBlockMutationPending}
+                className="btn btn-primary"
+              >
+                {contentBlockMutationPending ? 'Saving...' : editingContentBlock ? 'Save Changes' : 'Add Content Block'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============ Sub-topic Content Modal ============ */}
+      {showSubtopicContentModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+            <h2 className="text-xl font-bold text-gray-900 mb-1">Edit Sub-topic Content</h2>
+            <p className="text-sm text-gray-500 mb-4">{editingSubtopic?.title || 'Sub-topic'}</p>
+
+            <div className="space-y-4">
+              <div>
+                <label className="label">Content Text</label>
+                <textarea
+                  className="input"
+                  rows={5}
+                  placeholder="Optional content text for this sub-topic"
+                  value={subtopicContentForm.content_text}
+                  onChange={(e) => setSubtopicContentForm({ ...subtopicContentForm, content_text: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <label className="label">Estimated Minutes</label>
+                <input
+                  type="number"
+                  className="input"
+                  min="0"
+                  placeholder="Optional"
+                  value={subtopicContentForm.estimated_minutes}
+                  onChange={(e) => setSubtopicContentForm({ ...subtopicContentForm, estimated_minutes: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3 mt-6">
+              <button onClick={closeSubtopicContentModal} className="btn btn-secondary">
+                Cancel
+              </button>
+              <button
+                onClick={handleSubtopicContentSubmit}
+                disabled={subtopicContentMutationPending}
+                className="btn btn-primary"
+              >
+                {subtopicContentMutationPending ? 'Saving...' : 'Save'}
               </button>
             </div>
           </div>

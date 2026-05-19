@@ -71,6 +71,7 @@ const QuestionPaperBuilderPage = lazy(() => import('./pages/examinations/Questio
 const ExamPapersPage = lazy(() => import('./pages/examinations/ExamPapersPage'))
 const CurriculumCoveragePage = lazy(() => import('./pages/examinations/CurriculumCoveragePage'))
 const QuestionsPage = lazy(() => import('./pages/examinations/QuestionsPage'))
+const StudentResponsePage = lazy(() => import('./pages/examinations/StudentResponsePage'))
 
 // Parent Portal pages
 const ParentDashboard = lazy(() => import('./pages/parent/ParentDashboard'))
@@ -441,6 +442,7 @@ function App() {
             <Route path="academics/paper-builder" element={<SchoolRoute><CapabilityRoute module="examinations" capability="paper_builder"><PaperBuilderRoute><QuestionPaperBuilderPage /></PaperBuilderRoute></CapabilityRoute></SchoolRoute>} />
             <Route path="academics/papers" element={<SchoolRoute><CapabilityRoute module="examinations" capability="paper_builder"><PaperBuilderRoute><ExamPapersPage /></PaperBuilderRoute></CapabilityRoute></SchoolRoute>} />
             <Route path="examinations/papers/:paperId" element={<SchoolRoute><CapabilityRoute module="examinations" capability="paper_builder"><PaperBuilderRoute><QuestionPaperBuilderPage /></PaperBuilderRoute></CapabilityRoute></SchoolRoute>} />
+            <Route path="academics/papers/:paperId/responses" element={<SchoolRoute><ModuleRoute module="examinations"><StudentResponsePage /></ModuleRoute></SchoolRoute>} />
             <Route path="academics/curriculum-coverage" element={<SchoolRoute><ModuleRoute module="examinations"><CurriculumCoveragePage /></ModuleRoute></SchoolRoute>} />
             <Route path="academics/questions" element={<SchoolRoute><ModuleRoute module="examinations"><QuestionsPage /></ModuleRoute></SchoolRoute>} />
 

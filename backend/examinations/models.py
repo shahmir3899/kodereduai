@@ -1,6 +1,7 @@
 from django.db import models
 from django.conf import settings
 from decimal import Decimal
+from pgvector.django import VectorField
 
 
 class ExamType(models.Model):
@@ -325,6 +326,16 @@ class DifficultyLevel(models.TextChoices):
     HARD = 'HARD', 'Hard'
 
 
+BLOOM_LEVELS = [
+    ('remember', 'Remember'),
+    ('understand', 'Understand'),
+    ('apply', 'Apply'),
+    ('analyze', 'Analyze'),
+    ('evaluate', 'Evaluate'),
+    ('create', 'Create'),
+]
+
+
 class Question(models.Model):
     """Question bank for exam papers."""
 
@@ -365,6 +376,13 @@ class Question(models.Model):
         choices=DifficultyLevel.choices,
         default=DifficultyLevel.MEDIUM,
     )
+    embedding = VectorField(dimensions=1536, null=True, blank=True)
+    bloom_level = models.CharField(
+        max_length=20,
+        choices=BLOOM_LEVELS,
+        null=True,
+        blank=True,
+    )
     marks = models.DecimalField(
         max_digits=5,
         decimal_places=2,
@@ -398,6 +416,32 @@ class Question(models.Model):
         related_name='test_questions',
         help_text='Curriculum topics this question tests'
     )
+
+    source_content_block = models.ForeignKey(
+        'lms.ContentBlock',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='generated_questions',
+    )
+    paper_use_count = models.IntegerField(default=0)
+    last_used_in = models.ForeignKey(
+        'ExamPaper',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='last_used_questions',
+    )
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    is_ai_generated = models.BooleanField(default=False)
+    verified_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='verified_questions',
+    )
+    verified_at = models.DateTimeField(null=True, blank=True)
     
     # Metadata
     created_by = models.ForeignKey(
@@ -457,6 +501,30 @@ class Question(models.Model):
                 for topic in topics
             ],
         }
+
+
+class QuestionRevision(models.Model):
+    question = models.ForeignKey(
+        Question,
+        on_delete=models.CASCADE,
+        related_name='revisions',
+    )
+    question_text = models.TextField()
+    snapshot = models.JSONField()
+    changed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='question_revisions',
+    )
+    changed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-changed_at', '-id']
+
+    def __str__(self):
+        return f"Revision {self.id} for question {self.question_id}"
 
 
 class ExamPaper(models.Model):
@@ -667,6 +735,59 @@ class PaperQuestion(models.Model):
         if self.question_snapshot:
             return self.question_snapshot
         return self.build_question_snapshot()
+
+
+class StudentResponse(models.Model):
+    student = models.ForeignKey(
+        'students.Student',
+        on_delete=models.CASCADE,
+        related_name='question_responses',
+    )
+    question = models.ForeignKey(
+        Question,
+        on_delete=models.CASCADE,
+        related_name='student_responses',
+    )
+    exam_paper = models.ForeignKey(
+        ExamPaper,
+        on_delete=models.CASCADE,
+        related_name='student_responses',
+    )
+    response_text = models.TextField(blank=True)
+    marks_awarded = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    is_correct = models.BooleanField(null=True, blank=True)
+    time_taken_seconds = models.IntegerField(null=True, blank=True)
+    submitted_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('student', 'question', 'exam_paper')
+        ordering = ['-submitted_at', '-id']
+        indexes = [
+            models.Index(fields=['exam_paper', 'student']),
+            models.Index(fields=['question', 'submitted_at']),
+        ]
+
+    def __str__(self):
+        return f"Response {self.id} for question {self.question_id}"
+
+
+class QuestionStats(models.Model):
+    question = models.OneToOneField(
+        Question,
+        on_delete=models.CASCADE,
+        related_name='stats',
+    )
+    attempt_count = models.IntegerField(default=0)
+    correct_count = models.IntegerField(default=0)
+    avg_time_seconds = models.FloatField(null=True, blank=True)
+    real_difficulty = models.FloatField(null=True, blank=True)
+    last_computed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['question_id']
+
+    def __str__(self):
+        return f"Stats for question {self.question_id}"
 
 
 class PaperUpload(models.Model):

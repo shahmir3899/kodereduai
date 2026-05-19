@@ -4,13 +4,67 @@ Celery tasks for examinations app - async question paper processing.
 
 import logging
 from celery import shared_task
+from django.db.models import Avg, Count, Q
 from django.utils import timezone
-from django.conf import settings
 
-from .models import PaperUpload
-from .paper_ocr_processor import PaperOCRProcessor
+from core.embeddings import generate_text_embedding
+
+from .models import PaperUpload, Question, QuestionStats, StudentResponse
 
 logger = logging.getLogger(__name__)
+
+
+@shared_task
+def embed_question(question_id: int):
+    try:
+        question = Question.objects.get(id=question_id)
+    except Question.DoesNotExist:
+        logger.warning('Question %s not found for embedding', question_id)
+        return {'success': False, 'error': 'Question not found'}
+
+    content_parts = [
+        question.question_text or '',
+        question.answer_text or '',
+        question.correct_answer or '',
+    ]
+    question.embedding = generate_text_embedding('\n'.join(part for part in content_parts if part))
+    question.save(update_fields=['embedding', 'updated_at'])
+    return {'success': True, 'question_id': question_id}
+
+
+@shared_task
+def recompute_question_stats(question_id: int):
+    if not Question.objects.filter(id=question_id).exists():
+        logger.warning('Question %s not found for stats recompute', question_id)
+        return {'success': False, 'error': 'Question not found'}
+
+    aggregate = StudentResponse.objects.filter(question_id=question_id).aggregate(
+        attempt_count=Count('id'),
+        correct_count=Count('id', filter=Q(is_correct=True)),
+        avg_time_seconds=Avg('time_taken_seconds'),
+    )
+    attempt_count = aggregate['attempt_count'] or 0
+    correct_count = aggregate['correct_count'] or 0
+    real_difficulty = None
+    if attempt_count:
+        real_difficulty = 1.0 - (correct_count / attempt_count)
+
+    stats, _ = QuestionStats.objects.update_or_create(
+        question_id=question_id,
+        defaults={
+            'attempt_count': attempt_count,
+            'correct_count': correct_count,
+            'avg_time_seconds': aggregate['avg_time_seconds'],
+            'real_difficulty': real_difficulty,
+            'last_computed_at': timezone.now(),
+        },
+    )
+    return {
+        'success': True,
+        'question_id': question_id,
+        'attempt_count': stats.attempt_count,
+        'correct_count': stats.correct_count,
+    }
 
 
 @shared_task(bind=True, max_retries=2)
@@ -24,6 +78,8 @@ def process_paper_upload_ocr(self, upload_id: int):
     Returns:
         dict: Processing result with success status and data
     """
+    from .paper_ocr_processor import PaperOCRProcessor
+
     try:
         logger.info(f"Starting OCR processing for PaperUpload {upload_id}")
         

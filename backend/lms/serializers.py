@@ -4,9 +4,10 @@ Uses Read + Create serializer pattern for each model.
 """
 
 from rest_framework import serializers
+from core.models import AIJob
 from .models import (
-    Book, Chapter, Topic, SubTopic,
-    LessonPlan, LessonAttachment,
+    Book, Chapter, Topic, SubTopic, ContentBlock, ContentRevision, Tag,
+    LessonPlan, LearningObjective, LessonPlanObjective, CurriculumStandard, StandardObjective, TopicStandardAlignment, LessonAttachment,
     Assignment, AssignmentAttachment, AssignmentSubmission, TOCImportJob,
 )
 
@@ -48,10 +49,56 @@ class SubTopicSerializer(serializers.ModelSerializer):
         model = SubTopic
         fields = [
             'id', 'topic', 'title', 'subtopic_number',
-            'description', 'is_active',
+            'description', 'content_text', 'content_blocks_json',
+            'content_schema_version', 'estimated_minutes', 'is_active',
             'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class ContentBlockSerializer(serializers.ModelSerializer):
+    revision_note = serializers.CharField(write_only=True, required=False, allow_blank=True)
+
+    class Meta:
+        model = ContentBlock
+        fields = [
+            'id', 'chapter', 'topic', 'subtopic',
+            'block_type', 'content_text', 'content_rich',
+            'sequence_order', 'difficulty_level', 'estimated_minutes',
+            'is_ai_generated', 'is_active', 'revision_note', 'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def create(self, validated_data):
+        validated_data.pop('revision_note', '')
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        revision_note = validated_data.pop('revision_note', '')
+        request = self.context.get('request')
+        if request and getattr(request.user, 'is_authenticated', False):
+            instance._revision_changed_by = request.user
+        instance._revision_note = revision_note
+        return super().update(instance, validated_data)
+
+
+class ContentRevisionSerializer(serializers.ModelSerializer):
+    changed_by_name = serializers.CharField(source='changed_by.username', read_only=True)
+
+    class Meta:
+        model = ContentRevision
+        fields = [
+            'id', 'content_block', 'content_text', 'content_rich',
+            'changed_by', 'changed_by_name', 'changed_at', 'revision_note',
+        ]
+        read_only_fields = fields
+
+
+class TagSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Tag
+        fields = ['id', 'name', 'tag_type', 'subject', 'school']
+        read_only_fields = ['id']
 
 
 class TopicSerializer(serializers.ModelSerializer):
@@ -331,6 +378,27 @@ class LessonAttachmentSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'uploaded_at']
 
 
+class LearningObjectiveSerializer(serializers.ModelSerializer):
+    topic_title = serializers.CharField(source='topic.title', read_only=True)
+
+    class Meta:
+        model = LearningObjective
+        fields = [
+            'id', 'topic', 'topic_title', 'statement', 'bloom_level',
+            'is_ai_generated', 'is_active', 'created_at',
+        ]
+        read_only_fields = ['id', 'created_at']
+
+
+class StandardObjectiveSerializer(serializers.ModelSerializer):
+    standard_name = serializers.CharField(source='standard.name', read_only=True)
+
+    class Meta:
+        model = StandardObjective
+        fields = ['id', 'standard', 'standard_name', 'subject', 'grade', 'code', 'statement']
+        read_only_fields = fields
+
+
 # ---------------------------------------------------------------------------
 # Lesson Plans
 # ---------------------------------------------------------------------------
@@ -345,9 +413,12 @@ class LessonPlanReadSerializer(serializers.ModelSerializer):
         source='academic_year.name', read_only=True, default=None,
     )
     status_display = serializers.CharField(source='get_status_display', read_only=True)
+    objectives = serializers.SerializerMethodField()
+    objectives_text = serializers.CharField(source='objectives', read_only=True)
     attachments = LessonAttachmentSerializer(many=True, read_only=True)
     planned_topics = TopicSerializer(many=True, read_only=True)
     planned_subtopics = SubTopicSerializer(many=True, read_only=True)
+    linked_objectives = serializers.SerializerMethodField()
     display_text = serializers.CharField(read_only=True)
     content_mode = serializers.CharField(read_only=True)
     ai_generated = serializers.BooleanField(read_only=True)
@@ -360,16 +431,24 @@ class LessonPlanReadSerializer(serializers.ModelSerializer):
             'class_obj', 'class_name',
             'subject', 'subject_name',
             'teacher', 'teacher_name',
-            'title', 'description', 'objectives',
+            'title', 'description', 'objectives', 'objectives_text',
             'lesson_date', 'duration_minutes',
             'materials_needed', 'teaching_methods',
-            'planned_topics', 'planned_subtopics', 'display_text',
+            'planned_topics', 'planned_subtopics', 'linked_objectives', 'display_text',
             'content_mode', 'ai_generated',
             'status', 'status_display',
             'is_active', 'attachments',
             'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def get_linked_objectives(self, obj):
+        objectives = [link.objective for link in obj.lesson_objectives.select_related('objective', 'objective__topic')]
+        return LearningObjectiveSerializer(objectives, many=True).data
+
+    def get_objectives(self, obj):
+        objectives = [link.objective for link in obj.lesson_objectives.select_related('objective', 'objective__topic')]
+        return LearningObjectiveSerializer(objectives, many=True).data
 
 
 class LessonPlanCreateSerializer(serializers.ModelSerializer):
@@ -386,6 +465,7 @@ class LessonPlanCreateSerializer(serializers.ModelSerializer):
         required=False,
         write_only=True,
     )
+    ai_job_id = serializers.IntegerField(required=False, write_only=True)
 
     class Meta:
         model = LessonPlan
@@ -396,7 +476,7 @@ class LessonPlanCreateSerializer(serializers.ModelSerializer):
             'lesson_date', 'duration_minutes',
             'materials_needed', 'teaching_methods',
             'content_mode', 'ai_generated',
-            'planned_topic_ids', 'planned_subtopic_ids',
+            'planned_topic_ids', 'planned_subtopic_ids', 'ai_job_id',
             'status', 'is_active',
         ]
         read_only_fields = ['id']
@@ -413,6 +493,7 @@ class LessonPlanCreateSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         topic_ids = validated_data.pop('planned_topic_ids', []) or []
         subtopic_ids = validated_data.pop('planned_subtopic_ids', []) or []
+        ai_job_id = validated_data.pop('ai_job_id', None)
         merged_topics = self._merge_topic_ids_from_subtopics(topic_ids, subtopic_ids)
         instance = super().create(validated_data)
         if merged_topics:
@@ -423,11 +504,14 @@ class LessonPlanCreateSerializer(serializers.ModelSerializer):
             instance.content_mode = 'TOPICS'
             instance.save(update_fields=['content_mode'])
             instance.compute_display_text()
+        if ai_job_id and instance.ai_generated:
+            AIJob.objects.filter(id=ai_job_id).update(accepted=True)
         return instance
 
     def update(self, instance, validated_data):
         topic_ids = validated_data.pop('planned_topic_ids', None)
         subtopic_ids = validated_data.pop('planned_subtopic_ids', None)
+        ai_job_id = validated_data.pop('ai_job_id', None)
         instance = super().update(instance, validated_data)
         if topic_ids is not None or subtopic_ids is not None:
             t_list = topic_ids if topic_ids is not None else list(
@@ -440,6 +524,8 @@ class LessonPlanCreateSerializer(serializers.ModelSerializer):
             instance.planned_topics.set(merged)
             instance.planned_subtopics.set(s_list or [])
             instance.compute_display_text()
+        if ai_job_id and instance.ai_generated:
+            AIJob.objects.filter(id=ai_job_id).update(accepted=True)
         return instance
 
 

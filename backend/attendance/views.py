@@ -287,16 +287,10 @@ class AttendanceUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
             session_class=session_class,
         )
 
-        # Try to use Celery if available, otherwise process synchronously
-        try:
-            from .tasks import process_attendance_upload
-            process_attendance_upload.delay(upload.id)
-        except Exception as e:
-            # Celery/Redis not available, process synchronously
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.warning(f"Celery not available, processing synchronously: {e}")
-            self._process_upload_sync(upload.id)
+        # Use call_task so CELERY_FORCE_SYNC or Redis-unavailable both work.
+        from .tasks import process_attendance_upload
+        from core.task_utils import call_task
+        call_task(process_attendance_upload, upload.id)
 
     def _process_upload_sync(self, upload_id: int):
         """

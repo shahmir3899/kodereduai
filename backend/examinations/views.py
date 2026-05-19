@@ -4,6 +4,7 @@ from decimal import Decimal
 from django.db import IntegrityError, transaction
 from django.db.models import Count, Q
 from django.http import HttpResponse
+from pgvector.django import CosineDistance
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -14,10 +15,13 @@ from rest_framework.views import APIView
 from core.mixins import TenantQuerySetMixin, ensure_tenant_school_id
 from core.permissions import ADMIN_ROLES, IsSchoolAdmin, IsSchoolAdminOrReadOnly, HasSchoolAccess, ModuleAccessMixin, get_effective_role, get_teacher_combined_scope
 from core.class_scope import resolve_class_scope
+from core.ai_jobs import complete_ai_job, create_ai_job, fail_ai_job
+from core.embeddings import generate_text_embedding
+from lms.models import Tag, QuestionTag
 
 from .models import (
     ExamType, ExamGroup, Exam, ExamSubject, StudentMark, GradeScale,
-    Question, ExamPaper, PaperQuestion, PaperUpload, PaperFeedback
+    Question, ExamPaper, PaperQuestion, StudentResponse, PaperUpload, PaperFeedback
 )
 from .serializers import (
     ExamTypeSerializer, ExamTypeCreateSerializer,
@@ -26,6 +30,7 @@ from .serializers import (
     ExamSubjectSerializer, ExamSubjectCreateSerializer,
     StudentMarkSerializer, StudentMarkCreateSerializer,
     StudentMarkBulkEntrySerializer,
+    StudentResponseSerializer, StudentResponseBulkSubmitSerializer,
     GradeScaleSerializer, GradeScaleCreateSerializer,
     ExamGroupSerializer, ExamGroupCreateSerializer,
     ExamGroupWizardCreateSerializer, DateSheetUpdateSerializer,
@@ -35,6 +40,7 @@ from .serializers import (
     PaperUploadSerializer, PaperUploadCreateSerializer,
     PaperFeedbackSerializer, QuestionReviewSerializer,
 )
+from .tasks import recompute_question_stats
 
 
 
@@ -623,6 +629,89 @@ class ExamGroupViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
                 updated_count += count
 
         return Response({'updated_count': updated_count})
+
+
+class StudentResponseViewSet(ModuleAccessMixin, viewsets.ModelViewSet):
+    required_module = 'examinations'
+    queryset = StudentResponse.objects.all()
+    permission_classes = [IsAuthenticated, HasSchoolAccess]
+
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return StudentResponseBulkSubmitSerializer
+        return StudentResponseSerializer
+
+    def get_queryset(self):
+        queryset = self.queryset.select_related('student', 'question', 'exam_paper', 'exam_paper__school')
+        school_id = _resolve_school_id(self.request)
+        if school_id:
+            queryset = queryset.filter(exam_paper__school_id=school_id)
+        elif self.request.headers.get('X-School-ID'):
+            return queryset.none()
+
+        exam_paper_id = self.request.query_params.get('exam_paper')
+        if exam_paper_id:
+            queryset = queryset.filter(exam_paper_id=exam_paper_id)
+
+        student_id = self.request.query_params.get('student')
+        if student_id:
+            queryset = queryset.filter(student_id=student_id)
+
+        question_id = self.request.query_params.get('question')
+        if question_id:
+            queryset = queryset.filter(question_id=question_id)
+
+        return queryset
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        exam_paper = serializer.validated_data['exam_paper_obj']
+        student = serializer.validated_data['student_obj']
+        responses = serializer.validated_data['responses']
+        school_id = _resolve_school_id(request)
+        if school_id and exam_paper.school_id != school_id:
+            raise ValidationError({'exam_paper': 'Exam paper is outside the active school context.'})
+
+        created_count = 0
+        updated_count = 0
+        changed_question_ids = set()
+        saved_responses = []
+
+        with transaction.atomic():
+            for entry in responses:
+                response_obj, created = StudentResponse.objects.update_or_create(
+                    student=student,
+                    question_id=entry['question'],
+                    exam_paper=exam_paper,
+                    defaults={
+                        'response_text': entry.get('response_text', ''),
+                        'marks_awarded': entry.get('marks_awarded'),
+                        'is_correct': entry.get('is_correct'),
+                        'time_taken_seconds': entry.get('time_taken_seconds'),
+                    },
+                )
+                saved_responses.append(response_obj)
+                changed_question_ids.add(response_obj.question_id)
+                if created:
+                    created_count += 1
+                else:
+                    updated_count += 1
+
+        from core.task_utils import call_task
+        for question_id in changed_question_ids:
+            call_task(recompute_question_stats, question_id)
+
+        response_serializer = StudentResponseSerializer(saved_responses, many=True)
+        return Response(
+            {
+                'created_count': created_count,
+                'updated_count': updated_count,
+                'responses': response_serializer.data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
     @action(detail=True, methods=['post'], url_path='update-date-by-subject')
     def update_date_by_subject(self, request, pk=None):
@@ -1809,6 +1898,10 @@ class QuestionViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelView
         difficulty = self.request.query_params.get('difficulty') or self.request.query_params.get('difficulty_level')
         if difficulty:
             qs = qs.filter(difficulty_level=difficulty)
+
+        bloom_level = self.request.query_params.get('bloom_level')
+        if bloom_level:
+            qs = qs.filter(bloom_level=bloom_level)
         
         # Filter by active status
         is_active = self.request.query_params.get('is_active')
@@ -1826,10 +1919,18 @@ class QuestionViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelView
         if topic_id:
             qs = qs.filter(tested_topics__id=topic_id).distinct()
 
+        tag_id = self.request.query_params.get('tag_id')
+        if tag_id:
+            qs = qs.filter(question_tags__tag_id=tag_id).distinct()
+
+        ordering = self.request.query_params.get('ordering')
+        if ordering in {'paper_use_count', '-paper_use_count'}:
+            qs = qs.order_by(ordering, 'id')
+
         if class_id or book_id or chapter_id:
             qs = qs.distinct()
 
-        return qs.select_related('subject', 'exam_type', 'created_by')
+        return qs.select_related('subject', 'exam_type', 'created_by', 'stats')
 
     def perform_create(self, serializer):
         school_id = _resolve_school_id(self.request)
@@ -1847,11 +1948,75 @@ class QuestionViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelView
             allowed_subject_ids = _get_teacher_allowed_subject_ids(self.request, school_id=school_id)
             if not subject or subject.id not in allowed_subject_ids:
                 raise PermissionDenied('You can only edit questions for your assigned subjects.')
+        serializer.instance._revision_changed_by = self.request.user
         serializer.save()
 
     def perform_destroy(self, instance):
         instance.is_active = False
         instance.save()
+
+    @action(detail=True, methods=['post'], url_path='add_tag')
+    def add_tag(self, request, pk=None):
+        question = self.get_object()
+        tag_id = request.data.get('tag_id')
+        if not tag_id:
+            return Response({'detail': 'tag_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            tag = Tag.objects.get(id=tag_id)
+        except Tag.DoesNotExist:
+            return Response({'detail': 'Tag not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if tag.school_id and tag.school_id != question.school_id:
+            return Response({'detail': 'Tag does not belong to the same school.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if request.data.get('remove'):
+            deleted, _ = QuestionTag.objects.filter(question=question, tag=tag).delete()
+            return Response({'removed': bool(deleted)})
+
+        relation, created = QuestionTag.objects.get_or_create(question=question, tag=tag)
+        return Response({'created': created, 'id': relation.id}, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'], url_path='semantic_search')
+    def semantic_search(self, request):
+        query = (request.query_params.get('q') or '').strip()
+        if not query:
+            return Response([])
+
+        try:
+            limit = max(1, min(int(request.query_params.get('limit', 10)), 50))
+        except (TypeError, ValueError):
+            limit = 10
+
+        queryset = self.get_queryset().filter(embedding__isnull=False)
+        if not queryset.exists():
+            return Response([])
+
+        query_embedding = generate_text_embedding(query)
+        matches = list(
+            queryset.prefetch_related('tested_topics__chapter__book')
+            .annotate(similarity_distance=CosineDistance('embedding', query_embedding))
+            .order_by('similarity_distance')[:limit]
+        )
+
+        results = []
+        for question in matches:
+            first_topic = next(iter(question.tested_topics.all()), None)
+            chapter = first_topic.chapter if first_topic else None
+            book = chapter.book if chapter else None
+            results.append({
+                'id': question.id,
+                'question_text': question.question_text,
+                'question_type': question.question_type,
+                'difficulty_level': question.difficulty_level,
+                'marks': str(question.marks),
+                'similarity_score': max(0.0, 1.0 - float(question.similarity_distance)),
+                'chapter_title': chapter.title if chapter else '',
+                'topic_title': first_topic.title if first_topic else '',
+                'book_title': book.title if book else '',
+            })
+
+        return Response(results)
     
     @action(detail=False, methods=['post'])
     def generate_from_lesson(self, request):
@@ -1959,6 +2124,19 @@ Respond with ONLY a JSON array, no extra text:
   }}
 ]
 """
+
+        ai_job = create_ai_job(
+            job_type='generate_questions',
+            triggered_by=request.user,
+            school=lesson.school,
+            input_data={
+                'lesson_plan_id': lesson_plan_id,
+                'question_count': question_count,
+                'question_type': question_type,
+                'difficulty_level': difficulty_level,
+            },
+            model_used=getattr(settings, 'GROQ_MODEL', 'unknown'),
+        )
         
         # Call Groq API
         try:
@@ -2030,22 +2208,34 @@ Respond with ONLY a JSON array, no extra text:
                 created_questions.append(question)
             
             serializer = QuestionSerializer(created_questions, many=True)
+            complete_ai_job(
+                ai_job,
+                output_data={
+                    'question_ids': [question.id for question in created_questions],
+                    'question_count': len(created_questions),
+                },
+                accepted=True,
+            )
             return Response({
                 'message': f'Generated {len(created_questions)} questions',
+                'ai_job_id': ai_job.id,
                 'questions': serializer.data,
             }, status=status.HTTP_201_CREATED)
             
         except requests.RequestException as e:
+            fail_ai_job(ai_job, error_message=e)
             return Response(
                 {'error': f'API error: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
         except json.JSONDecodeError as e:
+            fail_ai_job(ai_job, error_message=e)
             return Response(
                 {'error': f'Invalid JSON from AI: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
         except Exception as e:
+            fail_ai_job(ai_job, error_message=e)
             return Response(
                 {'error': f'Generation failed: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -2414,6 +2604,9 @@ class ExamPaperViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
         Returns: topics count, covered topics, lesson plans, etc.
         """
         exam_paper = self.get_object()
+        slo_coverage_count = exam_paper.covered_topics.filter(
+            standard_alignments__isnull=False,
+        ).values('standard_alignments__objective_id').distinct().count()
         
         return Response({
             'exam_paper_id': exam_paper.id,
@@ -2426,7 +2619,7 @@ class ExamPaperViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
                     'chapter': f"{t.chapter.chapter_number}: {t.chapter.title}",
                     'topic': f"{t.topic_number}: {t.title}",
                     'questions_count': t.test_questions.filter(
-                        paper_questions__exam_paper=exam_paper
+                        paper_assignments__exam_paper=exam_paper
                     ).count(),
                 }
                 for t in exam_paper.covered_topics
@@ -2440,6 +2633,10 @@ class ExamPaperViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
                 for lp in exam_paper.lesson_plans.all()
             ],
             'topic_count': exam_paper.covered_topics.count(),
+            'slo_coverage_count': slo_coverage_count,
+            # Backward-compatible aliases used by older clients/tests.
+            'covered_slos': slo_coverage_count,
+            'slo_coverage': slo_coverage_count,
         })
     
     @action(detail=False, methods=['post'])
@@ -2644,7 +2841,8 @@ class PaperUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
             )
             
             # Trigger async OCR processing
-            process_paper_upload_ocr.delay(upload.id)
+            from core.task_utils import call_task
+            call_task(process_paper_upload_ocr, upload.id)
             
             return Response(
                 PaperUploadSerializer(upload).data,

@@ -1,6 +1,7 @@
 from django.contrib import admin
 from .models import (
-    Book, Chapter, Topic, SubTopic,
+    Book, Chapter, Topic, SubTopic, ContentBlock, ContentRevision,
+    CurriculumStandard, StandardObjective, TopicStandardAlignment,
     LessonPlan, LessonAttachment,
     Assignment, AssignmentAttachment, AssignmentSubmission,
 )
@@ -61,6 +62,45 @@ class SubTopicAdmin(admin.ModelAdmin):
     list_filter = ['is_active']
     search_fields = ['title']
     raw_id_fields = ['topic']
+
+
+@admin.register(ContentBlock)
+class ContentBlockAdmin(admin.ModelAdmin):
+    list_display = ['block_type', 'chapter', 'topic', 'subtopic', 'sequence_order', 'is_active']
+    list_filter = ['block_type', 'is_active']
+    search_fields = ['content_text']
+    raw_id_fields = ['chapter', 'topic', 'subtopic']
+
+
+@admin.register(ContentRevision)
+class ContentRevisionAdmin(admin.ModelAdmin):
+    list_display = ['id', 'content_block', 'changed_by', 'changed_at']
+    list_filter = ['changed_at']
+    search_fields = ['content_text', 'revision_note']
+    raw_id_fields = ['content_block', 'changed_by']
+    readonly_fields = ['changed_at']
+
+
+@admin.register(CurriculumStandard)
+class CurriculumStandardAdmin(admin.ModelAdmin):
+    list_display = ['name', 'board', 'country']
+    list_filter = ['country', 'board']
+    search_fields = ['name', 'board']
+
+
+@admin.register(StandardObjective)
+class StandardObjectiveAdmin(admin.ModelAdmin):
+    list_display = ['code', 'standard', 'subject', 'grade']
+    list_filter = ['standard', 'subject', 'grade']
+    search_fields = ['code', 'statement']
+    raw_id_fields = ['standard', 'subject', 'grade']
+
+
+@admin.register(TopicStandardAlignment)
+class TopicStandardAlignmentAdmin(admin.ModelAdmin):
+    list_display = ['topic', 'objective']
+    list_filter = ['objective__standard', 'topic__chapter__book__subject']
+    raw_id_fields = ['topic', 'objective']
 
 
 # ---------------------------------------------------------------------------

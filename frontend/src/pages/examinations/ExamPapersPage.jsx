@@ -217,6 +217,13 @@ export default function ExamPapersPage() {
                           </button>
                           <button
                             type="button"
+                            onClick={() => navigate(`/academics/papers/${paper.id}/responses`)}
+                            className="px-3 py-1.5 rounded border border-emerald-200 text-emerald-700 text-xs hover:bg-emerald-50"
+                          >
+                            Responses
+                          </button>
+                          <button
+                            type="button"
                             onClick={async () => {
                               const res = await questionPaperApi.generatePDF(paper.id)
                               const blob = new Blob([res.data], { type: 'application/pdf' })

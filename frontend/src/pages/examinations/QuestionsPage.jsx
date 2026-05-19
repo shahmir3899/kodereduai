@@ -29,6 +29,22 @@ const DIFFICULTY_LEVELS = [
   { value: 'HARD', label: 'Hard', color: 'text-red-600' },
 ]
 
+const BLOOM_LEVELS = [
+  { value: 'remember', label: 'Remember', color: 'bg-gray-100 text-gray-700' },
+  { value: 'understand', label: 'Understand', color: 'bg-blue-100 text-blue-700' },
+  { value: 'apply', label: 'Apply', color: 'bg-green-100 text-green-700' },
+  { value: 'analyze', label: 'Analyze', color: 'bg-yellow-100 text-yellow-700' },
+  { value: 'evaluate', label: 'Evaluate', color: 'bg-orange-100 text-orange-700' },
+  { value: 'create', label: 'Create', color: 'bg-red-100 text-red-700' },
+]
+
+const TAG_TYPE_COLORS = {
+  concept: 'bg-blue-100 text-blue-700',
+  skill: 'bg-green-100 text-green-700',
+  keyword: 'bg-amber-100 text-amber-700',
+  standard: 'bg-purple-100 text-purple-700',
+}
+
 const TYPE_COLOR = Object.fromEntries(QUESTION_TYPES.map((t) => [t.value, t.color]))
 const TYPE_LABEL = Object.fromEntries(QUESTION_TYPES.map((t) => [t.value, t.label]))
 
@@ -37,6 +53,7 @@ const EMPTY_FORM = {
   question_text: '',
   question_type: 'MCQ',
   difficulty_level: 'MEDIUM',
+  bloom_level: '',
   marks: 1,
   option_a: '',
   option_b: '',
@@ -46,6 +63,7 @@ const EMPTY_FORM = {
   answer_text: '',
   type_data: {},
   tested_topics: [],
+  source_content_block: '',
   // matching helpers (not sent directly)
   matching_left: ['', ''],
   matching_right: ['', ''],
@@ -58,14 +76,17 @@ const EMPTY_FORM = {
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function buildPayload(form) {
+  const sourceBlockId = parseInt(form.source_content_block, 10)
   const base = {
     subject: form.subject,
     question_text: form.question_text,
     question_type: form.question_type,
     difficulty_level: form.difficulty_level,
+    bloom_level: form.bloom_level || null,
     marks: parseFloat(form.marks) || 1,
     answer_text: form.answer_text,
     tested_topics: form.tested_topics,
+    source_content_block: Number.isFinite(sourceBlockId) ? sourceBlockId : null,
   }
 
   if (form.question_type === 'MCQ') {
@@ -105,11 +126,15 @@ function buildPayload(form) {
 
 function formFromQuestion(q) {
   const td = q.type_data || {}
+  const sourceContentBlockId = typeof q.source_content_block === 'object'
+    ? q.source_content_block?.id
+    : q.source_content_block
   return {
     subject: q.subject,
     question_text: q.question_text || '',
     question_type: q.question_type || 'MCQ',
     difficulty_level: q.difficulty_level || 'MEDIUM',
+    bloom_level: q.bloom_level || '',
     marks: q.marks || 1,
     option_a: q.option_a || '',
     option_b: q.option_b || '',
@@ -123,10 +148,35 @@ function formFromQuestion(q) {
         : ''),
     type_data: td,
     tested_topics: (q.tested_topics || []).map((t) => (typeof t === 'object' ? t.id : t)),
+    source_content_block: sourceContentBlockId || '',
     matching_left: td.left_items?.length ? td.left_items : ['', ''],
     matching_right: td.right_items?.length ? td.right_items : ['', ''],
     matching_pairs: td.pairs?.length ? td.pairs : [{ left: 0, right: 0 }, { left: 1, right: 1 }],
   }
+}
+
+function extractQuestionTags(question) {
+  const rawTags = question?.tags || question?.question_tags || question?.tag_details || []
+  if (!Array.isArray(rawTags)) return []
+  return rawTags
+    .map((tag) => {
+      if (typeof tag === 'object' && tag !== null) {
+        return {
+          id: tag.id,
+          name: tag.name || `Tag #${tag.id}`,
+          tag_type: tag.tag_type || 'keyword',
+        }
+      }
+      const numericId = parseInt(tag, 10)
+      return Number.isFinite(numericId)
+        ? { id: numericId, name: `Tag #${numericId}`, tag_type: 'keyword' }
+        : null
+    })
+    .filter(Boolean)
+}
+
+function extractQuestionTagIds(question) {
+  return extractQuestionTags(question).map((tag) => tag.id)
 }
 
 // ─── Type-aware form sections ─────────────────────────────────────────────────
@@ -512,14 +562,84 @@ function QuestionModal({ editQuestion, initialClassFilterId, initialSubject, ini
         },
   )
   const [errors, setErrors] = useState({})
+  const [sourceSearch, setSourceSearch] = useState('')
+  const [tagSearch, setTagSearch] = useState('')
+  const [selectedTagIds, setSelectedTagIds] = useState(() => (isEdit ? extractQuestionTagIds(editQuestion) : []))
   const queryClient = useQueryClient()
+
+  const { data: modalTagsData, isLoading: modalTagsLoading } = useQuery({
+    queryKey: ['question-modal-tags', form.subject],
+    queryFn: () => lmsApi.getTags({ subject_id: form.subject }),
+    enabled: !!form.subject,
+  })
+  const modalTags = modalTagsData?.data?.results || modalTagsData?.data || []
+  const filteredModalTags = useMemo(() => {
+    const needle = tagSearch.trim().toLowerCase()
+    if (!needle) return modalTags
+    return modalTags.filter((tag) => String(tag.name || '').toLowerCase().includes(needle))
+  }, [modalTags, tagSearch])
+
+  const createTagMutation = useMutation({
+    mutationFn: (data) => lmsApi.createTag(data),
+    onSuccess: (response) => {
+      const createdTag = response?.data
+      queryClient.invalidateQueries({ queryKey: ['question-modal-tags'] })
+      queryClient.invalidateQueries({ queryKey: ['question-filter-tags'] })
+      if (createdTag?.id) {
+        setSelectedTagIds((prev) => (prev.includes(createdTag.id) ? prev : [...prev, createdTag.id]))
+      }
+    },
+  })
+
+  const sourceTopicId = useMemo(() => {
+    if (form.tested_topics?.length > 0) {
+      const firstTopic = parseInt(form.tested_topics[0], 10)
+      if (Number.isFinite(firstTopic)) return firstTopic
+    }
+    const initialTopic = parseInt(initialTopicId, 10)
+    return Number.isFinite(initialTopic) ? initialTopic : null
+  }, [form.tested_topics, initialTopicId])
+
+  const {
+    data: sourceBlocksData,
+    isLoading: sourceBlocksLoading,
+    isError: sourceBlocksError,
+    error: sourceBlocksErrorObj,
+  } = useQuery({
+    queryKey: ['question-modal-source-content-blocks', sourceTopicId],
+    queryFn: () => lmsApi.getContentBlocks({ topic_id: sourceTopicId, is_active: true }),
+    enabled: !!sourceTopicId,
+  })
+
+  const sourceBlocks = sourceBlocksData?.data?.results || sourceBlocksData?.data || []
+  const filteredSourceBlocks = useMemo(() => {
+    const needle = sourceSearch.trim().toLowerCase()
+    if (!needle) return sourceBlocks
+    return sourceBlocks.filter((block) => {
+      const label = `${block.block_type || ''} ${block.content_text || ''}`.toLowerCase()
+      return label.includes(needle)
+    })
+  }, [sourceBlocks, sourceSearch])
+
+  const formatSourceBlockOption = (block) => {
+    const type = (block.block_type || 'text').replace(/_/g, ' ')
+    const typeLabel = type.charAt(0).toUpperCase() + type.slice(1)
+    const text = (block.content_text || '').trim()
+    return `${typeLabel} — ${text.length > 60 ? `${text.slice(0, 60)}...` : text}`
+  }
 
   const saveMutation = useMutation({
     mutationFn: (payload) =>
       isEdit
         ? questionPaperApi.updateQuestion(editQuestion.id, payload)
         : questionPaperApi.createQuestion(payload),
-    onSuccess: () => {
+    onSuccess: async (response) => {
+      const savedQuestionId = response?.data?.id || editQuestion?.id
+      if (!isEdit && savedQuestionId && selectedTagIds.length > 0) {
+        await Promise.all(
+          selectedTagIds.map((tagId) => questionPaperApi.addQuestionTag(savedQuestionId, tagId)),
+        )
+      }
       queryClient.invalidateQueries({ queryKey: ['questions'] })
       onSaved()
     },
@@ -565,6 +685,37 @@ function QuestionModal({ editQuestion, initialClassFilterId, initialSubject, ini
     if (Object.keys(errs).length) { setErrors(errs); return }
     setErrors({})
     saveMutation.mutate(buildPayload(form))
+  }
+
+  const handleSelectTag = async (tagId) => {
+    if (!tagId) return
+    if (selectedTagIds.includes(tagId)) return
+    setSelectedTagIds((prev) => [...prev, tagId])
+
+    if (isEdit && editQuestion?.id) {
+      try {
+        await questionPaperApi.addQuestionTag(editQuestion.id, tagId)
+      } catch {
+        setSelectedTagIds((prev) => prev.filter((id) => id !== tagId))
+      }
+    }
+  }
+
+  const handleRemoveTag = async (tagId) => {
+    setSelectedTagIds((prev) => prev.filter((id) => id !== tagId))
+    if (isEdit && editQuestion?.id) {
+      try {
+        await questionPaperApi.addQuestionTag(editQuestion.id, tagId, true)
+      } catch {
+        setSelectedTagIds((prev) => (prev.includes(tagId) ? prev : [...prev, tagId]))
+      }
+    }
+  }
+
+  const handleCreateTagFromSearch = () => {
+    const name = tagSearch.trim()
+    if (!name || !form.subject || createTagMutation.isPending) return
+    createTagMutation.mutate({ name, tag_type: 'keyword', subject: form.subject })
   }
 
   return (
@@ -707,8 +858,8 @@ function QuestionModal({ editQuestion, initialClassFilterId, initialSubject, ini
 
             {/* Search page filters are independent; modal has its own context selectors above. */}
 
-            {/* Type + Difficulty + Marks */}
-            <div className="grid grid-cols-3 gap-3">
+            {/* Type + Difficulty + Bloom + Marks */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
                 <select
@@ -741,6 +892,22 @@ function QuestionModal({ editQuestion, initialClassFilterId, initialSubject, ini
                   {DIFFICULTY_LEVELS.map((d) => (
                     <option key={d.value} value={d.value}>
                       {d.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Bloom&apos;s Level</label>
+                <select
+                  value={form.bloom_level}
+                  onChange={(e) => setForm({ ...form, bloom_level: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                >
+                  <option value="">Not set</option>
+                  {BLOOM_LEVELS.map((level) => (
+                    <option key={level.value} value={level.value}>
+                      {level.label}
                     </option>
                   ))}
                 </select>
@@ -812,6 +979,130 @@ function QuestionModal({ editQuestion, initialClassFilterId, initialSubject, ini
               initialChapterId={modalChapterId || initialChapterId}
             />
 
+            {/* Optional Source Content Block */}
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-gray-700">Source Content Block (optional)</label>
+              {!sourceTopicId ? (
+                <p className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded px-3 py-2">
+                  Select at least one topic above to link a source content block.
+                </p>
+              ) : sourceBlocksLoading ? (
+                <p className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded px-3 py-2">
+                  Loading content blocks for selected topic...
+                </p>
+              ) : sourceBlocksError ? (
+                <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">
+                  {sourceBlocksErrorObj?.response?.data?.detail || 'Failed to load content blocks for selected topic.'}
+                </p>
+              ) : (
+                <>
+                  <input
+                    type="text"
+                    value={sourceSearch}
+                    onChange={(e) => setSourceSearch(e.target.value)}
+                    placeholder="Search source block by type or text..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                  />
+                  {sourceBlocks.length === 0 ? (
+                    <p className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded px-3 py-2">
+                      No content blocks found for the selected topic.
+                    </p>
+                  ) : (
+                    <select
+                      value={form.source_content_block || ''}
+                      onChange={(e) => setForm({ ...form, source_content_block: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                    >
+                      <option value="">No source linked</option>
+                      {filteredSourceBlocks.map((block) => (
+                        <option key={block.id} value={block.id}>
+                          {formatSourceBlockOption(block)}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Tags */}
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-gray-700">Tags</label>
+              {!form.subject ? (
+                <p className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded px-3 py-2">
+                  Select a subject to load tags.
+                </p>
+              ) : (
+                <>
+                  <input
+                    type="text"
+                    value={tagSearch}
+                    onChange={(e) => setTagSearch(e.target.value)}
+                    placeholder="Search tags..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                  />
+
+                  {modalTagsLoading ? (
+                    <p className="text-xs text-gray-500">Loading tags...</p>
+                  ) : (
+                    <>
+                      <div className="max-h-28 overflow-y-auto border border-gray-200 rounded-lg p-2 bg-gray-50">
+                        {filteredModalTags.length === 0 ? (
+                          <p className="text-xs text-gray-500">No matching tags.</p>
+                        ) : (
+                          <div className="flex flex-wrap gap-1.5">
+                            {filteredModalTags.map((tag) => {
+                              const selected = selectedTagIds.includes(tag.id)
+                              return (
+                                <button
+                                  type="button"
+                                  key={tag.id}
+                                  onClick={() => handleSelectTag(tag.id)}
+                                  className={`text-xs px-2 py-0.5 rounded-full border ${selected ? 'bg-blue-100 text-blue-700 border-blue-200' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100'}`}
+                                >
+                                  {tag.name}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </div>
+
+                      {tagSearch.trim() && filteredModalTags.length === 0 && (
+                        <button
+                          type="button"
+                          onClick={handleCreateTagFromSearch}
+                          disabled={createTagMutation.isPending}
+                          className="text-xs font-medium text-blue-700 hover:text-blue-900"
+                        >
+                          {createTagMutation.isPending ? 'Creating tag...' : `Create "${tagSearch.trim()}"`}
+                        </button>
+                      )}
+
+                      {selectedTagIds.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {selectedTagIds.map((tagId) => {
+                            const tagObj = modalTags.find((tag) => tag.id === tagId)
+                            return (
+                              <button
+                                type="button"
+                                key={tagId}
+                                onClick={() => handleRemoveTag(tagId)}
+                                className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200"
+                                title="Remove tag"
+                              >
+                                {tagObj?.name || `Tag #${tagId}`} ×
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+
             {/* Footer */}
             <div className="flex justify-end gap-3 pt-2 border-t border-gray-100">
               <button
@@ -838,10 +1129,61 @@ function QuestionModal({ editQuestion, initialClassFilterId, initialSubject, ini
 
 // ─── Question Card ────────────────────────────────────────────────────────────
 
-function QuestionCard({ question, onEdit, onDelete }) {
+function QuestionCard({ question, onEdit, onDelete, onOpenSource, onVerify, isVerifying }) {
   const typeColor = TYPE_COLOR[question.question_type] || 'bg-gray-100 text-gray-600'
   const typeLabel = TYPE_LABEL[question.question_type] || question.question_type
   const diff = DIFFICULTY_LEVELS.find((d) => d.value === question.difficulty_level)
+  const bloom = BLOOM_LEVELS.find((level) => level.value === question.bloom_level)
+  const rawRealDifficulty = Number(question.real_difficulty)
+  const hasRealDifficulty = Number.isFinite(rawRealDifficulty)
+  const mappedRealDifficulty = hasRealDifficulty
+    ? (rawRealDifficulty <= 0.34
+        ? 'EASY'
+        : rawRealDifficulty <= 0.67
+        ? 'MEDIUM'
+        : 'HARD')
+    : null
+  const realDifficultyLabel = mappedRealDifficulty
+    ? (DIFFICULTY_LEVELS.find((d) => d.value === mappedRealDifficulty)?.label || mappedRealDifficulty)
+    : null
+  const realDifficultyColor = mappedRealDifficulty
+    ? (DIFFICULTY_LEVELS.find((d) => d.value === mappedRealDifficulty)?.color || 'text-gray-600')
+    : 'text-gray-600'
+  const attemptCountRaw = Number(question?.stats?.attempt_count ?? question?.attempt_count)
+  const attemptCount = Number.isFinite(attemptCountRaw) ? attemptCountRaw : null
+  const hasDifficultyMismatch = hasRealDifficulty
+    && !!question.difficulty_level
+    && mappedRealDifficulty
+    && question.difficulty_level !== mappedRealDifficulty
+  const sourceContentBlockId = typeof question.source_content_block === 'object'
+    ? question.source_content_block?.id
+    : question.source_content_block
+
+  const { data: sourceBlockData } = useQuery({
+    queryKey: ['question-source-content-block', sourceContentBlockId],
+    queryFn: () => lmsApi.getContentBlock(sourceContentBlockId),
+    enabled: !!sourceContentBlockId,
+    staleTime: 300000,
+  })
+
+  const sourceBlock = sourceBlockData?.data
+  const sourceTopicTitle = sourceBlock?.topic_title || sourceBlock?.topic?.title || (sourceBlock?.topic ? `Topic #${sourceBlock.topic}` : '')
+  const sourceChapterTitle = sourceBlock?.chapter_title || sourceBlock?.chapter?.title || (sourceBlock?.chapter ? `Chapter #${sourceBlock.chapter}` : '')
+  const sourcePathLabel = sourceChapterTitle && sourceTopicTitle
+    ? `${sourceChapterTitle} › ${sourceTopicTitle}`
+    : sourceTopicTitle || sourceChapterTitle || 'Content Block'
+  const sourcePreview = (sourceBlock?.content_text || '').trim()
+  const sourceTooltip = sourcePreview ? sourcePreview.slice(0, 100) : 'Source content block linked'
+  const isAiGenerated = !!question.is_ai_generated
+  const isAiVerified = !!question.verified_by
+  const questionTags = extractQuestionTags(question)
+  const visibleTags = questionTags.slice(0, 3)
+  const hiddenTagCount = Math.max(0, questionTags.length - visibleTags.length)
+  const rawSimilarity = Number(question.similarity_score)
+  const hasSimilarityScore = Number.isFinite(rawSimilarity)
+  const similarityPercent = hasSimilarityScore
+    ? Math.max(0, Math.min(100, rawSimilarity <= 1 ? rawSimilarity * 100 : rawSimilarity))
+    : null
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-sm transition-shadow">
@@ -854,6 +1196,32 @@ function QuestionCard({ question, onEdit, onDelete }) {
             </span>
             {diff && (
               <span className={`text-xs font-medium ${diff.color}`}>{diff.label}</span>
+            )}
+            {hasRealDifficulty && (
+              <span
+                className={`text-xs font-medium px-2 py-0.5 rounded-full bg-gray-100 ${realDifficultyColor}`}
+                title={`Based on ${attemptCount ?? 'N'} student attempts`}
+              >
+                Real: {realDifficultyLabel}
+              </span>
+            )}
+            {hasDifficultyMismatch && (
+              <span
+                className="text-xs px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700"
+                title="Difficulty mismatch between stated and real difficulty"
+              >
+                Mismatch
+              </span>
+            )}
+            {bloom && (
+              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${bloom.color}`}>
+                {bloom.label}
+              </span>
+            )}
+            {isAiGenerated && (
+              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${isAiVerified ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                {isAiVerified ? 'AI · Verified' : 'AI · Unverified'}
+              </span>
             )}
             <span className="text-xs text-gray-500">
               {question.marks} {question.marks === 1 ? 'mark' : 'marks'}
@@ -908,10 +1276,60 @@ function QuestionCard({ question, onEdit, onDelete }) {
               {question.answer_text}
             </p>
           )}
+
+          {sourceContentBlockId && (
+            <button
+              type="button"
+              onClick={() => onOpenSource(sourceContentBlockId)}
+              title={sourceTooltip}
+              className="mt-2 inline-flex items-center gap-1 text-xs text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-full px-2 py-0.5"
+            >
+              <span className="font-medium">Source</span>
+              <span>From: {sourcePathLabel}</span>
+            </button>
+          )}
+
+          {questionTags.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {visibleTags.map((tag) => (
+                <span
+                  key={tag.id}
+                  className={`text-[11px] px-2 py-0.5 rounded-full ${TAG_TYPE_COLORS[tag.tag_type] || 'bg-gray-100 text-gray-700'}`}
+                >
+                  {tag.name}
+                </span>
+              ))}
+              {hiddenTagCount > 0 && (
+                <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">+{hiddenTagCount} more</span>
+              )}
+            </div>
+          )}
+
+          {hasSimilarityScore && (
+            <div className="mt-2">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[11px] text-gray-500">Similarity</span>
+                <span className="text-[11px] font-medium text-gray-700">{similarityPercent.toFixed(0)}%</span>
+              </div>
+              <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                <div className="h-1.5 bg-emerald-500 rounded-full transition-all" style={{ width: `${similarityPercent}%` }} />
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Actions */}
         <div className="flex gap-1 shrink-0">
+          {isAiGenerated && !isAiVerified && (
+            <button
+              onClick={() => onVerify(question)}
+              disabled={isVerifying}
+              className="text-xs px-2 py-1 rounded border border-amber-300 text-amber-700 hover:bg-amber-50 disabled:opacity-60"
+              title="Mark this AI-generated question as verified"
+            >
+              {isVerifying ? 'Verifying...' : 'Verify'}
+            </button>
+          )}
           <button
             onClick={() => onEdit(question)}
             className="text-gray-400 hover:text-blue-600 p-1.5 rounded hover:bg-blue-50 transition"
@@ -940,6 +1358,63 @@ function QuestionCard({ question, onEdit, onDelete }) {
               />
             </svg>
           </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SourceContentBlockModal({ contentBlockId, onClose }) {
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: ['source-content-block-modal', contentBlockId],
+    queryFn: () => lmsApi.getContentBlock(contentBlockId),
+    enabled: !!contentBlockId,
+  })
+
+  const block = data?.data
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 overflow-y-auto">
+      <div className="min-h-full flex items-start justify-center py-10 px-4">
+        <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+            <h2 className="text-lg font-bold text-gray-900">Source Content Block</h2>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">×</button>
+          </div>
+
+          <div className="p-6">
+            {isLoading && (
+              <p className="text-sm text-gray-500">Loading source content block...</p>
+            )}
+            {isError && (
+              <p className="text-sm text-red-600">
+                {error?.response?.data?.detail || 'Failed to load source content block.'}
+              </p>
+            )}
+            {!isLoading && !isError && !block && (
+              <p className="text-sm text-gray-500">Source content block not found.</p>
+            )}
+            {!isLoading && !isError && block && (
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">
+                    {(block.block_type || 'text').replace(/_/g, ' ')}
+                  </span>
+                  {block.chapter_title && (
+                    <span className="text-xs text-gray-500">{block.chapter_title}</span>
+                  )}
+                  {block.topic_title && (
+                    <span className="text-xs text-gray-500">› {block.topic_title}</span>
+                  )}
+                </div>
+                <p className="text-sm text-gray-800 whitespace-pre-wrap">{block.content_text || 'No content text available.'}</p>
+              </div>
+            )}
+          </div>
+
+          <div className="px-6 py-4 border-t border-gray-200 flex justify-end">
+            <button onClick={onClose} className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 text-sm">Close</button>
+          </div>
         </div>
       </div>
     </div>
@@ -981,7 +1456,7 @@ function DeleteConfirm({ question, onCancel, onConfirm, isLoading }) {
 export default function QuestionsPage() {
   const queryClient = useQueryClient()
   const location = useLocation()
-  const { isTeacher } = useAuth()
+  const { isTeacher, user } = useAuth()
   const { activeAcademicYear } = useAcademicYear()
   const locationState = location.state || {}
   const { sessionClasses } = useSessionClasses(activeAcademicYear?.id)
@@ -995,7 +1470,13 @@ export default function QuestionsPage() {
   const [filterTopicId, setFilterTopicId] = useState(locationState.topicId || '')
   const [filterType, setFilterType] = useState('')
   const [filterDifficulty, setFilterDifficulty] = useState('')
+  const [filterBloom, setFilterBloom] = useState('')
+  const [filterSource, setFilterSource] = useState('ALL')
+  const [filterTagId, setFilterTagId] = useState('')
+  const [filterTagSearch, setFilterTagSearch] = useState('')
   const [filterSearch, setFilterSearch] = useState('')
+  const [searchMode, setSearchMode] = useState('KEYWORD')
+  const [semanticSearchTerm, setSemanticSearchTerm] = useState('')
   const [page, setPage] = useState(1)
   const resolvedClassId = getResolvedMasterClassId(filterClassId, activeAcademicYear?.id, sessionClasses)
   const { subjects: classSubjects, isLoading: classSubjectsLoading } = useClassSubjects(resolvedClassId)
@@ -1025,12 +1506,26 @@ export default function QuestionsPage() {
   })
   const chapters = bookTreeData?.data?.chapters || []
 
+  const { data: filterTagsData, isLoading: filterTagsLoading } = useQuery({
+    queryKey: ['question-filter-tags', filterSubject],
+    queryFn: () => lmsApi.getTags({ subject_id: filterSubject || undefined }),
+    enabled: !!resolvedClassId,
+  })
+  const filterTags = filterTagsData?.data?.results || filterTagsData?.data || []
+  const filteredFilterTags = useMemo(() => {
+    const needle = filterTagSearch.trim().toLowerCase()
+    if (!needle) return filterTags
+    return filterTags.filter((tag) => String(tag.name || '').toLowerCase().includes(needle))
+  }, [filterTags, filterTagSearch])
+
   // If navigated here from Curriculum "+Q" button, open create modal pre-seeded with subject
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [editQuestion, setEditQuestion] = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
+  const [sourcePreviewBlockId, setSourcePreviewBlockId] = useState(null)
   const [toast, setToast] = useState(null)
   const [actionHint, setActionHint] = useState('')
+  const [verifyingQuestionId, setVerifyingQuestionId] = useState(null)
 
   // Pre-open the create modal if a topicId was passed (coming from CurriculumPage "+Q")
   useEffect(() => {
@@ -1040,6 +1535,17 @@ export default function QuestionsPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  useEffect(() => {
+    if (searchMode !== 'SEMANTIC') {
+      setSemanticSearchTerm('')
+      return
+    }
+    const timer = window.setTimeout(() => {
+      setSemanticSearchTerm(filterSearch.trim())
+    }, 600)
+    return () => window.clearTimeout(timer)
+  }, [searchMode, filterSearch])
+
   const queryParams = {
     ...(resolvedClassId && { class_id: resolvedClassId }),
     ...(filterSubject && { subject: filterSubject }),
@@ -1048,6 +1554,11 @@ export default function QuestionsPage() {
     ...(filterTopicId && { topic_id: filterTopicId }),
     ...(filterType && { question_type: filterType }),
     ...(filterDifficulty && { difficulty_level: filterDifficulty }),
+    ...(filterBloom && { bloom_level: filterBloom }),
+    ...(filterSource === 'HUMAN' && { is_ai_generated: 'false' }),
+    ...(filterSource === 'AI_UNVERIFIED' && { is_ai_generated: 'true', 'verified_by__isnull': 'true' }),
+    ...(filterSource === 'AI_VERIFIED' && { is_ai_generated: 'true', 'verified_by__isnull': 'false' }),
+    ...(filterTagId && { tag_id: filterTagId }),
     ...(filterSearch && { search: filterSearch }),
     page,
     page_size: 20,
@@ -1059,9 +1570,34 @@ export default function QuestionsPage() {
     enabled: !!resolvedClassId,
   })
 
-  const questions = data?.data?.results || []
-  const totalCount = data?.data?.count || 0
-  const totalPages = Math.ceil(totalCount / 20)
+  const semanticQueryParams = {
+    q: semanticSearchTerm,
+    limit: 50,
+    ...(resolvedClassId && { class_id: resolvedClassId }),
+    ...(filterSubject && { subject: filterSubject }),
+  }
+
+  const {
+    data: semanticData,
+    isFetching: semanticIsFetching,
+    isSuccess: semanticIsSuccess,
+  } = useQuery({
+    queryKey: ['questions-semantic-search', semanticQueryParams],
+    queryFn: () => questionPaperApi.semanticSearchQuestions(semanticQueryParams),
+    enabled: !!resolvedClassId && searchMode === 'SEMANTIC' && !!semanticSearchTerm,
+  })
+
+  const semanticResultPayload = semanticData?.data
+  const semanticQuestions = Array.isArray(semanticResultPayload)
+    ? semanticResultPayload
+    : semanticResultPayload?.results || semanticResultPayload?.questions || []
+  const useSemanticResults = searchMode === 'SEMANTIC' && !!semanticSearchTerm && semanticQuestions.length > 0
+  const shouldFallbackToKeyword = searchMode === 'SEMANTIC' && !!semanticSearchTerm && semanticIsSuccess && semanticQuestions.length === 0
+
+  const keywordQuestions = data?.data?.results || []
+  const questions = useSemanticResults ? semanticQuestions : keywordQuestions
+  const totalCount = useSemanticResults ? semanticQuestions.length : (data?.data?.count || 0)
+  const totalPages = useSemanticResults ? 1 : Math.ceil(totalCount / 20)
 
   const deleteMutation = useMutation({
     mutationFn: (id) => questionPaperApi.deleteQuestion(id),
@@ -1074,6 +1610,59 @@ export default function QuestionsPage() {
       setToast({ type: 'error', message: 'Failed to delete question.' })
     },
   })
+
+  const verifyQuestionMutation = useMutation({
+    mutationFn: ({ questionId, payload }) => questionPaperApi.updateQuestion(questionId, payload),
+    onMutate: async ({ questionId, payload }) => {
+      setVerifyingQuestionId(questionId)
+      await queryClient.cancelQueries({ queryKey: ['questions'] })
+      const previousQueries = queryClient.getQueriesData({ queryKey: ['questions'] })
+
+      previousQueries.forEach(([key, queryData]) => {
+        if (!queryData?.data?.results) return
+        queryClient.setQueryData(key, {
+          ...queryData,
+          data: {
+            ...queryData.data,
+            results: queryData.data.results.map((q) => (
+              q.id === questionId
+                ? { ...q, verified_by: payload.verified_by, verified_at: payload.verified_at }
+                : q
+            )),
+          },
+        })
+      })
+
+      return { previousQueries }
+    },
+    onError: (error, _variables, context) => {
+      context?.previousQueries?.forEach(([key, queryData]) => {
+        queryClient.setQueryData(key, queryData)
+      })
+      setToast({ type: 'error', message: error?.response?.data?.detail || 'Failed to verify question.' })
+    },
+    onSuccess: () => {
+      setToast({ type: 'success', message: 'Question marked as verified.' })
+    },
+    onSettled: () => {
+      setVerifyingQuestionId(null)
+      queryClient.invalidateQueries({ queryKey: ['questions'] })
+    },
+  })
+
+  const handleVerifyQuestion = (question) => {
+    if (!user?.id) {
+      setToast({ type: 'error', message: 'Unable to verify question: user session missing.' })
+      return
+    }
+    verifyQuestionMutation.mutate({
+      questionId: question.id,
+      payload: {
+        verified_by: user.id,
+        verified_at: new Date().toISOString(),
+      },
+    })
+  }
 
   const handleFilterChange = (setter) => (e) => {
     setter(e.target.value)
@@ -1233,10 +1822,26 @@ export default function QuestionsPage() {
                 placeholder="Search questions..."
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
               />
+              <div className="mt-2 inline-flex rounded-lg border border-gray-300 overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => { setSearchMode('KEYWORD'); setPage(1) }}
+                  className={`px-2.5 py-1 text-xs font-medium ${searchMode === 'KEYWORD' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                >
+                  Keyword
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setSearchMode('SEMANTIC'); setPage(1) }}
+                  className={`px-2.5 py-1 text-xs font-medium border-l border-gray-300 ${searchMode === 'SEMANTIC' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                >
+                  Semantic
+                </button>
+              </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 mt-3">
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Question Type</label>
               <select
@@ -1268,11 +1873,69 @@ export default function QuestionsPage() {
                 ))}
               </select>
             </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Bloom Level</label>
+              <select
+                value={filterBloom}
+                onChange={handleFilterChange(setFilterBloom)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+              >
+                <option value="">All Bloom Levels</option>
+                {BLOOM_LEVELS.map((level) => (
+                  <option key={level.value} value={level.value}>
+                    {level.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Source</label>
+              <select
+                value={filterSource}
+                onChange={handleFilterChange(setFilterSource)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+              >
+                <option value="ALL">All</option>
+                <option value="HUMAN">Human</option>
+                <option value="AI_UNVERIFIED">AI (Unverified)</option>
+                <option value="AI_VERIFIED">AI (Verified)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Tag</label>
+              <input
+                type="text"
+                value={filterTagSearch}
+                onChange={handleFilterChange(setFilterTagSearch)}
+                placeholder="Search tags..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm mb-1"
+              />
+              <select
+                value={filterTagId}
+                onChange={handleFilterChange(setFilterTagId)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                disabled={filterTagsLoading}
+              >
+                <option value="">All Tags</option>
+                {filteredFilterTags.map((tag) => (
+                  <option key={tag.id} value={tag.id}>{tag.name}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
           {actionHint && (
             <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
               <p className="text-xs text-amber-800">{actionHint}</p>
+            </div>
+          )}
+
+          {shouldFallbackToKeyword && (
+            <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2">
+              <p className="text-xs text-blue-800">Semantic search is still indexing. Using keyword search instead.</p>
             </div>
           )}
 
@@ -1305,6 +1968,12 @@ export default function QuestionsPage() {
                 : `${totalCount} question${totalCount !== 1 ? 's' : ''}`}
             {isFetching && !isLoading && (
               <span className="ml-2 text-blue-500 text-xs">Refreshing…</span>
+            )}
+            {semanticIsFetching && searchMode === 'SEMANTIC' && semanticSearchTerm && (
+              <span className="ml-2 text-blue-500 text-xs">Semantic search…</span>
+            )}
+            {useSemanticResults && (
+              <span className="ml-2 text-emerald-600 text-xs font-medium">Semantic Search</span>
             )}
           </p>
 
@@ -1348,13 +2017,13 @@ export default function QuestionsPage() {
             <div className="text-4xl mb-3">📝</div>
             <p className="text-gray-600 font-medium">No questions found</p>
             <p className="text-gray-400 text-sm mt-1">
-              {filterSubject || filterType || filterDifficulty || filterSearch
+              {filterSubject || filterType || filterDifficulty || filterBloom || filterTagId || filterSearch || filterSource !== 'ALL'
                 ? 'Try clearing some filters'
                 : !classSubjectsLoading && classSubjects.length === 0
                   ? 'Assign subjects to this class first in Subjects -> Class Assignments'
                   : 'Add your first question to get started'}
             </p>
-            {!(filterSubject || filterType || filterDifficulty || filterSearch) && (
+            {!(filterSubject || filterType || filterDifficulty || filterBloom || filterTagId || filterSearch || filterSource !== 'ALL') && (
               <button
                 onClick={handleOpenCreateModal}
                 className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
@@ -1371,6 +2040,9 @@ export default function QuestionsPage() {
                 question={q}
                 onEdit={setEditQuestion}
                 onDelete={setDeleteTarget}
+                onOpenSource={setSourcePreviewBlockId}
+                onVerify={handleVerifyQuestion}
+                isVerifying={verifyingQuestionId === q.id}
               />
             ))}
           </div>
@@ -1427,6 +2099,13 @@ export default function QuestionsPage() {
           onCancel={() => setDeleteTarget(null)}
           onConfirm={() => deleteMutation.mutate(deleteTarget.id)}
           isLoading={deleteMutation.isPending}
+        />
+      )}
+
+      {sourcePreviewBlockId && (
+        <SourceContentBlockModal
+          contentBlockId={sourcePreviewBlockId}
+          onClose={() => setSourcePreviewBlockId(null)}
         />
       )}
     </div>

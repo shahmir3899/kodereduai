@@ -11,8 +11,8 @@ from rest_framework.views import exception_handler
 from core.mixins import ensure_tenant_school_id
 from core.permissions import HasSchoolAccess
 
-from .models import BackgroundTask
-from .serializers import BackgroundTaskSerializer
+from .models import AIJob, BackgroundTask
+from .serializers import AIJobSerializer, BackgroundTaskSerializer
 
 
 class BackgroundTaskViewSet(
@@ -54,6 +54,32 @@ class BackgroundTaskViewSet(
         task.completed_at = timezone.now()
         task.save(update_fields=['status', 'error_message', 'completed_at', 'updated_at'])
         return Response({'detail': 'Task cancelled.'})
+
+
+class AIJobViewSet(
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    viewsets.GenericViewSet,
+):
+    serializer_class = AIJobSerializer
+    permission_classes = [IsAuthenticated, HasSchoolAccess]
+
+    def get_queryset(self):
+        school_id = ensure_tenant_school_id(self.request)
+        qs = AIJob.objects.filter(triggered_by=self.request.user)
+        if school_id:
+            qs = qs.filter(school_id=school_id)
+        return qs
+
+    @action(detail=True, methods=['post'], url_path='feedback')
+    def feedback(self, request, pk=None):
+        job = self.get_object()
+        accepted = request.data.get('accepted')
+        if accepted is None:
+            return Response({'detail': 'accepted is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        job.accepted = bool(accepted)
+        job.save(update_fields=['accepted'])
+        return Response({'id': job.id, 'accepted': job.accepted})
 
 
 def custom_exception_handler(exc, context):

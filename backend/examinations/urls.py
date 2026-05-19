@@ -2,7 +2,7 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
     ExamTypeViewSet, ExamGroupViewSet, ExamViewSet, ExamSubjectViewSet,
-    StudentMarkViewSet, GradeScaleViewSet, ReportCardView,
+    StudentMarkViewSet, StudentResponseViewSet, GradeScaleViewSet, ReportCardView,
     QuestionViewSet, ExamPaperViewSet, PaperUploadViewSet, PaperFeedbackViewSet,
 )
 
@@ -12,6 +12,7 @@ router.register(r'exam-groups', ExamGroupViewSet, basename='exam-group')
 router.register(r'exams', ExamViewSet, basename='exam')
 router.register(r'exam-subjects', ExamSubjectViewSet, basename='exam-subject')
 router.register(r'marks', StudentMarkViewSet, basename='student-mark')
+router.register(r'student-responses', StudentResponseViewSet, basename='student-response')
 router.register(r'grade-scales', GradeScaleViewSet, basename='grade-scale')
 
 # Question Paper Builder routes

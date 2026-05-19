@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import BackgroundTask
+from .models import AIJob, BackgroundTask
 
 
 class BackgroundTaskSerializer(serializers.ModelSerializer):
@@ -22,3 +22,15 @@ class BackgroundTaskSerializer(serializers.ModelSerializer):
         if obj.status == BackgroundTask.Status.IN_PROGRESS:
             return -1  # Indeterminate
         return 0
+
+
+class AIJobSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AIJob
+        fields = [
+            'id', 'job_type', 'triggered_by', 'school',
+            'input_data', 'output_data', 'model_used', 'tokens_used',
+            'status', 'accepted', 'error_message',
+            'created_at', 'completed_at',
+        ]
+        read_only_fields = fields

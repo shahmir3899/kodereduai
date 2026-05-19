@@ -1,6 +1,8 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { Outlet, Link, useLocation } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../contexts/AuthContext'
+import { useToast } from './Toast'
 import FinanceChatWidget from './FinanceChatWidget'
 import AcademicsChatWidget from './AcademicsChatWidget'
 import CommunicationChatWidget from './CommunicationChatWidget'
@@ -8,7 +10,7 @@ import NotificationBell from './NotificationBell'
 import { TaskDrawerButton } from './TaskDrawer'
 import SchoolSwitcher from './SchoolSwitcher'
 import AcademicYearSwitcher from './AcademicYearSwitcher'
-import { inventoryApi } from '../services/api'
+import { inventoryApi, aiJobsApi } from '../services/api'
 
 // Icons (simple SVG components)
 const RocketIcon = () => (
@@ -351,9 +353,12 @@ const SESSION_AWARE_PREFIXES = [
 
 export default function Layout() {
   const { user, logout, activeSchool, effectiveRole, isSuperAdmin, isStaffMember, isPrincipal, isHRManager, isStaffLevel, isParent, isStudent, isModuleEnabled } = useAuth()
+  const { showSuccess } = useToast()
   const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [hasInventoryAssignments, setHasInventoryAssignments] = useState(false)
+  const [showAIJobsMenu, setShowAIJobsMenu] = useState(false)
+  const previousPendingIdsRef = useRef(new Set())
   const isTeacher = effectiveRole === 'TEACHER'
   const isStaff = effectiveRole === 'STAFF'
 
@@ -379,6 +384,50 @@ export default function Layout() {
 
   const userDisplayName = [user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.username || 'User'
   const userAvatarInitial = userDisplayName.charAt(0).toUpperCase()
+
+  const { data: pendingAIJobsRes } = useQuery({
+    queryKey: ['layout-ai-jobs-pending'],
+    queryFn: () => aiJobsApi.getAIJobs({ status: 'pending', limit: 5 }),
+    refetchInterval: (query) => {
+      const payload = query.state.data?.data
+      const rows = Array.isArray(payload?.results) ? payload.results : (Array.isArray(payload) ? payload : [])
+      return rows.length > 0 ? 10000 : false
+    },
+    enabled: !isSuperAdmin,
+  })
+  const pendingAIJobsPayload = pendingAIJobsRes?.data
+  const pendingAIJobs = Array.isArray(pendingAIJobsPayload?.results)
+    ? pendingAIJobsPayload.results
+    : (Array.isArray(pendingAIJobsPayload) ? pendingAIJobsPayload : [])
+
+  const { data: recentAIJobsRes } = useQuery({
+    queryKey: ['layout-ai-jobs-recent'],
+    queryFn: () => aiJobsApi.getAIJobs({ limit: 5 }),
+    enabled: !isSuperAdmin && (showAIJobsMenu || pendingAIJobs.length > 0),
+    refetchInterval: pendingAIJobs.length > 0 ? 10000 : false,
+  })
+  const recentAIJobsPayload = recentAIJobsRes?.data
+  const recentAIJobs = Array.isArray(recentAIJobsPayload?.results)
+    ? recentAIJobsPayload.results
+    : (Array.isArray(recentAIJobsPayload) ? recentAIJobsPayload : [])
+
+  useEffect(() => {
+    const currentPendingIds = new Set((pendingAIJobs || []).map((job) => job.id))
+    const previousPendingIds = previousPendingIdsRef.current
+    const completedIds = Array.from(previousPendingIds).filter((id) => !currentPendingIds.has(id))
+
+    completedIds.forEach((id) => {
+      const completedJob = recentAIJobs.find((job) => job.id === id)
+      const jobType = completedJob?.job_type || 'job'
+      showSuccess(`AI finished: ${jobType}`)
+    })
+
+    previousPendingIdsRef.current = currentPendingIds
+  }, [pendingAIJobs, recentAIJobs, showSuccess])
+
+  useEffect(() => {
+    setShowAIJobsMenu(false)
+  }, [location.pathname])
 
   const isSessionAwarePage = SESSION_AWARE_PREFIXES.some(
     prefix => location.pathname === prefix || location.pathname.startsWith(prefix + '/')
@@ -810,7 +859,40 @@ export default function Layout() {
             </div>
 
             {/* Task drawer + Notification bell + User avatar */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 relative">
+              {pendingAIJobs.length > 0 && (
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowAIJobsMenu((prev) => !prev)}
+                    className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 text-xs font-medium"
+                    title="View AI job statuses"
+                  >
+                    <span className="inline-block w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                    AI working...
+                  </button>
+
+                  {showAIJobsMenu && (
+                    <div className="absolute right-0 mt-2 w-72 rounded-lg border border-gray-200 bg-white shadow-lg z-20">
+                      <div className="px-3 py-2 border-b border-gray-100">
+                        <p className="text-xs font-semibold text-gray-700">Recent AI Jobs</p>
+                      </div>
+                      <div className="max-h-64 overflow-y-auto">
+                        {recentAIJobs.length === 0 ? (
+                          <p className="px-3 py-3 text-xs text-gray-500">No AI jobs found.</p>
+                        ) : (
+                          recentAIJobs.map((job) => (
+                            <div key={job.id} className="px-3 py-2 border-b border-gray-50 last:border-b-0">
+                              <p className="text-xs font-medium text-gray-800">{job.job_type}</p>
+                              <p className="text-[11px] text-gray-500">Status: {job.status}</p>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
               <TaskDrawerButton />
               {!isSuperAdmin && <NotificationBell />}
               <Link to="/profile" className="hidden lg:flex items-center hover:opacity-80 transition-opacity">

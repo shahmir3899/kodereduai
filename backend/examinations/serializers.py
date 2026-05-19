@@ -5,7 +5,7 @@ from core.permissions import get_effective_role, get_teacher_combined_scope
 from lms.models import Topic
 from .models import (
     ExamType, ExamGroup, Exam, ExamSubject, StudentMark, GradeScale,
-    Question, ExamPaper, PaperQuestion, PaperUpload, PaperFeedback
+    Question, ExamPaper, PaperQuestion, StudentResponse, QuestionStats, PaperUpload, PaperFeedback
 )
 
 
@@ -400,6 +400,7 @@ class QuestionSerializer(serializers.ModelSerializer):
     exam_type_name = serializers.CharField(source='exam_type.name', read_only=True, allow_null=True)
     created_by_name = serializers.CharField(source='created_by.username', read_only=True, allow_null=True)
     tested_topics = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
+    real_difficulty = serializers.FloatField(source='stats.real_difficulty', read_only=True, allow_null=True)
     
     # NEW: Curriculum topics - read-only expanded details + write support via list of IDs
     tested_topics_details = serializers.SerializerMethodField()
@@ -422,13 +423,71 @@ class QuestionSerializer(serializers.ModelSerializer):
         model = Question
         fields = [
             'id', 'school', 'subject', 'subject_name', 'exam_type', 'exam_type_name',
-            'question_text', 'question_image_url', 'question_type', 'difficulty_level',
+            'question_text', 'question_image_url', 'question_type', 'difficulty_level', 'bloom_level',
             'marks', 'option_a', 'option_b', 'option_c', 'option_d', 'correct_answer',
             'answer_text', 'type_data', 'tested_topics',
-            'tested_topics_details',
+            'source_content_block', 'paper_use_count', 'last_used_in', 'last_used_at',
+            'is_ai_generated', 'verified_by', 'verified_at',
+            'tested_topics_details', 'real_difficulty',
             'created_by', 'created_by_name', 'is_active', 'created_at', 'updated_at',
         ]
-        read_only_fields = ['id', 'school', 'created_by', 'created_by_name', 'created_at', 'updated_at', 'tested_topics_details']
+        read_only_fields = ['id', 'school', 'created_by', 'created_by_name', 'created_at', 'updated_at', 'tested_topics_details', 'real_difficulty']
+
+
+class StudentResponseSerializer(serializers.ModelSerializer):
+    student_name = serializers.CharField(source='student.name', read_only=True)
+    question_text = serializers.CharField(source='question.question_text', read_only=True)
+
+    class Meta:
+        model = StudentResponse
+        fields = [
+            'id', 'student', 'student_name', 'question', 'question_text', 'exam_paper',
+            'response_text', 'marks_awarded', 'is_correct', 'time_taken_seconds', 'submitted_at',
+        ]
+        read_only_fields = ['id', 'submitted_at', 'student_name', 'question_text']
+
+
+class StudentResponseEntrySerializer(serializers.Serializer):
+    question = serializers.IntegerField()
+    response_text = serializers.CharField(required=False, allow_blank=True, default='')
+    marks_awarded = serializers.DecimalField(max_digits=6, decimal_places=2, required=False, allow_null=True)
+    is_correct = serializers.BooleanField(required=False, allow_null=True)
+    time_taken_seconds = serializers.IntegerField(required=False, allow_null=True, min_value=0)
+
+
+class StudentResponseBulkSubmitSerializer(serializers.Serializer):
+    student = serializers.IntegerField()
+    exam_paper = serializers.IntegerField()
+    responses = StudentResponseEntrySerializer(many=True, min_length=1)
+
+    def validate(self, attrs):
+        from students.models import Student
+
+        try:
+            exam_paper = ExamPaper.objects.select_related('school').get(id=attrs['exam_paper'])
+        except ExamPaper.DoesNotExist as exc:
+            raise serializers.ValidationError({'exam_paper': 'Exam paper not found.'}) from exc
+
+        try:
+            student = Student.objects.get(id=attrs['student'])
+        except Student.DoesNotExist as exc:
+            raise serializers.ValidationError({'student': 'Student not found.'}) from exc
+
+        if student.school_id != exam_paper.school_id:
+            raise serializers.ValidationError({'student': 'Student must belong to the same school as the exam paper.'})
+
+        question_ids = [entry['question'] for entry in attrs['responses']]
+        if len(question_ids) != len(set(question_ids)):
+            raise serializers.ValidationError({'responses': 'Duplicate question IDs are not allowed in a single submission.'})
+
+        paper_question_ids = set(exam_paper.paper_questions.values_list('question_id', flat=True))
+        invalid_question_ids = [question_id for question_id in question_ids if question_id not in paper_question_ids]
+        if invalid_question_ids:
+            raise serializers.ValidationError({'responses': f'Questions not linked to this paper: {sorted(invalid_question_ids)}.'})
+
+        attrs['exam_paper_obj'] = exam_paper
+        attrs['student_obj'] = student
+        return attrs
 
 
 class QuestionCreateUpdateSerializer(serializers.ModelSerializer):
@@ -443,9 +502,10 @@ class QuestionCreateUpdateSerializer(serializers.ModelSerializer):
         model = Question
         fields = [
             'subject', 'exam_type', 'question_text', 'question_image_url',
-            'question_type', 'difficulty_level', 'marks',
+            'question_type', 'difficulty_level', 'bloom_level', 'marks',
             'option_a', 'option_b', 'option_c', 'option_d', 'correct_answer',
             'answer_text', 'type_data', 'tested_topics',
+            'source_content_block', 'is_ai_generated', 'verified_by', 'verified_at',
         ]
 
     def validate(self, data):
@@ -614,6 +674,7 @@ class ExamPaperSerializer(serializers.ModelSerializer):
     lesson_plans_details = serializers.SerializerMethodField()
     covered_topics = serializers.SerializerMethodField()
     question_topics_summary = serializers.SerializerMethodField()
+    overused_questions = serializers.SerializerMethodField()
     
     def get_lesson_plans_details(self, obj):
         """Return lesson plan details."""
@@ -644,6 +705,16 @@ class ExamPaperSerializer(serializers.ModelSerializer):
         """Question count per topic."""
         return obj.question_topics_summary
 
+    def get_overused_questions(self, obj):
+        return [
+            {
+                'question_id': paper_question.question_id,
+                'paper_use_count': paper_question.question.paper_use_count,
+            }
+            for paper_question in obj.paper_questions.select_related('question').all()
+            if paper_question.question.paper_use_count > 3
+        ]
+
     class Meta:
         model = ExamPaper
         fields = [
@@ -651,12 +722,12 @@ class ExamPaperSerializer(serializers.ModelSerializer):
             'class_obj', 'class_name', 'subject', 'subject_name',
             'paper_title', 'instructions', 'total_marks', 'duration_minutes',
             'paper_questions', 'question_count', 'calculated_total_marks',
-            'lesson_plans_details', 'covered_topics', 'question_topics_summary',
+            'lesson_plans_details', 'covered_topics', 'question_topics_summary', 'overused_questions',
             'status', 'generated_by', 'generated_by_name',
             'is_active', 'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'school', 'generated_by', 'generated_by_name', 'created_at', 'updated_at', 
-                           'lesson_plans_details', 'covered_topics', 'question_topics_summary']
+                           'lesson_plans_details', 'covered_topics', 'question_topics_summary', 'overused_questions']
 
 
 class ExamPaperCreateUpdateSerializer(serializers.ModelSerializer):

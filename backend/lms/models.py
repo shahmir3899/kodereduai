@@ -1,5 +1,7 @@
 import uuid
+from django.conf import settings
 from django.db import models
+from pgvector.django import VectorField
 
 
 # ---------------------------------------------------------------------------
@@ -184,6 +186,7 @@ class Topic(models.Model):
         default=1,
         help_text='Estimated teaching periods needed',
     )
+    embedding = VectorField(dimensions=1536, null=True, blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -236,6 +239,10 @@ class SubTopic(models.Model):
         help_text='Ordering within the parent topic (1, 2, 3…)',
     )
     description = models.TextField(blank=True)
+    content_text = models.TextField(blank=True)
+    content_blocks_json = models.JSONField(null=True, blank=True)
+    content_schema_version = models.CharField(max_length=10, default='1.0')
+    estimated_minutes = models.IntegerField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -248,6 +255,174 @@ class SubTopic(models.Model):
 
     def __str__(self):
         return f"{self.topic.chapter.chapter_number}.{self.topic.topic_number}.{self.subtopic_number}: {self.title}"
+
+
+class ContentBlock(models.Model):
+    """Relational curriculum content block linked to chapter/topic/subtopic hierarchy."""
+
+    class BlockType(models.TextChoices):
+        TEXT = 'text', 'Text Paragraph'
+        DEFINITION = 'definition', 'Definition'
+        EXAMPLE = 'example', 'Worked Example'
+        EXERCISE = 'exercise', 'Exercise'
+        FORMULA = 'formula', 'Formula / Equation'
+        DIAGRAM_DESC = 'diagram_desc', 'Diagram Description'
+        SUMMARY = 'summary', 'Summary'
+        KEY_POINT = 'key_point', 'Key Point'
+
+    # Hierarchy: at least one of chapter/topic/subtopic must be set.
+    chapter = models.ForeignKey(
+        Chapter,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='content_blocks_rel',
+    )
+    topic = models.ForeignKey(
+        Topic,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='content_blocks_rel',
+    )
+    subtopic = models.ForeignKey(
+        SubTopic,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='content_blocks_rel',
+    )
+
+    block_type = models.CharField(
+        max_length=30,
+        choices=BlockType.choices,
+        default=BlockType.TEXT,
+    )
+    content_text = models.TextField()
+    content_rich = models.JSONField(null=True, blank=True)
+    sequence_order = models.PositiveIntegerField(default=0)
+    difficulty_level = models.IntegerField(null=True, blank=True)
+    estimated_minutes = models.IntegerField(null=True, blank=True)
+    embedding = VectorField(dimensions=1536, null=True, blank=True)
+
+    is_ai_generated = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['sequence_order']
+        constraints = [
+            models.CheckConstraint(
+                name='content_block_has_parent',
+                condition=(
+                    models.Q(chapter__isnull=False)
+                    | models.Q(topic__isnull=False)
+                    | models.Q(subtopic__isnull=False)
+                ),
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.block_type} | {self.content_text[:60]}"
+
+
+class ContentRevision(models.Model):
+    content_block = models.ForeignKey(
+        ContentBlock,
+        on_delete=models.CASCADE,
+        related_name='revisions',
+    )
+    content_text = models.TextField()
+    content_rich = models.JSONField(null=True, blank=True)
+    changed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='content_revisions',
+    )
+    changed_at = models.DateTimeField(auto_now_add=True)
+    revision_note = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ['-changed_at', '-id']
+
+    def __str__(self):
+        return f"Revision {self.id} for block {self.content_block_id}"
+
+
+class Tag(models.Model):
+    class TagType(models.TextChoices):
+        CONCEPT = 'concept', 'Concept'
+        SKILL = 'skill', 'Skill'
+        KEYWORD = 'keyword', 'Keyword'
+        STANDARD = 'standard', 'Curriculum Standard'
+
+    name = models.CharField(max_length=100, unique=True)
+    tag_type = models.CharField(max_length=20, choices=TagType.choices)
+    subject = models.ForeignKey(
+        'academics.Subject',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='curriculum_tags',
+    )
+    school = models.ForeignKey(
+        'schools.School',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='curriculum_tags',
+    )
+
+    class Meta:
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+
+class ContentBlockTag(models.Model):
+    content_block = models.ForeignKey(
+        ContentBlock,
+        on_delete=models.CASCADE,
+        related_name='content_block_tags',
+    )
+    tag = models.ForeignKey(
+        Tag,
+        on_delete=models.CASCADE,
+        related_name='content_block_tags',
+    )
+
+    class Meta:
+        unique_together = ('content_block', 'tag')
+
+
+class QuestionTag(models.Model):
+    question = models.ForeignKey(
+        'examinations.Question',
+        on_delete=models.CASCADE,
+        related_name='question_tags',
+    )
+    tag = models.ForeignKey(
+        Tag,
+        on_delete=models.CASCADE,
+        related_name='question_tags',
+    )
+
+    class Meta:
+        unique_together = ('question', 'tag')
+
+
+OBJECTIVE_BLOOM_LEVELS = [
+    ('remember', 'Remember'),
+    ('understand', 'Understand'),
+    ('apply', 'Apply'),
+    ('analyze', 'Analyze'),
+    ('evaluate', 'Evaluate'),
+    ('create', 'Create'),
+]
 
 
 # ---------------------------------------------------------------------------
@@ -380,6 +555,96 @@ class LessonPlan(models.Model):
         self.display_text = '\n'.join(lines)
         self.save(update_fields=['display_text'])
         return self.display_text
+
+
+class LearningObjective(models.Model):
+    topic = models.ForeignKey(
+        Topic,
+        on_delete=models.CASCADE,
+        related_name='objectives',
+    )
+    statement = models.TextField()
+    bloom_level = models.CharField(max_length=20, choices=OBJECTIVE_BLOOM_LEVELS)
+    is_ai_generated = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['topic_id', 'id']
+
+    def __str__(self):
+        return self.statement[:80]
+
+
+class LessonPlanObjective(models.Model):
+    lesson_plan = models.ForeignKey(
+        LessonPlan,
+        on_delete=models.CASCADE,
+        related_name='lesson_objectives',
+    )
+    objective = models.ForeignKey(
+        LearningObjective,
+        on_delete=models.CASCADE,
+        related_name='lesson_links',
+    )
+
+    class Meta:
+        unique_together = ('lesson_plan', 'objective')
+
+
+class CurriculumStandard(models.Model):
+    name = models.CharField(max_length=100)
+    country = models.CharField(max_length=50, default='Pakistan')
+    board = models.CharField(max_length=100)
+
+    class Meta:
+        ordering = ['name', 'board']
+
+    def __str__(self):
+        return f'{self.name} ({self.board})'
+
+
+class StandardObjective(models.Model):
+    standard = models.ForeignKey(
+        CurriculumStandard,
+        on_delete=models.CASCADE,
+        related_name='objectives',
+    )
+    subject = models.ForeignKey(
+        'academics.Subject',
+        on_delete=models.CASCADE,
+        related_name='standard_objectives',
+    )
+    grade = models.ForeignKey(
+        'students.Class',
+        on_delete=models.CASCADE,
+        related_name='standard_objectives',
+    )
+    code = models.CharField(max_length=30)
+    statement = models.TextField()
+
+    class Meta:
+        ordering = ['code']
+        unique_together = ('standard', 'subject', 'grade', 'code')
+
+    def __str__(self):
+        return self.code
+
+
+class TopicStandardAlignment(models.Model):
+    topic = models.ForeignKey(
+        Topic,
+        on_delete=models.CASCADE,
+        related_name='standard_alignments',
+    )
+    objective = models.ForeignKey(
+        StandardObjective,
+        on_delete=models.CASCADE,
+        related_name='topic_alignments',
+    )
+
+    class Meta:
+        unique_together = ('topic', 'objective')
 
 
 class LessonAttachment(models.Model):

@@ -1,5 +1,6 @@
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
+import { normalizeLessonPlanText } from './lessonPlanTextUtils'
 
 /** Match report card / finance exports (indigo-600) */
 const PRIMARY = [79, 70, 229]
@@ -184,7 +185,14 @@ export async function exportLessonPlansPDF({
     y = doc.lastAutoTable.finalY + 6
 
     y = writeSection(doc, y, pageH, contentW, 'Description', plan.description)
-    y = writeSection(doc, y, pageH, contentW, 'Objectives', plan.objectives)
+    y = writeSection(
+      doc,
+      y,
+      pageH,
+      contentW,
+      'Objectives',
+      normalizeLessonPlanText(plan.objectives_text ?? plan.objectives),
+    )
     y = writeSection(doc, y, pageH, contentW, 'Teaching methods', plan.teaching_methods)
     y = writeSection(doc, y, pageH, contentW, 'Materials needed', plan.materials_needed)
 

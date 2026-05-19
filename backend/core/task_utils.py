@@ -1,8 +1,14 @@
 """
 Utilities for dispatching and tracking background Celery tasks.
+
+Set env var CELERY_FORCE_SYNC=true to run all background tasks synchronously
+inside the web request, bypassing the Celery worker entirely.  This is the
+recommended setting when you do not run a Celery worker (e.g. small deploys or
+during migration away from Celery).
 """
 
 import logging
+import os
 import time
 import uuid
 
@@ -12,6 +18,9 @@ from django.utils import timezone
 from .models import BackgroundTask
 
 logger = logging.getLogger(__name__)
+
+# When True, dispatch_background_task always runs tasks inline (no Redis needed).
+CELERY_FORCE_SYNC = os.getenv('CELERY_FORCE_SYNC', '').lower() in ('1', 'true', 'yes')
 
 # Cache worker availability to avoid pinging Redis on every request.
 # Format: (timestamp, is_available)
@@ -23,9 +32,13 @@ def _celery_worker_available():
     """
     Quick check whether at least one Celery worker is connected.
 
-    Result is cached for _WORKER_CACHE_TTL seconds to avoid overhead.
-    Returns False if Redis is unreachable or no workers respond.
+    Returns False immediately when CELERY_FORCE_SYNC is set so that
+    dispatch_background_task always takes the sync path without touching Redis.
+    Otherwise the result is cached for _WORKER_CACHE_TTL seconds.
     """
+    if CELERY_FORCE_SYNC:
+        return False
+
     now = time.monotonic()
     if now - _worker_cache['checked_at'] < _WORKER_CACHE_TTL:
         return _worker_cache['available']
@@ -211,3 +224,39 @@ def mark_task_failed(celery_task_id, error_message):
         error_message=error_message,
         completed_at=timezone.now(),
     )
+
+
+def call_task(celery_task_func, *args, **kwargs):
+    """
+    Fire a Celery task in the background when a worker is available, or run
+    it synchronously when CELERY_FORCE_SYNC is set or Redis is unreachable.
+
+    Use this as a drop-in replacement for ``celery_task_func.delay(*args, **kwargs)``
+    in places that do NOT need BackgroundTask progress tracking (e.g. signal
+    handlers that trigger embedding updates or stats recomputes).
+
+    Returns:
+        True  — task was sent to Celery (async)
+        False — task ran synchronously inside this process
+    """
+    if CELERY_FORCE_SYNC:
+        try:
+            celery_task_func(*args, **kwargs)
+        except Exception:
+            logger.exception("call_task sync execution failed: %s", celery_task_func.__name__)
+        return False
+
+    try:
+        celery_task_func.delay(*args, **kwargs)
+        return True
+    except Exception as exc:
+        logger.warning(
+            "call_task: Celery unavailable (%s), running %s synchronously",
+            exc,
+            celery_task_func.__name__,
+        )
+        try:
+            celery_task_func(*args, **kwargs)
+        except Exception:
+            logger.exception("call_task sync fallback failed: %s", celery_task_func.__name__)
+        return False
