@@ -22,6 +22,10 @@ logger = logging.getLogger(__name__)
 # When True, dispatch_background_task always runs tasks inline (no Redis needed).
 CELERY_FORCE_SYNC = os.getenv('CELERY_FORCE_SYNC', '').lower() in ('1', 'true', 'yes')
 
+# When True, dispatch_background_task enqueues to a DB-backed queue (QueuedJob)
+# instead of sending tasks to Celery.
+DB_JOB_QUEUE_ENABLED = os.getenv('DB_JOB_QUEUE_ENABLED', '').lower() in ('1', 'true', 'yes')
+
 # Cache worker availability to avoid pinging Redis on every request.
 # Format: (timestamp, is_available)
 _worker_cache = {'checked_at': 0.0, 'available': False}
@@ -126,6 +130,40 @@ def dispatch_background_task(
             logger.exception(f"Eager task failed for '{title}'")
             mark_task_failed(celery_task_id, str(task_exc)[:500])
         logger.info(f"Dispatched background task {celery_task_id}: {title}")
+        return bg_task
+
+    # Explicit sync mode takes precedence over DB queue mode.
+    if CELERY_FORCE_SYNC:
+        logger.warning(f"CELERY_FORCE_SYNC=true, running '{title}' synchronously")
+        return _run_sync_fallback(
+            celery_task_func, task_type, title, school_id, user,
+            task_args, task_kwargs, progress_total,
+        )
+
+    # Optional DB-backed async queue (no Celery/Redis needed).
+    if DB_JOB_QUEUE_ENABLED:
+        celery_task_id = f"dbq-{uuid.uuid4()}"
+        bg_task = BackgroundTask.objects.create(
+            school_id=school_id,
+            celery_task_id=celery_task_id,
+            task_type=task_type,
+            title=title,
+            status=BackgroundTask.Status.PENDING,
+            progress_total=progress_total,
+            triggered_by=user,
+        )
+
+        from .job_queue import enqueue_background_job
+
+        enqueue_background_job(
+            background_task=bg_task,
+            school_id=school_id,
+            user=user,
+            task_func=celery_task_func,
+            task_args=task_args,
+            task_kwargs=task_kwargs,
+        )
+        logger.info(f"Enqueued DB background task {celery_task_id}: {title}")
         return bg_task
 
     # Production: verify a worker is alive before dispatching to Celery.

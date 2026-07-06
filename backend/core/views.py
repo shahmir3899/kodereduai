@@ -42,6 +42,13 @@ class BackgroundTaskViewSet(
         if task.status in (BackgroundTask.Status.SUCCESS, BackgroundTask.Status.FAILED):
             return Response({'detail': 'Task already finished.'}, status=400)
 
+        # Try to cancel DB-backed queued job first (if present).
+        try:
+            from .job_queue import cancel_queued_job
+            cancel_queued_job(task.celery_task_id)
+        except Exception:
+            pass
+
         # Try to revoke the Celery task
         try:
             from config.celery import app as celery_app

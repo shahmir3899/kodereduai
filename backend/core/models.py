@@ -1,5 +1,6 @@
 from django.db import models
 from django.conf import settings
+from django.utils import timezone
 
 
 class BackgroundTask(models.Model):
@@ -105,3 +106,63 @@ class AIJob(models.Model):
 
     def __str__(self):
         return f'[{self.job_type}] {self.model_used} ({self.status})'
+
+
+class QueuedJob(models.Model):
+    """Internal DB-backed queue entry linked to a BackgroundTask."""
+
+    class Status(models.TextChoices):
+        PENDING = 'PENDING', 'Pending'
+        RUNNING = 'RUNNING', 'Running'
+        SUCCESS = 'SUCCESS', 'Success'
+        FAILED = 'FAILED', 'Failed'
+        CANCELLED = 'CANCELLED', 'Cancelled'
+
+    school = models.ForeignKey(
+        'schools.School',
+        on_delete=models.CASCADE,
+        related_name='queued_jobs',
+    )
+    background_task = models.OneToOneField(
+        BackgroundTask,
+        on_delete=models.CASCADE,
+        related_name='queued_job',
+    )
+    callable_path = models.CharField(max_length=255)
+    task_args = models.JSONField(default=list, blank=True)
+    task_kwargs = models.JSONField(default=dict, blank=True)
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.PENDING,
+    )
+    priority = models.PositiveSmallIntegerField(default=100)
+    attempt_count = models.PositiveSmallIntegerField(default=0)
+    max_attempts = models.PositiveSmallIntegerField(default=3)
+    scheduled_for = models.DateTimeField(default=timezone.now)
+    locked_at = models.DateTimeField(null=True, blank=True)
+    lock_expires_at = models.DateTimeField(null=True, blank=True)
+    last_heartbeat_at = models.DateTimeField(null=True, blank=True)
+    last_error = models.TextField(blank=True, default='')
+    started_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    triggered_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='queued_jobs',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['priority', 'scheduled_for', 'id']
+        indexes = [
+            models.Index(fields=['status', 'scheduled_for', 'priority']),
+            models.Index(fields=['status', 'lock_expires_at']),
+            models.Index(fields=['school', 'status', '-created_at']),
+        ]
+
+    def __str__(self):
+        return f"{self.callable_path} ({self.status})"
