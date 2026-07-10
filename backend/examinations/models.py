@@ -574,6 +574,16 @@ class ExamPaper(models.Model):
         blank=True,
         help_text="General instructions for students"
     )
+    structure = models.JSONField(
+        blank=True,
+        default=list,
+        help_text='List of paper section dicts used for rendering/choices.',
+    )
+    render_options = models.JSONField(
+        blank=True,
+        default=dict,
+        help_text='Paper render options (e.g., answer_lines).',
+    )
     total_marks = models.DecimalField(
         max_digits=6,
         decimal_places=2,
@@ -637,6 +647,29 @@ class ExamPaper(models.Model):
         return result['total'] or 0
 
     @property
+    def structure_marks_total(self):
+        """Sum of slots_counted * marks_per_question from structure sections."""
+        total = Decimal('0')
+        sections = self.structure if isinstance(self.structure, list) else []
+        for section in sections:
+            if not isinstance(section, dict):
+                continue
+            if str(section.get('type', 'question_group')).lower() == 'divider':
+                continue
+            slots_counted_raw = section.get('slots_counted', section.get('slots_shown', 0))
+            marks_raw = section.get('marks_per_question', 0)
+            try:
+                slots_counted = int(slots_counted_raw)
+            except (TypeError, ValueError):
+                slots_counted = 0
+            try:
+                marks_per_question = Decimal(str(marks_raw))
+            except Exception:
+                marks_per_question = Decimal('0')
+            total += Decimal(slots_counted) * marks_per_question
+        return total
+
+    @property
     def covered_topics(self):
         """Get all unique topics tested via questions in this paper."""
         from lms.models import Topic
@@ -680,6 +713,7 @@ class PaperQuestion(models.Model):
     question_order = models.PositiveIntegerField(
         help_text="Display order in the paper (1, 2, 3...)"
     )
+    section_key = models.CharField(max_length=50, blank=True, default='')
     marks_override = models.DecimalField(
         max_digits=5,
         decimal_places=2,
@@ -825,6 +859,22 @@ class PaperUpload(models.Model):
         max_length=500,
         help_text="Supabase storage URL"
     )
+    context_class = models.ForeignKey(
+        'students.Class',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='paper_uploads',
+        help_text="Uploader's optional class context; final selection always happens in the UI.",
+    )
+    context_subject = models.ForeignKey(
+        'academics.Subject',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='paper_uploads',
+        help_text="Uploader's optional subject context; final selection always happens in the UI.",
+    )
     ai_extracted_json = models.JSONField(
         null=True,
         blank=True,
@@ -900,3 +950,79 @@ class PaperFeedback(models.Model):
 
     def __str__(self):
         return f"Feedback for Upload #{self.paper_upload.id}"
+
+
+class StudentTermAssessment(models.Model):
+    """
+    Teacher-entered skills/behaviour ratings and remarks for a student,
+    scoped to an academic year. Feeds the Skills Assessment, Behaviour
+    Evaluation, and Remarks sections of the comprehensive student report.
+    """
+
+    class Rating(models.IntegerChoices):
+        NEEDS_IMPROVEMENT = 1, 'Needs Improvement'
+        FAIR = 2, 'Fair'
+        GOOD = 3, 'Good'
+        VERY_GOOD = 4, 'Very Good'
+        EXCELLENT = 5, 'Excellent'
+
+    school = models.ForeignKey(
+        'schools.School',
+        on_delete=models.CASCADE,
+        related_name='student_term_assessments',
+    )
+    student = models.ForeignKey(
+        'students.Student',
+        on_delete=models.CASCADE,
+        related_name='term_assessments',
+    )
+    academic_year = models.ForeignKey(
+        'academic_sessions.AcademicYear',
+        on_delete=models.CASCADE,
+        related_name='student_term_assessments',
+    )
+    term = models.ForeignKey(
+        'academic_sessions.Term',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='student_term_assessments',
+        help_text='Optional finer scope; left blank for a whole-year assessment',
+    )
+
+    # Skills
+    listening = models.IntegerField(choices=Rating.choices, null=True, blank=True)
+    speaking = models.IntegerField(choices=Rating.choices, null=True, blank=True)
+    writing = models.IntegerField(choices=Rating.choices, null=True, blank=True)
+    reading = models.IntegerField(choices=Rating.choices, null=True, blank=True)
+    participation = models.IntegerField(choices=Rating.choices, null=True, blank=True)
+    confidence = models.IntegerField(choices=Rating.choices, null=True, blank=True)
+    social_skills = models.IntegerField(choices=Rating.choices, null=True, blank=True)
+
+    # Behaviour
+    discipline = models.IntegerField(choices=Rating.choices, null=True, blank=True)
+    respect = models.IntegerField(choices=Rating.choices, null=True, blank=True)
+    teamwork = models.IntegerField(choices=Rating.choices, null=True, blank=True)
+    class_participation = models.IntegerField(choices=Rating.choices, null=True, blank=True)
+    responsibility = models.IntegerField(choices=Rating.choices, null=True, blank=True)
+
+    teacher_remark = models.TextField(blank=True)
+    principal_remark = models.TextField(blank=True)
+
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('student', 'academic_year', 'term')
+        ordering = ['-updated_at']
+        verbose_name = 'Student Term Assessment'
+        verbose_name_plural = 'Student Term Assessments'
+
+    def __str__(self):
+        return f"Assessment for {self.student.name} - {self.academic_year}"

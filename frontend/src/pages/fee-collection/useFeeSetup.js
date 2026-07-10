@@ -3,6 +3,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { financeApi, classesApi, studentsApi } from '../../services/api'
 import { useBackgroundTask } from '../../hooks/useBackgroundTask'
 
+const formatGenerationPeriod = (month, year) => new Date(year, month - 1).toLocaleString('en-US', { month: 'short', year: 'numeric' })
+
 /**
  * Data hook for FeeSetupPage — fee structures + record generation.
  */
@@ -79,7 +81,7 @@ export function useFeeSetup({ academicYearId, feeType, studentClassId, structure
   const generateMutation = useBackgroundTask({
     mutationFn: (data) => financeApi.generateMonthly(data),
     taskType: 'FEE_GENERATION',
-    title: `Generating fees for ${month}/${year}`,
+    title: `Generating fees for ${formatGenerationPeriod(month, year)}`,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['feePayments'] })
       queryClient.invalidateQueries({ queryKey: ['feeSummary'] })

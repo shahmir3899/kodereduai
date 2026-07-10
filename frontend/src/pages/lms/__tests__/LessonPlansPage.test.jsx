@@ -54,7 +54,7 @@ describe('LessonPlansPage', () => {
     it('renders header with Add button', async () => {
       renderWithProviders(<LessonPlansPage />)
       expect(screen.getByText('Lesson Plans')).toBeInTheDocument()
-      expect(screen.getByText('Add lesson plan')).toBeInTheDocument()
+      expect(screen.getByText('Add Lesson Plan')).toBeInTheDocument()
     })
 
     it('renders filters', async () => {
@@ -107,12 +107,25 @@ describe('LessonPlansPage', () => {
   })
 
   describe('Actions', () => {
-    it('Add button opens bulk lesson plans modal', async () => {
+    it('Add Lesson Plan button opens bulk lesson plans modal', async () => {
       renderWithProviders(<LessonPlansPage />)
-      fireEvent.click(screen.getByText('Add lesson plan'))
+      fireEvent.click(screen.getByText('Add Lesson Plan'))
       await waitFor(() => {
         expect(screen.getByText('Bulk lesson plans')).toBeInTheDocument()
       })
+    })
+
+    it('"Create single lesson plan" inside the bulk modal opens the single-plan create modal', async () => {
+      renderWithProviders(<LessonPlansPage />)
+      fireEvent.click(screen.getByText('Add Lesson Plan'))
+      await waitFor(() => {
+        expect(screen.getByText('Bulk lesson plans')).toBeInTheDocument()
+      })
+      fireEvent.click(screen.getByText('Create single lesson plan'))
+      await waitFor(() => {
+        expect(screen.getAllByText('Create Lesson Plan').length).toBeGreaterThanOrEqual(1)
+      })
+      expect(screen.queryByText('Bulk lesson plans')).not.toBeInTheDocument()
     })
   })
 

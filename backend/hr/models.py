@@ -64,6 +64,7 @@ class StaffMember(models.Model):
         ON_LEAVE = 'ON_LEAVE', 'On Leave'
         TERMINATED = 'TERMINATED', 'Terminated'
         RESIGNED = 'RESIGNED', 'Resigned'
+        RETIRED = 'RETIRED', 'Retired'
 
     class EmploymentType(models.TextChoices):
         FULL_TIME = 'FULL_TIME', 'Full Time'
@@ -174,6 +175,22 @@ class StaffMember(models.Model):
     @property
     def full_name(self):
         return f"{self.first_name} {self.last_name}"
+
+    def save(self, *args, **kwargs):
+        # Keep is_active in sync with employment_status so the two flags
+        # can never drift apart (e.g. via the edit form's status dropdown).
+        update_fields = kwargs.get('update_fields')
+        if update_fields is None or 'employment_status' in update_fields:
+            if self.employment_status == self.EmploymentStatus.ACTIVE:
+                self.is_active = True
+            elif self.employment_status in (
+                self.EmploymentStatus.TERMINATED,
+                self.EmploymentStatus.RESIGNED,
+            ):
+                self.is_active = False
+            if update_fields is not None and 'is_active' not in update_fields:
+                kwargs['update_fields'] = list(update_fields) + ['is_active']
+        super().save(*args, **kwargs)
 
 
 class StaffQualification(models.Model):

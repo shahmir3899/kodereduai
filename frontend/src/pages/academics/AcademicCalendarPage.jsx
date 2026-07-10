@@ -63,8 +63,10 @@ export default function AcademicCalendarPage() {
   const [month, setMonth] = useState(today.getMonth() + 1)
   const [selectedClassId, setSelectedClassId] = useState('')
   const [showModal, setShowModal] = useState(false)
+  const [selectedDateKey, setSelectedDateKey] = useState('')
   const [form, setForm] = useState(EMPTY_FORM)
   const [formErrors, setFormErrors] = useState({})
+  const [editingEntryId, setEditingEntryId] = useState(null)
   const [isRangeSelecting, setIsRangeSelecting] = useState(false)
   const [rangeAnchorDate, setRangeAnchorDate] = useState('')
   const [rangeHoverDate, setRangeHoverDate] = useState('')
@@ -127,6 +129,9 @@ export default function AcademicCalendarPage() {
     return map
   }, [monthDays])
 
+  const selectedDateInfo = selectedDateKey ? monthDaysByDate[selectedDateKey] : null
+  const selectedDateEntries = selectedDateInfo?.entries || []
+
   const completeness = useMemo(() => {
     const totalDays = monthDays.length || daysInMonth
     const customConfiguredDays = monthDays.filter((d) => (d.entries || []).length > 0).length
@@ -186,6 +191,21 @@ export default function AcademicCalendarPage() {
     },
   })
 
+  const updateEntryMut = useMutation({
+    mutationFn: ({ id, payload }) => sessionsApi.updateCalendarEntry(id, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['calendarMonthView'] })
+      queryClient.invalidateQueries({ queryKey: ['calendarEntries'] })
+      showSuccess('Calendar entry updated')
+      closeModal()
+    },
+    onError: (err) => {
+      const data = err.response?.data || {}
+      setFormErrors(data)
+      showError(data.detail || data.non_field_errors?.[0] || 'Failed to update calendar entry')
+    },
+  })
+
   const deleteEntryMut = useMutation({
     mutationFn: (id) => sessionsApi.deleteCalendarEntry(id),
     onSuccess: () => {
@@ -215,6 +235,7 @@ export default function AcademicCalendarPage() {
   }
 
   const openAddModalForDates = (startDate, endDate = startDate) => {
+    setEditingEntryId(null)
     setForm({
       ...EMPTY_FORM,
       start_date: startDate,
@@ -225,13 +246,43 @@ export default function AcademicCalendarPage() {
   }
 
   const openAddModal = () => {
+    closeDayDetailsModal()
     openAddModalForDates(monthStart, monthStart)
+  }
+
+  const openEditModal = (entry) => {
+    setEditingEntryId(entry.id)
+    setForm({
+      name: entry.name || '',
+      description: entry.description || '',
+      entry_kind: entry.entry_kind || 'EVENT',
+      off_day_type: entry.off_day_type || 'OTHER',
+      scope: entry.scope || 'SCHOOL',
+      start_date: entry.start_date || '',
+      end_date: entry.end_date || '',
+      color: entry.color || '#f97316',
+      class_ids: (entry.class_ids || []).map((id) => String(id)),
+      affects_students: entry.affects_students !== false,
+      affects_staff: entry.affects_staff !== false,
+    })
+    setFormErrors({})
+    closeDayDetailsModal()
+    setShowModal(true)
+  }
+
+  const openDayDetailsModal = (dateKey) => {
+    setSelectedDateKey(dateKey)
+  }
+
+  const closeDayDetailsModal = () => {
+    setSelectedDateKey('')
   }
 
   const closeModal = () => {
     setShowModal(false)
     setForm(EMPTY_FORM)
     setFormErrors({})
+    setEditingEntryId(null)
   }
 
   const toggleRangeSelecting = () => {
@@ -243,7 +294,14 @@ export default function AcademicCalendarPage() {
 
   const handleCalendarDateSelect = (dateKey) => {
     if (!isRangeSelecting) {
-      openAddModalForDates(dateKey, dateKey)
+      const dayInfo = monthDaysByDate[dateKey]
+      const hasEntries = (dayInfo?.entries || []).length > 0
+      if (hasEntries) {
+        openDayDetailsModal(dateKey)
+      } else {
+        closeDayDetailsModal()
+        openAddModalForDates(dateKey, dateKey)
+      }
       return
     }
     if (!rangeAnchorDate) {
@@ -342,6 +400,11 @@ export default function AcademicCalendarPage() {
           })
         : [],
       is_active: true,
+    }
+
+    if (editingEntryId) {
+      updateEntryMut.mutate({ id: editingEntryId, payload })
+      return
     }
 
     createEntryMut.mutate(payload)
@@ -546,6 +609,75 @@ export default function AcademicCalendarPage() {
         )}
       </div>
 
+      {selectedDateKey && selectedDateInfo && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={closeDayDetailsModal}>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[92vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">{selectedDateKey}</h3>
+                <p className="text-sm text-gray-600">{selectedDateInfo.is_off_day ? 'Marked OFF' : 'No OFF-day flag'}</p>
+              </div>
+              <button onClick={closeDayDetailsModal} className="p-1 rounded hover:bg-gray-100">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              {selectedDateEntries.length === 0 ? (
+                <p className="text-sm text-gray-500">No events or off-days are configured for this date.</p>
+              ) : (
+                selectedDateEntries.map((entry) => (
+                  <div key={entry.id} className="rounded-lg border border-gray-200 p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">{entry.name}</p>
+                        <p className="text-xs text-gray-600 mt-0.5">
+                          {entry.entry_kind === 'OFF_DAY' ? 'OFF Day' : 'Event'}
+                          {entry.off_day_type ? ` · ${entry.off_day_type.replace(/_/g, ' ')}` : ''}
+                        </p>
+                        <p className="text-xs text-gray-600 mt-0.5">{entry.start_date} to {entry.end_date}</p>
+                        <p className="text-xs text-gray-600 mt-0.5">{entry.scope === 'CLASS' ? 'Specific Classes' : 'Whole School'}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => openEditModal(entry)}
+                          className="text-xs text-blue-600 hover:text-blue-700"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => deleteEntryMut.mutate(entry.id)}
+                          className="text-xs text-red-600 hover:text-red-700"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2 pt-4">
+              <button
+                type="button"
+                onClick={() => {
+                  closeDayDetailsModal()
+                  openAddModalForDates(selectedDateKey, selectedDateKey)
+                }}
+                className="btn-primary px-4 py-2 text-sm"
+              >
+                Add Event / Off Day
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="card p-4 sm:p-5">
           <h3 className="text-sm font-semibold text-gray-900 mb-3">Terms Touching This Month</h3>
@@ -580,6 +712,12 @@ export default function AcademicCalendarPage() {
                       <p className="text-xs text-gray-600 mt-0.5">{entry.scope === 'CLASS' ? 'Class Specific' : 'Whole School'}</p>
                     </div>
                     <button
+                      onClick={() => openEditModal(entry)}
+                      className="text-xs text-blue-600 hover:text-blue-700 mr-3"
+                    >
+                      Edit
+                    </button>
+                    <button
                       onClick={() => deleteEntryMut.mutate(entry.id)}
                       className="text-xs text-red-600 hover:text-red-700"
                     >
@@ -613,7 +751,9 @@ export default function AcademicCalendarPage() {
       {showModal && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={closeModal}>
           <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[92vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Add Event / Off Day</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">
+              {editingEntryId ? 'Edit Event / Off Day' : 'Add Event / Off Day'}
+            </h3>
             <form className="space-y-4" onSubmit={submitEntry}>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="sm:col-span-2">
@@ -767,7 +907,7 @@ export default function AcademicCalendarPage() {
               <div className="flex justify-end gap-2 pt-2">
                 <button type="button" onClick={closeModal} className="btn-secondary px-4 py-2 text-sm">Cancel</button>
                 <button type="submit" className="btn-primary px-4 py-2 text-sm" disabled={createEntryMut.isPending}>
-                  {createEntryMut.isPending ? 'Saving...' : 'Save'}
+                  {(createEntryMut.isPending || updateEntryMut.isPending) ? 'Saving...' : (editingEntryId ? 'Update' : 'Save')}
                 </button>
               </div>
             </form>

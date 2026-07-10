@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query'
 import { lmsApi, hrApi, schoolsApi } from '../../services/api'
 import ClassSelector from '../../components/ClassSelector'
@@ -12,8 +12,9 @@ import { useToast } from '../../components/Toast'
 import TeacherScopeSummary from '../../components/teacher/TeacherScopeSummary'
 import TeacherScopeBadge, { TeacherScopeHint, useTeacherScopeLookup } from '../../components/teacher/TeacherScopeBadge'
 import BulkLessonPlansModal from './BulkLessonPlansModal'
+import LessonPlanTopicsPickerModal from './LessonPlanTopicsPickerModal'
 import { exportLessonPlansPDF } from './lessonPlansExportPdf'
-import { normalizeLessonPlanText } from './lessonPlanTextUtils'
+import { normalizeLessonPlanText, deriveAutoTitleFromCurriculumSummary } from './lessonPlanTextUtils'
 
 const STATUS_BADGES = {
   DRAFT: 'bg-gray-100 text-gray-800',
@@ -66,6 +67,7 @@ function objectiveRowsToPlainText(rows) {
 }
 
 const EMPTY_FORM = {
+  mode: 'MINIMAL',
   title: '',
   description: '',
   objectives: '',
@@ -78,6 +80,10 @@ const EMPTY_FORM = {
   materials_needed: '',
   teaching_methods: '',
   status: 'DRAFT',
+  chapterIds: [],
+  topicIds: [],
+  subtopicIds: [],
+  curriculumSummary: '',
 }
 
 export default function LessonPlansPage() {
@@ -94,14 +100,28 @@ export default function LessonPlansPage() {
   const [filterSubject, setFilterSubject] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [showBulkModal, setShowBulkModal] = useState(false)
+  const [topicPickerOpen, setTopicPickerOpen] = useState(false)
   const [editingPlan, setEditingPlan] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [form, setForm] = useState({ ...EMPTY_FORM })
+  const isMinimal = form.mode === 'MINIMAL' && !editingPlan
   const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
   const resolvedFilterClass = getResolvedMasterClassId(filterClass, activeAcademicYear?.id, sessionClasses)
   const resolvedFormClassObj = getResolvedMasterClassId(form.class_obj, activeAcademicYear?.id, sessionClasses)
   const { subjects: filterClassSubjects, isLoading: filterSubjectsLoading } = useClassSubjects(resolvedFilterClass)
-  const { subjects: formClassSubjects, isLoading: formSubjectsLoading } = useClassSubjects(resolvedFormClassObj)
+  const { subjects: formClassSubjects, assignments: formClassAssignments, isLoading: formSubjectsLoading } = useClassSubjects(resolvedFormClassObj)
+
+  // Minimal mode has no visible Teacher field — auto-assign from the class-subject's assigned teacher.
+  useEffect(() => {
+    if (!isMinimal || !form.subject || formClassAssignments.length === 0) return
+    const sid = String(form.subject)
+    const match = formClassAssignments.find(
+      (cs) => String(cs.subject) === sid && cs.is_active !== false && cs.teacher != null && cs.teacher !== '',
+    )
+    if (match && String(form.teacher) !== String(match.teacher)) {
+      setForm((prev) => ({ ...prev, teacher: String(match.teacher) }))
+    }
+  }, [isMinimal, form.subject, form.teacher, formClassAssignments])
   const sessionClassIdByMaster = useMemo(() => {
     const map = {}
     sessionClasses.forEach((sc) => {
@@ -322,6 +342,7 @@ export default function LessonPlansPage() {
 
     setEditingPlan(plan)
     setForm({
+      mode: 'STANDARD',
       title: plan.title || '',
       description: plan.description || '',
       objectives: objectivesText,
@@ -336,6 +357,10 @@ export default function LessonPlansPage() {
       materials_needed: plan.materials_needed || '',
       teaching_methods: plan.teaching_methods || '',
       status: plan.status || 'DRAFT',
+      chapterIds: [],
+      topicIds: (plan.planned_topics || []).map((t) => t.id),
+      subtopicIds: (plan.planned_subtopics || []).map((s) => s.id),
+      curriculumSummary: '',
     })
     setShowModal(true)
   }
@@ -347,10 +372,6 @@ export default function LessonPlansPage() {
   }
 
   const handleSubmit = () => {
-    if (!form.title) {
-      showError('Title is required')
-      return
-    }
     if (!form.class_obj) {
       showError('Please select a class')
       return
@@ -359,17 +380,43 @@ export default function LessonPlansPage() {
       showError('Please select a subject')
       return
     }
+    const topicSelectionCount = form.chapterIds.length + form.topicIds.length + form.subtopicIds.length
+
+    if (isMinimal) {
+      if (!form.lesson_date) {
+        showError('Please select a lesson date')
+        return
+      }
+      if (topicSelectionCount === 0) {
+        showError('Please select at least one chapter or topic')
+        return
+      }
+      if (!form.teacher) {
+        showError('No teacher is assigned to this class and subject. Please select one.')
+        return
+      }
+    } else if (!form.title) {
+      showError('Title is required')
+      return
+    }
 
     const objectiveRows = form.objective_rows || []
     const payload = {
       ...form,
-      objectives: objectiveRowsToPlainText(objectiveRows) || form.objectives,
+      title: isMinimal ? deriveAutoTitleFromCurriculumSummary(form.curriculumSummary) : form.title,
+      description: isMinimal ? '' : form.description,
+      objectives: isMinimal ? '' : (objectiveRowsToPlainText(objectiveRows) || form.objectives),
+      materials_needed: isMinimal ? '' : form.materials_needed,
+      teaching_methods: isMinimal ? '' : form.teaching_methods,
+      status: isMinimal ? 'DRAFT' : form.status,
       class_obj: parseInt(resolvedFormClassObj),
       subject: parseInt(form.subject),
       teacher: form.teacher ? parseInt(form.teacher) : null,
-      duration_minutes: parseInt(form.duration_minutes) || 45,
+      duration_minutes: isMinimal ? 45 : (parseInt(form.duration_minutes) || 45),
+      planned_topic_ids: form.topicIds,
+      planned_subtopic_ids: form.subtopicIds,
     }
-    const objectiveIds = Array.from(
+    const objectiveIds = isMinimal ? [] : Array.from(
       new Set(
         objectiveRows
           .map((row) => row.objectiveId)
@@ -436,7 +483,7 @@ export default function LessonPlansPage() {
           <p className="text-sm text-gray-600">Create and manage lesson plans for your classes</p>
         </div>
         <button type="button" onClick={() => setShowBulkModal(true)} className="btn btn-primary">
-          Add lesson plan
+          Add Lesson Plan
         </button>
       </div>
 
@@ -831,18 +878,43 @@ export default function LessonPlansPage() {
               {editingPlan ? 'Edit Lesson Plan' : 'Create Lesson Plan'}
             </h2>
 
+            {!editingPlan && (
+              <div className="flex items-center gap-4 mb-4 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+                <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+                  <input
+                    type="radio"
+                    name="lessonPlanMode"
+                    checked={form.mode === 'MINIMAL'}
+                    onChange={() => setForm({ ...form, mode: 'MINIMAL' })}
+                  />
+                  Minimal <span className="text-xs text-gray-500">(date, subject, chapter/topic only)</span>
+                </label>
+                <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+                  <input
+                    type="radio"
+                    name="lessonPlanMode"
+                    checked={form.mode === 'STANDARD'}
+                    onChange={() => setForm({ ...form, mode: 'STANDARD' })}
+                  />
+                  Standard <span className="text-xs text-gray-500">(full details)</span>
+                </label>
+              </div>
+            )}
+
             <div className="space-y-4">
               {/* Title */}
-              <div>
-                <label className="label">Title *</label>
-                <input
-                  type="text"
-                  className="input"
-                  placeholder="e.g., Introduction to Photosynthesis"
-                  value={form.title}
-                  onChange={(e) => setForm({ ...form, title: e.target.value })}
-                />
-              </div>
+              {!isMinimal && (
+                <div>
+                  <label className="label">Title *</label>
+                  <input
+                    type="text"
+                    className="input"
+                    placeholder="e.g., Introduction to Photosynthesis"
+                    value={form.title}
+                    onChange={(e) => setForm({ ...form, title: e.target.value })}
+                  />
+                </div>
+              )}
 
               {/* Class & Subject row */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -892,25 +964,52 @@ export default function LessonPlansPage() {
                 fallbackText="Select both class and subject to confirm whether this lesson plan is using class-wide or subject-only access."
               />
 
+              {/* Chapter / Topic */}
+              <div>
+                <label className="label">
+                  Chapter / Topic {isMinimal ? '*' : '(optional)'}
+                </label>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm text-gray-600">
+                    {form.chapterIds.length + form.topicIds.length + form.subtopicIds.length} item(s) selected
+                  </span>
+                  <button
+                    type="button"
+                    className="btn btn-secondary text-xs py-1 px-2"
+                    disabled={!resolvedFormClassObj || !form.subject}
+                    onClick={() => setTopicPickerOpen(true)}
+                  >
+                    Select chapter / topic
+                  </button>
+                </div>
+                {(!resolvedFormClassObj || !form.subject) && (
+                  <p className="text-xs text-gray-500 mt-1">Select class and subject first.</p>
+                )}
+              </div>
+
               {/* Teacher & Date row */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {(!isMinimal || !form.teacher) && (
+                  <div>
+                    <label className="label">
+                      Teacher{isMinimal ? ' (no default found — please choose)' : ''}
+                    </label>
+                    <select
+                      className="input"
+                      value={form.teacher}
+                      onChange={(e) => setForm({ ...form, teacher: e.target.value })}
+                    >
+                      <option value="">Select Teacher</option>
+                      {staff.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.full_name || t.user_name || `Staff #${t.id}`}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <div>
-                  <label className="label">Teacher</label>
-                  <select
-                    className="input"
-                    value={form.teacher}
-                    onChange={(e) => setForm({ ...form, teacher: e.target.value })}
-                  >
-                    <option value="">Select Teacher</option>
-                    {staff.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.full_name || t.user_name || `Staff #${t.id}`}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="label">Lesson Date</label>
+                  <label className="label">Lesson Date {isMinimal ? '*' : ''}</label>
                   <input
                     type="date"
                     className="input"
@@ -920,44 +1019,49 @@ export default function LessonPlansPage() {
                 </div>
               </div>
 
-              {/* Duration & Status row */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="label">Duration (minutes)</label>
-                  <input
-                    type="number"
-                    className="input"
-                    min="1"
-                    value={form.duration_minutes}
-                    onChange={(e) => setForm({ ...form, duration_minutes: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="label">Status</label>
-                  <select
-                    className="input"
-                    value={form.status}
-                    onChange={(e) => setForm({ ...form, status: e.target.value })}
-                  >
-                    <option value="DRAFT">Draft</option>
-                    <option value="PUBLISHED">Published</option>
-                  </select>
-                </div>
-              </div>
+              {!isMinimal && (
+                <>
+                  {/* Duration & Status row */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="label">Duration (minutes)</label>
+                      <input
+                        type="number"
+                        className="input"
+                        min="1"
+                        value={form.duration_minutes}
+                        onChange={(e) => setForm({ ...form, duration_minutes: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="label">Status</label>
+                      <select
+                        className="input"
+                        value={form.status}
+                        onChange={(e) => setForm({ ...form, status: e.target.value })}
+                      >
+                        <option value="DRAFT">Draft</option>
+                        <option value="PUBLISHED">Published</option>
+                      </select>
+                    </div>
+                  </div>
 
-              {/* Description */}
-              <div>
-                <label className="label">Description</label>
-                <textarea
-                  className="input"
-                  rows={3}
-                  placeholder="Brief description of the lesson..."
-                  value={form.description}
-                  onChange={(e) => setForm({ ...form, description: e.target.value })}
-                />
-              </div>
+                  {/* Description */}
+                  <div>
+                    <label className="label">Description</label>
+                    <textarea
+                      className="input"
+                      rows={3}
+                      placeholder="Brief description of the lesson..."
+                      value={form.description}
+                      onChange={(e) => setForm({ ...form, description: e.target.value })}
+                    />
+                  </div>
+                </>
+              )}
 
               {/* Objectives */}
+              {!isMinimal && (
               <div>
                 <label className="label">Objectives</label>
                 <div className="space-y-2">
@@ -1038,30 +1142,35 @@ export default function LessonPlansPage() {
                   )}
                 </div>
               </div>
+              )}
 
-              {/* Materials Needed */}
-              <div>
-                <label className="label">Materials Needed</label>
-                <textarea
-                  className="input"
-                  rows={2}
-                  placeholder="Textbook, whiteboard, projector..."
-                  value={form.materials_needed}
-                  onChange={(e) => setForm({ ...form, materials_needed: e.target.value })}
-                />
-              </div>
+              {!isMinimal && (
+                <>
+                  {/* Materials Needed */}
+                  <div>
+                    <label className="label">Materials Needed</label>
+                    <textarea
+                      className="input"
+                      rows={2}
+                      placeholder="Textbook, whiteboard, projector..."
+                      value={form.materials_needed}
+                      onChange={(e) => setForm({ ...form, materials_needed: e.target.value })}
+                    />
+                  </div>
 
-              {/* Teaching Methods */}
-              <div>
-                <label className="label">Teaching Methods</label>
-                <textarea
-                  className="input"
-                  rows={2}
-                  placeholder="Lecture, group discussion, hands-on activity..."
-                  value={form.teaching_methods}
-                  onChange={(e) => setForm({ ...form, teaching_methods: e.target.value })}
-                />
-              </div>
+                  {/* Teaching Methods */}
+                  <div>
+                    <label className="label">Teaching Methods</label>
+                    <textarea
+                      className="input"
+                      rows={2}
+                      placeholder="Lecture, group discussion, hands-on activity..."
+                      value={form.teaching_methods}
+                      onChange={(e) => setForm({ ...form, teaching_methods: e.target.value })}
+                    />
+                  </div>
+                </>
+              )}
             </div>
 
             <div className="flex justify-end space-x-3 mt-6">
@@ -1084,12 +1193,29 @@ export default function LessonPlansPage() {
         </div>
       )}
 
+      <LessonPlanTopicsPickerModal
+        open={topicPickerOpen}
+        onClose={() => setTopicPickerOpen(false)}
+        classId={parseInt(resolvedFormClassObj, 10)}
+        subjectId={parseInt(form.subject, 10)}
+        initialChapterIds={form.chapterIds}
+        initialTopicIds={form.topicIds}
+        initialSubtopicIds={form.subtopicIds}
+        onApply={({ chapterIds, topicIds, subtopicIds, curriculumSummary }) => {
+          setForm((prev) => ({ ...prev, chapterIds, topicIds, subtopicIds, curriculumSummary }))
+        }}
+      />
+
       {showBulkModal && (
         <BulkLessonPlansModal
           onClose={() => setShowBulkModal(false)}
           onSuccess={() => {
             setShowBulkModal(false)
             queryClient.invalidateQueries({ queryKey: ['lessonPlans'] })
+          }}
+          onCreateSingle={() => {
+            setShowBulkModal(false)
+            openAddModal()
           }}
         />
       )}

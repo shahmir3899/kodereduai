@@ -4,6 +4,8 @@ import { financeApi, attendanceApi } from '../../services/api'
 import { useBackgroundTask } from '../../hooks/useBackgroundTask'
 import { filterPayments } from './feeUtils'
 
+const formatGenerationPeriod = (month, year) => new Date(year, month - 1).toLocaleString('en-US', { month: 'short', year: 'numeric' })
+
 /**
  * Data hook for FeeCollectPage — payment collection workbench.
  * Handles fee payments queries + all payment-related mutations.
@@ -77,7 +79,7 @@ export function useFeeCollection({ month, year, classFilter, statusFilter, feeTy
   const generateMutation = useBackgroundTask({
     mutationFn: (data) => financeApi.generateMonthly(data),
     taskType: 'FEE_GENERATION',
-    title: `Generating fees for ${month}/${year}`,
+    title: `Generating fees for ${formatGenerationPeriod(month, year)}`,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['feePayments'] })
       queryClient.invalidateQueries({ queryKey: ['feeSummary'] })

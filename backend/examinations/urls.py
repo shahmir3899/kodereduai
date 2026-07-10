@@ -4,6 +4,7 @@ from .views import (
     ExamTypeViewSet, ExamGroupViewSet, ExamViewSet, ExamSubjectViewSet,
     StudentMarkViewSet, StudentResponseViewSet, GradeScaleViewSet, ReportCardView,
     QuestionViewSet, ExamPaperViewSet, PaperUploadViewSet, PaperFeedbackViewSet,
+    StudentTermAssessmentView,
 )
 
 router = DefaultRouter()
@@ -24,4 +25,5 @@ router.register(r'paper-feedback', PaperFeedbackViewSet, basename='paper-feedbac
 urlpatterns = [
     path('', include(router.urls)),
     path('report-card/', ReportCardView.as_view(), name='report-card'),
+    path('student-term-assessment/', StudentTermAssessmentView.as_view(), name='student-term-assessment'),
 ]

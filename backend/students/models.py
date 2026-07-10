@@ -121,6 +121,7 @@ class Student(models.Model):
     blood_group = models.CharField(max_length=5, blank=True, default='')
     address = models.TextField(blank=True, default='')
     previous_school = models.CharField(max_length=200, blank=True, default='')
+    photo_url = models.URLField(blank=True, default='')
 
     # Parent contact (for WhatsApp notifications)
     parent_phone = models.CharField(

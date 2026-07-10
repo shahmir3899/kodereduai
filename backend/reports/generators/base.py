@@ -75,7 +75,7 @@ class BaseReportGenerator:
             from reportlab.lib.pagesizes import A4
             from reportlab.lib import colors
             from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-            from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+            from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
             from reportlab.lib.units import inch
 
             buffer = io.BytesIO()
@@ -90,8 +90,28 @@ class BaseReportGenerator:
                 fontSize=16,
                 spaceAfter=6,
             )
-            elements.append(Paragraph(self.school.name, title_style))
-            elements.append(Paragraph(data.get('title', 'Report'), styles['Heading2']))
+
+            # Student/subject photo, if provided, sits beside the title
+            photo_bytes = data.get('photo_bytes')
+            if photo_bytes:
+                try:
+                    photo = Image(io.BytesIO(photo_bytes), width=0.9*inch, height=0.9*inch)
+                    title_block = [
+                        [photo, Paragraph(f"{self.school.name}<br/>{data.get('title', 'Report')}", title_style)],
+                    ]
+                    photo_table = Table(title_block, colWidths=[1*inch, None])
+                    photo_table.setStyle(TableStyle([
+                        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+                    ]))
+                    elements.append(photo_table)
+                except Exception:
+                    logger.warning("Failed to embed photo in report", exc_info=True)
+                    elements.append(Paragraph(self.school.name, title_style))
+                    elements.append(Paragraph(data.get('title', 'Report'), styles['Heading2']))
+            else:
+                elements.append(Paragraph(self.school.name, title_style))
+                elements.append(Paragraph(data.get('title', 'Report'), styles['Heading2']))
             elements.append(Spacer(1, 12))
 
             # Subtitle / date range
@@ -105,22 +125,15 @@ class BaseReportGenerator:
                     elements.append(Paragraph(f"<b>{key}:</b> {value}", styles['Normal']))
                 elements.append(Spacer(1, 12))
 
-            # Table data
-            if data.get('table_headers') and data.get('table_rows'):
-                table_data = [data['table_headers']] + data['table_rows']
-                table = Table(table_data, repeatRows=1)
-                table.setStyle(TableStyle([
-                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2563EB')),
-                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-                    ('FONTSIZE', (0, 0), (-1, 0), 10),
-                    ('FONTSIZE', (0, 1), (-1, -1), 9),
-                    ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-                    ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-                    ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F3F4F6')]),
-                    ('TOPPADDING', (0, 0), (-1, -1), 4),
-                    ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-                ]))
-                elements.append(table)
+            # Primary table (e.g. exam results)
+            self._add_table_section(elements, styles, data.get('table_headers'), data.get('table_rows'))
+
+            # Secondary table (e.g. LMS assignments)
+            if data.get('lms_headers') and data.get('lms_rows'):
+                elements.append(Spacer(1, 12))
+                elements.append(Paragraph(data.get('lms_heading', 'Assignments'), styles['Heading3']))
+                elements.append(Spacer(1, 6))
+                self._add_table_section(elements, styles, data.get('lms_headers'), data.get('lms_rows'))
 
             # Footer
             elements.append(Spacer(1, 20))
@@ -133,6 +146,29 @@ class BaseReportGenerator:
         except ImportError:
             logger.warning("reportlab not installed, generating simple text PDF")
             return self._fallback_pdf(data)
+
+    def _add_table_section(self, elements, styles, headers, rows):
+        """Append a styled reportlab Table for (headers, rows) onto elements, if present."""
+        from reportlab.lib import colors
+        from reportlab.platypus import Table, TableStyle
+
+        if not headers or not rows:
+            return
+
+        table_data = [headers] + rows
+        table = Table(table_data, repeatRows=1)
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2563EB')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('FONTSIZE', (0, 1), (-1, -1), 9),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F3F4F6')]),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ]))
+        elements.append(table)
 
     def _fallback_pdf(self, data: dict) -> bytes:
         """Simple text-based fallback when reportlab is not available."""

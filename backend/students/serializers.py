@@ -66,7 +66,7 @@ class StudentSerializer(serializers.ModelSerializer):
             'class_obj', 'class_name', 'session_class_obj',
             'roll_number', 'name',
             'admission_number', 'admission_date', 'date_of_birth',
-            'gender', 'blood_group', 'address', 'previous_school',
+            'gender', 'blood_group', 'address', 'previous_school', 'photo_url',
             'parent_phone', 'parent_name',
             'guardian_name', 'guardian_relation', 'guardian_phone',
             'guardian_email', 'guardian_occupation', 'guardian_address',

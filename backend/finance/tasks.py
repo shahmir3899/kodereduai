@@ -3,6 +3,7 @@ Background tasks for finance operations.
 """
 
 import logging
+import time
 from decimal import Decimal
 
 from celery import shared_task
@@ -63,10 +64,12 @@ def generate_monthly_fees_task(
 
     try:
         from datetime import date
-        from django.db import transaction
+        from django.db import IntegrityError, transaction
         from students.models import Student
         from finance.models import FeePayment, MonthlyClosing, MonthlyFeeCategory
         from academic_sessions.models import StudentEnrollment
+
+        t0 = time.monotonic()
 
         # Block if period closed
         if MonthlyClosing.objects.filter(school_id=school_id, year=year, month=month).exists():
@@ -186,14 +189,15 @@ def generate_monthly_fees_task(
                 no_fee_count += plan['no_fee_structure']
 
                 prev_balances = {}
-                for fp in FeePayment.objects.filter(
+                for sid, due, paid in FeePayment.objects.filter(
                     school_id=school_id,
                     month=prev_month,
                     year=prev_year,
                     fee_type='MONTHLY',
                     monthly_category_id=cat_id,
-                ):
-                    prev_balances[fp.student_id] = fp.amount_due - fp.amount_paid
+                    student_id__in=student_ids,
+                ).values_list('student_id', 'amount_due', 'amount_paid'):
+                    prev_balances[sid] = (due or Decimal('0')) - (paid or Decimal('0'))
 
                 to_create = []
                 to_update = []
@@ -267,7 +271,11 @@ def generate_monthly_fees_task(
                 if delete_ids:
                     FeePayment.objects.filter(id__in=delete_ids).delete()
                 if to_create:
-                    FeePayment.objects.bulk_create(to_create, batch_size=1000)
+                    try:
+                        FeePayment.objects.bulk_create(to_create, batch_size=1000)
+                    except IntegrityError:
+                        logger.warning(f"{task_id} concurrent monthly fee generation detected (category={cat_id}, month={month}, year={year})")
+                        raise
                 if to_update:
                     FeePayment.objects.bulk_update(
                         to_update,
@@ -293,6 +301,7 @@ def generate_monthly_fees_task(
                 f'{skipped_count} skipped.'
             ),
         }
+        logger.info(f"{task_id} core generation took {time.monotonic() - t0:.2f}s")
         mark_task_success(task_id, result_data=result_data)
         return result_data
     except Exception as e:
@@ -312,10 +321,12 @@ def generate_annual_fees_task(
     task_id = self.request.id
 
     try:
-        from django.db import transaction
+        from django.db import IntegrityError, transaction
         from students.models import Student
         from finance.models import AnnualFeeCategory, FeePayment
         from academic_sessions.models import StudentEnrollment
+
+        t0 = time.monotonic()
 
         categories = list(AnnualFeeCategory.objects.filter(
             id__in=annual_category_ids,
@@ -483,7 +494,11 @@ def generate_annual_fees_task(
                 if delete_ids:
                     FeePayment.objects.filter(id__in=delete_ids).delete()
                 if to_create:
-                    FeePayment.objects.bulk_create(to_create, batch_size=1000)
+                    try:
+                        FeePayment.objects.bulk_create(to_create, batch_size=1000)
+                    except IntegrityError:
+                        logger.warning(f"{task_id} concurrent annual fee generation detected (category={category.id}, year={year})")
+                        raise
                 if to_update:
                     FeePayment.objects.bulk_update(
                         to_update,
@@ -508,6 +523,7 @@ def generate_annual_fees_task(
                 f'{skipped_count} skipped.'
             ),
         }
+        logger.info(f"{task_id} core generation took {time.monotonic() - t0:.2f}s")
         mark_task_success(task_id, result_data=result_data)
         return result_data
 
@@ -535,9 +551,11 @@ def generate_onetime_fees_task(
 
     try:
         from datetime import date
-        from django.db import transaction
+        from django.db import IntegrityError, transaction
         from students.models import Student
         from finance.models import FeePayment
+
+        t0 = time.monotonic()
 
         student_qs = Student.objects.filter(school_id=school_id, is_active=True)
         if student_ids:
@@ -604,7 +622,11 @@ def generate_onetime_fees_task(
                     update_task_progress(task_id, current=progress)
 
             if to_create:
-                FeePayment.objects.bulk_create(to_create, batch_size=1000)
+                try:
+                    FeePayment.objects.bulk_create(to_create, batch_size=1000)
+                except IntegrityError:
+                    logger.warning(f"{task_id} concurrent one-time fee generation detected (year={year})")
+                    raise
 
         result_data = {
             'created': created_count,
@@ -613,6 +635,7 @@ def generate_onetime_fees_task(
             'year': year,
             'message': f'{created_count} fee record(s) generated, {skipped_count} skipped.',
         }
+        logger.info(f"{task_id} core generation took {time.monotonic() - t0:.2f}s")
         mark_task_success(task_id, result_data=result_data)
         return result_data
 

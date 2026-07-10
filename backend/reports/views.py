@@ -121,6 +121,44 @@ class GenerateReportView(APIView):
             }, status=202)
 
 
+class InstantReportView(APIView):
+    """
+    Generate a report synchronously and return it directly — no Celery task,
+    no GeneratedReport row. For reports cheap enough to build inline (e.g. a
+    single student's comprehensive report) where an instant download beats the
+    async-task-plus-persisted-copy flow used by GenerateReportView.
+    """
+    permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
+
+    def post(self, request):
+        serializer = GenerateReportSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        school_id = ensure_tenant_school_id(request)
+        if not school_id:
+            return Response({'error': 'school_id required'}, status=400)
+
+        generator_class = _get_generator_class(data['report_type'])
+        if not generator_class:
+            return Response({'error': f"Unknown report type: {data['report_type']}"}, status=400)
+
+        from schools.models import School
+        school = School.objects.get(id=school_id)
+
+        generator = generator_class(school, data.get('parameters', {}))
+        try:
+            pdf_bytes = generator.generate(format='PDF')
+        except Exception as e:
+            logger.exception("Instant report generation failed: %s", e)
+            return Response({'error': f'Report generation failed: {e}'}, status=500)
+
+        filename = f"{data['report_type'].replace('_', ' ').title().replace(' ', '_')}.pdf"
+        response = HttpResponse(pdf_bytes, content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+
+
 class ReportDownloadView(APIView):
     """Download a previously generated report by ID."""
     permission_classes = [IsAuthenticated, HasSchoolAccess]

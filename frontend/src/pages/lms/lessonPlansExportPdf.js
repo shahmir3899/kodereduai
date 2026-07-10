@@ -49,14 +49,74 @@ function compressImageForPdf(img, { maxDimension = 480, quality = 0.72 } = {}) {
 function formatLessonDate(iso) {
   if (!iso) return '—'
   try {
-    return new Date(iso).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
+    return new Date(iso).toLocaleDateString('en-GB', {
       day: 'numeric',
+      month: 'short',
+      year: 'numeric',
     })
   } catch {
     return String(iso)
   }
+}
+
+/** A plan is "minimal" when none of the free-text detail fields have content. */
+function isMinimalPlan(plan) {
+  return (
+    !normalizeLessonPlanText(plan.description) &&
+    !normalizeLessonPlanText(plan.objectives_text ?? plan.objectives) &&
+    !normalizeLessonPlanText(plan.teaching_methods) &&
+    !normalizeLessonPlanText(plan.materials_needed)
+  )
+}
+
+function slugifyForFilename(text) {
+  const slug = String(text || '')
+    .trim()
+    .replace(/[^a-zA-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+  return slug || 'unknown'
+}
+
+function buildFilenameSegment(plans, field, fallback) {
+  const values = Array.from(new Set(plans.map((p) => (p[field] || '').trim()).filter(Boolean)))
+  if (values.length === 0) return fallback
+  if (values.length === 1) return slugifyForFilename(values[0])
+  return `multiple-${field === 'class_name' ? 'classes' : 'subjects'}`
+}
+
+/** Group plans by class+subject (alphabetical), preserving lesson_date order within each group. */
+function groupPlansByClassSubject(plans) {
+  const groups = new Map()
+  plans.forEach((plan) => {
+    const key = `${plan.class_obj ?? plan.class_name ?? ''}::${plan.subject ?? plan.subject_name ?? ''}`
+    if (!groups.has(key)) {
+      groups.set(key, {
+        className: plan.class_name?.trim() || 'Unknown class',
+        subjectName: plan.subject_name?.trim() || 'Unknown subject',
+        plans: [],
+      })
+    }
+    groups.get(key).plans.push(plan)
+  })
+  return Array.from(groups.values()).sort((a, b) => {
+    const c = a.className.localeCompare(b.className)
+    return c !== 0 ? c : a.subjectName.localeCompare(b.subjectName)
+  })
+}
+
+/** Split a group's plans into runs of consecutive minimal / standard plans, in original order. */
+function splitIntoRuns(plans) {
+  const runs = []
+  plans.forEach((plan) => {
+    const minimal = isMinimalPlan(plan)
+    const lastRun = runs[runs.length - 1]
+    if (lastRun && lastRun.minimal === minimal) {
+      lastRun.plans.push(plan)
+    } else {
+      runs.push({ minimal, plans: [plan] })
+    }
+  })
+  return runs
 }
 
 /**
@@ -75,6 +135,7 @@ export async function exportLessonPlansPDF({
   academicYearLabel = '',
   schoolData = null,
 }) {
+  const generatedAt = new Date()
   const doc = new jsPDF({ unit: 'mm', format: 'a4' })
   const pageW = doc.internal.pageSize.getWidth()
   const pageH = doc.internal.pageSize.getHeight()
@@ -124,12 +185,10 @@ export async function exportLessonPlansPDF({
     doc.text(`Academic year: ${academicYearLabel}`, MARGIN, y)
     y += 6
   }
-  doc.text(`Lesson dates: ${dateFrom} to ${dateTo}`, MARGIN, y)
+  doc.text(`Lesson dates: ${formatLessonDate(dateFrom)} to ${formatLessonDate(dateTo)}`, MARGIN, y)
   y += 6
   doc.setTextColor(90, 90, 90)
   doc.setFontSize(9)
-  doc.text(`Generated: ${new Date().toLocaleString()}`, MARGIN, y)
-  y += 5
   doc.text(`Plans included: ${plans.length}`, MARGIN, y)
   y += 8
 
@@ -138,88 +197,63 @@ export async function exportLessonPlansPDF({
   doc.line(MARGIN, y, pageW - MARGIN, y)
   y += 8
 
-  const n = plans.length
+  // Group by class/subject (class+subject is always constant within a group by
+  // construction, so it's always shown as a heading rather than repeated per row).
+  // Within each group, batch consecutive "minimal" plans into a single compact
+  // table and render "standard" plans as full detail cards, in original date order.
+  const groups = groupPlansByClassSubject(plans)
 
-  plans.forEach((plan, idx) => {
-    const planLabel = `Plan ${idx + 1} of ${n}`
-    const title = plan.title?.trim() || 'Untitled'
-
-    autoTable(doc, {
-      startY: y,
-      margin: { left: MARGIN, right: MARGIN },
-      tableWidth: contentW,
-      head: [[{ content: `${planLabel}: ${title}`, colSpan: 2 }]],
-      headStyles: {
-        fillColor: PRIMARY,
-        textColor: 255,
-        fontStyle: 'bold',
-        fontSize: 10,
-        cellPadding: { top: 3, right: 3, bottom: 3, left: 3 },
-        valign: 'middle',
-      },
-      body: [
-        ['Lesson date', formatLessonDate(plan.lesson_date)],
-        ['Class', plan.class_name || '—'],
-        ['Subject', plan.subject_name || '—'],
-        ['Teacher', plan.teacher_name || '—'],
-        [
-          'Duration',
-          plan.duration_minutes != null ? `${plan.duration_minutes} min` : '—',
-        ],
-        ['Status', String(plan.status || '—')],
-        ...(plan.ai_generated ? [['Source', 'AI-generated']] : []),
-      ],
-      theme: 'plain',
-      styles: {
-        fontSize: 9,
-        cellPadding: 2.5,
-        lineColor: [220, 220, 220],
-        lineWidth: 0.1,
-      },
-      columnStyles: {
-        0: { cellWidth: 42, fontStyle: 'bold', textColor: [85, 85, 85] },
-        1: { cellWidth: contentW - 42 },
-      },
-    })
-
-    y = doc.lastAutoTable.finalY + 6
-
-    y = writeSection(doc, y, pageH, contentW, 'Description', plan.description)
-    y = writeSection(
-      doc,
-      y,
-      pageH,
-      contentW,
-      'Objectives',
-      normalizeLessonPlanText(plan.objectives_text ?? plan.objectives),
+  const blocks = []
+  groups.forEach((group) => {
+    const teacherNames = Array.from(
+      new Set(group.plans.map((p) => (p.teacher_name || '').trim()).filter(Boolean)),
     )
-    y = writeSection(doc, y, pageH, contentW, 'Teaching methods', plan.teaching_methods)
-    y = writeSection(doc, y, pageH, contentW, 'Materials needed', plan.materials_needed)
+    const constantTeacher = teacherNames.length === 1 ? teacherNames[0] : null
 
-    if (plan.display_text?.trim()) {
-      y = writeSection(doc, y, pageH, contentW, 'Curriculum / topic summary', plan.display_text)
+    blocks.push({ type: 'heading', group, constantTeacher })
+
+    splitIntoRuns(group.plans).forEach((run) => {
+      if (run.minimal) {
+        blocks.push({ type: 'compact', plans: run.plans, showTeacherColumn: !constantTeacher })
+      } else {
+        run.plans.forEach((plan) => blocks.push({ type: 'standard', plan }))
+      }
+    })
+  })
+
+  blocks.forEach((block, idx) => {
+    const isLast = idx === blocks.length - 1
+
+    if (block.type === 'heading') {
+      y = ensureSpace(doc, y, 14, pageH)
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(12)
+      doc.setTextColor(...PRIMARY)
+      doc.text(`${block.group.className} — ${block.group.subjectName}`, MARGIN, y)
+      y += 3
+      doc.setDrawColor(...PRIMARY)
+      doc.setLineWidth(0.3)
+      doc.line(MARGIN, y, pageW - MARGIN, y)
+      y += 5
+      if (block.constantTeacher) {
+        doc.setFont('helvetica', 'normal')
+        doc.setFontSize(9)
+        doc.setTextColor(90, 90, 90)
+        doc.text(`Teacher: ${block.constantTeacher}`, MARGIN, y)
+        y += 6
+      } else {
+        y += 2
+      }
+      return
     }
 
-    if (plan.planned_topics?.length) {
-      const bullets = plan.planned_topics
-        .map((t) => {
-          const ch = t.chapter != null ? ` (Ch. ${t.chapter})` : ''
-          return `• ${t.title || 'Topic'}${ch}`
-        })
-        .join('\n')
-      y = writeSection(doc, y, pageH, contentW, 'Planned topics', bullets)
-    }
-
-    if (plan.planned_subtopics?.length) {
-      const bullets = plan.planned_subtopics
-        .map((st) => `• ${st.title?.trim() || `Sub-topic #${st.id ?? '?'}`}`)
-        .join('\n')
-      y = writeSection(doc, y, pageH, contentW, 'Planned sub-topics', bullets)
-    }
+    y = block.type === 'compact'
+      ? renderCompactTable(doc, block.plans, y, contentW, { showTeacherColumn: block.showTeacherColumn })
+      : renderStandardCard(doc, block.plan, y, pageH, contentW)
 
     y += 4
-    if (idx < n - 1) {
-      y = ensureSpace(doc, y, 16, pageH)
+    if (!isLast) {
+      y = ensureSpace(doc, y, 12, pageH)
       doc.setDrawColor(220, 220, 220)
       doc.setLineWidth(0.3)
       doc.line(MARGIN, y, pageW - MARGIN, y)
@@ -227,17 +261,167 @@ export async function exportLessonPlansPDF({
     }
   })
 
-  // Page numbers
+  // Footer: generated timestamp (left) + page number (center), every page
   const total = doc.internal.getNumberOfPages()
+  const generatedLabel = `Generated: ${generatedAt.toLocaleString()}`
   for (let i = 1; i <= total; i++) {
     doc.setPage(i)
     doc.setFontSize(8)
     doc.setTextColor(130, 130, 130)
     doc.setFont('helvetica', 'normal')
+    doc.text(generatedLabel, MARGIN, pageH - FOOTER_MM / 2)
     doc.text(`Page ${i} of ${total}`, pageW / 2, pageH - FOOTER_MM / 2, { align: 'center' })
   }
 
-  doc.save(`lesson-plans_${dateFrom}_${dateTo}.pdf`)
+  const classSeg = buildFilenameSegment(plans, 'class_name', 'all-classes')
+  const subjectSeg = buildFilenameSegment(plans, 'subject_name', 'all-subjects')
+  doc.save(`lesson-plans_${classSeg}_${subjectSeg}_${dateFrom}_${dateTo}.pdf`)
+}
+
+/**
+ * One row per lesson for plans with no free-text detail
+ * (date, chapter/topic, [teacher], duration, status, AI).
+ * The Teacher column is dropped when every plan in this batch shares the same
+ * teacher — that's already printed once above as "Teacher: X" instead.
+ */
+function renderCompactTable(doc, plans, startY, contentW, { showTeacherColumn = true } = {}) {
+  const head = showTeacherColumn
+    ? ['Date', 'Lesson / Topic', 'Teacher', 'Duration', 'Status', 'AI']
+    : ['Date', 'Lesson / Topic', 'Duration', 'Status', 'AI']
+
+  const body = plans.map((p) => {
+    const row = [formatLessonDate(p.lesson_date), p.title?.trim() || p.display_text?.trim() || 'Untitled']
+    if (showTeacherColumn) row.push(p.teacher_name || '—')
+    row.push(
+      p.duration_minutes != null ? `${p.duration_minutes} min` : '—',
+      String(p.status || '—'),
+      p.ai_generated ? 'AI' : '—',
+    )
+    return row
+  })
+
+  const columnStyles = showTeacherColumn
+    ? {
+        0: { cellWidth: 22 },
+        1: { cellWidth: contentW - 22 - 35 - 20 - 18 - 12 },
+        2: { cellWidth: 35 },
+        3: { cellWidth: 20 },
+        4: { cellWidth: 18 },
+        5: { cellWidth: 12, halign: 'center' },
+      }
+    : {
+        0: { cellWidth: 22 },
+        1: { cellWidth: contentW - 22 - 20 - 18 - 12 },
+        2: { cellWidth: 20 },
+        3: { cellWidth: 18 },
+        4: { cellWidth: 12, halign: 'center' },
+      }
+
+  autoTable(doc, {
+    startY,
+    margin: { left: MARGIN, right: MARGIN, bottom: FOOTER_MM + 4 },
+    tableWidth: contentW,
+    head: [head],
+    body,
+    theme: 'grid',
+    headStyles: {
+      fillColor: PRIMARY,
+      textColor: 255,
+      fontStyle: 'bold',
+      fontSize: 9,
+      cellPadding: 2.5,
+    },
+    bodyStyles: {
+      fontSize: 8.5,
+      cellPadding: 2.2,
+      lineColor: [220, 220, 220],
+      lineWidth: 0.1,
+    },
+    alternateRowStyles: { fillColor: [248, 248, 252] },
+    columnStyles,
+  })
+  return doc.lastAutoTable.finalY
+}
+
+/** Full detail card for a plan with description/objectives/teaching-methods/materials content. */
+function renderStandardCard(doc, plan, startY, pageH, contentW) {
+  let y = startY
+  const title = plan.title?.trim() || 'Untitled'
+  const heading = `${formatLessonDate(plan.lesson_date)}  ·  ${title}`
+
+  autoTable(doc, {
+    startY: y,
+    margin: { left: MARGIN, right: MARGIN },
+    tableWidth: contentW,
+    head: [[{ content: heading, colSpan: 2 }]],
+    headStyles: {
+      fillColor: PRIMARY,
+      textColor: 255,
+      fontStyle: 'bold',
+      fontSize: 10,
+      cellPadding: { top: 3, right: 3, bottom: 3, left: 3 },
+      valign: 'middle',
+    },
+    body: [
+      ['Class', plan.class_name || '—'],
+      ['Subject', plan.subject_name || '—'],
+      ['Teacher', plan.teacher_name || '—'],
+      [
+        'Duration',
+        plan.duration_minutes != null ? `${plan.duration_minutes} min` : '—',
+      ],
+      ['Status', String(plan.status || '—')],
+      ...(plan.ai_generated ? [['Source', 'AI-generated']] : []),
+    ],
+    theme: 'plain',
+    styles: {
+      fontSize: 9,
+      cellPadding: 2.5,
+      lineColor: [220, 220, 220],
+      lineWidth: 0.1,
+    },
+    columnStyles: {
+      0: { cellWidth: 42, fontStyle: 'bold', textColor: [85, 85, 85] },
+      1: { cellWidth: contentW - 42 },
+    },
+  })
+
+  y = doc.lastAutoTable.finalY + 6
+
+  y = writeSection(doc, y, pageH, contentW, 'Description', plan.description)
+  y = writeSection(
+    doc,
+    y,
+    pageH,
+    contentW,
+    'Objectives',
+    normalizeLessonPlanText(plan.objectives_text ?? plan.objectives),
+  )
+  y = writeSection(doc, y, pageH, contentW, 'Teaching methods', plan.teaching_methods)
+  y = writeSection(doc, y, pageH, contentW, 'Materials needed', plan.materials_needed)
+
+  if (plan.display_text?.trim()) {
+    y = writeSection(doc, y, pageH, contentW, 'Curriculum / topic summary', plan.display_text)
+  }
+
+  if (plan.planned_topics?.length) {
+    const bullets = plan.planned_topics
+      .map((t) => {
+        const ch = t.chapter != null ? ` (Ch. ${t.chapter})` : ''
+        return `• ${t.title || 'Topic'}${ch}`
+      })
+      .join('\n')
+    y = writeSection(doc, y, pageH, contentW, 'Planned topics', bullets)
+  }
+
+  if (plan.planned_subtopics?.length) {
+    const bullets = plan.planned_subtopics
+      .map((st) => `• ${st.title?.trim() || `Sub-topic #${st.id ?? '?'}`}`)
+      .join('\n')
+    y = writeSection(doc, y, pageH, contentW, 'Planned sub-topics', bullets)
+  }
+
+  return y
 }
 
 function ensureSpace(doc, y, neededMm, pageH) {

@@ -156,7 +156,25 @@
       "Bash(printf \"\\\\n19. ExamsPage.jsx\\\\n\")",
       "Bash(printf \"\\\\n20. FaceAttendancePage.jsx\\\\n\")",
       "Bash(printf \"\\\\n21. TransportDashboard.jsx\\\\n\")",
-      "Bash(/dev/null:*)"
+      "Bash(/dev/null:*)",
+      "Bash(grep -n \"Help text\\\\|</div>\\\\s*$\\\\|Curriculum Coverage Panel\\\\|aside className\" \"d:/Personal/EducationAI/frontend/src/pages/examinations/QuestionPaperBuilderPage.jsx\")",
+      "Bash(node -e ' *)",
+      "Bash(npx vitest *)",
+      "Read(//tmp/**)",
+      "Bash(python manage.py test examinations -v 1)",
+      "Bash(python manage.py check)",
+      "Bash(python manage.py test examinations.tests -v 1 --noinput)",
+      "Bash(python manage.py test students.tests reports)",
+      "Bash(python manage.py test students.tests reports --keepdb)",
+      "Bash(python manage.py test students.tests reports --noinput)",
+      "Bash(npm run *)",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(python -c ' *)",
+      "Bash(python manage.py makemigrations hr --name staff_employment_status_retired)",
+      "Bash(python manage.py test hr -v 2)",
+      "Bash(python manage.py makemigrations --check --dry-run)",
+      "Bash(python manage.py migrate hr)",
+      "Bash(python manage.py shell -c ' *)"
     ]
   }
 }

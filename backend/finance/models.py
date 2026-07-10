@@ -1,5 +1,6 @@
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models import Q
 from django.utils import timezone
 
 
@@ -585,6 +586,18 @@ class FeePayment(models.Model):
             models.Index(fields=['school', 'year', 'month']),
             models.Index(fields=['school', 'status']),
             models.Index(fields=['school', 'fee_type']),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['school', 'student', 'year', 'month', 'monthly_category'],
+                condition=Q(fee_type='MONTHLY'),
+                name='uniq_monthly_fee_per_student_period_category',
+            ),
+            models.UniqueConstraint(
+                fields=['school', 'student', 'year', 'annual_category'],
+                condition=Q(fee_type='ANNUAL'),
+                name='uniq_annual_fee_per_student_year_category',
+            ),
         ]
 
     def __str__(self):

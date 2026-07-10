@@ -5,8 +5,102 @@ from core.permissions import get_effective_role, get_teacher_combined_scope
 from lms.models import Topic
 from .models import (
     ExamType, ExamGroup, Exam, ExamSubject, StudentMark, GradeScale,
-    Question, ExamPaper, PaperQuestion, StudentResponse, QuestionStats, PaperUpload, PaperFeedback
+    Question, ExamPaper, PaperQuestion, StudentResponse, QuestionStats, PaperUpload, PaperFeedback,
+    StudentTermAssessment,
 )
+
+
+def _coerce_int(value, default=0, min_value=0):
+    try:
+        coerced = int(value)
+    except (TypeError, ValueError):
+        coerced = default
+    return max(min_value, coerced)
+
+
+def _coerce_decimal(value, default='0'):
+    try:
+        return Decimal(str(value))
+    except Exception:
+        return Decimal(str(default))
+
+
+def _coerce_bool(value):
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in {'true', '1', 'yes', 'y', 'on'}:
+            return True
+        if lowered in {'false', '0', 'no', 'n', 'off'}:
+            return False
+    return bool(value)
+
+
+class PaperStructureValidationMixin:
+    """Shared normalization for ExamPaper structure/render options payloads."""
+
+    def _normalize_structure(self, structure):
+        if structure is None:
+            return None
+        if not isinstance(structure, list):
+            raise serializers.ValidationError({'structure': 'structure must be a list of section objects.'})
+
+        normalized = []
+        for index, section in enumerate(structure):
+            if not isinstance(section, dict):
+                raise serializers.ValidationError({'structure': [f'Item at index {index} must be an object.']})
+
+            key = str(section.get('key', '')).strip()
+            if not key:
+                raise serializers.ValidationError({'structure': [f'Item at index {index} requires key.']})
+
+            entry_type = str(section.get('type', 'question_group') or 'question_group').strip().lower()
+            if entry_type == 'divider':
+                # A plain print-layout separator (e.g. "Section A") -- no marks/slots/
+                # questions attach to it, so it's exempt from the question_type/slots checks.
+                normalized.append({
+                    'key': key,
+                    'type': 'divider',
+                    'title': str(section.get('title', '') or ''),
+                })
+                continue
+
+            question_type = str(section.get('question_type', '')).strip().upper()
+            if not question_type:
+                raise serializers.ValidationError({'structure': [f'Item at index {index} requires question_type.']})
+
+            slots_shown = _coerce_int(section.get('slots_shown', 0), default=0, min_value=0)
+            slots_counted = _coerce_int(
+                section.get('slots_counted', slots_shown),
+                default=slots_shown,
+                min_value=0,
+            )
+            marks_per_question = _coerce_decimal(section.get('marks_per_question', '0'), default='0')
+
+            normalized.append({
+                'key': key,
+                'type': 'question_group',
+                'title': str(section.get('title', '') or ''),
+                'instruction': str(section.get('instruction', '') or ''),
+                'question_type': question_type,
+                'slots_shown': slots_shown,
+                'slots_counted': slots_counted,
+                'marks_per_question': str(marks_per_question),
+            })
+
+        return normalized
+
+    def _normalize_render_options(self, render_options):
+        if render_options is None:
+            return None
+        if not isinstance(render_options, dict):
+            raise serializers.ValidationError({'render_options': 'render_options must be an object.'})
+
+        normalized = dict(render_options)
+        if 'answer_lines' in normalized:
+            normalized['answer_lines'] = _coerce_bool(normalized.get('answer_lines'))
+        return normalized
 
 
 # ── ExamType ──────────────────────────────────────────────────
@@ -612,7 +706,7 @@ class PaperQuestionSerializer(serializers.ModelSerializer):
     class Meta:
         model = PaperQuestion
         fields = [
-            'id', 'question', 'question_order', 'marks_override', 'marks',
+            'id', 'question', 'question_order', 'section_key', 'marks_override', 'marks',
             'question_text', 'question_type', 'option_a', 'option_b',
             'option_c', 'option_d', 'question_image_url', 'answer_text',
             'correct_answer', 'difficulty_level', 'type_data',
@@ -669,6 +763,7 @@ class ExamPaperSerializer(serializers.ModelSerializer):
     paper_questions = PaperQuestionSerializer(many=True, read_only=True)
     question_count = serializers.IntegerField(read_only=True)
     calculated_total_marks = serializers.DecimalField(max_digits=6, decimal_places=2, read_only=True)
+    structure_marks_total = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
     
     # NEW: Curriculum alignment - read-only expanded details
     lesson_plans_details = serializers.SerializerMethodField()
@@ -720,8 +815,9 @@ class ExamPaperSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'school', 'exam', 'exam_name', 'exam_subject',
             'class_obj', 'class_name', 'subject', 'subject_name',
-            'paper_title', 'instructions', 'total_marks', 'duration_minutes',
+            'paper_title', 'instructions', 'structure', 'render_options', 'total_marks', 'duration_minutes',
             'paper_questions', 'question_count', 'calculated_total_marks',
+            'structure_marks_total',
             'lesson_plans_details', 'covered_topics', 'question_topics_summary', 'overused_questions',
             'status', 'generated_by', 'generated_by_name',
             'is_active', 'created_at', 'updated_at',
@@ -802,14 +898,14 @@ class ExamPaperCreateUpdateSerializer(serializers.ModelSerializer):
         return instance
 
 
-class ExamPaperDraftEnsureSerializer(serializers.ModelSerializer):
+class ExamPaperDraftEnsureSerializer(PaperStructureValidationMixin, serializers.ModelSerializer):
     """Serializer for creating or refreshing server-backed draft papers."""
 
     class Meta:
         model = ExamPaper
         fields = [
             'exam', 'exam_subject', 'class_obj', 'subject',
-            'paper_title', 'instructions', 'total_marks',
+            'paper_title', 'instructions', 'structure', 'render_options', 'total_marks',
             'duration_minutes', 'status',
         ]
 
@@ -818,10 +914,14 @@ class ExamPaperDraftEnsureSerializer(serializers.ModelSerializer):
         exam = data.get('exam') or getattr(self.instance, 'exam', None)
         if exam_subject and exam and exam_subject.exam != exam:
             raise serializers.ValidationError('ExamSubject must belong to the specified Exam.')
+        if 'structure' in data:
+            data['structure'] = self._normalize_structure(data.get('structure'))
+        if 'render_options' in data:
+            data['render_options'] = self._normalize_render_options(data.get('render_options'))
         return data
 
 
-class ExamPaperDraftAutosaveSerializer(serializers.Serializer):
+class ExamPaperDraftAutosaveSerializer(PaperStructureValidationMixin, serializers.Serializer):
     """Serializer for autosaving editable paper metadata and manual questions."""
 
     exam = serializers.PrimaryKeyRelatedField(
@@ -844,6 +944,8 @@ class ExamPaperDraftAutosaveSerializer(serializers.Serializer):
     )
     paper_title = serializers.CharField(required=False, allow_blank=False)
     instructions = serializers.CharField(required=False, allow_blank=True)
+    structure = serializers.JSONField(required=False)
+    render_options = serializers.JSONField(required=False)
     total_marks = serializers.DecimalField(max_digits=6, decimal_places=2, required=False)
     duration_minutes = serializers.IntegerField(min_value=1, required=False)
     manual_questions = serializers.ListField(
@@ -857,6 +959,26 @@ class ExamPaperDraftAutosaveSerializer(serializers.Serializer):
         exam = data.get('exam')
         if exam_subject and exam and exam_subject.exam != exam:
             raise serializers.ValidationError('ExamSubject must belong to the specified Exam.')
+
+        if 'structure' in data:
+            data['structure'] = self._normalize_structure(data.get('structure'))
+        if 'render_options' in data:
+            data['render_options'] = self._normalize_render_options(data.get('render_options'))
+
+        manual_questions = data.get('manual_questions')
+        if manual_questions is not None:
+            normalized_questions = []
+            for item in manual_questions:
+                if not isinstance(item, dict):
+                    raise serializers.ValidationError({'manual_questions': 'Each manual question must be an object.'})
+                normalized = dict(item)
+                section_key = normalized.get('section_key', '')
+                if section_key is None:
+                    section_key = ''
+                normalized['section_key'] = str(section_key)[:50]
+                normalized_questions.append(normalized)
+            data['manual_questions'] = normalized_questions
+
         return data
 
 
@@ -864,18 +986,21 @@ class PaperUploadSerializer(serializers.ModelSerializer):
     """Serializer for PaperUpload."""
     uploaded_by_name = serializers.CharField(source='uploaded_by.username', read_only=True, allow_null=True)
     exam_paper_title = serializers.CharField(source='exam_paper.paper_title', read_only=True, allow_null=True)
+    context_class_name = serializers.CharField(source='context_class.name', read_only=True, allow_null=True)
+    context_subject_name = serializers.CharField(source='context_subject.name', read_only=True, allow_null=True)
 
     class Meta:
         model = PaperUpload
         fields = [
             'id', 'school', 'exam_paper', 'exam_paper_title',
             'uploaded_by', 'uploaded_by_name', 'image_url',
+            'context_class', 'context_class_name', 'context_subject', 'context_subject_name',
             'ai_extracted_json', 'extraction_confidence', 'extraction_notes',
             'status', 'error_message', 'created_at', 'processed_at',
         ]
         read_only_fields = [
-            'id', 'school', 'uploaded_by', 'ai_extracted_json',
-            'extraction_confidence', 'extraction_notes', 'status',
+            'id', 'school', 'uploaded_by', 'context_class', 'context_subject',
+            'ai_extracted_json', 'extraction_confidence', 'extraction_notes', 'status',
             'error_message', 'created_at', 'processed_at',
         ]
 
@@ -916,3 +1041,25 @@ class QuestionReviewResponseSerializer(serializers.Serializer):
     suggestions = serializers.ListField(child=serializers.CharField())
     corrected_text = serializers.CharField()
     clarity_score = serializers.IntegerField()
+
+
+class StudentTermAssessmentSerializer(serializers.ModelSerializer):
+    """Skills/behaviour ratings + remarks for one student's academic year — feeds the report PDF."""
+    updated_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = StudentTermAssessment
+        fields = [
+            'id', 'student', 'academic_year', 'term',
+            'listening', 'speaking', 'writing', 'reading',
+            'participation', 'confidence', 'social_skills',
+            'discipline', 'respect', 'teamwork', 'class_participation', 'responsibility',
+            'teacher_remark', 'principal_remark',
+            'updated_by', 'updated_by_name', 'updated_at',
+        ]
+        read_only_fields = ['id', 'updated_by', 'updated_by_name', 'updated_at']
+
+    def get_updated_by_name(self, obj):
+        if obj.updated_by:
+            return obj.updated_by.get_full_name() or obj.updated_by.username
+        return None

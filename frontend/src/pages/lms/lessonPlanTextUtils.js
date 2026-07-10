@@ -20,3 +20,25 @@ export function normalizeLessonPlanText(val) {
   }
   return String(val).trim()
 }
+
+/**
+ * Derive a lesson title from LessonPlanTopicsPickerModal's `curriculumSummary`
+ * (lines like "• Book › Chapter: Topic" or "• Book › Chapter › Topic: Sub-topic").
+ * Used by minimal-mode lesson plan creation, where the user never types a title.
+ */
+export function deriveAutoTitleFromCurriculumSummary(curriculumSummary, fallback = 'Lesson') {
+  const lines = String(curriculumSummary || '')
+    .split('\n')
+    .map((line) => line.replace(/^[•\-*]\s*/, '').trim())
+    .filter(Boolean)
+  const names = lines
+    .map((line) => {
+      const afterColon = line.includes(':') ? line.split(':').pop() : line
+      const afterArrow = afterColon.includes('›') ? afterColon.split('›').pop() : afterColon
+      return afterArrow.trim()
+    })
+    .filter(Boolean)
+  const unique = Array.from(new Set(names))
+  const title = unique.slice(0, 3).join(', ')
+  return (title || fallback).slice(0, 200)
+}

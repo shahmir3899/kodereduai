@@ -1,110 +1,186 @@
-import { useState, useCallback } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useDropzone } from 'react-dropzone'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { questionPaperApi } from '../../services/api'
-import RichTextEditor from '../../components/RichTextEditor'
 import Toast from '../../components/Toast'
+import PaperStructureBuilder, { makeDefaultSection } from './PaperStructureBuilder'
+import QuestionSlotEditor from './QuestionSlotEditor'
+
+const REVIEW_DRAFT_DEFAULT = {
+  paper_title: '',
+  instructions: '',
+  total_marks: '100',
+  duration_minutes: '60',
+  questions: [],
+}
+
+const POLL_INTERVAL_MS = 2500
+const TERMINAL_STATUSES = ['EXTRACTED', 'FAILED']
+
+function parseDurationMinutesFromLabel(label) {
+  if (!label) return null
+  const text = String(label).toLowerCase()
+  const match = text.match(/(\d+(\.\d+)?)/)
+  if (!match) return null
+  const value = parseFloat(match[1])
+  if (Number.isNaN(value)) return null
+  return Math.round(text.includes('hour') ? value * 60 : value)
+}
+
+/** Maps one extracted section into a PaperStructureBuilder-shaped structure row. */
+function mapExtractedSectionToRow(section, index) {
+  const slotsShown = Number(section?.shown_count) || 0
+  const slotsCounted = Number(section?.counted_count ?? slotsShown) || slotsShown
+  return makeDefaultSection(index, {
+    title: section?.title || `Q${index + 1}`,
+    instruction: section?.instruction || '',
+    question_type: section?.question_type_guess || 'SHORT',
+    slots_shown: slotsShown,
+    slots_counted: slotsCounted,
+    marks_per_question: Number(section?.marks_per_question) || 0,
+  })
+}
+
+/** Maps one extracted question into a QuestionSlotEditor-shaped draft question. */
+function mapExtractedQuestionToDraft(question, sectionKey, index) {
+  const options = question?.options
+  return {
+    local_id: `ocr_${sectionKey || 'unassigned'}_${index}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    question_id: null,
+    section_key: sectionKey || '',
+    question_text: question?.question_text || '',
+    question_type: question?.question_type || 'SHORT',
+    difficulty_level: 'MEDIUM',
+    bloom_level: '',
+    marks: Number(question?.marks) || 1,
+    marks_override: Number(question?.marks) || 1,
+    correct_answer: '',
+    answer_text: '',
+    type_data: question?.type_data && typeof question.type_data === 'object' ? question.type_data : {},
+    options: {
+      A: options?.A || '',
+      B: options?.B || '',
+      C: options?.C || '',
+      D: options?.D || '',
+    },
+  }
+}
+
+/** Builds the review-stage prefill (structure rows + slotted questions) from ai_extracted_json. */
+function buildPrefillFromExtraction(aiExtractedJson) {
+  const header = aiExtractedJson?.header || {}
+  const sections = Array.isArray(aiExtractedJson?.sections) ? aiExtractedJson.sections : []
+
+  const structureRows = []
+  const questions = []
+  sections.forEach((section, sectionIndex) => {
+    const row = mapExtractedSectionToRow(section, sectionIndex)
+    structureRows.push(row)
+    ;(section?.questions || []).forEach((question, questionIndex) => {
+      questions.push(mapExtractedQuestionToDraft(question, row.key, questionIndex))
+    })
+  })
+
+  return { header, structureRows, questions }
+}
 
 /**
- * ImageCapturePaperTab - Upload handwritten question papers for OCR extraction
+ * ImageCapturePaperTab - "Capture from image" source for wizard Step 3.
+ * Upload-first: works standalone even before Steps 1-2 are complete. Uploads the
+ * image, polls the PaperUpload until OCR finishes, then shows detected header/
+ * structure/questions as editable SUGGESTIONS the user reviews before accepting.
  */
-export default function ImageCapturePaperTab({ onPaperCreate, isLoading }) {
+export default function ImageCapturePaperTab({ classId, subjectId, readOnly = false, onApplyPrefill }) {
   const [uploadedImage, setUploadedImage] = useState(null)
-  const [extractedUpload, setExtractedUpload] = useState(null)
-  const [confirmingQuestions, setConfirmingQuestions] = useState([])
-  const [paperMetadata, setPaperMetadata] = useState({
-    class_obj: '',
-    subject: '',
-    exam: '',
-    paper_title: '',
-    instructions: '',
-    total_marks: '100',
-    duration_minutes: '60',
-  })
+  const [uploadId, setUploadId] = useState(null)
+  const [detectedHeader, setDetectedHeader] = useState(null)
+  const [reviewStructure, setReviewStructure] = useState([])
+  const [reviewDraft, setReviewDraft] = useState(REVIEW_DRAFT_DEFAULT)
   const [toast, setToast] = useState(null)
+  const hasAppliedExtractionRef = useRef(false)
 
-  // Upload mutation
+  // Upload mutation — defined at top level (never inside a handler).
   const uploadMutation = useMutation({
-    mutationFn: (file) =>
-      questionPaperApi.uploadPaperImage(
-        file,
-        paperMetadata.class_obj || null,
-        paperMetadata.subject || null
-      ),
-    onSuccess: (data) => {
-      setExtractedUpload(data.data)
-      setConfirmingQuestions(
-        data.data.ai_extracted_json?.questions?.map((q, idx) => ({
-          ...q,
-          id: idx,
-          question_text: q.question_text || '',
-          question_type: q.question_type || 'SHORT',
-          marks: q.marks || 1,
-          options: q.options || { A: '', B: '', C: '', D: '' },
-        })) || []
-      )
-      setToast({
-        type: 'success',
-        message: `OCR Extraction Complete: ${data.data.ai_extracted_json?.questions?.length || 0} questions found`,
-      })
+    mutationFn: ({ file, uploadClassId, uploadSubjectId }) =>
+      questionPaperApi.uploadPaperImage(file, uploadClassId || null, uploadSubjectId || null),
+    onSuccess: (response) => {
+      setUploadId(response.data.id)
     },
     onError: (error) => {
-      const msg = error.response?.data?.detail || 'Error uploading image'
-      setToast({ type: 'error', message: msg })
+      setToast({ type: 'error', message: error.response?.data?.detail || 'Error uploading image' })
     },
   })
 
-  // Polling for OCR status
-  const { refetch: checkUploadStatus } = useQuery({
-    queryKey: ['paperUpload', extractedUpload?.id],
-    queryFn: () => questionPaperApi.getPaperUpload(extractedUpload?.id),
-    enabled: false,
-    onSuccess: (data) => {
-      if (data.data.status === 'EXTRACTED') {
-        setExtractedUpload(data.data)
-        setConfirmingQuestions(
-          data.data.ai_extracted_json?.questions?.map((q, idx) => ({
-            ...q,
-            id: idx,
-          })) || []
-        )
-      } else if (data.data.status === 'FAILED') {
-        setToast({ type: 'error', message: 'OCR extraction failed. Please try again.' })
-      }
+  // Polling query — genuinely polls (unlike the old enabled:false/never-refetched query):
+  // refetchInterval re-evaluates after every fetch and stops once the upload reaches a
+  // terminal status.
+  const { data: pollResponse } = useQuery({
+    queryKey: ['paperUploadStatus', uploadId],
+    queryFn: () => questionPaperApi.getPaperUpload(uploadId),
+    enabled: !!uploadId,
+    refetchInterval: (query) => {
+      const uploadStatus = query.state.data?.data?.status
+      return TERMINAL_STATUSES.includes(uploadStatus) ? false : POLL_INTERVAL_MS
     },
   })
+  const uploadRecord = pollResponse?.data || null
 
-  // Handle file drop
+  // Apply the OCR extraction into locally-editable review state exactly once per upload.
+  useEffect(() => {
+    if (uploadRecord?.status !== 'EXTRACTED') return
+    if (hasAppliedExtractionRef.current) return
+    hasAppliedExtractionRef.current = true
+
+    const { header, structureRows, questions } = buildPrefillFromExtraction(uploadRecord.ai_extracted_json)
+    setDetectedHeader(header)
+    setReviewStructure(structureRows)
+    setReviewDraft({
+      paper_title: header.exam_title || '',
+      instructions: '',
+      total_marks: String(
+        header.detected_total_marks ?? uploadRecord.ai_extracted_json?.computed_total_marks ?? '100',
+      ),
+      duration_minutes: String(parseDurationMinutesFromLabel(header.duration_label) ?? '60'),
+      questions,
+    })
+  }, [uploadRecord])
+
+  const handleReset = useCallback(() => {
+    setUploadedImage(null)
+    setUploadId(null)
+    setDetectedHeader(null)
+    setReviewStructure([])
+    setReviewDraft(REVIEW_DRAFT_DEFAULT)
+    hasAppliedExtractionRef.current = false
+  }, [])
+
   const onDrop = useCallback((acceptedFiles) => {
     const file = acceptedFiles[0]
-    if (file) {
-      // Compress image using Compressor.js
-      import('compressorjs').then(({ default: Compressor }) => {
-        new Compressor(file, {
-          quality: 0.8,
-          maxWidth: 2000,
-          maxHeight: 2000,
-          mimeType: 'image/jpeg',
-          success: (result) => {
-            setUploadedImage({
-              file: new File([result], file.name, { type: 'image/jpeg' }),
-              preview: URL.createObjectURL(file),
-            })
-            // Auto-upload
-            uploadMutation.mutate(new File([result], file.name, { type: 'image/jpeg' }))
-          },
-          error: () => {
-            setToast({ type: 'error', message: 'Error compressing image' })
-          },
-        })
+    if (!file) return
+
+    import('compressorjs').then(({ default: Compressor }) => {
+      new Compressor(file, {
+        quality: 0.8,
+        maxWidth: 2000,
+        maxHeight: 2000,
+        mimeType: 'image/jpeg',
+        success: (result) => {
+          const compressedFile = new File([result], file.name, { type: 'image/jpeg' })
+          setUploadedImage({ file: compressedFile, preview: URL.createObjectURL(file) })
+          uploadMutation.mutate({ file: compressedFile, uploadClassId: classId, uploadSubjectId: subjectId })
+        },
+        error: () => {
+          setToast({ type: 'error', message: 'Error compressing image' })
+        },
       })
-    }
-  }, [])
+    })
+  }, [classId, subjectId, uploadMutation])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: { 'image/*': ['.jpeg', '.jpg', '.png', '.webp'] },
     maxSize: 10 * 1024 * 1024,
+    disabled: readOnly,
   })
 
   // Enhance input props to support camera capture on mobile
@@ -113,51 +189,36 @@ export default function ImageCapturePaperTab({ onPaperCreate, isLoading }) {
     capture: 'environment', // Opens rear camera on mobile devices
   }
 
-  // Update question in confirmation list
-  const handleUpdateQuestion = (id, updates) => {
-    setConfirmingQuestions(
-      confirmingQuestions.map((q) => (q.id === id ? { ...q, ...updates } : q))
-    )
-  }
-
-  // Handle confirmation
-  const handleConfimpaper = async () => {
-    const confirmMutation = useMutation({
-      mutationFn: () =>
-        questionPaperApi.confirmPaperUpload(extractedUpload.id, {
-          confirmed_data: { questions: confirmingQuestions },
-          paper_metadata: paperMetadata,
-        }),
-      onSuccess: (data) => {
-        setToast({
-          type: 'success',
-          message: `Paper confirmed! Created ${data.data.questions_created} questions.`,
-        })
-        onPaperCreate(data.data)
+  const handleAccept = () => {
+    if (!uploadRecord?.id) return
+    onApplyPrefill?.({
+      uploadId: uploadRecord.id,
+      paperFields: {
+        paper_title: reviewDraft.paper_title,
+        total_marks: reviewDraft.total_marks,
+        duration_minutes: reviewDraft.duration_minutes,
       },
-      onError: (error) => {
-        const msg = error.response?.data?.detail || 'Error confirming paper'
-        setToast({ type: 'error', message: msg })
-      },
+      structure: reviewStructure,
+      questions: reviewDraft.questions,
     })
-
-    confirmMutation.mutate()
   }
 
-  if (uploadMutation.isPending) {
-    return (
-      <div className="flexflex-col items-center justify-center py-12">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
-        <p className="text-gray-600">Processing image with OCR...</p>
-      </div>
-    )
-  }
+  const isUploading = uploadMutation.isPending
+  const isProcessing = !!uploadId && !!uploadRecord && ['PENDING', 'PROCESSING'].includes(uploadRecord.status)
+  const isExtracted = uploadRecord?.status === 'EXTRACTED'
+  const isFailed = uploadRecord?.status === 'FAILED'
 
-  if (!uploadedImage) {
-    // Upload state
-    return (
-      <div className="space-y-6">
-        {/* Dropzone */}
+  return (
+    <div className="space-y-6">
+      {toast && <Toast type={toast.type} message={toast.message} onClose={() => setToast(null)} />}
+
+      {readOnly && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          This paper is finalized and is opened in read-only mode.
+        </div>
+      )}
+
+      {!readOnly && !uploadId && (
         <div
           {...getRootProps()}
           className={`border-2 border-dashed rounded-lg p-12 text-center cursor-pointer transition ${
@@ -178,194 +239,154 @@ export default function ImageCapturePaperTab({ onPaperCreate, isLoading }) {
             Supports JPEG, PNG, WebP • Max 10 MB • Camera enabled on mobile
           </p>
         </div>
+      )}
 
-        {/* Paper Metadata (optional) */}
-        <div className="bg-gray-50 p-4 rounded-lg">
-          <h4 className="font-semibold text-gray-800 mb-3">Paper Details (Optional)</h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <input
-              type="text"
-              placeholder="Paper Title"
-              value={paperMetadata.paper_title}
-              onChange={(e) =>
-                setPaperMetadata({ ...paperMetadata, paper_title: e.target.value })
-              }
-              className="px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-            />
-            <input
-              type="number"
-              placeholder="Total Marks"
-              value={paperMetadata.total_marks}
-              onChange={(e) =>
-                setPaperMetadata({ ...paperMetadata, total_marks: e.target.value })
-              }
-              className="px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
+      {(isUploading || isProcessing) && (
+        <div className="flex flex-col items-center justify-center py-12">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4" />
+          <p className="text-gray-600">
+            {isUploading ? 'Compressing and uploading image...' : 'Processing with OCR... this can take up to a minute.'}
+          </p>
         </div>
-      </div>
-    )
-  }
+      )}
 
-  if (extractedUpload && confirmingQuestions.length > 0) {
-    // Review & confirm state
-    return (
-      <div className="space-y-6">
-        {/* Image Preview */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="md:col-span-1">
-            <h4 className="font-semibold text-gray-800 mb-2">Uploaded Image</h4>
+      {isFailed && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-6 text-center space-y-3">
+          <p className="text-red-800 font-medium">OCR extraction failed.</p>
+          <p className="text-sm text-red-700">{uploadRecord?.error_message || 'Please try again with a clearer photo.'}</p>
+          <button
+            type="button"
+            onClick={handleReset}
+            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+          >
+            Try Again
+          </button>
+        </div>
+      )}
+
+      {isExtracted && (
+        <div className="space-y-6">
+          {uploadedImage && (
             <img
               src={uploadedImage.preview}
-              alt="Question paper"
-              className="w-full h-auto border border-gray-300 rounded-lg"
+              alt="Uploaded question paper"
+              className="w-full max-w-xs mx-auto h-auto border border-gray-300 rounded-lg"
             />
-            <p className="text-xs text-gray-500 mt-2">
-              Confidence: {(extractedUpload.extraction_confidence * 100).toFixed(1)}%
-            </p>
+          )}
+
+          {/* Detected from image — display hints only, never auto-selected */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <h4 className="font-semibold text-blue-900 mb-3">Detected from image</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+              {detectedHeader?.school_name && (
+                <div><span className="text-blue-700">School:</span> <span className="text-blue-900">{detectedHeader.school_name}</span></div>
+              )}
+              {detectedHeader?.exam_title && (
+                <div><span className="text-blue-700">Exam title:</span> <span className="text-blue-900">{detectedHeader.exam_title}</span></div>
+              )}
+              <div>
+                <span className="text-blue-700">Class:</span>{' '}
+                <span className="text-blue-900">
+                  {detectedHeader?.class_label
+                    ? `Detected: ${detectedHeader.class_label} — select the matching class below`
+                    : 'Not detected — select the class below'}
+                </span>
+              </div>
+              <div>
+                <span className="text-blue-700">Subject:</span>{' '}
+                <span className="text-blue-900">
+                  {detectedHeader?.subject_label
+                    ? `Detected: ${detectedHeader.subject_label} — select the matching subject below`
+                    : 'Not detected — select the subject below'}
+                </span>
+              </div>
+              <div>
+                <span className="text-blue-700">Total marks:</span>{' '}
+                <span className="text-blue-900">
+                  {detectedHeader?.detected_total_marks ?? uploadRecord?.ai_extracted_json?.computed_total_marks ?? 'Not detected'}
+                </span>
+              </div>
+              {detectedHeader?.duration_label && (
+                <div><span className="text-blue-700">Duration:</span> <span className="text-blue-900">{detectedHeader.duration_label}</span></div>
+              )}
+            </div>
+            {!(classId && subjectId) && (
+              <p className="text-xs text-blue-700 mt-3">
+                Pick the actual class and subject in Paper Setup (Step 1) — detected labels are hints only.
+              </p>
+            )}
           </div>
 
-          {/* Questions for review */}
-          <div className="md:col-span-2 space-y-4">
-            <h4 className="font-semibold text-gray-800">
-              Review Extracted Questions ({confirmingQuestions.length})
-            </h4>
-
-            <div className="space-y-3 max-h-96 overflow-y-auto bg-gray-50 p-4 rounded">
-              {confirmingQuestions.map((question, idx) => (
-                <div key={question.id} className="bg-white p-4 border border-gray-200 rounded-lg space-y-3">
-                  {/* Question number, type, marks */}
-                  <div className="flex gap-2 items-center flex-wrap">
-                    <span className="font-bold text-gray-800">Q{idx + 1}.</span>
-                    <select
-                      value={question.question_type}
-                      onChange={(e) =>
-                        handleUpdateQuestion(question.id, { question_type: e.target.value })
-                      }
-                      className="px-2 py-1 border border-gray-300 rounded text-sm"
-                    >
-                      <option value="MCQ">MCQ</option>
-                      <option value="SHORT">Short</option>
-                      <option value="ESSAY">Essay</option>
-                      <option value="TRUE_FALSE">T/F</option>
-                      <option value="FILL_BLANK">Fill</option>
-                    </select>
-                    <input
-                      type="number"
-                      value={question.marks}
-                      onChange={(e) =>
-                        handleUpdateQuestion(question.id, { marks: parseFloat(e.target.value) })
-                      }
-                      min="0.5"
-                      step="0.5"
-                      className="w-16 px-2 py-1 border border-gray-300 rounded text-sm"
-                    />
-                    <span className="text-sm text-gray-600">marks</span>
-                  </div>
-
-                  {/* Question text editor */}
-                  <RichTextEditor
-                    value={question.question_text}
-                    onChange={(html) =>
-                      handleUpdateQuestion(question.id, { question_text: html })
-                    }
-                    placeholder="Edit question text..."
-                  />
-
-                  {/* MCQ options (if applicable) */}
-                  {question.question_type === 'MCQ' && (
-                    <div className="space-y-2 bg-gray-50 p-2 rounded">
-                      {['A', 'B', 'C', 'D'].map((opt) => (
-                        <input
-                          key={opt}
-                          type="text"
-                          value={question.options?.[opt] || ''}
-                          onChange={(e) =>
-                            handleUpdateQuestion(question.id, {
-                              options: {
-                                ...question.options,
-                                [opt]: e.target.value,
-                              },
-                            })
-                          }
-                          placeholder={`Option ${opt}`}
-                          className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
+          {/* Editable paper fields, prefilled from detection */}
+          <div className="bg-gray-50 p-4 rounded-lg space-y-3">
+            <h4 className="font-semibold text-gray-800">Paper Details</h4>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <input
+                type="text"
+                placeholder="Paper Title"
+                value={reviewDraft.paper_title}
+                onChange={(e) => setReviewDraft((prev) => ({ ...prev, paper_title: e.target.value }))}
+                className="px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+              />
+              <input
+                type="number"
+                placeholder="Total Marks"
+                value={reviewDraft.total_marks}
+                onChange={(e) => setReviewDraft((prev) => ({ ...prev, total_marks: e.target.value }))}
+                className="px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+              />
+              <input
+                type="number"
+                placeholder="Duration (minutes)"
+                value={reviewDraft.duration_minutes}
+                onChange={(e) => setReviewDraft((prev) => ({ ...prev, duration_minutes: e.target.value }))}
+                className="px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+              />
             </div>
           </div>
-        </div>
 
-        {/* Paper metadata form */}
-        <div className="bg-gray-50 p-4 rounded-lg space-y-3">
-          <h4 className="font-semibold text-gray-800">Paper Metadata</h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <input
-              type="text"
-              placeholder="Paper Title"
-              value={paperMetadata.paper_title}
-              onChange={(e) =>
-                setPaperMetadata({ ...paperMetadata, paper_title: e.target.value })
-              }
-              className="px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-            />
-            <textarea
-              placeholder="Instructions"
-              value={paperMetadata.instructions}
-              onChange={(e) =>
-                setPaperMetadata({ ...paperMetadata, instructions: e.target.value })
-              }
-              rows="2"
-              className="md:col-span-2 px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-            />
-            <input
-              type="number"
-              placeholder="Total Marks"
-              value={paperMetadata.total_marks}
-              onChange={(e) =>
-                setPaperMetadata({ ...paperMetadata, total_marks: e.target.value })
-              }
-              className="px-3 py-2 border border-gray-300 rounded"
-            />
-            <input
-              type="number"
-              placeholder="Duration (min)"
-              value={paperMetadata.duration_minutes}
-              onChange={(e) =>
-                setPaperMetadata({ ...paperMetadata, duration_minutes: e.target.value })
-              }
-              className="px-3 py-2 border border-gray-300 rounded"
+          {/* Detected structure — editable before accepting */}
+          <div>
+            <h4 className="font-semibold text-gray-800 mb-2">Detected Paper Structure</h4>
+            <PaperStructureBuilder
+              sections={reviewStructure}
+              onChange={setReviewStructure}
+              totalMarks={reviewDraft.total_marks}
             />
           </div>
-        </div>
 
-        {/* Action buttons */}
-        <div className="flex gap-2 justify-end pt-4 border-t border-gray-200">
-          <button
-            onClick={() => setUploadedImage(null)}
-            className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100"
-          >
-            Upload Different Image
-          </button>
-          <button
-            onClick={handleConfimpaper}
-            disabled={isLoading}
-            className={`px-6 py-2 rounded-lg font-medium ${
-              isLoading
-                ? 'bg-gray-400 cursor-not-allowed'
-                : 'bg-green-600 text-white hover:bg-green-700'
-            }`}
-          >
-            {isLoading ? 'Confirming...' : 'Confirm & Create Paper'}
-          </button>
-        </div>
-      </div>
-    )
-  }
+          {/* Detected questions, slotted into their sections — editable before accepting */}
+          <div>
+            <h4 className="font-semibold text-gray-800 mb-2">Detected Questions</h4>
+            <QuestionSlotEditor
+              draftData={reviewDraft}
+              onDraftDataChange={setReviewDraft}
+              structure={reviewStructure}
+              classId={classId}
+              subjectId={subjectId}
+              source="manual"
+              hideFooter
+            />
+          </div>
 
-  return null
+          <div className="flex gap-2 justify-end pt-4 border-t border-gray-200">
+            <button
+              type="button"
+              onClick={handleReset}
+              className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100"
+            >
+              Upload Different Image
+            </button>
+            <button
+              type="button"
+              onClick={handleAccept}
+              className="px-6 py-2 rounded-lg font-medium bg-green-600 text-white hover:bg-green-700"
+            >
+              Accept & continue
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }

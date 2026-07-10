@@ -51,7 +51,7 @@ vi.mock('../../../components/ClassSelector', () => ({
 }))
 
 vi.mock('../ImageCapturePaperTab', () => ({ default: () => <div>Image Tab</div> }))
-vi.mock('../LessonPlanPaperTab', () => ({ default: () => <div>Lesson Tab</div> }))
+vi.mock('../BankFillSource', () => ({ default: () => <div>Bank Fill Source</div> }))
 vi.mock('../ManualEntryPaperTab', () => ({
   default: function MockManualEntryPaperTab({ draftData, onDraftDataChange }) {
     return (
@@ -169,7 +169,23 @@ vi.mock('../../../services/api', () => ({
     }),
     createExamPaper: vi.fn().mockResolvedValue({ data: { id: 1 } }),
     ensureDraft: vi.fn().mockResolvedValue({ data: { id: 1 } }),
-    autosaveDraft: vi.fn().mockResolvedValue({ data: { id: 1 } }),
+    autosaveDraft: vi.fn().mockImplementation((id, data) => Promise.resolve({
+      data: {
+        id,
+        status: 'DRAFT',
+        paper_questions: (data.manual_questions || []).map((q, idx) => ({
+          question: q.question_id || 9000 + idx,
+          question_order: q.question_order || idx + 1,
+          question_text: q.question_text,
+          question_type: q.question_type,
+          difficulty_level: q.difficulty_level,
+          marks: q.marks,
+          bloom_level: q.bloom_level,
+          section_key: q.section_key || '',
+          question_snapshot: { bloom_level: q.bloom_level },
+        })),
+      },
+    })),
   },
   examinationsApi: {
     getExams: vi.fn().mockResolvedValue({ data: { results: [] } }),
@@ -218,6 +234,9 @@ describe('Bloom Distribution Chart in Paper Builder', () => {
     const user = userEvent.setup()
     renderWithProviders(<QuestionPaperBuilderPage />)
 
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Add Unclassified' })).toBeInTheDocument()
+    })
     await user.click(screen.getByRole('button', { name: 'Add Unclassified' }))
     await waitFor(() => {
       expect(screen.getByText('Unclassified (1)')).toBeInTheDocument()
@@ -228,6 +247,9 @@ describe('Bloom Distribution Chart in Paper Builder', () => {
     const user = userEvent.setup()
     renderWithProviders(<QuestionPaperBuilderPage />)
 
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Make Surface Heavy' })).toBeInTheDocument()
+    })
     await user.click(screen.getByRole('button', { name: 'Make Surface Heavy' }))
     await waitFor(() => {
       expect(screen.getByText(/Warning:/)).toBeInTheDocument()
@@ -237,7 +259,7 @@ describe('Bloom Distribution Chart in Paper Builder', () => {
   it('chart colors match bloom badge colors', async () => {
     renderWithProviders(<QuestionPaperBuilderPage />)
     await waitFor(() => {
-      const marker = screen.getByText('Apply (1)').parentElement.querySelector('span.w-2.h-2')
+      const marker = screen.getByText('Apply (1)').querySelector('span.w-2.h-2')
       expect(marker).toBeInTheDocument()
       expect(marker).toHaveStyle({ backgroundColor: '#16A34A' })
     })

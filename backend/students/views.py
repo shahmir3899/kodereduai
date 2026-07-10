@@ -4,6 +4,7 @@ Student and Class views.
 
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
+from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.db.models import Count, Q
@@ -825,6 +826,67 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             return Response(status=status.HTTP_204_NO_CONTENT)
         except StudentDocument.DoesNotExist:
             return Response({'error': 'Document not found'}, status=404)
+
+    @action(detail=True, methods=['post'], parser_classes=[MultiPartParser, FormParser])
+    def upload_photo(self, request, pk=None):
+        """Upload (or replace) a student's profile photo."""
+        from PIL import UnidentifiedImageError
+        from core.storage import storage_service
+
+        student = self.get_object()
+
+        if 'file' not in request.FILES:
+            return Response({'error': 'No file provided.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        file = request.FILES['file']
+
+        allowed_types = ['image/jpeg', 'image/png', 'image/webp']
+        if file.content_type not in allowed_types:
+            return Response(
+                {'error': f'Invalid file type. Allowed: {", ".join(allowed_types)}'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        max_size = 5 * 1024 * 1024
+        if file.size > max_size:
+            return Response(
+                {'error': 'File too large. Maximum size is 5MB.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            if student.photo_url:
+                old_path = storage_service._extract_storage_path(student.photo_url)
+                if old_path:
+                    storage_service.delete_file(old_path)
+
+            url = storage_service.upload_student_photo(file, student.school_id, student.id)
+            student.photo_url = url
+            student.save(update_fields=['photo_url', 'updated_at'])
+
+            return Response({'photo_url': url, 'message': 'Photo uploaded successfully.'})
+        except UnidentifiedImageError:
+            return Response(
+                {'error': 'Could not process image file. It may be corrupted or in an unsupported format.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=True, methods=['post'], url_path='remove_photo')
+    def remove_photo(self, request, pk=None):
+        """Remove a student's profile photo."""
+        from core.storage import storage_service
+
+        student = self.get_object()
+        if student.photo_url:
+            old_path = storage_service._extract_storage_path(student.photo_url)
+            if old_path:
+                storage_service.delete_file(old_path)
+            student.photo_url = ''
+            student.save(update_fields=['photo_url', 'updated_at'])
+
+        return Response({'message': 'Photo removed.'})
 
     @action(detail=True, methods=['get'], url_path='ai-profile')
     def ai_profile(self, request, pk=None):

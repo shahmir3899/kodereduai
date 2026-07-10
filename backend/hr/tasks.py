@@ -33,6 +33,9 @@ def generate_payslips_task(self, school_id, user_id, month, year):
         total = len(active_staff)
         update_task_progress(task_id, current=0, total=total)
 
+        all_staff_count = StaffMember.objects.filter(school_id=school_id).count()
+        excluded_inactive = all_staff_count - total
+
         # 1 query: existing payslip staff IDs for this month/year
         existing_staff_ids = set(Payslip.objects.filter(
             school_id=school_id, month=month, year=year,
@@ -56,12 +59,14 @@ def generate_payslips_task(self, school_id, user_id, month, year):
         to_create = []
         already_exists = 0
         no_salary = 0
+        no_salary_staff_names = []
 
         for i, staff in enumerate(active_staff):
             if staff.id in existing_staff_ids:
                 already_exists += 1
             elif staff.id not in salary_map:
                 no_salary += 1
+                no_salary_staff_names.append(f"{staff.first_name} {staff.last_name}")
             else:
                 salary = salary_map[staff.id]
                 to_create.append(Payslip(
@@ -89,12 +94,19 @@ def generate_payslips_task(self, school_id, user_id, month, year):
         if already_exists:
             parts.append(f'{already_exists} already existed')
         if no_salary:
-            parts.append(f'{no_salary} have no salary structure')
+            names = ', '.join(no_salary_staff_names)
+            parts.append(f'{no_salary} have no salary structure ({names})')
+        message = ', '.join(parts) + '.'
+        if excluded_inactive:
+            message += f' {excluded_inactive} staff excluded (inactive/not employed).'
         result_data = {
             'created': created,
             'already_exists': already_exists,
             'no_salary_structure': no_salary,
-            'message': ', '.join(parts) + '.',
+            'no_salary_staff_names': no_salary_staff_names,
+            'total_staff': all_staff_count,
+            'excluded_inactive': excluded_inactive,
+            'message': message,
         }
         mark_task_success(task_id, result_data=result_data)
         return result_data

@@ -21,7 +21,8 @@ from lms.models import Tag, QuestionTag
 
 from .models import (
     ExamType, ExamGroup, Exam, ExamSubject, StudentMark, GradeScale,
-    Question, ExamPaper, PaperQuestion, StudentResponse, PaperUpload, PaperFeedback
+    Question, ExamPaper, PaperQuestion, StudentResponse, PaperUpload, PaperFeedback,
+    StudentTermAssessment,
 )
 from .serializers import (
     ExamTypeSerializer, ExamTypeCreateSerializer,
@@ -38,6 +39,7 @@ from .serializers import (
     ExamPaperSerializer, ExamPaperCreateUpdateSerializer,
     ExamPaperDraftEnsureSerializer, ExamPaperDraftAutosaveSerializer,
     PaperUploadSerializer, PaperUploadCreateSerializer,
+    StudentTermAssessmentSerializer,
     PaperFeedbackSerializer, QuestionReviewSerializer,
 )
 from .tasks import recompute_question_stats
@@ -1580,6 +1582,69 @@ class GradeScaleViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         instance.save()
 
 
+class StudentTermAssessmentView(ModuleAccessMixin, APIView):
+    """
+    Skills/behaviour ratings + remarks for one student's academic year (upsert).
+    GET  ?student_id=&academic_year= -> existing row, or a blank shape if none yet.
+    POST {student_id, academic_year, ...ratings, teacher_remark, principal_remark} -> create/update.
+    """
+    required_module = 'examinations'
+    permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
+
+    RATING_FIELDS = [
+        'listening', 'speaking', 'writing', 'reading', 'participation', 'confidence', 'social_skills',
+        'discipline', 'respect', 'teamwork', 'class_participation', 'responsibility',
+    ]
+
+    def get(self, request):
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response({'error': 'school_id required'}, status=400)
+
+        student_id = request.query_params.get('student_id')
+        academic_year_id = request.query_params.get('academic_year')
+        if not student_id or not academic_year_id:
+            return Response({'error': 'student_id and academic_year are required'}, status=400)
+
+        assessment = StudentTermAssessment.objects.filter(
+            school_id=school_id, student_id=student_id, academic_year_id=academic_year_id, term__isnull=True,
+        ).first()
+        if not assessment:
+            blank = {f: None for f in self.RATING_FIELDS}
+            blank.update({
+                'exists': False, 'student': int(student_id), 'academic_year': int(academic_year_id),
+                'teacher_remark': '', 'principal_remark': '',
+            })
+            return Response(blank)
+
+        data = StudentTermAssessmentSerializer(assessment).data
+        data['exists'] = True
+        return Response(data)
+
+    def post(self, request):
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response({'error': 'school_id required'}, status=400)
+
+        student_id = request.data.get('student')
+        academic_year_id = request.data.get('academic_year')
+        if not student_id or not academic_year_id:
+            return Response({'error': 'student and academic_year are required'}, status=400)
+
+        defaults = {f: request.data.get(f) or None for f in self.RATING_FIELDS}
+        defaults['teacher_remark'] = request.data.get('teacher_remark', '')
+        defaults['principal_remark'] = request.data.get('principal_remark', '')
+        defaults['updated_by'] = request.user
+
+        assessment, _created = StudentTermAssessment.objects.update_or_create(
+            school_id=school_id, student_id=student_id, academic_year_id=academic_year_id, term=None,
+            defaults=defaults,
+        )
+        data = StudentTermAssessmentSerializer(assessment).data
+        data['exists'] = True
+        return Response(data)
+
+
 class ReportCardView(ModuleAccessMixin, APIView):
     required_module = 'examinations'
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
@@ -1918,6 +1983,10 @@ class QuestionViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelView
         topic_id = self.request.query_params.get('topic_id')
         if topic_id:
             qs = qs.filter(tested_topics__id=topic_id).distinct()
+
+        topic_ids = self.request.query_params.getlist('topics')
+        if topic_ids:
+            qs = qs.filter(tested_topics__id__in=topic_ids).distinct()
 
         tag_id = self.request.query_params.get('tag_id')
         if tag_id:
@@ -2405,19 +2474,26 @@ class ExamPaperViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
             question_id = question_payload.pop('question_id', None)
             question_order = question_payload.pop('question_order', index)
             marks_override = question_payload.pop('marks_override', None)
+            section_key = question_payload.pop('section_key', '') or ''
             question_payload.pop('local_id', None)
 
             assignment = None
             question_instance = None
             if question_id is not None:
                 assignment = existing_assignments.get(question_id)
-                if assignment is None:
-                    raise ValidationError({
-                        'manual_questions': [
-                            f'question_id {question_id} is not attached to this paper and cannot be autosaved yet.'
-                        ]
-                    })
-                question_instance = assignment.question
+                if assignment is not None:
+                    question_instance = assignment.question
+                else:
+                    # Not yet linked to this paper (e.g. just attached from the question
+                    # bank picker) — reuse the existing bank question instead of raising or
+                    # creating a duplicate Question row.
+                    question_instance = Question.objects.filter(
+                        id=question_id, school=exam_paper.school,
+                    ).first()
+                    if question_instance is None:
+                        raise ValidationError({
+                            'manual_questions': [f'question_id {question_id} was not found.']
+                        })
 
             question_payload['subject'] = exam_paper.subject_id
             serializer = QuestionCreateUpdateSerializer(
@@ -2443,6 +2519,7 @@ class ExamPaperViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
                 )
 
             assignment.question_order = question_order
+            assignment.section_key = str(section_key)[:50]
             assignment.marks_override = marks_override
             assignment.save()
             assignment.sync_question_snapshot()
@@ -2807,8 +2884,10 @@ class PaperUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
         
         serializer = PaperUploadCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        
+
         image_file = serializer.validated_data['image']
+        context_class_id = serializer.validated_data.get('class_obj')
+        context_subject_id = serializer.validated_data.get('subject')
         school_id = _resolve_school_id(request)
         
         if not school_id:
@@ -2837,6 +2916,8 @@ class PaperUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
                 school_id=school_id,
                 uploaded_by=request.user,
                 image_url=image_url,
+                context_class_id=context_class_id,
+                context_subject_id=context_subject_id,
                 status=PaperUpload.Status.PENDING
             )
             
@@ -2857,27 +2938,86 @@ class PaperUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
 
     @action(detail=True, methods=['post'], url_path='confirm')
     def confirm_extraction(self, request, pk=None):
-        """Confirm extracted questions and create ExamPaper."""
+        """Confirm extracted questions.
+
+        Two modes:
+        - exam_paper_id provided (current draft-pipeline flow): the paper and its
+          questions were already created via ensure-draft + autosave, using the same
+          manual_questions path as typed entry. This call only records the
+          PaperFeedback learning-loop row and marks/links the upload — it never
+          creates ExamPaper/Question/PaperQuestion rows itself.
+        - exam_paper_id absent (legacy one-shot flow, kept for API compatibility):
+          creates the ExamPaper and its Questions directly from confirmed_data.
+        """
         upload = self.get_object()
-        
+
         if upload.status != PaperUpload.Status.EXTRACTED:
             return Response(
                 {'detail': 'Upload must be in EXTRACTED status'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         # Get confirmed data from request
         confirmed_json = request.data.get('confirmed_data')
         paper_metadata = request.data.get('paper_metadata', {})
-        
+        exam_paper_id = request.data.get('exam_paper_id')
+
         if not confirmed_json:
             return Response(
                 {'detail': 'confirmed_data is required'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         try:
             school_id = _resolve_school_id(request)
+
+            if exam_paper_id:
+                exam_paper = ExamPaper.objects.filter(id=exam_paper_id, school_id=school_id).first()
+                if exam_paper is None:
+                    return Response(
+                        {'detail': 'exam_paper_id was not found for this school.'},
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
+
+                if not _can_manage_exam_papers(
+                    request,
+                    class_id=exam_paper.class_obj_id,
+                    subject_id=exam_paper.subject_id,
+                    school_id=school_id,
+                ):
+                    return Response(
+                        {'detail': 'Only School Admin, Principal, or assigned class teachers can confirm exam papers.'},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+
+                questions = confirmed_json.get('questions', [])
+
+                # Feedback-only: the draft pipeline already created the paper/questions.
+                PaperFeedback.objects.create(
+                    paper_upload=upload,
+                    ai_extracted_json=upload.ai_extracted_json,
+                    user_confirmed_json=confirmed_json,
+                    accuracy_metrics={
+                        'total_questions': len(questions),
+                        'extraction_confidence': upload.extraction_confidence
+                    },
+                    confirmed_by=request.user
+                )
+
+                upload.status = PaperUpload.Status.CONFIRMED
+                upload.exam_paper = exam_paper
+                upload.save()
+
+                return Response(
+                    {
+                        'detail': 'Paper successfully confirmed',
+                        'exam_paper_id': exam_paper.id,
+                        'questions_created': exam_paper.question_count,
+                    },
+                    status=status.HTTP_200_OK
+                )
+
+            # Legacy one-shot flow: no exam_paper_id, so create everything here.
             if not _can_manage_exam_papers(
                 request,
                 class_id=paper_metadata.get('class_obj'),
@@ -2888,7 +3028,7 @@ class PaperUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
                     {'detail': 'Only School Admin, Principal, or assigned class teachers can create exam papers.'},
                     status=status.HTTP_403_FORBIDDEN,
                 )
-            
+
             # Create ExamPaper
             exam_paper = ExamPaper.objects.create(
                 school_id=school_id,
@@ -2903,7 +3043,7 @@ class PaperUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
                 status=ExamPaper.Status.DRAFT,
                 generated_by=request.user
             )
-            
+
             # Create Questions from confirmed data
             questions = confirmed_json.get('questions', [])
             for idx, q_data in enumerate(questions, start=1):
@@ -2920,7 +3060,7 @@ class PaperUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
                     option_d=q_data.get('options', {}).get('D', ''),
                     created_by=request.user,
                 )
-                
+
                 # Link question to paper
                 paper_question = PaperQuestion.objects.create(
                     exam_paper=exam_paper,
@@ -2929,7 +3069,7 @@ class PaperUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
                     marks_override=q_data.get('marks')
                 )
                 paper_question.sync_question_snapshot()
-            
+
             # Create feedback record for learning loop
             PaperFeedback.objects.create(
                 paper_upload=upload,
@@ -2941,12 +3081,12 @@ class PaperUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
                 },
                 confirmed_by=request.user
             )
-            
+
             # Update upload status
             upload.status = PaperUpload.Status.CONFIRMED
             upload.exam_paper = exam_paper
             upload.save()
-            
+
             return Response(
                 {
                     'detail': 'Paper successfully confirmed',
@@ -2955,7 +3095,7 @@ class PaperUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
                 },
                 status=status.HTTP_200_OK
             )
-        
+
         except Exception as e:
             return Response(
                 {'detail': f'Error confirming extraction: {str(e)}'},

@@ -22,7 +22,7 @@ import {
 } from '../../utils/classScope'
 import LessonPlanAIModal from './LessonPlanAIModal'
 import LessonPlanTopicsPickerModal from './LessonPlanTopicsPickerModal'
-import { normalizeLessonPlanText } from './lessonPlanTextUtils'
+import { normalizeLessonPlanText, deriveAutoTitleFromCurriculumSummary } from './lessonPlanTextUtils'
 
 const STEPS = [
   { num: 1, label: 'Class & range' },
@@ -74,16 +74,19 @@ function emptyRow() {
     teaching_methods: '',
     materials_needed: '',
     ai_generated: false,
+    curriculumSummary: '',
   }
 }
 
-export default function BulkLessonPlansModal({ onClose, onSuccess }) {
+export default function BulkLessonPlansModal({ onClose, onSuccess, onCreateSingle }) {
   const { activeSchool } = useAuth()
   const { activeAcademicYear } = useAcademicYear()
   const queryClient = useQueryClient()
   const { showSuccess, showError } = useToast()
 
   const [step, setStep] = useState(1)
+  const [planMode, setPlanMode] = useState('MINIMAL')
+  const isMinimal = planMode === 'MINIMAL'
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [selectedClass, setSelectedClass] = useState('')
@@ -209,12 +212,33 @@ export default function BulkLessonPlansModal({ onClose, onSuccess }) {
       return
     }
     if (step === 2) {
-      for (const d of teachingDates) {
-        if (existingDateSet.has(d)) continue
-        const r = rowByDate[d] || emptyRow()
-        if (!normalizeLessonPlanText(r.title)) {
-          showError(`Add a title for ${d} (or skip dates that already have a plan).`)
-          return
+      if (isMinimal) {
+        for (const d of teachingDates) {
+          if (existingDateSet.has(d)) continue
+          const r = rowByDate[d] || emptyRow()
+          const topicCount = (r.chapterIds || []).length + (r.topicIds || []).length + (r.subtopicIds || []).length
+          if (topicCount === 0) {
+            showError(`Select at least one chapter/topic for ${d} (or skip dates that already have a plan).`)
+            return
+          }
+        }
+        setRowByDate((prev) => {
+          const next = { ...prev }
+          teachingDates.forEach((d) => {
+            if (existingDateSet.has(d)) return
+            const r = next[d] || emptyRow()
+            next[d] = { ...r, title: deriveAutoTitleFromCurriculumSummary(r.curriculumSummary) }
+          })
+          return next
+        })
+      } else {
+        for (const d of teachingDates) {
+          if (existingDateSet.has(d)) continue
+          const r = rowByDate[d] || emptyRow()
+          if (!normalizeLessonPlanText(r.title)) {
+            showError(`Add a title for ${d} (or skip dates that already have a plan).`)
+            return
+          }
         }
       }
       setStep(3)
@@ -355,11 +379,22 @@ export default function BulkLessonPlansModal({ onClose, onSuccess }) {
         className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center justify-between mb-2 gap-2">
           <h2 className="text-lg font-semibold text-gray-900">Bulk lesson plans</h2>
-          <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">
-            &times;
-          </button>
+          <div className="flex items-center gap-3">
+            {step === 1 && onCreateSingle && (
+              <button
+                type="button"
+                onClick={onCreateSingle}
+                className="text-xs text-primary-600 hover:text-primary-800 underline"
+              >
+                Create single lesson plan
+              </button>
+            )}
+            <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">
+              &times;
+            </button>
+          </div>
         </div>
         <p className="text-sm text-gray-600 mb-4">
           Step 1: class and date range. Step 2: one row per teaching day — topics and AI are per date (separate API call
@@ -394,6 +429,26 @@ export default function BulkLessonPlansModal({ onClose, onSuccess }) {
 
         {step === 1 && (
           <div className="space-y-4">
+            <div className="flex items-center gap-4 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+              <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+                <input
+                  type="radio"
+                  name="bulkLessonPlanMode"
+                  checked={planMode === 'MINIMAL'}
+                  onChange={() => setPlanMode('MINIMAL')}
+                />
+                Minimal <span className="text-xs text-gray-500">(date, subject, chapter/topic only)</span>
+              </label>
+              <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+                <input
+                  type="radio"
+                  name="bulkLessonPlanMode"
+                  checked={planMode === 'STANDARD'}
+                  onChange={() => setPlanMode('STANDARD')}
+                />
+                Standard <span className="text-xs text-gray-500">(full details per day)</span>
+              </label>
+            </div>
             <div className="flex flex-wrap gap-2">
               <button type="button" className="btn btn-secondary text-sm" onClick={setToday}>
                 Today
@@ -447,33 +502,39 @@ export default function BulkLessonPlansModal({ onClose, onSuccess }) {
                 </select>
               </div>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="label">Teacher *</label>
-                <select
-                  className="input w-full"
-                  value={selectedTeacher}
-                  onChange={(e) => setSelectedTeacher(e.target.value)}
-                >
-                  <option value="">Select teacher</option>
-                  {staff.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.full_name || t.user_name || `Staff #${t.id}`}
-                    </option>
-                  ))}
-                </select>
+            {(!isMinimal || !selectedTeacher) && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="label">
+                    Teacher {isMinimal ? '(no default found — please choose)' : '*'}
+                  </label>
+                  <select
+                    className="input w-full"
+                    value={selectedTeacher}
+                    onChange={(e) => setSelectedTeacher(e.target.value)}
+                  >
+                    <option value="">Select teacher</option>
+                    {staff.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.full_name || t.user_name || `Staff #${t.id}`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {!isMinimal && (
+                  <div>
+                    <label className="label">Duration (minutes)</label>
+                    <input
+                      type="number"
+                      min={1}
+                      className="input w-full sm:max-w-[12rem]"
+                      value={duration}
+                      onChange={(e) => setDuration(e.target.value)}
+                    />
+                  </div>
+                )}
               </div>
-              <div>
-                <label className="label">Duration (minutes)</label>
-                <input
-                  type="number"
-                  min={1}
-                  className="input w-full sm:max-w-[12rem]"
-                  value={duration}
-                  onChange={(e) => setDuration(e.target.value)}
-                />
-              </div>
-            </div>
+            )}
             <p className="text-sm text-gray-600">
               Non-teaching days are skipped automatically: <strong>Sundays</strong>, <strong>Saturdays</strong>, and{' '}
               <strong>school calendar off days</strong>.
@@ -488,8 +549,10 @@ export default function BulkLessonPlansModal({ onClose, onSuccess }) {
           <div className="space-y-3">
             <p className="text-sm text-gray-600">
               <strong>{teachingDates.length}</strong> teaching day(s). Pick curriculum per row, or tick several dates
-              and <strong>apply the same chapter / topic / sub-topic set</strong> in one go. <strong>AI</strong> runs one
-              request per row when you use it (needs at least one topic or sub-topic).
+              and <strong>apply the same chapter / topic / sub-topic set</strong> in one go.
+              {isMinimal
+                ? ' Title is generated automatically from the selected chapter/topic.'
+                : ' AI runs one request per row when you use it (needs at least one topic or sub-topic).'}
             </p>
             <div className="flex flex-wrap items-center gap-2 pb-1">
               <button
@@ -519,9 +582,13 @@ export default function BulkLessonPlansModal({ onClose, onSuccess }) {
                     </th>
                     <th className="text-left px-3 py-2 font-medium text-gray-600 whitespace-nowrap">Date</th>
                     <th className="text-left px-3 py-2 font-medium text-gray-600">Curriculum</th>
-                    <th className="text-left px-3 py-2 font-medium text-gray-600 min-w-[10rem]">Title *</th>
-                    <th className="text-left px-3 py-2 font-medium text-gray-600 min-w-[12rem]">Description</th>
-                    <th className="text-left px-3 py-2 font-medium text-gray-600 whitespace-nowrap">AI</th>
+                    {!isMinimal && (
+                      <>
+                        <th className="text-left px-3 py-2 font-medium text-gray-600 min-w-[10rem]">Title *</th>
+                        <th className="text-left px-3 py-2 font-medium text-gray-600 min-w-[12rem]">Description</th>
+                        <th className="text-left px-3 py-2 font-medium text-gray-600 whitespace-nowrap">AI</th>
+                      </>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -566,45 +633,49 @@ export default function BulkLessonPlansModal({ onClose, onSuccess }) {
                             </div>
                           )}
                         </td>
-                        <td className="px-3 py-2 align-top">
-                          {!skipRow && (
-                            <input
-                              type="text"
-                              className="input w-full text-sm"
-                              placeholder="Lesson title"
-                              value={r.title}
-                              onChange={(e) => updateRow(d, { title: e.target.value })}
-                            />
-                          )}
-                        </td>
-                        <td className="px-3 py-2 align-top">
-                          {!skipRow && (
-                            <textarea
-                              className="input w-full text-sm"
-                              rows={2}
-                              placeholder="Optional"
-                              value={r.description}
-                              onChange={(e) => updateRow(d, { description: e.target.value })}
-                            />
-                          )}
-                        </td>
-                        <td className="px-3 py-2 align-top whitespace-nowrap">
-                          {!skipRow && (
-                            <button
-                              type="button"
-                              className="btn btn-secondary text-xs py-1 px-2"
-                              disabled={rowAiEligibleCount(d) === 0}
-                              title={
-                                rowAiEligibleCount(d) === 0
-                                  ? 'Select at least one chapter, topic, or sub-topic to use AI'
-                                  : 'Open AI generator for this date'
-                              }
-                              onClick={() => setAiModalDate(d)}
-                            >
-                              AI
-                            </button>
-                          )}
-                        </td>
+                        {!isMinimal && (
+                          <>
+                            <td className="px-3 py-2 align-top">
+                              {!skipRow && (
+                                <input
+                                  type="text"
+                                  className="input w-full text-sm"
+                                  placeholder="Lesson title"
+                                  value={r.title}
+                                  onChange={(e) => updateRow(d, { title: e.target.value })}
+                                />
+                              )}
+                            </td>
+                            <td className="px-3 py-2 align-top">
+                              {!skipRow && (
+                                <textarea
+                                  className="input w-full text-sm"
+                                  rows={2}
+                                  placeholder="Optional"
+                                  value={r.description}
+                                  onChange={(e) => updateRow(d, { description: e.target.value })}
+                                />
+                              )}
+                            </td>
+                            <td className="px-3 py-2 align-top whitespace-nowrap">
+                              {!skipRow && (
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary text-xs py-1 px-2"
+                                  disabled={rowAiEligibleCount(d) === 0}
+                                  title={
+                                    rowAiEligibleCount(d) === 0
+                                      ? 'Select at least one chapter, topic, or sub-topic to use AI'
+                                      : 'Open AI generator for this date'
+                                  }
+                                  onClick={() => setAiModalDate(d)}
+                                >
+                                  AI
+                                </button>
+                              )}
+                            </td>
+                          </>
+                        )}
                       </tr>
                     )
                   })}
@@ -682,12 +753,12 @@ export default function BulkLessonPlansModal({ onClose, onSuccess }) {
         initialChapterIds={topicsPickerDate ? rowByDate[topicsPickerDate]?.chapterIds || [] : []}
         initialTopicIds={topicsPickerDate ? rowByDate[topicsPickerDate]?.topicIds || [] : []}
         initialSubtopicIds={topicsPickerDate ? rowByDate[topicsPickerDate]?.subtopicIds || [] : []}
-        onApply={({ chapterIds, topicIds, subtopicIds }) => {
+        onApply={({ chapterIds, topicIds, subtopicIds, curriculumSummary }) => {
           if (topicsPickerDate) {
-            updateRow(topicsPickerDate, { chapterIds, topicIds, subtopicIds })
+            updateRow(topicsPickerDate, { chapterIds, topicIds, subtopicIds, curriculumSummary })
           } else {
             datesSelectedForBulkCurriculum.forEach((iso) => {
-              if (!existingDateSet.has(iso)) updateRow(iso, { chapterIds, topicIds, subtopicIds })
+              if (!existingDateSet.has(iso)) updateRow(iso, { chapterIds, topicIds, subtopicIds, curriculumSummary })
             })
             setDatesSelectedForBulkCurriculum([])
           }

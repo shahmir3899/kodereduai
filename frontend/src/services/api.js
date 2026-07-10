@@ -268,6 +268,14 @@ export const studentsApi = {
   getDocuments: (id) => api.get(`/api/students/${id}/documents/`),
   uploadDocument: (id, data) => api.post(`/api/students/${id}/documents/`, data),
   deleteDocument: (id, docId) => api.delete(`/api/students/${id}/documents/${docId}/`),
+  uploadPhoto: (id, file) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return api.post(`/api/students/${id}/upload_photo/`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+  removePhoto: (id) => api.post(`/api/students/${id}/remove_photo/`),
   getAIProfile: (id) => api.get(`/api/students/${id}/ai-profile/`),
   reclassifyStudent: (id, data) => api.post(`/api/students/${id}/reclassify/`, data),
   createStudentUserAccount: (id, data) => api.post(`/api/students/${id}/create-user-account/`, data),
@@ -398,6 +406,7 @@ export const hrApi = {
   createStaff: (data) => api.post('/api/hr/staff/', data),
   updateStaff: (id, data) => api.patch(`/api/hr/staff/${id}/`, data),
   deleteStaff: (id) => api.delete(`/api/hr/staff/${id}/`),
+  reactivateStaff: (id) => api.post(`/api/hr/staff/${id}/reactivate/`),
   createStaffUserAccount: (id, data) => api.post(`/api/hr/staff/${id}/create-user-account/`, data),
   linkStaffUserAccount: (id, data) => api.post(`/api/hr/staff/${id}/link-user-account/`, data),
   unlinkStaffUserAccount: (id) => api.post(`/api/hr/staff/${id}/unlink-user-account/`),
@@ -673,6 +682,10 @@ export const examinationsApi = {
   // Report Card
   getReportCard: (params) => api.get('/api/examinations/report-card/', { params }),
 
+  // Student Term Assessment (skills/behaviour ratings + remarks)
+  getStudentTermAssessment: (params) => api.get('/api/examinations/student-term-assessment/', { params }),
+  saveStudentTermAssessment: (data) => api.post('/api/examinations/student-term-assessment/', data),
+
   // AI Comments
   generateComments: (examId, force = false) =>
     api.post(`/api/examinations/exams/${examId}/generate-comments/`, { force }),
@@ -754,6 +767,7 @@ export const notificationsApi = {
 // Reports API
 export const reportsApi = {
   generate: (data) => api.post('/api/reports/generate/', data),
+  generateInstant: (data) => api.post('/api/reports/generate-instant/', data, { responseType: 'blob' }),
   getList: (params) => api.get('/api/reports/list/', { params }),
   download: (reportId) => api.get(`/api/reports/${reportId}/download/`, { responseType: 'blob' }),
 }
@@ -1254,9 +1268,15 @@ export const faceAttendanceApi = {
 export const questionPaperApi = {
   // Questions
   getQuestions: (params) => api.get('/api/examinations/questions/', { params }),
-  getQuestionsByTopics: (topicIds = []) => {
+  getQuestionsByTopics: (topicIds = [], extraParams = {}) => {
     const ids = Array.isArray(topicIds) ? topicIds : String(topicIds || '').split(',').filter(Boolean)
-    const query = ids.map((id) => `topics=${encodeURIComponent(id)}`).join('&')
+    const searchParams = new URLSearchParams()
+    ids.forEach((id) => searchParams.append('topics', id))
+    Object.entries(extraParams).forEach(([key, value]) => {
+      if (value === undefined || value === null || value === '') return
+      searchParams.append(key, value)
+    })
+    const query = searchParams.toString()
     return api.get(`/api/examinations/questions/${query ? `?${query}` : ''}`)
   },
   getQuestionsByLessonPlan: (lessonPlanId) =>

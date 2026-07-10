@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useBackgroundTasks } from '../contexts/BackgroundTaskContext'
+import { downloadGeneratedReport } from '../utils/downloadReport'
 
 const STATUS_CONFIG = {
   PENDING: { color: 'text-gray-500', bg: 'bg-gray-50', label: 'Pending' },
@@ -90,6 +91,18 @@ function TaskItem({ task, onDismiss, onCancel }) {
   const showProgress = (task.status === 'IN_PROGRESS' || task.status === 'PENDING') && task.progress_total > 0
   const percent = task.progress_percent
   const isActive = task.status === 'PENDING' || task.status === 'IN_PROGRESS'
+  const [downloading, setDownloading] = useState(false)
+
+  const handleDownload = async () => {
+    setDownloading(true)
+    try {
+      await downloadGeneratedReport(task.result_data.report_id, `${task.result_data.report_type || 'report'}.pdf`)
+    } catch {
+      // Swallowed — the drawer has no toast surface; the button simply resets.
+    } finally {
+      setDownloading(false)
+    }
+  }
 
   return (
     <div className={`${config.bg} rounded-lg p-3 border border-gray-200`}>
@@ -154,16 +167,15 @@ function TaskItem({ task, onDismiss, onCancel }) {
         <p className="mt-1 text-xs text-green-700">{task.result_data.message}</p>
       )}
 
-      {/* Download link for reports */}
-      {task.status === 'SUCCESS' && task.result_data?.download_url && (
-        <a
-          href={`${import.meta.env.VITE_API_URL || ''}${task.result_data.download_url}`}
-          className="mt-1 text-xs text-blue-600 hover:underline inline-block"
-          target="_blank"
-          rel="noopener noreferrer"
+      {/* Download button for reports */}
+      {task.status === 'SUCCESS' && task.result_data?.report_id && (
+        <button
+          onClick={handleDownload}
+          disabled={downloading}
+          className="mt-1 text-xs text-blue-600 hover:underline inline-block disabled:opacity-50"
         >
-          Download file
-        </a>
+          {downloading ? 'Downloading...' : 'Download file'}
+        </button>
       )}
     </div>
   )

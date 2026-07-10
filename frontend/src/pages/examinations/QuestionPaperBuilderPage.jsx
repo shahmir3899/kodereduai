@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
-import { useMutation, useQueries, useQuery } from '@tanstack/react-query'
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { questionPaperApi, examinationsApi, lmsApi } from '../../services/api'
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import Toast from '../../components/Toast'
@@ -14,7 +14,63 @@ import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 import ImageCapturePaperTab from './ImageCapturePaperTab'
 import ManualEntryPaperTab from './ManualEntryPaperTab'
-import LessonPlanPaperTab from './LessonPlanPaperTab'
+import BankFillSource from './BankFillSource'
+import PaperStructureBuilder, { calculateAllocatedMarks } from './PaperStructureBuilder'
+
+const RENDER_OPTIONS_DEFAULT = { answer_lines: false }
+
+const WIZARD_STEPS = [
+  { id: 1, label: 'Paper Setup' },
+  { id: 2, label: 'Paper Structure' },
+  { id: 3, label: 'Add Questions' },
+]
+
+function hydrateStructure(structure) {
+  if (!Array.isArray(structure)) return []
+  return structure.map((section, index) => {
+    const localId = `sec_${section?.key || index}_${index}`
+    const key = section?.key || `sec_${Date.now()}_${index}`
+
+    if (section?.type === 'divider') {
+      return { local_id: localId, key, type: 'divider', title: section?.title || 'Section' }
+    }
+
+    const slotsShown = Number(section?.slots_shown ?? 0) || 0
+    const slotsCounted = Number(section?.slots_counted ?? slotsShown) || 0
+    const isChoice = slotsCounted !== slotsShown
+    return {
+      local_id: localId,
+      key,
+      type: 'question_group',
+      title: section?.title || `Q${index + 1}`,
+      instruction: section?.instruction || '',
+      instructionIsAuto: false,
+      question_type: section?.question_type || 'SHORT',
+      slots_shown: slotsShown,
+      slots_counted: slotsCounted,
+      marks_per_question: Number(section?.marks_per_question ?? 0) || 0,
+      is_choice: isChoice,
+    }
+  })
+}
+
+function serializeStructure(sections) {
+  return (sections || []).map((section) => {
+    if (section.type === 'divider') {
+      return { key: section.key, type: 'divider', title: section.title }
+    }
+    return {
+      key: section.key,
+      type: 'question_group',
+      title: section.title,
+      instruction: section.instruction,
+      question_type: section.question_type,
+      slots_shown: section.slots_shown,
+      slots_counted: section.slots_counted,
+      marks_per_question: section.marks_per_question,
+    }
+  })
+}
 
 const MANUAL_DRAFT_DEFAULT = {
   paper_title: '',
@@ -31,6 +87,22 @@ const MANUAL_QUESTION_DEFAULT_OPTIONS = {
   D: '',
 }
 
+/** Exam records from the API expose name/exam_type_name/start_date (not exam_date or
+ * a nested exam_subject) — build a safe label without ever rendering "Invalid Date". */
+function formatExamOptionLabel(exam) {
+  const parts = [exam.name || exam.exam_type_name || `Exam #${exam.id}`]
+  if (exam.exam_type_name && exam.exam_type_name !== exam.name) {
+    parts.push(`(${exam.exam_type_name})`)
+  }
+  if (exam.start_date) {
+    const parsedDate = new Date(exam.start_date)
+    if (!Number.isNaN(parsedDate.getTime())) {
+      parts.push(`- ${parsedDate.toLocaleDateString()}`)
+    }
+  }
+  return parts.join(' ')
+}
+
 const BLOOM_LEVELS = [
   { key: 'remember', label: 'Remember', color: '#6B7280' },
   { key: 'understand', label: 'Understand', color: '#2563EB' },
@@ -45,6 +117,7 @@ function toQuestionDraft(paperQuestion) {
   return {
     local_id: `q_${paperQuestion.question}_${paperQuestion.question_order}`,
     question_id: paperQuestion.question,
+    section_key: paperQuestion.section_key || '',
     question_text: paperQuestion.question_text || '',
     question_type: paperQuestion.question_type || 'SHORT',
     difficulty_level: paperQuestion.difficulty_level || 'MEDIUM',
@@ -66,10 +139,42 @@ function toQuestionDraft(paperQuestion) {
   }
 }
 
-function buildManualAutosaveQuestions(questions) {
-  return (questions || []).map((question, index) => ({
+/**
+ * Flattens draft questions into autosave order: sections in structure order first
+ * (preserving each question's relative position within its section), then any
+ * questions not linked to a section key.
+ */
+function orderQuestionsForAutosave(questions, structure) {
+  const orderedKeys = (structure || [])
+    .filter((section) => section.type !== 'divider')
+    .map((section) => section.key)
+    .filter(Boolean)
+  const bySection = new Map()
+  const unassigned = []
+
+  ;(questions || []).forEach((question) => {
+    const sectionKey = question.section_key || ''
+    if (sectionKey && orderedKeys.includes(sectionKey)) {
+      if (!bySection.has(sectionKey)) bySection.set(sectionKey, [])
+      bySection.get(sectionKey).push(question)
+    } else {
+      unassigned.push(question)
+    }
+  })
+
+  const ordered = []
+  orderedKeys.forEach((key) => {
+    ordered.push(...(bySection.get(key) || []))
+  })
+  ordered.push(...unassigned)
+  return ordered
+}
+
+function buildManualAutosaveQuestions(questions, structure = []) {
+  return orderQuestionsForAutosave(questions, structure).map((question, index) => ({
     question_id: question.question_id || undefined,
     question_order: index + 1,
+    section_key: question.section_key || '',
     marks_override: Number(question.marks_override ?? question.marks ?? 1) || 1,
     question_text: question.question_text || '',
     question_type: question.question_type || 'SHORT',
@@ -96,6 +201,7 @@ function buildManualAutosaveQuestions(questions) {
  */
 export default function QuestionPaperBuilderPage() {
   const { activeSchool, user } = useAuth()
+  const queryClient = useQueryClient()
   const navigate = useNavigate()
   const location = useLocation()
   const { paperId: routePaperId } = useParams()
@@ -111,6 +217,15 @@ export default function QuestionPaperBuilderPage() {
   const [coverageCollapsed, setCoverageCollapsed] = useState(false)
   const [paperStatus, setPaperStatus] = useState('DRAFT')
   const [overusedQuestionCounts, setOverusedQuestionCounts] = useState({})
+  const [wizardStep, setWizardStep] = useState(location.state?.lessonPlanId ? 3 : 1)
+  const [structure, setStructure] = useState([])
+  const [renderOptions, setRenderOptions] = useState(RENDER_OPTIONS_DEFAULT)
+  const [sourceChosen, setSourceChosen] = useState(Boolean(location.state?.lessonPlanId))
+  const hasJumpedToStep3Ref = useRef(false)
+  // Whether the Paper Title field is still following the auto-generated
+  // "Exam - Class - Subject" suggestion. Flips to false the moment the user types
+  // into the field directly, or once we resume a draft that already has its own title.
+  const titleIsAutoRef = useRef(!resumePaperId)
   const [paperMetadata, setPaperMetadata] = useState({
     class_obj: '',
     subject: '',
@@ -131,10 +246,16 @@ export default function QuestionPaperBuilderPage() {
     queryKey: 'teacherPaperBuilderClasses',
   })
 
-  // Fetch exams
+  // Fetch exams — scoped to the current academic year (session) and the selected
+  // class, since an Exam always belongs to exactly one class/year.
   const { data: examsData, isLoading: examsLoading } = useQuery({
-    queryKey: ['exams'],
-    queryFn: () => examinationsApi.getExams({ page_size: 999 }),
+    queryKey: ['exams', activeAcademicYear?.id, resolvedClassObj],
+    queryFn: () => examinationsApi.getExams({
+      page_size: 999,
+      academic_year: activeAcademicYear.id,
+      class_obj: resolvedClassObj,
+    }),
+    enabled: !!activeAcademicYear?.id && !!resolvedClassObj,
   })
 
   const hydrateOverusedQuestionCounts = useCallback((paper) => {
@@ -156,34 +277,48 @@ export default function QuestionPaperBuilderPage() {
     setOverusedQuestionCounts(nextCounts)
   }, [])
 
-  useQuery({
+  const { data: resumeDraftRes } = useQuery({
     queryKey: ['paperBuilderResumeDraft', resumePaperId],
     queryFn: () => questionPaperApi.getExamPaper(resumePaperId),
     enabled: !!resumePaperId,
-    onSuccess: (response) => {
-      const paper = response?.data
-      if (!paper?.id) return
-
-      setDraftId(paper.id)
-      setPaperStatus(paper.status || 'DRAFT')
-      setPaperMetadata({
-        class_obj: paper.class_obj ? String(paper.class_obj) : '',
-        subject: paper.subject ? String(paper.subject) : '',
-        exam: paper.exam ? String(paper.exam) : '',
-      })
-      setManualDraft({
-        paper_title: paper.paper_title || '',
-        instructions: paper.instructions || '',
-        total_marks: String(paper.total_marks ?? '100'),
-        duration_minutes: String(paper.duration_minutes ?? '60'),
-        questions: (paper.paper_questions || []).map(toQuestionDraft),
-      })
-      setManualDirty(false)
-      setSaveState('saved')
-      setLastSavedAt(paper.updated_at || new Date().toISOString())
-      hydrateOverusedQuestionCounts(paper)
-    },
   })
+
+  useEffect(() => {
+    const paper = resumeDraftRes?.data
+    if (!paper?.id) return
+
+    if ((paper.paper_title || '').trim()) {
+      titleIsAutoRef.current = false
+    }
+
+    setDraftId(paper.id)
+    setPaperStatus(paper.status || 'DRAFT')
+    setPaperMetadata({
+      class_obj: paper.class_obj ? String(paper.class_obj) : '',
+      subject: paper.subject ? String(paper.subject) : '',
+      exam: paper.exam ? String(paper.exam) : '',
+    })
+    setManualDraft({
+      paper_title: paper.paper_title || '',
+      instructions: paper.instructions || '',
+      total_marks: String(paper.total_marks ?? '100'),
+      duration_minutes: String(paper.duration_minutes ?? '60'),
+      questions: (paper.paper_questions || []).map(toQuestionDraft),
+    })
+    setStructure(hydrateStructure(paper.structure))
+    setRenderOptions({ ...RENDER_OPTIONS_DEFAULT, ...(paper.render_options || {}) })
+    setManualDirty(false)
+    setSaveState('saved')
+    setLastSavedAt(paper.updated_at || new Date().toISOString())
+    hydrateOverusedQuestionCounts(paper)
+
+    if (!hasJumpedToStep3Ref.current) {
+      hasJumpedToStep3Ref.current = true
+      setWizardStep(3)
+      setSourceChosen(true)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resumeDraftRes])
 
   const isReadOnlyPaper = Boolean(resumePaperId && paperStatus && paperStatus !== 'DRAFT')
 
@@ -191,9 +326,49 @@ export default function QuestionPaperBuilderPage() {
     if (isReadOnlyPaper && activeTab !== 'manual') {
       setActiveTab('manual')
     }
+    if (isReadOnlyPaper) {
+      setWizardStep(3)
+      setSourceChosen(true)
+    }
   }, [activeTab, isReadOnlyPaper])
 
   const exams = examsData?.data?.results || []
+
+  // Human-readable labels for the auto paper-title suggestion ("Exam - Class - Subject").
+  const selectedClassLabel = useMemo(() => {
+    if (!paperMetadata.class_obj) return ''
+    const sessionMatch = sessionClasses.find((sc) => String(sc.id) === String(paperMetadata.class_obj))
+    if (sessionMatch) {
+      return sessionMatch.display_name || sessionMatch.label || sessionMatch.class_obj_name || ''
+    }
+    const teacherMatch = (teacherClassOptions || []).find((opt) => String(opt.id) === String(paperMetadata.class_obj))
+    return teacherMatch?.label || teacherMatch?.name || ''
+  }, [paperMetadata.class_obj, sessionClasses, teacherClassOptions])
+
+  const selectedSubjectLabel = useMemo(() => {
+    if (!paperMetadata.subject) return ''
+    return classSubjects.find((subject) => String(subject.id) === String(paperMetadata.subject))?.name || ''
+  }, [paperMetadata.subject, classSubjects])
+
+  const selectedExamLabel = useMemo(() => {
+    if (!paperMetadata.exam) return ''
+    return exams.find((exam) => String(exam.id) === String(paperMetadata.exam))?.exam_type_name || ''
+  }, [paperMetadata.exam, exams])
+
+  const autoPaperTitle = useMemo(() => {
+    return [selectedExamLabel, selectedClassLabel, selectedSubjectLabel].filter(Boolean).join(' - ')
+  }, [selectedExamLabel, selectedClassLabel, selectedSubjectLabel])
+
+  // Keeps the Paper Title field following "Exam - Class - Subject" until the user
+  // types their own title (or clears it back to empty, which re-enables the suggestion).
+  useEffect(() => {
+    if (!titleIsAutoRef.current) return
+    if (!autoPaperTitle || autoPaperTitle === manualDraft.paper_title) return
+    setManualDraft((prev) => ({ ...prev, paper_title: autoPaperTitle }))
+    setManualDirty(true)
+    setSaveState((prev) => (prev === 'saving' ? prev : 'pending'))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoPaperTitle])
 
   const { data: coverageStatsRes, isLoading: coverageLoading, isError: coverageError } = useQuery({
     queryKey: ['paperCoverageStats', draftId, activeTab, manualDraft.questions.length],
@@ -328,27 +503,6 @@ export default function QuestionPaperBuilderPage() {
   const lastEnsurePayloadRef = useRef('')
   const lastAutosavePayloadRef = useRef('')
 
-  // Create exam paper mutation
-  const createPaperMutation = useMutation({
-    mutationFn: (data) => questionPaperApi.createExamPaper(data),
-    onSuccess: (response) => {
-      setToast({
-        type: 'success',
-        message: 'Exam paper created successfully!',
-      })
-      // Redirect to paper detail/preview
-      setTimeout(() => {
-        navigate(`/examinations/papers/${response.data.id}`)
-      }, 1500)
-    },
-    onError: (error) => {
-      const msg = error.response?.data?.detail || 'Error creating exam paper'
-      setToast({
-        type: 'error',
-        message: msg,
-      })
-    },
-  })
 
   const ensureDraftMutation = useMutation({
     mutationFn: (data) => questionPaperApi.ensureDraft(data),
@@ -373,21 +527,37 @@ export default function QuestionPaperBuilderPage() {
       const paper = response?.data
       if (!paper?.id) return
       setDraftId(paper.id)
-      setPaperMetadata((prev) => ({
-        ...prev,
-        class_obj: paper.class_obj ? String(paper.class_obj) : prev.class_obj,
-        subject: paper.subject ? String(paper.subject) : prev.subject,
-        exam: paper.exam ? String(paper.exam) : '',
-      }))
-      setManualDraft((prev) => ({
-        ...prev,
-        paper_title: paper.paper_title || prev.paper_title,
-        instructions: paper.instructions || '',
-        total_marks: String(paper.total_marks ?? prev.total_marks),
-        duration_minutes: String(paper.duration_minutes ?? prev.duration_minutes),
-        questions: (paper.paper_questions || []).map(toQuestionDraft),
-      }))
-      setManualDirty(false)
+
+      // This response reflects whatever was sent at dispatch time. If the user kept
+      // editing (structure/questions/metadata) while the request was in flight, the
+      // live state has already moved on — overwriting it here would silently revert
+      // those newer edits (this exact class of bug has bitten this page before).
+      // Only apply the server echo when nothing has changed since we sent it.
+      const latestPayloadHash = JSON.stringify(buildAutosavePayload())
+      const hasNewerLocalEdits = Boolean(variables?.payloadHash) && variables.payloadHash !== latestPayloadHash
+
+      if (!hasNewerLocalEdits) {
+        // Deliberately NOT syncing class_obj/subject/exam from this response: the
+        // dropdowns are the source of truth once the user starts picking values, and
+        // buildEnsurePayload() omits empty subject/exam (they're required FKs, so an
+        // in-progress "cleared, about to repick" state can't be sent) rather than
+        // clearing them server-side — echoing the server's still-old value back here
+        // used to silently revert a subject/exam the user had just cleared mid-selection.
+        setManualDraft((prev) => ({
+          ...prev,
+          paper_title: paper.paper_title || prev.paper_title,
+          instructions: paper.instructions || '',
+          total_marks: String(paper.total_marks ?? prev.total_marks),
+          duration_minutes: String(paper.duration_minutes ?? prev.duration_minutes),
+          questions: (paper.paper_questions || []).map(toQuestionDraft),
+        }))
+        setStructure(hydrateStructure(paper.structure))
+        setRenderOptions({ ...RENDER_OPTIONS_DEFAULT, ...(paper.render_options || {}) })
+        setManualDirty(false)
+      }
+      // else: leave local state (and manualDirty=true) alone — the next autosave
+      // cycle will pick up and send the newer edits.
+
       setSaveState('saved')
       setLastSavedAt(new Date().toISOString())
       lastAutosavePayloadRef.current = variables?.payloadHash || lastAutosavePayloadRef.current
@@ -419,6 +589,16 @@ export default function QuestionPaperBuilderPage() {
       if (parsed.manualDraft) {
         setManualDraft((prev) => ({ ...prev, ...parsed.manualDraft }))
       }
+      if (Array.isArray(parsed.structure)) {
+        setStructure(parsed.structure)
+      }
+      if (parsed.renderOptions) {
+        setRenderOptions((prev) => ({ ...prev, ...parsed.renderOptions }))
+      }
+      if (parsed.wizardStep) {
+        setWizardStep(parsed.wizardStep)
+        setSourceChosen(parsed.wizardStep >= 3)
+      }
       setSaveState('pending')
       setToast({ type: 'success', message: 'Recovered unsaved manual draft from this browser.' })
     } catch {
@@ -426,7 +606,7 @@ export default function QuestionPaperBuilderPage() {
     }
   }, [recoveryKey, resumePaperId])
 
-  const recoveryPayload = useDebounce({ paperMetadata, manualDraft }, 400)
+  const recoveryPayload = useDebounce({ paperMetadata, manualDraft, structure, renderOptions, wizardStep }, 400)
   useEffect(() => {
     if (activeTab !== 'manual') return
     if (draftId) {
@@ -440,6 +620,9 @@ export default function QuestionPaperBuilderPage() {
         JSON.stringify({
           paperMetadata: recoveryPayload.paperMetadata,
           manualDraft: recoveryPayload.manualDraft,
+          structure: recoveryPayload.structure,
+          renderOptions: recoveryPayload.renderOptions,
+          wizardStep: recoveryPayload.wizardStep,
           savedAt: new Date().toISOString(),
         }),
       )
@@ -455,6 +638,8 @@ export default function QuestionPaperBuilderPage() {
       exam: paperMetadata.exam || undefined,
       paper_title: (manualDraft.paper_title || '').trim() || undefined,
       instructions: manualDraft.instructions || '',
+      structure: serializeStructure(structure),
+      render_options: renderOptions,
     }
 
     const parsedTotal = Number(manualDraft.total_marks)
@@ -468,13 +653,13 @@ export default function QuestionPaperBuilderPage() {
     }
 
     return payload
-  }, [manualDraft.duration_minutes, manualDraft.instructions, manualDraft.paper_title, manualDraft.total_marks, paperMetadata.exam, paperMetadata.subject, resolvedClassObj])
+  }, [manualDraft.duration_minutes, manualDraft.instructions, manualDraft.paper_title, manualDraft.total_marks, paperMetadata.exam, paperMetadata.subject, renderOptions, resolvedClassObj, structure])
 
   const buildAutosavePayload = useCallback(() => {
     const payload = buildEnsurePayload()
-    payload.manual_questions = buildManualAutosaveQuestions(manualDraft.questions)
+    payload.manual_questions = buildManualAutosaveQuestions(manualDraft.questions, structure)
     return payload
-  }, [buildEnsurePayload, manualDraft.questions])
+  }, [buildEnsurePayload, manualDraft.questions, structure])
 
   useEffect(() => {
     if (activeTab !== 'manual') return
@@ -500,23 +685,31 @@ export default function QuestionPaperBuilderPage() {
     resolvedClassObj,
   ])
 
-  const debouncedAutosavePayload = useDebounce(buildAutosavePayload(), 900)
+  // `useDebounce` only gates *when* autosave fires (settle trigger); the payload it returns
+  // can still lag the live state by up to `delay` right after mount (its internal state starts
+  // frozen at the first render's value until its own timer first fires). Reading that stale
+  // snapshot as the outgoing payload once caused an early autosave-after-resume to post an
+  // empty manual_questions list, which the backend interprets as "delete every question."
+  // So the debounce is used only as a trigger; the payload sent is always rebuilt fresh here.
+  const debouncedAutosaveTrigger = useDebounce(JSON.stringify(buildAutosavePayload()), 900)
   useEffect(() => {
     if (activeTab !== 'manual') return
     if (!draftId) return
     if (!manualDirty) return
     if (autosaveMutation.isPending) return
+    if (debouncedAutosaveTrigger === lastAutosavePayloadRef.current) return
 
-    const payloadHash = JSON.stringify(debouncedAutosavePayload)
+    const payload = buildAutosavePayload()
+    const payloadHash = JSON.stringify(payload)
     if (payloadHash === lastAutosavePayloadRef.current) return
 
     setSaveState('saving')
     autosaveMutation.mutate({
       id: draftId,
-      data: debouncedAutosavePayload,
+      data: payload,
       payloadHash,
     })
-  }, [activeTab, autosaveMutation, debouncedAutosavePayload, draftId, manualDirty])
+  }, [activeTab, autosaveMutation, buildAutosavePayload, debouncedAutosaveTrigger, draftId, manualDirty])
 
   const handleManualDraftChange = useCallback((nextDraft) => {
     setManualDraft(nextDraft)
@@ -525,6 +718,38 @@ export default function QuestionPaperBuilderPage() {
       setSaveState('pending')
     }
   }, [saveState])
+
+  const handleStructureChange = useCallback((nextStructure) => {
+    setStructure(nextStructure)
+    setManualDirty(true)
+    if (saveState !== 'saving') {
+      setSaveState('pending')
+    }
+  }, [saveState])
+
+  const handleRenderOptionsChange = useCallback((nextRenderOptions) => {
+    setRenderOptions(nextRenderOptions)
+    setManualDirty(true)
+    if (saveState !== 'saving') {
+      setSaveState('pending')
+    }
+  }, [saveState])
+
+  // Marks mismatch is advisory only — never a hard block — but it should at least
+  // interrupt the "Next" click with a confirmation instead of silently sailing past it.
+  const handleGoToAddQuestions = useCallback(() => {
+    const allocated = calculateAllocatedMarks(structure)
+    const total = Number(manualDraft.total_marks) || 0
+    const isMismatched = total > 0 && allocated !== total
+
+    if (isMismatched) {
+      const proceed = window.confirm(
+        `Allocated marks (${allocated}) don't match the paper's total marks (${total}). Continue to Add Questions anyway?`,
+      )
+      if (!proceed) return
+    }
+    setWizardStep(3)
+  }, [structure, manualDraft.total_marks])
 
   const handleManualSubmit = useCallback(async () => {
     if (!(manualDraft.paper_title || '').trim()) {
@@ -579,29 +804,89 @@ export default function QuestionPaperBuilderPage() {
     resolvedClassObj,
   ])
 
-  // Handle paper creation from either tab
-  const handlePaperCreate = (paperData) => {
-    // Ensure metadata is included
-    const finalData = {
-      ...paperMetadata,
-      class_obj: resolvedClassObj,
-      ...paperData,
-      status: 'DRAFT',
-    }
+  // Feedback-only confirm call for image-capture uploads: records the PaperFeedback
+  // learning-loop row and links/marks the upload CONFIRMED, but never creates
+  // ExamPaper/Question rows itself — those already exist via ensure-draft + autosave.
+  const confirmPaperUploadMutation = useMutation({
+    mutationFn: ({ uploadId, payload }) => questionPaperApi.confirmPaperUpload(uploadId, payload),
+    onError: () => {
+      setToast({
+        type: 'error',
+        message: 'Could not record OCR feedback for the uploaded paper (your draft is unaffected).',
+      })
+    },
+  })
 
-    createPaperMutation.mutate(finalData)
-  }
+  const [pendingImageConfirm, setPendingImageConfirm] = useState(null)
+  useEffect(() => {
+    if (!draftId || !pendingImageConfirm) return
+    const { uploadId, questions } = pendingImageConfirm
+    setPendingImageConfirm(null)
+    confirmPaperUploadMutation.mutate({
+      uploadId,
+      payload: { exam_paper_id: draftId, confirmed_data: { questions } },
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftId, pendingImageConfirm])
 
-  const handlePaperCreated = (paper) => {
-    if (!paper?.id) {
-      setToast({ type: 'error', message: 'Paper created but no ID returned' })
-      return
+  // Commits the reviewed image-extraction prefill (paper fields, structure, slotted
+  // questions) into the same wizard state manual entry uses — it then autosaves
+  // through the normal draft path exactly like typed/bank questions.
+  const handleApplyImagePrefill = useCallback((prefill) => {
+    if ((prefill.paperFields.paper_title || '').trim()) {
+      // The detected title is a real suggestion from the paper itself — stop the
+      // Exam/Class/Subject auto-title from overwriting it later.
+      titleIsAutoRef.current = false
     }
-    setToast({ type: 'success', message: 'Exam paper created successfully!' })
-    setTimeout(() => {
-      navigate(`/examinations/papers/${paper.id}`)
-    }, 1200)
-  }
+    setManualDraft((prev) => ({
+      ...prev,
+      paper_title: prefill.paperFields.paper_title || prev.paper_title,
+      total_marks: prefill.paperFields.total_marks || prev.total_marks,
+      duration_minutes: prefill.paperFields.duration_minutes || prev.duration_minutes,
+      questions: [...prev.questions, ...prefill.questions],
+    }))
+    setManualDirty(true)
+    setSaveState((prev) => (prev === 'saving' ? prev : 'pending'))
+    setStructure((prev) => [...prev, ...prefill.structure])
+    setActiveTab('manual')
+    setSourceChosen(true)
+    setWizardStep(3)
+    setPendingImageConfirm({ uploadId: prefill.uploadId, questions: prefill.questions })
+    setToast({ type: 'success', message: 'Prefilled from your uploaded paper — review and edit; it autosaves as you go.' })
+  }, [])
+
+  const linkLessonPlansMutation = useMutation({
+    mutationFn: ({ id, lessonPlanIds }) => questionPaperApi.linkLessonPlans(id, { lesson_plan_ids: lessonPlanIds }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['paperCoverageStats', draftId] })
+    },
+  })
+
+  const [selectedLessonPlanIds, setSelectedLessonPlanIds] = useState([])
+  const handleLessonPlanIdsChange = useCallback((lessonPlanIds) => {
+    setSelectedLessonPlanIds(lessonPlanIds)
+  }, [])
+
+  // Seeded from the server's current linkage (via coverage stats) before any sync is
+  // allowed to fire — otherwise BankFillSource's default empty selection, reported on
+  // mount before the user touches anything, would wipe out lesson plans already linked
+  // to a resumed draft.
+  const lastLinkedLessonPlanIdsRef = useRef(null)
+  useEffect(() => {
+    if (lastLinkedLessonPlanIdsRef.current === null && coverageStatsRes) {
+      lastLinkedLessonPlanIdsRef.current = JSON.stringify(linkedLessonPlanIds)
+    }
+  }, [coverageStatsRes, linkedLessonPlanIds])
+
+  useEffect(() => {
+    if (!draftId) return
+    if (lastLinkedLessonPlanIdsRef.current === null) return
+    const payloadHash = JSON.stringify(selectedLessonPlanIds)
+    if (payloadHash === lastLinkedLessonPlanIdsRef.current) return
+    lastLinkedLessonPlanIdsRef.current = payloadHash
+    linkLessonPlansMutation.mutate({ id: draftId, lessonPlanIds: selectedLessonPlanIds })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftId, selectedLessonPlanIds])
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -626,161 +911,367 @@ export default function QuestionPaperBuilderPage() {
 
       {/* Main Content */}
       <div className="max-w-6xl mx-auto px-6 py-8">
-        {/* Metadata form */}
-        <div className="bg-white rounded-lg shadow-sm p-6 mb-6 border border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-800 mb-4">Paper Metadata</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
+        {/* Wizard step nav */}
+        <div className="flex items-center gap-2 mb-6">
+          {WIZARD_STEPS.map((step, index) => (
+            <div key={step.id} className="flex items-center gap-2 flex-1">
+              <button
+                type="button"
+                onClick={() => setWizardStep(step.id)}
+                className={`flex-1 flex items-center gap-2 px-4 py-3 rounded-lg border text-left transition ${
+                  wizardStep === step.id
+                    ? 'bg-blue-600 border-blue-600 text-white'
+                    : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                <span
+                  aria-hidden="true"
+                  className={`w-6 h-6 flex items-center justify-center rounded-full text-xs font-semibold ${
+                    wizardStep === step.id ? 'bg-white text-blue-600' : 'bg-gray-100 text-gray-500'
+                  }`}
+                >
+                  {step.id}.
+                </span>
+                <span className="font-medium text-sm">{step.label}</span>
+              </button>
+              {index < WIZARD_STEPS.length - 1 && (
+                <span className="text-gray-300 hidden sm:inline">→</span>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Step 1: Paper Setup */}
+        {wizardStep === 1 && (
+          <div className="bg-white rounded-lg shadow-sm p-6 mb-6 border border-gray-200">
+            <h2 className="text-lg font-semibold text-gray-800 mb-4">Paper Setup</h2>
+
+            {!isReadOnlyPaper && (
+              <div className="flex items-center justify-between gap-3 mb-6 rounded-lg border border-dashed border-blue-300 bg-blue-50 px-4 py-3">
+                <p className="text-sm text-blue-800">
+                  📄 Have a printed/handwritten paper? Upload it and we'll pre-fill this form.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => { setActiveTab('image'); setSourceChosen(true); setWizardStep(3) }}
+                  className="shrink-0 px-3 py-1.5 border border-blue-300 text-blue-700 rounded-lg text-sm hover:bg-blue-100"
+                >
+                  Upload paper image
+                </button>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Class *
+                </label>
+                <ClassSelector
+                  value={paperMetadata.class_obj}
+                  onChange={(e) =>
+                    setPaperMetadata({ ...paperMetadata, class_obj: e.target.value, subject: '', exam: '' })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  scope={classSelectorScope}
+                  academicYearId={activeAcademicYear?.id}
+                  showAllOption={showAllOption}
+                  classes={teacherClassOptions || undefined}
+                  disabled={isReadOnlyPaper}
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Subject *
+                </label>
+                <select
+                  value={paperMetadata.subject}
+                  onChange={(e) =>
+                    setPaperMetadata({ ...paperMetadata, subject: e.target.value })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  disabled={isReadOnlyPaper || !resolvedClassObj || classSubjectsLoading}
+                  required
+                >
+                  <option value="">
+                    {!resolvedClassObj
+                      ? 'Select class first'
+                      : classSubjectsLoading
+                        ? 'Loading subjects...'
+                        : classSubjects.length > 0
+                          ? 'Select subject'
+                          : 'No subjects assigned to this class'}
+                  </option>
+                  {classSubjects.map((subject) => (
+                    <option key={subject.id} value={subject.id}>
+                      {subject.code ? `${subject.code} - ` : ''}{subject.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Exam (Optional)
+                </label>
+                <select
+                  value={paperMetadata.exam}
+                  onChange={(e) =>
+                    setPaperMetadata({ ...paperMetadata, exam: e.target.value })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  disabled={isReadOnlyPaper || !resolvedClassObj || examsLoading}
+                >
+                  <option value="">
+                    {!resolvedClassObj
+                      ? 'Select class first'
+                      : examsLoading
+                        ? 'Loading exams...'
+                        : exams.length > 0
+                          ? 'Select Exam (Optional)'
+                          : 'No exams found for this class this session'}
+                  </option>
+                  {exams.map((exam) => (
+                    <option key={exam.id} value={exam.id}>
+                      {formatExamOptionLabel(exam)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Paper Title *
+                </label>
+                <input
+                  type="text"
+                  value={manualDraft.paper_title || ''}
+                  onChange={(e) => {
+                    titleIsAutoRef.current = e.target.value.trim() === ''
+                    handleManualDraftChange({ ...manualDraft, paper_title: e.target.value })
+                  }}
+                  placeholder="e.g., Physics Mid-Term 2026"
+                  disabled={isReadOnlyPaper}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                {titleIsAutoRef.current && autoPaperTitle && (
+                  <p className="text-xs text-gray-500 mt-1">Auto-generated from exam, class and subject — edit anytime.</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Total Marks
+                </label>
+                <input
+                  type="number"
+                  value={manualDraft.total_marks || '100'}
+                  onChange={(e) => handleManualDraftChange({ ...manualDraft, total_marks: e.target.value })}
+                  disabled={isReadOnlyPaper}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Duration (minutes)
+                </label>
+                <input
+                  type="number"
+                  value={manualDraft.duration_minutes || '60'}
+                  onChange={(e) => handleManualDraftChange({ ...manualDraft, duration_minutes: e.target.value })}
+                  disabled={isReadOnlyPaper}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+
+            <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Class *
+                Instructions
               </label>
-              <ClassSelector
-                value={paperMetadata.class_obj}
-                onChange={(e) =>
-                  setPaperMetadata({ ...paperMetadata, class_obj: e.target.value, subject: '' })
-                }
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                scope={classSelectorScope}
-                academicYearId={activeAcademicYear?.id}
-                showAllOption={showAllOption}
-                classes={teacherClassOptions || undefined}
+              <textarea
+                value={manualDraft.instructions || ''}
+                onChange={(e) => handleManualDraftChange({ ...manualDraft, instructions: e.target.value })}
+                placeholder="Enter general instructions for students..."
+                rows="4"
                 disabled={isReadOnlyPaper}
-                required
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Subject *
+            <div className="flex items-center gap-2 mb-6">
+              <input
+                type="checkbox"
+                id="answer-lines"
+                checked={Boolean(renderOptions.answer_lines)}
+                disabled={isReadOnlyPaper}
+                onChange={(e) => handleRenderOptionsChange({ ...renderOptions, answer_lines: e.target.checked })}
+              />
+              <label htmlFor="answer-lines" className="text-sm text-gray-700">
+                Add answer lines in exported paper
               </label>
-              <select
-                value={paperMetadata.subject}
-                onChange={(e) =>
-                  setPaperMetadata({ ...paperMetadata, subject: e.target.value })
-                }
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                disabled={isReadOnlyPaper || !resolvedClassObj || classSubjectsLoading}
-                required
-              >
-                <option value="">
-                  {!resolvedClassObj
-                    ? 'Select class first'
-                    : classSubjectsLoading
-                      ? 'Loading subjects...'
-                      : classSubjects.length > 0
-                        ? 'Select subject'
-                        : 'No subjects assigned to this class'}
-                </option>
-                {classSubjects.map((subject) => (
-                  <option key={subject.id} value={subject.id}>
-                    {subject.code ? `${subject.code} - ` : ''}{subject.name}
-                  </option>
-                ))}
-              </select>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Exam (Optional)
-              </label>
-              <select
-                value={paperMetadata.exam}
-                onChange={(e) =>
-                  setPaperMetadata({ ...paperMetadata, exam: e.target.value })
-                }
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                disabled={isReadOnlyPaper || examsLoading}
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setWizardStep(2)}
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700"
               >
-                <option value="">{examsLoading ? 'Loading exams...' : 'Select Exam (Optional)'}</option>
-                {exams.map((exam) => (
-                  <option key={exam.id} value={exam.id}>
-                    {exam.exam_type?.name} - {exam.exam_subject?.subject?.name} ({new Date(exam.exam_date).toLocaleDateString()})
-                  </option>
-                ))}
-              </select>
+                Next: Paper Structure
+              </button>
             </div>
           </div>
-        </div>
+        )}
 
-        {/* Builder + Coverage */}
-        <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
-          {/* Tabs */}
-          <div className="xl:col-span-3 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-            {/* Tab buttons */}
-            <div className="flex border-b border-gray-200">
+        {/* Step 2: Paper Structure */}
+        {wizardStep === 2 && (
+          <div className="bg-white rounded-lg shadow-sm p-6 mb-6 border border-gray-200">
+            <h2 className="text-lg font-semibold text-gray-800 mb-4">Paper Structure</h2>
+            <PaperStructureBuilder
+              sections={structure}
+              onChange={handleStructureChange}
+              totalMarks={manualDraft.total_marks}
+              readOnly={isReadOnlyPaper}
+            />
+
+            <div className="flex justify-between mt-6">
               <button
-                onClick={() => setActiveTab('manual')}
-                className={`flex-1 px-6 py-4 font-medium text-center transition ${
-                  activeTab === 'manual'
-                    ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600'
-                    : 'text-gray-600 hover:text-gray-800'
-                }`}
+                type="button"
+                onClick={() => setWizardStep(1)}
+                className="px-6 py-2 border border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-gray-50"
               >
-                <span className="text-xl mr-2">⌨️</span>
-                Manual Entry
+                Back: Paper Setup
               </button>
               <button
-                onClick={() => setActiveTab('image')}
-                disabled={isReadOnlyPaper}
-                className={`flex-1 px-6 py-4 font-medium text-center transition ${
-                  activeTab === 'image'
-                    ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600'
-                    : 'text-gray-600 hover:text-gray-800'
-                }`}
+                type="button"
+                onClick={handleGoToAddQuestions}
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700"
               >
-                <span className="text-xl mr-2">📸</span>
-                Capture from Image
-              </button>
-              <button
-                onClick={() => setActiveTab('lesson')}
-                disabled={isReadOnlyPaper}
-                className={`flex-1 px-6 py-4 font-medium text-center transition ${
-                  activeTab === 'lesson'
-                    ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600'
-                    : 'text-gray-600 hover:text-gray-800'
-                }`}
-              >
-                <span className="text-xl mr-2">📚</span>
-                From Lesson Plans
+                Next: Add Questions
               </button>
             </div>
+          </div>
+        )}
 
-            {/* Tab content */}
+        {/* Step 3: Add Questions + Coverage */}
+        {wizardStep === 3 && (
+        <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
+          {/* Source chooser + content */}
+          <div className="xl:col-span-3 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
             <div className="p-8">
-              {activeTab === 'manual' && (
-                <ManualEntryPaperTab
-                  draftData={manualDraft}
-                  onDraftDataChange={handleManualDraftChange}
-                  onSubmitDraft={handleManualSubmit}
-                  isLoading={
-                    saveState === 'saving'
-                    || ensureDraftMutation.isPending
-                    || autosaveMutation.isPending
-                  }
-                  saveState={saveState}
-                  lastSavedAt={lastSavedAt}
-                  draftReady={!!draftId}
-                  classId={resolvedClassObj}
-                  subjectId={paperMetadata.subject}
-                  overusedQuestionCounts={overusedQuestionCounts}
-                  readOnly={isReadOnlyPaper}
-                />
+              {structure.length === 0 && (
+                <div className="mb-6 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+                  Define sections in Step 2, or add questions freely.
+                </div>
               )}
 
-              {activeTab === 'image' && (
-                <ImageCapturePaperTab
-                  onPaperCreate={handlePaperCreate}
-                  isLoading={createPaperMutation.isPending}
-                />
-              )}
+              {!sourceChosen && !isReadOnlyPaper ? (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTab('manual'); setSourceChosen(true) }}
+                    className="p-6 border-2 border-gray-200 rounded-lg text-center hover:border-blue-400 hover:bg-blue-50 transition"
+                  >
+                    <span className="text-3xl block mb-2">⌨️</span>
+                    <span className="font-semibold text-gray-800">Type manually</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTab('lesson'); setSourceChosen(true) }}
+                    className="p-6 border-2 border-gray-200 rounded-lg text-center hover:border-blue-400 hover:bg-blue-50 transition"
+                  >
+                    <span className="text-3xl block mb-2">📚</span>
+                    <span className="font-semibold text-gray-800">From question bank / lesson plans</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setActiveTab('image'); setSourceChosen(true) }}
+                    className="p-6 border-2 border-gray-200 rounded-lg text-center hover:border-blue-400 hover:bg-blue-50 transition"
+                  >
+                    <span className="text-3xl block mb-2">📸</span>
+                    <span className="font-semibold text-gray-800">Capture from image</span>
+                  </button>
+                </div>
+              ) : (
+                <>
+                  {!isReadOnlyPaper && (
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="text-sm text-gray-600">
+                        Source: <span className="font-medium text-gray-800">
+                          {activeTab === 'manual' && 'Type manually'}
+                          {activeTab === 'lesson' && 'From question bank / lesson plans'}
+                          {activeTab === 'image' && 'Capture from image'}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setSourceChosen(false)}
+                        className="text-sm text-blue-600 hover:text-blue-800"
+                      >
+                        Change source
+                      </button>
+                    </div>
+                  )}
 
-              {activeTab === 'lesson' && (
-                <LessonPlanPaperTab
-                  metadata={paperMetadata}
-                  onPaperCreated={handlePaperCreated}
-                  isLoading={createPaperMutation.isPending}
-                  initialLessonPlanId={location.state?.lessonPlanId}
-                />
+                  {activeTab === 'manual' && (
+                    <ManualEntryPaperTab
+                      draftData={manualDraft}
+                      onDraftDataChange={handleManualDraftChange}
+                      onSubmitDraft={handleManualSubmit}
+                      isLoading={
+                        saveState === 'saving'
+                        || ensureDraftMutation.isPending
+                        || autosaveMutation.isPending
+                      }
+                      saveState={saveState}
+                      lastSavedAt={lastSavedAt}
+                      draftReady={!!draftId}
+                      classId={resolvedClassObj}
+                      subjectId={paperMetadata.subject}
+                      structure={structure}
+                      overusedQuestionCounts={overusedQuestionCounts}
+                      readOnly={isReadOnlyPaper}
+                    />
+                  )}
+
+                  {activeTab === 'image' && (
+                    <ImageCapturePaperTab
+                      classId={resolvedClassObj}
+                      subjectId={paperMetadata.subject}
+                      readOnly={isReadOnlyPaper}
+                      onApplyPrefill={handleApplyImagePrefill}
+                    />
+                  )}
+
+                  {activeTab === 'lesson' && (
+                    <BankFillSource
+                      draftData={manualDraft}
+                      onDraftDataChange={handleManualDraftChange}
+                      onSubmitDraft={handleManualSubmit}
+                      isLoading={
+                        saveState === 'saving'
+                        || ensureDraftMutation.isPending
+                        || autosaveMutation.isPending
+                      }
+                      saveState={saveState}
+                      lastSavedAt={lastSavedAt}
+                      draftReady={!!draftId}
+                      classId={resolvedClassObj}
+                      subjectId={paperMetadata.subject}
+                      structure={structure}
+                      overusedQuestionCounts={overusedQuestionCounts}
+                      readOnly={isReadOnlyPaper}
+                      initialLessonPlanId={location.state?.lessonPlanId}
+                      initialLessonPlanIds={linkedLessonPlanIds}
+                      onLessonPlanIdsChange={handleLessonPlanIdsChange}
+                    />
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -904,8 +1395,10 @@ export default function QuestionPaperBuilderPage() {
             )}
           </aside>
         </div>
+        )}
 
         {/* Help text */}
+        {wizardStep === 3 && (
         <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
             <h4 className="font-semibold text-blue-900 mb-2">💡 Manual Entry Tips</h4>
@@ -927,6 +1420,7 @@ export default function QuestionPaperBuilderPage() {
             </ul>
           </div>
         </div>
+        )}
       </div>
     </div>
   )

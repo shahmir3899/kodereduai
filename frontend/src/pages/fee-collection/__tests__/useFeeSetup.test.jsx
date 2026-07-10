@@ -48,12 +48,12 @@ describe('useFeeSetup generation invalidation parity', () => {
       feeType: 'MONTHLY',
       studentClassId: null,
       structureMode: 'class',
-      month: 4,
+      month: 9,
       year: 2026,
     }))
 
     const monthlyTaskConfig = capturedBackgroundTaskOptions.find(
-      (config) => config.title === 'Generating fees for 4/2026'
+      (config) => config.title === 'Generating fees for Sep 2026'
     )
 
     expect(monthlyTaskConfig).toBeTruthy()

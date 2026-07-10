@@ -1,6 +1,6 @@
 from django.urls import path
 from .views import (
-    GenerateReportView, ReportListView, ReportDownloadView,
+    GenerateReportView, InstantReportView, ReportListView, ReportDownloadView,
     CustomLetterListCreateView, CustomLetterDetailView,
     LetterTemplatesView, LetterPrefillView, GenerateLetterPDFView,
     LetterAIDraftView,
@@ -8,6 +8,7 @@ from .views import (
 
 urlpatterns = [
     path('generate/', GenerateReportView.as_view(), name='generate-report'),
+    path('generate-instant/', InstantReportView.as_view(), name='generate-instant-report'),
     path('list/', ReportListView.as_view(), name='report-list'),
     path('<int:report_id>/download/', ReportDownloadView.as_view(), name='report-download'),
 

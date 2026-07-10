@@ -1,69 +1,497 @@
 """
-Comprehensive student report generator.
-Combines attendance, fees, and academic data into a single report.
+Premium comprehensive student progress report — A4, dynamically built from
+database records. Section-based layout: header/letterhead, student profile
+card, attendance (colored month-grid + legend + stat cards), learning
+progress (lessons grouped by subject), skills/behaviour assessment, exam
+results (when present), fee summary (table + stat cards + chart), teacher/
+principal remarks, and a signature block. Page 1 covers header/profile/
+attendance; page 2 covers everything else.
 """
 
-from datetime import date
-from django.db.models import Sum, Count, Q, Avg
+import calendar
+import io
+import math
+from collections import OrderedDict
+from datetime import date, datetime, timedelta
 from decimal import Decimal
+
+from django.db.models import Q, Sum
+
 from .base import BaseReportGenerator
+
+# --- Palette -------------------------------------------------------------
+
+BLUE = '#2563EB'
+GRAY_TEXT = '#6B7280'
+GRAY_BORDER = '#E5E7EB'
+CARD_BG = '#F8FAFC'
+
+PRESENT_BG, PRESENT_TEXT = '#D1FAE5', '#065F46'
+ABSENT_BG, ABSENT_TEXT = '#FEE2E2', '#991B1B'
+HOLIDAY_BG = '#FEF3C7'
+WEEKEND_BG = '#E5E7EB'
+INFO_BG, INFO_TEXT = '#DBEAFE', '#1E40AF'
+NEUTRAL_BG, NEUTRAL_TEXT = '#F3F4F6', '#374151'
+
+
+def _month_range_q(date_from, date_to):
+    """
+    Build a Q filter over integer year/month fields (as used by FeePayment)
+    spanning a date range.
+    """
+    y1, m1 = date_from.year, date_from.month
+    y2, m2 = date_to.year, date_to.month
+    if y1 == y2:
+        return Q(year=y1, month__gte=m1, month__lte=m2)
+    return (
+        Q(year=y1, month__gte=m1)
+        | Q(year__gt=y1, year__lt=y2)
+        | Q(year=y2, month__lte=m2)
+    )
+
+
+def fetch_image_bytes(url, timeout=5):
+    """Best-effort image download — returns None on any failure so callers can render without it."""
+    if not url:
+        return None
+    try:
+        import requests
+        resp = requests.get(url, timeout=timeout)
+        if resp.status_code == 200:
+            return resp.content
+    except Exception:
+        pass
+    return None
+
+
+# --- Small vector-drawn building blocks -----------------------------------
+# Ratings render as drawn star polygons rather than Unicode "★" glyphs:
+# reportlab's default Helvetica/base-14 fonts only cover the Latin-1/WinAnsi
+# range and don't reliably render U+2605, so a literal string risks blank
+# or broken glyphs in the PDF. Drawing shapes sidesteps that entirely.
+
+def _star_points(cx, cy, outer_r, inner_r):
+    points = []
+    for i in range(10):
+        angle = math.pi / 2 + i * math.pi / 5
+        r = outer_r if i % 2 == 0 else inner_r
+        points.extend([cx + r * math.cos(angle), cy + r * math.sin(angle)])
+    return points
+
+
+def draw_rating_stars(rating, max_stars=5, size=10, gap=2):
+    """Small Drawing flowable: max_stars vector stars, `rating` of them filled."""
+    from reportlab.graphics.shapes import Drawing, Polygon
+    from reportlab.lib import colors
+
+    filled = colors.HexColor('#F59E0B')
+    empty = colors.HexColor('#E5E7EB')
+    width = max_stars * (size + gap)
+    drawing = Drawing(width, size)
+    outer_r, inner_r = size / 2, size / 2 * 0.42
+    for i in range(max_stars):
+        cx = i * (size + gap) + outer_r
+        pts = _star_points(cx, outer_r, outer_r, inner_r)
+        fill = filled if rating and i < rating else empty
+        drawing.add(Polygon(pts, fillColor=fill, strokeColor=fill))
+    return drawing
+
+
+def section_heading(text, styles):
+    """Section heading with a colored left-accent bar in place of a literal icon glyph."""
+    from reportlab.lib import colors
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.platypus import Paragraph, Table, TableStyle
+
+    heading_style = ParagraphStyle(
+        'SectionHeading', parent=styles['Heading2'], fontSize=17,
+        textColor=colors.HexColor(BLUE), spaceBefore=0, spaceAfter=0, leading=19,
+    )
+    bar = Table([['']], colWidths=[4], rowHeights=[19])
+    bar.setStyle(TableStyle([('BACKGROUND', (0, 0), (-1, -1), colors.HexColor(BLUE))]))
+    row = Table([[bar, Paragraph(text, heading_style)]], colWidths=[6, None])
+    row.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('LEFTPADDING', (0, 0), (0, 0), 0),
+        ('LEFTPADDING', (1, 0), (1, 0), 6),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ('TOPPADDING', (0, 0), (-1, -1), 0),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+    ]))
+    return row
+
+
+def build_stat_cards(cards):
+    """cards: list of (value, label, bg_hex, text_hex) -> a row of rounded colored stat cards."""
+    from reportlab.lib import colors
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.platypus import Paragraph, Table, TableStyle
+
+    styles = getSampleStyleSheet()
+    card_tables = []
+    for value, label, bg_hex, text_hex in cards:
+        value_style = ParagraphStyle(
+            f'StatValue_{text_hex}', parent=styles['Normal'], fontSize=20,
+            textColor=colors.HexColor(text_hex), alignment=1, leading=24,
+        )
+        label_style = ParagraphStyle(
+            f'StatLabel_{text_hex}', parent=styles['Normal'], fontSize=8,
+            textColor=colors.HexColor(text_hex), alignment=1,
+        )
+        card = Table(
+            [[Paragraph(f"<b>{value}</b>", value_style)], [Paragraph(label, label_style)]],
+            colWidths=[112],
+        )
+        card.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor(bg_hex)),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('TOPPADDING', (0, 0), (-1, 0), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 2),
+            ('TOPPADDING', (0, 1), (-1, 1), 0),
+            ('BOTTOMPADDING', (0, 1), (-1, 1), 10),
+            ('ROUNDEDCORNERS', [6, 6, 6, 6]),
+        ]))
+        card_tables.append(card)
+
+    outer = Table([card_tables], colWidths=[120] * len(card_tables))
+    outer.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 3),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 3),
+        ('TOPPADDING', (0, 0), (-1, -1), 0),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+    ]))
+    return outer
+
+
+def build_legend(items):
+    """items: list of (hex_color, label) -> a small color-key row."""
+    from reportlab.lib import colors
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.platypus import Paragraph, Table, TableStyle
+
+    styles = getSampleStyleSheet()
+    label_style = ParagraphStyle('LegendLabel', parent=styles['Normal'], fontSize=8, textColor=colors.HexColor(NEUTRAL_TEXT))
+    cells, col_widths = [], []
+    for _color_hex, label in items:
+        cells.append('')
+        col_widths.append(10)
+        cells.append(Paragraph(label, label_style))
+        col_widths.append(56)
+    table = Table([cells], colWidths=col_widths, rowHeights=[12])
+    style_cmds = [
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 2),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 2),
+    ]
+    for i, (color_hex, _label) in enumerate(items):
+        col = i * 2
+        style_cmds.append(('BACKGROUND', (col, 0), (col, 0), colors.HexColor(color_hex)))
+    table.setStyle(TableStyle(style_cmds))
+    return table
+
+
+def build_month_grid_flowables(year, month, attendance_by_date, holiday_dates=None):
+    """
+    Calendar-style Table for one month, cells colored by present/absent/
+    holiday/weekend. Returns a list of flowables (month title + table).
+    """
+    from reportlab.lib import colors
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.lib.units import inch
+    from reportlab.platypus import Paragraph, Table, TableStyle
+
+    holiday_dates = holiday_dates or set()
+    styles = getSampleStyleSheet()
+    cal = calendar.Calendar(firstweekday=6)  # Sunday-first
+    weeks = cal.monthdayscalendar(year, month)
+
+    header = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+    table_data = [header] + [
+        [str(day) if day else '' for day in week] for week in weeks
+    ]
+
+    table = Table(table_data, colWidths=[0.62 * inch] * 7)
+    style_cmds = [
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor(BLUE)),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor(GRAY_BORDER)),
+        ('FONTSIZE', (0, 0), (-1, -1), 8),
+        ('TOPPADDING', (0, 0), (-1, -1), 5),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+    ]
+    for r, week in enumerate(weeks, start=1):
+        for c, day in enumerate(week):
+            if not day:
+                style_cmds.append(('BACKGROUND', (c, r), (c, r), colors.HexColor('#F9FAFB')))
+                continue
+            d = date(year, month, day)
+            status = attendance_by_date.get(d)
+            if status == 'PRESENT':
+                bg = PRESENT_BG
+            elif status == 'ABSENT':
+                bg = ABSENT_BG
+            elif d in holiday_dates:
+                bg = HOLIDAY_BG
+            elif d.weekday() == 6:
+                bg = WEEKEND_BG
+            else:
+                bg = None
+            if bg:
+                style_cmds.append(('BACKGROUND', (c, r), (c, r), colors.HexColor(bg)))
+    table.setStyle(TableStyle(style_cmds))
+
+    month_style = ParagraphStyle(
+        'MonthTitle', parent=styles['Normal'], fontSize=11,
+        textColor=colors.HexColor(BLUE), spaceAfter=3,
+    )
+    month_label = date(year, month, 1).strftime('%B %Y')
+    return [Paragraph(f"<b>{month_label}</b>", month_style), table]
+
+
+def build_fee_chart(fee_rows):
+    """Grouped bar chart (Due vs Paid per month) as a reportlab Drawing flowable."""
+    from reportlab.graphics.charts.barcharts import VerticalBarChart
+    from reportlab.graphics.charts.legends import Legend
+    from reportlab.graphics.shapes import Drawing
+    from reportlab.lib import colors
+
+    labels = [f"{r['month']:02d}/{r['year']}" for r in fee_rows]
+    due_values = [float(r['due']) for r in fee_rows]
+    paid_values = [float(r['paid']) for r in fee_rows]
+
+    drawing = Drawing(480, 190)
+    chart = VerticalBarChart()
+    chart.x = 35
+    chart.y = 30
+    chart.width = 340
+    chart.height = 140
+    chart.data = [due_values, paid_values]
+    chart.categoryAxis.categoryNames = labels
+    chart.categoryAxis.labels.fontSize = 7
+    chart.categoryAxis.labels.angle = 30
+    chart.categoryAxis.labels.dy = -8
+    chart.valueAxis.valueMin = 0
+    chart.bars[0].fillColor = colors.HexColor('#F59E0B')
+    chart.bars[1].fillColor = colors.HexColor('#10B981')
+    chart.barSpacing = 2
+    drawing.add(chart)
+
+    legend = Legend()
+    legend.x = 395
+    legend.y = 120
+    legend.alignment = 'right'
+    legend.colorNamePairs = [
+        (colors.HexColor('#F59E0B'), 'Due'),
+        (colors.HexColor('#10B981'), 'Paid'),
+    ]
+    legend.fontSize = 8
+    legend.dx = 8
+    legend.dy = 8
+    drawing.add(legend)
+
+    return drawing
+
+
+def build_table(headers, rows):
+    """Styled reportlab Table, matching the visual language used elsewhere in reports."""
+    from reportlab.lib import colors
+    from reportlab.platypus import Table, TableStyle
+
+    table = Table([headers] + rows, repeatRows=1)
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor(BLUE)),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTSIZE', (0, 0), (-1, 0), 10),
+        ('FONTSIZE', (0, 1), (-1, -1), 9),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor(GRAY_BORDER)),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F3F4F6')]),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+    ]))
+    return table
+
+
+def build_ratings_table(rating_pairs):
+    """rating_pairs: list of (label, rating_int_or_None) -> a 2-col table: label | stars."""
+    from reportlab.lib import colors
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.platypus import Paragraph, Table, TableStyle
+
+    styles = getSampleStyleSheet()
+    rows = [[Paragraph(label, styles['Normal']), draw_rating_stars(rating)] for label, rating in rating_pairs]
+    table = Table(rows, colWidths=[180, 90])
+    table.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor(GRAY_BORDER)),
+        ('ROWBACKGROUNDS', (0, 0), (-1, -1), [colors.white, colors.HexColor('#F9FAFB')]),
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ('LEFTPADDING', (0, 0), (-1, -1), 8),
+    ]))
+    return table
 
 
 class StudentComprehensiveReportGenerator(BaseReportGenerator):
-    """All-in-one student report for parent-teacher meetings."""
+    """Premium student progress report: profile, attendance, learning, assessment, fees, remarks."""
+
+    def _date_range(self):
+        """Parse date_from/date_to parameters into date objects, when both are present."""
+        date_from = self.parameters.get('date_from')
+        date_to = self.parameters.get('date_to')
+        if not date_from or not date_to:
+            return None, None
+        try:
+            return date.fromisoformat(date_from), date.fromisoformat(date_to)
+        except (TypeError, ValueError):
+            return None, None
+
+    def _resolve_academic_year(self, date_from, academic_year_id):
+        """Resolve which AcademicYear the fee chart's fixed 12-month window should anchor to."""
+        from academic_sessions.models import AcademicYear
+
+        if academic_year_id:
+            ay = AcademicYear.objects.filter(id=academic_year_id, school=self.school).first()
+            if ay:
+                return ay
+        if date_from:
+            ay = AcademicYear.objects.filter(
+                school=self.school, start_date__lte=date_from, end_date__gte=date_from,
+            ).first()
+            if ay:
+                return ay
+        return AcademicYear.objects.filter(school=self.school, is_current=True).first()
+
+    @staticmethod
+    def _twelve_months_from(start_date):
+        """List of 12 (year, month) tuples starting at start_date's month."""
+        months = []
+        y, m = start_date.year, start_date.month
+        for _ in range(12):
+            months.append((y, m))
+            m += 1
+            if m > 12:
+                m = 1
+                y += 1
+        return months
+
+    def _resolve_holiday_dates(self, months_list, class_obj_id):
+        """Expand active school-calendar OFF_DAY entries into a set of individual dates."""
+        if not months_list:
+            return set()
+        from academic_sessions.models import SchoolCalendarEntry
+
+        first_y, first_m = months_list[0]
+        last_y, last_m = months_list[-1]
+        range_start = date(first_y, first_m, 1)
+        range_end = date(last_y, last_m, calendar.monthrange(last_y, last_m)[1])
+
+        entries = SchoolCalendarEntry.objects.filter(
+            school=self.school,
+            entry_kind=SchoolCalendarEntry.EntryKind.OFF_DAY,
+            is_active=True,
+            affects_students=True,
+            start_date__lte=range_end,
+            end_date__gte=range_start,
+        ).prefetch_related('classes')
+
+        holiday_dates = set()
+        for entry in entries:
+            if entry.scope == SchoolCalendarEntry.Scope.CLASS:
+                class_ids = set(entry.classes.values_list('id', flat=True))
+                if class_obj_id not in class_ids:
+                    continue
+            d = max(entry.start_date, range_start)
+            end = min(entry.end_date, range_end)
+            while d <= end:
+                holiday_dates.add(d)
+                d += timedelta(days=1)
+        return holiday_dates
 
     def get_data(self):
         student_id = self.parameters.get('student_id')
         if not student_id:
-            return {'title': 'Student Report', 'subtitle': 'No student specified',
-                    'summary': {}, 'table_headers': [], 'table_rows': []}
+            return {'error': 'No student specified'}
 
         academic_year_id = self._academic_year_id()
+        date_from, date_to = self._date_range()
 
         from students.models import Student
 
         try:
             student = Student.objects.select_related('class_obj', 'school').get(id=student_id)
         except Student.DoesNotExist:
-            return {'title': 'Student Report', 'subtitle': 'Student not found',
-                    'summary': {}, 'table_headers': [], 'table_rows': []}
+            return {'error': 'Student not found'}
+
+        enrollment_map = self._get_enrollment_map([student.id])
+        class_name = self._resolve_class_name(student, enrollment_map)
+        roll_number = self._resolve_roll_number(student, enrollment_map)
 
         # --- Attendance ---
         from attendance.models import AttendanceRecord
         att_qs = AttendanceRecord.objects.filter(student=student)
-        if academic_year_id:
+        if date_from and date_to:
+            att_qs = att_qs.filter(date__gte=date_from, date__lte=date_to)
+        elif academic_year_id:
             att_qs = att_qs.filter(academic_year_id=academic_year_id)
-        total_days = att_qs.count()
-        present = att_qs.filter(status='PRESENT').count()
-        absent = att_qs.filter(status='ABSENT').count()
-        att_rate = round(present / total_days * 100, 1) if total_days > 0 else 0
 
-        # --- Fees ---
+        attendance_by_date = {rec.date: rec.status for rec in att_qs.only('date', 'status')}
+        present = sum(1 for s in attendance_by_date.values() if s == 'PRESENT')
+        absent = sum(1 for s in attendance_by_date.values() if s == 'ABSENT')
+        total_days = present + absent
+        att_rate = round(present / total_days * 100, 1) if total_days else 0
+        attendance_months = sorted({(d.year, d.month) for d in attendance_by_date.keys()})
+        holiday_dates = self._resolve_holiday_dates(attendance_months, student.class_obj_id)
+
+        # --- Fees: always a fixed 12-month view of the academic year, independent of
+        # the report's date_from/date_to — a partial-period chart isn't useful for
+        # spotting collection trends, so this always plots the whole year.
         from finance.models import FeePayment
-        fee_qs = FeePayment.objects.filter(student=student)
-        if academic_year_id:
-            fee_qs = fee_qs.filter(academic_year_id=academic_year_id)
-        fee_agg = fee_qs.aggregate(
-            total_due=Sum('amount_due'),
-            total_paid=Sum('amount_paid'),
-        )
-        fee_due = fee_agg['total_due'] or Decimal('0')
-        fee_paid = fee_agg['total_paid'] or Decimal('0')
+        academic_year_obj = self._resolve_academic_year(date_from, academic_year_id)
 
-        # --- Exams ---
+        if academic_year_obj:
+            months_list = self._twelve_months_from(academic_year_obj.start_date)
+        else:
+            today = date.today()
+            months_list = self._twelve_months_from(date(today.year, today.month, 1))
+
+        fee_by_month = {
+            (r['year'], r['month']): r
+            for r in FeePayment.objects.filter(student=student, month__gte=1)
+                .values('year', 'month')
+                .annotate(total_due=Sum('amount_due'), total_paid=Sum('amount_paid'))
+        }
+        fee_rows = [
+            {
+                'year': y, 'month': m,
+                'due': fee_by_month.get((y, m), {}).get('total_due') or Decimal('0'),
+                'paid': fee_by_month.get((y, m), {}).get('total_paid') or Decimal('0'),
+            }
+            for y, m in months_list
+        ]
+        fee_due = sum((r['due'] for r in fee_rows), Decimal('0'))
+        fee_paid = sum((r['paid'] for r in fee_rows), Decimal('0'))
+
+        # --- Exams (separate, conditional section) ---
         exam_rows = []
+        exam_pct_values = []
         try:
             from examinations.models import StudentMark
-            marks = StudentMark.objects.filter(
-                student=student
-            )
-            if academic_year_id:
+            marks = StudentMark.objects.filter(student=student)
+            if date_from and date_to:
+                marks = marks.filter(exam_subject__exam__start_date__range=(date_from, date_to))
+            elif academic_year_id:
                 marks = marks.filter(enrollment__academic_year_id=academic_year_id)
             marks = marks.select_related('exam_subject__exam', 'exam_subject__subject')
             for m in marks:
                 obtained = float(m.marks_obtained or 0)
                 total = float(m.exam_subject.total_marks or 0)
                 pct = round(obtained / total * 100, 1) if total > 0 else 0
+                exam_pct_values.append(pct)
                 exam_rows.append([
                     m.exam_subject.exam.name,
                     m.exam_subject.subject.name,
@@ -72,34 +500,365 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
                 ])
         except Exception:
             pass
+        exam_avg_pct = round(sum(exam_pct_values) / len(exam_pct_values), 1) if exam_pct_values else None
 
-        enrollment_map = self._get_enrollment_map([student.id])
-        class_name = self._resolve_class_name(student, enrollment_map)
-        roll_number = self._resolve_roll_number(student, enrollment_map)
+        # --- Learning progress: lessons taught, grouped by subject ---
+        lessons_by_subject = OrderedDict()
+        try:
+            from lms.models import LessonPlan
+            lessons = LessonPlan.objects.filter(
+                class_obj_id=student.class_obj_id,
+                status=LessonPlan.Status.PUBLISHED,
+            ).select_related('subject')
+            if date_from and date_to:
+                lessons = lessons.filter(lesson_date__range=(date_from, date_to))
+            elif academic_year_id:
+                lessons = lessons.filter(academic_year_id=academic_year_id)
+            for lp in lessons.order_by('lesson_date'):
+                topic = lp.display_text.strip() if lp.display_text else lp.title
+                lessons_by_subject.setdefault(lp.subject.name, []).append(topic)
+        except Exception:
+            pass
 
-        summary = {
-            'Student Name': student.name,
-            'Class': class_name,
-            'Roll Number': roll_number,
-            'Admission #': student.admission_number or '-',
-            'Parent/Guardian': student.parent_name or student.guardian_name or '-',
-            'Contact': student.parent_phone or student.guardian_phone or '-',
-            '--- Attendance ---': '',
-            'Days Present': present,
-            'Days Absent': absent,
-            'Attendance Rate': f"{att_rate}%",
-            '--- Fees ---': '',
-            'Total Fee Due': f"PKR {fee_due:,.0f}",
-            'Total Paid': f"PKR {fee_paid:,.0f}",
-            'Outstanding': f"PKR {fee_due - fee_paid:,.0f}",
-        }
+        # --- Skills / behaviour assessment + remarks (teacher-entered, StudentTermAssessment) ---
+        skills_ratings = []
+        behaviour_ratings = []
+        teacher_remark = ''
+        principal_remark = ''
+        assessment_exists = False
+        if academic_year_obj:
+            try:
+                from examinations.models import StudentTermAssessment
+                assessment = StudentTermAssessment.objects.filter(
+                    student=student, academic_year=academic_year_obj,
+                ).order_by('-updated_at').first()
+                if assessment:
+                    assessment_exists = True
+                    skills_ratings = [
+                        ('Listening', assessment.listening), ('Speaking', assessment.speaking),
+                        ('Writing', assessment.writing), ('Reading', assessment.reading),
+                        ('Participation', assessment.participation), ('Confidence', assessment.confidence),
+                        ('Social Skills', assessment.social_skills),
+                    ]
+                    behaviour_ratings = [
+                        ('Discipline', assessment.discipline), ('Respect', assessment.respect),
+                        ('Teamwork', assessment.teamwork),
+                        ('Class Participation', assessment.class_participation),
+                        ('Responsibility', assessment.responsibility),
+                    ]
+                    teacher_remark = assessment.teacher_remark
+                    principal_remark = assessment.principal_remark
+            except Exception:
+                pass
 
-        subtitle_period = f" | Academic Year ID: {academic_year_id}" if academic_year_id else ''
+        # --- Header images (best-effort; report renders fine without them) ---
+        photo_bytes = fetch_image_bytes(student.photo_url)
+        school_logo_bytes = fetch_image_bytes(self.school.logo)
+
+        if date_from and date_to:
+            period_label = f"{date_from.strftime('%d %b %Y')} - {date_to.strftime('%d %b %Y')}"
+        elif academic_year_id:
+            period_label = f"Academic Year ID {academic_year_id}"
+        else:
+            period_label = "All Time"
+
+        gender_display = {'M': 'Male', 'F': 'Female', 'O': 'Other'}.get(student.gender, '-')
+        dob_display = student.date_of_birth.strftime('%d %b %Y') if student.date_of_birth else '-'
+        parent_display = ' / '.join(filter(None, [student.parent_name, student.parent_phone])) or '-'
+        academic_session_display = academic_year_obj.name if academic_year_obj else 'N/A'
+
+        student_info_rows = [
+            ('Name', student.name),
+            ('Class', class_name),
+            ('Roll #', str(roll_number)),
+            ('Admission #', student.admission_number or '-'),
+            ('Date of Birth', dob_display),
+            ('Gender', gender_display),
+            ('Parent Name', student.parent_name or student.guardian_name or '-'),
+            ('Parent Contact', student.parent_phone or student.guardian_phone or '-'),
+            ('Academic Session', academic_session_display),
+        ]
 
         return {
-            'title': f"Comprehensive Report - {student.name}",
-            'subtitle': f"Class: {class_name} | Generated: {date.today().strftime('%d %B %Y')}{subtitle_period}",
-            'summary': summary,
-            'table_headers': ['Exam', 'Subject', 'Marks', 'Percentage'] if exam_rows else [],
-            'table_rows': exam_rows,
+            'school_name': self.school.name,
+            'school_logo_bytes': school_logo_bytes,
+            'academic_session_display': academic_session_display,
+            'report_period_label': period_label,
+            'student_info_rows': student_info_rows,
+            'photo_bytes': photo_bytes,
+            'attendance_by_date': attendance_by_date,
+            'attendance_months': attendance_months,
+            'holiday_dates': holiday_dates,
+            'present_count': present,
+            'absent_count': absent,
+            'working_days': total_days,
+            'attendance_rate': att_rate,
+            'fee_rows': fee_rows,
+            'fee_due': fee_due,
+            'fee_paid': fee_paid,
+            'fee_outstanding': fee_due - fee_paid,
+            'lessons_by_subject': lessons_by_subject,
+            'exam_rows': exam_rows,
+            'exam_avg_pct': exam_avg_pct,
+            'skills_ratings': skills_ratings,
+            'behaviour_ratings': behaviour_ratings,
+            'assessment_exists': assessment_exists,
+            'teacher_remark': teacher_remark,
+            'principal_remark': principal_remark,
         }
+
+    def render_pdf(self, data):
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+        from reportlab.lib.units import inch
+        from reportlab.platypus import (
+            HRFlowable, Image, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle,
+        )
+
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(
+            buffer, pagesize=A4,
+            topMargin=0.5 * inch, bottomMargin=0.5 * inch,
+            leftMargin=0.55 * inch, rightMargin=0.55 * inch,
+        )
+        styles = getSampleStyleSheet()
+        elements = []
+
+        if data.get('error'):
+            elements.append(Paragraph(data['error'], styles['Heading2']))
+            doc.build(elements)
+            return buffer.getvalue()
+
+        muted_style = ParagraphStyle('Muted', parent=styles['Normal'], fontSize=9.5, textColor=colors.HexColor(GRAY_TEXT))
+        body_style = ParagraphStyle('Body', parent=styles['Normal'], fontSize=9.5, leading=13)
+
+        # ============================================================
+        # HEADER / LETTERHEAD
+        # ============================================================
+        school_title_style = ParagraphStyle('SchoolTitle', parent=styles['Heading1'], fontSize=23, leading=26, spaceAfter=1)
+        report_title_style = ParagraphStyle('ReportTitle', parent=styles['Normal'], fontSize=14, textColor=colors.HexColor(BLUE), spaceAfter=1)
+        session_style = ParagraphStyle('SessionLine', parent=styles['Normal'], fontSize=9.5, textColor=colors.HexColor(GRAY_TEXT))
+
+        header_text = [
+            Paragraph(f"<b>{data['school_name']}</b>", school_title_style),
+            Paragraph('Comprehensive Student Progress Report', report_title_style),
+            Paragraph(f"Academic Session: {data['academic_session_display']}", session_style),
+        ]
+        logo_bytes = data.get('school_logo_bytes')
+        if logo_bytes:
+            try:
+                logo = Image(io.BytesIO(logo_bytes), width=0.8 * inch, height=0.8 * inch)
+                header_row = Table([[logo, header_text]], colWidths=[1.0 * inch, None])
+                header_row.setStyle(TableStyle([
+                    ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                    ('LEFTPADDING', (0, 0), (-1, -1), 0),
+                ]))
+                elements.append(header_row)
+            except Exception:
+                elements.extend(header_text)
+        else:
+            elements.extend(header_text)
+
+        elements.append(Spacer(1, 8))
+        elements.append(HRFlowable(width='100%', thickness=2, color=colors.HexColor(BLUE), spaceAfter=12))
+
+        # ============================================================
+        # STUDENT PROFILE CARD
+        # ============================================================
+        info_label_style = ParagraphStyle('InfoLabel', parent=styles['Normal'], fontSize=8.5, textColor=colors.HexColor(GRAY_TEXT))
+        info_rows = data.get('student_info_rows', [])
+        info_table_data = []
+        for i in range(0, len(info_rows), 2):
+            pair = info_rows[i:i + 2]
+            row = []
+            for label, value in pair:
+                row.append(Paragraph(f"<font color='{GRAY_TEXT}'>{label}</font><br/><b>{value}</b>", info_label_style))
+            if len(pair) == 1:
+                row.append('')
+            info_table_data.append(row)
+        info_grid = Table(info_table_data, colWidths=[2.15 * inch, 2.15 * inch])
+        info_grid.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 0),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 7),
+        ]))
+
+        photo_bytes = data.get('photo_bytes')
+        if photo_bytes:
+            try:
+                photo_cell = Image(io.BytesIO(photo_bytes), width=1.15 * inch, height=1.15 * inch)
+            except Exception:
+                photo_cell = ''
+        else:
+            photo_cell = ''
+
+        info_card_inner = Table([[info_grid, photo_cell]], colWidths=[None, 1.3 * inch])
+        info_card_inner.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 0),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ]))
+        info_card = Table([[info_card_inner]], colWidths=[6.4 * inch])
+        info_card.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor(CARD_BG)),
+            ('BOX', (0, 0), (-1, -1), 1, colors.HexColor(GRAY_BORDER)),
+            ('ROUNDEDCORNERS', [8, 8, 8, 8]),
+            ('TOPPADDING', (0, 0), (-1, -1), 12),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
+            ('LEFTPADDING', (0, 0), (-1, -1), 14),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 14),
+        ]))
+        elements.append(info_card)
+        elements.append(Spacer(1, 14))
+
+        # ============================================================
+        # ATTENDANCE (page 1)
+        # ============================================================
+        elements.append(section_heading('Attendance', styles))
+        elements.append(Spacer(1, 8))
+        if data['attendance_by_date']:
+            elements.append(build_legend([
+                (PRESENT_BG, 'Present'), (ABSENT_BG, 'Absent'),
+                (HOLIDAY_BG, 'Holiday'), (WEEKEND_BG, 'Weekend'),
+            ]))
+            elements.append(Spacer(1, 8))
+            for year, month in data['attendance_months']:
+                elements.extend(build_month_grid_flowables(year, month, data['attendance_by_date'], data.get('holiday_dates')))
+                elements.append(Spacer(1, 10))
+            elements.append(build_stat_cards([
+                (str(data['present_count']), 'Present', PRESENT_BG, PRESENT_TEXT),
+                (str(data['absent_count']), 'Absent', ABSENT_BG, ABSENT_TEXT),
+                (f"{data['attendance_rate']}%", 'Attendance %', INFO_BG, INFO_TEXT),
+                (str(data['working_days']), 'Working Days', NEUTRAL_BG, NEUTRAL_TEXT),
+            ]))
+            elements.append(Spacer(1, 6))
+            elements.append(Paragraph(f"Report Period: {data['report_period_label']}", muted_style))
+        else:
+            elements.append(Paragraph('No attendance records for this period.', body_style))
+
+        # ============================================================
+        # PAGE 2
+        # ============================================================
+        elements.append(PageBreak())
+
+        # --- Learning Progress ---
+        elements.append(section_heading('Learning Progress', styles))
+        elements.append(Spacer(1, 8))
+        lessons_by_subject = data.get('lessons_by_subject') or {}
+        if lessons_by_subject:
+            for subject, topics in lessons_by_subject.items():
+                elements.append(Paragraph(f"<b>{subject}</b>", body_style))
+                bullet_html = '<br/>'.join(f'• {t}' for t in topics)
+                elements.append(Paragraph(bullet_html, body_style))
+                elements.append(Spacer(1, 8))
+        else:
+            elements.append(Paragraph('No learning records available.', body_style))
+        elements.append(Spacer(1, 6))
+
+        # --- Exam Results (only if present in this duration) ---
+        if data['exam_rows']:
+            elements.append(section_heading('Exam Results', styles))
+            elements.append(Spacer(1, 8))
+            elements.append(Paragraph(f"Average: {data['exam_avg_pct']}%", body_style))
+            elements.append(Spacer(1, 4))
+            elements.append(build_table(['Exam', 'Subject', 'Marks', 'Percentage'], data['exam_rows']))
+            elements.append(Spacer(1, 14))
+
+        # --- Skills Assessment ---
+        elements.append(section_heading('Skills Assessment', styles))
+        elements.append(Spacer(1, 8))
+        if data['assessment_exists']:
+            elements.append(build_ratings_table(data['skills_ratings']))
+        else:
+            elements.append(Paragraph('Not yet assessed.', body_style))
+        elements.append(Spacer(1, 14))
+
+        # --- Behaviour Evaluation ---
+        elements.append(section_heading('Behaviour Evaluation', styles))
+        elements.append(Spacer(1, 8))
+        if data['assessment_exists']:
+            elements.append(build_ratings_table(data['behaviour_ratings']))
+        else:
+            elements.append(Paragraph('Not yet assessed.', body_style))
+        elements.append(Spacer(1, 14))
+
+        # --- Fee Summary ---
+        elements.append(section_heading('Fee Summary', styles))
+        elements.append(Spacer(1, 8))
+        if data['fee_rows']:
+            fee_table_rows = [
+                [
+                    date(r['year'], r['month'], 1).strftime('%b %Y'),
+                    f"{r['due']:,.0f}", f"{r['paid']:,.0f}", f"{(r['due'] - r['paid']):,.0f}",
+                ]
+                for r in data['fee_rows']
+            ]
+            elements.append(build_table(['Month', 'Fee', 'Paid', 'Balance'], fee_table_rows))
+            elements.append(Spacer(1, 10))
+            elements.append(build_stat_cards([
+                (f"{data['fee_due']:,.0f}", 'Total Fee (PKR)', NEUTRAL_BG, NEUTRAL_TEXT),
+                (f"{data['fee_paid']:,.0f}", 'Total Paid (PKR)', PRESENT_BG, PRESENT_TEXT),
+                (f"{data['fee_outstanding']:,.0f}", 'Outstanding (PKR)', ABSENT_BG, ABSENT_TEXT),
+            ]))
+            elements.append(Spacer(1, 10))
+            elements.append(build_fee_chart(data['fee_rows']))
+        else:
+            elements.append(Paragraph('No fee records available.', body_style))
+        elements.append(Spacer(1, 14))
+
+        # --- Remarks ---
+        remark_box_style = TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor(CARD_BG)),
+            ('BOX', (0, 0), (-1, -1), 1, colors.HexColor(GRAY_BORDER)),
+            ('ROUNDEDCORNERS', [6, 6, 6, 6]),
+            ('TOPPADDING', (0, 0), (-1, -1), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
+            ('LEFTPADDING', (0, 0), (-1, -1), 10),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 10),
+        ])
+
+        elements.append(section_heading('Teacher Remarks', styles))
+        elements.append(Spacer(1, 8))
+        teacher_remark_text = data['teacher_remark'].strip() if data['teacher_remark'] else 'No remarks provided.'
+        teacher_box = Table([[Paragraph(teacher_remark_text, body_style)]], colWidths=[6.4 * inch])
+        teacher_box.setStyle(remark_box_style)
+        elements.append(teacher_box)
+        elements.append(Spacer(1, 14))
+
+        elements.append(section_heading('Principal Remarks', styles))
+        elements.append(Spacer(1, 8))
+        principal_remark_text = data['principal_remark'].strip() if data['principal_remark'] else 'No remarks provided.'
+        principal_box = Table([[Paragraph(principal_remark_text, body_style)]], colWidths=[6.4 * inch])
+        principal_box.setStyle(remark_box_style)
+        elements.append(principal_box)
+        elements.append(Spacer(1, 24))
+
+        # --- Signatures ---
+        sig_label_style = ParagraphStyle('SigLabel', parent=styles['Normal'], fontSize=9, textColor=colors.HexColor(GRAY_TEXT), alignment=1)
+        sig_table = Table(
+            [
+                ['_________________________', '_________________________', '_________________________'],
+                [Paragraph('Teacher Signature', sig_label_style), Paragraph('Principal Signature', sig_label_style), Paragraph('Date', sig_label_style)],
+            ],
+            colWidths=[2.1 * inch, 2.1 * inch, 2.1 * inch],
+        )
+        sig_table.setStyle(TableStyle([
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('TOPPADDING', (0, 1), (-1, 1), 4),
+        ]))
+        elements.append(sig_table)
+
+        # --- Footer ---
+        elements.append(Spacer(1, 18))
+        elements.append(HRFlowable(width='100%', thickness=0.5, color=colors.HexColor(GRAY_BORDER)))
+        elements.append(Spacer(1, 4))
+        elements.append(Paragraph(
+            f"Generated by KoderEduAI &nbsp;|&nbsp; {datetime.now().strftime('%d %B %Y at %I:%M %p')}",
+            muted_style,
+        ))
+
+        doc.build(elements)
+        return buffer.getvalue()

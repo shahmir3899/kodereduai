@@ -1,6 +1,12 @@
 """
 DOCX generator for exam papers.
 Generates formatted question papers with school metadata and snapshot-backed questions.
+
+Legacy (empty-structure) papers render through the original flat, unstructured
+layout unchanged. Structured papers (ExamPaper.structure non-empty) render through
+the shared layout plan in paper_export_layout.py in the classic school-paper format
+(header block, section headings with marks, per-type question rendering, answer
+lines, deterministic matching-table shuffle) -- kept consistent with the PDF export.
 """
 
 import io
@@ -11,6 +17,8 @@ from urllib.parse import urlparse
 
 from django.utils.html import strip_tags
 import requests
+
+from .paper_export_layout import build_export_layout
 
 logger = logging.getLogger(__name__)
 
@@ -74,16 +82,30 @@ class ExamPaperDOCXGenerator:
 
         self._append_school_logo(document, Inches(1.15))
 
+        layout = build_export_layout(self.exam_paper)
+        if layout is None:
+            self._render_legacy(document, WD_ALIGN_PARAGRAPH)
+        else:
+            self._render_structured(document, layout, WD_ALIGN_PARAGRAPH, Inches)
+
+        output = io.BytesIO()
+        document.save(output)
+        logger.info('Generated DOCX for ExamPaper %s', self.exam_paper.id)
+        return output.getvalue()
+
+    def _render_legacy(self, document, align):
+        """Unchanged from the original flat-list rendering -- legacy (empty-structure)
+        papers must keep exporting exactly as before."""
         school_heading = document.add_heading(self.school.name, level=1)
-        school_heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        school_heading.alignment = align.CENTER
 
         exam_name = self._exam_name()
         if exam_name:
             exam_heading = document.add_heading(f'Exam: {exam_name}', level=3)
-            exam_heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            exam_heading.alignment = align.CENTER
 
         paper_heading = document.add_heading(self.exam_paper.paper_title, level=2)
-        paper_heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        paper_heading.alignment = align.CENTER
 
         meta_lines = [
             f"Class: {self.exam_paper.class_obj.name}",
@@ -123,9 +145,114 @@ class ExamPaperDOCXGenerator:
         footer = document.add_paragraph(
             f"Generated on {datetime.now().strftime('%d %B %Y')} | {self.school.name}"
         )
-        footer.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        footer.alignment = align.CENTER
 
-        output = io.BytesIO()
-        document.save(output)
-        logger.info('Generated DOCX for ExamPaper %s', self.exam_paper.id)
-        return output.getvalue()
+    def _render_structured(self, document, layout, align, inches):
+        """Classic school-paper format for structured papers (non-empty ExamPaper.structure)."""
+        from docx.enum.text import WD_TAB_ALIGNMENT
+
+        header = layout['header']
+
+        school_heading = document.add_heading(header['school_name'], level=1)
+        school_heading.alignment = align.CENTER
+
+        if header['exam_name']:
+            exam_heading = document.add_heading(f"Exam: {header['exam_name']}", level=3)
+            exam_heading.alignment = align.CENTER
+
+        paper_heading = document.add_heading(header['paper_title'], level=2)
+        paper_heading.alignment = align.CENTER
+
+        subject_class_p = document.add_paragraph(
+            f"Paper: {header['subject_name']}    Class: {header['class_name']}"
+        )
+        subject_class_p.alignment = align.CENTER
+
+        document.add_paragraph(f"Name: {'_' * 40}")
+        document.add_paragraph(f"Roll No: {'_' * 20}     Date: {'_' * 15}")
+        document.add_paragraph(
+            f"Total Marks: {header['total_marks']}     Time: {header['duration_minutes']} minutes"
+        )
+
+        if header['instructions']:
+            document.add_paragraph('Instructions:')
+            instructions_text = _html_to_text(header['instructions'])
+            for line in [entry.strip() for entry in instructions_text.splitlines() if entry.strip()]:
+                document.add_paragraph(line, style='List Bullet')
+
+        for block in layout['blocks']:
+            if block['type'] == 'divider':
+                self._render_divider_heading(document, block, align)
+                continue
+            if block['type'] == 'section':
+                self._render_section_heading(document, block, inches, WD_TAB_ALIGNMENT)
+            for item in block['items']:
+                self._render_question_item(document, item)
+
+        footer = document.add_paragraph(
+            f"Generated on {datetime.now().strftime('%d %B %Y')} | {header['school_name']}"
+        )
+        footer.alignment = align.CENTER
+
+    def _render_divider_heading(self, document, block, align):
+        """A plain print-layout separator (e.g. 'Section A') -- no marks, no questions."""
+        heading = document.add_heading(block['title'], level=2)
+        heading.alignment = align.CENTER
+
+    def _render_section_heading(self, document, block, inches, tab_alignment):
+        heading_text = block['title']
+        if block['instruction']:
+            heading_text = f"{heading_text}. {block['instruction']}"
+
+        paragraph = document.add_paragraph()
+        paragraph.paragraph_format.tab_stops.add_tab_stop(inches(6.5), tab_alignment.RIGHT)
+        run = paragraph.add_run(heading_text)
+        run.bold = True
+        paragraph.add_run(f"\t({block['section_marks']})")
+
+    def _render_question_item(self, document, item):
+        document.add_paragraph(f"Q{item['number']}. ({item['marks']} marks)")
+
+        question_text = _html_to_text(item['question_text'])
+        document.add_paragraph(question_text or '-')
+
+        rendered_extra = False
+
+        if item['question_type'] == 'MCQ' and item['options']:
+            for option_key in ('A', 'B', 'C', 'D'):
+                option_value = item['options'].get(option_key)
+                if option_value:
+                    document.add_paragraph(f"{option_key}. {_html_to_text(option_value)}")
+            rendered_extra = True
+
+        elif item['question_type'] == 'FILL_BLANK' and item['fill_blank_items']:
+            for blank_line in item['fill_blank_items']:
+                document.add_paragraph(blank_line)
+            rendered_extra = True
+
+        elif item['question_type'] == 'MATCHING' and item['matching_pairs']:
+            self._render_matching_table(document, item['matching_pairs'])
+            rendered_extra = True
+
+        elif item['question_type'] == 'TRUE_FALSE':
+            document.add_paragraph('True / False')
+            rendered_extra = True
+
+        if item['answer_lines']:
+            for _ in range(item['answer_lines']):
+                document.add_paragraph('_' * 60)
+            rendered_extra = True
+
+        if not rendered_extra:
+            document.add_paragraph('')
+
+    def _render_matching_table(self, document, pairs):
+        table = document.add_table(rows=len(pairs) + 1, cols=2)
+        table.style = 'Table Grid'
+        header_cells = table.rows[0].cells
+        header_cells[0].text = 'Column A'
+        header_cells[1].text = 'Column B'
+        for row_index, pair in enumerate(pairs, start=1):
+            cells = table.rows[row_index].cells
+            cells[0].text = pair['left']
+            cells[1].text = pair['right']

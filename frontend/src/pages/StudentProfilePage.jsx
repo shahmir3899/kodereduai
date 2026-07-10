@@ -1,16 +1,18 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { studentsApi, reportsApi } from '../services/api'
+import { studentsApi, examinationsApi } from '../services/api'
 import { useToast } from '../components/Toast'
-import { useBackgroundTask } from '../hooks/useBackgroundTask'
 import WhatsAppTick from '../components/WhatsAppTick'
 import { useAcademicYear } from '../contexts/AcademicYearContext'
 import { useAuth } from '../contexts/AuthContext'
 import { useSessionClasses } from '../hooks/useSessionClasses'
 import { getNextAvailableRoll } from '../utils/rollSuggestion'
+import ReportPeriodPicker from '../components/ReportPeriodPicker'
+import PhotoCropModal from '../components/PhotoCropModal'
+import { downloadInstantReport } from '../utils/downloadReport'
 
-const TABS = ['Overview', 'Attendance', 'Fees', 'Academics', 'History', 'Documents']
+const TABS = ['Overview', 'Attendance', 'Fees', 'Academics', 'Assessment', 'History', 'Documents']
 
 const riskColors = {
   HIGH: 'bg-red-100 text-red-800 border-red-200',
@@ -87,23 +89,65 @@ export default function StudentProfilePage() {
   const { showError, showSuccess } = useToast()
   const { activeSchool } = useAuth()
   const { activeAcademicYear } = useAcademicYear()
+  const photoInputRef = useRef(null)
   const {
     sessionClasses: correctionSessionClasses,
     isLoading: correctionClassesLoading,
   } = useSessionClasses(activeAcademicYear?.id)
 
-  // Report download (background task)
-  const reportTask = useBackgroundTask({
-    mutationFn: (data) => reportsApi.generate(data),
-    taskType: 'REPORT_GENERATION',
-    title: 'Generating Student Report',
-    onSuccess: (resultData) => {
-      if (resultData?.download_url) {
-        const baseUrl = import.meta.env.VITE_API_URL || ''
-        window.open(`${baseUrl}${resultData.download_url}`, '_blank')
-      }
+  // Report download — generated synchronously and streamed straight back, nothing saved server-side.
+  const [isDownloadingReport, setIsDownloadingReport] = useState(false)
+
+  const handleGenerateReport = async (periodParams) => {
+    setIsDownloadingReport(true)
+    try {
+      await downloadInstantReport(
+        { report_type: 'STUDENT_COMPREHENSIVE', parameters: { student_id: parseInt(id), ...periodParams } },
+        `${student?.name || 'student'}-report.pdf`,
+      )
+    } catch {
+      showError('Failed to generate report')
+    } finally {
+      setIsDownloadingReport(false)
+    }
+  }
+
+  const uploadPhotoMutation = useMutation({
+    mutationFn: (file) => studentsApi.uploadPhoto(id, file),
+    onSuccess: () => {
+      showSuccess('Photo uploaded successfully.')
+      queryClient.invalidateQueries({ queryKey: ['student', id] })
     },
+    onError: (error) => showError(getApiErrorMessage(error, 'Failed to upload photo')),
   })
+
+  const removePhotoMutation = useMutation({
+    mutationFn: () => studentsApi.removePhoto(id),
+    onSuccess: () => {
+      showSuccess('Photo removed.')
+      queryClient.invalidateQueries({ queryKey: ['student', id] })
+    },
+    onError: (error) => showError(getApiErrorMessage(error, 'Failed to remove photo')),
+  })
+
+  const [cropImageSrc, setCropImageSrc] = useState(null)
+
+  const handlePhotoFileChange = (e) => {
+    const file = e.target.files?.[0]
+    if (file) setCropImageSrc(URL.createObjectURL(file))
+    e.target.value = ''
+  }
+
+  const closeCropModal = () => {
+    if (cropImageSrc) URL.revokeObjectURL(cropImageSrc)
+    setCropImageSrc(null)
+  }
+
+  const handleCropSave = (blob) => {
+    const file = new File([blob], 'photo.jpg', { type: 'image/jpeg' })
+    uploadPhotoMutation.mutate(file)
+    closeCropModal()
+  }
 
   // Core data
   const { data: studentData, isLoading, isError: studentIsError, error: studentError } = useQuery({
@@ -146,6 +190,16 @@ export default function StudentProfilePage() {
     enabled: tab === 'Academics',
     staleTime: 5 * 60_000,
     gcTime: 10 * 60_000,
+  })
+
+  const {
+    data: assessmentData, isLoading: assessmentLoading,
+    isError: assessmentIsError, error: assessmentError, refetch: refetchAssessment,
+  } = useQuery({
+    queryKey: ['studentTermAssessment', id, activeAcademicYear?.id],
+    queryFn: () => examinationsApi.getStudentTermAssessment({ student_id: id, academic_year: activeAcademicYear?.id }),
+    enabled: tab === 'Assessment' && !!activeAcademicYear?.id,
+    staleTime: 60_000,
   })
 
   const { data: historyData, isLoading: historyLoading, isError: historyIsError, error: historyError } = useQuery({
@@ -467,10 +521,52 @@ export default function StudentProfilePage() {
       {/* Header Card */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <div className="flex flex-col md:flex-row md:items-center gap-4">
-          <div className="w-16 h-16 rounded-full bg-primary-100 flex items-center justify-center flex-shrink-0">
-            <span className="text-2xl font-bold text-primary-700">
-              {student.name?.charAt(0)?.toUpperCase()}
-            </span>
+          <div className="relative w-16 h-16 flex-shrink-0 group">
+            {student.photo_url ? (
+              <img
+                src={student.photo_url}
+                alt={student.name}
+                className="w-16 h-16 rounded-full object-cover"
+              />
+            ) : (
+              <div className="w-16 h-16 rounded-full bg-primary-100 flex items-center justify-center">
+                <span className="text-2xl font-bold text-primary-700">
+                  {student.name?.charAt(0)?.toUpperCase()}
+                </span>
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => photoInputRef.current?.click()}
+              disabled={uploadPhotoMutation.isPending}
+              title={student.photo_url ? 'Change photo' : 'Upload photo'}
+              className="absolute inset-0 rounded-full bg-black/50 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity disabled:opacity-100 disabled:bg-black/30"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </button>
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              onChange={handlePhotoFileChange}
+              className="hidden"
+            />
+            {student.photo_url && (
+              <button
+                type="button"
+                onClick={() => removePhotoMutation.mutate()}
+                disabled={removePhotoMutation.isPending}
+                title="Remove photo"
+                className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-red-100 text-red-600 border border-red-200 flex items-center justify-center hover:bg-red-200"
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
           </div>
           <div className="flex-1">
             <div className="flex items-center gap-3">
@@ -546,17 +642,12 @@ export default function StudentProfilePage() {
             >
               Reclassify
             </button>
-            <button
-              onClick={() => reportTask.trigger({
-                report_type: 'STUDENT_COMPREHENSIVE',
-                format: 'PDF',
-                parameters: { student_id: parseInt(id) },
-              })}
-              disabled={reportTask.isSubmitting}
-              className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50"
-            >
-              {reportTask.isSubmitting ? 'Starting...' : 'Download Report'}
-            </button>
+            <ReportPeriodPicker
+              label={isDownloadingReport ? 'Generating...' : 'Download Report'}
+              activeAcademicYearId={activeAcademicYear?.id}
+              disabled={isDownloadingReport}
+              onSelect={handleGenerateReport}
+            />
           </div>
         </div>
       </div>
@@ -621,6 +712,20 @@ export default function StudentProfilePage() {
       {tab === 'Attendance' && <AttendanceTab data={attendanceData?.data} isLoading={attendanceLoading} error={attendanceIsError ? attendanceError : null} />}
       {tab === 'Fees' && <FeesTab data={feeData?.data} isLoading={feeLoading} error={feeIsError ? feeError : null} />}
       {tab === 'Academics' && <AcademicsTab data={examData?.data} isLoading={examLoading} error={examIsError ? examError : null} />}
+      {tab === 'Assessment' && (
+        activeAcademicYear?.id
+          ? (
+            <AssessmentTab
+              studentId={id}
+              academicYearId={activeAcademicYear.id}
+              data={assessmentData?.data}
+              refetch={refetchAssessment}
+              isLoading={assessmentLoading}
+              error={assessmentIsError ? assessmentError : null}
+            />
+          )
+          : <div className="text-center py-10 text-gray-500">Select an academic year to record an assessment.</div>
+      )}
       {tab === 'History' && <HistoryTab data={historyData?.data} isLoading={historyLoading} error={historyIsError ? historyError : null} />}
       {tab === 'Documents' && <DocumentsTab studentId={id} data={docsData?.data} refetch={refetchDocs} isLoading={docsLoading} error={docsIsError ? docsError : null} />}
 
@@ -889,6 +994,14 @@ export default function StudentProfilePage() {
             </div>
           </div>
         </div>
+      )}
+
+      {cropImageSrc && (
+        <PhotoCropModal
+          imageSrc={cropImageSrc}
+          onCancel={closeCropModal}
+          onSave={handleCropSave}
+        />
       )}
 
     </div>
@@ -1227,6 +1340,118 @@ function HistoryTab({ data, isLoading, error }) {
           ))}
         </tbody>
       </table>
+    </div>
+  )
+}
+
+const SKILL_FIELDS = [
+  ['listening', 'Listening'], ['speaking', 'Speaking'], ['writing', 'Writing'], ['reading', 'Reading'],
+  ['participation', 'Participation'], ['confidence', 'Confidence'], ['social_skills', 'Social Skills'],
+]
+const BEHAVIOUR_FIELDS = [
+  ['discipline', 'Discipline'], ['respect', 'Respect'], ['teamwork', 'Teamwork'],
+  ['class_participation', 'Class Participation'], ['responsibility', 'Responsibility'],
+]
+const RATING_OPTIONS = [
+  [1, 'Needs Improvement'], [2, 'Fair'], [3, 'Good'], [4, 'Very Good'], [5, 'Excellent'],
+]
+
+function AssessmentTab({ studentId, academicYearId, data, refetch, isLoading, error }) {
+  const { showError, showSuccess } = useToast()
+  const [form, setForm] = useState(null)
+
+  useEffect(() => {
+    if (!data) return
+    const next = { teacher_remark: data.teacher_remark || '', principal_remark: data.principal_remark || '' }
+    for (const [field] of [...SKILL_FIELDS, ...BEHAVIOUR_FIELDS]) {
+      next[field] = data[field] ?? ''
+    }
+    setForm(next)
+  }, [data])
+
+  const saveMutation = useMutation({
+    mutationFn: (payload) => examinationsApi.saveStudentTermAssessment(payload),
+    onSuccess: () => {
+      showSuccess('Assessment saved.')
+      refetch()
+    },
+    onError: () => showError('Failed to save assessment'),
+  })
+
+  if (isLoading || !form) return <div className="text-center py-10 text-gray-500">Loading assessment...</div>
+  if (error) return <div className="text-center py-10 text-red-600">Failed to load assessment</div>
+
+  const setField = (field, value) => setForm((prev) => ({ ...prev, [field]: value }))
+
+  const handleSave = () => {
+    const payload = { student: studentId, academic_year: academicYearId }
+    for (const [field] of [...SKILL_FIELDS, ...BEHAVIOUR_FIELDS]) {
+      payload[field] = form[field] === '' ? null : Number(form[field])
+    }
+    payload.teacher_remark = form.teacher_remark
+    payload.principal_remark = form.principal_remark
+    saveMutation.mutate(payload)
+  }
+
+  const RatingSelect = ({ field, label }) => (
+    <div className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
+      <label className="text-sm text-gray-700">{label}</label>
+      <select
+        value={form[field]}
+        onChange={(e) => setField(field, e.target.value)}
+        className="border border-gray-300 rounded-lg px-2 py-1 text-sm"
+      >
+        <option value="">Not rated</option>
+        {RATING_OPTIONS.map(([val, lbl]) => (
+          <option key={val} value={val}>{lbl}</option>
+        ))}
+      </select>
+    </div>
+  )
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white rounded-xl border border-gray-200 p-4">
+        <h3 className="text-sm font-semibold text-gray-900 mb-2">Skills Assessment</h3>
+        {SKILL_FIELDS.map(([field, label]) => <RatingSelect key={field} field={field} label={label} />)}
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-200 p-4">
+        <h3 className="text-sm font-semibold text-gray-900 mb-2">Behaviour Evaluation</h3>
+        {BEHAVIOUR_FIELDS.map(([field, label]) => <RatingSelect key={field} field={field} label={label} />)}
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Teacher Remark</label>
+          <textarea
+            rows={3}
+            value={form.teacher_remark}
+            onChange={(e) => setField('teacher_remark', e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+            placeholder="e.g. Aly is an active student who participates enthusiastically..."
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Principal Remark</label>
+          <textarea
+            rows={3}
+            value={form.principal_remark}
+            onChange={(e) => setField('principal_remark', e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+          />
+        </div>
+      </div>
+
+      <div className="flex justify-end">
+        <button
+          onClick={handleSave}
+          disabled={saveMutation.isPending}
+          className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50"
+        >
+          {saveMutation.isPending ? 'Saving...' : 'Save Assessment'}
+        </button>
+      </div>
     </div>
   )
 }

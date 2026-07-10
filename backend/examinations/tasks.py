@@ -85,21 +85,26 @@ def process_paper_upload_ocr(self, upload_id: int):
         
         # Fetch the upload
         try:
-            upload = PaperUpload.objects.select_related('school').get(id=upload_id)
+            upload = PaperUpload.objects.select_related(
+                'school', 'context_class', 'context_subject',
+            ).get(id=upload_id)
         except PaperUpload.DoesNotExist:
             logger.error(f"PaperUpload {upload_id} not found")
             return {'success': False, 'error': 'Upload not found'}
-        
+
         # Update status to processing
         upload.status = PaperUpload.Status.PROCESSING
         upload.save(update_fields=['status'])
-        
+
         # Initialize processor
         processor = PaperOCRProcessor()
-        
-        # Prepare context (if available)
+
+        # Prepare context (if available) — the uploader's optional class/subject hints;
+        # the AI still detects header text verbatim, this only nudges extraction.
         context = {
             'school_id': upload.school_id,
+            'class_name': upload.context_class.name if upload.context_class_id else None,
+            'subject_name': upload.context_subject.name if upload.context_subject_id else None,
         }
         
         # Process the image

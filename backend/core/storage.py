@@ -10,6 +10,26 @@ from django.conf import settings
 logger = logging.getLogger(__name__)
 
 
+def _process_profile_photo(file_content: bytes, max_dimension: int = 480, quality: int = 85) -> bytes:
+    """
+    Normalize a profile photo upload: respect camera EXIF orientation, convert to
+    RGB, and downscale to at most max_dimension on the long edge. Always returns
+    JPEG bytes so callers don't need to track the source format/extension.
+    """
+    import io
+    from PIL import Image, ImageOps
+
+    image = Image.open(io.BytesIO(file_content))
+    image = ImageOps.exif_transpose(image)
+    if image.mode != 'RGB':
+        image = image.convert('RGB')
+    image.thumbnail((max_dimension, max_dimension), Image.LANCZOS)
+
+    output = io.BytesIO()
+    image.save(output, format='JPEG', quality=quality, optimize=True)
+    return output.getvalue()
+
+
 class SupabaseStorageService:
     """
     Service for uploading files to Supabase Storage.
@@ -144,6 +164,52 @@ class SupabaseStorageService:
         except Exception as e:
             logger.error(f"Failed to upload school asset: {e}")
             raise Exception(f"Failed to upload {asset_type}: {e}")
+
+    def upload_student_photo(self, file, school_id: int, student_id: int) -> str:
+        """
+        Upload a student profile photo to Supabase Storage.
+
+        Args:
+            file: File object from request
+            school_id: School ID for organizing files
+            student_id: Student ID — file overwrites in place on re-upload
+
+        Returns:
+            str: Public URL of uploaded file
+        """
+        if not self.is_configured():
+            raise Exception("Supabase storage not configured")
+
+        # Output is always a resized JPEG, so the stored filename is always .jpg
+        # regardless of what the client uploaded.
+        filename = f"students/{school_id}/{student_id}.jpg"
+
+        # Let decode errors (e.g. UnidentifiedImageError) propagate as-is so the
+        # view can distinguish "bad image" (400) from storage failures (500).
+        file_content = _process_profile_photo(file.read())
+
+        try:
+            logger.info(f"Uploading student photo: {filename} ({len(file_content)} bytes)")
+
+            # Try to remove existing file first (may not exist, that's OK)
+            try:
+                self.client.storage.from_(self.bucket).remove([filename])
+            except Exception:
+                pass
+
+            self.client.storage.from_(self.bucket).upload(
+                path=filename,
+                file=file_content,
+                file_options={"content-type": "image/jpeg"}
+            )
+
+            public_url = self.client.storage.from_(self.bucket).get_public_url(filename)
+            logger.info(f"Successfully uploaded student photo: {filename}")
+            return public_url
+
+        except Exception as e:
+            logger.error(f"Failed to upload student photo: {e}")
+            raise Exception(f"Failed to upload photo: {e}")
 
     def _extract_storage_path(self, public_url: str):
         """Extract the storage path from a Supabase public URL."""

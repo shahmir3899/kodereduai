@@ -329,6 +329,15 @@ class StaffMemberViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
         instance.employment_status = 'TERMINATED'
         instance.save(update_fields=['is_active', 'employment_status'])
 
+    @action(detail=True, methods=['post'])
+    def reactivate(self, request, pk=None):
+        """Reverse a deactivation: restore is_active and employment_status."""
+        instance = self.get_object()
+        instance.is_active = True
+        instance.employment_status = 'ACTIVE'
+        instance.save(update_fields=['is_active', 'employment_status'])
+        return Response(StaffMemberSerializer(instance).data)
+
     @action(detail=True, methods=['post'], url_path='create-user-account')
     def create_user_account(self, request, pk=None):
         """Create a User account for an existing staff member."""

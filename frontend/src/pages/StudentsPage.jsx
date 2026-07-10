@@ -14,6 +14,27 @@ import ClassSelector from '../components/ClassSelector'
 import { exportStudentsPDF, exportStudentsPNG } from './studentExport'
 import { useDebounce } from '../hooks/useDebounce'
 import WhatsAppTick from '../components/WhatsAppTick'
+import ReportPeriodPicker from '../components/ReportPeriodPicker'
+import { downloadInstantReport } from '../utils/downloadReport'
+
+function StudentAvatar({ student, sizeClass = 'w-8 h-8' }) {
+  if (student.photo_url) {
+    return (
+      <img
+        src={student.photo_url}
+        alt={student.name}
+        className={`${sizeClass} rounded-full object-cover flex-shrink-0`}
+      />
+    )
+  }
+  return (
+    <div className={`${sizeClass} rounded-full bg-primary-100 flex items-center justify-center flex-shrink-0`}>
+      <span className="text-xs font-bold text-primary-700">
+        {student.name?.charAt(0)?.toUpperCase()}
+      </span>
+    </div>
+  )
+}
 
 // Phone format: +92XXXXXXXXXX (E.164) — Excel export forces text format to preserve + prefix
 
@@ -46,11 +67,14 @@ export default function StudentsPage() {
   const { showError, showSuccess, showWarning } = useToast()
   const isSuperAdmin = user?.role === 'SUPER_ADMIN'
   const fileInputRef = useRef(null)
+  const [isGeneratingReports, setIsGeneratingReports] = useState(false)
+  const [reportDownloadProgress, setReportDownloadProgress] = useState({ current: 0, total: 0 })
 
   const [selectedSchoolId, setSelectedSchoolId] = useState(activeSchool?.id || null)
   const [selectedClassIds, setSelectedClassIds] = useState([])
   const [search, setSearch] = useState('')
   const debouncedSearch = useDebounce(search, 300)
+  const [showInactiveRecords, setShowInactiveRecords] = useState(false)
   const [showModal, setShowModal] = useState(false)
   const [editingStudent, setEditingStudent] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
@@ -845,6 +869,10 @@ export default function StudentsPage() {
           return false
         }
       }
+      // Hide inactive records by default (Record State) — toggled via the filter bar
+      if (!showInactiveRecords && !student.is_active) {
+        return false
+      }
       return true
     })
 
@@ -899,7 +927,7 @@ export default function StudentsPage() {
         sensitivity: 'base',
       })
     })
-  }, [allStudents, resolvedSelectedClasses, debouncedSearch, classGradeMap, classSelectorScope, selectedClassIds, sessionClasses])
+  }, [allStudents, resolvedSelectedClasses, debouncedSearch, classGradeMap, classSelectorScope, selectedClassIds, sessionClasses, showInactiveRecords])
 
   // Students without accounts (for bulk select) — must be after `students` useMemo
   const studentsWithoutAccounts = useMemo(() => {
@@ -1043,6 +1071,37 @@ export default function StudentsPage() {
       showSuccess('PNG downloaded!')
     } catch {
       showError('Failed to export PNG')
+    }
+  }
+
+  // Downloads one STUDENT_COMPREHENSIVE report per selected student, sequentially —
+  // each is generated synchronously and streamed straight back (nothing saved
+  // server-side), so this is a plain loop rather than a background-task dispatch.
+  const handleDownloadSelectedReports = async (periodParams) => {
+    const selected = allStudents.filter((s) => selectedStudents.has(s.id))
+    if (selected.length === 0) return
+
+    setIsGeneratingReports(true)
+    setReportDownloadProgress({ current: 0, total: selected.length })
+    let succeeded = 0
+    for (const student of selected) {
+      setReportDownloadProgress((prev) => ({ ...prev, current: prev.current + 1 }))
+      try {
+        await downloadInstantReport(
+          { report_type: 'STUDENT_COMPREHENSIVE', parameters: { student_id: student.id, ...periodParams } },
+          `${student.name}-report.pdf`,
+        )
+        succeeded += 1
+      } catch {
+        // Continue downloading the remaining selected students even if one fails.
+      }
+    }
+    setIsGeneratingReports(false)
+    setReportDownloadProgress({ current: 0, total: 0 })
+    if (succeeded > 0) {
+      showSuccess(`Downloaded ${succeeded} report${succeeded === 1 ? '' : 's'}.`)
+    } else {
+      showError('Failed to generate reports.')
     }
   }
 
@@ -1196,6 +1255,18 @@ export default function StudentsPage() {
           </div>
         </div>
 
+        {selectedSchoolId && (
+          <label className="flex items-center gap-2 mt-3 text-sm text-gray-600 cursor-pointer w-fit">
+            <input
+              type="checkbox"
+              checked={showInactiveRecords}
+              onChange={(e) => setShowInactiveRecords(e.target.checked)}
+              className="rounded"
+            />
+            Show inactive records
+          </label>
+        )}
+
         {/* Class chips — always show full list; 0-count chips are dimmed/disabled */}
         {selectedSchoolId && classChipData.length > 0 && (
           <div className="flex flex-wrap items-center gap-2 mt-4">
@@ -1292,6 +1363,7 @@ export default function StudentsPage() {
                         className="rounded flex-shrink-0"
                       />
                     )}
+                    <StudentAvatar student={student} sizeClass="w-8 h-8" />
                     <div className="min-w-0 flex-1">
                       <p className="font-medium text-sm text-gray-900 truncate">{student.name}</p>
                       <p className="text-xs text-gray-500">Roll #{student.roll_number} | {student.class_name}</p>
@@ -1309,11 +1381,6 @@ export default function StudentsPage() {
                       getLifecycleStyle(student.status)
                     }`}>
                       {getLifecycleLabel(student.status)}
-                    </span>
-                    <span className={`px-2 py-0.5 rounded-full text-xs ${
-                      student.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                    }`}>
-                      {student.is_active ? 'Record Active' : 'Record Inactive'}
                     </span>
                   </div>
                 </div>
@@ -1350,7 +1417,6 @@ export default function StudentsPage() {
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Parent Phone</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Account</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Lifecycle</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Record State</th>
                   <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
                 </tr>
               </thead>
@@ -1368,7 +1434,12 @@ export default function StudentsPage() {
                       ) : <span className="w-4 h-4 block" />}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-900">{student.roll_number}</td>
-                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{student.name}</td>
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                      <div className="flex items-center gap-2">
+                        <StudentAvatar student={student} sizeClass="w-7 h-7" />
+                        {student.name}
+                      </div>
+                    </td>
                     <td className="px-4 py-3 text-sm text-gray-500">{student.class_name}</td>
                     <td className="px-4 py-3 text-sm text-gray-500">
                       {student.parent_phone ? <>{student.parent_phone}<WhatsAppTick phone={student.parent_phone} /></> : <span className="text-gray-400 italic">Not set</span>}
@@ -1387,15 +1458,6 @@ export default function StudentsPage() {
                         getLifecycleStyle(student.status)
                       }`}>
                         {getLifecycleLabel(student.status)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        student.is_active
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-gray-100 text-gray-800'
-                      }`}>
-                        {student.is_active ? 'Record Active' : 'Record Inactive'}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right whitespace-nowrap">
@@ -1710,7 +1772,11 @@ export default function StudentsPage() {
       {/* Floating Bulk Convert Action Bar */}
       {selectedStudents.size > 0 && (
         <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-40 bg-purple-600 text-white px-6 py-3 rounded-full shadow-lg flex items-center gap-4">
-          <span className="text-sm font-medium">{selectedStudents.size} student(s) selected</span>
+          <span className="text-sm font-medium">
+            {isGeneratingReports
+              ? `Downloading ${reportDownloadProgress.current} of ${reportDownloadProgress.total}...`
+              : `${selectedStudents.size} student(s) selected`}
+          </span>
           <button
             onClick={() => {
               setBulkConvertPassword('')
@@ -1722,9 +1788,18 @@ export default function StudentsPage() {
           >
             Create Accounts
           </button>
+          <ReportPeriodPicker
+            label={isGeneratingReports ? 'Downloading...' : 'Download Reports'}
+            activeAcademicYearId={activeAcademicYear?.id}
+            disabled={isGeneratingReports}
+            onSelect={handleDownloadSelectedReports}
+            buttonClassName="bg-white text-purple-700 px-4 py-1.5 rounded-full text-sm font-semibold hover:bg-purple-50 disabled:opacity-50 flex items-center gap-1"
+            openUpward
+          />
           <button
             onClick={() => setSelectedStudents(new Set())}
-            className="text-purple-200 hover:text-white text-sm"
+            disabled={isGeneratingReports}
+            className="text-purple-200 hover:text-white text-sm disabled:opacity-50"
           >
             Clear
           </button>

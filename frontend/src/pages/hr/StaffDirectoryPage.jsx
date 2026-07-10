@@ -41,7 +41,8 @@ export default function StaffDirectoryPage() {
   const [search, setSearch] = useState('')
   const debouncedSearch = useDebounce(search, 300)
   const [departmentFilter, setDepartmentFilter] = useState('')
-  const [statusFilter, setStatusFilter] = useState('ACTIVE')
+  const [statusFilter, setStatusFilter] = useState('')
+  const [activityFilter, setActivityFilter] = useState('ACTIVE')
   const [staffCategoryFilter, setStaffCategoryFilter] = useState('ALL')
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [viewMember, setViewMember] = useState(null)
@@ -115,6 +116,19 @@ export default function StaffDirectoryPage() {
     },
     onError: (error) => {
       showError(error.response?.data?.detail || 'Failed to delete staff member')
+    },
+  })
+
+  // Reactivate mutation
+  const reactivateMutation = useMutation({
+    mutationFn: (id) => hrApi.reactivateStaff(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['hrStaff'] })
+      queryClient.invalidateQueries({ queryKey: ['hrDashboardStats'] })
+      showSuccess('Staff member reactivated successfully!')
+    },
+    onError: (error) => {
+      showError(error.response?.data?.detail || 'Failed to reactivate staff member')
     },
   })
 
@@ -436,6 +450,7 @@ export default function StaffDirectoryPage() {
     () => allStaff.filter((m) => m.is_active && m.employment_status === 'ACTIVE'),
     [allStaff]
   )
+  const inactiveStaffCount = allStaff.length - activeStaff.length
   const teachingStaffCount = useMemo(
     () => activeStaff.filter((m) => isTeachingMember(m)).length,
     [activeStaff]
@@ -465,6 +480,12 @@ export default function StaffDirectoryPage() {
       result = result.filter((m) => m.employment_status === statusFilter)
     }
 
+    if (activityFilter === 'ACTIVE') {
+      result = result.filter((m) => m.is_active)
+    } else if (activityFilter === 'INACTIVE') {
+      result = result.filter((m) => !m.is_active)
+    }
+
     if (staffCategoryFilter === 'TEACHING') {
       result = result.filter((m) => isTeachingMember(m))
     }
@@ -474,7 +495,7 @@ export default function StaffDirectoryPage() {
     }
 
     return result
-  }, [allStaff, debouncedSearch, departmentFilter, statusFilter, staffCategoryFilter])
+  }, [allStaff, debouncedSearch, departmentFilter, statusFilter, activityFilter, staffCategoryFilter])
 
   // Staff without accounts (for bulk select)
   const staffWithoutAccounts = useMemo(() => {
@@ -498,7 +519,7 @@ export default function StaffDirectoryPage() {
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Staff Directory</h1>
           <p className="text-sm text-gray-600">
-            {filteredStaff.length} staff member{filteredStaff.length !== 1 ? 's' : ''} &middot; {totalActive} active
+            {filteredStaff.length} shown &middot; {allStaff.length} total &middot; {totalActive} active &middot; {inactiveStaffCount} inactive
           </p>
         </div>
         <div className="flex gap-2">
@@ -526,9 +547,9 @@ export default function StaffDirectoryPage() {
           onClick={() => setStaffCategoryFilter('ALL')}
           className={`card text-left border-l-4 transition ${staffCategoryFilter === 'ALL' ? 'border-l-blue-500 ring-2 ring-blue-100' : 'border-l-transparent hover:border-l-blue-300'}`}
         >
-          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">All Members</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Active Members</p>
           <p className="text-2xl font-bold text-gray-900 mt-1">{totalActive}</p>
-          <p className="text-xs text-gray-500 mt-1">Active staff in this school</p>
+          <p className="text-xs text-gray-500 mt-1">{allStaff.length} total &middot; {inactiveStaffCount} inactive</p>
         </button>
         <button
           type="button"
@@ -552,7 +573,7 @@ export default function StaffDirectoryPage() {
 
       {/* Filters */}
       <div className="card mb-4">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
           <input
             type="text"
             className="input"
@@ -581,6 +602,15 @@ export default function StaffDirectoryPage() {
             <option value="TERMINATED">Terminated</option>
             <option value="RESIGNED">Resigned</option>
             <option value="RETIRED">Retired</option>
+          </select>
+          <select
+            className="input"
+            value={activityFilter}
+            onChange={(e) => setActivityFilter(e.target.value)}
+          >
+            <option value="ACTIVE">Active Only</option>
+            <option value="INACTIVE">Inactive Only</option>
+            <option value="ALL">All (Active + Inactive)</option>
           </select>
         </div>
       </div>
@@ -700,12 +730,22 @@ export default function StaffDirectoryPage() {
                       Unlink
                     </button>
                   )}
-                  <button
-                    onClick={() => setDeleteConfirm(member)}
-                    className="text-sm text-red-600 hover:text-red-800 font-medium"
-                  >
-                    Delete
-                  </button>
+                  {member.is_active ? (
+                    <button
+                      onClick={() => setDeleteConfirm(member)}
+                      className="text-sm text-red-600 hover:text-red-800 font-medium"
+                    >
+                      Deactivate
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => reactivateMutation.mutate(member.id)}
+                      disabled={reactivateMutation.isPending}
+                      className="text-sm text-green-600 hover:text-green-800 font-medium"
+                    >
+                      Reactivate
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -827,12 +867,22 @@ export default function StaffDirectoryPage() {
                             Unlink
                           </button>
                         )}
-                        <button
-                          onClick={() => setDeleteConfirm(member)}
-                          className="text-sm text-red-600 hover:text-red-800 font-medium"
-                        >
-                          Delete
-                        </button>
+                        {member.is_active ? (
+                          <button
+                            onClick={() => setDeleteConfirm(member)}
+                            className="text-sm text-red-600 hover:text-red-800 font-medium"
+                          >
+                            Deactivate
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => reactivateMutation.mutate(member.id)}
+                            disabled={reactivateMutation.isPending}
+                            className="text-sm text-green-600 hover:text-green-800 font-medium"
+                          >
+                            Reactivate
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
