@@ -42,7 +42,6 @@ function computeTeachingDates(dateFromStr, dateToStr, daysMap) {
     const info = daysMap?.[iso]
     if (info?.is_off_day) continue
     if (d.getDay() === 0) continue
-    if (d.getDay() === 6) continue
     out.push(iso)
   }
   return out
@@ -211,7 +210,7 @@ export default function BulkLessonPlansModal({ onClose, onSuccess, onCreateSingl
       if (!validateStep1()) return
       const dates = computeTeachingDates(dateFrom, dateTo, daysMap)
       if (dates.length === 0) {
-        showError('No teaching days in this range after Sundays, Saturdays, and calendar off days.')
+        showError('No teaching days in this range after Sundays and calendar off days.')
         return
       }
       const init = {}
@@ -550,7 +549,7 @@ export default function BulkLessonPlansModal({ onClose, onSuccess, onCreateSingl
               </div>
             )}
             <p className="text-sm text-gray-600">
-              Non-teaching days are skipped automatically: <strong>Sundays</strong>, <strong>Saturdays</strong>, and{' '}
+              Non-teaching days are skipped automatically: <strong>Sundays</strong> and{' '}
               <strong>school calendar off days</strong>.
             </p>
             <p className="text-sm text-gray-600">
