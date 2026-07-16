@@ -286,19 +286,19 @@ def build_preview_html(sections):
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>KoderEduAI — Platform Brochure</title>
+<title>EducationAI — Platform Brochure</title>
 <style>{BROCHURE_CSS}</style>
 </head>
 <body>
 <div class="brochure-wrapper">
   <div class="brochure-header">
-    <div class="logo-badge">KoderEduAI Platform</div>
+    <div class="logo-badge">EducationAI Platform</div>
     <h1>Smart School Management <span>&amp; Automation</span></h1>
     <p>The complete AI-powered ERP for modern educational institutions</p>
   </div>
   {sections_html}
   <div class="brochure-footer">
-    <p>© 2025 <strong>KoderEduAI</strong> · All rights reserved · support@kodereduai.com</p>
+    <p>© 2025 <strong>EducationAI</strong> · All rights reserved · support@kodereduai.com</p>
   </div>
 </div>
 </body>

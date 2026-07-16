@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Render build script for KoderEduAI backend
+# Render build script for EducationAI backend
 # This script runs during every deploy on Render.
 
 set -o errexit

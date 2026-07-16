@@ -4,6 +4,8 @@ User views for authentication and user management.
 
 from rest_framework import generics, status, viewsets
 from rest_framework.views import APIView
+from rest_framework.decorators import action
+from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework_simplejwt.views import TokenObtainPairView
@@ -54,6 +56,62 @@ class CurrentUserView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(CurrentUserSerializer(request.user).data)
+
+
+class ProfilePhotoView(APIView):
+    """
+    Upload or remove the currently authenticated user's avatar.
+    POST   - upload (or replace) the photo
+    DELETE - remove the photo
+    """
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request):
+        from PIL import UnidentifiedImageError
+        from core.storage import storage_service, validate_photo_upload
+
+        if 'file' not in request.FILES:
+            return Response({'error': 'No file provided.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        file = request.FILES['file']
+        try:
+            validate_photo_upload(file)
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = request.user
+        try:
+            if user.profile_photo_url:
+                old_path = storage_service._extract_storage_path(user.profile_photo_url)
+                if old_path:
+                    storage_service.delete_file(old_path)
+
+            url = storage_service.upload_user_photo(file, user.id)
+            user.profile_photo_url = url
+            user.save(update_fields=['profile_photo_url', 'updated_at'])
+
+            return Response({'profile_photo_url': url, 'message': 'Photo uploaded successfully.'})
+        except UnidentifiedImageError:
+            return Response(
+                {'error': 'Could not process image file. It may be corrupted or in an unsupported format.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    def delete(self, request):
+        from core.storage import storage_service
+
+        user = request.user
+        if user.profile_photo_url:
+            old_path = storage_service._extract_storage_path(user.profile_photo_url)
+            if old_path:
+                storage_service.delete_file(old_path)
+            user.profile_photo_url = ''
+            user.save(update_fields=['profile_photo_url', 'updated_at'])
+
+        return Response({'message': 'Photo removed.'})
 
 
 class ChangePasswordView(APIView):
@@ -207,6 +265,57 @@ class UserViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
                 school_id=school_id,
                 defaults={'role': role, 'is_default': True, 'is_active': True},
             )
+
+    @action(detail=True, methods=['post'], parser_classes=[MultiPartParser, FormParser])
+    def upload_photo(self, request, pk=None):
+        """Upload (or replace) another user's avatar (admin-managed)."""
+        from PIL import UnidentifiedImageError
+        from core.storage import storage_service, validate_photo_upload
+
+        target_user = self.get_object()
+
+        if 'file' not in request.FILES:
+            return Response({'error': 'No file provided.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        file = request.FILES['file']
+        try:
+            validate_photo_upload(file)
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            if target_user.profile_photo_url:
+                old_path = storage_service._extract_storage_path(target_user.profile_photo_url)
+                if old_path:
+                    storage_service.delete_file(old_path)
+
+            url = storage_service.upload_user_photo(file, target_user.id)
+            target_user.profile_photo_url = url
+            target_user.save(update_fields=['profile_photo_url', 'updated_at'])
+
+            return Response({'profile_photo_url': url, 'message': 'Photo uploaded successfully.'})
+        except UnidentifiedImageError:
+            return Response(
+                {'error': 'Could not process image file. It may be corrupted or in an unsupported format.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=True, methods=['post'], url_path='remove_photo')
+    def remove_photo(self, request, pk=None):
+        """Remove another user's avatar (admin-managed)."""
+        from core.storage import storage_service
+
+        target_user = self.get_object()
+        if target_user.profile_photo_url:
+            old_path = storage_service._extract_storage_path(target_user.profile_photo_url)
+            if old_path:
+                storage_service.delete_file(old_path)
+            target_user.profile_photo_url = ''
+            target_user.save(update_fields=['profile_photo_url', 'updated_at'])
+
+        return Response({'message': 'Photo removed.'})
 
 
 class SwitchSchoolView(APIView):

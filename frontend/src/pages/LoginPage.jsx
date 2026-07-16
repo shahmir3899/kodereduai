@@ -83,8 +83,8 @@ export default function LoginPage() {
         <div className="text-center mb-6 sm:mb-8">
           {isPortalMode ? (
             <>
-              <img src="/Logo.jpeg" alt="KoderEduAI" className="h-16 w-16 rounded-full object-cover mx-auto mb-3" />
-              <h1 className="text-2xl sm:text-3xl font-bold text-primary-700">KoderEduAI Admin Portal</h1>
+              <img src="/Logo.jpeg" alt="EducationAI" className="h-16 w-16 rounded-full object-cover mx-auto mb-3" />
+              <h1 className="text-2xl sm:text-3xl font-bold text-primary-700">EducationAI Admin Portal</h1>
               <p className="mt-2 text-gray-600">Super Administrator Access</p>
             </>
           ) : subdomainSchool ? (
@@ -101,8 +101,8 @@ export default function LoginPage() {
             </>
           ) : (
             <>
-              <img src="/Logo.jpeg" alt="KoderEduAI" className="h-16 w-16 rounded-full object-cover mx-auto mb-3" />
-              <h1 className="text-2xl sm:text-3xl font-bold text-primary-700">KoderEduAI</h1>
+              <img src="/Logo.jpeg" alt="EducationAI" className="h-16 w-16 rounded-full object-cover mx-auto mb-3" />
+              <h1 className="text-2xl sm:text-3xl font-bold text-primary-700">EducationAI</h1>
               <p className="mt-2 text-gray-600">AI-Powered Education Platform</p>
             </>
           )}
@@ -183,7 +183,7 @@ export default function LoginPage() {
         </div>
 
         <p className="mt-6 text-center text-sm text-gray-500">
-          KoderEduAI.pk - AI-Powered Education Platform
+          EducationAI - AI-Powered Education Platform
         </p>
       </div>
     </div>

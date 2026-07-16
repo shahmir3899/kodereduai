@@ -67,7 +67,7 @@ export default function LoginScreen() {
           <View style={styles.logoContainer}>
             <Text style={styles.logoText}>K</Text>
           </View>
-          <Text style={styles.appName}>KoderEduAI</Text>
+          <Text style={styles.appName}>EducationAI</Text>
           <Text style={styles.tagline}>Smart School Management</Text>
         </View>
 

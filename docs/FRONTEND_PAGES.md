@@ -72,7 +72,7 @@ Redirects: /attendance/upload, /attendance/review, /attendance/records, /accurac
 | Route | Component | Description | API Calls |
 |-------|-----------|-------------|-----------|
 | /students | StudentsPage.jsx | Student list with search, multi-select class chip filter (chips show live counts, sourced from classFilterOptions with session awareness), summary stats (shown/gender) in same card as filters, bulk ops. When `academic_year` is selected, class chips and class labels use enrollment-scoped class data for that year. Repeat is treated as a promotion/enrollment history concept, not a standalone record-state filter on this page. | GET/POST /api/students/ |
-| /students/:id | StudentProfilePage.jsx | Student detail (tabs: overview, attendance, fees, academics, history, documents) with AI risk summary, profile metadata, and promotion correction action | GET students/{id}/, profile_summary/, ai-profile/, attendance_history/, fee_ledger/, exam_results/, enrollment_history/, documents/ |
+| /students/:id | StudentProfilePage.jsx | Student detail (tabs: overview, attendance, fees, academics, **assessment**, history, documents) with AI risk summary, profile metadata, and promotion correction action. Assessment tab: single-student monthly skill/behaviour ratings + remarks, with a month selector (mirrors `/assessments`, scoped to one student) | GET students/{id}/, profile_summary/, ai-profile/, attendance_history/, fee_ledger/, exam_results/, enrollment_history/, documents/, GET/POST student-term-assessment/ |
 | /classes | ClassesGradesPage.jsx | Class management | GET/POST /api/classes/ |
 
 ## Academics
@@ -83,6 +83,7 @@ Redirects: /attendance/upload, /attendance/review, /attendance/records, /accurac
 | /academics/analytics | AcademicsAnalyticsPage.jsx | Academic analytics | GET analytics/ |
 | /academics/exam-types | ExamTypesPage.jsx | Exam type config | GET/POST exam-types/ |
 | /academics/exams | ExamsPage.jsx | Exam management | GET/POST exams/ |
+| /assessments | AssessmentsPage.jsx | Monthly skill & behaviour assessment roster (note: top-level route, not nested under `/academics`, though it lives in the Academics sidebar group). Filters: Academic Year, Class, Month. Per-student rows: 7 skill + 5 behaviour ratings (1-5), Teacher/Principal remark textareas with an "AI Suggest" button per remark, per-row Save button, and a class-wide "Save Month" bulk-save button. Dual desktop-table/mobile-card layout (`md` breakpoint). Principal remark is view-only for teachers. | GET student-term-assessment/roster/, POST student-term-assessment/, POST student-term-assessment/bulk-save/, POST student-term-assessment/ai-remark/ |
 | /academics/marks-entry | MarksEntryPage.jsx | Marks data entry | GET exams/, exam-subjects/, marks/, students/; POST marks/bulk_entry/ |
 | /academics/results | ResultsPage.jsx | Results view with expandable AI report card comments. Generate/Regenerate AI Comments button | GET exams/{id}/results/, POST exams/{id}/generate-comments/ |
 | /academics/report-cards | ReportCardPage.jsx | Report cards with class filter (ClassSelector), student search, Download PDF button (school logo + marks table + grade scale). Uses reportCardExport.js | GET report-card/, GET /api/schools/current/, GET /api/classes/ |

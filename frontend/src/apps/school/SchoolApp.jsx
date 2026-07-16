@@ -44,7 +44,7 @@ export default function SchoolApp() {
       setSchoolData(schoolInfo)
 
       // Apply school branding in browser tab.
-      document.title = `${schoolInfo.name || 'School Portal'} - KoderEduAI`
+      document.title = `${schoolInfo.name || 'School Portal'} - EducationAI`
       let favicon = document.querySelector("link[rel='icon']")
       if (!favicon) {
         favicon = document.createElement('link')

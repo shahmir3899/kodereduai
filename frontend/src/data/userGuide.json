@@ -1,9 +1,9 @@
 {
   "meta": {
-    "title": "KoderEduAI",
+    "title": "EducationAI",
     "subtitle": "School Administration Guide",
-    "version": "3.1 - Session Class Standardization",
-    "generatedAt": "2026-04-12T17:39:32.105011+00:00",
+    "version": "3.3 - Monthly Skill & Behaviour Assessments",
+    "generatedAt": "2026-07-16T09:03:27.688162+00:00",
     "totalChapters": 21,
     "modules": [
       "Dashboard | Classes & Students | Attendance (AI-Powered)",
@@ -28,7 +28,7 @@
           "content": [
             {
               "type": "body_text",
-              "text": "KoderEduAI is a comprehensive School Management System that covers every aspect of school administration - from student enrollment and attendance tracking to finance, HR, academics, examinations, transport, library, and more. The system supports multiple user roles and provides dedicated portals for administrators, teachers, parents, and students."
+              "text": "EducationAI is a comprehensive School Management System that covers every aspect of school administration - from student enrollment and attendance tracking to finance, HR, academics, examinations, transport, library, and more. The system supports multiple user roles and provides dedicated portals for administrators, teachers, parents, and students."
             }
           ]
         },
@@ -1651,6 +1651,59 @@
               "type": "info_box",
               "title": "Complete Exam Workflow",
               "text": "Grade Scale > Exam Types > Create Exam > Enter Marks > View Results > Publish > Report Cards. Each step depends on the previous one."
+            }
+          ]
+        },
+        {
+          "id": "6.8",
+          "title": "Step 7: Monthly Skill & Behaviour Assessments",
+          "slug": "step-7-monthly-skill-behaviour-assessments",
+          "content": [
+            {
+              "type": "nav_path",
+              "path": "Sidebar > Academics > Assessments"
+            },
+            {
+              "type": "body_text",
+              "text": "Separately from exam marks, teachers record a monthly snapshot of each student's skills (Listening, Speaking, Writing, Reading, Participation, Confidence, Social Skills) and behaviour (Discipline, Respect, Teamwork, Class Participation, Responsibility), plus a Teacher Remark and a Principal Remark. Each snapshot is scoped to one student, one academic year, and one calendar month, so a fresh set of ratings can be entered every month."
+            },
+            {
+              "type": "step",
+              "number": 1,
+              "text": "Select the Academic Year, Class, and Month from the filters at the top of the page."
+            },
+            {
+              "type": "step",
+              "number": 2,
+              "text": "The roster loads every student enrolled in that class for the selected month."
+            },
+            {
+              "type": "step",
+              "number": 3,
+              "text": "Rate each skill and behaviour on a 5-point scale: Needs Improvement, Fair, Good, Very Good, Excellent."
+            },
+            {
+              "type": "step",
+              "number": 4,
+              "text": "Write a Teacher Remark, or click 'AI Suggest' next to the remark box to draft one from the ratings already entered for that student. Review and edit any AI draft before saving."
+            },
+            {
+              "type": "step",
+              "number": 5,
+              "text": "Click 'Save' on a single student's row to save just that student, or 'Save Month' to save the whole class roster at once."
+            },
+            {
+              "type": "bullet",
+              "text": "The page also works on a phone or tablet - the table becomes a scrollable list of cards."
+            },
+            {
+              "type": "info_box",
+              "title": "Principal Remark access",
+              "text": "Only School Admins, Principals, and Super Admins can edit the Principal Remark field. Teachers can view it, and their saves never overwrite an existing Principal Remark."
+            },
+            {
+              "type": "body_text",
+              "text": "The most recently saved month's ratings and remarks for the student's academic year appear automatically on that student's Comprehensive Report (Skills Assessment, Behaviour Evaluation, and Remarks sections) - no separate step is needed to publish them to the report."
             }
           ]
         }
@@ -4975,7 +5028,7 @@
           "content": [
             {
               "type": "body_text",
-              "text": "KoderEduAI uses a hierarchical role system for user management. School Admins and Principals can create and manage users within their schools."
+              "text": "EducationAI uses a hierarchical role system for user management. School Admins and Principals can create and manage users within their schools."
             }
           ]
         },
@@ -5215,7 +5268,7 @@
           "content": [
             {
               "type": "body_text",
-              "text": "KoderEduAI includes a suite of AI-powered intelligence features that operate across modules to improve accuracy, surface insights, and automate routine analysis. These features learn from your school's data patterns and become more effective over time."
+              "text": "EducationAI includes a suite of AI-powered intelligence features that operate across modules to improve accuracy, surface insights, and automate routine analysis. These features learn from your school's data patterns and become more effective over time."
             }
           ]
         },

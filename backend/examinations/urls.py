@@ -4,7 +4,8 @@ from .views import (
     ExamTypeViewSet, ExamGroupViewSet, ExamViewSet, ExamSubjectViewSet,
     StudentMarkViewSet, StudentResponseViewSet, GradeScaleViewSet, ReportCardView,
     QuestionViewSet, ExamPaperViewSet, PaperUploadViewSet, PaperFeedbackViewSet,
-    StudentTermAssessmentView,
+    StudentTermAssessmentView, StudentTermAssessmentRosterView, StudentTermAssessmentBulkSaveView,
+    StudentTermAssessmentAIRemarkView,
 )
 
 router = DefaultRouter()
@@ -26,4 +27,7 @@ urlpatterns = [
     path('', include(router.urls)),
     path('report-card/', ReportCardView.as_view(), name='report-card'),
     path('student-term-assessment/', StudentTermAssessmentView.as_view(), name='student-term-assessment'),
+    path('student-term-assessment/roster/', StudentTermAssessmentRosterView.as_view(), name='student-term-assessment-roster'),
+    path('student-term-assessment/bulk-save/', StudentTermAssessmentBulkSaveView.as_view(), name='student-term-assessment-bulk-save'),
+    path('student-term-assessment/ai-remark/', StudentTermAssessmentAIRemarkView.as_view(), name='student-term-assessment-ai-remark'),
 ]

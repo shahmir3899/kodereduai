@@ -6,6 +6,26 @@ import { authApi } from '../services/api'
 import { useToast } from '../components/Toast'
 import WhatsAppTick from '../components/WhatsAppTick'
 import FieldMatchTick from '../components/FieldMatchTick'
+import AvatarUpload from '../components/AvatarUpload'
+
+function getApiErrorMessage(error, fallback) {
+  const data = error?.response?.data
+  if (!data) return error?.message || fallback
+  if (typeof data === 'string') return data
+  if (typeof data.detail === 'string') return data.detail
+
+  const firstKey = Object.keys(data)[0]
+  if (!firstKey) return fallback
+  const firstValue = data[firstKey]
+
+  if (Array.isArray(firstValue) && firstValue.length > 0) {
+    return `${firstKey}: ${firstValue[0]}`
+  }
+  if (typeof firstValue === 'string') {
+    return `${firstKey}: ${firstValue}`
+  }
+  return fallback
+}
 
 // ---- Profile Tab ----
 function ProfileTab() {
@@ -38,6 +58,24 @@ function ProfileTab() {
     },
   })
 
+  const uploadPhotoMutation = useMutation({
+    mutationFn: (file) => authApi.uploadProfilePhoto(file),
+    onSuccess: async () => {
+      await refreshUser()
+      showSuccess('Photo uploaded successfully.')
+    },
+    onError: (error) => showError(getApiErrorMessage(error, 'Failed to upload photo')),
+  })
+
+  const removePhotoMutation = useMutation({
+    mutationFn: () => authApi.removeProfilePhoto(),
+    onSuccess: async () => {
+      await refreshUser()
+      showSuccess('Photo removed.')
+    },
+    onError: (error) => showError(getApiErrorMessage(error, 'Failed to remove photo')),
+  })
+
   const handleChange = (field) => (e) => {
     setForm(prev => ({ ...prev, [field]: e.target.value }))
   }
@@ -47,9 +85,23 @@ function ProfileTab() {
     updateMutation.mutate(form)
   }
 
+  const displayName = (user?.first_name || user?.last_name)
+    ? `${user?.first_name || ''} ${user?.last_name || ''}`.trim()
+    : user?.username
+
   return (
     <div className="card max-w-2xl">
       <h2 className="text-lg font-semibold text-gray-900 mb-4">Personal Information</h2>
+      <div className="mb-6">
+        <AvatarUpload
+          photoUrl={user?.profile_photo_url}
+          displayName={displayName}
+          onUpload={(file) => uploadPhotoMutation.mutate(file)}
+          onRemove={() => removePhotoMutation.mutate()}
+          uploading={uploadPhotoMutation.isPending}
+          removing={removePhotoMutation.isPending}
+        />
+      </div>
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>

@@ -265,6 +265,18 @@ class IsSchoolAdminOrReadOnly(permissions.BasePermission):
         return role in ADMIN_ROLES
 
 
+class CanManageStudentAssessments(permissions.BasePermission):
+    """Allow teachers and admin roles to access student monthly assessments."""
+    message = "Only teachers, principals, school admins, or super admins can access student assessments."
+
+    def has_permission(self, request, view):
+        if not request.user.is_authenticated:
+            return False
+
+        role = get_effective_role(request)
+        return role in ADMIN_ROLES or role == 'TEACHER'
+
+
 class CanEditCurriculum(permissions.BasePermission):
     """
     Curriculum edit policy:

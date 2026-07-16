@@ -195,7 +195,7 @@ class BrochureDownloadPdfView(APIView):
 
         pdf_bytes = HTML(string=full_html).write_pdf()
         response = HttpResponse(pdf_bytes, content_type='application/pdf')
-        response['Content-Disposition'] = 'attachment; filename="KoderEduAI_Brochure.pdf"'
+        response['Content-Disposition'] = 'attachment; filename="EducationAI_Brochure.pdf"'
         return response
 
 

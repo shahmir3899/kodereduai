@@ -258,7 +258,7 @@ export default function BrochurePage() {
       const url = URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }))
       const a = document.createElement('a')
       a.href = url
-      a.download = 'KoderEduAI_Brochure.pdf'
+      a.download = 'EducationAI_Brochure.pdf'
       a.click()
       URL.revokeObjectURL(url)
     } catch {

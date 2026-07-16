@@ -1,6 +1,6 @@
 """
-KoderEduAI — rich marketing brochure generator.
-Output: KoderEduAI_Brochure.pdf  (A4, slide-style pages)
+EducationAI — rich marketing brochure generator.
+Output: EducationAI_Brochure.pdf  (A4, slide-style pages)
 Requires: reportlab, Pillow
 """
 
@@ -464,7 +464,7 @@ def draw_page_bg(canvas, doc):
     canvas.rect(0, 0, W, 18, stroke=0, fill=1)
     canvas.setFillColor(BRAND_WHITE)
     canvas.setFont("Helvetica", 7)
-    canvas.drawCentredString(W / 2, 5, "KoderEduAI  |  Smart School Management Platform  |  www.kodereduai.pk")
+    canvas.drawCentredString(W / 2, 5, "EducationAI  |  Smart School Management Platform  |  www.kodereduai.pk")
     canvas.restoreState()
 
 
@@ -492,7 +492,7 @@ def draw_cover_bg(canvas, doc):
     canvas.rect(0, 0, W, 24, stroke=0, fill=1)
     canvas.setFillColor(BRAND_WHITE)
     canvas.setFont("Helvetica", 7.5)
-    canvas.drawCentredString(W / 2, 7, "KoderEduAI  |  Transforming Schools with Technology")
+    canvas.drawCentredString(W / 2, 7, "EducationAI  |  Transforming Schools with Technology")
     canvas.restoreState()
 
 
@@ -508,7 +508,7 @@ def build_cover():
     logo_d = Drawing(160, 50)
     logo_d.add(Rect(0, 8, 160, 42, rx=8, ry=8,
                     fillColor=colors.HexColor("#FFFFFF22"), strokeColor=None))
-    logo_d.add(String(80, 20, "KoderEduAI", textAnchor="middle",
+    logo_d.add(String(80, 20, "EducationAI", textAnchor="middle",
                       fontName="Helvetica-Bold", fontSize=26,
                       fillColor=colors.white))
     # center it
@@ -554,11 +554,11 @@ def build_introduction():
     elems = []
     elems.append(SectionBadge("INTRODUCTION", BRAND_BLUE))
     elems.append(sp(8))
-    elems.append(Paragraph("What is KoderEduAI?", H2))
+    elems.append(Paragraph("What is EducationAI?", H2))
     elems.append(DecorativeLine(INNER_W, BRAND_CYAN, 3))
     elems.append(sp(8))
     elems.append(Paragraph(
-        "KoderEduAI is a modern, AI-powered School Growth Platform designed to help institutions "
+        "EducationAI is a modern, AI-powered School Growth Platform designed to help institutions "
         "run smarter, faster, and with measurably higher parent trust. It brings every school "
         "operation — academics, attendance, finance, HR, communication, and institutional "
         "reporting — into one connected system, so leadership teams can drive real results "
@@ -608,7 +608,7 @@ def build_introduction():
     diff_data = [
         [Paragraph("<b>Traditional Systems</b>", style("TH", fontName="Helvetica-Bold",
                                                         fontSize=9, textColor=BRAND_WHITE)),
-         Paragraph("<b>KoderEduAI Way</b>", style("TH2", fontName="Helvetica-Bold",
+         Paragraph("<b>EducationAI Way</b>", style("TH2", fontName="Helvetica-Bold",
                                                    fontSize=9, textColor=BRAND_WHITE))],
         ["Biometric machines required", "Photograph existing register — AI does the rest"],
         ["Pay for 50 modules, use 5", "Enable only what you need — pay for what you use"],
@@ -646,7 +646,7 @@ def build_use_cases():
     elems.append(DecorativeLine(INNER_W, BRAND_ORANGE, 3))
     elems.append(sp(10))
     elems.append(Paragraph(
-        "KoderEduAI is designed around how schools actually operate day-to-day. "
+        "EducationAI is designed around how schools actually operate day-to-day. "
         "Here are five scenarios where the platform delivers measurable improvement.",
         BODY))
     elems.append(sp(10))
@@ -654,7 +654,7 @@ def build_use_cases():
     cases = [
         ("A", "School Owner Scaling Operations",
          "A growing school group needs consistent operations across campuses. "
-         "KoderEduAI delivers centralized visibility with branch-level flexibility, "
+         "EducationAI delivers centralized visibility with branch-level flexibility, "
          "so management can expand without losing governance or data control.",
          BRAND_BLUE),
         ("B", "Principal Improving Daily Discipline",
@@ -664,17 +664,17 @@ def build_use_cases():
          BRAND_GREEN),
         ("C", "Accounts Office Improving Fee Collection",
          "The accounts team wants cleaner fee operations, fewer manual follow-ups, "
-         "and predictable cash flow. KoderEduAI streamlines collection workflows "
+         "and predictable cash flow. EducationAI streamlines collection workflows "
          "to reduce leakage and speed up period-end reconciliation.",
          BRAND_GOLD),
         ("D", "Parent Trust and Communication",
          "Parents expect transparent updates and quick responses. "
-         "KoderEduAI strengthens the school–parent relationship through structured "
+         "EducationAI strengthens the school–parent relationship through structured "
          "two-way communication, live status visibility, and responsive workflows.",
          BRAND_PURPLE),
         ("E", "Admissions and Student Retention",
          "Schools want better inquiry conversion and stronger retention through service quality. "
-         "KoderEduAI supports a more consistent student journey from first enquiry "
+         "EducationAI supports a more consistent student journey from first enquiry "
          "all the way through ongoing engagement and academic progress.",
          BRAND_CYAN),
     ]
@@ -694,7 +694,7 @@ def build_benefits():
     elems.append(DecorativeLine(INNER_W, BRAND_GREEN, 3))
     elems.append(sp(10))
     elems.append(Paragraph(
-        "KoderEduAI is built with every stakeholder in mind — from the school owner "
+        "EducationAI is built with every stakeholder in mind — from the school owner "
         "setting strategic direction to the parent checking on their child's attendance.",
         BODY))
     elems.append(sp(10))
@@ -772,7 +772,7 @@ def build_automations():
     elems.append(DecorativeLine(INNER_W, BRAND_CYAN, 3))
     elems.append(sp(10))
     elems.append(Paragraph(
-        "KoderEduAI automates the most time-heavy workflows in school operations, "
+        "EducationAI automates the most time-heavy workflows in school operations, "
         "so your team can focus on outcomes — not repetitive manual tasks. "
         "Every automation is designed to run reliably, with human oversight built in where it matters.",
         BODY))
@@ -926,7 +926,7 @@ def build_faq():
          "Absolutely. Modules can be added at any point without any platform migration or "
          "data migration. Your existing data is always safe and accessible."),
         ("Is this suitable for school chains or groups?",
-         "Yes. KoderEduAI is purpose-built for multi-branch school groups. It supports "
+         "Yes. EducationAI is purpose-built for multi-branch school groups. It supports "
          "centralized oversight with branch-level control, and each branch can have its own "
          "independent module configuration."),
         ("How long does onboarding take?",
@@ -970,7 +970,7 @@ def build_closing():
     elems.append(Paragraph("Ready to Transform Your School?", closing_h))
     elems.append(sp(8))
     elems.append(Paragraph(
-        "Join schools already running smarter with KoderEduAI.", closing_sub))
+        "Join schools already running smarter with EducationAI.", closing_sub))
     elems.append(sp(14))
     elems.append(Paragraph(
         "www.kodereduai.pk  ·  info@kodereduai.pk  ·  +92-300-0000000",
@@ -984,7 +984,7 @@ def build_closing():
 # ─────────────────────────────────────────────
 
 def build_document():
-    out_path = os.path.join(os.path.dirname(__file__), "KoderEduAI_Brochure.pdf")
+    out_path = os.path.join(os.path.dirname(__file__), "EducationAI_Brochure.pdf")
 
     PAGE_MARGIN = 24 * mm
 
@@ -1002,8 +1002,8 @@ def build_document():
         out_path,
         pagesize=A4,
         pageTemplates=[cover_tmpl, content_tmpl],
-        title="KoderEduAI — Smart School Management Platform",
-        author="KoderEduAI",
+        title="EducationAI — Smart School Management Platform",
+        author="EducationAI",
         subject="Product Brochure 2026",
         leftMargin=PAGE_MARGIN, rightMargin=PAGE_MARGIN,
         topMargin=PAGE_MARGIN, bottomMargin=28,

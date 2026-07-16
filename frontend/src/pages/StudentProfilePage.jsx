@@ -52,6 +52,7 @@ function normalizeGender(gender) {
 export default function StudentProfilePage() {
   const { id } = useParams()
   const [tab, setTab] = useState('Overview')
+  const [assessmentMonth, setAssessmentMonth] = useState(String(new Date().getMonth() + 1))
   const [showEditModal, setShowEditModal] = useState(false)
   const [editForm, setEditForm] = useState({
     name: '',
@@ -196,9 +197,13 @@ export default function StudentProfilePage() {
     data: assessmentData, isLoading: assessmentLoading,
     isError: assessmentIsError, error: assessmentError, refetch: refetchAssessment,
   } = useQuery({
-    queryKey: ['studentTermAssessment', id, activeAcademicYear?.id],
-    queryFn: () => examinationsApi.getStudentTermAssessment({ student_id: id, academic_year: activeAcademicYear?.id }),
-    enabled: tab === 'Assessment' && !!activeAcademicYear?.id,
+    queryKey: ['studentTermAssessment', id, activeAcademicYear?.id, assessmentMonth],
+    queryFn: () => examinationsApi.getStudentTermAssessment({
+      student_id: id,
+      academic_year: activeAcademicYear?.id,
+      month: assessmentMonth,
+    }),
+    enabled: tab === 'Assessment' && !!activeAcademicYear?.id && !!assessmentMonth,
     staleTime: 60_000,
   })
 
@@ -718,6 +723,8 @@ export default function StudentProfilePage() {
             <AssessmentTab
               studentId={id}
               academicYearId={activeAcademicYear.id}
+              month={assessmentMonth}
+              onMonthChange={setAssessmentMonth}
               data={assessmentData?.data}
               refetch={refetchAssessment}
               isLoading={assessmentLoading}
@@ -1355,8 +1362,12 @@ const BEHAVIOUR_FIELDS = [
 const RATING_OPTIONS = [
   [1, 'Needs Improvement'], [2, 'Fair'], [3, 'Good'], [4, 'Very Good'], [5, 'Excellent'],
 ]
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+]
 
-function AssessmentTab({ studentId, academicYearId, data, refetch, isLoading, error }) {
+function AssessmentTab({ studentId, academicYearId, month, onMonthChange, data, refetch, isLoading, error }) {
   const { showError, showSuccess } = useToast()
   const [form, setForm] = useState(null)
 
@@ -1384,7 +1395,7 @@ function AssessmentTab({ studentId, academicYearId, data, refetch, isLoading, er
   const setField = (field, value) => setForm((prev) => ({ ...prev, [field]: value }))
 
   const handleSave = () => {
-    const payload = { student: studentId, academic_year: academicYearId }
+    const payload = { student: studentId, academic_year: academicYearId, month: Number(month) }
     for (const [field] of [...SKILL_FIELDS, ...BEHAVIOUR_FIELDS]) {
       payload[field] = form[field] === '' ? null : Number(form[field])
     }
@@ -1411,6 +1422,20 @@ function AssessmentTab({ studentId, academicYearId, data, refetch, isLoading, er
 
   return (
     <div className="space-y-6">
+      <div className="bg-white rounded-xl border border-gray-200 p-4">
+        <label className="block text-sm font-medium text-gray-700 mb-1">Month</label>
+        <select
+          value={month}
+          onChange={(e) => onMonthChange(e.target.value)}
+          className="w-full sm:w-48 px-3 py-2 border border-gray-300 rounded-lg text-sm"
+        >
+          {MONTH_NAMES.map((label, index) => (
+            <option key={label} value={String(index + 1)}>{label}</option>
+          ))}
+        </select>
+        <p className="mt-1 text-xs text-gray-500">Ratings and remarks are saved as a monthly snapshot.</p>
+      </div>
+
       <div className="bg-white rounded-xl border border-gray-200 p-4">
         <h3 className="text-sm font-semibold text-gray-900 mb-2">Skills Assessment</h3>
         {SKILL_FIELDS.map(([field, label]) => <RatingSelect key={field} field={field} label={label} />)}

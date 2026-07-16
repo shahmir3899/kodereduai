@@ -6,6 +6,26 @@ import { hrApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import { useToast } from '../../components/Toast'
 import WhatsAppTick from '../../components/WhatsAppTick'
+import AvatarUpload from '../../components/AvatarUpload'
+
+function getApiErrorMessage(error, fallback) {
+  const data = error?.response?.data
+  if (!data) return error?.message || fallback
+  if (typeof data === 'string') return data
+  if (typeof data.detail === 'string') return data.detail
+
+  const firstKey = Object.keys(data)[0]
+  if (!firstKey) return fallback
+  const firstValue = data[firstKey]
+
+  if (Array.isArray(firstValue) && firstValue.length > 0) {
+    return `${firstKey}: ${firstValue[0]}`
+  }
+  if (typeof firstValue === 'string') {
+    return `${firstKey}: ${firstValue}`
+  }
+  return fallback
+}
 
 const EMPTY_FORM = {
   first_name: '',
@@ -138,6 +158,26 @@ export default function StaffFormPage() {
     },
   })
 
+  const uploadPhotoMutation = useMutation({
+    mutationFn: (file) => hrApi.uploadStaffPhoto(id, file),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['hrStaffMember', id] })
+      queryClient.invalidateQueries({ queryKey: ['hrStaff'] })
+      showSuccess('Photo uploaded successfully.')
+    },
+    onError: (error) => showError(getApiErrorMessage(error, 'Failed to upload photo')),
+  })
+
+  const removePhotoMutation = useMutation({
+    mutationFn: () => hrApi.removeStaffPhoto(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['hrStaffMember', id] })
+      queryClient.invalidateQueries({ queryKey: ['hrStaff'] })
+      showSuccess('Photo removed.')
+    },
+    onError: (error) => showError(getApiErrorMessage(error, 'Failed to remove photo')),
+  })
+
   const updateUserRoleMutation = useMutation({
     mutationFn: (payload) => hrApi.updateStaffUserRole(id, payload),
     onSuccess: (response) => {
@@ -261,6 +301,16 @@ export default function StaffFormPage() {
           <div className="card">
             <h2 className="text-sm font-semibold text-gray-700 mb-4">Personal Information</h2>
             <div className="space-y-4">
+              {isEdit && (
+                <AvatarUpload
+                  photoUrl={staffData?.data?.photo_url}
+                  displayName={`${form.first_name} ${form.last_name}`.trim()}
+                  onUpload={(file) => uploadPhotoMutation.mutate(file)}
+                  onRemove={() => removePhotoMutation.mutate()}
+                  uploading={uploadPhotoMutation.isPending}
+                  removing={removePhotoMutation.isPending}
+                />
+              )}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="label">First Name *</label>

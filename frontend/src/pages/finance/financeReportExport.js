@@ -213,7 +213,7 @@ export function exportFinanceReport({
     doc.setPage(i)
     doc.setFontSize(8)
     doc.setTextColor(150)
-    doc.text('KoderEduAI Finance Report', MARGIN.left, pageHeight - 10)
+    doc.text('EducationAI Finance Report', MARGIN.left, pageHeight - 10)
     doc.text(`Page ${i} of ${pageCount}`, pageWidth - 35, pageHeight - 10)
     doc.setTextColor(0)
   }

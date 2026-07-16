@@ -230,3 +230,102 @@ class ReportCardCommentGenerator:
             if float(gs.min_percentage) <= percentage <= float(gs.max_percentage):
                 return gs.grade_label
         return '-'
+
+
+ASSESSMENT_REMARK_PROMPT_TEMPLATE = """Generate a short remark (2-3 sentences) for a student's monthly progress assessment.
+
+Ratings given (scale: Needs Improvement, Fair, Good, Very Good, Excellent):
+{ratings_lines}
+
+Rules:
+- Be professional, encouraging, and constructive
+- Do NOT include the student's name in the remark
+- Base the remark only on the ratings given above — do not invent specific incidents or facts not implied by them
+- {tone_instruction}
+- Keep to exactly 2-3 sentences
+- Do not use exclamation marks excessively
+
+Remark:"""
+
+REMARK_TONE_INSTRUCTIONS = {
+    'teacher': "Write as a classroom teacher's personal observation, referencing the specific skills or behaviours that stand out",
+    'principal': 'Write as a brief, formal evaluative overview suitable for a principal sign-off — more concise and less specific than a teacher note',
+}
+
+
+def generate_term_assessment_remark(ratings, remark_type='teacher'):
+    """
+    Draft a teacher/principal remark from a student's monthly skill/behaviour ratings.
+
+    `ratings` is a dict of {field_label: rating_value} where rating_value is 1-5
+    (matching StudentTermAssessment.Rating) or falsy for "not rated" fields, which
+    are skipped. Returns (remark_text, used_fallback) — remark_text is None if no
+    fields are rated yet, since there's nothing to draft a suggestion from.
+    """
+    from .models import StudentTermAssessment
+
+    rating_labels = dict(StudentTermAssessment.Rating.choices)
+    rated_items = []
+    for label, value in (ratings or {}).items():
+        if value in (None, ''):
+            continue
+        try:
+            rating_int = int(value)
+        except (TypeError, ValueError):
+            continue
+        if rating_int in rating_labels:
+            rated_items.append((label, rating_labels[rating_int]))
+
+    if not rated_items:
+        return None, False
+
+    if not settings.GROQ_API_KEY:
+        return _generate_rule_based_remark(rated_items), True
+
+    tone_instruction = REMARK_TONE_INSTRUCTIONS.get(remark_type, REMARK_TONE_INSTRUCTIONS['teacher'])
+    ratings_lines = '\n'.join(f'- {label}: {rating}' for label, rating in rated_items)
+    prompt = ASSESSMENT_REMARK_PROMPT_TEMPLATE.format(
+        ratings_lines=ratings_lines,
+        tone_instruction=tone_instruction,
+    )
+
+    try:
+        from groq import Groq
+        client = Groq(api_key=settings.GROQ_API_KEY)
+
+        response = client.chat.completions.create(
+            model=settings.GROQ_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.5,
+            max_tokens=200,
+            timeout=15,
+        )
+
+        remark = response.choices[0].message.content.strip()
+        if remark.startswith('"') and remark.endswith('"'):
+            remark = remark[1:-1]
+        return remark, False
+
+    except Exception as e:
+        logger.warning(f"Groq API call failed for assessment remark, using rule-based fallback: {e}")
+        return _generate_rule_based_remark(rated_items), True
+
+
+def _generate_rule_based_remark(rated_items):
+    """Fallback: build a remark from the highest/lowest rated fields, without an LLM."""
+    ranked = sorted(rated_items, key=lambda item: item[1])
+    RATING_ORDER = ['Needs Improvement', 'Fair', 'Good', 'Very Good', 'Excellent']
+    lowest_label, lowest_rating = ranked[0]
+    highest_label, highest_rating = ranked[-1]
+
+    if RATING_ORDER.index(highest_rating) >= 3:
+        sentence = f"Shows {highest_rating.lower()} progress in {highest_label.lower()}."
+    else:
+        sentence = f"Rated {highest_rating.lower()} across most areas this month."
+
+    if lowest_label != highest_label and RATING_ORDER.index(lowest_rating) <= 1:
+        sentence += f" {lowest_label} needs continued attention and encouragement."
+    else:
+        sentence += " Continue encouraging consistent effort across all areas."
+
+    return sentence

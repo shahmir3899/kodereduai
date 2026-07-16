@@ -290,6 +290,11 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | POST | /api/examinations/exam-papers/create_from_lessons/ | | Create paper from lesson plans. Body: {lesson_plan_ids, class_id, subject_id, paper_title, instructions, total_marks, duration_minutes} |
 | GET | /api/examinations/exam-papers/{id}/generate-pdf/ | | Generate PDF of exam paper |
 | POST | /api/examinations/exam-papers/review-questions/ | | Grammar/spelling review. Body: {questions: [text1, text2]} |
+| **MONTHLY ASSESSMENTS** | | | |
+| GET/POST | /api/examinations/student-term-assessment/ | student_id, academic_year, month (all required, GET) | Single student/month upsert (Student Profile "Assessment" tab, and roster page's per-row save). POST body: {student, academic_year, month, ...12 rating fields (1-5\|null), teacher_remark, principal_remark}. Non-admin saves never overwrite an existing principal_remark |
+| GET | /api/examinations/student-term-assessment/roster/ | academic_year, month, session_class or class_obj | One row per enrolled student, merging in that month's existing assessment (if any) |
+| POST | /api/examinations/student-term-assessment/bulk-save/ | | Bulk upsert for a class/month. Body: {academic_year, month, session_class\|class_obj, assessments: [{student, ...rating fields, teacher_remark, principal_remark}]}. Returns {created, updated, errors, results} |
+| POST | /api/examinations/student-term-assessment/ai-remark/ | | Draft a Teacher/Principal remark from ratings. Body: {ratings: {field_label: 1-5}, remark_type: 'teacher'\|'principal'}. Returns {remark, fallback}; 400 if no ratings are set |
 
 ## LMS Topics (Curriculum Coverage)
 | Method | URL | Params | Description |

@@ -412,6 +412,14 @@ export const hrApi = {
   unlinkStaffUserAccount: (id) => api.post(`/api/hr/staff/${id}/unlink-user-account/`),
   updateStaffUserRole: (id, data) => api.post(`/api/hr/staff/${id}/update-user-role/`, data),
   bulkCreateStaffAccounts: (data) => api.post('/api/hr/staff/bulk-create-accounts/', data),
+  uploadStaffPhoto: (id, file) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return api.post(`/api/hr/staff/${id}/upload_photo/`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+  removeStaffPhoto: (id) => api.post(`/api/hr/staff/${id}/remove_photo/`),
 
   // Departments
   getDepartments: (params) => api.get('/api/hr/departments/', { params }),
@@ -685,6 +693,9 @@ export const examinationsApi = {
   // Student Term Assessment (skills/behaviour ratings + remarks)
   getStudentTermAssessment: (params) => api.get('/api/examinations/student-term-assessment/', { params }),
   saveStudentTermAssessment: (data) => api.post('/api/examinations/student-term-assessment/', data),
+  getStudentTermAssessmentRoster: (params) => api.get('/api/examinations/student-term-assessment/roster/', { params }),
+  bulkSaveStudentTermAssessment: (data) => api.post('/api/examinations/student-term-assessment/bulk-save/', data),
+  aiSuggestAssessmentRemark: (data) => api.post('/api/examinations/student-term-assessment/ai-remark/', data),
 
   // AI Comments
   generateComments: (examId, force = false) =>
@@ -696,6 +707,14 @@ export const authApi = {
   switchSchool: (schoolId) => api.post('/api/auth/switch-school/', { school_id: schoolId }),
   updateProfile: (data) => api.patch('/api/auth/me/', data),
   changePassword: (data) => api.post('/api/auth/change-password/', data),
+  uploadProfilePhoto: (file) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return api.post('/api/auth/me/photo/', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+  removeProfilePhoto: () => api.delete('/api/auth/me/photo/'),
 }
 
 // Organizations API (Super Admin)
@@ -721,6 +740,14 @@ export const usersApi = {
   createUser: (data) => api.post('/api/users/', data),
   updateUser: (id, data) => api.patch(`/api/users/${id}/`, data),
   deleteUser: (id) => api.delete(`/api/users/${id}/`),
+  uploadPhoto: (id, file) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return api.post(`/api/users/${id}/upload_photo/`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+  removePhoto: (id) => api.post(`/api/users/${id}/remove_photo/`),
 }
 
 // Notifications API

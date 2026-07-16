@@ -277,6 +277,13 @@ exam_paper(FK), question(FK), question_order, marks_override(nullable), created_
 
 **Unique constraint:** (exam_paper, question)
 
+### StudentTermAssessment
+school(FK), student(FK), academic_year(FK), term(FK nullable — reserved for a future whole-term row, unused by the current monthly workflow), month (1-12), listening/speaking/writing/reading/participation/confidence/social_skills (1-5, nullable), discipline/respect/teamwork/class_participation/responsibility (1-5, nullable), teacher_remark, principal_remark, updated_by(FK, SET_NULL), created_at, updated_at
+
+**Unique constraint:** (student, academic_year, month) — one row per student per month per academic year.
+
+Teacher/admin-entered monthly skill & behaviour snapshot, feeding the Skills Assessment / Behaviour Evaluation / Remarks sections of the student comprehensive report (`reports.generators.student`, see `docs/STUDENT_REPORT_DATA_MAP.md` §6). Entered via `/assessments` (class roster) or the Student Profile "Assessment" tab (single student); see `examinations/views.py`'s `StudentTermAssessment*` views. Non-admin (teacher) saves never overwrite an existing `principal_remark`. `examinations/ai_comments_service.py::generate_term_assessment_remark()` drafts a Teacher/Principal remark from a student's current ratings via Groq (rule-based fallback if unconfigured/unreachable), exposed at `POST student-term-assessment/ai-remark/`.
+
 ---
 
 ## finance — Fee Management & Accounting

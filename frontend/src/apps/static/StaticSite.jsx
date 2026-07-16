@@ -25,7 +25,7 @@ export default function StaticSite() {
       {/* Navigation */}
       <nav className="bg-white shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-          <h1 className="text-2xl font-bold text-blue-600">KoderEduAI</h1>
+          <h1 className="text-2xl font-bold text-blue-600">EducationAI</h1>
           <div className="space-x-4">
             <a
               href="https://portal.kodereduai.pk"
@@ -151,7 +151,7 @@ export default function StaticSite() {
       {/* Footer */}
       <footer className="bg-gray-900 text-white py-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <p>&copy; 2026 KoderEduAI. All rights reserved.</p>
+          <p>&copy; 2026 EducationAI. All rights reserved.</p>
           <p className="text-gray-400 text-sm mt-2">
             Empowering schools with intelligent technology
           </p>

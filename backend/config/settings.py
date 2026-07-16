@@ -1,5 +1,5 @@
 """
-Django settings for KoderEduAI.pk Platform.
+Django settings for EducationAI Platform.
 """
 
 import os

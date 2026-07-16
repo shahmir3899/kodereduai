@@ -13,7 +13,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core.mixins import TenantQuerySetMixin, ensure_tenant_school_id
-from core.permissions import ADMIN_ROLES, IsSchoolAdmin, IsSchoolAdminOrReadOnly, HasSchoolAccess, ModuleAccessMixin, get_effective_role, get_teacher_combined_scope
+from core.permissions import ADMIN_ROLES, IsSchoolAdmin, IsSchoolAdminOrReadOnly, HasSchoolAccess, ModuleAccessMixin, CanManageStudentAssessments, get_effective_role, get_teacher_combined_scope
 from core.class_scope import resolve_class_scope
 from core.ai_jobs import complete_ai_job, create_ai_job, fail_ai_job
 from core.embeddings import generate_text_embedding
@@ -1584,17 +1584,87 @@ class GradeScaleViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
 
 class StudentTermAssessmentView(ModuleAccessMixin, APIView):
     """
-    Skills/behaviour ratings + remarks for one student's academic year (upsert).
-    GET  ?student_id=&academic_year= -> existing row, or a blank shape if none yet.
-    POST {student_id, academic_year, ...ratings, teacher_remark, principal_remark} -> create/update.
+    Skills/behaviour ratings + remarks for one student's academic year + month (upsert).
+    GET  ?student_id=&academic_year=&month= -> existing row, or a blank shape if none yet.
+    POST {student, academic_year, month, ...ratings, teacher_remark, principal_remark} -> create/update.
     """
     required_module = 'examinations'
-    permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, CanManageStudentAssessments, HasSchoolAccess]
 
     RATING_FIELDS = [
         'listening', 'speaking', 'writing', 'reading', 'participation', 'confidence', 'social_skills',
         'discipline', 'respect', 'teamwork', 'class_participation', 'responsibility',
     ]
+
+    @staticmethod
+    def _parse_month(raw_month):
+        try:
+            month = int(raw_month)
+        except (TypeError, ValueError):
+            return None
+        return month if 1 <= month <= 12 else None
+
+    def _teacher_can_access_class(self, request, school_id, academic_year_id, class_obj_id=None, session_class_id=None):
+        role = get_effective_role(request)
+        if role in ADMIN_ROLES:
+            return True
+        if role != 'TEACHER':
+            return False
+
+        scope = get_teacher_combined_scope(request, school_id=school_id, academic_year_id=academic_year_id)
+        allowed_class_ids = set(scope.get('all_class_ids', set()))
+        allowed_session_ids = set(scope.get('full_session_class_ids', set()))
+
+        if session_class_id:
+            return int(session_class_id) in allowed_session_ids or int(class_obj_id or 0) in allowed_class_ids
+        if class_obj_id:
+            return int(class_obj_id) in allowed_class_ids
+        return False
+
+    def _teacher_can_access_student(self, request, school_id, student_id, academic_year_id):
+        role = get_effective_role(request)
+        if role in ADMIN_ROLES:
+            return True
+        if role != 'TEACHER':
+            return False
+
+        from academic_sessions.models import StudentEnrollment
+
+        enrollment = StudentEnrollment.objects.filter(
+            school_id=school_id,
+            student_id=student_id,
+            academic_year_id=academic_year_id,
+            is_active=True,
+        ).select_related('session_class', 'class_obj').first()
+        if not enrollment:
+            return False
+
+        return self._teacher_can_access_class(
+            request,
+            school_id,
+            academic_year_id,
+            class_obj_id=enrollment.class_obj_id,
+            session_class_id=enrollment.session_class_id,
+        )
+
+    def _build_defaults(self, request, row, existing=None):
+        role = get_effective_role(request)
+        defaults = {
+            field: (None if row.get(field) in (None, '') else row.get(field))
+            for field in self.RATING_FIELDS
+        }
+        defaults['teacher_remark'] = row.get('teacher_remark', '')
+        if role in ADMIN_ROLES:
+            defaults['principal_remark'] = row.get('principal_remark', '')
+        elif existing is not None:
+            defaults['principal_remark'] = existing.principal_remark or ''
+        else:
+            defaults['principal_remark'] = ''
+        defaults['updated_by'] = request.user
+        return defaults
+
+    def _reject_no_access(self):
+        return Response({'detail': 'You are not assigned to this student/class for the selected academic year.'}, status=403)
 
     def get(self, request):
         school_id = _resolve_school_id(request)
@@ -1603,16 +1673,26 @@ class StudentTermAssessmentView(ModuleAccessMixin, APIView):
 
         student_id = request.query_params.get('student_id')
         academic_year_id = request.query_params.get('academic_year')
-        if not student_id or not academic_year_id:
-            return Response({'error': 'student_id and academic_year are required'}, status=400)
+        month = self._parse_month(request.query_params.get('month'))
+        if not student_id or not academic_year_id or month is None:
+            return Response({'error': 'student_id, academic_year, and month (1-12) are required'}, status=400)
+
+        if not self._teacher_can_access_student(request, school_id, student_id, academic_year_id):
+            return self._reject_no_access()
 
         assessment = StudentTermAssessment.objects.filter(
-            school_id=school_id, student_id=student_id, academic_year_id=academic_year_id, term__isnull=True,
+            school_id=school_id,
+            student_id=student_id,
+            academic_year_id=academic_year_id,
+            month=month,
         ).first()
         if not assessment:
             blank = {f: None for f in self.RATING_FIELDS}
             blank.update({
-                'exists': False, 'student': int(student_id), 'academic_year': int(academic_year_id),
+                'exists': False,
+                'student': int(student_id),
+                'academic_year': int(academic_year_id),
+                'month': month,
                 'teacher_remark': '', 'principal_remark': '',
             })
             return Response(blank)
@@ -1628,21 +1708,277 @@ class StudentTermAssessmentView(ModuleAccessMixin, APIView):
 
         student_id = request.data.get('student')
         academic_year_id = request.data.get('academic_year')
-        if not student_id or not academic_year_id:
-            return Response({'error': 'student and academic_year are required'}, status=400)
+        month = self._parse_month(request.data.get('month'))
+        if not student_id or not academic_year_id or month is None:
+            return Response({'error': 'student, academic_year, and month (1-12) are required'}, status=400)
 
-        defaults = {f: request.data.get(f) or None for f in self.RATING_FIELDS}
-        defaults['teacher_remark'] = request.data.get('teacher_remark', '')
-        defaults['principal_remark'] = request.data.get('principal_remark', '')
-        defaults['updated_by'] = request.user
+        if not self._teacher_can_access_student(request, school_id, student_id, academic_year_id):
+            return self._reject_no_access()
+
+        existing = StudentTermAssessment.objects.filter(
+            school_id=school_id,
+            student_id=student_id,
+            academic_year_id=academic_year_id,
+            month=month,
+        ).first()
+        defaults = self._build_defaults(request, request.data, existing=existing)
 
         assessment, _created = StudentTermAssessment.objects.update_or_create(
-            school_id=school_id, student_id=student_id, academic_year_id=academic_year_id, term=None,
+            school_id=school_id,
+            student_id=student_id,
+            academic_year_id=academic_year_id,
+            month=month,
             defaults=defaults,
         )
         data = StudentTermAssessmentSerializer(assessment).data
         data['exists'] = True
         return Response(data)
+
+
+class StudentTermAssessmentRosterView(ModuleAccessMixin, APIView):
+    """
+    Class/month roster for student assessments.
+    GET ?academic_year=&month=&session_class= (or class_obj=) -> one row per enrolled student
+    with existing monthly assessment data merged in.
+    """
+    required_module = 'examinations'
+    permission_classes = [IsAuthenticated, CanManageStudentAssessments, HasSchoolAccess]
+
+    RATING_FIELDS = StudentTermAssessmentView.RATING_FIELDS
+
+    def get(self, request):
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response({'error': 'school_id required'}, status=400)
+
+        academic_year_id = request.query_params.get('academic_year')
+        month = StudentTermAssessmentView._parse_month(request.query_params.get('month'))
+        session_class_id = request.query_params.get('session_class')
+        class_obj_id = request.query_params.get('class_obj')
+
+        if not academic_year_id or month is None:
+            return Response({'error': 'academic_year and month (1-12) are required'}, status=400)
+        if not session_class_id and not class_obj_id:
+            return Response({'error': 'session_class or class_obj is required'}, status=400)
+
+        if not StudentTermAssessmentView()._teacher_can_access_class(
+            request,
+            school_id,
+            academic_year_id,
+            class_obj_id=class_obj_id,
+            session_class_id=session_class_id,
+        ):
+            return Response({'detail': 'You are not assigned to this class for the selected academic year.'}, status=403)
+
+        from academic_sessions.models import StudentEnrollment
+
+        enrollments = StudentEnrollment.objects.filter(
+            school_id=school_id,
+            academic_year_id=academic_year_id,
+            is_active=True,
+        ).select_related('student', 'session_class', 'class_obj')
+
+        if session_class_id:
+            enrollments = enrollments.filter(session_class_id=session_class_id)
+        else:
+            enrollments = enrollments.filter(class_obj_id=class_obj_id)
+
+        enrollments = enrollments.order_by('roll_number', 'student__name', 'id')
+        student_ids = list(enrollments.values_list('student_id', flat=True))
+
+        assessments = StudentTermAssessment.objects.filter(
+            school_id=school_id,
+            academic_year_id=academic_year_id,
+            month=month,
+            student_id__in=student_ids,
+        ).select_related('updated_by')
+        assessments_by_student = {row.student_id: row for row in assessments}
+
+        results = []
+        for enrollment in enrollments:
+            assessment = assessments_by_student.get(enrollment.student_id)
+            if assessment:
+                row = StudentTermAssessmentSerializer(assessment).data
+                row['exists'] = True
+            else:
+                row = {f: None for f in self.RATING_FIELDS}
+                row.update({
+                    'exists': False,
+                    'student': enrollment.student_id,
+                    'academic_year': int(academic_year_id),
+                    'month': month,
+                    'teacher_remark': '',
+                    'principal_remark': '',
+                    'updated_by': None,
+                    'updated_by_name': None,
+                    'updated_at': None,
+                })
+
+            row['student_name'] = enrollment.student.name
+            row['roll_number'] = enrollment.roll_number
+            row['enrollment_id'] = enrollment.id
+            row['class_obj'] = enrollment.class_obj_id
+            row['session_class'] = enrollment.session_class_id
+            results.append(row)
+
+        return Response({
+            'academic_year': int(academic_year_id),
+            'month': month,
+            'class_obj': int(class_obj_id) if class_obj_id else None,
+            'session_class': int(session_class_id) if session_class_id else None,
+            'count': len(results),
+            'results': results,
+        })
+
+
+class StudentTermAssessmentBulkSaveView(ModuleAccessMixin, APIView):
+    """
+    Bulk upsert student assessments for a selected class + month.
+    POST {
+      academic_year, month, session_class|class_obj,
+      assessments: [{student, ...rating_fields, teacher_remark, principal_remark}]
+    }
+    """
+    required_module = 'examinations'
+    permission_classes = [IsAuthenticated, CanManageStudentAssessments, HasSchoolAccess]
+
+    RATING_FIELDS = StudentTermAssessmentView.RATING_FIELDS
+
+    def post(self, request):
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response({'error': 'school_id required'}, status=400)
+
+        academic_year_id = request.data.get('academic_year')
+        month = StudentTermAssessmentView._parse_month(request.data.get('month'))
+        session_class_id = request.data.get('session_class')
+        class_obj_id = request.data.get('class_obj')
+        rows = request.data.get('assessments') or []
+
+        if not academic_year_id or month is None:
+            return Response({'error': 'academic_year and month (1-12) are required'}, status=400)
+        if not session_class_id and not class_obj_id:
+            return Response({'error': 'session_class or class_obj is required'}, status=400)
+        if not isinstance(rows, list):
+            return Response({'error': 'assessments must be a list'}, status=400)
+
+        if not StudentTermAssessmentView()._teacher_can_access_class(
+            request,
+            school_id,
+            academic_year_id,
+            class_obj_id=class_obj_id,
+            session_class_id=session_class_id,
+        ):
+            return Response({'detail': 'You are not assigned to this class for the selected academic year.'}, status=403)
+
+        from academic_sessions.models import StudentEnrollment
+
+        enrollments = StudentEnrollment.objects.filter(
+            school_id=school_id,
+            academic_year_id=academic_year_id,
+            is_active=True,
+        )
+        if session_class_id:
+            enrollments = enrollments.filter(session_class_id=session_class_id)
+        else:
+            enrollments = enrollments.filter(class_obj_id=class_obj_id)
+
+        allowed_student_ids = set(enrollments.values_list('student_id', flat=True))
+        if not allowed_student_ids:
+            return Response({
+                'error': 'No active enrollments found for selected class and academic year',
+            }, status=400)
+
+        created = 0
+        updated = 0
+        errors = []
+        saved_results = []
+
+        existing_map = {
+            row.student_id: row
+            for row in StudentTermAssessment.objects.filter(
+                school_id=school_id,
+                academic_year_id=academic_year_id,
+                month=month,
+                student_id__in=allowed_student_ids,
+            )
+        }
+
+        with transaction.atomic():
+            for index, row in enumerate(rows):
+                student_id = row.get('student')
+                if not student_id:
+                    errors.append({'index': index, 'error': 'student is required'})
+                    continue
+                if student_id not in allowed_student_ids:
+                    errors.append({
+                        'index': index,
+                        'student': student_id,
+                        'error': 'student is not enrolled in selected class/academic_year',
+                    })
+                    continue
+
+                defaults = StudentTermAssessmentView()._build_defaults(request, row, existing=existing_map.get(student_id))
+
+                obj, was_created = StudentTermAssessment.objects.update_or_create(
+                    school_id=school_id,
+                    student_id=student_id,
+                    academic_year_id=academic_year_id,
+                    month=month,
+                    defaults=defaults,
+                )
+                if was_created:
+                    created += 1
+                else:
+                    updated += 1
+
+                payload = StudentTermAssessmentSerializer(obj).data
+                payload['exists'] = True
+                saved_results.append(payload)
+
+        return Response({
+            'academic_year': int(academic_year_id),
+            'month': month,
+            'class_obj': int(class_obj_id) if class_obj_id else None,
+            'session_class': int(session_class_id) if session_class_id else None,
+            'submitted_count': len(rows),
+            'created': created,
+            'updated': updated,
+            'error_count': len(errors),
+            'errors': errors,
+            'results': saved_results,
+        })
+
+
+class StudentTermAssessmentAIRemarkView(ModuleAccessMixin, APIView):
+    """
+    Draft a teacher/principal remark from a student's current skill/behaviour ratings.
+    POST {ratings: {field_label: rating_value(1-5)}, remark_type: 'teacher'|'principal'} -> {remark, fallback}
+    """
+    required_module = 'examinations'
+    permission_classes = [IsAuthenticated, CanManageStudentAssessments, HasSchoolAccess]
+
+    def post(self, request):
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response({'error': 'school_id required'}, status=400)
+
+        ratings = request.data.get('ratings')
+        remark_type = request.data.get('remark_type') or 'teacher'
+        if not isinstance(ratings, dict):
+            return Response({'error': 'ratings (object) is required'}, status=400)
+        if remark_type not in ('teacher', 'principal'):
+            return Response({'error': "remark_type must be 'teacher' or 'principal'"}, status=400)
+
+        from .ai_comments_service import generate_term_assessment_remark
+
+        remark, fallback = generate_term_assessment_remark(ratings, remark_type=remark_type)
+        if remark is None:
+            return Response(
+                {'error': 'Rate at least one skill or behaviour before requesting an AI suggestion.'},
+                status=400,
+            )
+        return Response({'remark': remark, 'fallback': fallback})
 
 
 class ReportCardView(ModuleAccessMixin, APIView):

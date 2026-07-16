@@ -163,7 +163,7 @@ export default function SchoolLoginPage({ school }) {
         </div>
 
         <p className="mt-6 text-center text-sm text-gray-500">
-          KoderEduAI.pk - AI-Powered Education Platform
+          EducationAI - AI-Powered Education Platform
         </p>
       </div>
     </div>

@@ -9,6 +9,22 @@ from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
+PHOTO_ALLOWED_CONTENT_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+PHOTO_MAX_SIZE_BYTES = 5 * 1024 * 1024
+
+
+def validate_photo_upload(file):
+    """
+    Validate a profile-photo upload's content type and size.
+    Raises ValueError with a user-facing message if invalid.
+    """
+    if file.content_type not in PHOTO_ALLOWED_CONTENT_TYPES:
+        raise ValueError(
+            f'Invalid file type. Allowed: {", ".join(PHOTO_ALLOWED_CONTENT_TYPES)}'
+        )
+    if file.size > PHOTO_MAX_SIZE_BYTES:
+        raise ValueError('File too large. Maximum size is 5MB.')
+
 
 def _process_profile_photo(file_content: bytes, max_dimension: int = 480, quality: int = 85) -> bytes:
     """
@@ -165,31 +181,21 @@ class SupabaseStorageService:
             logger.error(f"Failed to upload school asset: {e}")
             raise Exception(f"Failed to upload {asset_type}: {e}")
 
-    def upload_student_photo(self, file, school_id: int, student_id: int) -> str:
+    def _upload_profile_photo(self, file, filename: str) -> str:
         """
-        Upload a student profile photo to Supabase Storage.
+        Shared implementation for profile-style photo uploads: resize/normalize,
+        overwrite any existing file at the given path, and return the public URL.
 
-        Args:
-            file: File object from request
-            school_id: School ID for organizing files
-            student_id: Student ID — file overwrites in place on re-upload
-
-        Returns:
-            str: Public URL of uploaded file
+        Let decode errors (e.g. UnidentifiedImageError) propagate as-is so callers
+        can distinguish "bad image" (400) from storage failures (500).
         """
         if not self.is_configured():
             raise Exception("Supabase storage not configured")
 
-        # Output is always a resized JPEG, so the stored filename is always .jpg
-        # regardless of what the client uploaded.
-        filename = f"students/{school_id}/{student_id}.jpg"
-
-        # Let decode errors (e.g. UnidentifiedImageError) propagate as-is so the
-        # view can distinguish "bad image" (400) from storage failures (500).
         file_content = _process_profile_photo(file.read())
 
         try:
-            logger.info(f"Uploading student photo: {filename} ({len(file_content)} bytes)")
+            logger.info(f"Uploading profile photo: {filename} ({len(file_content)} bytes)")
 
             # Try to remove existing file first (may not exist, that's OK)
             try:
@@ -204,12 +210,57 @@ class SupabaseStorageService:
             )
 
             public_url = self.client.storage.from_(self.bucket).get_public_url(filename)
-            logger.info(f"Successfully uploaded student photo: {filename}")
+            logger.info(f"Successfully uploaded profile photo: {filename}")
             return public_url
 
         except Exception as e:
-            logger.error(f"Failed to upload student photo: {e}")
+            logger.error(f"Failed to upload profile photo {filename}: {e}")
             raise Exception(f"Failed to upload photo: {e}")
+
+    def upload_student_photo(self, file, school_id: int, student_id: int) -> str:
+        """
+        Upload a student profile photo to Supabase Storage.
+
+        Args:
+            file: File object from request
+            school_id: School ID for organizing files
+            student_id: Student ID — file overwrites in place on re-upload
+
+        Returns:
+            str: Public URL of uploaded file
+        """
+        # Output is always a resized JPEG, so the stored filename is always .jpg
+        # regardless of what the client uploaded.
+        return self._upload_profile_photo(file, f"students/{school_id}/{student_id}.jpg")
+
+    def upload_user_photo(self, file, user_id: int) -> str:
+        """
+        Upload a user account's avatar to Supabase Storage.
+
+        Args:
+            file: File object from request
+            user_id: User ID — file overwrites in place on re-upload
+
+        Returns:
+            str: Public URL of uploaded file
+        """
+        # User.school is a nullable/deprecated legacy field (users can belong to
+        # multiple schools via memberships), so the path is keyed by user_id only.
+        return self._upload_profile_photo(file, f"users/{user_id}.jpg")
+
+    def upload_staff_photo(self, file, school_id: int, staff_id: int) -> str:
+        """
+        Upload an HR staff member's photo to Supabase Storage.
+
+        Args:
+            file: File object from request
+            school_id: School ID for organizing files
+            staff_id: StaffMember ID — file overwrites in place on re-upload
+
+        Returns:
+            str: Public URL of uploaded file
+        """
+        return self._upload_profile_photo(file, f"staff/{school_id}/{staff_id}.jpg")
 
     def _extract_storage_path(self, public_url: str):
         """Extract the storage path from a Supabase public URL."""

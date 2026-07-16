@@ -831,7 +831,7 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
     def upload_photo(self, request, pk=None):
         """Upload (or replace) a student's profile photo."""
         from PIL import UnidentifiedImageError
-        from core.storage import storage_service
+        from core.storage import storage_service, validate_photo_upload
 
         student = self.get_object()
 
@@ -840,19 +840,10 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
 
         file = request.FILES['file']
 
-        allowed_types = ['image/jpeg', 'image/png', 'image/webp']
-        if file.content_type not in allowed_types:
-            return Response(
-                {'error': f'Invalid file type. Allowed: {", ".join(allowed_types)}'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        max_size = 5 * 1024 * 1024
-        if file.size > max_size:
-            return Response(
-                {'error': 'File too large. Maximum size is 5MB.'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        try:
+            validate_photo_upload(file)
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             if student.photo_url:

@@ -9,6 +9,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from .views import (
     CustomTokenObtainPairView,
     CurrentUserView,
+    ProfilePhotoView,
     ChangePasswordView,
     UserViewSet,
     SuperAdminUserCreateView,
@@ -30,6 +31,7 @@ urlpatterns = [
 
     # Current user
     path('auth/me/', CurrentUserView.as_view(), name='current_user'),
+    path('auth/me/photo/', ProfilePhotoView.as_view(), name='profile_photo'),
     path('auth/change-password/', ChangePasswordView.as_view(), name='change_password'),
     path('auth/switch-school/', SwitchSchoolView.as_view(), name='switch_school'),
 

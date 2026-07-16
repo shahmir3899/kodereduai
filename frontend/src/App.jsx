@@ -67,6 +67,7 @@ const MarksEntryPage = lazy(() => import('./pages/examinations/MarksEntryPage'))
 const ResultsPage = lazy(() => import('./pages/examinations/ResultsPage'))
 const ReportCardPage = lazy(() => import('./pages/examinations/ReportCardPage'))
 const GradeScalePage = lazy(() => import('./pages/examinations/GradeScalePage'))
+const AssessmentsPage = lazy(() => import('./pages/academics/AssessmentsPage'))
 const QuestionPaperBuilderPage = lazy(() => import('./pages/examinations/QuestionPaperBuilderPage'))
 const ExamPapersPage = lazy(() => import('./pages/examinations/ExamPapersPage'))
 const CurriculumCoveragePage = lazy(() => import('./pages/examinations/CurriculumCoveragePage'))
@@ -313,6 +314,20 @@ function AssessmentManageRoute({ children }) {
   return children
 }
 
+function AssessmentAccessRoute({ children }) {
+  const { effectiveRole } = useAuth()
+  if (effectiveRole !== 'SCHOOL_ADMIN' && effectiveRole !== 'PRINCIPAL' && effectiveRole !== 'TEACHER' && effectiveRole !== 'SUPER_ADMIN') {
+    return (
+      <AccessRestrictedRedirect
+        to="/dashboard"
+        title="Assessment Access Limited"
+        message="This page is available only to teachers and school admins." 
+      />
+    )
+  }
+  return children
+}
+
 function AdminPrincipalRoute({ children }) {
   const { effectiveRole } = useAuth()
   if (effectiveRole !== 'SCHOOL_ADMIN' && effectiveRole !== 'PRINCIPAL') {
@@ -433,6 +448,7 @@ function App() {
             <Route path="academics/calendar" element={<SchoolRoute><ModuleRoute module="academics"><ManagementRoute><AcademicCalendarPage /></ManagementRoute></ModuleRoute></SchoolRoute>} />
             <Route path="academics/sessions" element={<SchoolRoute><ModuleRoute module="academics"><ManagementRoute><AcademicYearsPage /></ManagementRoute></ModuleRoute></SchoolRoute>} />
             <Route path="academics/promotion" element={<SchoolRoute><ModuleRoute module="academics"><ManagementRoute><PromotionPage /></ManagementRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="assessments" element={<SchoolRoute><ModuleRoute module="examinations"><AssessmentAccessRoute><AssessmentsPage /></AssessmentAccessRoute></ModuleRoute></SchoolRoute>} />
             <Route path="academics/exam-types" element={<SchoolRoute><ModuleRoute module="examinations"><AssessmentManageRoute><ExamTypesPage /></AssessmentManageRoute></ModuleRoute></SchoolRoute>} />
             <Route path="academics/exams" element={<SchoolRoute><ModuleRoute module="examinations"><AssessmentManageRoute><ExamsPage /></AssessmentManageRoute></ModuleRoute></SchoolRoute>} />
             <Route path="academics/marks-entry" element={<SchoolRoute><ModuleRoute module="examinations"><MarksEntryPage /></ModuleRoute></SchoolRoute>} />

@@ -1258,7 +1258,7 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
         elements.append(Paragraph(f"Date: _________________", sig_text))
 
         # Footer
-        footer_text = f"Generated on {timezone.now().strftime('%d %b %Y at %H:%M')} | KoderEduAI"
+        footer_text = f"Generated on {timezone.now().strftime('%d %b %Y at %H:%M')} | EducationAI"
         elements.append(Spacer(1, 0.1*inch))
         elements.append(Paragraph(footer_text, styles['Normal']))
 

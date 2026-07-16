@@ -789,13 +789,28 @@ export default function StaffDirectoryPage() {
                       ) : <span className="w-4 h-4 block" />}
                     </td>
                     <td className="py-3 pr-4">
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">
-                          {member.first_name} {member.last_name}
-                        </p>
-                        {member.employee_id && (
-                          <p className="text-xs text-gray-500">{member.employee_id}</p>
+                      <div className="flex items-center gap-2.5">
+                        {member.photo_url ? (
+                          <img
+                            src={member.photo_url}
+                            alt={`${member.first_name} ${member.last_name}`}
+                            className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+                          />
+                        ) : (
+                          <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center flex-shrink-0">
+                            <span className="text-xs font-bold text-primary-700">
+                              {member.first_name?.charAt(0)}{member.last_name?.charAt(0)}
+                            </span>
+                          </div>
                         )}
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">
+                            {member.first_name} {member.last_name}
+                          </p>
+                          {member.employee_id && (
+                            <p className="text-xs text-gray-500">{member.employee_id}</p>
+                          )}
+                        </div>
                       </div>
                     </td>
                     <td className="py-3 pr-4 text-sm text-gray-600">
@@ -900,11 +915,19 @@ export default function StaffDirectoryPage() {
             {/* Header */}
             <div className="flex items-center justify-between p-6 border-b border-gray-200">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-full bg-primary-100 flex items-center justify-center">
-                  <span className="text-primary-700 font-bold text-lg">
-                    {viewMember.first_name?.charAt(0)}{viewMember.last_name?.charAt(0)}
-                  </span>
-                </div>
+                {viewMember.photo_url ? (
+                  <img
+                    src={viewMember.photo_url}
+                    alt={`${viewMember.first_name} ${viewMember.last_name}`}
+                    className="w-12 h-12 rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="w-12 h-12 rounded-full bg-primary-100 flex items-center justify-center">
+                    <span className="text-primary-700 font-bold text-lg">
+                      {viewMember.first_name?.charAt(0)}{viewMember.last_name?.charAt(0)}
+                    </span>
+                  </div>
+                )}
                 <div>
                   <h2 className="text-lg font-bold text-gray-900">{viewMember.first_name} {viewMember.last_name}</h2>
                   <p className="text-sm text-gray-500">{viewMember.employee_id}</p>

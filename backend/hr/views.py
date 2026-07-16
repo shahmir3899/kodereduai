@@ -11,6 +11,7 @@ from django.db import transaction
 from django.db.models import Count, Q, Sum
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
+from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 
@@ -521,6 +522,57 @@ class StaffMemberViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
             'username': staff.user.username,
             'role': staff.user.role,
         }, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'], parser_classes=[MultiPartParser, FormParser])
+    def upload_photo(self, request, pk=None):
+        """Upload (or replace) a staff member's photo."""
+        from PIL import UnidentifiedImageError
+        from core.storage import storage_service, validate_photo_upload
+
+        staff = self.get_object()
+
+        if 'file' not in request.FILES:
+            return Response({'error': 'No file provided.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        file = request.FILES['file']
+        try:
+            validate_photo_upload(file)
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            if staff.photo_url:
+                old_path = storage_service._extract_storage_path(staff.photo_url)
+                if old_path:
+                    storage_service.delete_file(old_path)
+
+            url = storage_service.upload_staff_photo(file, staff.school_id, staff.id)
+            staff.photo_url = url
+            staff.save(update_fields=['photo_url', 'updated_at'])
+
+            return Response({'photo_url': url, 'message': 'Photo uploaded successfully.'})
+        except UnidentifiedImageError:
+            return Response(
+                {'error': 'Could not process image file. It may be corrupted or in an unsupported format.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=True, methods=['post'], url_path='remove_photo')
+    def remove_photo(self, request, pk=None):
+        """Remove a staff member's photo."""
+        from core.storage import storage_service
+
+        staff = self.get_object()
+        if staff.photo_url:
+            old_path = storage_service._extract_storage_path(staff.photo_url)
+            if old_path:
+                storage_service.delete_file(old_path)
+            staff.photo_url = ''
+            staff.save(update_fields=['photo_url', 'updated_at'])
+
+        return Response({'message': 'Photo removed.'})
 
     @action(detail=False, methods=['post'], url_path='bulk-create-accounts')
     def bulk_create_accounts(self, request):

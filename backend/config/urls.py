@@ -1,5 +1,5 @@
 """
-URL configuration for KoderEduAI.pk Platform.
+URL configuration for EducationAI Platform.
 """
 
 from django.contrib import admin
@@ -47,7 +47,7 @@ def landing_metrics(request):
 def api_root(request):
     """API root endpoint with available endpoints."""
     return Response({
-        'name': 'KoderEduAI API',
+        'name': 'EducationAI API',
         'version': '1.0.0',
         'endpoints': {
             'auth': {

@@ -137,7 +137,7 @@ class BaseReportGenerator:
 
             # Footer
             elements.append(Spacer(1, 20))
-            footer_text = f"Generated on {datetime.now().strftime('%d %B %Y at %I:%M %p')} | KoderEduAI"
+            footer_text = f"Generated on {datetime.now().strftime('%d %B %Y at %I:%M %p')} | EducationAI"
             elements.append(Paragraph(footer_text, styles['Normal']))
 
             doc.build(elements)

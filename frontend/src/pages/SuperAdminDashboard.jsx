@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { schoolsApi, usersApi, organizationsApi, membershipsApi } from '../services/api'
 import { useConfirmModal } from '../components/ConfirmModal'
+import AvatarUpload from '../components/AvatarUpload'
 
 export default function SuperAdminDashboard() {
   const queryClient = useQueryClient()
@@ -157,6 +158,22 @@ export default function SuperAdminDashboard() {
   const toggleUserMutation = useMutation({
     mutationFn: ({ id, isActive }) => usersApi.updateUser(id, { is_active: !isActive }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['adminUsers'] }),
+  })
+
+  const uploadUserPhotoMutation = useMutation({
+    mutationFn: (file) => usersApi.uploadPhoto(editingUser.id, file),
+    onSuccess: (response) => {
+      queryClient.invalidateQueries({ queryKey: ['adminUsers'] })
+      setEditingUser((prev) => prev && { ...prev, profile_photo_url: response.data.profile_photo_url })
+    },
+  })
+
+  const removeUserPhotoMutation = useMutation({
+    mutationFn: () => usersApi.removePhoto(editingUser.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['adminUsers'] })
+      setEditingUser((prev) => prev && { ...prev, profile_photo_url: '' })
+    },
   })
 
   // Organization
@@ -937,6 +954,18 @@ export default function SuperAdminDashboard() {
       {showUserModal && (
         <Modal title={editingUser ? 'Edit User' : 'Add User'} onClose={() => { setShowUserModal(false); setEditingUser(null) }} scroll>
           <div className="space-y-4">
+            {editingUser && (
+              <div className="flex justify-center">
+                <AvatarUpload
+                  photoUrl={editingUser.profile_photo_url}
+                  displayName={`${newUser.first_name} ${newUser.last_name}`.trim() || editingUser.username}
+                  onUpload={(file) => uploadUserPhotoMutation.mutate(file)}
+                  onRemove={() => removeUserPhotoMutation.mutate()}
+                  uploading={uploadUserPhotoMutation.isPending}
+                  removing={removeUserPhotoMutation.isPending}
+                />
+              </div>
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               <Field label="First Name">
                 <input type="text" className="input" value={newUser.first_name}

@@ -1050,7 +1050,7 @@ class StudentTermAssessmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = StudentTermAssessment
         fields = [
-            'id', 'student', 'academic_year', 'term',
+            'id', 'student', 'academic_year', 'month', 'term',
             'listening', 'speaking', 'writing', 'reading',
             'participation', 'confidence', 'social_skills',
             'discipline', 'respect', 'teamwork', 'class_participation', 'responsibility',

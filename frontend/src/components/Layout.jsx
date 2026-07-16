@@ -508,6 +508,7 @@ export default function Layout() {
         ...(isModuleEnabled('examinations') ? [
           ...(!isTeacher ? [{ name: 'Exam Types', href: '/academics/exam-types', icon: FolderIcon }] : []),
           ...(!isTeacher ? [{ name: 'Exams', href: '/academics/exams', icon: ClipboardIcon }] : []),
+          { name: 'Assessments', href: '/assessments', icon: DocumentIcon },
           { name: 'Marks Entry', href: '/academics/marks-entry', icon: DocumentIcon },
           ...(!isTeacher ? [{ name: 'Grade Scale', href: '/academics/grade-scale', icon: SettingsIcon }] : []),
           { name: 'Results', href: '/academics/results', icon: ChartIcon },
@@ -707,8 +708,8 @@ export default function Layout() {
           {isSuperAdmin ? (
             // Super admin sees platform branding
             <>
-              <img src="/Logo.jpeg" alt="KoderEduAI" className="h-10 w-10 rounded-full object-cover flex-shrink-0" />
-              <h1 className="text-lg font-bold text-primary-600 whitespace-nowrap overflow-hidden text-ellipsis">KoderEduAI</h1>
+              <img src="/Logo.jpeg" alt="EducationAI" className="h-10 w-10 rounded-full object-cover flex-shrink-0" />
+              <h1 className="text-lg font-bold text-primary-600 whitespace-nowrap overflow-hidden text-ellipsis">EducationAI</h1>
             </>
           ) : (
             // School admin / staff / teacher sees their school branding
@@ -808,11 +809,19 @@ export default function Layout() {
             className="flex items-center mb-3 p-2 -m-2 rounded-lg hover:bg-gray-50 transition-colors"
             onClick={() => setSidebarOpen(false)}
           >
-            <div className="w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center">
-              <span className="text-primary-700 font-medium">
-                {userAvatarInitial}
-              </span>
-            </div>
+            {user?.profile_photo_url ? (
+              <img
+                src={user.profile_photo_url}
+                alt={userDisplayName}
+                className="w-10 h-10 rounded-full object-cover"
+              />
+            ) : (
+              <div className="w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center">
+                <span className="text-primary-700 font-medium">
+                  {userAvatarInitial}
+                </span>
+              </div>
+            )}
             <div className="ml-3">
               <p className="text-sm font-medium text-gray-900">{userDisplayName}</p>
               <p className="text-xs text-gray-500">{user?.role_display}</p>
@@ -897,11 +906,19 @@ export default function Layout() {
               {!isSuperAdmin && <NotificationBell />}
               <Link to="/profile" className="hidden lg:flex items-center hover:opacity-80 transition-opacity">
                 <span className="text-sm text-gray-600 mr-3">{userDisplayName}</span>
-                <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center">
-                  <span className="text-primary-700 font-medium text-sm">
-                    {userAvatarInitial}
-                  </span>
-                </div>
+                {user?.profile_photo_url ? (
+                  <img
+                    src={user.profile_photo_url}
+                    alt={userDisplayName}
+                    className="w-8 h-8 rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center">
+                    <span className="text-primary-700 font-medium text-sm">
+                      {userAvatarInitial}
+                    </span>
+                  </div>
+                )}
               </Link>
             </div>
           </div>

@@ -1,9 +1,9 @@
 """
-KoderEduAI - Comprehensive User Guide PDF Generator
+EducationAI - Comprehensive User Guide PDF Generator
 Generates a professional PDF user guide covering all modules and workflows.
 
 Source: generate_user_guide.py (project root)
-Output: KoderEduAI_User_Guide.pdf (project root)
+Output: EducationAI_User_Guide.pdf (project root)
         frontend/src/data/userGuide.json (for in-app guide)
 Run:    python generate_user_guide.py
 """
@@ -32,7 +32,7 @@ class UserGuidePDF(FPDF):
         if self.page_no() > 1:
             self.set_font("Helvetica", "I", 8)
             self.set_text_color(120, 120, 120)
-            self.cell(0, 8, "KoderEduAI - User Guide", align="L")
+            self.cell(0, 8, "EducationAI - User Guide", align="L")
             self.cell(0, 8, f"Page {self.page_no()}", align="R", new_x="LMARGIN", new_y="NEXT")
             self.set_draw_color(200, 200, 200)
             self.line(10, 14, 200, 14)
@@ -67,7 +67,7 @@ class UserGuidePDF(FPDF):
         self.ln(50)
         self.set_font("Helvetica", "B", 36)
         self.set_text_color(25, 60, 120)
-        self.cell(0, 20, "KoderEduAI", align="C", new_x="LMARGIN", new_y="NEXT")
+        self.cell(0, 20, "EducationAI", align="C", new_x="LMARGIN", new_y="NEXT")
         self.ln(5)
         self.set_font("Helvetica", "", 20)
         self.set_text_color(80, 80, 80)
@@ -80,7 +80,7 @@ class UserGuidePDF(FPDF):
         self.set_font("Helvetica", "", 12)
         self.set_text_color(100, 100, 100)
         self.cell(0, 8, "School Management System", align="C", new_x="LMARGIN", new_y="NEXT")
-        self.cell(0, 8, "Version 3.2 - Historical Scope and Promotion Corrections", align="C", new_x="LMARGIN", new_y="NEXT")
+        self.cell(0, 8, "Version 3.3 - Monthly Skill & Behaviour Assessments", align="C", new_x="LMARGIN", new_y="NEXT")
         self.ln(40)
         self.set_font("Helvetica", "", 10)
         self.cell(0, 6, "Modules Covered:", align="C", new_x="LMARGIN", new_y="NEXT")
@@ -351,7 +351,7 @@ def build_guide():
 
     pdf.section_title("Overview")
     pdf.body_text(
-        "KoderEduAI is a comprehensive School Management System that covers every aspect of school "
+        "EducationAI is a comprehensive School Management System that covers every aspect of school "
         "administration - from student enrollment and attendance tracking to finance, HR, academics, "
         "examinations, transport, library, and more. The system supports multiple user roles and provides "
         "dedicated portals for administrators, teachers, parents, and students."
@@ -867,6 +867,32 @@ def build_guide():
     pdf.info_box("Complete Exam Workflow",
                  "Grade Scale > Exam Types > Create Exam > Enter Marks > View Results > Publish > Report Cards. "
                  "Each step depends on the previous one.")
+
+    pdf.section_title("Step 7: Monthly Skill & Behaviour Assessments")
+    pdf.nav_path("Sidebar > Academics > Assessments")
+    pdf.body_text(
+        "Separately from exam marks, teachers record a monthly snapshot of each student's skills "
+        "(Listening, Speaking, Writing, Reading, Participation, Confidence, Social Skills) and behaviour "
+        "(Discipline, Respect, Teamwork, Class Participation, Responsibility), plus a Teacher Remark and "
+        "a Principal Remark. Each snapshot is scoped to one student, one academic year, and one calendar "
+        "month, so a fresh set of ratings can be entered every month."
+    )
+    pdf.step("Select the Academic Year, Class, and Month from the filters at the top of the page.")
+    pdf.step("The roster loads every student enrolled in that class for the selected month.")
+    pdf.step("Rate each skill and behaviour on a 5-point scale: Needs Improvement, Fair, Good, Very Good, Excellent.")
+    pdf.step("Write a Teacher Remark, or click 'AI Suggest' next to the remark box to draft one from the "
+             "ratings already entered for that student. Review and edit any AI draft before saving.")
+    pdf.step("Click 'Save' on a single student's row to save just that student, or 'Save Month' to save "
+             "the whole class roster at once.")
+    pdf.bullet("The page also works on a phone or tablet - the table becomes a scrollable list of cards.")
+    pdf.info_box("Principal Remark access",
+                 "Only School Admins, Principals, and Super Admins can edit the Principal Remark field. "
+                 "Teachers can view it, and their saves never overwrite an existing Principal Remark.")
+    pdf.body_text(
+        "The most recently saved month's ratings and remarks for the student's academic year appear "
+        "automatically on that student's Comprehensive Report (Skills Assessment, Behaviour Evaluation, "
+        "and Remarks sections) - no separate step is needed to publish them to the report."
+    )
 
     # =========================================================================
     # CHAPTER 6: FINANCE MODULE
@@ -1903,7 +1929,7 @@ def build_guide():
     pdf.chapter_title("User Management")
 
     pdf.body_text(
-        "KoderEduAI uses a hierarchical role system for user management. "
+        "EducationAI uses a hierarchical role system for user management. "
         "School Admins and Principals can create and manage users within their schools."
     )
 
@@ -1999,7 +2025,7 @@ def build_guide():
     pdf.chapter_title("AI Intelligence Features")
 
     pdf.body_text(
-        "KoderEduAI includes a suite of AI-powered intelligence features that operate across "
+        "EducationAI includes a suite of AI-powered intelligence features that operate across "
         "modules to improve accuracy, surface insights, and automate routine analysis. These "
         "features learn from your school's data patterns and become more effective over time."
     )
@@ -2130,7 +2156,7 @@ def build_guide():
     toc_data = pdf.toc_entries
 
     # Generate PDF
-    output_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "KoderEduAI_User_Guide.pdf")
+    output_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "EducationAI_User_Guide.pdf")
     pdf.output(output_path)
     print(f"PDF generated successfully at: {output_path}")
     print(f"Total pages: {pdf.page_no()}")
@@ -2143,9 +2169,9 @@ def build_guide():
     # =========================================================================
     json_data = {
         "meta": {
-            "title": "KoderEduAI",
+            "title": "EducationAI",
             "subtitle": "School Administration Guide",
-            "version": "3.1 - Session Class Standardization",
+            "version": "3.3 - Monthly Skill & Behaviour Assessments",
             "generatedAt": datetime.now(timezone.utc).isoformat(),
             "totalChapters": len(pdf.json_chapters),
             "modules": pdf.json_modules

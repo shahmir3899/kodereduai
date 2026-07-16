@@ -1,5 +1,6 @@
 from django.db import models
 from django.conf import settings
+from django.core.validators import MinValueValidator, MaxValueValidator
 from decimal import Decimal
 from pgvector.django import VectorField
 
@@ -989,6 +990,10 @@ class StudentTermAssessment(models.Model):
         related_name='student_term_assessments',
         help_text='Optional finer scope; left blank for a whole-year assessment',
     )
+    month = models.PositiveSmallIntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(12)],
+        help_text='Assessment month (1-12).',
+    )
 
     # Skills
     listening = models.IntegerField(choices=Rating.choices, null=True, blank=True)
@@ -1019,10 +1024,14 @@ class StudentTermAssessment(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = ('student', 'academic_year', 'term')
+        unique_together = ('student', 'academic_year', 'month')
         ordering = ['-updated_at']
         verbose_name = 'Student Term Assessment'
         verbose_name_plural = 'Student Term Assessments'
+        indexes = [
+            models.Index(fields=['school', 'academic_year', 'month'], name='exm_sta_sch_ay_m_idx'),
+            models.Index(fields=['student', 'academic_year', 'month'], name='exm_sta_std_ay_m_idx'),
+        ]
 
     def __str__(self):
         return f"Assessment for {self.student.name} - {self.academic_year}"

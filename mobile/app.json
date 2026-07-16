@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "KoderEduAI",
+    "name": "EducationAI",
     "slug": "kodereduai",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -54,13 +54,13 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow KoderEduAI to access your camera for attendance capture."
+          "cameraPermission": "Allow EducationAI to access your camera for attendance capture."
         }
       ],
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Allow KoderEduAI to use your location for journey tracking.",
+          "locationAlwaysAndWhenInUsePermission": "Allow EducationAI to use your location for journey tracking.",
           "isAndroidBackgroundLocationEnabled": true,
           "isAndroidForegroundServiceEnabled": true
         }
@@ -75,7 +75,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow KoderEduAI to access your photos."
+          "photosPermission": "Allow EducationAI to access your photos."
         }
       ]
     ],
