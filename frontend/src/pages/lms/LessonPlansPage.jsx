@@ -195,6 +195,7 @@ export default function LessonPlansPage() {
         ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
         page_size: 9999,
       }),
+    enabled: !!resolvedFilterClass,
   })
 
   const staff = staffData?.data?.results || staffData?.data || []

@@ -39,7 +39,7 @@ vi.mock('../../../contexts/AcademicYearContext', () => ({
 // Mock ClassSelector to avoid its internal complexity
 vi.mock('../../../components/ClassSelector', () => ({
   default: ({ value, onChange }) => (
-    <select data-testid="class-selector" value={value || ''} onChange={(e) => onChange(e.target.value)}>
+    <select data-testid="class-selector" value={value || ''} onChange={onChange}>
       <option value="">All Classes</option>
       <option value="1">Class 1A</option>
       <option value="2">Class 2B</option>
@@ -48,6 +48,10 @@ vi.mock('../../../components/ClassSelector', () => ({
 }))
 
 const WAIT_OPTS = { timeout: 3000 }
+
+function selectClass1() {
+  fireEvent.change(screen.getByTestId('class-selector'), { target: { value: '1' } })
+}
 
 describe('LessonPlansPage', () => {
   describe('Rendering', () => {
@@ -67,8 +71,18 @@ describe('LessonPlansPage', () => {
   })
 
   describe('Table', () => {
-    it('displays plan titles and metadata', async () => {
+    it('does not load any plans until a class filter is applied', async () => {
       renderWithProviders(<LessonPlansPage />)
+      await waitFor(() => {
+        expect(screen.getByText(/No lesson plans yet/)).toBeInTheDocument()
+      }, WAIT_OPTS)
+      expect(screen.queryByText('Introduction to Algebra')).not.toBeInTheDocument()
+      expect(screen.queryByText('Geometry Basics')).not.toBeInTheDocument()
+    })
+
+    it('displays plan titles and metadata once a class is selected', async () => {
+      renderWithProviders(<LessonPlansPage />)
+      selectClass1()
       await waitFor(() => {
         // Titles appear in both mobile cards and desktop table
         expect(screen.getAllByText('Introduction to Algebra').length).toBeGreaterThanOrEqual(1)
@@ -78,6 +92,7 @@ describe('LessonPlansPage', () => {
 
     it('shows status badges', async () => {
       renderWithProviders(<LessonPlansPage />)
+      selectClass1()
       await waitFor(() => {
         // Component renders plan.status directly (uppercase)
         expect(screen.getAllByText('DRAFT').length).toBeGreaterThanOrEqual(1)
@@ -87,6 +102,7 @@ describe('LessonPlansPage', () => {
 
     it('shows AI badge for AI-generated plans', async () => {
       renderWithProviders(<LessonPlansPage />)
+      selectClass1()
       await waitFor(() => {
         // Desktop table shows "AI", mobile cards show "AI Generated"
         const aiBadges = screen.getAllByText(/^AI/)
@@ -96,6 +112,7 @@ describe('LessonPlansPage', () => {
 
     it('shows class and subject names', async () => {
       renderWithProviders(<LessonPlansPage />)
+      selectClass1()
       await waitFor(() => {
         // Both plans are for Class 1A / Mathematics
         const classNames = screen.getAllByText('Class 1A')
@@ -132,6 +149,7 @@ describe('LessonPlansPage', () => {
   describe('Filters', () => {
     it('search filters plans client-side', async () => {
       renderWithProviders(<LessonPlansPage />)
+      selectClass1()
       await waitFor(() => {
         expect(screen.getAllByText('Introduction to Algebra').length).toBeGreaterThanOrEqual(1)
       }, WAIT_OPTS)

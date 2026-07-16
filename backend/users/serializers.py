@@ -85,6 +85,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             'role_display': user.get_role_display(),
             'school_id': default_mem.school_id if default_mem else user.school_id,
             'school_name': default_mem.school.name if default_mem else (user.school.name if user.school else None),
+            'profile_photo_url': user.profile_photo_url,
             'is_super_admin': user.is_super_admin,
             'organization_id': user.organization_id,
             'organization_name': user.organization.name if user.organization else None,

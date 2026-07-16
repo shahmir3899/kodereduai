@@ -15,6 +15,7 @@ import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useToast } from '../../components/Toast'
 import ClassSelector from '../../components/ClassSelector'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
+import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
 import {
   getClassSelectorScope,
   getResolvedMasterClassId,
@@ -106,6 +107,17 @@ export default function BulkLessonPlansModal({ onClose, onSuccess, onCreateSingl
   const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
   const resolvedClass = getResolvedMasterClassId(selectedClass, activeAcademicYear?.id, sessionClasses)
   const selectedSessionClassId = resolveSessionClassId(selectedClass, activeAcademicYear?.id, sessionClasses)
+
+  const {
+    showAllOption,
+    classOptions: teacherClassOptions,
+  } = useTeacherScopedClasses({
+    academicYearId: activeAcademicYear?.id,
+    selectedClass,
+    setSelectedClass,
+    autoSelectFirst: true,
+    queryKey: 'teacherLessonPlanClasses',
+  })
 
   const { data: classSubjectsData } = useQuery({
     queryKey: ['classSubjects', resolvedClass, selectedSessionClassId, activeAcademicYear?.id],
@@ -483,6 +495,8 @@ export default function BulkLessonPlansModal({ onClose, onSuccess, onCreateSingl
                   }}
                   scope={classSelectorScope}
                   academicYearId={activeAcademicYear?.id}
+                  showAllOption={showAllOption}
+                  classes={teacherClassOptions || undefined}
                 />
               </div>
               <div>
