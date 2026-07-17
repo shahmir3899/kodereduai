@@ -415,6 +415,19 @@ export const handlers = [
     const plan = mockLessonPlans.find(p => p.id === parseInt(params.id))
     return HttpResponse.json({ ...plan, status: 'PUBLISHED', status_display: 'Published' })
   }),
+  http.post('/api/lms/lesson-plans/bulk_delete/', async ({ request }) => {
+    const body = await request.json()
+    const ids = body.ids || []
+    return HttpResponse.json({ requested_count: ids.length, deleted_count: ids.length })
+  }),
+  http.post('/api/lms/lesson-plans/bulk_publish/', async ({ request }) => {
+    const body = await request.json()
+    const ids = body.ids || []
+    const publishedCount = mockLessonPlans.filter(
+      (p) => ids.includes(p.id) && p.status === 'DRAFT',
+    ).length
+    return HttpResponse.json({ requested_count: ids.length, published_count: publishedCount })
+  }),
 
   // LMS Assignments
   http.get('/api/lms/assignments/', ({ request }) => {

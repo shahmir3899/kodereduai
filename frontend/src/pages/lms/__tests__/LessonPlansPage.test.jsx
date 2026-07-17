@@ -53,6 +53,13 @@ function selectClass1() {
   fireEvent.change(screen.getByTestId('class-selector'), { target: { value: '1' } })
 }
 
+// Mock plans fall within 2026-03-15 .. 2026-03-20; both are covered by this range.
+function applyDateRange(container) {
+  const dateInputs = container.querySelectorAll('input[type="date"]')
+  fireEvent.change(dateInputs[0], { target: { value: '2026-03-01' } })
+  fireEvent.change(dateInputs[1], { target: { value: '2026-03-31' } })
+}
+
 describe('LessonPlansPage', () => {
   describe('Rendering', () => {
     it('renders header with Add button', async () => {
@@ -80,9 +87,20 @@ describe('LessonPlansPage', () => {
       expect(screen.queryByText('Geometry Basics')).not.toBeInTheDocument()
     })
 
-    it('displays plan titles and metadata once a class is selected', async () => {
+    it('does not load any plans when a class is selected but no date range is applied', async () => {
       renderWithProviders(<LessonPlansPage />)
       selectClass1()
+      await waitFor(() => {
+        expect(screen.getByText(/Select a valid lesson-date range/)).toBeInTheDocument()
+      }, WAIT_OPTS)
+      expect(screen.queryByText('Introduction to Algebra')).not.toBeInTheDocument()
+      expect(screen.queryByText('Geometry Basics')).not.toBeInTheDocument()
+    })
+
+    it('displays plan titles and metadata once a class and date range are applied', async () => {
+      const { container } = renderWithProviders(<LessonPlansPage />)
+      selectClass1()
+      applyDateRange(container)
       await waitFor(() => {
         // Titles appear in both mobile cards and desktop table
         expect(screen.getAllByText('Introduction to Algebra').length).toBeGreaterThanOrEqual(1)
@@ -91,8 +109,9 @@ describe('LessonPlansPage', () => {
     })
 
     it('shows status badges', async () => {
-      renderWithProviders(<LessonPlansPage />)
+      const { container } = renderWithProviders(<LessonPlansPage />)
       selectClass1()
+      applyDateRange(container)
       await waitFor(() => {
         // Component renders plan.status directly (uppercase)
         expect(screen.getAllByText('DRAFT').length).toBeGreaterThanOrEqual(1)
@@ -101,8 +120,9 @@ describe('LessonPlansPage', () => {
     })
 
     it('shows AI badge for AI-generated plans', async () => {
-      renderWithProviders(<LessonPlansPage />)
+      const { container } = renderWithProviders(<LessonPlansPage />)
       selectClass1()
+      applyDateRange(container)
       await waitFor(() => {
         // Desktop table shows "AI", mobile cards show "AI Generated"
         const aiBadges = screen.getAllByText(/^AI/)
@@ -111,8 +131,9 @@ describe('LessonPlansPage', () => {
     })
 
     it('shows class and subject names', async () => {
-      renderWithProviders(<LessonPlansPage />)
+      const { container } = renderWithProviders(<LessonPlansPage />)
       selectClass1()
+      applyDateRange(container)
       await waitFor(() => {
         // Both plans are for Class 1A / Mathematics
         const classNames = screen.getAllByText('Class 1A')
@@ -148,8 +169,9 @@ describe('LessonPlansPage', () => {
 
   describe('Filters', () => {
     it('search filters plans client-side', async () => {
-      renderWithProviders(<LessonPlansPage />)
+      const { container } = renderWithProviders(<LessonPlansPage />)
       selectClass1()
+      applyDateRange(container)
       await waitFor(() => {
         expect(screen.getAllByText('Introduction to Algebra').length).toBeGreaterThanOrEqual(1)
       }, WAIT_OPTS)
@@ -158,6 +180,77 @@ describe('LessonPlansPage', () => {
       await waitFor(() => {
         expect(screen.queryByText('Introduction to Algebra')).not.toBeInTheDocument()
         expect(screen.getAllByText('Geometry Basics').length).toBeGreaterThanOrEqual(1)
+      })
+    })
+  })
+
+  describe('Bulk actions', () => {
+    // mockLessonPlans: id 1 'Introduction to Algebra' is DRAFT, id 2 'Geometry Basics' is PUBLISHED.
+    function selectBothRowsInDesktopTable(container) {
+      const table = container.querySelector('table')
+      const rowCheckboxes = table.querySelectorAll('tbody input[type="checkbox"]')
+      fireEvent.click(rowCheckboxes[0])
+      fireEvent.click(rowCheckboxes[1])
+    }
+
+    it('shows the bulk actions toolbar with correct counts once plans are selected', async () => {
+      const { container } = renderWithProviders(<LessonPlansPage />)
+      selectClass1()
+      applyDateRange(container)
+      await waitFor(() => {
+        expect(screen.getAllByText('Introduction to Algebra').length).toBeGreaterThanOrEqual(1)
+      }, WAIT_OPTS)
+
+      selectBothRowsInDesktopTable(container)
+
+      await waitFor(() => {
+        expect(screen.getByText('2 selected')).toBeInTheDocument()
+      })
+      // Only the DRAFT plan is approvable.
+      expect(screen.getByText('Approve Selected (1)')).toBeInTheDocument()
+      expect(screen.getByText('Delete Selected (2)')).toBeInTheDocument()
+    })
+
+    it('bulk approve only publishes the selected draft plan(s), leaving other selections untouched', async () => {
+      const { container } = renderWithProviders(<LessonPlansPage />)
+      selectClass1()
+      applyDateRange(container)
+      await waitFor(() => {
+        expect(screen.getAllByText('Introduction to Algebra').length).toBeGreaterThanOrEqual(1)
+      }, WAIT_OPTS)
+
+      // Row 0 (DRAFT) and row 1 (already PUBLISHED) are both selected.
+      selectBothRowsInDesktopTable(container)
+      fireEvent.click(screen.getByText('Approve Selected (1)'))
+
+      // Only the DRAFT plan's selection is cleared after approving; the already-published
+      // plan that was also checked stays selected.
+      await waitFor(() => {
+        expect(screen.getByText('1 selected')).toBeInTheDocument()
+      })
+      expect(screen.getByText('Approve Selected (0)')).toBeInTheDocument()
+    })
+
+    it('bulk delete removes the selected plans after confirmation', async () => {
+      const { container } = renderWithProviders(<LessonPlansPage />)
+      selectClass1()
+      applyDateRange(container)
+      await waitFor(() => {
+        expect(screen.getAllByText('Introduction to Algebra').length).toBeGreaterThanOrEqual(1)
+      }, WAIT_OPTS)
+
+      const table = container.querySelector('table')
+      fireEvent.click(table.querySelectorAll('tbody input[type="checkbox"]')[0])
+      fireEvent.click(screen.getByText('Delete Selected (1)'))
+
+      await waitFor(() => {
+        expect(screen.getByText('Delete Lesson Plans')).toBeInTheDocument()
+      })
+      const deleteButtons = screen.getAllByRole('button', { name: 'Delete' })
+      fireEvent.click(deleteButtons[deleteButtons.length - 1])
+
+      await waitFor(() => {
+        expect(screen.queryByText('Delete Lesson Plans')).not.toBeInTheDocument()
       })
     })
   })

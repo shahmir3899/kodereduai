@@ -1077,6 +1077,8 @@ export const lmsApi = {
   linkLessonPlanObjectives: (id, objectiveIds) =>
     api.post(`/api/lms/lesson-plans/${id}/link_objectives/`, { objective_ids: objectiveIds }),
   bulkCreateLessonPlans: (data) => api.post('/api/lms/lesson-plans/bulk_create/', data),
+  bulkDeleteLessonPlans: (ids) => api.post('/api/lms/lesson-plans/bulk_delete/', { ids }),
+  bulkPublishLessonPlans: (ids) => api.post('/api/lms/lesson-plans/bulk_publish/', { ids }),
 
   // Assignments
   getAssignments: (params) => api.get('/api/lms/assignments/', { params }),

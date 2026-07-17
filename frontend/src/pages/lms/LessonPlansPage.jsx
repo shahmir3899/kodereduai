@@ -103,6 +103,8 @@ export default function LessonPlansPage() {
   const [topicPickerOpen, setTopicPickerOpen] = useState(false)
   const [editingPlan, setEditingPlan] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
+  const [selectedIds, setSelectedIds] = useState(new Set())
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false)
   const [form, setForm] = useState({ ...EMPTY_FORM })
   const isMinimal = form.mode === 'MINIMAL' && !editingPlan
   const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
@@ -186,6 +188,8 @@ export default function LessonPlansPage() {
     queryFn: () => hrApi.getStaff({ status: 'ACTIVE', page_size: 9999 }),
   })
 
+  const hasValidDateRange = Boolean(exportDateFrom && exportDateTo && exportDateFrom <= exportDateTo)
+
   const { data: plansData, isLoading } = useQuery({
     queryKey: ['lessonPlans', resolvedFilterClass, filterSubject, activeAcademicYear?.id],
     queryFn: () =>
@@ -195,14 +199,15 @@ export default function LessonPlansPage() {
         ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
         page_size: 9999,
       }),
-    enabled: !!resolvedFilterClass,
+    // Lesson plans are only fetched once a class AND a valid lesson-date range are applied.
+    enabled: !!resolvedFilterClass && hasValidDateRange,
   })
 
   const staff = staffData?.data?.results || staffData?.data || []
   const allPlans = plansData?.data?.results || plansData?.data || []
 
   // Client-side search
-  const plans = useMemo(() => {
+  const searchedPlans = useMemo(() => {
     if (!search) return allPlans
     const q = search.toLowerCase()
     return allPlans.filter(
@@ -212,16 +217,53 @@ export default function LessonPlansPage() {
     )
   }, [allPlans, search])
 
-  const exportPlans = useMemo(() => {
-    if (!exportDateFrom || !exportDateTo || exportDateFrom > exportDateTo) return []
-    return plans
-      .filter((p) => p.lesson_date && p.lesson_date >= exportDateFrom && p.lesson_date <= exportDateTo)
-      .slice()
-      .sort((a, b) => String(a.lesson_date).localeCompare(String(b.lesson_date)))
-  }, [plans, exportDateFrom, exportDateTo])
+  // Restrict to the applied lesson-date range (the same range gates fetching above).
+  const plans = useMemo(() => {
+    if (!hasValidDateRange) return []
+    return searchedPlans.filter(
+      (p) => p.lesson_date && p.lesson_date >= exportDateFrom && p.lesson_date <= exportDateTo,
+    )
+  }, [searchedPlans, hasValidDateRange, exportDateFrom, exportDateTo])
 
-  const canDownloadExport =
-    Boolean(exportDateFrom && exportDateTo && exportDateFrom <= exportDateTo) && exportPlans.length > 0
+  const exportPlans = useMemo(
+    () => plans.slice().sort((a, b) => String(a.lesson_date).localeCompare(String(b.lesson_date))),
+    [plans],
+  )
+
+  const canDownloadExport = hasValidDateRange && exportPlans.length > 0
+
+  // Only the currently visible/filtered plans are selectable/actionable in bulk.
+  const selectedVisibleIds = useMemo(
+    () => plans.filter((p) => selectedIds.has(p.id)).map((p) => p.id),
+    [plans, selectedIds],
+  )
+  const selectedDraftIds = useMemo(
+    () => plans.filter((p) => selectedIds.has(p.id) && p.status === 'DRAFT').map((p) => p.id),
+    [plans, selectedIds],
+  )
+  const allVisibleSelected = plans.length > 0 && plans.every((p) => selectedIds.has(p.id))
+  const someVisibleSelected = plans.some((p) => selectedIds.has(p.id))
+
+  const toggleSelectPlan = (id) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const toggleSelectAllVisible = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (allVisibleSelected) {
+        plans.forEach((p) => next.delete(p.id))
+      } else {
+        plans.forEach((p) => next.add(p.id))
+      }
+      return next
+    })
+  }
 
   // -- Mutations --
 
@@ -289,6 +331,42 @@ export default function LessonPlansPage() {
     },
     onError: (error) => {
       showError(error.response?.data?.detail || 'Failed to publish lesson plan')
+    },
+  })
+
+  const clearSelectedIds = (ids) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      ids.forEach((id) => next.delete(id))
+      return next
+    })
+  }
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: (ids) => lmsApi.bulkDeleteLessonPlans(ids),
+    onSuccess: (response, ids) => {
+      queryClient.invalidateQueries({ queryKey: ['lessonPlans'] })
+      clearSelectedIds(ids)
+      setBulkDeleteConfirm(false)
+      const deletedCount = response?.data?.deleted_count ?? ids.length
+      showSuccess(`Deleted ${deletedCount} lesson plan(s).`)
+    },
+    onError: (error) => {
+      setBulkDeleteConfirm(false)
+      showError(error.response?.data?.detail || 'Failed to delete the selected lesson plans.')
+    },
+  })
+
+  const bulkPublishMutation = useMutation({
+    mutationFn: (ids) => lmsApi.bulkPublishLessonPlans(ids),
+    onSuccess: (response, ids) => {
+      queryClient.invalidateQueries({ queryKey: ['lessonPlans'] })
+      clearSelectedIds(ids)
+      const publishedCount = response?.data?.published_count ?? ids.length
+      showSuccess(`Approved ${publishedCount} lesson plan(s).`)
+    },
+    onError: (error) => {
+      showError(error.response?.data?.detail || 'Failed to approve the selected lesson plans.')
     },
   })
 
@@ -545,7 +623,7 @@ export default function LessonPlansPage() {
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4 mt-4 pt-4 border-t border-gray-100">
           <div>
-            <label className="label">Download — from (lesson date)</label>
+            <label className="label">Lesson date — from</label>
             <input
               type="date"
               className="input"
@@ -554,7 +632,7 @@ export default function LessonPlansPage() {
             />
           </div>
           <div>
-            <label className="label">Download — to (lesson date)</label>
+            <label className="label">Lesson date — to</label>
             <input
               type="date"
               className="input"
@@ -581,8 +659,8 @@ export default function LessonPlansPage() {
               Download lesson plans (PDF)
             </button>
             <p className="text-xs text-gray-500 mt-1">
-              Pick a date range, then download a formatted PDF with full details for every plan in range
-              (respects class, subject, and search above).
+              This date range also controls which lesson plans are shown below. Download gets a formatted
+              PDF with full details for every plan in range (respects class, subject, and search above).
             </p>
           </div>
         </div>
@@ -597,39 +675,47 @@ export default function LessonPlansPage() {
 
       {/* Table */}
       <div className="card">
-        {isLoading ? (
+        {!resolvedFilterClass ? (
+          <div className="p-4 sm:p-6">
+            <div className="flex items-center gap-3 flex-wrap">
+              {/* Step 1 */}
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-blue-100 text-blue-700 ring-2 ring-blue-300">
+                <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-blue-500 text-white">1</span>
+                Filter Class / Subject
+              </div>
+              <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+              {/* Step 2 */}
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-gray-100 text-gray-400">
+                <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-gray-300 text-white">2</span>
+                Create Lesson Plan
+              </div>
+              <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+              {/* Step 3 */}
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-gray-100 text-gray-400">
+                <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-gray-300 text-white">3</span>
+                Publish &amp; Track
+              </div>
+            </div>
+            <p className="text-sm text-gray-500 mt-3">
+              No lesson plans yet. Select a class above to get started.
+            </p>
+          </div>
+        ) : !hasValidDateRange ? (
+          <div className="p-4 sm:p-6 text-center text-gray-500">
+            <p className="text-sm">
+              Select a valid lesson-date range above ("Lesson date - from/to") to view lesson plans for this class.
+            </p>
+          </div>
+        ) : isLoading ? (
           <div className="text-center py-8">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
             <p className="text-gray-500 mt-2">Loading lesson plans...</p>
           </div>
         ) : plans.length === 0 ? (
           allPlans.length === 0 ? (
-            <div className="p-4 sm:p-6">
-              <div className="flex items-center gap-3 flex-wrap">
-                {/* Step 1 */}
-                <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${
-                  filterClass ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700 ring-2 ring-blue-300'
-                }`}>
-                  <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${
-                    filterClass ? 'bg-green-500 text-white' : 'bg-blue-500 text-white'
-                  }`}>{filterClass ? '\u2713' : '1'}</span>
-                  Filter Class / Subject
-                </div>
-                <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-                {/* Step 2 */}
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-gray-100 text-gray-400">
-                  <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-gray-300 text-white">2</span>
-                  Create Lesson Plan
-                </div>
-                <svg className="w-4 h-4 text-gray-300 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-                {/* Step 3 */}
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm bg-gray-100 text-gray-400">
-                  <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold bg-gray-300 text-white">3</span>
-                  Publish &amp; Track
-                </div>
-              </div>
-              <p className="text-sm text-gray-500 mt-3">
-                No lesson plans yet. Use the filters above or click "Create" to get started.
+            <div className="p-4 sm:p-6 text-center text-gray-500">
+              <p className="text-sm">
+                No lesson plans found for the selected class/subject and date range.
               </p>
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-3">
                 <p className="text-xs text-blue-700">
@@ -639,16 +725,73 @@ export default function LessonPlansPage() {
             </div>
           ) : (
             <div className="text-center py-8 text-gray-500">
-              No lesson plans match your search.
+              No lesson plans match your search within the selected date range.
             </div>
           )
         ) : (
           <>
+            {/* Bulk actions toolbar */}
+            {someVisibleSelected && (
+              <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2 bg-blue-50 border-b border-blue-100">
+                <span className="text-sm text-blue-800 font-medium">
+                  {selectedVisibleIds.length} selected
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="text-xs text-gray-600 hover:text-gray-800"
+                    onClick={() => clearSelectedIds(selectedVisibleIds)}
+                  >
+                    Clear
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary text-xs py-1 px-3"
+                    disabled={selectedDraftIds.length === 0 || bulkPublishMutation.isPending}
+                    onClick={() => bulkPublishMutation.mutate(selectedDraftIds)}
+                    title={
+                      selectedDraftIds.length === 0
+                        ? 'No draft plans selected'
+                        : `Approve ${selectedDraftIds.length} plan(s)`
+                    }
+                  >
+                    {bulkPublishMutation.isPending
+                      ? 'Approving...'
+                      : `Approve Selected (${selectedDraftIds.length})`}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-danger text-xs py-1 px-3"
+                    onClick={() => setBulkDeleteConfirm(true)}
+                  >
+                    Delete Selected ({selectedVisibleIds.length})
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Mobile card view */}
-            <div className="sm:hidden space-y-2">
+            <div className="sm:hidden space-y-2 p-2">
+              <label className="flex items-center gap-2 px-1 pb-1 text-xs text-gray-600">
+                <input
+                  type="checkbox"
+                  checked={allVisibleSelected}
+                  ref={(el) => {
+                    if (el) el.indeterminate = !allVisibleSelected && someVisibleSelected
+                  }}
+                  onChange={toggleSelectAllVisible}
+                />
+                Select all ({plans.length})
+              </label>
               {plans.map((plan) => (
                 <div key={plan.id} className="p-3 border border-gray-200 rounded-lg">
                   <div className="flex items-start justify-between gap-2">
+                    <input
+                      type="checkbox"
+                      className="mt-1"
+                      checked={selectedIds.has(plan.id)}
+                      onChange={() => toggleSelectPlan(plan.id)}
+                    />
                     <div className="min-w-0 flex-1">
                       <p className="font-medium text-sm text-gray-900 truncate">{plan.title}</p>
                       {plan.description?.trim() && (
@@ -739,6 +882,16 @@ export default function LessonPlansPage() {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
+                    <th className="px-4 py-3 text-left w-8">
+                      <input
+                        type="checkbox"
+                        checked={allVisibleSelected}
+                        ref={(el) => {
+                          if (el) el.indeterminate = !allVisibleSelected && someVisibleSelected
+                        }}
+                        onChange={toggleSelectAllVisible}
+                      />
+                    </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                       Title
                     </th>
@@ -768,6 +921,13 @@ export default function LessonPlansPage() {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {plans.map((plan) => (
                     <tr key={plan.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(plan.id)}
+                          onChange={() => toggleSelectPlan(plan.id)}
+                        />
+                      </td>
                       <td className="px-4 py-3 text-sm max-w-[280px]">
                         <div className="font-medium text-gray-900 truncate">{plan.title}</div>
                         {plan.description?.trim() && (
@@ -1240,6 +1400,31 @@ export default function LessonPlansPage() {
                 className="btn btn-danger"
               >
                 {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Delete Confirmation Modal */}
+      {bulkDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
+            <h2 className="text-xl font-bold text-gray-900 mb-2">Delete Lesson Plans</h2>
+            <p className="text-gray-600 mb-6">
+              Are you sure you want to delete <strong>{selectedVisibleIds.length}</strong> selected lesson
+              plan(s)? This action cannot be undone.
+            </p>
+            <div className="flex justify-end space-x-3">
+              <button onClick={() => setBulkDeleteConfirm(false)} className="btn btn-secondary">
+                Cancel
+              </button>
+              <button
+                onClick={() => bulkDeleteMutation.mutate(selectedVisibleIds)}
+                disabled={bulkDeleteMutation.isPending}
+                className="btn btn-danger"
+              >
+                {bulkDeleteMutation.isPending ? 'Deleting...' : 'Delete'}
               </button>
             </div>
           </div>

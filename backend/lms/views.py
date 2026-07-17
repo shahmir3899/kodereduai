@@ -1628,6 +1628,72 @@ class LessonPlanViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         serializer = LessonPlanReadSerializer(plan)
         return Response(serializer.data)
 
+    @action(detail=False, methods=['post'], url_path='bulk_delete')
+    def bulk_delete(self, request):
+        """
+        Delete many lesson plans in a single request (avoids one HTTP
+        round-trip per plan, which is what made bulk deletes slow before).
+
+        POST /api/lms/lesson-plans/bulk_delete/
+        Body: {"ids": [1, 2, 3]}
+        """
+        ids = request.data.get('ids') or []
+        if not isinstance(ids, list) or not ids:
+            return Response(
+                {'error': 'ids must be a non-empty list.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        queryset = self.get_queryset().filter(id__in=ids)
+        # queryset.delete()'s own count includes cascaded rows (attachments, M2M
+        # through-rows, etc.), so count matching plans up front instead.
+        deleted_count = queryset.count()
+        queryset.delete()
+
+        logger.info(
+            f"Bulk deleted {deleted_count} lesson plan(s) (requested {len(ids)}) "
+            f"by {request.user.email}"
+        )
+
+        return Response({'requested_count': len(ids), 'deleted_count': deleted_count})
+
+    @action(detail=False, methods=['post'], url_path='bulk_publish')
+    def bulk_publish(self, request):
+        """
+        Publish many draft lesson plans in a single request. Plans that are
+        already published (or outside the caller's scope) are silently
+        skipped rather than treated as failures.
+
+        POST /api/lms/lesson-plans/bulk_publish/
+        Body: {"ids": [1, 2, 3]}
+        """
+        ids = request.data.get('ids') or []
+        if not isinstance(ids, list) or not ids:
+            return Response(
+                {'error': 'ids must be a non-empty list.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        plans = list(self.get_queryset().filter(id__in=ids, status=LessonPlan.Status.DRAFT))
+        published_ids = [plan.id for plan in plans]
+
+        LessonPlan.objects.filter(id__in=published_ids).update(status=LessonPlan.Status.PUBLISHED)
+
+        logger.info(
+            f"Bulk published {len(published_ids)} lesson plan(s) (requested {len(ids)}) "
+            f"by {request.user.email}"
+        )
+
+        from notifications.triggers import trigger_lesson_plan_published
+        for plan in plans:
+            plan.status = LessonPlan.Status.PUBLISHED
+            try:
+                trigger_lesson_plan_published(plan)
+            except Exception as e:
+                logger.warning(f"Could not send lesson plan notification for {plan.id}: {e}")
+
+        return Response({'requested_count': len(ids), 'published_count': len(published_ids)})
+
     @action(detail=True, methods=['post'], url_path='link_objectives')
     def link_objectives(self, request, pk=None):
         plan = self.get_object()
