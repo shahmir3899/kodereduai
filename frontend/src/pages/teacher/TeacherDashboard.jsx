@@ -69,7 +69,7 @@ const icons = {
 }
 
 export default function TeacherDashboard() {
-  const { user, isModuleEnabled } = useAuth()
+  const { user, activeSchool, isModuleEnabled } = useAuth()
   const { activeAcademicYear } = useAcademicYear()
   const now = new Date()
   const todayDay = DAY_NAMES[now.getDay()]
@@ -88,6 +88,16 @@ export default function TeacherDashboard() {
   const todayDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
 
   // ─── Queries ──────────────────────────────────────────────────────────────────
+
+  // Academic calendar: is today an OFF day (holiday/weekly-off/custom)?
+  const { data: dailyReportRes } = useQuery({
+    queryKey: ['teacherDailyReport', todayDate, activeSchool?.id, activeAcademicYear?.id],
+    queryFn: () => attendanceApi.getDailyReport(todayDate, activeSchool?.id, activeAcademicYear?.id),
+    enabled: isModuleEnabled('attendance') && !!activeSchool?.id,
+  })
+  const isOffDay = !!dailyReportRes?.data?.is_off_day
+  const offDayTypes = dailyReportRes?.data?.off_day_types || []
+  const offDayLabel = `OFF Day${offDayTypes.length ? `: ${offDayTypes.join(', ')}` : ''}`
 
   // Today's timetable
   const { data: timetableRes, isLoading: loadingTimetable } = useQuery({
@@ -159,7 +169,9 @@ export default function TeacherDashboard() {
 
   const { data: classTeacherScopeRes } = useQuery({
     queryKey: ['myClassTeacherAssignments', activeAcademicYear?.id],
-    queryFn: () => academicsApi.getMyClassTeacherAssignments(),
+    queryFn: () => academicsApi.getMyClassTeacherAssignments(
+      activeAcademicYear?.id ? { academic_year: activeAcademicYear.id } : undefined,
+    ),
     enabled: isModuleEnabled('academics'),
   })
   const classTeacherAssignments = classTeacherScopeRes?.data || []
@@ -301,10 +313,10 @@ export default function TeacherDashboard() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
         <StatCard
           label="Classes Today"
-          value={timetable.length}
-          subtitle={currentPeriodIdx >= 0 ? `Now: ${timetable[currentPeriodIdx]?.subject_name || 'Class'}` : undefined}
+          value={isOffDay ? 'OFF' : timetable.length}
+          subtitle={isOffDay ? offDayLabel : (currentPeriodIdx >= 0 ? `Now: ${timetable[currentPeriodIdx]?.subject_name || 'Class'}` : undefined)}
           icon={icons.classes}
-          color="blue"
+          color={isOffDay ? 'gray' : 'blue'}
           loading={loadingTimetable}
           cardClassName="h-28"
         />
@@ -313,7 +325,9 @@ export default function TeacherDashboard() {
             <div className="flex items-start justify-between">
               <div className="min-w-0">
                 <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Attendance to Mark</p>
-                {loadingAttendanceProgress ? (
+                {isOffDay ? (
+                  <p className="text-sm text-gray-500 mt-1 font-medium">{offDayLabel}</p>
+                ) : loadingAttendanceProgress ? (
                   <p className="text-sm text-gray-400 mt-1">Loading...</p>
                 ) : attendanceProgressByClass?.length ? (
                   <div className="mt-2 space-y-1.5 max-h-14 overflow-y-auto pr-1">
@@ -335,7 +349,7 @@ export default function TeacherDashboard() {
                   <p className="text-sm text-gray-400 mt-1">No classes assigned</p>
                 )}
               </div>
-              <div className="w-10 h-10 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
+              <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${isOffDay ? 'bg-gray-100 text-gray-500' : 'bg-amber-100 text-amber-600'}`}>
                 {icons.attendance}
               </div>
             </div>
@@ -372,7 +386,6 @@ export default function TeacherDashboard() {
           <div className="card">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-sm font-semibold text-gray-900">Class Teacher Scope</h2>
-              <Link to="/academics/subjects" className="text-xs text-sky-600 hover:text-sky-700 font-medium">Manage</Link>
             </div>
             {scopeSummary.classTeacherClasses.length === 0 ? (
               <p className="text-sm text-gray-400">No class-teacher assignments in the current academic year.</p>
@@ -391,7 +404,6 @@ export default function TeacherDashboard() {
           <div className="card">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-sm font-semibold text-gray-900">Subject Teacher Scope</h2>
-              <Link to="/academics/subjects" className="text-xs text-sky-600 hover:text-sky-700 font-medium">Assignments</Link>
             </div>
             {scopeSummary.subjectTeacherClasses.length === 0 ? (
               <p className="text-sm text-gray-400">No subject-teacher assignments in the current academic year.</p>
@@ -422,6 +434,11 @@ export default function TeacherDashboard() {
               <h2 className="text-sm font-semibold text-gray-900">Today's Timetable</h2>
               <Link to="/academics/timetable" className="text-xs text-sky-600 hover:text-sky-700 font-medium">Full Timetable</Link>
             </div>
+            {isOffDay && (
+              <div className="mb-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
+                {offDayLabel} — school is not in session today. Periods below are the regular weekly schedule and won't run.
+              </div>
+            )}
             {loadingTimetable ? (
               <div className="space-y-2 animate-pulse">
                 {[...Array(4)].map((_, i) => <div key={i} className="h-12 bg-gray-50 rounded-lg" />)}
@@ -431,7 +448,7 @@ export default function TeacherDashboard() {
             ) : (
               <div className="space-y-1.5">
                 {timetable.map((entry, idx) => {
-                  const isCurrent = idx === currentPeriodIdx
+                  const isCurrent = !isOffDay && idx === currentPeriodIdx
                   return (
                     <div
                       key={entry.id}

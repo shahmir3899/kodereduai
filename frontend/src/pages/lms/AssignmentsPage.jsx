@@ -107,7 +107,9 @@ export default function AssignmentsPage() {
 
   const { data: classTeacherScopeRes, isLoading: classTeacherScopeLoading } = useQuery({
     queryKey: ['myClassTeacherAssignments', activeAcademicYear?.id],
-    queryFn: () => academicsApi.getMyClassTeacherAssignments(),
+    queryFn: () => academicsApi.getMyClassTeacherAssignments(
+      activeAcademicYear?.id ? { academic_year: activeAcademicYear.id } : undefined,
+    ),
     enabled: isTeacher,
   })
 

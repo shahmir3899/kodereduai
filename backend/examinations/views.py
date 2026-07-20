@@ -855,11 +855,14 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
         return ctx
 
     def get_queryset(self):
+        from academic_sessions.utils import annotate_session_class_display
+
         qs = super().get_queryset().select_related(
             'school', 'academic_year', 'term', 'exam_type', 'class_obj', 'exam_group',
         ).annotate(
             subjects_count=Count('exam_subjects', filter=Q(exam_subjects__is_active=True)),
         )
+        qs = annotate_session_class_display(qs)
         qs = _apply_teacher_exam_scope(qs, self.request, class_field='class_obj_id')
         scope = resolve_class_scope(
             self.request,
@@ -1451,10 +1454,12 @@ class StudentMarkViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
         ws.merge_cells('A1:E1')
         ws['A1'] = f'Marks Entry - {exam_subject.exam.name}'
         ws['A1'].font = header_font
+        from academic_sessions.utils import resolve_class_display_name
+
         ws.merge_cells('A2:E2')
         ws['A2'] = (
             f'Subject: {exam_subject.subject.name} | '
-            f'Class: {exam_subject.exam.class_obj.name} | '
+            f'Class: {resolve_class_display_name(exam_subject.exam.school_id, exam_subject.exam.academic_year_id, exam_subject.exam.class_obj)} | '
             f'Total Marks: {exam_subject.total_marks} | '
             f'Passing: {exam_subject.passing_marks}'
         )
@@ -2010,7 +2015,7 @@ class ReportCardView(ModuleAccessMixin, APIView):
         except Student.DoesNotExist:
             return Response({'detail': 'Student not found.'}, status=404)
 
-        enrollment_qs = StudentEnrollment.objects.select_related('class_obj', 'academic_year').filter(
+        enrollment_qs = StudentEnrollment.objects.select_related('class_obj', 'academic_year', 'session_class').filter(
             school_id=school_id,
             student_id=student.id,
         )
@@ -2181,17 +2186,28 @@ class ReportCardView(ModuleAccessMixin, APIView):
                 'is_absent': subj_absent,
             })
 
+        from academic_sessions.utils import resolve_class_display_name, resolve_current_academic_year_id
+
+        enrollment_class_name = (
+            enrollment.session_class.display_name
+            if enrollment.session_class_id and enrollment.session_class.display_name
+            else enrollment.class_obj.name
+        )
+        current_class_name = resolve_class_display_name(
+            school_id, resolve_current_academic_year_id(school_id), student.class_obj,
+        )
+
         return Response({
             'student_name': student.name,
             'roll_number': enrollment.roll_number or student.roll_number,
-            'class_name': enrollment.class_obj.name,
+            'class_name': enrollment_class_name,
             'school_name': student.school.name,
             'academic_year_name': enrollment.academic_year.name,
             'term_name': exams[0].term.name if exams and exams[0].term else None,
             'enrollment_info': {
                 'enrollment_id': enrollment.id,
-                'class_at_report_session': enrollment.class_obj.name,
-                'current_class': student.class_obj.name if student.class_obj else None,
+                'class_at_report_session': enrollment_class_name,
+                'current_class': current_class_name,
                 'academic_year_id': enrollment.academic_year_id,
                 'academic_year_name': enrollment.academic_year.name,
             },
@@ -2199,7 +2215,7 @@ class ReportCardView(ModuleAccessMixin, APIView):
                 'id': student.id,
                 'name': student.name,
                 'roll_number': enrollment.roll_number or student.roll_number,
-                'class_name': enrollment.class_obj.name,
+                'class_name': enrollment_class_name,
                 'school_name': student.school.name,
             },
             'subjects': subject_summaries,

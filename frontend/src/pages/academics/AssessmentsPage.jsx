@@ -6,6 +6,7 @@ import { useToast } from '../../components/Toast'
 import ClassSelector from '../../components/ClassSelector'
 import { examinationsApi, sessionsApi } from '../../services/api'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
+import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 
 const MONTH_NAMES = [
@@ -132,6 +133,14 @@ export default function AssessmentsPage() {
       setAcademicYearId(String(activeAcademicYear.id))
     }
   }, [activeAcademicYear?.id])
+
+  const { classOptions: teacherClassOptions } = useTeacherScopedClasses({
+    academicYearId: academicYearId || undefined,
+    selectedClass: selectedClassId,
+    setSelectedClass: setSelectedClassId,
+    autoSelectFirst: true,
+    queryKey: 'myAssessmentClasses',
+  })
 
   const { data: academicYearsRes } = useQuery({
     queryKey: ['monthlyAssessmentAcademicYears'],
@@ -408,6 +417,7 @@ export default function AssessmentsPage() {
             scope={classSelectorScope}
             academicYearId={academicYearId}
             schoolId={activeSchool?.id}
+            classes={teacherClassOptions || undefined}
             className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
             placeholder="Select class"
           />

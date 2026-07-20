@@ -300,6 +300,7 @@ export default function ClassesGradesPage() {
   // ─── Class Modal Helpers ────────────────────────────────────
 
   const openClassCreate = (presetLevel) => {
+    if (!canEditClasses) return
     setEditingClass(null)
     if (presetLevel !== undefined && presetLevel !== null) {
       const baseName = GRADE_LEVEL_LABELS[presetLevel] || ''
@@ -492,10 +493,12 @@ export default function ClassesGradesPage() {
               >Grid</button>
             </div>
           )}
-          <button onClick={() => setShowAllocator(true)} disabled={classScope === 'session'} className="text-sm px-3 py-1.5 bg-sky-50 text-sky-700 hover:bg-sky-100 rounded-lg font-medium transition-colors disabled:opacity-50">
-            AI Allocator
-          </button>
-          {activeClasses.length === 0 && selectedSchoolId && (
+          {canEditClasses && (
+            <button onClick={() => setShowAllocator(true)} disabled={classScope === 'session'} className="text-sm px-3 py-1.5 bg-sky-50 text-sky-700 hover:bg-sky-100 rounded-lg font-medium transition-colors disabled:opacity-50">
+              AI Allocator
+            </button>
+          )}
+          {canEditClasses && activeClasses.length === 0 && selectedSchoolId && (
             <button
               onClick={() => addStandardMut.mutate()}
               disabled={addStandardMut.isPending || (classScope === 'session' && !activeAcademicYear?.id)}
@@ -504,9 +507,11 @@ export default function ClassesGradesPage() {
               {addStandardMut.isPending ? 'Adding...' : (classScope === 'session' ? 'Add Standard Session Classes' : 'Add Standard Classes')}
             </button>
           )}
-          <button onClick={() => openClassCreate()} disabled={!selectedSchoolId || (classScope === 'session' && !activeAcademicYear?.id)} className="btn-primary text-sm px-3 py-1.5 disabled:opacity-50">
-            + {classScope === 'session' ? 'Session Class' : 'Class'}
-          </button>
+          {canEditClasses && (
+            <button onClick={() => openClassCreate()} disabled={!selectedSchoolId || (classScope === 'session' && !activeAcademicYear?.id)} className="btn-primary text-sm px-3 py-1.5 disabled:opacity-50">
+              + {classScope === 'session' ? 'Session Class' : 'Class'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -525,17 +530,19 @@ export default function ClassesGradesPage() {
               Master classes should stay section-free. Create sections like A/B/C inside Session Classes for each academic year.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              if (classScope !== 'session') setClassScope('session')
-              initializeSessionClassesMut.mutate()
-            }}
-            disabled={!activeAcademicYear?.id || initializeSessionClassesMut.isPending}
-            className="px-3 py-2 text-xs rounded-lg border border-blue-300 text-blue-800 bg-white hover:bg-blue-100 disabled:opacity-50"
-          >
-            {initializeSessionClassesMut.isPending ? 'Initializing...' : 'Initialize From Master Classes'}
-          </button>
+          {canEditClasses && (
+            <button
+              type="button"
+              onClick={() => {
+                if (classScope !== 'session') setClassScope('session')
+                initializeSessionClassesMut.mutate()
+              }}
+              disabled={!activeAcademicYear?.id || initializeSessionClassesMut.isPending}
+              className="px-3 py-2 text-xs rounded-lg border border-blue-300 text-blue-800 bg-white hover:bg-blue-100 disabled:opacity-50"
+            >
+              {initializeSessionClassesMut.isPending ? 'Initializing...' : 'Initialize From Master Classes'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -649,7 +656,11 @@ export default function ClassesGradesPage() {
           {sortedLevels.map(level => {
             const levelClasses = classesByLevel[level] || []
             const isExpanded = expandedLevels.has(level)
-            const label = GRADE_LEVEL_LABELS[level] || `Level ${level}`
+            // Session classes can be renamed per academic year (e.g. "Nursery" -> "Junior 1")
+            // without touching the master grade-level preset, so prefer the actual
+            // session class name over the static GRADE_LEVEL_LABELS preset when scoped to a session.
+            const sessionLabel = classScope === 'session' ? (levelClasses[0]?.name || levelClasses[0]?.display_name) : null
+            const label = sessionLabel || GRADE_LEVEL_LABELS[level] || `Level ${level}`
             const editableClass = levelClasses.find(c => !c.section) || levelClasses[0]
 
             // Compute accurate totals: direct (session_class-linked) + unassigned (orphan) per master class
@@ -727,7 +738,7 @@ export default function ClassesGradesPage() {
                                 {classScope === 'session' && (
                                   <div className="text-[11px] text-blue-700 flex items-center gap-2 flex-wrap">
                                     <span>Master: {c.linked_master_name || 'Not linked'}</span>
-                                    {masterUnassigned > 0 && !!c.class_obj && (
+                                    {canEditClasses && masterUnassigned > 0 && !!c.class_obj && (
                                       <button
                                         type="button"
                                         onClick={() => assignUnassignedMut.mutate({ id: c.id, label: c.label || c.name })}
@@ -738,7 +749,7 @@ export default function ClassesGradesPage() {
                                         Assign {masterUnassigned} here
                                       </button>
                                     )}
-                                    {!c.class_obj && (
+                                    {canEditClasses && !c.class_obj && (
                                       <button
                                         type="button"
                                         onClick={() => handleLinkNow(c)}
@@ -765,7 +776,7 @@ export default function ClassesGradesPage() {
                     ) : (
                       <p className="text-xs text-gray-400 mb-3">No classes at this level yet.</p>
                     )}
-                    {classScope === 'session' ? (
+                    {classScope === 'session' && canEditClasses && (
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-xs text-gray-500">Quick add sections:</span>
                         {[1, 2, 3, 4, 5, 6].map(count => (
@@ -778,7 +789,8 @@ export default function ClassesGradesPage() {
                         ))}
                         {quickAddSectionsMut.isPending && <span className="text-xs text-gray-400">Creating...</span>}
                       </div>
-                    ) : (
+                    )}
+                    {classScope === 'master' && (
                       <p className="text-xs text-sky-700">Sections are created in Session Classes, not in the master catalog.</p>
                     )}
                   </div>
@@ -796,8 +808,9 @@ export default function ClassesGradesPage() {
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900">{cls.name}</h3>
                   <p className="text-xs text-gray-500">
-                    {GRADE_LEVEL_LABELS[cls.grade_level] || `Level ${cls.grade_level}`}
-                    {cls.section ? ` / Section ${cls.section}` : ''}
+                    {classScope === 'session'
+                      ? `Level ${cls.grade_level}${cls.section ? ` / Section ${cls.section}` : ''}`
+                      : `${GRADE_LEVEL_LABELS[cls.grade_level] || `Level ${cls.grade_level}`}${cls.section ? ` / Section ${cls.section}` : ''}`}
                   </p>
                 </div>
                 <span className={`px-2 py-1 rounded-full text-xs font-medium ${
@@ -818,7 +831,7 @@ export default function ClassesGradesPage() {
                     <span>Master Class:</span>
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-blue-700">{cls.linked_master_name || 'Not linked'}</span>
-                      {!cls.class_obj && (
+                      {canEditClasses && !cls.class_obj && (
                         <button
                           type="button"
                           onClick={() => handleLinkNow(cls)}

@@ -714,10 +714,13 @@ class TimetableEntryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
         return TimetableEntrySerializer
 
     def get_queryset(self):
+        from academic_sessions.utils import annotate_session_class_display
+
         queryset = TimetableEntry.objects.select_related(
             'school', 'class_obj', 'slot', 'subject', 'teacher',
             'academic_year',
         )
+        queryset = annotate_session_class_display(queryset)
         if _is_school_header_rejected(self.request):
             return queryset.none()
         school_id = _resolve_school_id(self.request)

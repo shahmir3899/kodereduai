@@ -406,7 +406,7 @@ class StandardObjectiveSerializer(serializers.ModelSerializer):
 class LessonPlanReadSerializer(serializers.ModelSerializer):
     """Read serializer with nested details for display."""
     teacher_name = serializers.CharField(source='teacher.full_name', read_only=True)
-    class_name = serializers.CharField(source='class_obj.name', read_only=True)
+    class_name = serializers.SerializerMethodField()
     subject_name = serializers.CharField(source='subject.name', read_only=True)
     school_name = serializers.CharField(source='school.name', read_only=True)
     academic_year_name = serializers.CharField(
@@ -449,6 +449,13 @@ class LessonPlanReadSerializer(serializers.ModelSerializer):
     def get_objectives(self, obj):
         objectives = [link.objective for link in obj.lesson_objectives.select_related('objective', 'objective__topic')]
         return LearningObjectiveSerializer(objectives, many=True).data
+
+    def get_class_name(self, obj):
+        session_name = getattr(obj, 'session_display_name', None)
+        if session_name:
+            section = getattr(obj, 'session_display_section', None)
+            return f"{session_name} - {section}" if section else session_name
+        return obj.class_obj.name if obj.class_obj_id else None
 
 
 class LessonPlanCreateSerializer(serializers.ModelSerializer):
@@ -610,7 +617,7 @@ class AssignmentAttachmentSerializer(serializers.ModelSerializer):
 class AssignmentReadSerializer(serializers.ModelSerializer):
     """Read serializer with nested details and computed submission_count."""
     teacher_name = serializers.CharField(source='teacher.full_name', read_only=True)
-    class_name = serializers.CharField(source='class_obj.name', read_only=True)
+    class_name = serializers.SerializerMethodField()
     subject_name = serializers.CharField(source='subject.name', read_only=True)
     school_name = serializers.CharField(source='school.name', read_only=True)
     academic_year_name = serializers.CharField(
@@ -640,6 +647,13 @@ class AssignmentReadSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def get_class_name(self, obj):
+        session_name = getattr(obj, 'session_display_name', None)
+        if session_name:
+            section = getattr(obj, 'session_display_section', None)
+            return f"{session_name} - {section}" if section else session_name
+        return obj.class_obj.name if obj.class_obj_id else None
 
 
 class AssignmentCreateSerializer(serializers.ModelSerializer):

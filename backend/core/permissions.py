@@ -188,6 +188,18 @@ def get_teacher_combined_scope(request, school_id=None, academic_year_id=None):
     }
 
 
+def teacher_has_student_access(request, student, school_id=None):
+    """
+    Whether the requesting teacher can access `student`, using the same
+    session-scoped-first-then-master-class-fallback rule as StudentViewSet.get_queryset.
+    """
+    scope = get_teacher_combined_scope(request, school_id=school_id)
+    session_ids = scope.get('full_session_class_ids', set())
+    if session_ids and student.id in _get_session_class_student_ids(session_ids):
+        return True
+    return student.class_obj_id in scope.get('full_class_ids', set())
+
+
 def _is_data_restricted_user(request):
     """
     Check if current user has data-restricted access (PRINCIPAL + staff roles).
@@ -268,6 +280,24 @@ class IsSchoolAdminOrReadOnly(permissions.BasePermission):
 class CanManageStudentAssessments(permissions.BasePermission):
     """Allow teachers and admin roles to access student monthly assessments."""
     message = "Only teachers, principals, school admins, or super admins can access student assessments."
+
+    def has_permission(self, request, view):
+        if not request.user.is_authenticated:
+            return False
+
+        role = get_effective_role(request)
+        return role in ADMIN_ROLES or role == 'TEACHER'
+
+
+class CanManageStudentPhoto(permissions.BasePermission):
+    """
+    Permission for uploading/removing a student's profile photo.
+    - SUPER_ADMIN, SCHOOL_ADMIN, PRINCIPAL: any student in the school
+    - TEACHER: only students within their assigned scope (enforced by the
+      ViewSet's tenant-scoped get_queryset/get_object, same as other
+      teacher-facing student actions)
+    """
+    message = "You don't have permission to manage this student's photo."
 
     def has_permission(self, request, view):
         if not request.user.is_authenticated:

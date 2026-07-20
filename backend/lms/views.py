@@ -1363,9 +1363,12 @@ class LessonPlanViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         return LessonPlanReadSerializer
 
     def get_queryset(self):
+        from academic_sessions.utils import annotate_session_class_display
+
         queryset = super().get_queryset().select_related(
             'school', 'academic_year', 'class_obj', 'subject', 'teacher',
         ).prefetch_related('attachments', 'planned_topics', 'planned_subtopics')
+        queryset = annotate_session_class_display(queryset)
 
         queryset = _apply_teacher_dual_scope(queryset, self.request)
 
@@ -1424,6 +1427,49 @@ class LessonPlanViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
             instance = serializer.instance
             instance.academic_year = academic_year
             instance.save(update_fields=['academic_year'])
+
+    @action(detail=False, methods=['get'], url_path='my_classes')
+    def my_classes(self, request):
+        """
+        Classes available for lesson planning (role-aware).
+
+        Unlike attendance/records/my_classes (class-teacher only), this includes
+        classes where the teacher is either the class teacher OR teaches a subject
+        there — teachers plan lessons for every class/subject they teach, not just
+        the class they're the class teacher of.
+
+        GET /api/lms/lesson-plans/my_classes/
+        """
+        from students.models import Class
+        from academic_sessions.utils import get_session_class_label_map, resolve_current_academic_year_id
+
+        school_id = ensure_tenant_school_id(request) or request.user.school_id
+        if not school_id:
+            return Response({'detail': 'No school context.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        role = get_effective_role(request)
+        if role in ADMIN_ROLES:
+            classes = Class.objects.filter(school_id=school_id, is_active=True)
+        elif role == 'TEACHER':
+            scope = get_teacher_combined_scope(request, school_id=school_id)
+            classes = Class.objects.filter(id__in=scope['all_class_ids'], is_active=True)
+        else:
+            classes = Class.objects.none()
+
+        classes = list(classes.order_by('grade_level', 'section', 'name'))
+        academic_year_id = request.query_params.get('academic_year') or resolve_current_academic_year_id(school_id)
+        label_map = get_session_class_label_map(school_id, academic_year_id, [c.id for c in classes])
+
+        data = []
+        for c in classes:
+            session_label = label_map.get(c.id)
+            data.append({
+                'id': c.id,
+                'name': session_label['name'] if session_label else c.name,
+                'section': session_label['section'] if session_label else c.section,
+                'grade_level': c.grade_level,
+            })
+        return Response(data)
 
     @action(detail=False, methods=['get'])
     def by_class(self, request):
@@ -1749,11 +1795,14 @@ class AssignmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         return AssignmentReadSerializer
 
     def get_queryset(self):
+        from academic_sessions.utils import annotate_session_class_display
+
         queryset = super().get_queryset().select_related(
             'school', 'academic_year', 'class_obj', 'subject', 'teacher',
         ).prefetch_related('attachments').annotate(
             submission_count=Count('submissions'),
         ).order_by('-due_date', '-id')
+        queryset = annotate_session_class_display(queryset)
 
         queryset = _apply_teacher_dual_scope(queryset, self.request)
 

@@ -7,6 +7,7 @@ import { useToast } from '../../components/Toast'
 import RTLWrapper, { isRTLLanguage } from '../../components/RTLWrapper'
 import ClassSelector from '../../components/ClassSelector'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
+import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 import LessonPlanAIModal from './LessonPlanAIModal'
 import { normalizeLessonPlanText } from './lessonPlanTextUtils'
@@ -111,6 +112,14 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
     })
     return map
   }, [sessionClasses])
+
+  const { classOptions: teacherClassOptions } = useTeacherScopedClasses({
+    academicYearId: activeAcademicYear?.id,
+    selectedClass,
+    setSelectedClass,
+    autoSelectFirst: !editingPlan,
+    queryKey: 'myLessonPlanWizardClasses',
+  })
 
   const [title, setTitle] = useState('')
   const [objectives, setObjectives] = useState('')
@@ -532,6 +541,7 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
                   }}
                   scope={classSelectorScope}
                   academicYearId={activeAcademicYear?.id}
+                  classes={teacherClassOptions || undefined}
                 />
               </div>
               <div>

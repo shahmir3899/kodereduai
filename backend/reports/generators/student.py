@@ -16,7 +16,8 @@ from collections import OrderedDict
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 
-from django.db.models import Q, Sum
+from django.db.models import F, Q, Sum
+from django.db.models.functions import Coalesce
 from reportlab.lib.units import inch
 
 from .base import BaseReportGenerator
@@ -30,10 +31,18 @@ CARD_BG = '#F8FAFC'
 
 PRESENT_BG, PRESENT_TEXT = '#D1FAE5', '#065F46'
 ABSENT_BG, ABSENT_TEXT = '#FEE2E2', '#991B1B'
-HOLIDAY_BG = '#FEF3C7'
-WEEKEND_BG = '#E5E7EB'
+OFF_DAY_BG = '#FEF3C7'
 INFO_BG, INFO_TEXT = '#DBEAFE', '#1E40AF'
 NEUTRAL_BG, NEUTRAL_TEXT = '#F3F4F6', '#374151'
+
+# Attendance status -> (background, text) color, keyed by AttendanceRecord.AttendanceStatus
+# value so the calendar grid/legend track whatever statuses actually appear in the data
+# rather than a hardcoded Present/Absent pair.
+ATTENDANCE_STATUS_COLORS = {
+    'PRESENT': (PRESENT_BG, PRESENT_TEXT),
+    'ABSENT': (ABSENT_BG, ABSENT_TEXT),
+}
+DEFAULT_STATUS_COLOR = (NEUTRAL_BG, NEUTRAL_TEXT)
 
 
 def _make_footer_canvas(doc, school_name):
@@ -121,6 +130,16 @@ def fetch_image_bytes(url, timeout=5):
     except Exception:
         pass
     return None
+
+
+def fit_title_font_size(text, max_width, font_name='Helvetica-Bold', max_size=23, min_size=13):
+    """Largest font size (down to min_size) at which `text` still fits on one line within max_width."""
+    from reportlab.pdfbase.pdfmetrics import stringWidth
+
+    size = max_size
+    while size > min_size and stringWidth(text, font_name, size) > max_width:
+        size -= 1
+    return size
 
 
 # --- Small vector-drawn building blocks -----------------------------------
@@ -251,10 +270,34 @@ def build_legend(items):
     return table
 
 
+def build_photo_placeholder(size=1.15 * inch):
+    """Bordered placeholder box shown in place of the student's profile photo when none is available or the fetch failed."""
+    from reportlab.lib import colors
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.platypus import Paragraph, Table, TableStyle
+
+    styles = getSampleStyleSheet()
+    label_style = ParagraphStyle(
+        'PhotoPlaceholderLabel', parent=styles['Normal'], fontSize=7.5,
+        textColor=colors.HexColor(GRAY_TEXT), alignment=1,
+    )
+    cell = Table([[Paragraph('No Photo', label_style)]], colWidths=[size], rowHeights=[size])
+    cell.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor(CARD_BG)),
+        ('BOX', (0, 0), (-1, -1), 1, colors.HexColor(GRAY_BORDER)),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('ROUNDEDCORNERS', [6, 6, 6, 6]),
+    ]))
+    return cell
+
+
 def build_month_grid_flowables(year, month, attendance_by_date, holiday_dates=None):
     """
-    Calendar-style Table for one month, cells colored by present/absent/
-    holiday/weekend. Returns a list of flowables (month title + table).
+    Calendar-style Table for one month, cells colored by attendance status
+    (whatever status codes are present in the data) or, absent a record,
+    by whether the date is a school-calendar off day. Returns a list of
+    flowables (month title + table).
     """
     from reportlab.lib import colors
     from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
@@ -271,16 +314,20 @@ def build_month_grid_flowables(year, month, attendance_by_date, holiday_dates=No
         [str(day) if day else '' for day in week] for week in weeks
     ]
 
-    table = Table(table_data, colWidths=[0.62 * inch] * 7)
+    # 6.4in matches the content width used elsewhere in this report (profile
+    # card, remark boxes) so the grid reads as full-width rather than an
+    # island in the middle of the page.
+    col_width = 6.4 * inch / 7
+    table = Table(table_data, colWidths=[col_width] * 7)
     style_cmds = [
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor(BLUE)),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor(GRAY_BORDER)),
-        ('FONTSIZE', (0, 0), (-1, -1), 8),
-        ('TOPPADDING', (0, 0), (-1, -1), 5),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('TOPPADDING', (0, 0), (-1, -1), 7),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 7),
     ]
     for r, week in enumerate(weeks, start=1):
         for c, day in enumerate(week):
@@ -289,14 +336,10 @@ def build_month_grid_flowables(year, month, attendance_by_date, holiday_dates=No
                 continue
             d = date(year, month, day)
             status = attendance_by_date.get(d)
-            if status == 'PRESENT':
-                bg = PRESENT_BG
-            elif status == 'ABSENT':
-                bg = ABSENT_BG
+            if status:
+                bg, _text = ATTENDANCE_STATUS_COLORS.get(status, DEFAULT_STATUS_COLOR)
             elif d in holiday_dates:
-                bg = HOLIDAY_BG
-            elif d.weekday() == 6:
-                bg = WEEKEND_BG
+                bg = OFF_DAY_BG
             else:
                 bg = None
             if bg:
@@ -611,11 +654,23 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
             att_qs = att_qs.filter(academic_year_id=academic_year_id)
 
         attendance_by_date = {rec.date: rec.status for rec in att_qs.only('date', 'status')}
-        present = sum(1 for s in attendance_by_date.values() if s == 'PRESENT')
-        absent = sum(1 for s in attendance_by_date.values() if s == 'ABSENT')
-        total_days = present + absent
+        present = sum(1 for s in attendance_by_date.values() if s == AttendanceRecord.AttendanceStatus.PRESENT)
+        absent = sum(1 for s in attendance_by_date.values() if s == AttendanceRecord.AttendanceStatus.ABSENT)
+        total_days = len(attendance_by_date)
         att_rate = round(present / total_days * 100, 1) if total_days else 0
         attendance_months = sorted({(d.year, d.month) for d in attendance_by_date.keys()})
+
+        # Legend entries reflect whatever status codes actually appear in the data,
+        # not a hardcoded Present/Absent pair — future attendance statuses show up
+        # automatically using their model-declared display label.
+        status_display = dict(AttendanceRecord.AttendanceStatus.choices)
+        status_counts = OrderedDict()
+        for s in attendance_by_date.values():
+            status_counts[s] = status_counts.get(s, 0) + 1
+        attendance_status_summary = [
+            (code, status_display.get(code, code.title()))
+            for code in sorted(status_counts)
+        ]
         holiday_dates = self._resolve_holiday_dates(attendance_months, student.class_obj_id)
 
         # --- Fees: always a fixed 12-month view of the academic year, independent of
@@ -634,18 +689,40 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
             (r['year'], r['month']): r
             for r in FeePayment.objects.filter(student=student, month__gte=1)
                 .values('year', 'month')
-                .annotate(total_due=Sum('amount_due'), total_paid=Sum('amount_paid'))
+                .annotate(
+                    total_due=Sum('amount_due'),
+                    total_paid=Sum('amount_paid'),
+                    # amount_due = previous_balance (carried-forward from an unpaid prior
+                    # month) + base_monthly_fee (this month's own charge) — summing
+                    # amount_due across months double-counts any rolled-over balance, so
+                    # the "fresh charge" total needs base_monthly_fee instead. Falls back
+                    # to amount_due - previous_balance for pre-migration rows where
+                    # base_monthly_fee was never backfilled.
+                    total_base=Sum(Coalesce('base_monthly_fee', F('amount_due') - F('previous_balance'))),
+                )
         }
         fee_rows = [
             {
                 'year': y, 'month': m,
                 'due': fee_by_month.get((y, m), {}).get('total_due') or Decimal('0'),
                 'paid': fee_by_month.get((y, m), {}).get('total_paid') or Decimal('0'),
+                'base': fee_by_month.get((y, m), {}).get('total_base') or Decimal('0'),
             }
             for y, m in months_list
         ]
-        fee_due = sum((r['due'] for r in fee_rows), Decimal('0'))
+        fee_due = sum((r['base'] for r in fee_rows), Decimal('0'))
         fee_paid = sum((r['paid'] for r in fee_rows), Decimal('0'))
+
+        # Outstanding balance is whatever the most recent month with actual fee
+        # records shows as due-minus-paid — that figure already has every prior
+        # unpaid month rolled into it, so summing per-month balances would count
+        # old shortfalls again for every month they remained unpaid.
+        months_with_data = [(y, m) for y, m in months_list if (y, m) in fee_by_month]
+        if months_with_data:
+            latest_row = fee_by_month[months_with_data[-1]]
+            fee_outstanding = (latest_row.get('total_due') or Decimal('0')) - (latest_row.get('total_paid') or Decimal('0'))
+        else:
+            fee_outstanding = Decimal('0')
 
         # --- Exams (separate, conditional section) ---
         exam_rows = []
@@ -784,6 +861,7 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
             'photo_bytes': photo_bytes,
             'attendance_by_date': attendance_by_date,
             'attendance_months': attendance_months,
+            'attendance_status_summary': attendance_status_summary,
             'holiday_dates': holiday_dates,
             'present_count': present,
             'absent_count': absent,
@@ -792,7 +870,7 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
             'fee_rows': fee_rows,
             'fee_due': fee_due,
             'fee_paid': fee_paid,
-            'fee_outstanding': fee_due - fee_paid,
+            'fee_outstanding': fee_outstanding,
             'lessons_by_subject': lessons_by_subject,
             'exam_rows': exam_rows,
             'exam_avg_pct': exam_avg_pct,
@@ -836,16 +914,32 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
         # ============================================================
         # HEADER / LETTERHEAD
         # ============================================================
-        school_title_style = ParagraphStyle('SchoolTitle', parent=styles['Heading1'], fontSize=23, leading=26, spaceAfter=1)
-        report_title_style = ParagraphStyle('ReportTitle', parent=styles['Normal'], fontSize=14, textColor=colors.HexColor(BLUE), spaceAfter=1)
-        session_style = ParagraphStyle('SessionLine', parent=styles['Normal'], fontSize=9.5, textColor=colors.HexColor(GRAY_TEXT))
+        # Font size shrinks to keep long school names on one line; the gap
+        # between all three header lines is a fixed constant so it reads as
+        # even regardless of each line's own font size/leading.
+        HEADER_LINE_GAP = 4
+        logo_bytes = data.get('school_logo_bytes')
+        title_max_width = doc.width - (1.0 * inch if logo_bytes else 0) - 4
+        title_font_size = fit_title_font_size(data['school_name'], title_max_width)
+
+        school_title_style = ParagraphStyle(
+            'SchoolTitle', parent=styles['Heading1'], fontSize=title_font_size,
+            leading=title_font_size + 3, spaceBefore=0, spaceAfter=HEADER_LINE_GAP,
+        )
+        report_title_style = ParagraphStyle(
+            'ReportTitle', parent=styles['Normal'], fontSize=14, leading=16,
+            textColor=colors.HexColor(BLUE), spaceBefore=0, spaceAfter=HEADER_LINE_GAP,
+        )
+        session_style = ParagraphStyle(
+            'SessionLine', parent=styles['Normal'], fontSize=9.5, leading=11,
+            textColor=colors.HexColor(GRAY_TEXT), spaceBefore=0, spaceAfter=0,
+        )
 
         header_text = [
             Paragraph(f"<b>{data['school_name']}</b>", school_title_style),
             Paragraph('Student Report', report_title_style),
             Paragraph(f"Academic Session: {data['academic_session_display']}", session_style),
         ]
-        logo_bytes = data.get('school_logo_bytes')
         if logo_bytes:
             try:
                 logo = Image(io.BytesIO(logo_bytes), width=0.8 * inch, height=0.8 * inch)
@@ -890,9 +984,9 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
             try:
                 photo_cell = Image(io.BytesIO(photo_bytes), width=1.15 * inch, height=1.15 * inch)
             except Exception:
-                photo_cell = ''
+                photo_cell = build_photo_placeholder()
         else:
-            photo_cell = ''
+            photo_cell = build_photo_placeholder()
 
         info_card_inner = Table([[info_grid, photo_cell]], colWidths=[None, 1.3 * inch])
         info_card_inner.setStyle(TableStyle([
@@ -920,10 +1014,13 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
         elements.append(section_heading('Attendance', styles))
         elements.append(Spacer(1, 8))
         if data['attendance_by_date']:
-            elements.append(build_legend([
-                (PRESENT_BG, 'Present'), (ABSENT_BG, 'Absent'),
-                (HOLIDAY_BG, 'Holiday'), (WEEKEND_BG, 'Weekend'),
-            ]))
+            legend_items = [
+                (ATTENDANCE_STATUS_COLORS.get(code, DEFAULT_STATUS_COLOR)[0], label)
+                for code, label in data['attendance_status_summary']
+            ]
+            if data.get('holiday_dates'):
+                legend_items.append((OFF_DAY_BG, 'Off Day'))
+            elements.append(build_legend(legend_items))
             elements.append(Spacer(1, 8))
             for year, month in data['attendance_months']:
                 elements.append(KeepTogether(build_month_grid_flowables(year, month, data['attendance_by_date'], data.get('holiday_dates'))))

@@ -15,7 +15,7 @@ from django.shortcuts import get_object_or_404
 
 from rest_framework import permissions as drf_permissions
 
-from core.permissions import IsSchoolAdmin, HasSchoolAccess, ADMIN_ROLES, get_effective_role
+from core.permissions import IsSchoolAdmin, HasSchoolAccess, ADMIN_ROLES, get_effective_role, teacher_has_student_access
 from core.mixins import ensure_tenant_school_id
 from .serializers import (
     GenerateReportSerializer, CustomLetterSerializer,
@@ -35,6 +35,44 @@ class IsSchoolAdminOrHR(drf_permissions.BasePermission):
             return False
         role = get_effective_role(request)
         return role in ADMIN_ROLES or role == 'HR_MANAGER'
+
+
+STUDENT_SCOPED_REPORT_TYPES = {'STUDENT_COMPREHENSIVE', 'STUDENT_PROGRESS'}
+
+
+class CanGenerateInstantReport(drf_permissions.BasePermission):
+    """
+    Instant report access:
+    - ADMIN_ROLES: any report type, any student.
+    - TEACHER: only single-student reports (STUDENT_COMPREHENSIVE, STUDENT_PROGRESS),
+      and only for a student within their own class/subject scope — reports like
+      FEE_COLLECTION/FEE_DEFAULTERS/CLASS_RESULT stay admin-only since they aren't
+      scoped to a single student a teacher is assigned to.
+    """
+    message = "You don't have permission to generate this report."
+
+    def has_permission(self, request, view):
+        if not request.user.is_authenticated:
+            return False
+
+        role = get_effective_role(request)
+        if role in ADMIN_ROLES:
+            return True
+        if role != 'TEACHER':
+            return False
+
+        report_type = request.data.get('report_type')
+        if report_type not in STUDENT_SCOPED_REPORT_TYPES:
+            return False
+
+        student_id = (request.data.get('parameters') or {}).get('student_id')
+        if not student_id:
+            return False
+
+        from students.models import Student
+        school_id = ensure_tenant_school_id(request)
+        student = Student.objects.filter(id=student_id, school_id=school_id).first()
+        return bool(student) and teacher_has_student_access(request, student, school_id=school_id)
 
 
 GENERATOR_MAP = {
@@ -128,7 +166,7 @@ class InstantReportView(APIView):
     single student's comprehensive report) where an instant download beats the
     async-task-plus-persisted-copy flow used by GenerateReportView.
     """
-    permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, CanGenerateInstantReport, HasSchoolAccess]
 
     def post(self, request):
         serializer = GenerateReportSerializer(data=request.data)

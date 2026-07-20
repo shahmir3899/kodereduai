@@ -43,7 +43,7 @@ class SubjectBulkCreateSerializer(serializers.Serializer):
 # ── ClassSubject ─────────────────────────────────────────────────────────────
 
 class ClassSubjectSerializer(serializers.ModelSerializer):
-    class_name = serializers.CharField(source='class_obj.name', read_only=True)
+    class_name = serializers.SerializerMethodField()
     class_section = serializers.SerializerMethodField()
     class_grade_level = serializers.IntegerField(source='class_obj.grade_level', read_only=True, default=0)
     subject_name = serializers.CharField(source='subject.name', read_only=True)
@@ -67,6 +67,11 @@ class ClassSubjectSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'school', 'created_at', 'updated_at']
+
+    def get_class_name(self, obj):
+        if obj.session_class and obj.session_class.display_name:
+            return obj.session_class.display_name
+        return obj.class_obj.name
 
     def get_class_section(self, obj):
         if obj.session_class and obj.session_class.section:
@@ -187,8 +192,8 @@ class ClassSubjectBulkAssignSerializer(serializers.Serializer):
 # ── ClassTeacherAssignment ──────────────────────────────────────────────────
 
 class ClassTeacherAssignmentSerializer(serializers.ModelSerializer):
-    class_name = serializers.CharField(source='class_obj.name', read_only=True)
-    # Derive section from session_class if available, else from master class
+    # Derive name/section from session_class if available, else from master class
+    class_name = serializers.SerializerMethodField()
     class_section = serializers.SerializerMethodField()
     class_grade_level = serializers.IntegerField(source='class_obj.grade_level', read_only=True, default=0)
     teacher_name = serializers.SerializerMethodField()
@@ -208,6 +213,12 @@ class ClassTeacherAssignmentSerializer(serializers.ModelSerializer):
             'is_active', 'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'school', 'created_at', 'updated_at']
+
+    def get_class_name(self, obj):
+        """Get name from session_class, fall back to master class name."""
+        if obj.session_class and obj.session_class.display_name:
+            return obj.session_class.display_name
+        return obj.class_obj.name
 
     def get_class_section(self, obj):
         """Get section from session_class, fall back to master class section."""
@@ -329,7 +340,7 @@ class TimetableSlotCreateSerializer(serializers.ModelSerializer):
 # ── TimetableEntry ───────────────────────────────────────────────────────────
 
 class TimetableEntrySerializer(serializers.ModelSerializer):
-    class_name = serializers.CharField(source='class_obj.name', read_only=True)
+    class_name = serializers.SerializerMethodField()
     slot_name = serializers.CharField(source='slot.name', read_only=True)
     slot_order = serializers.IntegerField(source='slot.order', read_only=True)
     slot_type = serializers.CharField(source='slot.slot_type', read_only=True)
@@ -364,6 +375,13 @@ class TimetableEntrySerializer(serializers.ModelSerializer):
 
     def get_teacher_name(self, obj):
         return obj.teacher.full_name if obj.teacher else None
+
+    def get_class_name(self, obj):
+        session_name = getattr(obj, 'session_display_name', None)
+        if session_name:
+            section = getattr(obj, 'session_display_section', None)
+            return f"{session_name} - {section}" if section else session_name
+        return obj.class_obj.name if obj.class_obj_id else None
 
 
 class TimetableEntryCreateSerializer(serializers.ModelSerializer):

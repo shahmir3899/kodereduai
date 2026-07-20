@@ -442,7 +442,7 @@ function App() {
             <Route path="hr/letters" element={<SchoolRoute><ModuleRoute module="hr"><LetterComposerPage /></ModuleRoute></SchoolRoute>} />
 
             {/* Academics routes */}
-            <Route path="academics/subjects" element={<SchoolRoute><ModuleRoute module="academics"><SubjectsPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="academics/subjects" element={<SchoolRoute><ModuleRoute module="academics"><ManagementRoute><SubjectsPage /></ManagementRoute></ModuleRoute></SchoolRoute>} />
             <Route path="academics/timetable" element={<SchoolRoute><ModuleRoute module="academics"><TimetableRoute /></ModuleRoute></SchoolRoute>} />
             <Route path="academics/analytics" element={<SchoolRoute><ModuleRoute module="academics"><AdminPrincipalRoute><AcademicsAnalyticsPage /></AdminPrincipalRoute></ModuleRoute></SchoolRoute>} />
             <Route path="academics/calendar" element={<SchoolRoute><ModuleRoute module="academics"><ManagementRoute><AcademicCalendarPage /></ManagementRoute></ModuleRoute></SchoolRoute>} />

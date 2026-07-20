@@ -109,7 +109,7 @@ export function useTeacherScopeLookup({ academicYearId } = {}) {
 
   const { data: classTeacherScopeRes, isLoading: classScopeLoading } = useQuery({
     queryKey: ['myClassTeacherAssignments', resolvedAcademicYearId],
-    queryFn: () => academicsApi.getMyClassTeacherAssignments(),
+    queryFn: () => academicsApi.getMyClassTeacherAssignments(yearParams),
     enabled: isTeacherEnabled,
   })
 

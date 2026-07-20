@@ -252,7 +252,7 @@ export const schoolsApi = {
 // Students API
 export const studentsApi = {
   getStudents: (params) => api.get('/api/students/', { params }),
-  getStudent: (id) => api.get(`/api/students/${id}/`),
+  getStudent: (id, params) => api.get(`/api/students/${id}/`, { params }),
   createStudent: (data) => api.post('/api/students/', data),
   updateStudent: (id, data) => api.patch(`/api/students/${id}/`, data),
   deleteStudent: (id) => api.delete(`/api/students/${id}/`),
@@ -517,7 +517,7 @@ export const academicsApi = {
   createClassTeacher: (data) => api.post('/api/academics/class-teachers/', data),
   updateClassTeacher: (id, data) => api.patch(`/api/academics/class-teachers/${id}/`, data),
   deleteClassTeacher: (id) => api.delete(`/api/academics/class-teachers/${id}/`),
-  getMyClassTeacherAssignments: () => api.get('/api/academics/class-teachers/my_classes/'),
+  getMyClassTeacherAssignments: (params) => api.get('/api/academics/class-teachers/my_classes/', { params }),
 
   // Timetable Slots
   getTimetableSlots: (params) => api.get('/api/academics/timetable-slots/', { params }),
@@ -1068,6 +1068,7 @@ export const lmsApi = {
   createTag: (data) => api.post('/api/lms/tags/', data),
 
   // Lesson Plans
+  getMyLessonPlanClasses: (params) => api.get('/api/lms/lesson-plans/my_classes/', { params }),
   getLessonPlans: (params) => api.get('/api/lms/lesson-plans/', { params }),
   getLessonPlan: (id) => api.get(`/api/lms/lesson-plans/${id}/`),
   createLessonPlan: (data) => api.post('/api/lms/lesson-plans/', data),

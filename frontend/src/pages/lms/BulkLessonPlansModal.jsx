@@ -116,6 +116,7 @@ export default function BulkLessonPlansModal({ onClose, onSuccess, onCreateSingl
     setSelectedClass,
     autoSelectFirst: true,
     queryKey: 'teacherLessonPlanClasses',
+    fetchClasses: () => lmsApi.getMyLessonPlanClasses(),
   })
 
   const { data: classSubjectsData } = useQuery({

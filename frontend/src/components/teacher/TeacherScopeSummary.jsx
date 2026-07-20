@@ -1,6 +1,5 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { academicsApi } from '../../services/api'
@@ -13,7 +12,7 @@ export default function TeacherScopeSummary({ compact = false }) {
 
   const { data: classTeacherScopeRes } = useQuery({
     queryKey: ['myClassTeacherAssignments', activeAcademicYear?.id],
-    queryFn: () => academicsApi.getMyClassTeacherAssignments(),
+    queryFn: () => academicsApi.getMyClassTeacherAssignments(yearParams),
     enabled: isTeacher && isModuleEnabled('academics'),
   })
 
@@ -66,9 +65,6 @@ export default function TeacherScopeSummary({ compact = false }) {
             {activeAcademicYear?.name ? `Academic Year: ${activeAcademicYear.name}` : 'Current access scope'}
           </p>
         </div>
-        <Link to="/academics/subjects" className="text-xs text-sky-700 hover:text-sky-900 font-medium">
-          Manage
-        </Link>
       </div>
 
       <div className={`grid gap-3 ${compact ? 'grid-cols-1 xl:grid-cols-2' : 'grid-cols-1 lg:grid-cols-2'}`}>

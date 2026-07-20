@@ -135,12 +135,19 @@ class ExamTypeCreateSerializer(serializers.ModelSerializer):
 
 class ExamSerializer(serializers.ModelSerializer):
     exam_type_name = serializers.CharField(source='exam_type.name', read_only=True)
-    class_name = serializers.CharField(source='class_obj.name', read_only=True)
+    class_name = serializers.SerializerMethodField()
     academic_year_name = serializers.CharField(source='academic_year.name', read_only=True)
     term_name = serializers.CharField(source='term.name', read_only=True, default=None)
     subjects_count = serializers.IntegerField(read_only=True, default=0)
     exam_group = serializers.PrimaryKeyRelatedField(read_only=True)
     exam_group_name = serializers.CharField(source='exam_group.name', read_only=True, default=None)
+
+    def get_class_name(self, obj):
+        session_name = getattr(obj, 'session_display_name', None)
+        if session_name:
+            section = getattr(obj, 'session_display_section', None)
+            return f"{session_name} - {section}" if section else session_name
+        return obj.class_obj.name if obj.class_obj_id else None
 
     class Meta:
         model = Exam
@@ -756,7 +763,7 @@ class PaperQuestionSerializer(serializers.ModelSerializer):
 
 class ExamPaperSerializer(serializers.ModelSerializer):
     """Serializer for ExamPaper with nested questions."""
-    class_name = serializers.CharField(source='class_obj.name', read_only=True)
+    class_name = serializers.SerializerMethodField()
     subject_name = serializers.CharField(source='subject.name', read_only=True)
     exam_name = serializers.CharField(source='exam.name', read_only=True, allow_null=True)
     generated_by_name = serializers.CharField(source='generated_by.username', read_only=True, allow_null=True)
@@ -771,6 +778,10 @@ class ExamPaperSerializer(serializers.ModelSerializer):
     question_topics_summary = serializers.SerializerMethodField()
     overused_questions = serializers.SerializerMethodField()
     
+    def get_class_name(self, obj):
+        from .paper_export_layout import resolve_exam_paper_class_name
+        return resolve_exam_paper_class_name(obj)
+
     def get_lesson_plans_details(self, obj):
         """Return lesson plan details."""
         return [

@@ -18,7 +18,7 @@ from urllib.parse import urlparse
 from django.utils.html import strip_tags
 import requests
 
-from .paper_export_layout import build_export_layout
+from .paper_export_layout import build_export_layout, resolve_exam_paper_class_name
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +108,7 @@ class ExamPaperDOCXGenerator:
         paper_heading.alignment = align.CENTER
 
         meta_lines = [
-            f"Class: {self.exam_paper.class_obj.name}",
+            f"Class: {resolve_exam_paper_class_name(self.exam_paper)}",
             f"Subject: {self.exam_paper.subject.name}",
             f"Total Marks: {self.exam_paper.total_marks}",
             f"Duration: {self.exam_paper.duration_minutes} minutes",

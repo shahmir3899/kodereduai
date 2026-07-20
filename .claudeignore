@@ -1,0 +1,100 @@
+# =============================================================================
+# Dependency directories
+# =============================================================================
+node_modules/
+.venv/
+venv/
+env/
+ENV/
+__pycache__/
+*.egg-info/
+
+# =============================================================================
+# Build / dist output
+# =============================================================================
+dist/
+build/
+staticfiles/
+frontend/dist/
+frontend/apps/koderkids-landing-astro/dist/
+frontend/apps/koderkids-landing-astro/.astro/
+mobile/android/app/build/
+mobile/android/.gradle/
+
+# =============================================================================
+# Logs
+# =============================================================================
+*.log
+.cursor/*.log
+
+# =============================================================================
+# Databases / backups / dumps
+# =============================================================================
+db.sqlite3
+db.sqlite3-journal
+*.dump
+backup_*.sql
+supabase_backup.dump
+storage_backup/
+
+# =============================================================================
+# Test fixtures / large mock or sample data
+# =============================================================================
+toc_sample.jpeg
+tmp-toc-tiny.png
+test_output.txt
+
+# =============================================================================
+# Large binary / media assets (not small icons or config)
+# =============================================================================
+*.pdf
+*.xlsx
+*.xmind
+*.docx
+mobile/assets/*.png
+!mobile/assets/favicon.png
+frontend/apps/koderkids-landing-astro/public/**/*.png
+frontend/apps/koderkids-landing-astro/public/**/*.jpg
+frontend/apps/koderkids-landing-astro/public/**/*.jpeg
+frontend/apps/koderkids-landing-astro/public/**/*.gif
+frontend/apps/koderkids-landing-astro/public/**/*.webp
+frontend/apps/koderkids-landing-astro/public/**/*.mp4
+frontend/apps/koderkids-landing-astro/public/**/*.mov
+
+# =============================================================================
+# Generated / compiled files
+# =============================================================================
+*.pyc
+*.pyo
+*.so
+package-lock.json
+mobile/android/gradle/wrapper/gradle-wrapper.jar
+
+# =============================================================================
+# Coverage / cache
+# =============================================================================
+.pytest_cache/
+htmlcov/
+.coverage
+.tox/
+.cache/
+
+# =============================================================================
+# Stray / junk files present in this repo root
+# =============================================================================
+nul
+tmpclaude-*-cwd
+d:Personalsmart-attendance*/
+
+# =============================================================================
+# Env files (never read secrets)
+# =============================================================================
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# =============================================================================
+# WAHA session store
+# =============================================================================
+infra/waha/sessions/

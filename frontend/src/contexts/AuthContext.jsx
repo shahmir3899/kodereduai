@@ -463,7 +463,12 @@ export function AuthProvider({ children }) {
         2 * 60 * 1000,
         'A',
       )
-      addPrefetch(['myClassTeacherAssignments', activeAcademicYearId], () => academicsApi.getMyClassTeacherAssignments(), 5 * 60 * 1000, 'A')
+      addPrefetch(
+        ['myClassTeacherAssignments', activeAcademicYearId],
+        () => academicsApi.getMyClassTeacherAssignments(activeAcademicYearId ? { academic_year: activeAcademicYearId } : undefined),
+        5 * 60 * 1000,
+        'A',
+      )
       if (isModuleAvailable({ moduleKey: 'attendance', enabledModules, isSuperAdmin })) {
         addPrefetch(['myAttendanceClasses'], () => attendanceApi.getMyAttendanceClasses(), 2 * 60 * 1000, 'B')
       }

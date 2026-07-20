@@ -18,7 +18,7 @@ from django.db.models.functions import Coalesce
 
 from core.permissions import (
     IsSchoolAdmin, IsSchoolAdminOrReadOnly, HasSchoolAccess, ModuleAccessMixin,
-    IsStudent, IsStudentOrAdmin, get_effective_role, ADMIN_ROLES, ROLE_HIERARCHY,
+    IsStudent, IsStudentOrAdmin, CanManageStudentPhoto, get_effective_role, ADMIN_ROLES, ROLE_HIERARCHY,
     get_teacher_combined_scope, get_teacher_session_class_scope, _get_session_class_student_ids,
 )
 from core.mixins import TenantQuerySetMixin, ensure_tenant_schools, ensure_tenant_school_id
@@ -123,6 +123,10 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
     queryset = Student.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
 
+    def get_permissions(self):
+        if self.action in ('upload_photo', 'remove_photo'):
+            return [IsAuthenticated(), CanManageStudentPhoto(), HasSchoolAccess()]
+        return super().get_permissions()
 
     def get_serializer_class(self):
         if self.action == 'create':
@@ -208,11 +212,16 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             )
 
         if academic_year:
-            # Use a JOIN to filter enrolled students (much faster than IN subquery)
-            queryset = queryset.filter(
-                enrollments__academic_year_id=academic_year,
-                enrollments__is_active=enrollment_active_filter,
-            ).distinct()
+            # Only exclude non-enrolled students on the list action — a single-student
+            # detail fetch (retrieve) must still resolve even if the student has no
+            # active enrollment for the requested year (e.g. withdrawn/transferred),
+            # it just won't get historical enrollment-scoped fields overridden.
+            if self.action == 'list':
+                # Use a JOIN to filter enrolled students (much faster than IN subquery)
+                queryset = queryset.filter(
+                    enrollments__academic_year_id=academic_year,
+                    enrollments__is_active=enrollment_active_filter,
+                ).distinct()
             # Annotate with enrollment-scoped roll number, class ID, and class name
             # so the serializer can return historical class info for previous sessions.
             from academic_sessions.models import StudentEnrollment
@@ -232,10 +241,12 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
                 _enrollment_class_grade=Subquery(enr_qs.values('class_obj__grade_level')[:1]),
                 _enrollment_status=Subquery(enr_qs.values('status')[:1]),
             )
-            return queryset.order_by(
-                '_enrollment_class_grade', '_enrollment_class_name',
-                '_enrollment_roll_number', 'name',
-            )
+            if self.action == 'list':
+                return queryset.order_by(
+                    '_enrollment_class_grade', '_enrollment_class_name',
+                    '_enrollment_roll_number', 'name',
+                )
+            return queryset
 
         return queryset.order_by('class_obj__grade_level', 'class_obj__name', 'roll_number')
 

@@ -152,8 +152,11 @@ export default function StudentProfilePage() {
 
   // Core data
   const { data: studentData, isLoading, isError: studentIsError, error: studentError } = useQuery({
-    queryKey: ['student', id],
-    queryFn: () => studentsApi.getStudent(id),
+    queryKey: ['student', id, activeAcademicYear?.id],
+    queryFn: () => studentsApi.getStudent(
+      id,
+      activeAcademicYear?.id ? { academic_year: activeAcademicYear.id } : undefined,
+    ),
   })
 
   const { data: summaryData, isLoading: summaryLoading, isError: summaryIsError, error: summaryError } = useQuery({

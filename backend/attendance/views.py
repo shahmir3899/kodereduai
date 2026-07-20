@@ -1089,7 +1089,8 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
         # Get class name
         try:
             class_obj = StudentClass.objects.get(id=class_id, school_id=school_id)
-            class_name = class_obj.name
+            from academic_sessions.utils import resolve_class_display_name
+            class_name = resolve_class_display_name(school_id, academic_year_id, class_obj)
         except StudentClass.DoesNotExist:
             return Response({'error': 'Class not found.'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -1457,6 +1458,7 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
     def my_classes(self, request):
         """Return classes available for manual attendance entry (role-aware)."""
         from students.models import Class
+        from academic_sessions.utils import get_session_class_label_map, resolve_current_academic_year_id
 
         school_id = ensure_tenant_school_id(request) or request.user.school_id
         if not school_id:
@@ -1472,7 +1474,19 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
         else:
             classes = Class.objects.none()
 
-        data = [{'id': c.id, 'name': c.name, 'section': c.section, 'grade_level': c.grade_level} for c in classes.order_by('grade_level', 'section', 'name')]
+        classes = list(classes.order_by('grade_level', 'section', 'name'))
+        academic_year_id = request.query_params.get('academic_year') or resolve_current_academic_year_id(school_id)
+        label_map = get_session_class_label_map(school_id, academic_year_id, [c.id for c in classes])
+
+        data = []
+        for c in classes:
+            session_label = label_map.get(c.id)
+            data.append({
+                'id': c.id,
+                'name': session_label['name'] if session_label else c.name,
+                'section': session_label['section'] if session_label else c.section,
+                'grade_level': c.grade_level,
+            })
         return Response(data)
 
     @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated, CanManualAttendance])

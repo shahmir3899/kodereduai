@@ -500,7 +500,7 @@ export default function Layout() {
       icon: BookOpenIcon,
       children: [
         { type: 'divider', label: 'Curriculum' },
-        { name: 'Subjects', href: '/academics/subjects', icon: AcademicIcon },
+        ...(!isTeacher ? [{ name: 'Subjects', href: '/academics/subjects', icon: AcademicIcon }] : []),
         { name: 'Timetable', href: '/academics/timetable', icon: ClockIcon },
         ...(isModuleEnabled('examinations') || isModuleEnabled('lms') ? [
           { type: 'divider', label: 'Assessment' },

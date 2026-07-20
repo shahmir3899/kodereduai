@@ -9,6 +9,9 @@ import { useSessionClasses } from './useSessionClasses'
  * - Teachers get only assigned classes (session-scoped when academic year is active).
  * - Non-teachers get undefined options so ClassSelector falls back to default behavior.
  * - Optionally auto-selects the first available class for teachers.
+ * - `fetchClasses` defaults to class-teacher-only scope (attendance/exam marking).
+ *   Pass a different source (e.g. lmsApi.getMyLessonPlanClasses) for callers that
+ *   also need subject-teacher classes, like lesson planning.
  */
 export default function useTeacherScopedClasses({
   academicYearId,
@@ -16,13 +19,14 @@ export default function useTeacherScopedClasses({
   setSelectedClass,
   autoSelectFirst = false,
   queryKey = 'teacherScopedClasses',
+  fetchClasses = () => attendanceApi.getMyAttendanceClasses(),
 }) {
   const { isTeacher } = useAuth()
   const { sessionClasses } = useSessionClasses(academicYearId)
 
   const { data: myClassesRes, isLoading } = useQuery({
     queryKey: [queryKey],
-    queryFn: () => attendanceApi.getMyAttendanceClasses(),
+    queryFn: fetchClasses,
     enabled: isTeacher,
   })
 

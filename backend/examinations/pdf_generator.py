@@ -13,7 +13,7 @@ import io
 import logging
 from datetime import datetime
 
-from .paper_export_layout import build_export_layout
+from .paper_export_layout import build_export_layout, resolve_exam_paper_class_name
 
 logger = logging.getLogger(__name__)
 
@@ -145,7 +145,7 @@ class ExamPaperPDFGenerator:
         elements.append(Paragraph(self.exam_paper.paper_title, title_style))
 
         metadata = [
-            ['Class:', self.exam_paper.class_obj.name, 'Total Marks:', str(self.exam_paper.total_marks)],
+            ['Class:', resolve_exam_paper_class_name(self.exam_paper), 'Total Marks:', str(self.exam_paper.total_marks)],
             ['Subject:', self.exam_paper.subject.name, 'Duration:', f"{self.exam_paper.duration_minutes} minutes"],
         ]
 

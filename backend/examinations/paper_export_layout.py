@@ -37,13 +37,28 @@ def _exam_name(exam_paper):
     return None
 
 
+def resolve_exam_paper_class_name(exam_paper):
+    """Session-year-aware class label for exports: prefers the linked exam's
+    academic year, falling back to the school's current academic year, so a
+    class renamed via SessionClass (e.g. "Nursery" -> "Junior 1") prints
+    correctly on exported papers instead of the stale master Class name.
+    """
+    from academic_sessions.utils import resolve_class_display_name, resolve_current_academic_year_id
+
+    academic_year_id = exam_paper.exam.academic_year_id if exam_paper.exam_id else None
+    if not academic_year_id:
+        academic_year_id = resolve_current_academic_year_id(exam_paper.school_id)
+
+    return resolve_class_display_name(exam_paper.school_id, academic_year_id, exam_paper.class_obj)
+
+
 def _build_header(exam_paper):
     return {
         'school_name': exam_paper.school.name,
         'exam_name': _exam_name(exam_paper),
         'paper_title': exam_paper.paper_title,
         'subject_name': exam_paper.subject.name,
-        'class_name': exam_paper.class_obj.name,
+        'class_name': resolve_exam_paper_class_name(exam_paper),
         'total_marks': str(exam_paper.total_marks),
         'duration_minutes': exam_paper.duration_minutes,
         'instructions': exam_paper.instructions or None,

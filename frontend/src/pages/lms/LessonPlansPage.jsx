@@ -174,6 +174,7 @@ export default function LessonPlansPage() {
     setSelectedClass: setFilterClass,
     autoSelectFirst: true,
     queryKey: 'teacherLessonPlanClasses',
+    fetchClasses: () => lmsApi.getMyLessonPlanClasses(),
   })
 
   // -- Data fetching --
