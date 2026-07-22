@@ -127,6 +127,8 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
   const [description, setDescription] = useState('')
   const [teachingMethods, setTeachingMethods] = useState('')
   const [materialsNeeded, setMaterialsNeeded] = useState('')
+  const [customTopics, setCustomTopics] = useState([])
+  const [customTopicInput, setCustomTopicInput] = useState('')
 
   // Pre-populate when editing
   useEffect(() => {
@@ -172,6 +174,7 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
       } else {
         setSelectedSubtopicIds([])
       }
+      setCustomTopics(editingPlan.custom_topics || [])
       if (editingPlan.title) {
         setStep(4)
       }
@@ -406,6 +409,17 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
     )
   }
 
+  const addCustomTopic = () => {
+    const label = customTopicInput.trim()
+    if (!label) return
+    setCustomTopics((prev) => (prev.includes(label) ? prev : [...prev, label]))
+    setCustomTopicInput('')
+  }
+
+  const removeCustomTopic = (index) => {
+    setCustomTopics((prev) => prev.filter((_, i) => i !== index))
+  }
+
   const toggleBook = (bookId) => {
     setExpandedBooks((prev) => ({ ...prev, [bookId]: !prev[bookId] }))
   }
@@ -469,6 +483,7 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
       ai_generated: wasAiGenerated,
       planned_topic_ids: selectedTopicIds,
       planned_subtopic_ids: selectedSubtopicIds,
+      custom_topics: customTopics,
       status,
     }
 
@@ -1033,6 +1048,54 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
                 value={materialsNeeded}
                 onChange={(e) => setMaterialsNeeded(e.target.value)}
               />
+            </div>
+
+            <div>
+              <label className="label mb-1">Custom topics (optional)</label>
+              <p className="text-xs text-gray-500 mb-2">
+                Add topic labels that aren&apos;t in a curriculum book — they show alongside any linked topics/sub-topics.
+              </p>
+              <div className="flex gap-2 mb-2">
+                <input
+                  type="text"
+                  className="input flex-1"
+                  placeholder="e.g., Guest speaker session"
+                  value={customTopicInput}
+                  onChange={(e) => setCustomTopicInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      addCustomTopic()
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={addCustomTopic}
+                  className="btn btn-secondary text-sm px-3 shrink-0"
+                >
+                  Add
+                </button>
+              </div>
+              {customTopics.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {customTopics.map((label, index) => (
+                    <span
+                      key={`${label}-${index}`}
+                      className="inline-flex items-center gap-1 bg-amber-50 text-amber-800 text-xs px-2.5 py-1 rounded-full"
+                    >
+                      {label}
+                      <button
+                        type="button"
+                        onClick={() => removeCustomTopic(index)}
+                        className="text-amber-500 hover:text-amber-700 ml-0.5"
+                      >
+                        &times;
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
 
             {(selectedTopicIds.length > 0 || selectedSubtopicIds.length > 0) && (

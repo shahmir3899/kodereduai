@@ -75,6 +75,7 @@ function emptyRow() {
     materials_needed: '',
     ai_generated: false,
     curriculumSummary: '',
+    custom_topics: [],
   }
 }
 
@@ -101,6 +102,7 @@ export default function BulkLessonPlansModal({ onClose, onSuccess, onCreateSingl
   const [datesSelectedForBulkCurriculum, setDatesSelectedForBulkCurriculum] = useState([])
   const [aiModalDate, setAiModalDate] = useState(null)
   const [creating, setCreating] = useState(false)
+  const [customTopicInputByDate, setCustomTopicInputByDate] = useState({})
 
   const { sessionClasses } = useSessionClasses(activeAcademicYear?.id, activeSchool?.id)
   const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
@@ -294,6 +296,22 @@ export default function BulkLessonPlansModal({ onClose, onSuccess, onCreateSingl
     }))
   }
 
+  const addCustomTopic = (dateStr) => {
+    const label = (customTopicInputByDate[dateStr] || '').trim()
+    if (!label) return
+    const r = rowByDate[dateStr] || emptyRow()
+    const existing = r.custom_topics || []
+    if (!existing.includes(label)) {
+      updateRow(dateStr, { custom_topics: [...existing, label] })
+    }
+    setCustomTopicInputByDate((prev) => ({ ...prev, [dateStr]: '' }))
+  }
+
+  const removeCustomTopic = (dateStr, index) => {
+    const r = rowByDate[dateStr] || emptyRow()
+    updateRow(dateStr, { custom_topics: (r.custom_topics || []).filter((_, i) => i !== index) })
+  }
+
   const handleCreateAll = async () => {
     setCreating(true)
     let created = 0
@@ -330,6 +348,7 @@ export default function BulkLessonPlansModal({ onClose, onSuccess, onCreateSingl
           ai_generated: !!r.ai_generated,
           planned_topic_ids: r.topicIds || [],
           planned_subtopic_ids: r.subtopicIds || [],
+          custom_topics: r.custom_topics || [],
           status: 'DRAFT',
         }
         try {
@@ -631,7 +650,7 @@ export default function BulkLessonPlansModal({ onClose, onSuccess, onCreateSingl
                             </span>
                           )}
                         </td>
-                        <td className="px-3 py-2 align-top">
+                        <td className="px-3 py-2 align-top min-w-[12rem]">
                           {!skipRow && (
                             <div className="flex flex-col gap-1">
                               <span className="text-xs text-gray-600">
@@ -644,6 +663,49 @@ export default function BulkLessonPlansModal({ onClose, onSuccess, onCreateSingl
                               >
                                 Select topics
                               </button>
+                              <div className="flex items-center gap-1 mt-1">
+                                <input
+                                  type="text"
+                                  className="input text-xs py-1 px-2 flex-1"
+                                  placeholder="+ custom topic"
+                                  value={customTopicInputByDate[d] || ''}
+                                  onChange={(e) =>
+                                    setCustomTopicInputByDate((prev) => ({ ...prev, [d]: e.target.value }))
+                                  }
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault()
+                                      addCustomTopic(d)
+                                    }
+                                  }}
+                                />
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary text-xs py-1 px-2 shrink-0"
+                                  onClick={() => addCustomTopic(d)}
+                                >
+                                  Add
+                                </button>
+                              </div>
+                              {(r.custom_topics || []).length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {r.custom_topics.map((label, index) => (
+                                    <span
+                                      key={`${label}-${index}`}
+                                      className="inline-flex items-center gap-1 bg-amber-50 text-amber-800 text-xs px-1.5 py-0.5 rounded-full"
+                                    >
+                                      {label}
+                                      <button
+                                        type="button"
+                                        onClick={() => removeCustomTopic(d, index)}
+                                        className="text-amber-500 hover:text-amber-700"
+                                      >
+                                        &times;
+                                      </button>
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                           )}
                         </td>
@@ -712,6 +774,7 @@ export default function BulkLessonPlansModal({ onClose, onSuccess, onCreateSingl
                 return (
                   <li key={d}>
                     <strong>{d}</strong>: {r.title || '(no title)'} — {rowCurriculumCount(d)} curriculum item(s)
+                    {r.custom_topics?.length ? `, ${r.custom_topics.length} custom topic(s)` : ''}
                     {r.ai_generated ? ' · AI' : ''}
                   </li>
                 )

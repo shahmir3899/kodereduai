@@ -491,6 +491,14 @@ class LessonPlan(models.Model):
         related_name='lesson_plans',
         help_text='Optional finer curriculum units linked to this lesson',
     )
+    custom_topics = models.JSONField(
+        default=list,
+        blank=True,
+        help_text=(
+            'Freeform topic labels typed by the teacher (not linked to a book), '
+            'shown alongside planned_topics/planned_subtopics in display_text'
+        ),
+    )
     display_text = models.TextField(
         blank=True,
         help_text='Pre-formatted topic display text, computed on save',
@@ -525,7 +533,12 @@ class LessonPlan(models.Model):
         return f"{self.title} - {self.class_obj.name} ({self.lesson_date})"
 
     def compute_display_text(self):
-        """Build pre-formatted text from planned topics and sub-topics, grouped by chapter."""
+        """
+        Build pre-formatted text from planned topics/sub-topics (grouped by
+        chapter) plus any teacher-typed custom topics, which are always
+        appended under their own heading so they stay visually distinct from
+        book-sourced content regardless of content_mode.
+        """
         if not self.pk:
             return ''
         topics = list(
@@ -538,7 +551,8 @@ class LessonPlan(models.Model):
                 'topic__chapter__chapter_number', 'topic__topic_number', 'subtopic_number',
             ),
         )
-        if not topics and not subtopics:
+        custom_topics = [t for t in (self.custom_topics or []) if str(t).strip()]
+        if not topics and not subtopics and not custom_topics:
             return ''
         subs_by_topic = {}
         for st in subtopics:
@@ -552,6 +566,11 @@ class LessonPlan(models.Model):
             lines.append(f"  {t.chapter.chapter_number}.{t.topic_number} {t.title}")
             for st in subs_by_topic.get(t.id, ()):
                 lines.append(f"      · {st.title}")
+        if custom_topics:
+            if lines:
+                lines.append('Custom topics')
+            for label in custom_topics:
+                lines.append(f"  · {str(label).strip()}")
         self.display_text = '\n'.join(lines)
         self.save(update_fields=['display_text'])
         return self.display_text

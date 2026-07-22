@@ -84,6 +84,7 @@ const EMPTY_FORM = {
   topicIds: [],
   subtopicIds: [],
   curriculumSummary: '',
+  custom_topics: [],
 }
 
 export default function LessonPlansPage() {
@@ -106,6 +107,7 @@ export default function LessonPlansPage() {
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false)
   const [form, setForm] = useState({ ...EMPTY_FORM })
+  const [customTopicInput, setCustomTopicInput] = useState('')
   const isMinimal = form.mode === 'MINIMAL' && !editingPlan
   const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
   const resolvedFilterClass = getResolvedMasterClassId(filterClass, activeAcademicYear?.id, sessionClasses)
@@ -376,7 +378,27 @@ export default function LessonPlansPage() {
   const openAddModal = () => {
     setEditingPlan(null)
     setForm({ ...EMPTY_FORM })
+    setCustomTopicInput('')
     setShowModal(true)
+  }
+
+  const addCustomTopic = () => {
+    const label = customTopicInput.trim()
+    if (!label) return
+    setForm((prev) => ({
+      ...prev,
+      custom_topics: (prev.custom_topics || []).includes(label)
+        ? prev.custom_topics
+        : [...(prev.custom_topics || []), label],
+    }))
+    setCustomTopicInput('')
+  }
+
+  const removeCustomTopic = (index) => {
+    setForm((prev) => ({
+      ...prev,
+      custom_topics: (prev.custom_topics || []).filter((_, i) => i !== index),
+    }))
   }
 
   const addObjectiveRow = () => {
@@ -441,7 +463,9 @@ export default function LessonPlansPage() {
       topicIds: (plan.planned_topics || []).map((t) => t.id),
       subtopicIds: (plan.planned_subtopics || []).map((s) => s.id),
       curriculumSummary: '',
+      custom_topics: plan.custom_topics || [],
     })
+    setCustomTopicInput('')
     setShowModal(true)
   }
 
@@ -449,6 +473,7 @@ export default function LessonPlansPage() {
     setShowModal(false)
     setEditingPlan(null)
     setForm({ ...EMPTY_FORM })
+    setCustomTopicInput('')
   }
 
   const handleSubmit = () => {
@@ -847,6 +872,18 @@ export default function LessonPlansPage() {
                       )}
                     </div>
                   )}
+                  {plan.custom_topics?.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {plan.custom_topics.slice(0, 3).map((label, index) => (
+                        <span key={`${label}-${index}`} className="px-1.5 py-0.5 bg-amber-50 text-amber-800 text-xs rounded">
+                          {label}
+                        </span>
+                      ))}
+                      {plan.custom_topics.length > 3 && (
+                        <span className="text-xs text-gray-500">+{plan.custom_topics.length - 3} more</span>
+                      )}
+                    </div>
+                  )}
                   {plan.ai_generated && (
                     <span className="inline-block mt-1 px-1.5 py-0.5 bg-purple-50 text-purple-700 text-xs rounded">
                       AI Generated
@@ -962,6 +999,18 @@ export default function LessonPlansPage() {
                             ))}
                             {plan.planned_topics.length > 2 && (
                               <span className="text-xs text-gray-500">+{plan.planned_topics.length - 2}</span>
+                            )}
+                          </div>
+                        )}
+                        {plan.custom_topics?.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {plan.custom_topics.slice(0, 2).map((label, index) => (
+                              <span key={`${label}-${index}`} className="px-1.5 py-0.5 bg-amber-50 text-amber-800 text-xs rounded">
+                                {label}
+                              </span>
+                            ))}
+                            {plan.custom_topics.length > 2 && (
+                              <span className="text-xs text-gray-500">+{plan.custom_topics.length - 2}</span>
                             )}
                           </div>
                         )}
@@ -1146,6 +1195,55 @@ export default function LessonPlansPage() {
                 </div>
                 {(!resolvedFormClassObj || !form.subject) && (
                   <p className="text-xs text-gray-500 mt-1">Select class and subject first.</p>
+                )}
+              </div>
+
+              {/* Custom topics — freeform labels not tied to a curriculum book, shown alongside chapter/topic selection above */}
+              <div>
+                <label className="label">Custom topics (optional)</label>
+                <p className="text-xs text-gray-500 mb-1">
+                  Add a topic label that isn&apos;t in a curriculum book — it shows alongside any selected chapter/topic.
+                </p>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    className="input flex-1"
+                    placeholder="e.g., Guest speaker session"
+                    value={customTopicInput}
+                    onChange={(e) => setCustomTopicInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        addCustomTopic()
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-secondary text-xs py-1 px-2 shrink-0"
+                    onClick={addCustomTopic}
+                  >
+                    Add
+                  </button>
+                </div>
+                {form.custom_topics?.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {form.custom_topics.map((label, index) => (
+                      <span
+                        key={`${label}-${index}`}
+                        className="inline-flex items-center gap-1 bg-amber-50 text-amber-800 text-xs px-2.5 py-1 rounded-full"
+                      >
+                        {label}
+                        <button
+                          type="button"
+                          onClick={() => removeCustomTopic(index)}
+                          className="text-amber-500 hover:text-amber-700 ml-0.5"
+                        >
+                          &times;
+                        </button>
+                      </span>
+                    ))}
+                  </div>
                 )}
               </div>
 

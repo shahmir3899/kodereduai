@@ -1569,6 +1569,7 @@ class LessonPlanViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         title_template = (vd.get('title_template') or '').strip()
         planned_topic_ids = vd.get('planned_topic_ids') or []
         planned_subtopic_ids = vd.get('planned_subtopic_ids') or []
+        custom_topics = [t.strip() for t in (vd.get('custom_topics') or []) if t.strip()]
         skipped_dates = []
         created_ids = []
 
@@ -1609,6 +1610,7 @@ class LessonPlanViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
                     'ai_generated': vd['ai_generated'],
                     'planned_topic_ids': planned_topic_ids,
                     'planned_subtopic_ids': planned_subtopic_ids,
+                    'custom_topics': custom_topics,
                     'status': 'DRAFT',
                     'is_active': True,
                 }

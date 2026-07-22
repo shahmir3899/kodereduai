@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { normalizeLessonPlanText } from './lessonPlanTextUtils'
+import { containsArabicScript, renderArabicTextToImage } from '../../utils/pdfArabicRender'
 
 /** Match report card / finance exports (indigo-600) */
 const PRIMARY = [79, 70, 229]
@@ -43,6 +44,78 @@ function compressImageForPdf(img, { maxDimension = 480, quality = 0.72 } = {}) {
     return dataUrl
   } catch {
     return null
+  }
+}
+
+/** Draws plain text, or (for Urdu/Arabic content) a pre-rendered image using the browser's own text shaping. */
+async function drawAdaptiveText(doc, text, x, y, { fontStyle = 'normal', fontSize = 10, color = [0, 0, 0], align = 'left', maxWidthMm } = {}) {
+  if (containsArabicScript(text)) {
+    const rendered = await renderArabicTextToImage(text, {
+      maxWidthMm: maxWidthMm ?? 120,
+      fontSizePt: fontSize,
+      color,
+      align: align === 'center' ? 'right' : align,
+    })
+    const drawX = align === 'right' ? x - rendered.widthMm : align === 'center' ? x - rendered.widthMm / 2 : x
+    doc.addImage(rendered.dataUrl, 'PNG', drawX, y - rendered.heightMm * 0.75, rendered.widthMm, rendered.heightMm)
+    return rendered.heightMm
+  }
+  doc.setFont('helvetica', fontStyle)
+  doc.setFontSize(fontSize)
+  doc.setTextColor(...color)
+  doc.text(text, x, y, { align })
+  return 0
+}
+
+/** Extra breathing room around Urdu images, on top of the cell's own padding — plain text sits
+ *  flush against that padding fine, but a right-aligned image reads as visually cramped there. */
+const ARABIC_IMAGE_MARGIN_MM = 2
+
+/** Pre-renders every Arabic-script string appearing in a table's body rows, keyed by the raw cell value. */
+async function prerenderArabicBodyCells(bodyRows, colWidthsMm, { fontSizePt = 9, color = [30, 30, 30], paddingMm = 2.2 } = {}) {
+  const images = new Map()
+  for (const row of bodyRows) {
+    for (let colIndex = 0; colIndex < row.length; colIndex++) {
+      const text = String(row[colIndex] ?? '')
+      if (!containsArabicScript(text) || images.has(text)) continue
+      const colWidth = colWidthsMm[colIndex] ?? 40
+      const rendered = await renderArabicTextToImage(text, {
+        maxWidthMm: Math.max(colWidth - paddingMm * 2 - ARABIC_IMAGE_MARGIN_MM * 2, 10),
+        fontSizePt,
+        color,
+        align: 'right',
+      })
+      images.set(text, rendered)
+    }
+  }
+  return images
+}
+
+/**
+ * autotable didParseCell/didDrawCell pair that substitutes a pre-rendered image for any
+ * body cell matching imagesMap. Uses the image's own natural dimensions (it was pre-rendered
+ * at exactly this column's target width) rather than re-deriving from data.cell.width — at
+ * didParseCell time, column widths from a fixed `columnStyles.cellWidth` haven't been resolved
+ * onto the cell yet (that happens later in autotable's layout pass), so relying on
+ * data.cell.width there previously produced an undersized row that clipped the image.
+ */
+function makeArabicCellHooks(doc, imagesMap) {
+  return {
+    didParseCell(data) {
+      if (data.section !== 'body') return
+      const rendered = imagesMap.get(String(data.cell.raw ?? ''))
+      if (!rendered) return
+      data.cell.text = []
+      data.cell.styles.minCellHeight = rendered.heightMm + data.cell.padding('vertical') + ARABIC_IMAGE_MARGIN_MM
+    },
+    didDrawCell(data) {
+      if (data.section !== 'body') return
+      const rendered = imagesMap.get(String(data.cell.raw ?? ''))
+      if (!rendered) return
+      const x = data.cell.x + data.cell.width - data.cell.padding('right') - ARABIC_IMAGE_MARGIN_MM - rendered.widthMm
+      const y = data.cell.y + (data.cell.height - rendered.heightMm) / 2
+      doc.addImage(rendered.dataUrl, 'PNG', x, y, rendered.widthMm, rendered.heightMm)
+    },
   }
 }
 
@@ -162,11 +235,10 @@ export async function exportLessonPlansPDF({
 
   const displayName = (schoolData?.name || '').trim()
   if (displayName) {
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(11)
-    doc.setTextColor(...PRIMARY)
-    doc.text(displayName, centerX, y, { align: 'center' })
-    y += 7
+    const consumed = await drawAdaptiveText(doc, displayName, centerX, y + 5, {
+      fontStyle: 'bold', fontSize: 11, color: PRIMARY, align: 'center', maxWidthMm: contentW,
+    })
+    y += consumed > 0 ? consumed + 4 : 7
   }
 
   const barH = 9
@@ -221,35 +293,32 @@ export async function exportLessonPlansPDF({
     })
   })
 
-  blocks.forEach((block, idx) => {
+  for (let idx = 0; idx < blocks.length; idx++) {
+    const block = blocks[idx]
     const isLast = idx === blocks.length - 1
 
     if (block.type === 'heading') {
       y = ensureSpace(doc, y, 14, pageH)
-      doc.setFont('helvetica', 'bold')
-      doc.setFontSize(12)
-      doc.setTextColor(...PRIMARY)
-      doc.text(`${block.group.className} — ${block.group.subjectName}`, MARGIN, y)
+      const groupHeading = `${block.group.className} — ${block.group.subjectName}`
+      await drawAdaptiveText(doc, groupHeading, MARGIN, y, { fontStyle: 'bold', fontSize: 12, color: PRIMARY, maxWidthMm: contentW })
       y += 3
       doc.setDrawColor(...PRIMARY)
       doc.setLineWidth(0.3)
       doc.line(MARGIN, y, pageW - MARGIN, y)
       y += 5
       if (block.constantTeacher) {
-        doc.setFont('helvetica', 'normal')
-        doc.setFontSize(9)
-        doc.setTextColor(90, 90, 90)
-        doc.text(`Teacher: ${block.constantTeacher}`, MARGIN, y)
+        const teacherLine = `Teacher: ${block.constantTeacher}`
+        await drawAdaptiveText(doc, teacherLine, MARGIN, y, { fontStyle: 'normal', fontSize: 9, color: [90, 90, 90], maxWidthMm: contentW })
         y += 6
       } else {
         y += 2
       }
-      return
+      continue
     }
 
     y = block.type === 'compact'
-      ? renderCompactTable(doc, block.plans, y, contentW, { showTeacherColumn: block.showTeacherColumn })
-      : renderStandardCard(doc, block.plan, y, pageH, contentW)
+      ? await renderCompactTable(doc, block.plans, y, contentW, { showTeacherColumn: block.showTeacherColumn })
+      : await renderStandardCard(doc, block.plan, y, pageH, contentW)
 
     y += 4
     if (!isLast) {
@@ -259,7 +328,7 @@ export async function exportLessonPlansPDF({
       doc.line(MARGIN, y, pageW - MARGIN, y)
       y += 10
     }
-  })
+  }
 
   // Footer: generated timestamp (left) + page number (center), every page
   const total = doc.internal.getNumberOfPages()
@@ -284,7 +353,7 @@ export async function exportLessonPlansPDF({
  * The Teacher column is dropped when every plan in this batch shares the same
  * teacher — that's already printed once above as "Teacher: X" instead.
  */
-function renderCompactTable(doc, plans, startY, contentW, { showTeacherColumn = true } = {}) {
+async function renderCompactTable(doc, plans, startY, contentW, { showTeacherColumn = true } = {}) {
   const head = showTeacherColumn
     ? ['Date', 'Lesson / Topic', 'Teacher', 'Duration', 'Status', 'AI']
     : ['Date', 'Lesson / Topic', 'Duration', 'Status', 'AI']
@@ -317,12 +386,19 @@ function renderCompactTable(doc, plans, startY, contentW, { showTeacherColumn = 
         4: { cellWidth: 12, halign: 'center' },
       }
 
+  const colWidthsMm = Array.from({ length: head.length }, (_, i) => columnStyles[i]?.cellWidth ?? 20)
+  const bodyPaddingMm = 2.2
+  const arabicImages = await prerenderArabicBodyCells(body, colWidthsMm, { fontSizePt: 8.5, paddingMm: bodyPaddingMm })
+  const { didParseCell, didDrawCell } = makeArabicCellHooks(doc, arabicImages)
+
   autoTable(doc, {
     startY,
     margin: { left: MARGIN, right: MARGIN, bottom: FOOTER_MM + 4 },
     tableWidth: contentW,
     head: [head],
     body,
+    didParseCell,
+    didDrawCell,
     theme: 'grid',
     headStyles: {
       fillColor: PRIMARY,
@@ -333,7 +409,7 @@ function renderCompactTable(doc, plans, startY, contentW, { showTeacherColumn = 
     },
     bodyStyles: {
       fontSize: 8.5,
-      cellPadding: 2.2,
+      cellPadding: bodyPaddingMm,
       lineColor: [220, 220, 220],
       lineWidth: 0.1,
     },
@@ -344,52 +420,71 @@ function renderCompactTable(doc, plans, startY, contentW, { showTeacherColumn = 
 }
 
 /** Full detail card for a plan with description/objectives/teaching-methods/materials content. */
-function renderStandardCard(doc, plan, startY, pageH, contentW) {
+async function renderStandardCard(doc, plan, startY, pageH, contentW) {
   let y = startY
   const title = plan.title?.trim() || 'Untitled'
   const heading = `${formatLessonDate(plan.lesson_date)}  ·  ${title}`
+  const barH = 9
+
+  // Heading bar is drawn directly (not via autotable) so Urdu titles can be placed as an image.
+  y = ensureSpace(doc, y, barH + 4, pageH)
+  doc.setFillColor(...PRIMARY)
+  doc.rect(MARGIN, y, contentW, barH, 'F')
+  if (containsArabicScript(heading)) {
+    const rendered = await renderArabicTextToImage(heading, {
+      maxWidthMm: contentW - 6,
+      fontSizePt: 10,
+      color: [255, 255, 255],
+      align: 'right',
+    })
+    const drawH = Math.min(rendered.heightMm, barH - 2)
+    const drawW = rendered.widthMm * (drawH / rendered.heightMm)
+    doc.addImage(rendered.dataUrl, 'PNG', MARGIN + contentW - 3 - drawW, y + (barH - drawH) / 2, drawW, drawH)
+  } else {
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(10)
+    doc.setTextColor(255, 255, 255)
+    doc.text(heading, MARGIN + 3, y + barH - 2.5)
+  }
+  y += barH + 3
+
+  const metaBody = [
+    ['Class', plan.class_name || '—'],
+    ['Subject', plan.subject_name || '—'],
+    ['Teacher', plan.teacher_name || '—'],
+    ['Duration', plan.duration_minutes != null ? `${plan.duration_minutes} min` : '—'],
+    ['Status', String(plan.status || '—')],
+    ...(plan.ai_generated ? [['Source', 'AI-generated']] : []),
+  ]
+  const metaColWidthsMm = [42, contentW - 42]
+  const metaPaddingMm = 2.5
+  const metaImages = await prerenderArabicBodyCells(metaBody, metaColWidthsMm, { fontSizePt: 9, paddingMm: metaPaddingMm })
+  const { didParseCell, didDrawCell } = makeArabicCellHooks(doc, metaImages)
 
   autoTable(doc, {
     startY: y,
     margin: { left: MARGIN, right: MARGIN },
     tableWidth: contentW,
-    head: [[{ content: heading, colSpan: 2 }]],
-    headStyles: {
-      fillColor: PRIMARY,
-      textColor: 255,
-      fontStyle: 'bold',
-      fontSize: 10,
-      cellPadding: { top: 3, right: 3, bottom: 3, left: 3 },
-      valign: 'middle',
-    },
-    body: [
-      ['Class', plan.class_name || '—'],
-      ['Subject', plan.subject_name || '—'],
-      ['Teacher', plan.teacher_name || '—'],
-      [
-        'Duration',
-        plan.duration_minutes != null ? `${plan.duration_minutes} min` : '—',
-      ],
-      ['Status', String(plan.status || '—')],
-      ...(plan.ai_generated ? [['Source', 'AI-generated']] : []),
-    ],
+    body: metaBody,
+    didParseCell,
+    didDrawCell,
     theme: 'plain',
     styles: {
       fontSize: 9,
-      cellPadding: 2.5,
+      cellPadding: metaPaddingMm,
       lineColor: [220, 220, 220],
       lineWidth: 0.1,
     },
     columnStyles: {
-      0: { cellWidth: 42, fontStyle: 'bold', textColor: [85, 85, 85] },
-      1: { cellWidth: contentW - 42 },
+      0: { cellWidth: metaColWidthsMm[0], fontStyle: 'bold', textColor: [85, 85, 85] },
+      1: { cellWidth: metaColWidthsMm[1] },
     },
   })
 
   y = doc.lastAutoTable.finalY + 6
 
-  y = writeSection(doc, y, pageH, contentW, 'Description', plan.description)
-  y = writeSection(
+  y = await writeSection(doc, y, pageH, contentW, 'Description', plan.description)
+  y = await writeSection(
     doc,
     y,
     pageH,
@@ -397,11 +492,11 @@ function renderStandardCard(doc, plan, startY, pageH, contentW) {
     'Objectives',
     normalizeLessonPlanText(plan.objectives_text ?? plan.objectives),
   )
-  y = writeSection(doc, y, pageH, contentW, 'Teaching methods', plan.teaching_methods)
-  y = writeSection(doc, y, pageH, contentW, 'Materials needed', plan.materials_needed)
+  y = await writeSection(doc, y, pageH, contentW, 'Teaching methods', plan.teaching_methods)
+  y = await writeSection(doc, y, pageH, contentW, 'Materials needed', plan.materials_needed)
 
   if (plan.display_text?.trim()) {
-    y = writeSection(doc, y, pageH, contentW, 'Curriculum / topic summary', plan.display_text)
+    y = await writeSection(doc, y, pageH, contentW, 'Curriculum / topic summary', plan.display_text)
   }
 
   if (plan.planned_topics?.length) {
@@ -411,14 +506,19 @@ function renderStandardCard(doc, plan, startY, pageH, contentW) {
         return `• ${t.title || 'Topic'}${ch}`
       })
       .join('\n')
-    y = writeSection(doc, y, pageH, contentW, 'Planned topics', bullets)
+    y = await writeSection(doc, y, pageH, contentW, 'Planned topics', bullets)
   }
 
   if (plan.planned_subtopics?.length) {
     const bullets = plan.planned_subtopics
       .map((st) => `• ${st.title?.trim() || `Sub-topic #${st.id ?? '?'}`}`)
       .join('\n')
-    y = writeSection(doc, y, pageH, contentW, 'Planned sub-topics', bullets)
+    y = await writeSection(doc, y, pageH, contentW, 'Planned sub-topics', bullets)
+  }
+
+  if (plan.custom_topics?.length) {
+    const bullets = plan.custom_topics.map((label) => `• ${label}`).join('\n')
+    y = await writeSection(doc, y, pageH, contentW, 'Custom topics', bullets)
   }
 
   return y
@@ -432,7 +532,7 @@ function ensureSpace(doc, y, neededMm, pageH) {
   return y
 }
 
-function writeSection(doc, startY, pageH, contentW, heading, rawText) {
+async function writeSection(doc, startY, pageH, contentW, heading, rawText) {
   const text = rawText != null && String(rawText).trim() ? String(rawText).trim() : '—'
   let y = startY
   y = ensureSpace(doc, y, 12, pageH)
@@ -442,6 +542,18 @@ function writeSection(doc, startY, pageH, contentW, heading, rawText) {
   doc.setTextColor(55, 55, 55)
   doc.text(heading, MARGIN, y)
   y += 5.5
+
+  if (containsArabicScript(text)) {
+    const rendered = await renderArabicTextToImage(text, {
+      maxWidthMm: contentW,
+      fontSizePt: 9,
+      color: [35, 35, 35],
+      align: 'right',
+    })
+    y = ensureSpace(doc, y, rendered.heightMm, pageH)
+    doc.addImage(rendered.dataUrl, 'PNG', MARGIN, y, rendered.widthMm, rendered.heightMm)
+    return y + rendered.heightMm + 3
+  }
 
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(9)

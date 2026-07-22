@@ -422,6 +422,7 @@ class LessonPlanReadSerializer(serializers.ModelSerializer):
     display_text = serializers.CharField(read_only=True)
     content_mode = serializers.CharField(read_only=True)
     ai_generated = serializers.BooleanField(read_only=True)
+    custom_topics = serializers.ListField(child=serializers.CharField(), read_only=True)
 
     class Meta:
         model = LessonPlan
@@ -434,7 +435,8 @@ class LessonPlanReadSerializer(serializers.ModelSerializer):
             'title', 'description', 'objectives', 'objectives_text',
             'lesson_date', 'duration_minutes',
             'materials_needed', 'teaching_methods',
-            'planned_topics', 'planned_subtopics', 'linked_objectives', 'display_text',
+            'planned_topics', 'planned_subtopics', 'custom_topics',
+            'linked_objectives', 'display_text',
             'content_mode', 'ai_generated',
             'status', 'status_display',
             'is_active', 'attachments',
@@ -473,6 +475,11 @@ class LessonPlanCreateSerializer(serializers.ModelSerializer):
         write_only=True,
     )
     ai_job_id = serializers.IntegerField(required=False, write_only=True)
+    custom_topics = serializers.ListField(
+        child=serializers.CharField(max_length=200, allow_blank=True),
+        required=False,
+        max_length=20,
+    )
 
     class Meta:
         model = LessonPlan
@@ -483,10 +490,14 @@ class LessonPlanCreateSerializer(serializers.ModelSerializer):
             'lesson_date', 'duration_minutes',
             'materials_needed', 'teaching_methods',
             'content_mode', 'ai_generated',
-            'planned_topic_ids', 'planned_subtopic_ids', 'ai_job_id',
+            'planned_topic_ids', 'planned_subtopic_ids', 'custom_topics', 'ai_job_id',
             'status', 'is_active',
         ]
         read_only_fields = ['id']
+
+    def validate_custom_topics(self, value):
+        cleaned = [label.strip() for label in value if label.strip()]
+        return cleaned
 
     def _merge_topic_ids_from_subtopics(self, topic_ids, subtopic_ids):
         tid_set = {int(x) for x in (topic_ids or []) if x is not None}
@@ -510,6 +521,7 @@ class LessonPlanCreateSerializer(serializers.ModelSerializer):
         if merged_topics or subtopic_ids:
             instance.content_mode = 'TOPICS'
             instance.save(update_fields=['content_mode'])
+        if merged_topics or subtopic_ids or instance.custom_topics:
             instance.compute_display_text()
         if ai_job_id and instance.ai_generated:
             AIJob.objects.filter(id=ai_job_id).update(accepted=True)
@@ -519,8 +531,10 @@ class LessonPlanCreateSerializer(serializers.ModelSerializer):
         topic_ids = validated_data.pop('planned_topic_ids', None)
         subtopic_ids = validated_data.pop('planned_subtopic_ids', None)
         ai_job_id = validated_data.pop('ai_job_id', None)
+        custom_topics_changed = 'custom_topics' in validated_data
         instance = super().update(instance, validated_data)
-        if topic_ids is not None or subtopic_ids is not None:
+        topics_changed = topic_ids is not None or subtopic_ids is not None
+        if topics_changed:
             t_list = topic_ids if topic_ids is not None else list(
                 instance.planned_topics.values_list('id', flat=True),
             )
@@ -530,6 +544,7 @@ class LessonPlanCreateSerializer(serializers.ModelSerializer):
             merged = self._merge_topic_ids_from_subtopics(t_list, s_list)
             instance.planned_topics.set(merged)
             instance.planned_subtopics.set(s_list or [])
+        if topics_changed or custom_topics_changed:
             instance.compute_display_text()
         if ai_job_id and instance.ai_generated:
             AIJob.objects.filter(id=ai_job_id).update(accepted=True)
@@ -575,6 +590,12 @@ class LessonPlanBulkCreateSerializer(serializers.Serializer):
         child=serializers.IntegerField(),
         required=False,
         default=list,
+    )
+    custom_topics = serializers.ListField(
+        child=serializers.CharField(max_length=200, allow_blank=True),
+        required=False,
+        default=list,
+        max_length=20,
     )
     description = serializers.CharField(required=False, allow_blank=True, default='')
     objectives = serializers.CharField(required=False, allow_blank=True, default='')
