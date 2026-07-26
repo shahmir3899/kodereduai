@@ -322,21 +322,14 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
     return true
   }
 
-  const validateStep2 = () => {
-    if (mode === 'TOPICS' && selectedTopicIds.length === 0 && selectedSubtopicIds.length === 0) {
-      showError('Please select at least one topic or sub-topic')
-      return false
-    }
-    return true
-  }
-
   const goNext = () => {
     if (step === 1 && !validateStep1()) return
     if (step === 1 && mode === 'FREEFORM') {
       setStep(3)
       return
     }
-    if (step === 2 && !validateStep2()) return
+    // Book topics/sub-topics are optional at step 2 — a custom topic (added in
+    // the review step) also satisfies TOPICS mode; enforced in handleSave.
     setStep((s) => Math.min(s + 1, 4))
   }
 
@@ -464,6 +457,15 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
   const handleSave = (status) => {
     if (!normalizeLessonPlanText(title)) {
       showError('Title is required')
+      return
+    }
+    if (
+      mode === 'TOPICS' &&
+      selectedTopicIds.length === 0 &&
+      selectedSubtopicIds.length === 0 &&
+      customTopics.length === 0
+    ) {
+      showError('Please select at least one topic/sub-topic or add a custom topic')
       return
     }
 

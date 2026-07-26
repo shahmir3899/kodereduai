@@ -231,8 +231,9 @@ export default function BulkLessonPlansModal({ onClose, onSuccess, onCreateSingl
           if (existingDateSet.has(d)) continue
           const r = rowByDate[d] || emptyRow()
           const topicCount = (r.chapterIds || []).length + (r.topicIds || []).length + (r.subtopicIds || []).length
-          if (topicCount === 0) {
-            showError(`Select at least one chapter/topic for ${d} (or skip dates that already have a plan).`)
+          const customTopicCount = (r.custom_topics || []).length
+          if (topicCount === 0 && customTopicCount === 0) {
+            showError(`Select at least one chapter/topic or add a custom topic for ${d} (or skip dates that already have a plan).`)
             return
           }
         }
@@ -241,7 +242,7 @@ export default function BulkLessonPlansModal({ onClose, onSuccess, onCreateSingl
           teachingDates.forEach((d) => {
             if (existingDateSet.has(d)) return
             const r = next[d] || emptyRow()
-            next[d] = { ...r, title: deriveAutoTitleFromCurriculumSummary(r.curriculumSummary) }
+            next[d] = { ...r, title: deriveAutoTitleFromCurriculumSummary(r.curriculumSummary, r.custom_topics) }
           })
           return next
         })
@@ -330,7 +331,7 @@ export default function BulkLessonPlansModal({ onClose, onSuccess, onCreateSingl
           setCreating(false)
           return
         }
-        const contentMode = r.topicIds?.length || r.subtopicIds?.length ? 'TOPICS' : 'FREEFORM'
+        const contentMode = r.topicIds?.length || r.subtopicIds?.length || r.custom_topics?.length ? 'TOPICS' : 'FREEFORM'
         const payload = {
           school: activeSchool?.id,
           academic_year: activeAcademicYear?.id,

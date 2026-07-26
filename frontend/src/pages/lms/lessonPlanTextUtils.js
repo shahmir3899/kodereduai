@@ -23,10 +23,13 @@ export function normalizeLessonPlanText(val) {
 
 /**
  * Derive a lesson title from LessonPlanTopicsPickerModal's `curriculumSummary`
- * (lines like "• Book › Chapter: Topic" or "• Book › Chapter › Topic: Sub-topic").
- * Used by minimal-mode lesson plan creation, where the user never types a title.
+ * (lines like "• Book › Chapter: Topic" or "• Book › Chapter › Topic: Sub-topic"),
+ * plus any teacher-typed custom topics on their own line below. Used by
+ * minimal-mode lesson plan creation, where the user never types a title —
+ * this derived title is what shows in the compact PDF export's "Lesson /
+ * Topic" column, so custom-only rows need it too or they'd read as blank.
  */
-export function deriveAutoTitleFromCurriculumSummary(curriculumSummary, fallback = 'Lesson') {
+export function deriveAutoTitleFromCurriculumSummary(curriculumSummary, customTopics = [], fallback = 'Lesson') {
   const lines = String(curriculumSummary || '')
     .split('\n')
     .map((line) => line.replace(/^[•\-*]\s*/, '').trim())
@@ -39,6 +42,14 @@ export function deriveAutoTitleFromCurriculumSummary(curriculumSummary, fallback
     })
     .filter(Boolean)
   const unique = Array.from(new Set(names))
-  const title = unique.slice(0, 3).join(', ')
-  return (title || fallback).slice(0, 200)
+  const bookTitle = unique.slice(0, 3).join(', ')
+
+  const customTitle = (customTopics || [])
+    .map((label) => String(label || '').trim())
+    .filter(Boolean)
+    .slice(0, 3)
+    .join(', ')
+
+  const combined = [bookTitle, customTitle].filter(Boolean).join('\n')
+  return (combined || fallback).slice(0, 200)
 }

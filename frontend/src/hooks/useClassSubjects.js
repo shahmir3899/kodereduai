@@ -6,6 +6,9 @@ export function useClassSubjects(classId) {
     queryKey: ['classSubjects', classId],
     queryFn: () => academicsApi.getClassSubjectsByClass(classId),
     enabled: !!classId,
+    // Subject-teacher assignments change occasionally (HR reassignment), but not
+    // every few seconds — avoid refetching on every tab focus across consumers.
+    staleTime: 2 * 60_000,
   })
 
   const assignments = data?.data?.results || data?.data || []

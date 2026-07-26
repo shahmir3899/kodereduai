@@ -15,6 +15,9 @@ export function useSessionClasses(academicYearId, schoolId) {
       is_active: true,
     }),
     enabled: !!resolvedSchoolId && !!academicYearId,
+    // Session/class rosters rarely change mid-session — avoid refetching this on
+    // every tab focus across the many pages that resolve class scope through it.
+    staleTime: 5 * 60_000,
   })
 
   const sessionClasses = data?.data?.results || data?.data || []

@@ -1352,6 +1352,8 @@ class LessonPlanViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         subject_id - filter by subject
         teacher_id - filter by teacher
         status     - filter by status (DRAFT, PUBLISHED)
+        date_from  - filter by lesson_date >= (YYYY-MM-DD)
+        date_to    - filter by lesson_date <= (YYYY-MM-DD)
     """
     required_module = 'lms'
     queryset = LessonPlan.objects.all()
@@ -1367,7 +1369,10 @@ class LessonPlanViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
 
         queryset = super().get_queryset().select_related(
             'school', 'academic_year', 'class_obj', 'subject', 'teacher',
-        ).prefetch_related('attachments', 'planned_topics', 'planned_subtopics')
+        ).prefetch_related(
+            'attachments', 'planned_topics', 'planned_subtopics',
+            'lesson_objectives__objective__topic',
+        )
         queryset = annotate_session_class_display(queryset)
 
         queryset = _apply_teacher_dual_scope(queryset, self.request)
@@ -1395,6 +1400,15 @@ class LessonPlanViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         plan_status = self.request.query_params.get('status')
         if plan_status:
             queryset = queryset.filter(status=plan_status)
+
+        # Filter by lesson date range
+        date_from = self.request.query_params.get('date_from')
+        if date_from:
+            queryset = queryset.filter(lesson_date__gte=date_from)
+
+        date_to = self.request.query_params.get('date_to')
+        if date_to:
+            queryset = queryset.filter(lesson_date__lte=date_to)
 
         # Filter by academic year
         academic_year_id = scope['academic_year_id'] or self.request.query_params.get('academic_year')

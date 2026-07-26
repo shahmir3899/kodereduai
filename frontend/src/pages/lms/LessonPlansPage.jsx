@@ -7,6 +7,7 @@ import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import { useClassSubjects } from '../../hooks/useClassSubjects'
 import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
+import { useMediaQuery } from '../../hooks/useMediaQuery'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 import { useToast } from '../../components/Toast'
 import TeacherScopeSummary from '../../components/teacher/TeacherScopeSummary'
@@ -93,6 +94,7 @@ export default function LessonPlansPage() {
   const { sessionClasses } = useSessionClasses(activeAcademicYear?.id)
   const queryClient = useQueryClient()
   const { showError, showSuccess } = useToast()
+  const isDesktop = useMediaQuery('(min-width: 640px)')
 
   const [search, setSearch] = useState('')
   const [exportDateFrom, setExportDateFrom] = useState('')
@@ -184,33 +186,38 @@ export default function LessonPlansPage() {
   const { data: schoolRes } = useQuery({
     queryKey: ['currentSchool'],
     queryFn: () => schoolsApi.getMySchool(),
+    staleTime: 5 * 60_000,
   })
 
   const { data: staffData } = useQuery({
     queryKey: ['hrStaff'],
     queryFn: () => hrApi.getStaff({ status: 'ACTIVE', page_size: 9999 }),
+    staleTime: 2 * 60_000,
   })
 
   const hasValidDateRange = Boolean(exportDateFrom && exportDateTo && exportDateFrom <= exportDateTo)
 
   const { data: plansData, isLoading } = useQuery({
-    queryKey: ['lessonPlans', resolvedFilterClass, filterSubject, activeAcademicYear?.id],
+    queryKey: ['lessonPlans', resolvedFilterClass, filterSubject, activeAcademicYear?.id, exportDateFrom, exportDateTo],
     queryFn: () =>
       lmsApi.getLessonPlans({
         ...(resolvedFilterClass && { class_id: resolvedFilterClass }),
         ...(filterSubject && { subject_id: filterSubject }),
         ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
+        date_from: exportDateFrom,
+        date_to: exportDateTo,
         page_size: 9999,
       }),
-    // Lesson plans are only fetched once a class AND a valid lesson-date range are applied.
+    // Lesson plans are only fetched once a class AND a valid lesson-date range are applied —
+    // the date range itself is now applied server-side rather than fetched-then-filtered.
     enabled: !!resolvedFilterClass && hasValidDateRange,
   })
 
   const staff = staffData?.data?.results || staffData?.data || []
-  const allPlans = plansData?.data?.results || plansData?.data || []
+  const allPlans = hasValidDateRange ? (plansData?.data?.results || plansData?.data || []) : []
 
-  // Client-side search
-  const searchedPlans = useMemo(() => {
+  // Client-side search (date range is already applied server-side above)
+  const plans = useMemo(() => {
     if (!search) return allPlans
     const q = search.toLowerCase()
     return allPlans.filter(
@@ -219,14 +226,6 @@ export default function LessonPlansPage() {
         p.description?.toLowerCase().includes(q)
     )
   }, [allPlans, search])
-
-  // Restrict to the applied lesson-date range (the same range gates fetching above).
-  const plans = useMemo(() => {
-    if (!hasValidDateRange) return []
-    return searchedPlans.filter(
-      (p) => p.lesson_date && p.lesson_date >= exportDateFrom && p.lesson_date <= exportDateTo,
-    )
-  }, [searchedPlans, hasValidDateRange, exportDateFrom, exportDateTo])
 
   const exportPlans = useMemo(
     () => plans.slice().sort((a, b) => String(a.lesson_date).localeCompare(String(b.lesson_date))),
@@ -486,14 +485,15 @@ export default function LessonPlansPage() {
       return
     }
     const topicSelectionCount = form.chapterIds.length + form.topicIds.length + form.subtopicIds.length
+    const customTopicCount = (form.custom_topics || []).length
 
     if (isMinimal) {
       if (!form.lesson_date) {
         showError('Please select a lesson date')
         return
       }
-      if (topicSelectionCount === 0) {
-        showError('Please select at least one chapter or topic')
+      if (topicSelectionCount === 0 && customTopicCount === 0) {
+        showError('Please select at least one chapter/topic or add a custom topic')
         return
       }
       if (!form.teacher) {
@@ -508,7 +508,7 @@ export default function LessonPlansPage() {
     const objectiveRows = form.objective_rows || []
     const payload = {
       ...form,
-      title: isMinimal ? deriveAutoTitleFromCurriculumSummary(form.curriculumSummary) : form.title,
+      title: isMinimal ? deriveAutoTitleFromCurriculumSummary(form.curriculumSummary, form.custom_topics) : form.title,
       description: isMinimal ? '' : form.description,
       objectives: isMinimal ? '' : (objectiveRowsToPlainText(objectiveRows) || form.objectives),
       materials_needed: isMinimal ? '' : form.materials_needed,
@@ -796,8 +796,9 @@ export default function LessonPlansPage() {
               </div>
             )}
 
-            {/* Mobile card view */}
-            <div className="sm:hidden space-y-2 p-2">
+            {/* Mobile card view — only mounted below the sm breakpoint, not just CSS-hidden */}
+            {!isDesktop && (
+            <div className="space-y-2 p-2">
               <label className="flex items-center gap-2 px-1 pb-1 text-xs text-gray-600">
                 <input
                   type="checkbox"
@@ -914,9 +915,11 @@ export default function LessonPlansPage() {
                 </div>
               ))}
             </div>
+            )}
 
-            {/* Desktop table view */}
-            <div className="hidden sm:block overflow-x-auto">
+            {/* Desktop table view — only mounted at/above the sm breakpoint */}
+            {isDesktop && (
+            <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
@@ -1077,6 +1080,7 @@ export default function LessonPlansPage() {
                 </tbody>
               </table>
             </div>
+            )}
           </>
         )}
       </div>

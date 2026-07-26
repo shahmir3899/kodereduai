@@ -116,9 +116,18 @@ def ensure_demo_portal_baseline(school_id: int | None = None) -> dict:
         (classes[1], [("1", "Demo Hamza"), ("2", "Demo Ayesha"), ("3", "Demo Bilal")]),
         (classes[2], [("1", "Demo Zara"), ("2", "Demo Omar"), ("3", "Demo Hira")]),
     ]
+    blood_groups = ["O+", "A+", "B+", "AB+", "O-", "A-"]
+    from students.models import StudentDocument
+
     for cls, pairs in roll_plan:
-        for roll, sname in pairs:
-            _, created = Student.objects.get_or_create(
+        for i, (roll, sname) in enumerate(pairs):
+            gender = "MALE" if i % 2 == 0 else "FEMALE"
+            # Age loosely follows grade level so DOBs read as plausible for the class.
+            dob = date(date.today().year - (5 + cls.grade_level), 1 + (i * 2) % 12, 5 + (i * 3) % 20)
+            guardian_last = sname.split(" ", 1)[-1]
+            phone = f"0300-{(1000000 + cls.id * 1000 + int(roll) * 10 + i):07d}"
+
+            stu, created = Student.objects.get_or_create(
                 school=school,
                 class_obj=cls,
                 roll_number=roll,
@@ -126,11 +135,47 @@ def ensure_demo_portal_baseline(school_id: int | None = None) -> dict:
                     "name": sname,
                     "is_active": True,
                     "status": Student.Status.ACTIVE,
-                    "gender": "",
+                    "gender": gender,
                 },
             )
             if created:
                 summary["students"] += 1
+
+            # Backfill demographic/guardian fields even on pre-existing rows,
+            # so re-running this after the roster already exists still fills gaps.
+            field_updates = {
+                "gender": gender,
+                "date_of_birth": dob,
+                "admission_number": f"DEMO-{sid}-{cls.id}-{roll}",
+                "admission_date": date(dob.year + 5, 4, 1),
+                "blood_group": blood_groups[i % len(blood_groups)],
+                "address": f"House {10 + i}, Demo Town, Model City",
+                "parent_name": f"Mr. {guardian_last} Sr.",
+                "parent_phone": phone,
+                "guardian_name": f"Mr. {guardian_last} Sr.",
+                "guardian_relation": "Father",
+                "guardian_phone": phone,
+                "guardian_email": f"guardian.{sname.lower().replace(' ', '.')}@example.com",
+                "guardian_occupation": "Business",
+                "guardian_address": f"House {10 + i}, Demo Town, Model City",
+                "emergency_contact": phone,
+                "photo_url": f"https://demo-seed.invalid/students/{sid}/{cls.id}/{roll}.jpg",
+            }
+            dirty_fields = [f for f, v in field_updates.items() if getattr(stu, f) != v]
+            if dirty_fields:
+                for f, v in field_updates.items():
+                    setattr(stu, f, v)
+                stu.save(update_fields=dirty_fields)
+
+            StudentDocument.objects.get_or_create(
+                school=school,
+                student=stu,
+                document_type="BIRTH_CERT",
+                defaults={
+                    "title": "Birth Certificate",
+                    "file_url": f"https://demo-seed.invalid/students/{sid}/{cls.id}/{roll}/birth_cert.pdf",
+                },
+            )
 
     # --- HR: one department + designation + staff (for payslips / timetable teacher) ---
     dept, _ = StaffDepartment.objects.get_or_create(

@@ -353,13 +353,27 @@ export async function exportLessonPlansPDF({
  * The Teacher column is dropped when every plan in this batch shares the same
  * teacher — that's already printed once above as "Teacher: X" instead.
  */
+/**
+ * Title/display_text alone can miss custom topics — e.g. on plans saved before
+ * auto-titling accounted for them, or wherever title was typed by hand. Append
+ * custom topics on their own line so they always show here regardless of title.
+ */
+function compactTopicCell(p) {
+  const base = p.title?.trim() || p.display_text?.trim() || 'Untitled'
+  const customTopics = (p.custom_topics || []).map((t) => String(t || '').trim()).filter(Boolean)
+  if (!customTopics.length) return base
+  const alreadyIncluded = customTopics.every((t) => base.includes(t))
+  if (alreadyIncluded) return base
+  return `${base}\n${customTopics.join(', ')}`
+}
+
 async function renderCompactTable(doc, plans, startY, contentW, { showTeacherColumn = true } = {}) {
   const head = showTeacherColumn
     ? ['Date', 'Lesson / Topic', 'Teacher', 'Duration', 'Status', 'AI']
     : ['Date', 'Lesson / Topic', 'Duration', 'Status', 'AI']
 
   const body = plans.map((p) => {
-    const row = [formatLessonDate(p.lesson_date), p.title?.trim() || p.display_text?.trim() || 'Untitled']
+    const row = [formatLessonDate(p.lesson_date), compactTopicCell(p)]
     if (showTeacherColumn) row.push(p.teacher_name || '—')
     row.push(
       p.duration_minutes != null ? `${p.duration_minutes} min` : '—',

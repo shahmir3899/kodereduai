@@ -445,12 +445,11 @@ class LessonPlanReadSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at', 'updated_at']
 
     def get_linked_objectives(self, obj):
-        objectives = [link.objective for link in obj.lesson_objectives.select_related('objective', 'objective__topic')]
+        objectives = [link.objective for link in obj.lesson_objectives.all()]
         return LearningObjectiveSerializer(objectives, many=True).data
 
     def get_objectives(self, obj):
-        objectives = [link.objective for link in obj.lesson_objectives.select_related('objective', 'objective__topic')]
-        return LearningObjectiveSerializer(objectives, many=True).data
+        return self.get_linked_objectives(obj)
 
     def get_class_name(self, obj):
         session_name = getattr(obj, 'session_display_name', None)
