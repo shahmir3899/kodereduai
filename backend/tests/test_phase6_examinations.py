@@ -12,7 +12,7 @@ Run:
 import pytest
 from decimal import Decimal
 
-from examinations.models import ExamType, Exam, ExamSubject, StudentMark, GradeScale
+from examinations.models import ExamType, ExamGroup, Exam, ExamSubject, StudentMark, GradeScale
 from academic_sessions.models import AcademicYear, StudentEnrollment
 from academics.models import ClassSubject, Subject
 
@@ -464,6 +464,151 @@ class TestExams:
         data = resp.json()
         p6_exams_b = [e for e in data if e.get('name', '').startswith(P6)]
         assert len(p6_exams_b) == 0, f"count={len(p6_exams_b)}"
+
+
+# ==================================================================
+# LEVEL G: EXAM GROUP WIZARD + BULK PUBLISH
+#
+# Regression coverage for update-date-by-subject / download-date-sheet /
+# publish-all, which were previously defined as @action methods on
+# StudentResponseViewSet (registered under /student-responses/) instead of
+# ExamGroupViewSet (registered under /exam-groups/), making the frontend's
+# calls to /exam-groups/{id}/... 404. Also covers publish-all's notification
+# fan-out, which previously did a bare status update with no notification.
+# ==================================================================
+
+@pytest.mark.django_db
+@pytest.mark.phase6
+class TestExamGroupWizardAndPublishAll:
+
+    def _create_group_with_two_classes(self, d, api):
+        token = d['tokens']['admin']
+        sid = d['SID_A']
+        school = d['school_a']
+
+        ClassSubject.objects.create(school=school, class_obj=d['class_1'], subject=d['subj_math'])
+        ClassSubject.objects.create(school=school, class_obj=d['class_1'], subject=d['subj_eng'])
+        ClassSubject.objects.create(school=school, class_obj=d['class_2'], subject=d['subj_math'])
+
+        et = ExamType.objects.create(school=school, name=f'{P6}GroupType', weight=Decimal('50.00'))
+
+        resp = api.post('/api/examinations/exam-groups/wizard-create/', {
+            'academic_year': d['academic_year'].id,
+            'term': d['term_1'].id,
+            'exam_type': et.id,
+            'name': f'{P6}Group Wizard Test',
+            'class_ids': [d['class_1'].id, d['class_2'].id],
+            'default_total_marks': '100',
+            'default_passing_marks': '33',
+            'start_date': '2026-04-01',
+            'end_date': '2026-04-05',
+        }, token, sid)
+        assert resp.status_code == 201, f"status={resp.status_code} body={resp.content[:300]}"
+        return resp.json()
+
+    def test_g1_wizard_create_group_and_subjects(self, exam_prereqs, api):
+        """G1: wizard-create builds one Exam per class and ExamSubjects from ClassSubject assignments."""
+        d = exam_prereqs
+        data = self._create_group_with_two_classes(d, api)
+        assert data['exams_created'] == 2, data
+        assert data['subjects_created'] == 3, data  # 2 subjects for class_1 + 1 for class_2
+
+        group = ExamGroup.objects.get(id=data['group_id'])
+        exams = list(group.exams.all())
+        assert len(exams) == 2
+        assert {e.class_obj_id for e in exams} == {d['class_1'].id, d['class_2'].id}
+        assert all(e.exam_group_id == group.id for e in exams)
+
+    def test_g2_group_actions_resolve_under_exam_groups_not_404(self, exam_prereqs, api):
+        """G2: download-date-sheet/update-date-by-subject/publish-all resolve under
+        /exam-groups/, confirming they are no longer stranded under /student-responses/."""
+        d = exam_prereqs
+        data = self._create_group_with_two_classes(d, api)
+        group_id = data['group_id']
+        token = d['tokens']['admin']
+        sid = d['SID_A']
+
+        resp = api.get(f'/api/examinations/exam-groups/{group_id}/download-date-sheet/', token, sid)
+        assert resp.status_code == 200, f"status={resp.status_code}"
+        assert resp['Content-Type'] == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+
+        resp = api.post(f'/api/examinations/exam-groups/{group_id}/update-date-by-subject/', {
+            'subject_id': d['subj_math'].id, 'exam_date': '2026-04-02',
+        }, token, sid)
+        assert resp.status_code == 200, f"status={resp.status_code} body={resp.content[:300]}"
+        assert resp.json()['updated_count'] == 2  # subj_math appears in both classes
+
+        resp = api.post(f'/api/examinations/exam-groups/{group_id}/publish-all/', {}, token, sid)
+        assert resp.status_code == 200, f"status={resp.status_code} body={resp.content[:300]}"
+
+    def test_g3_group_actions_teacher_forbidden(self, exam_prereqs, api):
+        """G3: teacher role gets 403 on the relocated actions (ExamGroupViewSet is IsSchoolAdmin-gated,
+        same as every other ExamGroup action)."""
+        d = exam_prereqs
+        data = self._create_group_with_two_classes(d, api)
+        group_id = data['group_id']
+        token = d['tokens']['teacher']
+        sid = d['SID_A']
+
+        resp = api.get(f'/api/examinations/exam-groups/{group_id}/download-date-sheet/', token, sid)
+        assert resp.status_code == 403, f"status={resp.status_code}"
+
+        resp = api.post(f'/api/examinations/exam-groups/{group_id}/publish-all/', {}, token, sid)
+        assert resp.status_code == 403, f"status={resp.status_code}"
+
+    def test_g4_publish_all_sets_status_on_all_child_exams(self, exam_prereqs, api):
+        """G4: publish-all marks every active exam in the group PUBLISHED."""
+        d = exam_prereqs
+        data = self._create_group_with_two_classes(d, api)
+        group_id = data['group_id']
+        token = d['tokens']['admin']
+        sid = d['SID_A']
+
+        resp = api.post(f'/api/examinations/exam-groups/{group_id}/publish-all/', {}, token, sid)
+        assert resp.status_code == 200, f"status={resp.status_code}"
+        assert resp.json()['published_count'] == 2
+
+        group = ExamGroup.objects.get(id=group_id)
+        statuses = set(group.exams.values_list('status', flat=True))
+        assert statuses == {Exam.Status.PUBLISHED}, statuses
+
+    def test_g5_publish_all_notifies_admins_per_exam(self, exam_prereqs, api):
+        """G5: publish-all fires the same EXAM_RESULT notification fan-out a single-exam
+        publish would, once per exam in the group (not merged into one notification)."""
+        from notifications.models import NotificationLog
+
+        d = exam_prereqs
+        data = self._create_group_with_two_classes(d, api)
+        group_id = data['group_id']
+        token = d['tokens']['admin']
+        sid = d['SID_A']
+
+        before_count = NotificationLog.objects.filter(
+            school=d['school_a'], event_type='EXAM_RESULT',
+        ).count()
+
+        resp = api.post(f'/api/examinations/exam-groups/{group_id}/publish-all/', {}, token, sid)
+        assert resp.status_code == 200, f"status={resp.status_code}"
+
+        after_count = NotificationLog.objects.filter(
+            school=d['school_a'], event_type='EXAM_RESULT',
+        ).count()
+        # 2 exams in the group x (admin + principal) recipients = 4 notifications minimum
+        assert after_count - before_count >= 4, f"before={before_count} after={after_count}"
+
+        # Each of the two exams should have generated its own distinct notification body
+        # for the same admin recipient (i.e. not deduped away as "the same notification").
+        bodies = set(
+            NotificationLog.objects.filter(
+                school=d['school_a'], event_type='EXAM_RESULT',
+                recipient_user=d['users']['admin'],
+            ).values_list('body', flat=True)
+        )
+        group = ExamGroup.objects.get(id=group_id)
+        exam_names = set(group.exams.values_list('name', flat=True))
+        assert len(bodies) >= len(exam_names), f"bodies={bodies} exam_names={exam_names}"
+        for name in exam_names:
+            assert any(name in body for body in bodies), f"no notification body mentions {name!r}: {bodies}"
 
 
 # ==================================================================

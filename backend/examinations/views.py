@@ -632,89 +632,6 @@ class ExamGroupViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
 
         return Response({'updated_count': updated_count})
 
-
-class StudentResponseViewSet(ModuleAccessMixin, viewsets.ModelViewSet):
-    required_module = 'examinations'
-    queryset = StudentResponse.objects.all()
-    permission_classes = [IsAuthenticated, HasSchoolAccess]
-
-    def get_serializer_class(self):
-        if self.action == 'create':
-            return StudentResponseBulkSubmitSerializer
-        return StudentResponseSerializer
-
-    def get_queryset(self):
-        queryset = self.queryset.select_related('student', 'question', 'exam_paper', 'exam_paper__school')
-        school_id = _resolve_school_id(self.request)
-        if school_id:
-            queryset = queryset.filter(exam_paper__school_id=school_id)
-        elif self.request.headers.get('X-School-ID'):
-            return queryset.none()
-
-        exam_paper_id = self.request.query_params.get('exam_paper')
-        if exam_paper_id:
-            queryset = queryset.filter(exam_paper_id=exam_paper_id)
-
-        student_id = self.request.query_params.get('student')
-        if student_id:
-            queryset = queryset.filter(student_id=student_id)
-
-        question_id = self.request.query_params.get('question')
-        if question_id:
-            queryset = queryset.filter(question_id=question_id)
-
-        return queryset
-
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-
-        exam_paper = serializer.validated_data['exam_paper_obj']
-        student = serializer.validated_data['student_obj']
-        responses = serializer.validated_data['responses']
-        school_id = _resolve_school_id(request)
-        if school_id and exam_paper.school_id != school_id:
-            raise ValidationError({'exam_paper': 'Exam paper is outside the active school context.'})
-
-        created_count = 0
-        updated_count = 0
-        changed_question_ids = set()
-        saved_responses = []
-
-        with transaction.atomic():
-            for entry in responses:
-                response_obj, created = StudentResponse.objects.update_or_create(
-                    student=student,
-                    question_id=entry['question'],
-                    exam_paper=exam_paper,
-                    defaults={
-                        'response_text': entry.get('response_text', ''),
-                        'marks_awarded': entry.get('marks_awarded'),
-                        'is_correct': entry.get('is_correct'),
-                        'time_taken_seconds': entry.get('time_taken_seconds'),
-                    },
-                )
-                saved_responses.append(response_obj)
-                changed_question_ids.add(response_obj.question_id)
-                if created:
-                    created_count += 1
-                else:
-                    updated_count += 1
-
-        from core.task_utils import call_task
-        for question_id in changed_question_ids:
-            call_task(recompute_question_stats, question_id)
-
-        response_serializer = StudentResponseSerializer(saved_responses, many=True)
-        return Response(
-            {
-                'created_count': created_count,
-                'updated_count': updated_count,
-                'responses': response_serializer.data,
-            },
-            status=status.HTTP_201_CREATED,
-        )
-
     @action(detail=True, methods=['post'], url_path='update-date-by-subject')
     def update_date_by_subject(self, request, pk=None):
         """Set the same exam_date for a subject across ALL classes in the group."""
@@ -828,10 +745,105 @@ class StudentResponseViewSet(ModuleAccessMixin, viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'], url_path='publish-all')
     def publish_all(self, request, pk=None):
-        """Publish all exams in the group."""
+        """Publish all exams in the group, notifying the same recipients a single-exam publish would."""
+        from notifications.triggers import trigger_exam_result_published
+
         group = self.get_object()
-        count = group.exams.filter(is_active=True).update(status=Exam.Status.PUBLISHED)
-        return Response({'published_count': count})
+        exams = list(
+            group.exams.filter(is_active=True).select_related('school', 'class_obj', 'academic_year')
+        )
+        Exam.objects.filter(id__in=[exam.id for exam in exams]).update(status=Exam.Status.PUBLISHED)
+        for exam in exams:
+            exam.status = Exam.Status.PUBLISHED
+            try:
+                trigger_exam_result_published(exam)
+            except Exception:
+                # Do not block publish if notification fanout fails.
+                pass
+        return Response({'published_count': len(exams)})
+
+
+class StudentResponseViewSet(ModuleAccessMixin, viewsets.ModelViewSet):
+    required_module = 'examinations'
+    queryset = StudentResponse.objects.all()
+    permission_classes = [IsAuthenticated, HasSchoolAccess]
+
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return StudentResponseBulkSubmitSerializer
+        return StudentResponseSerializer
+
+    def get_queryset(self):
+        queryset = self.queryset.select_related('student', 'question', 'exam_paper', 'exam_paper__school')
+        school_id = _resolve_school_id(self.request)
+        if school_id:
+            queryset = queryset.filter(exam_paper__school_id=school_id)
+        elif self.request.headers.get('X-School-ID'):
+            return queryset.none()
+
+        exam_paper_id = self.request.query_params.get('exam_paper')
+        if exam_paper_id:
+            queryset = queryset.filter(exam_paper_id=exam_paper_id)
+
+        student_id = self.request.query_params.get('student')
+        if student_id:
+            queryset = queryset.filter(student_id=student_id)
+
+        question_id = self.request.query_params.get('question')
+        if question_id:
+            queryset = queryset.filter(question_id=question_id)
+
+        return queryset
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        exam_paper = serializer.validated_data['exam_paper_obj']
+        student = serializer.validated_data['student_obj']
+        responses = serializer.validated_data['responses']
+        school_id = _resolve_school_id(request)
+        if school_id and exam_paper.school_id != school_id:
+            raise ValidationError({'exam_paper': 'Exam paper is outside the active school context.'})
+
+        created_count = 0
+        updated_count = 0
+        changed_question_ids = set()
+        saved_responses = []
+
+        with transaction.atomic():
+            for entry in responses:
+                response_obj, created = StudentResponse.objects.update_or_create(
+                    student=student,
+                    question_id=entry['question'],
+                    exam_paper=exam_paper,
+                    defaults={
+                        'response_text': entry.get('response_text', ''),
+                        'marks_awarded': entry.get('marks_awarded'),
+                        'is_correct': entry.get('is_correct'),
+                        'time_taken_seconds': entry.get('time_taken_seconds'),
+                    },
+                )
+                saved_responses.append(response_obj)
+                changed_question_ids.add(response_obj.question_id)
+                if created:
+                    created_count += 1
+                else:
+                    updated_count += 1
+
+        from core.task_utils import call_task
+        for question_id in changed_question_ids:
+            call_task(recompute_question_stats, question_id)
+
+        response_serializer = StudentResponseSerializer(saved_responses, many=True)
+        return Response(
+            {
+                'created_count': created_count,
+                'updated_count': updated_count,
+                'responses': response_serializer.data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
