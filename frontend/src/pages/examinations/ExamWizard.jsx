@@ -11,6 +11,25 @@ const STEPS = [
   { num: 4, label: 'Preview' },
 ]
 
+// Parse/format 'YYYY-MM-DD' entirely in UTC so the local timezone offset
+// (e.g. UTC+5) never shifts the calendar date by a day during round-tripping.
+function parseDateOnly(dateStr) {
+  const [year, month, day] = dateStr.split('-').map(Number)
+  return new Date(Date.UTC(year, month - 1, day))
+}
+
+function addDaysToDateString(dateStr, days) {
+  const date = parseDateOnly(dateStr)
+  date.setUTCDate(date.getUTCDate() + days)
+  return date.toISOString().slice(0, 10)
+}
+
+function daysBetweenInclusive(startStr, endStr) {
+  const start = parseDateOnly(startStr)
+  const end = parseDateOnly(endStr)
+  return Math.round((end - start) / 86400000) + 1
+}
+
 export default function ExamWizard({ onClose, onSuccess }) {
   const queryClient = useQueryClient()
   const { activeAcademicYear, currentTerm } = useAcademicYear()
@@ -65,6 +84,14 @@ export default function ExamWizard({ onClose, onSuccess }) {
     return counts
   }, [allClassSubjects])
 
+  // Highest subject count among selected classes — the class with the most
+  // subjects sets how many distinct exam days the date range needs, assuming
+  // one subject's exam per day for that class.
+  const maxSubjectsPerClass = useMemo(() => {
+    const counts = wizardData.class_ids.map(id => subjectCountMap[id] || 0)
+    return counts.length > 0 ? Math.max(...counts) : 0
+  }, [subjectCountMap, wizardData.class_ids])
+
   // Unique subjects across selected classes (for legacy unused references)
   const uniqueSubjects = useMemo(() => {
     const subjectMap = {}
@@ -107,6 +134,38 @@ export default function ExamWizard({ onClose, onSuccess }) {
     })
     return rows
   }, [allClassSubjects, wizardData.class_ids, classes])
+
+  // Auto-extend the date range (Step 3) so there's at least one calendar day
+  // per subject for the class with the most subjects. Only ever extends
+  // end_date forward from start_date — never shrinks a range the admin
+  // already set longer than required, and never invents a start_date.
+  const [autoAdjustedEndDate, setAutoAdjustedEndDate] = useState(null)
+  useEffect(() => {
+    if (step !== 3) return
+    if (!wizardData.start_date || maxSubjectsPerClass === 0) {
+      setAutoAdjustedEndDate(null)
+      return
+    }
+
+    const currentDays = wizardData.end_date
+      ? daysBetweenInclusive(wizardData.start_date, wizardData.end_date)
+      : 0
+
+    if (currentDays >= maxSubjectsPerClass) {
+      setAutoAdjustedEndDate(null)
+      return
+    }
+
+    const previousEndDate = wizardData.end_date
+    const neededEndDate = addDaysToDateString(wizardData.start_date, maxSubjectsPerClass - 1)
+    update('end_date', neededEndDate)
+    setAutoAdjustedEndDate({
+      from: previousEndDate || null,
+      to: neededEndDate,
+      subjectCount: maxSubjectsPerClass,
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, wizardData.start_date, wizardData.class_ids, maxSubjectsPerClass])
 
   const selectedType = examTypes.find(t => String(t.id) === String(wizardData.exam_type))
   const selectedYear = years.find(y => String(y.id) === String(wizardData.academic_year))
@@ -448,6 +507,11 @@ export default function ExamWizard({ onClose, onSuccess }) {
                 <div>
                   <p className="text-sm font-medium text-gray-700">Assign Exam Dates &amp; Times</p>
                   <p className="text-xs text-gray-500">One row per class per subject. Optional — you can set or adjust later.</p>
+                  {autoAdjustedEndDate && (
+                    <p className="text-xs text-amber-600 mt-1">
+                      End date adjusted to {autoAdjustedEndDate.to} to fit {autoAdjustedEndDate.subjectCount} subject{autoAdjustedEndDate.subjectCount !== 1 ? 's' : ''} (one exam day each). You can still pick any date for any row.
+                    </p>
+                  )}
                 </div>
                 <button type="button" onClick={() => setStep(4)} className="text-xs text-sky-600 hover:underline">
                   Skip &rarr;
@@ -495,8 +559,6 @@ export default function ExamWizard({ onClose, onSuccess }) {
                             <td className="px-3 py-2">
                               <input type="date"
                                 value={slot.exam_date || ''}
-                                min={wizardData.start_date || undefined}
-                                max={wizardData.end_date || undefined}
                                 onChange={e => setSlot('exam_date', e.target.value)}
                                 className="input text-sm py-1 w-full" />
                             </td>
