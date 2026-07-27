@@ -30,6 +30,12 @@ function daysBetweenInclusive(startStr, endStr) {
   return Math.round((end - start) / 86400000) + 1
 }
 
+// A stable reference for "no data yet" fallbacks. A fresh `[]` literal on
+// every render would give useMemo a new dependency each time, and anything
+// whose effect depends on that memo's identity (like the subject_ids
+// auto-sync below) would re-fire and re-render forever while queries load.
+const EMPTY_ARRAY = []
+
 export default function ExamWizard({ onClose, onSuccess }) {
   const queryClient = useQueryClient()
   const { activeAcademicYear, currentTerm } = useAcademicYear()
@@ -46,6 +52,7 @@ export default function ExamWizard({ onClose, onSuccess }) {
     default_total_marks: '100',
     default_passing_marks: '33',
     class_ids: [],
+    subject_ids: [],
     date_sheet: {},  // Key: "classId_subjectId" → { exam_date, start_time, end_time }
   })
 
@@ -69,11 +76,11 @@ export default function ExamWizard({ onClose, onSuccess }) {
     queryFn: () => academicsApi.getClassSubjects({ page_size: 9999 }),
   })
 
-  const years = yearsRes?.data?.results || yearsRes?.data || []
-  const terms = termsRes?.data?.results || termsRes?.data || []
-  const examTypes = examTypesRes?.data?.results || examTypesRes?.data || []
-  const classes = classesFromHook
-  const allClassSubjects = allClassSubjectsRes?.data?.results || allClassSubjectsRes?.data || []
+  const years = yearsRes?.data?.results || yearsRes?.data || EMPTY_ARRAY
+  const terms = termsRes?.data?.results || termsRes?.data || EMPTY_ARRAY
+  const examTypes = examTypesRes?.data?.results || examTypesRes?.data || EMPTY_ARRAY
+  const classes = classesFromHook || EMPTY_ARRAY
+  const allClassSubjects = allClassSubjectsRes?.data?.results || allClassSubjectsRes?.data || EMPTY_ARRAY
 
   // Class → subject count map
   const subjectCountMap = useMemo(() => {
@@ -92,7 +99,7 @@ export default function ExamWizard({ onClose, onSuccess }) {
     return counts.length > 0 ? Math.max(...counts) : 0
   }, [subjectCountMap, wizardData.class_ids])
 
-  // Unique subjects across selected classes (for legacy unused references)
+  // Unique subjects across selected classes — drives the Step 2 subject picker.
   const uniqueSubjects = useMemo(() => {
     const subjectMap = {}
     allClassSubjects
@@ -109,13 +116,22 @@ export default function ExamWizard({ onClose, onSuccess }) {
     return Object.values(subjectMap).sort((a, b) => a.name.localeCompare(b.name))
   }, [allClassSubjects, wizardData.class_ids])
 
-  // Per-class per-subject pairs for Step 3 timetable
+  // Default subject selection to "all available" whenever the selected classes
+  // (and therefore which subjects are even on offer) change. A manual pick
+  // within Step 2 sticks until the class selection changes again.
+  useEffect(() => {
+    update('subject_ids', uniqueSubjects.map(s => s.id))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uniqueSubjects])
+
+  // Per-class per-subject pairs, filtered to Step 2's subject selection —
+  // feeds both the Step 3 grid's per-cell options and the "unscheduled" list.
   const subjectClassPairs = useMemo(() => {
     const selectedClassMap = {}
     classes.forEach(c => { selectedClassMap[c.id] = c })
     const rows = []
     allClassSubjects
-      .filter(cs => wizardData.class_ids.includes(cs.class_obj))
+      .filter(cs => wizardData.class_ids.includes(cs.class_obj) && wizardData.subject_ids.includes(cs.subject))
       .forEach(cs => {
         const cls = selectedClassMap[cs.class_obj]
         if (!cls) return
@@ -133,7 +149,61 @@ export default function ExamWizard({ onClose, onSuccess }) {
       return s !== 0 ? s : a.className.localeCompare(b.className)
     })
     return rows
-  }, [allClassSubjects, wizardData.class_ids, classes])
+  }, [allClassSubjects, wizardData.class_ids, wizardData.subject_ids, classes])
+
+  // Subjects available per class (for the Step 3 per-cell picker).
+  const subjectsByClass = useMemo(() => {
+    const map = {}
+    subjectClassPairs.forEach(row => {
+      if (!map[row.classId]) map[row.classId] = []
+      map[row.classId].push(row)
+    })
+    return map
+  }, [subjectClassPairs])
+
+  // Every calendar day in [start_date, end_date] — the Step 3 grid's rows.
+  const dateRange = useMemo(() => {
+    if (!wizardData.start_date || !wizardData.end_date) return []
+    const days = daysBetweenInclusive(wizardData.start_date, wizardData.end_date)
+    if (days <= 0) return []
+    return Array.from({ length: days }, (_, i) => addDaysToDateString(wizardData.start_date, i))
+  }, [wizardData.start_date, wizardData.end_date])
+
+  // `${classId}|${date}` -> subjectId, derived from date_sheet for cell rendering.
+  const cellSubjectByClassDate = useMemo(() => {
+    const map = {}
+    Object.entries(wizardData.date_sheet).forEach(([key, val]) => {
+      if (!val?.exam_date) return
+      const [classId, subjectId] = key.split('_').map(Number)
+      map[`${classId}|${val.exam_date}`] = subjectId
+    })
+    return map
+  }, [wizardData.date_sheet])
+
+  // Assign (or clear, if subjectIdStr is '') a subject to a class+date cell.
+  // A given subject only ever occupies one date per class: picking it into a
+  // new cell moves it there; picking a different subject into an occupied
+  // cell frees the one it replaces.
+  const handleCellAssign = (classId, date, subjectIdStr) => {
+    const previousSubjectId = cellSubjectByClassDate[`${classId}|${date}`]
+    setWizardData(prev => {
+      const nextDateSheet = { ...prev.date_sheet }
+      if (previousSubjectId) {
+        const previousKey = `${classId}_${previousSubjectId}`
+        nextDateSheet[previousKey] = { ...(nextDateSheet[previousKey] || {}), exam_date: '' }
+      }
+      if (subjectIdStr) {
+        const newKey = `${classId}_${Number(subjectIdStr)}`
+        nextDateSheet[newKey] = { ...(nextDateSheet[newKey] || {}), exam_date: date }
+      }
+      return { ...prev, date_sheet: nextDateSheet }
+    })
+  }
+
+  // Selected subjects still not placed on any date.
+  const unscheduledPairs = useMemo(() => {
+    return subjectClassPairs.filter(row => !wizardData.date_sheet[row.key]?.exam_date)
+  }, [subjectClassPairs, wizardData.date_sheet])
 
   // Auto-extend the date range (Step 3) so there's at least one calendar day
   // per subject for the class with the most subjects. Only ever extends
@@ -230,6 +300,8 @@ export default function ExamWizard({ onClose, onSuccess }) {
     if (!wizardData.name.trim()) e.name = 'Required'
     if (!wizardData.academic_year) e.academic_year = 'Required'
     if (!wizardData.exam_type) e.exam_type = 'Required'
+    if (!wizardData.start_date) e.start_date = 'Required — Step 3 builds a calendar from this range.'
+    if (!wizardData.end_date) e.end_date = 'Required — Step 3 builds a calendar from this range.'
     if (wizardData.start_date && wizardData.end_date && wizardData.start_date > wizardData.end_date) {
       e.end_date = 'Must be after start date'
     }
@@ -238,12 +310,13 @@ export default function ExamWizard({ onClose, onSuccess }) {
   }
 
   const validateStep2 = () => {
-    if (wizardData.class_ids.length === 0) {
-      setErrors({ class_ids: 'Select at least one class.' })
-      return false
+    const e = {}
+    if (wizardData.class_ids.length === 0) e.class_ids = 'Select at least one class.'
+    if (wizardData.class_ids.length > 0 && wizardData.subject_ids.length === 0) {
+      e.subject_ids = 'Select at least one subject.'
     }
-    setErrors({})
-    return true
+    setErrors(e)
+    return Object.keys(e).length === 0
   }
 
   const goNext = () => {
@@ -281,6 +354,7 @@ export default function ExamWizard({ onClose, onSuccess }) {
       start_date: wizardData.start_date || null,
       end_date: wizardData.end_date || null,
       class_ids: wizardData.class_ids,
+      subject_ids: wizardData.subject_ids,
       default_total_marks: parseFloat(wizardData.default_total_marks) || 100,
       default_passing_marks: parseFloat(wizardData.default_passing_marks) || 33,
       date_sheet: dateSheetList,
@@ -433,11 +507,12 @@ export default function ExamWizard({ onClose, onSuccess }) {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Start Date *</label>
                   <input type="date" value={wizardData.start_date} onChange={e => update('start_date', e.target.value)} className="input w-full" />
+                  {errors.start_date && <p className="text-xs text-red-600 mt-1">{errors.start_date}</p>}
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">End Date *</label>
                   <input type="date" value={wizardData.end_date} onChange={e => update('end_date', e.target.value)} className="input w-full" />
                   {errors.end_date && <p className="text-xs text-red-600 mt-1">{errors.end_date}</p>}
                 </div>
@@ -497,88 +572,116 @@ export default function ExamWizard({ onClose, onSuccess }) {
               {wizardData.class_ids.length > 0 && (
                 <p className="text-xs text-gray-500 mt-2">{wizardData.class_ids.length} of {classes.length} classes selected</p>
               )}
+
+              {wizardData.class_ids.length > 0 && (
+                <div className="mt-5">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm font-medium text-gray-700">Select subjects to include</p>
+                    <div className="flex gap-2">
+                      <button type="button" onClick={() => update('subject_ids', uniqueSubjects.map(s => s.id))}
+                        className="text-xs text-blue-600 hover:underline">Select All</button>
+                      <button type="button" onClick={() => update('subject_ids', [])}
+                        className="text-xs text-gray-500 hover:underline">Clear</button>
+                    </div>
+                  </div>
+                  {errors.subject_ids && <p className="text-xs text-red-600 mb-2">{errors.subject_ids}</p>}
+                  {uniqueSubjects.length === 0 ? (
+                    <p className="text-xs text-gray-400">No subjects assigned to the selected classes yet.</p>
+                  ) : (
+                    <div className="border border-gray-200 rounded-lg max-h-56 overflow-y-auto divide-y divide-gray-100">
+                      {uniqueSubjects.map(s => {
+                        const checked = wizardData.subject_ids.includes(s.id)
+                        return (
+                          <label key={s.id} className={`flex items-center gap-3 px-4 py-2 cursor-pointer ${checked ? 'bg-sky-50' : 'hover:bg-gray-50'}`}>
+                            <input type="checkbox" checked={checked}
+                              onChange={() => update('subject_ids', checked
+                                ? wizardData.subject_ids.filter(id => id !== s.id)
+                                : [...wizardData.subject_ids, s.id]
+                              )}
+                              className="rounded border-gray-300 text-sky-600 focus:ring-sky-500" />
+                            <span className="text-sm text-gray-800">
+                              {s.name}{s.code ? <span className="text-xs text-gray-400 ml-1">({s.code})</span> : null}
+                            </span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  )}
+                  {wizardData.subject_ids.length > 0 && (
+                    <p className="text-xs text-gray-500 mt-2">{wizardData.subject_ids.length} of {uniqueSubjects.length} subjects selected</p>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
           {/* Step 3: Date Sheet */}
           {step === 3 && (
             <div>
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <p className="text-sm font-medium text-gray-700">Assign Exam Dates &amp; Times</p>
-                  <p className="text-xs text-gray-500">One row per class per subject. Optional — you can set or adjust later.</p>
-                  {autoAdjustedEndDate && (
-                    <p className="text-xs text-amber-600 mt-1">
-                      End date adjusted to {autoAdjustedEndDate.to} to fit {autoAdjustedEndDate.subjectCount} subject{autoAdjustedEndDate.subjectCount !== 1 ? 's' : ''} (one exam day each). You can still pick any date for any row.
-                    </p>
-                  )}
-                </div>
-                <button type="button" onClick={() => setStep(4)} className="text-xs text-sky-600 hover:underline">
-                  Skip &rarr;
-                </button>
+              <div className="mb-4">
+                <p className="text-sm font-medium text-gray-700">Assign Exam Dates</p>
+                <p className="text-xs text-gray-500">Click a cell to assign one subject to that class on that date. Start/end times can be set afterward from the Date Sheet.</p>
+                {autoAdjustedEndDate && (
+                  <p className="text-xs text-amber-600 mt-1">
+                    End date adjusted to {autoAdjustedEndDate.to} to fit {autoAdjustedEndDate.subjectCount} subject{autoAdjustedEndDate.subjectCount !== 1 ? 's' : ''} (one exam day each).
+                  </p>
+                )}
               </div>
 
-              {subjectClassPairs.length === 0 ? (
+              {selectedClasses.length === 0 || dateRange.length === 0 ? (
                 <div className="text-center py-8 text-gray-400 text-sm">
-                  No subjects found for selected classes. You can assign subjects later.
+                  No classes selected or no date range set.
                 </div>
               ) : (
                 <div className="border border-gray-200 rounded-lg overflow-auto max-h-[360px]">
                   <table className="min-w-full text-sm">
                     <thead className="sticky top-0 z-10">
                       <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
-                        <th className="px-3 py-2 text-left">Subject</th>
-                        <th className="px-3 py-2 text-left">Class</th>
-                        <th className="px-3 py-2 text-left w-36">Date</th>
-                        <th className="px-3 py-2 text-left w-28">Start</th>
-                        <th className="px-3 py-2 text-left w-28">End</th>
+                        <th className="px-3 py-2 text-left w-28">Date</th>
+                        {selectedClasses.map(cls => (
+                          <th key={cls.id} className="px-3 py-2 text-center">
+                            {cls.section ? `${cls.name} - ${cls.section}` : cls.name}
+                          </th>
+                        ))}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {subjectClassPairs.map((row, idx) => {
-                        const prev = subjectClassPairs[idx - 1]
-                        const isFirstOfSubject = !prev || prev.subjectName !== row.subjectName
-                        const slot = wizardData.date_sheet[row.key] || {}
-                        const setSlot = (field, val) => setWizardData(prev => ({
-                          ...prev,
-                          date_sheet: {
-                            ...prev.date_sheet,
-                            [row.key]: { ...(prev.date_sheet[row.key] || {}), [field]: val },
-                          },
-                        }))
-                        return (
-                          <tr key={row.key} className={`hover:bg-gray-50 ${isFirstOfSubject && idx > 0 ? 'border-t-2 border-gray-200' : ''}`}>
-                            <td className="px-3 py-2 font-medium text-gray-800">
-                              {isFirstOfSubject ? (
-                                <span>{row.subjectName}{row.subjectCode ? <span className="text-xs text-gray-400 ml-1">({row.subjectCode})</span> : null}</span>
-                              ) : (
-                                <span className="text-gray-300 text-xs">↳</span>
-                              )}
-                            </td>
-                            <td className="px-3 py-2 text-gray-600 text-xs">{row.className}</td>
-                            <td className="px-3 py-2">
-                              <input type="date"
-                                value={slot.exam_date || ''}
-                                onChange={e => setSlot('exam_date', e.target.value)}
-                                className="input text-sm py-1 w-full" />
-                            </td>
-                            <td className="px-3 py-2">
-                              <input type="time"
-                                value={slot.start_time || ''}
-                                onChange={e => setSlot('start_time', e.target.value)}
-                                className="input text-sm py-1 w-full" />
-                            </td>
-                            <td className="px-3 py-2">
-                              <input type="time"
-                                value={slot.end_time || ''}
-                                onChange={e => setSlot('end_time', e.target.value)}
-                                className="input text-sm py-1 w-full" />
-                            </td>
-                          </tr>
-                        )
-                      })}
+                      {dateRange.map(date => (
+                        <tr key={date} className="hover:bg-gray-50">
+                          <td className="px-3 py-2 font-medium text-gray-800 text-xs whitespace-nowrap">{date}</td>
+                          {selectedClasses.map(cls => {
+                            const classLabel = cls.section ? `${cls.name} - ${cls.section}` : cls.name
+                            return (
+                              <td key={cls.id} className="px-2 py-1.5">
+                                <select
+                                  aria-label={`${date} - ${classLabel}`}
+                                  value={cellSubjectByClassDate[`${cls.id}|${date}`] || ''}
+                                  onChange={e => handleCellAssign(cls.id, date, e.target.value)}
+                                  className="input text-xs py-1 w-full"
+                                >
+                                  <option value="">—</option>
+                                  {(subjectsByClass[cls.id] || []).map(row => (
+                                    <option key={row.subjectId} value={row.subjectId}>{row.subjectName}</option>
+                                  ))}
+                                </select>
+                              </td>
+                            )
+                          })}
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
+                </div>
+              )}
+
+              {unscheduledPairs.length > 0 && (
+                <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                  <p className="text-xs font-medium text-amber-800 mb-1">Not yet scheduled:</p>
+                  <ul className="text-xs text-amber-700 list-disc list-inside">
+                    {unscheduledPairs.map(row => (
+                      <li key={row.key}>{row.subjectName} ({row.className})</li>
+                    ))}
+                  </ul>
                 </div>
               )}
             </div>

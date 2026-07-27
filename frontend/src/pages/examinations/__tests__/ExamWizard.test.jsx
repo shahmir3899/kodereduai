@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { renderWithProviders } from '../../../test/utils'
 import ExamWizard from '../ExamWizard'
@@ -49,7 +49,7 @@ const ALL_CLASS_SUBJECTS = [
   { id: 4, class_obj: 2, subject: 201, subject_name: 'Mathematics', subject_code: 'MATH' },
 ]
 
-async function advanceToStep3(user, { startDate } = {}) {
+async function fillStep1(user, { startDate = '2026-05-01', endDate = '2026-05-01' } = {}) {
   renderWithProviders(<ExamWizard onClose={vi.fn()} onSuccess={vi.fn()} />)
 
   await waitFor(() => {
@@ -59,29 +59,40 @@ async function advanceToStep3(user, { startDate } = {}) {
   const examTypeOption = await screen.findByRole('option', { name: 'Mid-Term (50%)' })
   await user.selectOptions(examTypeOption.closest('select'), '5')
 
-  if (startDate) {
-    const [startInput] = document.querySelectorAll('input[type="date"]')
-    fireEvent.change(startInput, { target: { value: startDate } })
-  }
+  const [startInput, endInput] = document.querySelectorAll('input[type="date"]')
+  fireEvent.change(startInput, { target: { value: startDate } })
+  fireEvent.change(endInput, { target: { value: endDate } })
+}
 
+async function advanceToStep2(user, dateOpts) {
+  await fillStep1(user, dateOpts)
   await user.click(screen.getByRole('button', { name: 'Next' }))
-
   await waitFor(() => {
     expect(screen.getByText('Select classes for this exam')).toBeInTheDocument()
   })
-  const class1Checkbox = screen.getByText('Class 1 - A').closest('label').querySelector('input[type="checkbox"]')
-  const class2Checkbox = screen.getByText('Class 2 - B').closest('label').querySelector('input[type="checkbox"]')
-  await user.click(class1Checkbox)
-  await user.click(class2Checkbox)
+}
 
+async function selectClasses(user, { class1 = true, class2 = true } = {}) {
+  if (class1) {
+    const class1Checkbox = screen.getByText('Class 1 - A').closest('label').querySelector('input[type="checkbox"]')
+    await user.click(class1Checkbox)
+  }
+  if (class2) {
+    const class2Checkbox = screen.getByText('Class 2 - B').closest('label').querySelector('input[type="checkbox"]')
+    await user.click(class2Checkbox)
+  }
+}
+
+async function advanceToStep3(user, dateOpts) {
+  await advanceToStep2(user, dateOpts)
+  await selectClasses(user)
   await user.click(screen.getByRole('button', { name: 'Next' }))
-
   await waitFor(() => {
-    expect(screen.getByText('Assign Exam Dates & Times')).toBeInTheDocument()
+    expect(screen.getByText('Assign Exam Dates')).toBeInTheDocument()
   })
 }
 
-describe('ExamWizard — Step 3 date-range auto-extension', () => {
+describe('ExamWizard', () => {
   beforeEach(() => {
     mockGetAcademicYears.mockResolvedValue({ data: [{ id: 1, name: 'Academic Year 2026-27' }] })
     mockGetTerms.mockResolvedValue({ data: [{ id: 11, name: '1st Term' }] })
@@ -92,79 +103,179 @@ describe('ExamWizard — Step 3 date-range auto-extension', () => {
     })
   })
 
-  it('auto-extends a blank end_date to fit the class with the most subjects, and shows the inline note', async () => {
-    const user = userEvent.setup()
-    await advanceToStep3(user, { startDate: '2026-05-01' })
+  describe('Step 1 — dates are now required', () => {
+    it('blocks advancing past Step 1 without a start or end date', async () => {
+      const user = userEvent.setup()
+      renderWithProviders(<ExamWizard onClose={vi.fn()} onSuccess={vi.fn()} />)
 
-    // 3 subjects needed (Class 1's count) => end_date = start_date + 2 days = 2026-05-03
-    await waitFor(() => {
-      expect(screen.getByText(/End date adjusted to 2026-05-03/)).toBeInTheDocument()
-    })
-    expect(screen.getByText(/to fit 3 subjects/)).toBeInTheDocument()
-  })
+      await waitFor(() => expect(screen.getByText('Create Exam Group')).toBeInTheDocument())
+      const examTypeOption = await screen.findByRole('option', { name: 'Mid-Term (50%)' })
+      await user.selectOptions(examTypeOption.closest('select'), '5')
 
-  it('does not show the adjustment note when the existing range already fits', async () => {
-    const user = userEvent.setup()
-    renderWithProviders(<ExamWizard onClose={vi.fn()} onSuccess={vi.fn()} />)
+      await user.click(screen.getByRole('button', { name: 'Next' }))
 
-    await waitFor(() => {
-      expect(screen.getByText('Create Exam Group')).toBeInTheDocument()
-    })
-    const examTypeOption = await screen.findByRole('option', { name: 'Mid-Term (50%)' })
-    await user.selectOptions(examTypeOption.closest('select'), '5')
-
-    const [startInput, endInput] = document.querySelectorAll('input[type="date"]')
-    fireEvent.change(startInput, { target: { value: '2026-05-01' } })
-    fireEvent.change(endInput, { target: { value: '2026-05-10' } }) // 10-day window, comfortably fits 3 subjects
-
-    await user.click(screen.getByRole('button', { name: 'Next' }))
-    await waitFor(() => screen.getByText('Select classes for this exam'))
-    const class1Checkbox = screen.getByText('Class 1 - A').closest('label').querySelector('input[type="checkbox"]')
-    const class2Checkbox = screen.getByText('Class 2 - B').closest('label').querySelector('input[type="checkbox"]')
-    await user.click(class1Checkbox)
-    await user.click(class2Checkbox)
-    await user.click(screen.getByRole('button', { name: 'Next' }))
-
-    await waitFor(() => {
-      expect(screen.getByText('Assign Exam Dates & Times')).toBeInTheDocument()
-    })
-    expect(screen.queryByText(/End date adjusted/)).not.toBeInTheDocument()
-  })
-
-  it('does not hard-cap per-row date inputs to the start/end range', async () => {
-    const user = userEvent.setup()
-    await advanceToStep3(user, { startDate: '2026-05-01' })
-
-    await waitFor(() => {
-      expect(document.querySelectorAll('table input[type="date"]').length).toBeGreaterThan(0)
-    })
-    const rowDateInputs = [...document.querySelectorAll('table input[type="date"]')]
-    rowDateInputs.forEach((input) => {
-      expect(input).not.toHaveAttribute('min')
-      expect(input).not.toHaveAttribute('max')
+      // Still on Step 1 — required-field errors shown, class-selection UI never appears.
+      expect(screen.getAllByText(/Required — Step 3 builds a calendar/).length).toBe(2)
+      expect(screen.queryByText('Select classes for this exam')).not.toBeInTheDocument()
     })
   })
 
-  it('persists the auto-adjusted end_date into the wizard-create payload on submit', async () => {
-    const user = userEvent.setup()
-    await advanceToStep3(user, { startDate: '2026-05-01' })
+  describe('Step 2 — subject picker', () => {
+    it('defaults to every available subject selected once classes are picked', async () => {
+      const user = userEvent.setup()
+      await advanceToStep2(user)
+      await selectClasses(user)
 
-    await waitFor(() => {
-      expect(screen.getByText(/End date adjusted to 2026-05-03/)).toBeInTheDocument()
+      await waitFor(() => {
+        expect(screen.getByText('Select subjects to include')).toBeInTheDocument()
+      })
+      expect(screen.getByText('3 of 3 subjects selected')).toBeInTheDocument()
+      const mathCheckbox = screen.getByText('Mathematics').closest('label').querySelector('input[type="checkbox"]')
+      const englishCheckbox = screen.getByText('English').closest('label').querySelector('input[type="checkbox"]')
+      expect(mathCheckbox).toBeChecked()
+      expect(englishCheckbox).toBeChecked()
     })
 
-    await user.click(screen.getByRole('button', { name: 'Next' })) // -> Step 4 Preview
-    await waitFor(() => {
-      expect(screen.getByText('2026-05-01 to 2026-05-03')).toBeInTheDocument()
+    it('blocks advancing to Step 3 if every subject is deselected', async () => {
+      const user = userEvent.setup()
+      await advanceToStep2(user)
+      await selectClasses(user)
+      await waitFor(() => screen.getByText('Select subjects to include'))
+
+      const subjectsHeaderRow = screen.getByText('Select subjects to include').closest('div')
+      await user.click(within(subjectsHeaderRow).getByRole('button', { name: 'Clear' }))
+      await user.click(screen.getByRole('button', { name: 'Next' }))
+
+      expect(screen.getByText('Select at least one subject.')).toBeInTheDocument()
+      expect(screen.queryByText('Assign Exam Dates')).not.toBeInTheDocument()
     })
 
-    await user.click(screen.getByRole('button', { name: /Create \d+ Exam\(s\)/ }))
+    it('excludes a deselected subject from the Step 3 grid options', async () => {
+      const user = userEvent.setup()
+      await advanceToStep2(user)
+      await selectClasses(user)
+      await waitFor(() => screen.getByText('Select subjects to include'))
 
-    await waitFor(() => {
-      expect(mockWizardCreateExamGroup).toHaveBeenCalledTimes(1)
+      const scienceCheckbox = screen.getByText('Science').closest('label').querySelector('input[type="checkbox"]')
+      await user.click(scienceCheckbox) // deselect Science
+
+      await user.click(screen.getByRole('button', { name: 'Next' }))
+      await waitFor(() => expect(screen.getByText('Assign Exam Dates')).toBeInTheDocument())
+
+      const class1Cell = screen.getByLabelText('2026-05-01 - Class 1 - A')
+      const optionLabels = [...class1Cell.querySelectorAll('option')].map(o => o.textContent)
+      expect(optionLabels).toEqual(['—', 'English', 'Mathematics']) // alphabetical; Science excluded
+    })
+  })
+
+  describe('Step 3 — Date x Class grid', () => {
+    it('auto-extends an insufficient end_date to fit the class with the most subjects', async () => {
+      const user = userEvent.setup()
+      // start == end (1 day) is too short for Class 1's 3 subjects.
+      await advanceToStep3(user, { startDate: '2026-05-01', endDate: '2026-05-01' })
+
+      await waitFor(() => {
+        expect(screen.getByText(/End date adjusted to 2026-05-03/)).toBeInTheDocument()
+      })
+      expect(screen.getByText(/to fit 3 subjects/)).toBeInTheDocument()
+    })
+
+    it('does not show the adjustment note when the existing range already fits', async () => {
+      const user = userEvent.setup()
+      await advanceToStep3(user, { startDate: '2026-05-01', endDate: '2026-05-10' })
+      expect(screen.queryByText(/End date adjusted/)).not.toBeInTheDocument()
+    })
+
+    it('renders one row per calendar day and one column per selected class', async () => {
+      const user = userEvent.setup()
+      await advanceToStep3(user, { startDate: '2026-05-01', endDate: '2026-05-03' })
+
+      expect(screen.getByLabelText('2026-05-01 - Class 1 - A')).toBeInTheDocument()
+      expect(screen.getByLabelText('2026-05-02 - Class 1 - A')).toBeInTheDocument()
+      expect(screen.getByLabelText('2026-05-03 - Class 1 - A')).toBeInTheDocument()
+      expect(screen.getByLabelText('2026-05-01 - Class 2 - B')).toBeInTheDocument()
+
+      // Class 2 only has Math assigned -- its cell offers just that one option.
+      const class2Cell = screen.getByLabelText('2026-05-01 - Class 2 - B')
+      const optionLabels = [...class2Cell.querySelectorAll('option')].map(o => o.textContent)
+      expect(optionLabels).toEqual(['—', 'Mathematics'])
+    })
+
+    it('lists every not-yet-placed subject under "Not yet scheduled"', async () => {
+      const user = userEvent.setup()
+      await advanceToStep3(user, { startDate: '2026-05-01', endDate: '2026-05-03' })
+
+      expect(screen.getByText('Not yet scheduled:')).toBeInTheDocument()
+      expect(screen.getByText('Mathematics (Class 1 - A)')).toBeInTheDocument()
+      expect(screen.getByText('English (Class 1 - A)')).toBeInTheDocument()
+      expect(screen.getByText('Science (Class 1 - A)')).toBeInTheDocument()
+      expect(screen.getByText('Mathematics (Class 2 - B)')).toBeInTheDocument()
+    })
+
+    it('assigning a subject to a cell removes it from "Not yet scheduled"', async () => {
+      const user = userEvent.setup()
+      await advanceToStep3(user, { startDate: '2026-05-01', endDate: '2026-05-03' })
+
+      await user.selectOptions(screen.getByLabelText('2026-05-01 - Class 1 - A'), '201') // Mathematics
+
+      expect(screen.queryByText('Mathematics (Class 1 - A)')).not.toBeInTheDocument()
+      expect(screen.getByText('English (Class 1 - A)')).toBeInTheDocument() // still unscheduled
+    })
+
+    it('moves a subject to a new cell rather than duplicating it when reassigned', async () => {
+      const user = userEvent.setup()
+      await advanceToStep3(user, { startDate: '2026-05-01', endDate: '2026-05-03' })
+
+      await user.selectOptions(screen.getByLabelText('2026-05-01 - Class 1 - A'), '201') // Math -> May 1
+      expect(screen.getByLabelText('2026-05-01 - Class 1 - A')).toHaveValue('201')
+
+      await user.selectOptions(screen.getByLabelText('2026-05-02 - Class 1 - A'), '201') // move Math -> May 2
+      expect(screen.getByLabelText('2026-05-02 - Class 1 - A')).toHaveValue('201')
+      expect(screen.getByLabelText('2026-05-01 - Class 1 - A')).toHaveValue('') // freed, not duplicated
+    })
+
+    it('replacing a cell\'s subject frees the one it displaced', async () => {
+      const user = userEvent.setup()
+      await advanceToStep3(user, { startDate: '2026-05-01', endDate: '2026-05-03' })
+
+      await user.selectOptions(screen.getByLabelText('2026-05-01 - Class 1 - A'), '201') // Math
+      await user.selectOptions(screen.getByLabelText('2026-05-01 - Class 1 - A'), '202') // replace with English
+
+      expect(screen.getByLabelText('2026-05-01 - Class 1 - A')).toHaveValue('202')
+      expect(screen.getByText('Mathematics (Class 1 - A)')).toBeInTheDocument() // Math is unscheduled again
+      expect(screen.queryByText('English (Class 1 - A)')).not.toBeInTheDocument()
+    })
+  })
+
+  describe('Submit payload', () => {
+    it('sends subject_ids and the grid assignments as date_sheet entries', async () => {
+      const user = userEvent.setup()
+      await advanceToStep3(user, { startDate: '2026-05-01', endDate: '2026-05-03' })
+
+      await user.selectOptions(screen.getByLabelText('2026-05-01 - Class 1 - A'), '201') // Math
+      await user.selectOptions(screen.getByLabelText('2026-05-02 - Class 1 - A'), '202') // English
+      await user.selectOptions(screen.getByLabelText('2026-05-01 - Class 2 - B'), '201') // Math
+
+      await user.click(screen.getByRole('button', { name: 'Next' })) // -> Step 4 Preview
+      await waitFor(() => {
+        expect(screen.getByText('Date Sheet (3 entries)')).toBeInTheDocument()
+      })
+
+      await user.click(screen.getByRole('button', { name: /Create \d+ Exam\(s\)/ }))
+
+      await waitFor(() => {
+        expect(mockWizardCreateExamGroup).toHaveBeenCalledTimes(1)
+      })
       const payload = mockWizardCreateExamGroup.mock.calls[0][0]
-      expect(payload.start_date).toBe('2026-05-01')
-      expect(payload.end_date).toBe('2026-05-03')
+      expect(payload.subject_ids.sort()).toEqual([201, 202, 203])
+      expect(payload.date_sheet).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ class_id: 1, subject_id: 201, exam_date: '2026-05-01' }),
+          expect.objectContaining({ class_id: 1, subject_id: 202, exam_date: '2026-05-02' }),
+          expect.objectContaining({ class_id: 2, subject_id: 201, exam_date: '2026-05-01' }),
+        ]),
+      )
+      expect(payload.date_sheet).toHaveLength(3)
     })
   })
 })
