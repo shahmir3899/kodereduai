@@ -519,9 +519,10 @@ class TestExamGroupWizardAndPublishAll:
         assert {e.class_obj_id for e in exams} == {d['class_1'].id, d['class_2'].id}
         assert all(e.exam_group_id == group.id for e in exams)
 
-    def test_g1b_wizard_create_respects_subject_ids_filter(self, exam_prereqs, api):
-        """G1b: an explicit subject_ids list narrows ExamSubjects to that subset;
-        omitting it (test_g1) keeps every ClassSubject assigned to the class."""
+    def test_g1b_wizard_create_respects_class_subjects_filter(self, exam_prereqs, api):
+        """G1b: an explicit class_subjects entry narrows that class's ExamSubjects to the
+        listed subset; a class omitted from class_subjects (test_g1) keeps every ClassSubject
+        assigned to it."""
         d = exam_prereqs
         token = d['tokens']['admin']
         sid = d['SID_A']
@@ -538,7 +539,10 @@ class TestExamGroupWizardAndPublishAll:
             'exam_type': et.id,
             'name': f'{P6}Filtered Group',
             'class_ids': [d['class_1'].id, d['class_2'].id],
-            'subject_ids': [d['subj_math'].id],
+            'class_subjects': [
+                {'class_id': d['class_1'].id, 'subject_ids': [d['subj_math'].id]},
+                {'class_id': d['class_2'].id, 'subject_ids': [d['subj_math'].id]},
+            ],
             'default_total_marks': '100',
             'default_passing_marks': '33',
             'start_date': '2026-04-01',
@@ -548,7 +552,7 @@ class TestExamGroupWizardAndPublishAll:
         data = resp.json()
 
         # Only Math for each of the 2 classes -- English is excluded even though
-        # class_1 has it assigned, because it wasn't in subject_ids.
+        # class_1 has it assigned, because it wasn't listed for class_1.
         assert data['subjects_created'] == 2, data
 
         group = ExamGroup.objects.get(id=data['group_id'])
@@ -556,6 +560,79 @@ class TestExamGroupWizardAndPublishAll:
             ExamSubject.objects.filter(exam__exam_group=group).values_list('subject_id', flat=True)
         )
         assert subjects_in_group == {d['subj_math'].id}, subjects_in_group
+
+    def test_g1c_wizard_create_class_subjects_are_independent_per_class(self, exam_prereqs, api):
+        """G1c: two classes sharing a subject can be filtered independently -- class_1 keeps
+        only English, class_2 keeps only Math, even though both classes have Math assigned."""
+        d = exam_prereqs
+        token = d['tokens']['admin']
+        sid = d['SID_A']
+        school = d['school_a']
+
+        ClassSubject.objects.create(school=school, class_obj=d['class_1'], subject=d['subj_math'])
+        ClassSubject.objects.create(school=school, class_obj=d['class_1'], subject=d['subj_eng'])
+        ClassSubject.objects.create(school=school, class_obj=d['class_2'], subject=d['subj_math'])
+
+        et = ExamType.objects.create(school=school, name=f'{P6}IndependentType', weight=Decimal('50.00'))
+        resp = api.post('/api/examinations/exam-groups/wizard-create/', {
+            'academic_year': d['academic_year'].id,
+            'term': d['term_1'].id,
+            'exam_type': et.id,
+            'name': f'{P6}Independent Group',
+            'class_ids': [d['class_1'].id, d['class_2'].id],
+            'class_subjects': [
+                {'class_id': d['class_1'].id, 'subject_ids': [d['subj_eng'].id]},
+                {'class_id': d['class_2'].id, 'subject_ids': [d['subj_math'].id]},
+            ],
+            'default_total_marks': '100',
+            'default_passing_marks': '33',
+            'start_date': '2026-04-01',
+            'end_date': '2026-04-05',
+        }, token, sid)
+        assert resp.status_code == 201, f"status={resp.status_code} body={resp.content[:300]}"
+        data = resp.json()
+        assert data['subjects_created'] == 2, data
+
+        group = ExamGroup.objects.get(id=data['group_id'])
+        exam_1 = group.exams.get(class_obj=d['class_1'])
+        exam_2 = group.exams.get(class_obj=d['class_2'])
+        assert set(ExamSubject.objects.filter(exam=exam_1).values_list('subject_id', flat=True)) == {d['subj_eng'].id}
+        assert set(ExamSubject.objects.filter(exam=exam_2).values_list('subject_id', flat=True)) == {d['subj_math'].id}
+
+    def test_g1d_wizard_create_class_subjects_empty_list_means_zero_subjects(self, exam_prereqs, api):
+        """G1d: a class explicitly listed with an empty subject_ids gets zero ExamSubjects --
+        distinct from omitting the class entirely, which keeps every ClassSubject (test_g1)."""
+        d = exam_prereqs
+        token = d['tokens']['admin']
+        sid = d['SID_A']
+        school = d['school_a']
+
+        ClassSubject.objects.create(school=school, class_obj=d['class_1'], subject=d['subj_math'])
+        ClassSubject.objects.create(school=school, class_obj=d['class_2'], subject=d['subj_math'])
+
+        et = ExamType.objects.create(school=school, name=f'{P6}EmptyType', weight=Decimal('50.00'))
+        resp = api.post('/api/examinations/exam-groups/wizard-create/', {
+            'academic_year': d['academic_year'].id,
+            'term': d['term_1'].id,
+            'exam_type': et.id,
+            'name': f'{P6}Empty Group',
+            'class_ids': [d['class_1'].id, d['class_2'].id],
+            'class_subjects': [
+                {'class_id': d['class_1'].id, 'subject_ids': []},
+            ],
+            'default_total_marks': '100',
+            'default_passing_marks': '33',
+            'start_date': '2026-04-01',
+            'end_date': '2026-04-05',
+        }, token, sid)
+        assert resp.status_code == 201, f"status={resp.status_code} body={resp.content[:300]}"
+        data = resp.json()
+
+        # class_1 explicitly empty -> 0 subjects; class_2 omitted -> keeps its 1 ClassSubject.
+        assert data['subjects_created'] == 1, data
+        group = ExamGroup.objects.get(id=data['group_id'])
+        exam_1 = group.exams.get(class_obj=d['class_1'])
+        assert ExamSubject.objects.filter(exam=exam_1).count() == 0
 
     def test_g2_group_actions_resolve_under_exam_groups_not_404(self, exam_prereqs, api):
         """G2: download-date-sheet/update-date-by-subject/publish-all resolve under

@@ -596,7 +596,15 @@ class ExamGroupViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
                 )
                 created_exams.append(exam)
 
-            subject_ids = data.get('subject_ids') or []
+            # Per-class subject restriction. A class present here is filtered to
+            # exactly its listed subject_ids -- including an empty list, which
+            # deliberately yields zero ExamSubjects for that class rather than
+            # falling back. A class absent entirely (older clients) keeps every
+            # ClassSubject assigned to it.
+            subject_restriction_by_class = {
+                entry['class_id']: entry.get('subject_ids') or []
+                for entry in (data.get('class_subjects') or [])
+            }
 
             all_exam_subjects = []
             for exam in created_exams:
@@ -605,8 +613,10 @@ class ExamGroupViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
                     class_obj=exam.class_obj,
                     is_active=True,
                 ).select_related('subject')
-                if subject_ids:
-                    class_subjects = class_subjects.filter(subject_id__in=subject_ids)
+                if exam.class_obj_id in subject_restriction_by_class:
+                    class_subjects = class_subjects.filter(
+                        subject_id__in=subject_restriction_by_class[exam.class_obj_id]
+                    )
                 for cs in class_subjects:
                     slot = date_sheet_map.get((exam.class_obj_id, cs.subject_id), {})
                     all_exam_subjects.append(ExamSubject(

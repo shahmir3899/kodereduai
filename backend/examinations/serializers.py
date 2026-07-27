@@ -441,6 +441,14 @@ class ExamGroupCreateSerializer(serializers.ModelSerializer):
         return data
 
 
+class ClassSubjectSelectionSerializer(serializers.Serializer):
+    """One class's subject restriction within ExamGroupWizardCreateSerializer.class_subjects."""
+    class_id = serializers.IntegerField()
+    subject_ids = serializers.ListField(
+        child=serializers.IntegerField(), required=False, default=list,
+    )
+
+
 class ExamGroupWizardCreateSerializer(serializers.Serializer):
     """Accepts group details + class IDs for the wizard-create action."""
     academic_year = serializers.IntegerField()
@@ -453,12 +461,14 @@ class ExamGroupWizardCreateSerializer(serializers.Serializer):
     class_ids = serializers.ListField(
         child=serializers.IntegerField(), min_length=1,
     )
-    subject_ids = serializers.ListField(
-        child=serializers.IntegerField(),
+    class_subjects = serializers.ListField(
+        child=ClassSubjectSelectionSerializer(),
         required=False,
         default=list,
-        help_text="Optional: restrict created ExamSubjects to these subjects. "
-                   "Empty/omitted keeps the default of every ClassSubject assigned to each class.",
+        help_text="Optional: per-class subject restriction, e.g. "
+                   "[{'class_id': 1, 'subject_ids': [10, 11]}, ...]. A class omitted here "
+                   "keeps the default of every ClassSubject assigned to it; a class listed "
+                   "with an empty subject_ids gets none (deliberate, not a fallback).",
     )
     default_total_marks = serializers.DecimalField(
         max_digits=6, decimal_places=2, default=100.00, required=False,
