@@ -229,26 +229,49 @@ export function DateSheetModal({ groupId, onClose: closeDateSheet, queryClient, 
   // only needs to hold blank rows still waiting for an assignment.
   const [extraDates, setExtraDates] = useState([])
 
-  // Rows hidden via a per-row remove this session (see handleRemoveDateRow).
-  // A date only stays hidden while it's empty -- if it later gets a real
-  // assignment (e.g. through the Table tab), scheduledDates below overrides
-  // the exclusion so the row reappears with its data.
+  // Rows hidden via a per-row remove this session, for dates outside the
+  // group's saved range (see handleRemoveDateRow). A date only stays hidden
+  // while it's empty -- if it later gets a real assignment (e.g. through the
+  // Table tab), scheduledDates below overrides the exclusion so the row
+  // reappears with its data.
   const [excludedDates, setExcludedDates] = useState(new Set())
+  const [savingRows, setSavingRows] = useState(new Set())
+
+  // The date range the backend actually knows about (ExamGroup.start_date /
+  // end_date) -- distinct from calendarDates below, which also includes
+  // locally-added rows that were never saved.
+  const persistedRange = useMemo(
+    () => buildDateRange(dsRes?.data?.start_date, dsRes?.data?.end_date),
+    [dsRes],
+  )
 
   // Every day in the group's date range, plus any date that already has a
   // subject scheduled outside that range, plus this session's blank rows —
   // union rather than picking one, so a subject placed via "+ Add Date"
   // never causes its own row to disappear when the data refetches.
   const calendarDates = useMemo(() => {
-    const range = buildDateRange(dsRes?.data?.start_date, dsRes?.data?.end_date)
     const scheduled = grid.rows.map(r => r.date)
     const scheduledSet = new Set(scheduled)
-    const all = new Set([...range, ...scheduled, ...extraDates])
+    const all = new Set([...persistedRange, ...scheduled, ...extraDates])
     return [...all].filter(d => scheduledSet.has(d) || !excludedDates.has(d)).sort()
-  }, [dsRes, grid, extraDates, excludedDates])
+  }, [persistedRange, grid, extraDates, excludedDates])
 
-  const isCalendarRowEmpty = (date) =>
+  const isDateRowEmpty = (date) =>
     grid.columns.every(col => (subjectPool[col.examId] || []).filter(e => e.examDate === date).length === 0)
+
+  // A row can be removed if it's empty, and either it's purely a local,
+  // never-saved "+ Add Date" row (nothing to persist -- just stop showing it),
+  // or it sits at an edge of the group's actually-saved date range (removing
+  // it shrinks that range on the backend, same as ExamWizard shrinking
+  // end_date). A row in the *middle* of the saved range can't be removed
+  // without leaving a gap the backend has no way to represent, so it's never
+  // offered one.
+  const isDateRowRemovable = (date) => {
+    if (!isDateRowEmpty(date)) return false
+    if (!persistedRange.includes(date)) return true
+    if (persistedRange.length <= 1) return false
+    return date === persistedRange[0] || date === persistedRange[persistedRange.length - 1]
+  }
 
   const handleAddDateRow = () => {
     setOpenCell(null)
@@ -258,15 +281,31 @@ export function DateSheetModal({ groupId, onClose: closeDateSheet, queryClient, 
     setExtraDates(prev => prev.includes(nextDate) ? prev : [...prev, nextDate])
   }
 
-  // Remove any empty row, not just the trailing one -- mirrors
-  // handleAddDateRow's directness. Hides the row via excludedDates and, if it
-  // was a session-added blank row, prunes it out of extraDates too (tidy, not
-  // required for correctness since the exclusion alone hides it either way).
-  const handleRemoveDateRow = (date) => {
-    if (!isCalendarRowEmpty(date)) return
+  const handleRemoveDateRow = async (date) => {
+    if (!isDateRowRemovable(date)) return
     setOpenCell(null)
-    setExcludedDates(prev => new Set(prev).add(date))
-    setExtraDates(prev => prev.filter(d => d !== date))
+
+    if (!persistedRange.includes(date)) {
+      // Never saved to begin with -- just stop showing it.
+      setExcludedDates(prev => new Set(prev).add(date))
+      setExtraDates(prev => prev.filter(d => d !== date))
+      return
+    }
+
+    const patch = date === persistedRange[0]
+      ? { start_date: persistedRange[1] }
+      : { end_date: persistedRange[persistedRange.length - 2] }
+
+    setSavingRows(prev => new Set(prev).add(date))
+    try {
+      await examinationsApi.updateExamGroup(groupId, patch)
+      queryClient.invalidateQueries({ queryKey: ['dateSheet', groupId] })
+      queryClient.invalidateQueries({ queryKey: ['examGroups'] })
+    } catch {
+      setListError('Failed to remove date row.')
+    } finally {
+      setSavingRows(prev => { const s = new Set(prev); s.delete(date); return s })
+    }
   }
 
   // Replace a class+date cell's subject set, persisting immediately.
@@ -381,13 +420,16 @@ export function DateSheetModal({ groupId, onClose: closeDateSheet, queryClient, 
                   </tr>
                 ) : calendarDates.map((date, dateIdx) => {
                   const openUpward = dateIdx >= Math.floor(calendarDates.length / 2)
-                  const rowIsEmpty = isCalendarRowEmpty(date)
+                  const rowIsRemovable = isDateRowRemovable(date)
+                  const rowIsSaving = savingRows.has(date)
                   return (
                     <tr key={date} className="hover:bg-gray-50">
                       <td className="px-3 py-2 font-medium text-gray-900 border border-gray-200">
                         <div className="flex items-center gap-1.5">
                           <span>{date}</span>
-                          {rowIsEmpty && (
+                          {rowIsSaving ? (
+                            <span className="animate-spin rounded-full h-2.5 w-2.5 border-b-2 border-primary-600" />
+                          ) : rowIsRemovable && (
                             <button
                               type="button"
                               aria-label={`Remove ${date}`}

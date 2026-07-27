@@ -6,6 +6,7 @@ import { DateSheetModal } from '../ExamsPage'
 
 const mockGetDateSheet = vi.fn()
 const mockUpdateDateSheet = vi.fn()
+const mockUpdateExamGroup = vi.fn()
 const mockDownloadDateSheet = vi.fn()
 const mockDownloadDateSheetPdf = vi.fn()
 
@@ -13,6 +14,7 @@ vi.mock('../../../services/api', () => ({
   examinationsApi: {
     getDateSheet: (...args) => mockGetDateSheet(...args),
     updateDateSheet: (...args) => mockUpdateDateSheet(...args),
+    updateExamGroup: (...args) => mockUpdateExamGroup(...args),
     downloadDateSheet: (...args) => mockDownloadDateSheet(...args),
     downloadDateSheetPdf: (...args) => mockDownloadDateSheetPdf(...args),
   },
@@ -71,6 +73,7 @@ describe('DateSheetModal', () => {
   beforeEach(() => {
     mockGetDateSheet.mockResolvedValue({ data: DATE_SHEET_RESPONSE })
     mockUpdateDateSheet.mockResolvedValue({ data: { updated_count: 1 } })
+    mockUpdateExamGroup.mockResolvedValue({ data: { id: 5 } })
   })
 
   it('opens on the Calendar view by default', async () => {
@@ -134,19 +137,32 @@ describe('DateSheetModal', () => {
     expect(screen.queryByLabelText('2026-04-03 - Class 1 - A')).not.toBeInTheDocument()
   })
 
-  it('removes an empty middle row without disturbing scheduled rows', async () => {
+  it('does not offer to remove a row in the middle of the group\'s saved date range', async () => {
+    // A row here can't just be hidden client-side and forgotten -- the group's
+    // start_date/end_date is the only thing the backend persists, so a day
+    // strictly between them has no way to be individually excluded. Only the
+    // edges of the saved range (or a purely local, never-saved row) get a
+    // remove control -- see the two tests below.
     mockGetDateSheet.mockResolvedValue({
       data: { ...DATE_SHEET_RESPONSE, end_date: '2026-04-03' },
     })
+    renderModal()
+    await waitForLoaded()
+
+    expect(screen.getByLabelText('2026-04-02 - Class 1 - A')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Remove 2026-04-02' })).not.toBeInTheDocument()
+  })
+
+  it('removing the last row of the saved range shrinks the group\'s end_date', async () => {
     const user = userEvent.setup()
     renderModal()
     await waitForLoaded()
 
+    // 2026-04-02 is the actual end_date of this fixture's saved range (not a
+    // locally-added row), so removing it must persist via updateExamGroup.
     await user.click(screen.getByRole('button', { name: 'Remove 2026-04-02' }))
 
-    expect(screen.getByLabelText('2026-04-01 - Class 1 - A')).toBeInTheDocument()
-    expect(screen.queryByLabelText('2026-04-02 - Class 1 - A')).not.toBeInTheDocument()
-    expect(screen.getByLabelText('2026-04-03 - Class 1 - A')).toBeInTheDocument()
+    await waitFor(() => expect(mockUpdateExamGroup).toHaveBeenCalledWith(5, { end_date: '2026-04-01' }))
   })
 
   it('does not offer to remove a row that already has an assignment', async () => {

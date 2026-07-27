@@ -656,6 +656,7 @@ export const examinationsApi = {
   // Exam Groups
   getExamGroups: (params) => api.get('/api/examinations/exam-groups/', { params }),
   wizardCreateExamGroup: (data) => api.post('/api/examinations/exam-groups/wizard-create/', data),
+  updateExamGroup: (id, data) => api.patch(`/api/examinations/exam-groups/${id}/`, data),
   deleteExamGroup: (id) => api.delete(`/api/examinations/exam-groups/${id}/`),
   getDateSheet: (groupId) => api.get(`/api/examinations/exam-groups/${groupId}/date-sheet/`),
   updateDateBySubject: (groupId, data) => api.post(`/api/examinations/exam-groups/${groupId}/update-date-by-subject/`, data),
