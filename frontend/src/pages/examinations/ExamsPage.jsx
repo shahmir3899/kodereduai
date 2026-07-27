@@ -76,6 +76,56 @@ export function buildDateSheetGrid(subjects) {
   return { columns, rows, unscheduled }
 }
 
+// UTC-safe date helpers (mirrors ExamWizard.jsx) — avoid local-timezone
+// off-by-one bugs when turning a start/end date range into calendar rows.
+function parseDateOnly(dateStr) {
+  const [year, month, day] = dateStr.split('-').map(Number)
+  return new Date(Date.UTC(year, month - 1, day))
+}
+
+function addDaysToDateString(dateStr, days) {
+  const date = parseDateOnly(dateStr)
+  date.setUTCDate(date.getUTCDate() + days)
+  return date.toISOString().slice(0, 10)
+}
+
+function daysBetweenInclusive(startStr, endStr) {
+  const start = parseDateOnly(startStr)
+  const end = parseDateOnly(endStr)
+  return Math.round((end - start) / 86400000) + 1
+}
+
+// Every calendar day in [startStr, endStr], inclusive. [] if either bound is
+// missing or the range is invalid.
+export function buildDateRange(startStr, endStr) {
+  if (!startStr || !endStr) return []
+  const days = daysBetweenInclusive(startStr, endStr)
+  if (days <= 0) return []
+  return Array.from({ length: days }, (_, i) => addDaysToDateString(startStr, i))
+}
+
+function dayNameForDate(dateStr) {
+  return new Date(`${dateStr}T00:00:00Z`).toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' })
+}
+
+// Groups the date-sheet GET response's per-subject/per-class rows by class
+// (exam_id) — each class's ExamSubject records are the fixed pool of subjects
+// the Calendar view's per-cell picker can assign to that class's column.
+export function buildSubjectPoolByExam(subjects) {
+  const pool = {}
+  subjects.forEach(sub => {
+    sub.classes.forEach(cls => {
+      if (!pool[cls.exam_id]) pool[cls.exam_id] = []
+      pool[cls.exam_id].push({
+        examSubjectId: cls.exam_subject_id,
+        subjectName: sub.subject_name,
+        examDate: cls.exam_date || '',
+      })
+    })
+  })
+  return pool
+}
+
 export default function ExamsPage() {
   const queryClient = useQueryClient()
   const { confirm, ConfirmModalRoot } = useConfirmModal()
@@ -402,6 +452,7 @@ export default function ExamsPage() {
   const DateSheetModal = ({ groupId, onClose: closeDateSheet }) => {
     const [localRows, setLocalRows] = useState([])
     const [saving, setSaving] = useState(new Set())
+    const [savingCells, setSavingCells] = useState(new Set())
     const [viewMode, setViewMode] = useState('table') // 'table' | 'calendar'
 
     const { data: dsRes, isLoading: dsLoading } = useQuery({
@@ -483,6 +534,46 @@ export default function ExamsPage() {
 
     const grid = useMemo(() => buildDateSheetGrid(dsRes?.data?.subjects || []), [dsRes])
 
+    // Each class's fixed pool of ExamSubject records, for the Calendar view's
+    // per-cell subject picker (assigning = moving that record's exam_date).
+    const subjectPool = useMemo(() => buildSubjectPoolByExam(dsRes?.data?.subjects || []), [dsRes])
+
+    // Every day in the group's date range, so unfilled days still get a row to
+    // assign into. Falls back to just the already-dated rows for older groups
+    // that predate the wizard's required start/end date.
+    const calendarDates = useMemo(() => {
+      const range = buildDateRange(dsRes?.data?.start_date, dsRes?.data?.end_date)
+      return range.length > 0 ? range : grid.rows.map(r => r.date)
+    }, [dsRes, grid])
+
+    // Assign (or clear, if examSubjectIdStr is '') one subject to a class+date
+    // cell, persisting immediately. A subject only ever occupies one date per
+    // class: picking it into a new cell moves it there.
+    const handleCellAssign = async (examId, date, examSubjectIdStr) => {
+      const entries = (subjectPool[examId] || []).filter(e => e.examDate === date)
+      const previous = entries.length === 1 ? entries[0] : null
+      const updates = []
+      if (previous && String(previous.examSubjectId) !== examSubjectIdStr) {
+        updates.push({ exam_subject_id: previous.examSubjectId, exam_date: null })
+      }
+      if (examSubjectIdStr) {
+        updates.push({ exam_subject_id: Number(examSubjectIdStr), exam_date: date })
+      }
+      if (updates.length === 0) return
+
+      const cellKey = `${examId}|${date}`
+      setSavingCells(prev => new Set(prev).add(cellKey))
+      try {
+        await examinationsApi.updateDateSheet(groupId, updates)
+        queryClient.invalidateQueries({ queryKey: ['dateSheet', groupId] })
+        queryClient.invalidateQueries({ queryKey: ['examGroups'] })
+      } catch {
+        setListError('Failed to update date sheet.')
+      } finally {
+        setSavingCells(prev => { const s = new Set(prev); s.delete(cellKey); return s })
+      }
+    }
+
     return (
       <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={closeDateSheet}>
         <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[85vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
@@ -490,7 +581,7 @@ export default function ExamsPage() {
             <div>
               <h2 className="text-lg font-semibold text-gray-900">Date Sheet</h2>
               <p className="text-xs text-gray-500">
-                {viewMode === 'table' ? 'Each class–subject row is independent. Changes save on blur.' : 'Read-only calendar preview — switch to Table to edit dates.'}
+                {viewMode === 'table' ? 'Each class–subject row is independent. Changes save on blur.' : 'Click a cell to assign one subject to that class on that date.'}
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -538,21 +629,55 @@ export default function ExamsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {grid.rows.length === 0 ? (
+                  {calendarDates.length === 0 ? (
                     <tr>
                       <td colSpan={2 + grid.columns.length} className="px-3 py-6 text-center text-gray-400">
                         No dates set yet — switch to Table to assign dates.
                       </td>
                     </tr>
-                  ) : grid.rows.map(row => (
-                    <tr key={row.date} className="hover:bg-gray-50">
-                      <td className="px-3 py-2 font-medium text-gray-900 border border-gray-200">{row.date}</td>
-                      <td className="px-3 py-2 text-gray-600 border border-gray-200">{row.dayName}</td>
-                      {grid.columns.map(col => (
-                        <td key={col.examId} className="px-3 py-2 text-center border border-gray-200">
-                          {row.cells[col.examId] || <span className="text-gray-300">—</span>}
-                        </td>
-                      ))}
+                  ) : calendarDates.map(date => (
+                    <tr key={date} className="hover:bg-gray-50">
+                      <td className="px-3 py-2 font-medium text-gray-900 border border-gray-200">{date}</td>
+                      <td className="px-3 py-2 text-gray-600 border border-gray-200">{dayNameForDate(date)}</td>
+                      {grid.columns.map(col => {
+                        const entries = (subjectPool[col.examId] || []).filter(e => e.examDate === date)
+                        const cellKey = `${col.examId}|${date}`
+                        const isSaving = savingCells.has(cellKey)
+
+                        if (entries.length > 1) {
+                          // Two subjects landing on the same date+class isn't
+                          // prevented upstream — not a single-select scenario,
+                          // so keep it as read-only text rather than guessing
+                          // which one a picker should represent.
+                          return (
+                            <td key={col.examId} className="px-3 py-2 text-center border border-gray-200 text-xs">
+                              {entries.map(e => e.subjectName).join(' / ')}
+                            </td>
+                          )
+                        }
+
+                        const current = entries[0]
+                        const options = (subjectPool[col.examId] || []).filter(
+                          e => !e.examDate || e.examSubjectId === current?.examSubjectId
+                        )
+
+                        return (
+                          <td key={col.examId} className="px-2 py-1.5 border border-gray-200">
+                            <select
+                              aria-label={`${date} - ${col.label}`}
+                              value={current ? current.examSubjectId : ''}
+                              onChange={e => handleCellAssign(col.examId, date, e.target.value)}
+                              disabled={isSaving}
+                              className="input text-xs py-1 w-full"
+                            >
+                              <option value="">—</option>
+                              {options.map(o => (
+                                <option key={o.examSubjectId} value={o.examSubjectId}>{o.subjectName}</option>
+                              ))}
+                            </select>
+                          </td>
+                        )
+                      })}
                     </tr>
                   ))}
                 </tbody>
