@@ -463,3 +463,101 @@ class ExamPaperPDFGenerator:
         # Similar to generate() but includes correct_answer fields
         # Implementation can be added later if needed
         raise NotImplementedError("Answer key generation not yet implemented")
+
+
+class DateSheetPDFGenerator:
+    """
+    Render an ExamGroup's date sheet as a printable calendar grid: one row per
+    exam date, one column per class. Takes the already-pivoted grid dict from
+    examinations.views._build_date_sheet_grid rather than raw queryset data,
+    so the PDF and Excel exports can never disagree on layout/ordering.
+    """
+
+    def __init__(self, group, grid):
+        self.group = group
+        self.grid = grid
+
+    def generate(self) -> bytes:
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A4, landscape
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import inch
+        from reportlab.lib.enums import TA_CENTER
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(
+            buffer,
+            pagesize=landscape(A4),
+            topMargin=0.5 * inch,
+            bottomMargin=0.5 * inch,
+            leftMargin=0.5 * inch,
+            rightMargin=0.5 * inch,
+        )
+        styles = getSampleStyleSheet()
+
+        title_style = ParagraphStyle(
+            'DateSheetTitle', parent=styles['Heading1'], fontSize=16, alignment=TA_CENTER,
+            spaceAfter=4, textColor=colors.HexColor('#1F2937'), fontName='Helvetica-Bold',
+        )
+        subtitle_style = ParagraphStyle(
+            'DateSheetSubtitle', parent=styles['Normal'], fontSize=10, alignment=TA_CENTER,
+            spaceAfter=14, textColor=colors.HexColor('#6B7280'),
+        )
+        note_style = ParagraphStyle(
+            'DateSheetNote', parent=styles['Normal'], fontSize=9,
+            textColor=colors.HexColor('#374151'), spaceBefore=12,
+        )
+
+        elements = [Paragraph(f'Date Sheet — {self.group.name}', title_style)]
+
+        period = ''
+        if self.group.start_date and self.group.end_date:
+            period = f' | {self.group.start_date} to {self.group.end_date}'
+        elements.append(Paragraph(f'Exam Type: {self.group.exam_type.name}{period}', subtitle_style))
+
+        columns = self.grid['columns']
+        header = ['Date', 'Day'] + [col['label'] for col in columns]
+        table_data = [header]
+        for row in self.grid['rows']:
+            table_data.append(
+                [row['date'], row['day_name']]
+                + [row['cells'].get(col['class_id'], '') or '-' for col in columns]
+            )
+
+        if len(table_data) == 1:
+            table_data.append(['—', '—'] + ['—' for _ in columns])
+
+        available_width = landscape(A4)[0] - 1 * inch
+        date_col_width = 0.9 * inch
+        day_col_width = 0.9 * inch
+        remaining = available_width - date_col_width - day_col_width
+        class_col_width = remaining / len(columns) if columns else remaining
+        col_widths = [date_col_width, day_col_width] + [class_col_width] * len(columns)
+
+        table = Table(table_data, colWidths=col_widths, repeatRows=1)
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2563EB')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 9),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#D1D5DB')),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F9FAFB')]),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ]))
+        elements.append(table)
+
+        if self.grid['unscheduled']:
+            elements.append(Spacer(1, 6))
+            elements.append(Paragraph('<b>Not yet scheduled:</b>', note_style))
+            for item in self.grid['unscheduled']:
+                elements.append(Paragraph(
+                    f"&bull; {item['subject_name']} ({item['class_name']})", note_style,
+                ))
+
+        doc.build(elements)
+        logger.info(f"Generated date sheet PDF for ExamGroup {self.group.id}")
+        return buffer.getvalue()

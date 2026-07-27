@@ -612,6 +612,126 @@ class TestExamGroupWizardAndPublishAll:
 
 
 # ==================================================================
+# LEVEL H: DATE SHEET CALENDAR GRID (Excel + PDF exports)
+# ==================================================================
+
+@pytest.mark.django_db
+@pytest.mark.phase6
+class TestDateSheetGrid:
+
+    def _create_group_and_set_dates(self, d, api):
+        """Same 2-class/3-subject setup as TestExamGroupWizardAndPublishAll, then
+        assigns dates that exercise the grid pivot: two subjects sharing one
+        date+class (class_1's Math and English both on 2026-04-01), and one
+        subject deliberately left undated (class_2's Math)."""
+        from datetime import date
+
+        token = d['tokens']['admin']
+        sid = d['SID_A']
+        school = d['school_a']
+
+        ClassSubject.objects.create(school=school, class_obj=d['class_1'], subject=d['subj_math'])
+        ClassSubject.objects.create(school=school, class_obj=d['class_1'], subject=d['subj_eng'])
+        ClassSubject.objects.create(school=school, class_obj=d['class_2'], subject=d['subj_math'])
+
+        et = ExamType.objects.create(school=school, name=f'{P6}GridType', weight=Decimal('50.00'))
+        resp = api.post('/api/examinations/exam-groups/wizard-create/', {
+            'academic_year': d['academic_year'].id,
+            'term': d['term_1'].id,
+            'exam_type': et.id,
+            'name': f'{P6}Grid Test',
+            'class_ids': [d['class_1'].id, d['class_2'].id],
+            'default_total_marks': '100',
+            'default_passing_marks': '33',
+            'start_date': '2026-04-01',
+            'end_date': '2026-04-05',
+        }, token, sid)
+        assert resp.status_code == 201, f"status={resp.status_code} body={resp.content[:300]}"
+        group = ExamGroup.objects.get(id=resp.json()['group_id'])
+
+        ExamSubject.objects.filter(
+            exam__exam_group=group, exam__class_obj=d['class_1'], subject=d['subj_math'],
+        ).update(exam_date=date(2026, 4, 1))
+        ExamSubject.objects.filter(
+            exam__exam_group=group, exam__class_obj=d['class_1'], subject=d['subj_eng'],
+        ).update(exam_date=date(2026, 4, 1))
+        # class_2's Math is left with no exam_date on purpose.
+        return group
+
+    def test_h1_grid_pivots_dates_to_rows_and_classes_to_columns(self, exam_prereqs, api):
+        """H1: one row per distinct date, one column per class, cells hold the
+        subject name(s) for that date+class; two subjects sharing a cell are joined."""
+        from examinations.views import _build_date_sheet_grid
+
+        d = exam_prereqs
+        group = self._create_group_and_set_dates(d, api)
+
+        grid = _build_date_sheet_grid(group, d['school_a'].id)
+
+        assert len(grid['rows']) == 1, grid['rows']
+        assert grid['rows'][0]['date'] == '2026-04-01'
+        assert grid['rows'][0]['day_name'] == 'Wednesday'
+
+        class_ids = {col['class_id'] for col in grid['columns']}
+        assert class_ids == {d['class_1'].id, d['class_2'].id}
+
+        class_1_cell = grid['rows'][0]['cells'][d['class_1'].id]
+        assert d['subj_math'].name in class_1_cell
+        assert d['subj_eng'].name in class_1_cell
+
+        class_2_cell = grid['rows'][0]['cells'][d['class_2'].id]
+        assert class_2_cell == '', f"class_2 has no dated subject, expected blank cell, got {class_2_cell!r}"
+
+    def test_h2_unscheduled_subjects_listed_not_dropped(self, exam_prereqs, api):
+        """H2: a subject with no exam_date is reported in 'unscheduled', not silently dropped."""
+        from examinations.views import _build_date_sheet_grid
+
+        d = exam_prereqs
+        group = self._create_group_and_set_dates(d, api)
+        grid = _build_date_sheet_grid(group, d['school_a'].id)
+
+        assert len(grid['unscheduled']) == 1, grid['unscheduled']
+        assert grid['unscheduled'][0]['subject_name'] == d['subj_math'].name
+
+    def test_h3_download_excel_grid(self, exam_prereqs, api):
+        """H3: Excel export returns a workbook."""
+        d = exam_prereqs
+        group = self._create_group_and_set_dates(d, api)
+
+        resp = api.get(
+            f'/api/examinations/exam-groups/{group.id}/download-date-sheet/',
+            d['tokens']['admin'], d['SID_A'],
+        )
+        assert resp.status_code == 200, f"status={resp.status_code}"
+        assert resp['Content-Type'] == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        assert len(resp.content) > 1000
+
+    def test_h4_download_pdf_grid(self, exam_prereqs, api):
+        """H4: PDF export returns a valid PDF."""
+        d = exam_prereqs
+        group = self._create_group_and_set_dates(d, api)
+
+        resp = api.get(
+            f'/api/examinations/exam-groups/{group.id}/download-date-sheet-pdf/',
+            d['tokens']['admin'], d['SID_A'],
+        )
+        assert resp.status_code == 200, f"status={resp.status_code}"
+        assert resp['Content-Type'] == 'application/pdf'
+        assert resp.content[:4] == b'%PDF'
+
+    def test_h5_pdf_download_teacher_forbidden(self, exam_prereqs, api):
+        """H5: same admin-only gate as the other exam-group actions."""
+        d = exam_prereqs
+        group = self._create_group_and_set_dates(d, api)
+
+        resp = api.get(
+            f'/api/examinations/exam-groups/{group.id}/download-date-sheet-pdf/',
+            d['tokens']['teacher'], d['SID_A'],
+        )
+        assert resp.status_code == 403, f"status={resp.status_code}"
+
+
+# ==================================================================
 # LEVEL C: EXAM SUBJECTS API
 # ==================================================================
 

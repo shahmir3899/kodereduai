@@ -391,6 +391,67 @@ class ExamTypeViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelView
         return super().get_queryset()
 
 
+def _build_date_sheet_grid(group, school_id):
+    """Pivot an ExamGroup's per-(class, subject) exam dates into a Date x Class grid.
+
+    Subjects with no exam_date yet can't be placed on a date-indexed grid, so
+    they're returned separately as 'unscheduled' rather than silently dropped.
+    Two subjects landing on the same date for the same class (not prevented
+    anywhere upstream) are joined into one cell rather than treated as an error.
+    """
+    exam_subjects = ExamSubject.objects.filter(
+        exam__exam_group=group, exam__is_active=True,
+        is_active=True, school_id=school_id,
+    ).select_related('subject', 'exam', 'exam__class_obj').order_by(
+        'exam__class_obj__grade_level', 'exam__class_obj__name', 'subject__name',
+    )
+
+    columns_by_id = {}
+    cells = {}  # (date, class_id) -> [subject_name, ...]
+    unscheduled = []
+
+    for es in exam_subjects:
+        cls = es.exam.class_obj
+        if cls.id not in columns_by_id:
+            columns_by_id[cls.id] = {
+                'class_id': cls.id,
+                'label': f'{cls.name} - {cls.section}' if cls.section else cls.name,
+                '_sort_key': (cls.grade_level if cls.grade_level is not None else 0, cls.name),
+            }
+        if not es.exam_date:
+            unscheduled.append({
+                'subject_name': es.subject.name,
+                'class_name': columns_by_id[cls.id]['label'],
+            })
+            continue
+        cells.setdefault((es.exam_date, cls.id), []).append(es.subject.name)
+
+    columns = sorted(columns_by_id.values(), key=lambda c: c['_sort_key'])
+    for col in columns:
+        col.pop('_sort_key', None)
+
+    distinct_dates = sorted({exam_date for (exam_date, _class_id) in cells.keys()})
+    rows = []
+    for exam_date in distinct_dates:
+        row_cells = {}
+        for col in columns:
+            names = cells.get((exam_date, col['class_id']))
+            row_cells[col['class_id']] = ' / '.join(names) if names else ''
+        rows.append({
+            'date': exam_date.isoformat(),
+            'day_name': exam_date.strftime('%A'),
+            'cells': row_cells,
+        })
+
+    unscheduled.sort(key=lambda item: (item['class_name'], item['subject_name']))
+
+    return {
+        'columns': columns,
+        'rows': rows,
+        'unscheduled': unscheduled,
+    }
+
+
 class ExamGroupViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     required_module = 'examinations'
     queryset = ExamGroup.objects.all()
@@ -651,16 +712,11 @@ class ExamGroupViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
 
     @action(detail=True, methods=['get'], url_path='download-date-sheet')
     def download_date_sheet(self, request, pk=None):
-        """Generate and return an Excel date sheet."""
+        """Generate and return the date sheet as an Excel calendar grid
+        (one row per exam date, one column per class)."""
         group = self.get_object()
         school_id = _resolve_school_id(request)
-
-        exam_subjects = ExamSubject.objects.filter(
-            exam__exam_group=group, exam__is_active=True,
-            is_active=True, school_id=school_id,
-        ).select_related('subject', 'exam__class_obj').order_by(
-            'exam_date', 'subject__name',
-        )
+        grid = _build_date_sheet_grid(group, school_id)
 
         import openpyxl
         from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -669,11 +725,13 @@ class ExamGroupViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
         ws = wb.active
         ws.title = 'Date Sheet'
 
-        ws.merge_cells('A1:G1')
+        last_col = 2 + len(grid['columns'])  # Date + Day + one per class
+
+        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=last_col)
         ws['A1'] = f'Date Sheet - {group.name}'
         ws['A1'].font = Font(bold=True, size=14)
 
-        ws.merge_cells('A2:G2')
+        ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=last_col)
         period = ''
         if group.start_date and group.end_date:
             period = f' | {group.start_date} to {group.end_date}'
@@ -686,50 +744,38 @@ class ExamGroupViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
             left=Side(style='thin'), right=Side(style='thin'),
             top=Side(style='thin'), bottom=Side(style='thin'),
         )
-        flat_rows = []
-        for es in exam_subjects:
-            flat_rows.append({
-                'subject_name': es.subject.name,
-                'subject_code': es.subject.code,
-                'class_name': es.exam.class_obj.name,
-                'exam_date': es.exam_date,
-                'start_time': es.start_time,
-                'end_time': es.end_time,
-            })
 
-        flat_rows.sort(key=lambda x: (
-            str(x['exam_date'] or '9999-99-99'), x['subject_name'], x['class_name'],
-        ))
-
-        # Update headers to include time columns
-        headers = ['#', 'Date', 'Subject', 'Code', 'Class', 'Start Time', 'End Time']
+        header_row = 4
+        headers = ['Date', 'Day'] + [col['label'] for col in grid['columns']]
         for col_idx, header in enumerate(headers, 1):
-            cell = ws.cell(row=4, column=col_idx, value=header)
+            cell = ws.cell(row=header_row, column=col_idx, value=header)
             cell.font = header_font
             cell.fill = header_fill
-            cell.alignment = Alignment(horizontal='center')
+            cell.alignment = Alignment(horizontal='center', wrap_text=True)
             cell.border = thin_border
 
-        for row_idx, row in enumerate(flat_rows, 5):
-            def fmt_time(t):
-                if not t:
-                    return ''
-                return t.strftime('%H:%M') if hasattr(t, 'strftime') else str(t)[:5]
-            ws.cell(row=row_idx, column=1, value=row_idx - 4).border = thin_border
-            ws.cell(row=row_idx, column=2, value=str(row['exam_date'] or 'TBD')).border = thin_border
-            ws.cell(row=row_idx, column=3, value=row['subject_name']).border = thin_border
-            ws.cell(row=row_idx, column=4, value=row['subject_code']).border = thin_border
-            ws.cell(row=row_idx, column=5, value=row['class_name']).border = thin_border
-            ws.cell(row=row_idx, column=6, value=fmt_time(row['start_time'])).border = thin_border
-            ws.cell(row=row_idx, column=7, value=fmt_time(row['end_time'])).border = thin_border
+        row_idx = header_row + 1
+        for row in grid['rows']:
+            ws.cell(row=row_idx, column=1, value=row['date']).border = thin_border
+            ws.cell(row=row_idx, column=2, value=row['day_name']).border = thin_border
+            for col_idx, col in enumerate(grid['columns'], 3):
+                value = row['cells'].get(col['class_id'], '')
+                cell = ws.cell(row=row_idx, column=col_idx, value=value or '-')
+                cell.alignment = Alignment(horizontal='center')
+                cell.border = thin_border
+            row_idx += 1
 
-        ws.column_dimensions['A'].width = 5
-        ws.column_dimensions['B'].width = 14
-        ws.column_dimensions['C'].width = 25
-        ws.column_dimensions['D'].width = 10
-        ws.column_dimensions['E'].width = 20
-        ws.column_dimensions['F'].width = 12
-        ws.column_dimensions['G'].width = 12
+        ws.column_dimensions['A'].width = 14
+        ws.column_dimensions['B'].width = 12
+        for col_idx in range(3, last_col + 1):
+            ws.column_dimensions[openpyxl.utils.get_column_letter(col_idx)].width = 18
+
+        if grid['unscheduled']:
+            row_idx += 1
+            ws.cell(row=row_idx, column=1, value='Not yet scheduled:').font = Font(bold=True, size=10)
+            for item in grid['unscheduled']:
+                row_idx += 1
+                ws.cell(row=row_idx, column=1, value=f"{item['subject_name']} ({item['class_name']})")
 
         buffer = io.BytesIO()
         wb.save(buffer)
@@ -742,6 +788,29 @@ class ExamGroupViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
         )
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
         return response
+
+    @action(detail=True, methods=['get'], url_path='download-date-sheet-pdf')
+    def download_date_sheet_pdf(self, request, pk=None):
+        """Generate and return the date sheet as a printable PDF calendar grid."""
+        from .pdf_generator import DateSheetPDFGenerator
+
+        group = self.get_object()
+        school_id = _resolve_school_id(request)
+        grid = _build_date_sheet_grid(group, school_id)
+
+        try:
+            generator = DateSheetPDFGenerator(group, grid)
+            pdf_bytes = generator.generate()
+
+            filename = f'DateSheet_{group.name.replace(" ", "_")}.pdf'
+            response = HttpResponse(pdf_bytes, content_type='application/pdf')
+            response['Content-Disposition'] = f'attachment; filename="{filename}"'
+            return response
+        except Exception as e:
+            return Response(
+                {'detail': f'Error generating PDF: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
     @action(detail=True, methods=['post'], url_path='publish-all')
     def publish_all(self, request, pk=None):
