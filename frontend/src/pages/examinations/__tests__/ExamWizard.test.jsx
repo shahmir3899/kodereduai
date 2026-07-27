@@ -144,43 +144,67 @@ describe('ExamWizard', () => {
   })
 
   describe('Step 2 — subject picker', () => {
-    it('defaults to every available subject selected once classes are picked', async () => {
+    it('defaults to every available subject selected, nested under its own class', async () => {
       const user = userEvent.setup()
       await advanceToStep2(user)
       await selectClasses(user)
 
+      const class1Row = screen.getByText('Class 1 - A').closest('div')
       await waitFor(() => {
-        expect(screen.getByText('Select subjects to include')).toBeInTheDocument()
+        expect(within(class1Row).getByText('3 of 3 selected')).toBeInTheDocument()
       })
-      expect(screen.getByText('3 of 3 subjects selected')).toBeInTheDocument()
-      const mathCheckbox = screen.getByText('Mathematics').closest('label').querySelector('input[type="checkbox"]')
-      const englishCheckbox = screen.getByText('English').closest('label').querySelector('input[type="checkbox"]')
+      const mathCheckbox = within(class1Row).getByText('Mathematics').closest('label').querySelector('input[type="checkbox"]')
+      const englishCheckbox = within(class1Row).getByText('English').closest('label').querySelector('input[type="checkbox"]')
       expect(mathCheckbox).toBeChecked()
       expect(englishCheckbox).toBeChecked()
+
+      const class2Row = screen.getByText('Class 2 - B').closest('div')
+      expect(within(class2Row).getByText('1 of 1 selected')).toBeInTheDocument()
     })
 
-    it('blocks advancing to Step 3 if every subject is deselected', async () => {
+    it('keeps each class\'s subject selection independent, even for a shared subject', async () => {
       const user = userEvent.setup()
       await advanceToStep2(user)
       await selectClasses(user)
-      await waitFor(() => screen.getByText('Select subjects to include'))
+      await waitFor(() => screen.getByText('3 of 3 selected'))
 
-      const subjectsHeaderRow = screen.getByText('Select subjects to include').closest('div')
-      await user.click(within(subjectsHeaderRow).getByRole('button', { name: 'Clear' }))
+      const class1Row = screen.getByText('Class 1 - A').closest('div')
+      const class2Row = screen.getByText('Class 2 - B').closest('div')
+
+      const class2MathCheckbox = within(class2Row).getByText('Mathematics').closest('label').querySelector('input[type="checkbox"]')
+      await user.click(class2MathCheckbox) // deselect Math for Class 2 only
+
+      const class1MathCheckbox = within(class1Row).getByText('Mathematics').closest('label').querySelector('input[type="checkbox"]')
+      expect(class1MathCheckbox).toBeChecked() // Class 1's Math is untouched
+      expect(within(class2Row).getByText('0 of 1 selected')).toBeInTheDocument()
+    })
+
+    it('blocks advancing to Step 3 if every class ends up with zero subjects', async () => {
+      const user = userEvent.setup()
+      await advanceToStep2(user)
+      await selectClasses(user)
+      await waitFor(() => screen.getByText('3 of 3 selected'))
+
+      const class1Row = screen.getByText('Class 1 - A').closest('div')
+      const class2Row = screen.getByText('Class 2 - B').closest('div')
+      await user.click(within(class1Row).getByRole('button', { name: 'None' }))
+      await user.click(within(class2Row).getByRole('button', { name: 'None' }))
+
       await user.click(screen.getByRole('button', { name: 'Next' }))
 
-      expect(screen.getByText('Select at least one subject.')).toBeInTheDocument()
+      expect(screen.getByText('Select at least one subject for at least one class.')).toBeInTheDocument()
       expect(screen.queryByText('Assign Exam Dates')).not.toBeInTheDocument()
     })
 
-    it('excludes a deselected subject from the Step 3 grid options', async () => {
+    it('excludes a deselected subject from the Step 3 grid options for that class only', async () => {
       const user = userEvent.setup()
       await advanceToStep2(user)
       await selectClasses(user)
-      await waitFor(() => screen.getByText('Select subjects to include'))
+      await waitFor(() => screen.getByText('3 of 3 selected'))
 
-      const scienceCheckbox = screen.getByText('Science').closest('label').querySelector('input[type="checkbox"]')
-      await user.click(scienceCheckbox) // deselect Science
+      const class1Row = screen.getByText('Class 1 - A').closest('div')
+      const scienceCheckbox = within(class1Row).getByText('Science').closest('label').querySelector('input[type="checkbox"]')
+      await user.click(scienceCheckbox) // deselect Science for Class 1 only
 
       await user.click(screen.getByRole('button', { name: 'Next' }))
       await waitFor(() => expect(screen.getByText('Assign Exam Dates')).toBeInTheDocument())
@@ -315,7 +339,7 @@ describe('ExamWizard', () => {
   })
 
   describe('Submit payload', () => {
-    it('sends subject_ids and the grid assignments as date_sheet entries', async () => {
+    it('sends class_subjects and the grid assignments as date_sheet entries', async () => {
       const user = userEvent.setup()
       await advanceToStep3(user, { startDate: '2026-05-01', endDate: '2026-05-03' })
 
@@ -334,7 +358,10 @@ describe('ExamWizard', () => {
         expect(mockWizardCreateExamGroup).toHaveBeenCalledTimes(1)
       })
       const payload = mockWizardCreateExamGroup.mock.calls[0][0]
-      expect(payload.subject_ids.sort()).toEqual([201, 202, 203])
+      const subjectIdsByClass = Object.fromEntries(
+        payload.class_subjects.map(cs => [cs.class_id, [...cs.subject_ids].sort((a, b) => a - b)])
+      )
+      expect(subjectIdsByClass).toEqual({ 1: [201, 202, 203], 2: [201] })
       expect(payload.date_sheet).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ class_id: 1, subject_id: 201, exam_date: '2026-05-01' }),

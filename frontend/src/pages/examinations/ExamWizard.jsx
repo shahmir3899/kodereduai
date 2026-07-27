@@ -52,7 +52,7 @@ export default function ExamWizard({ onClose, onSuccess }) {
     default_total_marks: '100',
     default_passing_marks: '33',
     class_ids: [],
-    subject_ids: [],
+    subject_ids_by_class: {},  // Key: classId → [subjectId, ...], independent per class
     date_sheet: {},  // Key: "classId_subjectId" → { exam_date, start_time, end_time }
   })
 
@@ -100,39 +100,47 @@ export default function ExamWizard({ onClose, onSuccess }) {
     return counts.length > 0 ? Math.max(...counts) : 0
   }, [subjectCountMap, wizardData.class_ids])
 
-  // Unique subjects across selected classes — drives the Step 2 subject picker.
-  const uniqueSubjects = useMemo(() => {
-    const subjectMap = {}
-    allClassSubjects
-      .filter(cs => wizardData.class_ids.includes(cs.class_obj))
-      .forEach(cs => {
-        if (!subjectMap[cs.subject]) {
-          subjectMap[cs.subject] = {
-            id: cs.subject,
-            name: cs.subject_name,
-            code: cs.subject_code || '',
-          }
+  // Each class's own subjects — drives Step 2's per-class subject picker.
+  // Deliberately not deduplicated across classes: two classes both offering
+  // "Mathematics" get two independent entries, one per class.
+  const classSubjectsMap = useMemo(() => {
+    const map = {}
+    allClassSubjects.forEach(cs => {
+      if (!map[cs.class_obj]) map[cs.class_obj] = []
+      map[cs.class_obj].push({ id: cs.subject, name: cs.subject_name, code: cs.subject_code || '' })
+    })
+    Object.values(map).forEach(list => list.sort((a, b) => a.name.localeCompare(b.name)))
+    return map
+  }, [allClassSubjects])
+
+  // Default a newly-selected class's subjects to "all available" the first
+  // time it's checked. Only fills in classes missing an entry, so a manual
+  // pick within Step 2 sticks even if other classes' selections change —
+  // and a class unchecked then rechecked keeps its previous picks.
+  useEffect(() => {
+    setWizardData(prev => {
+      let changed = false
+      const next = { ...prev.subject_ids_by_class }
+      prev.class_ids.forEach(classId => {
+        if (!next[classId]) {
+          next[classId] = (classSubjectsMap[classId] || []).map(s => s.id)
+          changed = true
         }
       })
-    return Object.values(subjectMap).sort((a, b) => a.name.localeCompare(b.name))
-  }, [allClassSubjects, wizardData.class_ids])
+      return changed ? { ...prev, subject_ids_by_class: next } : prev
+    })
+  }, [wizardData.class_ids, classSubjectsMap])
 
-  // Default subject selection to "all available" whenever the selected classes
-  // (and therefore which subjects are even on offer) change. A manual pick
-  // within Step 2 sticks until the class selection changes again.
-  useEffect(() => {
-    update('subject_ids', uniqueSubjects.map(s => s.id))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [uniqueSubjects])
-
-  // Per-class per-subject pairs, filtered to Step 2's subject selection —
-  // feeds both the Step 3 grid's per-cell options and the "unscheduled" list.
+  // Per-class per-subject pairs, filtered to each class's own Step 2 subject
+  // selection — feeds both the Step 3 grid's per-cell options and the
+  // "unscheduled" list.
   const subjectClassPairs = useMemo(() => {
     const selectedClassMap = {}
     classes.forEach(c => { selectedClassMap[c.id] = c })
     const rows = []
     allClassSubjects
-      .filter(cs => wizardData.class_ids.includes(cs.class_obj) && wizardData.subject_ids.includes(cs.subject))
+      .filter(cs => wizardData.class_ids.includes(cs.class_obj)
+        && (wizardData.subject_ids_by_class[cs.class_obj] || []).includes(cs.subject))
       .forEach(cs => {
         const cls = selectedClassMap[cs.class_obj]
         if (!cls) return
@@ -150,7 +158,7 @@ export default function ExamWizard({ onClose, onSuccess }) {
       return s !== 0 ? s : a.className.localeCompare(b.className)
     })
     return rows
-  }, [allClassSubjects, wizardData.class_ids, wizardData.subject_ids, classes])
+  }, [allClassSubjects, wizardData.class_ids, wizardData.subject_ids_by_class, classes])
 
   // Subjects available per class (for the Step 3 per-cell picker).
   const subjectsByClass = useMemo(() => {
@@ -346,6 +354,19 @@ export default function ExamWizard({ onClose, onSuccess }) {
 
   const update = (field, value) => setWizardData(prev => ({ ...prev, [field]: value }))
 
+  const setClassSubjects = (classId, subjectIds) => setWizardData(prev => ({
+    ...prev,
+    subject_ids_by_class: { ...prev.subject_ids_by_class, [classId]: subjectIds },
+  }))
+
+  const toggleClassSubject = (classId, subjectId) => {
+    const current = wizardData.subject_ids_by_class[classId] || []
+    setClassSubjects(classId, current.includes(subjectId)
+      ? current.filter(id => id !== subjectId)
+      : [...current, subjectId]
+    )
+  }
+
   // Validation per step
   const validateStep1 = () => {
     const e = {}
@@ -364,8 +385,11 @@ export default function ExamWizard({ onClose, onSuccess }) {
   const validateStep2 = () => {
     const e = {}
     if (wizardData.class_ids.length === 0) e.class_ids = 'Select at least one class.'
-    if (wizardData.class_ids.length > 0 && wizardData.subject_ids.length === 0) {
-      e.subject_ids = 'Select at least one subject.'
+    const totalSelectedSubjects = wizardData.class_ids.reduce(
+      (sum, id) => sum + (wizardData.subject_ids_by_class[id]?.length || 0), 0,
+    )
+    if (wizardData.class_ids.length > 0 && totalSelectedSubjects === 0) {
+      e.subject_ids = 'Select at least one subject for at least one class.'
     }
     setErrors(e)
     return Object.keys(e).length === 0
@@ -406,7 +430,10 @@ export default function ExamWizard({ onClose, onSuccess }) {
       start_date: wizardData.start_date || null,
       end_date: wizardData.end_date || null,
       class_ids: wizardData.class_ids,
-      subject_ids: wizardData.subject_ids,
+      class_subjects: wizardData.class_ids.map(classId => ({
+        class_id: classId,
+        subject_ids: wizardData.subject_ids_by_class[classId] || [],
+      })),
       default_total_marks: parseFloat(wizardData.default_total_marks) || 100,
       default_passing_marks: parseFloat(wizardData.default_passing_marks) || 33,
       date_sheet: dateSheetList,
@@ -597,71 +624,70 @@ export default function ExamWizard({ onClose, onSuccess }) {
                 </div>
               </div>
               {errors.class_ids && <p className="text-xs text-red-600 mb-2">{errors.class_ids}</p>}
+              {errors.subject_ids && <p className="text-xs text-red-600 mb-2">{errors.subject_ids}</p>}
 
-              <div className="border border-gray-200 rounded-lg max-h-72 overflow-y-auto divide-y divide-gray-100">
+              <div className="border border-gray-200 rounded-lg max-h-[28rem] overflow-y-auto divide-y divide-gray-100">
                 {classes.map(cls => {
                   const subCount = subjectCountMap[cls.id] || 0
                   const checked = wizardData.class_ids.includes(cls.id)
+                  const classSubjects = classSubjectsMap[cls.id] || []
+                  const selectedSubjectIds = wizardData.subject_ids_by_class[cls.id] || []
                   return (
-                    <label key={cls.id} className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer ${checked ? 'bg-sky-50' : 'hover:bg-gray-50'}`}>
-                      <input type="checkbox" checked={checked}
-                        onChange={() => update('class_ids', checked
-                          ? wizardData.class_ids.filter(id => id !== cls.id)
-                          : [...wizardData.class_ids, cls.id]
+                    <div key={cls.id}>
+                      <label className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer ${checked ? 'bg-sky-50' : 'hover:bg-gray-50'}`}>
+                        <input type="checkbox" checked={checked}
+                          onChange={() => update('class_ids', checked
+                            ? wizardData.class_ids.filter(id => id !== cls.id)
+                            : [...wizardData.class_ids, cls.id]
+                          )}
+                          className="rounded border-gray-300 text-sky-600 focus:ring-sky-500" />
+                        <span className="flex-1 text-sm font-medium text-gray-800">{cls.name}{cls.section ? ` - ${cls.section}` : ''}</span>
+                        {subCount > 0 ? (
+                          <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">{subCount} subjects</span>
+                        ) : (
+                          <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">0 subjects</span>
                         )}
-                        className="rounded border-gray-300 text-sky-600 focus:ring-sky-500" />
-                      <span className="flex-1 text-sm font-medium text-gray-800">{cls.name}{cls.section ? ` - ${cls.section}` : ''}</span>
-                      {subCount > 0 ? (
-                        <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">{subCount} subjects</span>
-                      ) : (
-                        <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">0 subjects</span>
+                      </label>
+
+                      {checked && (
+                        <div className="pl-11 pr-4 pb-3 bg-sky-50/40 border-t border-dashed border-gray-200">
+                          {classSubjects.length === 0 ? (
+                            <p className="text-xs text-gray-400 py-2">No subjects assigned to this class yet.</p>
+                          ) : (
+                            <>
+                              <div className="flex items-center justify-between pt-2 pb-1">
+                                <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Subjects</span>
+                                <div className="flex gap-2">
+                                  <button type="button" onClick={() => setClassSubjects(cls.id, classSubjects.map(s => s.id))}
+                                    className="text-xs text-blue-600 hover:underline">All</button>
+                                  <button type="button" onClick={() => setClassSubjects(cls.id, [])}
+                                    className="text-xs text-gray-500 hover:underline">None</button>
+                                </div>
+                              </div>
+                              <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+                                {classSubjects.map(s => {
+                                  const subChecked = selectedSubjectIds.includes(s.id)
+                                  return (
+                                    <label key={s.id} className="flex items-center gap-1.5 text-xs text-gray-700 cursor-pointer">
+                                      <input type="checkbox" checked={subChecked}
+                                        onChange={() => toggleClassSubject(cls.id, s.id)}
+                                        className="rounded border-gray-300 text-sky-600 focus:ring-sky-500 h-3.5 w-3.5" />
+                                      {s.name}{s.code ? <span className="text-gray-400 ml-0.5">({s.code})</span> : null}
+                                    </label>
+                                  )
+                                })}
+                              </div>
+                              <p className="text-[11px] text-gray-400 mt-1.5">{selectedSubjectIds.length} of {classSubjects.length} selected</p>
+                            </>
+                          )}
+                        </div>
                       )}
-                    </label>
+                    </div>
                   )
                 })}
               </div>
               {wizardData.class_ids.length > 0 && (
                 <p className="text-xs text-gray-500 mt-2">{wizardData.class_ids.length} of {classes.length} classes selected</p>
-              )}
-
-              {wizardData.class_ids.length > 0 && (
-                <div className="mt-5">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-sm font-medium text-gray-700">Select subjects to include</p>
-                    <div className="flex gap-2">
-                      <button type="button" onClick={() => update('subject_ids', uniqueSubjects.map(s => s.id))}
-                        className="text-xs text-blue-600 hover:underline">Select All</button>
-                      <button type="button" onClick={() => update('subject_ids', [])}
-                        className="text-xs text-gray-500 hover:underline">Clear</button>
-                    </div>
-                  </div>
-                  {errors.subject_ids && <p className="text-xs text-red-600 mb-2">{errors.subject_ids}</p>}
-                  {uniqueSubjects.length === 0 ? (
-                    <p className="text-xs text-gray-400">No subjects assigned to the selected classes yet.</p>
-                  ) : (
-                    <div className="border border-gray-200 rounded-lg max-h-56 overflow-y-auto divide-y divide-gray-100">
-                      {uniqueSubjects.map(s => {
-                        const checked = wizardData.subject_ids.includes(s.id)
-                        return (
-                          <label key={s.id} className={`flex items-center gap-3 px-4 py-2 cursor-pointer ${checked ? 'bg-sky-50' : 'hover:bg-gray-50'}`}>
-                            <input type="checkbox" checked={checked}
-                              onChange={() => update('subject_ids', checked
-                                ? wizardData.subject_ids.filter(id => id !== s.id)
-                                : [...wizardData.subject_ids, s.id]
-                              )}
-                              className="rounded border-gray-300 text-sky-600 focus:ring-sky-500" />
-                            <span className="text-sm text-gray-800">
-                              {s.name}{s.code ? <span className="text-xs text-gray-400 ml-1">({s.code})</span> : null}
-                            </span>
-                          </label>
-                        )
-                      })}
-                    </div>
-                  )}
-                  {wizardData.subject_ids.length > 0 && (
-                    <p className="text-xs text-gray-500 mt-2">{wizardData.subject_ids.length} of {uniqueSubjects.length} subjects selected</p>
-                  )}
-                </div>
               )}
             </div>
           )}
