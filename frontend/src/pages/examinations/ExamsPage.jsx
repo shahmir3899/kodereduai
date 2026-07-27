@@ -538,28 +538,57 @@ export default function ExamsPage() {
     // per-cell subject picker (assigning = moving that record's exam_date).
     const subjectPool = useMemo(() => buildSubjectPoolByExam(dsRes?.data?.subjects || []), [dsRes])
 
-    // Every day in the group's date range, so unfilled days still get a row to
-    // assign into. Falls back to just the already-dated rows for older groups
-    // that predate the wizard's required start/end date.
+    // Rows added via "+ Add Date" this session, beyond the group's saved
+    // start/end range. Once a subject is assigned to one, it persists and
+    // reappears naturally through `grid.rows` on the next load — this state
+    // only needs to hold blank rows still waiting for an assignment.
+    const [extraDates, setExtraDates] = useState([])
+
+    // Every day in the group's date range, plus any date that already has a
+    // subject scheduled outside that range, plus this session's blank rows —
+    // union rather than picking one, so a subject placed via "+ Add Date"
+    // never causes its own row to disappear when the data refetches.
     const calendarDates = useMemo(() => {
       const range = buildDateRange(dsRes?.data?.start_date, dsRes?.data?.end_date)
-      return range.length > 0 ? range : grid.rows.map(r => r.date)
-    }, [dsRes, grid])
+      const scheduled = grid.rows.map(r => r.date)
+      return [...new Set([...range, ...scheduled, ...extraDates])].sort()
+    }, [dsRes, grid, extraDates])
 
-    // Assign (or clear, if examSubjectIdStr is '') one subject to a class+date
-    // cell, persisting immediately. A subject only ever occupies one date per
-    // class: picking it into a new cell moves it there.
-    const handleCellAssign = async (examId, date, examSubjectIdStr) => {
-      const entries = (subjectPool[examId] || []).filter(e => e.examDate === date)
-      const previous = entries.length === 1 ? entries[0] : null
-      const updates = []
-      if (previous && String(previous.examSubjectId) !== examSubjectIdStr) {
-        updates.push({ exam_subject_id: previous.examSubjectId, exam_date: null })
-      }
-      if (examSubjectIdStr) {
-        updates.push({ exam_subject_id: Number(examSubjectIdStr), exam_date: date })
-      }
-      if (updates.length === 0) return
+    const lastCalendarDate = calendarDates[calendarDates.length - 1]
+    const lastRowIsRemovable = !!lastCalendarDate
+      && extraDates.includes(lastCalendarDate)
+      && grid.columns.every(col => (subjectPool[col.examId] || []).filter(e => e.examDate === lastCalendarDate).length === 0)
+
+    const handleAddDateRow = () => {
+      setOpenCell(null)
+      const base = lastCalendarDate || dsRes?.data?.start_date
+      if (!base) return
+      const nextDate = addDaysToDateString(base, 1)
+      setExtraDates(prev => prev.includes(nextDate) ? prev : [...prev, nextDate])
+    }
+
+    const handleRemoveLastDateRow = () => {
+      if (!lastRowIsRemovable) return
+      setOpenCell(null)
+      setExtraDates(prev => prev.filter(d => d !== lastCalendarDate))
+    }
+
+    // Replace a class+date cell's subject set, persisting immediately.
+    // Subjects unchecked go back to unscheduled; subjects newly checked move
+    // onto this date (a subject only ever occupies one date per class, so
+    // checking one already scheduled elsewhere relocates it here).
+    const handleCellSubjectsChange = async (examId, date, nextExamSubjectIds) => {
+      const previousIds = (subjectPool[examId] || []).filter(e => e.examDate === date).map(e => e.examSubjectId)
+      const nextSet = new Set(nextExamSubjectIds)
+      const prevSet = new Set(previousIds)
+      const added = nextExamSubjectIds.filter(id => !prevSet.has(id))
+      const removed = previousIds.filter(id => !nextSet.has(id))
+      if (added.length === 0 && removed.length === 0) return
+
+      const updates = [
+        ...removed.map(id => ({ exam_subject_id: id, exam_date: null })),
+        ...added.map(id => ({ exam_subject_id: id, exam_date: date })),
+      ]
 
       const cellKey = `${examId}|${date}`
       setSavingCells(prev => new Set(prev).add(cellKey))
@@ -574,6 +603,25 @@ export default function ExamsPage() {
       }
     }
 
+    const toggleCellSubject = (examId, date, examSubjectId) => {
+      const current = (subjectPool[examId] || []).filter(e => e.examDate === date).map(e => e.examSubjectId)
+      const next = current.includes(examSubjectId)
+        ? current.filter(id => id !== examSubjectId)
+        : [...current, examSubjectId]
+      handleCellSubjectsChange(examId, date, next)
+    }
+
+    // Which cell's subject picker is open — `${examId}|${date}` or null.
+    const [openCell, setOpenCell] = useState(null)
+    useEffect(() => {
+      if (!openCell) return
+      const handlePointerDown = (e) => {
+        if (!e.target.closest(`[data-cell-key="${openCell}"]`)) setOpenCell(null)
+      }
+      document.addEventListener('mousedown', handlePointerDown)
+      return () => document.removeEventListener('mousedown', handlePointerDown)
+    }, [openCell])
+
     return (
       <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={closeDateSheet}>
         <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[85vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
@@ -581,7 +629,7 @@ export default function ExamsPage() {
             <div>
               <h2 className="text-lg font-semibold text-gray-900">Date Sheet</h2>
               <p className="text-xs text-gray-500">
-                {viewMode === 'table' ? 'Each class–subject row is independent. Changes save on blur.' : 'Click a cell to assign one subject to that class on that date.'}
+                {viewMode === 'table' ? 'Each class–subject row is independent. Changes save on blur.' : 'Click a cell to check off every subject that class sits on that date.'}
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -635,53 +683,102 @@ export default function ExamsPage() {
                         No dates set yet — switch to Table to assign dates.
                       </td>
                     </tr>
-                  ) : calendarDates.map(date => (
-                    <tr key={date} className="hover:bg-gray-50">
-                      <td className="px-3 py-2 font-medium text-gray-900 border border-gray-200">{date}</td>
-                      <td className="px-3 py-2 text-gray-600 border border-gray-200">{dayNameForDate(date)}</td>
-                      {grid.columns.map(col => {
-                        const entries = (subjectPool[col.examId] || []).filter(e => e.examDate === date)
-                        const cellKey = `${col.examId}|${date}`
-                        const isSaving = savingCells.has(cellKey)
+                  ) : calendarDates.map((date, dateIdx) => {
+                    const openUpward = dateIdx >= Math.floor(calendarDates.length / 2)
+                    return (
+                      <tr key={date} className="hover:bg-gray-50">
+                        <td className="px-3 py-2 font-medium text-gray-900 border border-gray-200">{date}</td>
+                        <td className="px-3 py-2 text-gray-600 border border-gray-200">{dayNameForDate(date)}</td>
+                        {grid.columns.map(col => {
+                          const classSubjectOptions = subjectPool[col.examId] || []
+                          const selectedIds = classSubjectOptions.filter(e => e.examDate === date).map(e => e.examSubjectId)
+                          const cellKey = `${col.examId}|${date}`
+                          const isSaving = savingCells.has(cellKey)
+                          const isOpen = openCell === cellKey
 
-                        if (entries.length > 1) {
-                          // Two subjects landing on the same date+class isn't
-                          // prevented upstream — not a single-select scenario,
-                          // so keep it as read-only text rather than guessing
-                          // which one a picker should represent.
                           return (
-                            <td key={col.examId} className="px-3 py-2 text-center border border-gray-200 text-xs">
-                              {entries.map(e => e.subjectName).join(' / ')}
+                            <td key={col.examId} className="px-2 py-1.5 border border-gray-200 relative" data-cell-key={cellKey}>
+                              <button
+                                type="button"
+                                aria-label={`${date} - ${col.label}`}
+                                onClick={() => setOpenCell(isOpen ? null : cellKey)}
+                                disabled={isSaving}
+                                className={`w-full min-h-[30px] text-left rounded border px-2 py-1 flex flex-wrap gap-1 items-center text-xs ${isOpen ? 'border-primary-500 ring-1 ring-primary-200 bg-primary-50' : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'}`}
+                              >
+                                {isSaving ? (
+                                  <span className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary-600" />
+                                ) : selectedIds.length === 0 ? (
+                                  <span className="text-gray-300">+ Add subjects</span>
+                                ) : selectedIds.map(id => {
+                                  const subj = classSubjectOptions.find(r => r.examSubjectId === id)
+                                  return (
+                                    <span key={id} className="inline-flex items-center bg-primary-100 text-primary-700 rounded-full px-2 py-0.5 text-[11px] font-medium">
+                                      {subj?.subjectName || id}
+                                    </span>
+                                  )
+                                })}
+                              </button>
+
+                              {isOpen && (
+                                <div className={`absolute z-20 left-0 w-52 bg-white border border-gray-300 rounded-lg shadow-lg p-2 ${openUpward ? 'bottom-full mb-1' : 'top-full mt-1'}`}>
+                                  <p className="text-[10px] font-semibold uppercase text-gray-400 px-1 mb-1">{col.label} · {date}</p>
+                                  <div className="max-h-40 overflow-auto">
+                                    {classSubjectOptions.length === 0 ? (
+                                      <p className="text-xs text-gray-400 px-1 py-2">No subjects for this class.</p>
+                                    ) : classSubjectOptions.map(row => {
+                                      const isHere = selectedIds.includes(row.examSubjectId)
+                                      const isElsewhere = !isHere && row.examDate && row.examDate !== date
+                                      return (
+                                        <label key={row.examSubjectId} className="flex items-center gap-2 px-1 py-1 text-xs rounded hover:bg-gray-50 cursor-pointer">
+                                          <input
+                                            type="checkbox"
+                                            checked={isHere}
+                                            onChange={() => toggleCellSubject(col.examId, date, row.examSubjectId)}
+                                            className="rounded border-gray-300"
+                                          />
+                                          <span className="flex-1">{row.subjectName}</span>
+                                          {isElsewhere && <span className="text-[10px] text-gray-400">{row.examDate}</span>}
+                                        </label>
+                                      )
+                                    })}
+                                  </div>
+                                  <div className="flex justify-end pt-1 mt-1 border-t border-gray-100">
+                                    <button type="button" onClick={() => setOpenCell(null)} className="text-xs font-medium text-primary-600 hover:text-primary-700 px-2 py-1">
+                                      Done
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
                             </td>
                           )
-                        }
-
-                        const current = entries[0]
-                        const options = (subjectPool[col.examId] || []).filter(
-                          e => !e.examDate || e.examSubjectId === current?.examSubjectId
-                        )
-
-                        return (
-                          <td key={col.examId} className="px-2 py-1.5 border border-gray-200">
-                            <select
-                              aria-label={`${date} - ${col.label}`}
-                              value={current ? current.examSubjectId : ''}
-                              onChange={e => handleCellAssign(col.examId, date, e.target.value)}
-                              disabled={isSaving}
-                              className="input text-xs py-1 w-full"
-                            >
-                              <option value="">—</option>
-                              {options.map(o => (
-                                <option key={o.examSubjectId} value={o.examSubjectId}>{o.subjectName}</option>
-                              ))}
-                            </select>
-                          </td>
-                        )
-                      })}
-                    </tr>
-                  ))}
+                        })}
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
+
+              {calendarDates.length > 0 && (
+                <div className="flex items-center gap-2 mt-2">
+                  <button
+                    type="button"
+                    onClick={handleAddDateRow}
+                    className="flex-1 text-xs font-medium text-gray-500 border border-dashed border-gray-300 rounded-lg py-2 hover:border-primary-400 hover:text-primary-600 hover:bg-primary-50"
+                  >
+                    + Add Date
+                  </button>
+                  {lastRowIsRemovable && (
+                    <button
+                      type="button"
+                      onClick={handleRemoveLastDateRow}
+                      className="text-xs font-medium text-gray-400 border border-gray-200 rounded-lg px-3 py-2 hover:border-red-300 hover:text-red-500"
+                    >
+                      Remove last
+                    </button>
+                  )}
+                </div>
+              )}
+
               {grid.unscheduled.length > 0 && (
                 <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
                   <p className="text-xs font-medium text-amber-800 mb-1">Not yet scheduled:</p>
