@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { examinationsApi, sessionsApi, academicsApi } from '../../services/api'
+import { examinationsApi, sessionsApi, academicsApi, classesApi } from '../../services/api'
 import ClassSelector from '../../components/ClassSelector'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
+import { useAuth } from '../../contexts/AuthContext'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 import ExamWizard from './ExamWizard'
@@ -131,12 +132,13 @@ export function buildSubjectPoolByExam(subjects) {
 // every ExamsPage re-render (e.g. from the examGroups query refetching after a
 // save) created a *new* DateSheetModal function, which React treated as a
 // different component type and remounted, silently resetting viewMode back to
-// 'table' mid-edit.
-function DateSheetModal({ groupId, onClose: closeDateSheet, queryClient, setListError }) {
+// its default mid-edit. Exported (not just module-scoped) so it can be tested
+// directly without mounting all of ExamsPage's other queries/contexts.
+export function DateSheetModal({ groupId, onClose: closeDateSheet, queryClient, setListError }) {
   const [localRows, setLocalRows] = useState([])
   const [saving, setSaving] = useState(new Set())
   const [savingCells, setSavingCells] = useState(new Set())
-  const [viewMode, setViewMode] = useState('table') // 'table' | 'calendar'
+  const [viewMode, setViewMode] = useState('calendar') // 'table' | 'calendar'
 
   const { data: dsRes, isLoading: dsLoading } = useQuery({
     queryKey: ['dateSheet', groupId],
@@ -308,22 +310,22 @@ function DateSheetModal({ groupId, onClose: closeDateSheet, queryClient, setList
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={closeDateSheet}>
       <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[85vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-1">
-          <div>
+        <div className="flex items-start justify-between gap-2 mb-1">
+          <div className="min-w-0">
             <h2 className="text-lg font-semibold text-gray-900">Date Sheet</h2>
             <p className="text-xs text-gray-500">
               {viewMode === 'table' ? 'Each class–subject row is independent. Changes save on blur.' : 'Click a cell to check off every subject that class sits on that date.'}
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <button onClick={handleDownload} className="text-xs px-3 py-1.5 bg-green-50 text-green-700 hover:bg-green-100 rounded-lg font-medium">
-              Download Excel
-            </button>
-            <button onClick={handleDownloadPdf} className="text-xs px-3 py-1.5 bg-red-50 text-red-700 hover:bg-red-100 rounded-lg font-medium">
-              Download PDF
-            </button>
-            <button onClick={closeDateSheet} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
-          </div>
+          <button onClick={closeDateSheet} className="text-gray-400 hover:text-gray-600 text-xl flex-shrink-0">&times;</button>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 mt-2">
+          <button onClick={handleDownload} className="text-xs px-3 py-1.5 bg-green-50 text-green-700 hover:bg-green-100 rounded-lg font-medium">
+            Download Excel
+          </button>
+          <button onClick={handleDownloadPdf} className="text-xs px-3 py-1.5 bg-red-50 text-red-700 hover:bg-red-100 rounded-lg font-medium">
+            Download PDF
+          </button>
         </div>
 
         <div className="flex border-b border-gray-200 mt-2">
@@ -372,7 +374,12 @@ function DateSheetModal({ groupId, onClose: closeDateSheet, queryClient, setList
                     <tr key={date} className="hover:bg-gray-50">
                       <td className="px-3 py-2 font-medium text-gray-900 border border-gray-200">{date}</td>
                       <td className="px-3 py-2 text-gray-600 border border-gray-200">{dayNameForDate(date)}</td>
-                      {grid.columns.map(col => {
+                      {grid.columns.map((col, colIdx) => {
+                        // Flip the popover to the cell's left once we're in the
+                        // latter half of the columns, so it opens toward the
+                        // table's horizontal-scroll center instead of running
+                        // off the right edge on a narrow (mobile) viewport.
+                        const openLeft = colIdx >= Math.ceil(grid.columns.length / 2)
                         const classSubjectOptions = subjectPool[col.examId] || []
                         const selectedIds = classSubjectOptions.filter(e => e.examDate === date).map(e => e.examSubjectId)
                         const cellKey = `${col.examId}|${date}`
@@ -403,7 +410,7 @@ function DateSheetModal({ groupId, onClose: closeDateSheet, queryClient, setList
                             </button>
 
                             {isOpen && (
-                              <div className={`absolute z-20 left-0 w-52 bg-white border border-gray-300 rounded-lg shadow-lg p-2 ${openUpward ? 'bottom-full mb-1' : 'top-full mt-1'}`}>
+                              <div className={`absolute z-20 w-52 bg-white border border-gray-300 rounded-lg shadow-lg p-2 ${openLeft ? 'right-0' : 'left-0'} ${openUpward ? 'bottom-full mb-1' : 'top-full mt-1'}`}>
                                 <p className="text-[10px] font-semibold uppercase text-gray-400 px-1 mb-1">{col.label} · {date}</p>
                                 <div className="max-h-40 overflow-auto">
                                   {classSubjectOptions.length === 0 ? (
@@ -538,6 +545,7 @@ export default function ExamsPage() {
   const queryClient = useQueryClient()
   const { confirm, ConfirmModalRoot } = useConfirmModal()
   const { activeAcademicYear, currentTerm } = useAcademicYear()
+  const { activeSchool } = useAuth()
   const getDefaultForm = () => createEmptyForm(activeAcademicYear?.id, currentTerm?.id)
 
   // UI state
@@ -568,12 +576,21 @@ export default function ExamsPage() {
     return map
   }, [sessionClasses])
 
+  // Session classes for resolving exam-row labels (getExamClassLabel below). When a
+  // single year is selected in the list filter (the common case), reuse that
+  // year-scoped fetch instead of pulling every session class in the school — the
+  // SessionClass API can only filter by one academic_year at a time, so "All Years"
+  // is the one case that still needs the unscoped, every-year query.
+  const { sessionClasses: yearFilterSessionClasses } = useSessionClasses(yearFilter || undefined)
   const { data: allSessionClassesRes } = useQuery({
     queryKey: ['sessionClassesForExamList'],
     queryFn: () => sessionsApi.getSessionClasses({ page_size: 9999, is_active: true }),
+    enabled: !yearFilter,
   })
 
-  const allSessionClasses = allSessionClassesRes?.data?.results || allSessionClassesRes?.data || []
+  const allSessionClasses = yearFilter
+    ? yearFilterSessionClasses
+    : (allSessionClassesRes?.data?.results || allSessionClassesRes?.data || [])
 
   const sessionClassesByYearMaster = useMemo(() => {
     const map = {}
@@ -769,10 +786,14 @@ export default function ExamsPage() {
   const closeModal = () => { setShowModal(false); setEditId(null); setForm(getDefaultForm()); setErrors({}); setSelectedSubjects([]); setTestScheduleRows([]) }
 
   // Find editing exam in either standalone list or inside group exams
-  const editingExam = editId ? (
-    standaloneExams.find(e => e.id === editId) ||
-    groups.flatMap(g => g.exams || []).find(e => e.id === editId)
-  ) : null
+  const editingExam = useMemo(() => {
+    if (!editId) return null
+    return (
+      standaloneExams.find(e => e.id === editId) ||
+      groups.flatMap(g => g.exams || []).find(e => e.id === editId) ||
+      null
+    )
+  }, [editId, standaloneExams, groups])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -855,6 +876,33 @@ export default function ExamsPage() {
     } finally { setIsSubmitting(false) }
   }
 
+  // ── Prefetch helpers ──
+  // Warm caches on hover/focus (before the click that actually needs the data),
+  // so the Wizard and Date Sheet modal open with data already in hand instead of
+  // showing their own loading state. Query keys/params must match the queries
+  // that eventually consume them (ExamWizard's allClassSubjectsForWizard/classes,
+  // DateSheetModal's dateSheet) or React Query treats it as a separate fetch.
+
+  const prefetchWizardData = () => {
+    queryClient.prefetchQuery({
+      queryKey: ['allClassSubjectsForWizard'],
+      queryFn: () => academicsApi.getClassSubjects({ page_size: 9999 }),
+    })
+    if (activeSchool?.id) {
+      queryClient.prefetchQuery({
+        queryKey: ['classes', activeSchool.id],
+        queryFn: () => classesApi.getClasses({ school_id: activeSchool.id, page_size: 9999 }),
+      })
+    }
+  }
+
+  const prefetchDateSheet = (groupId) => {
+    queryClient.prefetchQuery({
+      queryKey: ['dateSheet', groupId],
+      queryFn: () => examinationsApi.getDateSheet(groupId),
+    })
+  }
+
   // ── Render helpers ──
 
   const isLoading = groupsLoading && standaloneLoading
@@ -870,7 +918,12 @@ export default function ExamsPage() {
           <p className="text-sm text-gray-600">Create and manage exams and tests</p>
         </div>
         {activeTab === 'exams' ? (
-          <button onClick={() => setShowWizard(true)} className="btn-primary text-sm px-4 py-2">
+          <button
+            onClick={() => setShowWizard(true)}
+            onMouseEnter={prefetchWizardData}
+            onFocus={prefetchWizardData}
+            className="btn-primary text-sm px-4 py-2"
+          >
             + Create Exam
           </button>
         ) : (
@@ -963,6 +1016,8 @@ export default function ExamsPage() {
                         <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
                           <button
                             onClick={() => setDateSheetGroupId(group.id)}
+                            onMouseEnter={() => prefetchDateSheet(group.id)}
+                            onFocus={() => prefetchDateSheet(group.id)}
                             className="text-xs px-2 py-1 text-gray-600 hover:bg-gray-100 rounded"
                             title="Date Sheet"
                           >
@@ -1098,7 +1153,12 @@ export default function ExamsPage() {
                   <span className="font-semibold">Tip:</span> Use the Exam Wizard for guided setup with date sheets.
                 </p>
               </div>
-              <button onClick={() => setShowWizard(true)} className="btn-primary text-sm px-4 py-2 mt-3">
+              <button
+                onClick={() => setShowWizard(true)}
+                onMouseEnter={prefetchWizardData}
+                onFocus={prefetchWizardData}
+                className="btn-primary text-sm px-4 py-2 mt-3"
+              >
                 + Create Exam
               </button>
             </div>
