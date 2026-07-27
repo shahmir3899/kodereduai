@@ -121,6 +121,42 @@ describe('DateSheetModal', () => {
     ]))
   })
 
+  it('extends and then removes the trailing empty row via "+ Add Date"', async () => {
+    const user = userEvent.setup()
+    renderModal()
+    await waitForLoaded()
+
+    expect(screen.queryByLabelText('2026-04-03 - Class 1 - A')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '+ Add Date' }))
+    expect(screen.getByLabelText('2026-04-03 - Class 1 - A')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Remove 2026-04-03' }))
+    expect(screen.queryByLabelText('2026-04-03 - Class 1 - A')).not.toBeInTheDocument()
+  })
+
+  it('removes an empty middle row without disturbing scheduled rows', async () => {
+    mockGetDateSheet.mockResolvedValue({
+      data: { ...DATE_SHEET_RESPONSE, end_date: '2026-04-03' },
+    })
+    const user = userEvent.setup()
+    renderModal()
+    await waitForLoaded()
+
+    await user.click(screen.getByRole('button', { name: 'Remove 2026-04-02' }))
+
+    expect(screen.getByLabelText('2026-04-01 - Class 1 - A')).toBeInTheDocument()
+    expect(screen.queryByLabelText('2026-04-02 - Class 1 - A')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('2026-04-03 - Class 1 - A')).toBeInTheDocument()
+  })
+
+  it('does not offer to remove a row that already has an assignment', async () => {
+    renderModal()
+    await waitForLoaded()
+
+    // Mathematics is scheduled on 2026-04-01, so that row has no remove control.
+    expect(screen.queryByRole('button', { name: 'Remove 2026-04-01' })).not.toBeInTheDocument()
+  })
+
   it('shows the empty state when the group has no subjects', async () => {
     mockGetDateSheet.mockResolvedValue({
       data: { group_id: 6, group_name: 'Empty Group', start_date: null, end_date: null, subjects: [] },

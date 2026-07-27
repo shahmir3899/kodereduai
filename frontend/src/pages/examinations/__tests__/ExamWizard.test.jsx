@@ -324,17 +324,28 @@ describe('ExamWizard', () => {
       await user.click(screen.getByRole('button', { name: '+ Add Date' }))
       expect(screen.getByLabelText('2026-05-04 - Class 1 - A')).toBeInTheDocument()
 
-      await user.click(screen.getByRole('button', { name: 'Remove last' }))
+      await user.click(screen.getByRole('button', { name: 'Remove 2026-05-04' }))
       expect(screen.queryByLabelText('2026-05-04 - Class 1 - A')).not.toBeInTheDocument()
       expect(screen.getByLabelText('2026-05-01 - Class 1 - A')).toBeInTheDocument()
     })
 
-    it('does not offer to remove the trailing row once it has an assignment', async () => {
+    it('removes a middle row without disturbing the rows before or after it', async () => {
+      const user = userEvent.setup()
+      await advanceToStep3(user, { startDate: '2026-05-01', endDate: '2026-05-03' })
+
+      await user.click(screen.getByRole('button', { name: 'Remove 2026-05-02' }))
+
+      expect(screen.getByLabelText('2026-05-01 - Class 1 - A')).toBeInTheDocument()
+      expect(screen.queryByLabelText('2026-05-02 - Class 1 - A')).not.toBeInTheDocument()
+      expect(screen.getByLabelText('2026-05-03 - Class 1 - A')).toBeInTheDocument()
+    })
+
+    it('does not offer to remove a row once it has an assignment', async () => {
       const user = userEvent.setup()
       await advanceToStep3(user, { startDate: '2026-05-01', endDate: '2026-05-03' })
 
       await toggleCellSubject(user, '2026-05-03 - Class 1 - A', 'Science')
-      expect(screen.queryByRole('button', { name: 'Remove last' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Remove 2026-05-03' })).not.toBeInTheDocument()
     })
   })
 

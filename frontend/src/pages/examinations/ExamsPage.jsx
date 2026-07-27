@@ -229,6 +229,12 @@ export function DateSheetModal({ groupId, onClose: closeDateSheet, queryClient, 
   // only needs to hold blank rows still waiting for an assignment.
   const [extraDates, setExtraDates] = useState([])
 
+  // Rows hidden via a per-row remove this session (see handleRemoveDateRow).
+  // A date only stays hidden while it's empty -- if it later gets a real
+  // assignment (e.g. through the Table tab), scheduledDates below overrides
+  // the exclusion so the row reappears with its data.
+  const [excludedDates, setExcludedDates] = useState(new Set())
+
   // Every day in the group's date range, plus any date that already has a
   // subject scheduled outside that range, plus this session's blank rows —
   // union rather than picking one, so a subject placed via "+ Add Date"
@@ -236,26 +242,31 @@ export function DateSheetModal({ groupId, onClose: closeDateSheet, queryClient, 
   const calendarDates = useMemo(() => {
     const range = buildDateRange(dsRes?.data?.start_date, dsRes?.data?.end_date)
     const scheduled = grid.rows.map(r => r.date)
-    return [...new Set([...range, ...scheduled, ...extraDates])].sort()
-  }, [dsRes, grid, extraDates])
+    const scheduledSet = new Set(scheduled)
+    const all = new Set([...range, ...scheduled, ...extraDates])
+    return [...all].filter(d => scheduledSet.has(d) || !excludedDates.has(d)).sort()
+  }, [dsRes, grid, extraDates, excludedDates])
 
-  const lastCalendarDate = calendarDates[calendarDates.length - 1]
-  const lastRowIsRemovable = !!lastCalendarDate
-    && extraDates.includes(lastCalendarDate)
-    && grid.columns.every(col => (subjectPool[col.examId] || []).filter(e => e.examDate === lastCalendarDate).length === 0)
+  const isCalendarRowEmpty = (date) =>
+    grid.columns.every(col => (subjectPool[col.examId] || []).filter(e => e.examDate === date).length === 0)
 
   const handleAddDateRow = () => {
     setOpenCell(null)
-    const base = lastCalendarDate || dsRes?.data?.start_date
+    const base = calendarDates[calendarDates.length - 1] || dsRes?.data?.start_date
     if (!base) return
     const nextDate = addDaysToDateString(base, 1)
     setExtraDates(prev => prev.includes(nextDate) ? prev : [...prev, nextDate])
   }
 
-  const handleRemoveLastDateRow = () => {
-    if (!lastRowIsRemovable) return
+  // Remove any empty row, not just the trailing one -- mirrors
+  // handleAddDateRow's directness. Hides the row via excludedDates and, if it
+  // was a session-added blank row, prunes it out of extraDates too (tidy, not
+  // required for correctness since the exclusion alone hides it either way).
+  const handleRemoveDateRow = (date) => {
+    if (!isCalendarRowEmpty(date)) return
     setOpenCell(null)
-    setExtraDates(prev => prev.filter(d => d !== lastCalendarDate))
+    setExcludedDates(prev => new Set(prev).add(date))
+    setExtraDates(prev => prev.filter(d => d !== date))
   }
 
   // Replace a class+date cell's subject set, persisting immediately.
@@ -370,9 +381,25 @@ export function DateSheetModal({ groupId, onClose: closeDateSheet, queryClient, 
                   </tr>
                 ) : calendarDates.map((date, dateIdx) => {
                   const openUpward = dateIdx >= Math.floor(calendarDates.length / 2)
+                  const rowIsEmpty = isCalendarRowEmpty(date)
                   return (
                     <tr key={date} className="hover:bg-gray-50">
-                      <td className="px-3 py-2 font-medium text-gray-900 border border-gray-200">{date}</td>
+                      <td className="px-3 py-2 font-medium text-gray-900 border border-gray-200">
+                        <div className="flex items-center gap-1.5">
+                          <span>{date}</span>
+                          {rowIsEmpty && (
+                            <button
+                              type="button"
+                              aria-label={`Remove ${date}`}
+                              title="Remove this date row"
+                              onClick={() => handleRemoveDateRow(date)}
+                              className="text-gray-300 hover:text-red-500 leading-none"
+                            >
+                              &times;
+                            </button>
+                          )}
+                        </div>
+                      </td>
                       <td className="px-3 py-2 text-gray-600 border border-gray-200">{dayNameForDate(date)}</td>
                       {grid.columns.map((col, colIdx) => {
                         // Flip the popover to the cell's left once we're in the
@@ -449,24 +476,13 @@ export function DateSheetModal({ groupId, onClose: closeDateSheet, queryClient, 
             </table>
 
             {calendarDates.length > 0 && (
-              <div className="flex items-center gap-2 mt-2">
-                <button
-                  type="button"
-                  onClick={handleAddDateRow}
-                  className="flex-1 text-xs font-medium text-gray-500 border border-dashed border-gray-300 rounded-lg py-2 hover:border-primary-400 hover:text-primary-600 hover:bg-primary-50"
-                >
-                  + Add Date
-                </button>
-                {lastRowIsRemovable && (
-                  <button
-                    type="button"
-                    onClick={handleRemoveLastDateRow}
-                    className="text-xs font-medium text-gray-400 border border-gray-200 rounded-lg px-3 py-2 hover:border-red-300 hover:text-red-500"
-                  >
-                    Remove last
-                  </button>
-                )}
-              </div>
+              <button
+                type="button"
+                onClick={handleAddDateRow}
+                className="w-full text-xs font-medium text-gray-500 border border-dashed border-gray-300 rounded-lg py-2 mt-2 hover:border-primary-400 hover:text-primary-600 hover:bg-primary-50"
+              >
+                + Add Date
+              </button>
             )}
 
             {grid.unscheduled.length > 0 && (

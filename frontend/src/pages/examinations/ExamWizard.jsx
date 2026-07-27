@@ -170,13 +170,21 @@ export default function ExamWizard({ onClose, onSuccess }) {
     return map
   }, [subjectClassPairs])
 
-  // Every calendar day in [start_date, end_date] — the Step 3 grid's rows.
-  const dateRange = useMemo(() => {
+  // Every calendar day in [start_date, end_date].
+  const fullDateRange = useMemo(() => {
     if (!wizardData.start_date || !wizardData.end_date) return []
     const days = daysBetweenInclusive(wizardData.start_date, wizardData.end_date)
     if (days <= 0) return []
     return Array.from({ length: days }, (_, i) => addDaysToDateString(wizardData.start_date, i))
   }, [wizardData.start_date, wizardData.end_date])
+
+  // Rows removed from the grid this session (see handleRemoveDateRow) — the
+  // Step 3 grid's actual rows are fullDateRange minus these.
+  const [excludedDates, setExcludedDates] = useState(new Set())
+  const dateRange = useMemo(
+    () => fullDateRange.filter(d => !excludedDates.has(d)),
+    [fullDateRange, excludedDates],
+  )
 
   // `${classId}|${date}` -> [subjectId, ...], derived from date_sheet for cell rendering.
   // A cell can hold more than one subject (e.g. two periods on the same day).
@@ -240,24 +248,29 @@ export default function ExamWizard({ onClose, onSuccess }) {
     return () => document.removeEventListener('mousedown', handlePointerDown)
   }, [openCell])
 
-  // Append/remove one trailing day to Step 3's grid without going back to
-  // Step 1. Removing is only offered for the very last row, and only while
-  // it's empty, so the range can't develop a gap or silently drop data.
+  // Append one trailing day to Step 3's grid without going back to Step 1.
   const handleAddDateRow = () => {
     if (!wizardData.end_date) return
     setOpenCell(null)
     update('end_date', addDaysToDateString(wizardData.end_date, 1))
   }
 
-  const lastDateRow = dateRange[dateRange.length - 1]
-  const lastDateRowIsEmpty = lastDateRow
-    ? selectedClasses.every(cls => (cellSubjectsByClassDate[`${cls.id}|${lastDateRow}`] || []).length === 0)
-    : false
+  const isDateRowEmpty = (date) =>
+    selectedClasses.every(cls => (cellSubjectsByClassDate[`${cls.id}|${date}`] || []).length === 0)
 
-  const handleRemoveLastDateRow = () => {
-    if (!lastDateRow || !lastDateRowIsEmpty || dateRange.length <= 1) return
+  // Remove any empty row, not just the trailing one -- mirrors handleAddDateRow's
+  // directness. The trailing row still shrinks end_date (so it doesn't just get
+  // re-added if the range needs to grow again later); any other row is hidden via
+  // excludedDates, since the range itself is anchored by start_date/end_date and
+  // isn't otherwise addressable per-day.
+  const handleRemoveDateRow = (date) => {
+    if (!isDateRowEmpty(date)) return
     setOpenCell(null)
-    update('end_date', addDaysToDateString(wizardData.end_date, -1))
+    if (date === fullDateRange[fullDateRange.length - 1] && fullDateRange.length > 1) {
+      update('end_date', addDaysToDateString(wizardData.end_date, -1))
+    } else {
+      setExcludedDates(prev => new Set(prev).add(date))
+    }
   }
 
   // Selected subjects still not placed on any date.
@@ -725,9 +738,25 @@ export default function ExamWizard({ onClose, onSuccess }) {
                     <tbody className="divide-y divide-gray-100">
                       {dateRange.map((date, dateIdx) => {
                         const openUpward = dateIdx >= Math.floor(dateRange.length / 2)
+                        const rowIsEmpty = isDateRowEmpty(date)
                         return (
                           <tr key={date} className="hover:bg-gray-50">
-                            <td className="px-3 py-2 font-medium text-gray-800 text-xs whitespace-nowrap">{date}</td>
+                            <td className="px-3 py-2 font-medium text-gray-800 text-xs whitespace-nowrap">
+                              <div className="flex items-center gap-1.5">
+                                <span>{date}</span>
+                                {rowIsEmpty && (
+                                  <button
+                                    type="button"
+                                    aria-label={`Remove ${date}`}
+                                    title="Remove this date row"
+                                    onClick={() => handleRemoveDateRow(date)}
+                                    className="text-gray-300 hover:text-red-500 leading-none"
+                                  >
+                                    &times;
+                                  </button>
+                                )}
+                              </div>
+                            </td>
                             {selectedClasses.map((cls, classIdx) => {
                               // Flip the popover to the cell's left once we're in the
                               // latter half of the columns, so it opens toward the
@@ -802,24 +831,13 @@ export default function ExamWizard({ onClose, onSuccess }) {
               )}
 
               {selectedClasses.length > 0 && dateRange.length > 0 && (
-                <div className="flex items-center gap-2 mt-2">
-                  <button
-                    type="button"
-                    onClick={handleAddDateRow}
-                    className="flex-1 text-xs font-medium text-gray-500 border border-dashed border-gray-300 rounded-lg py-2 hover:border-primary-400 hover:text-primary-600 hover:bg-primary-50"
-                  >
-                    + Add Date
-                  </button>
-                  {lastDateRowIsEmpty && dateRange.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={handleRemoveLastDateRow}
-                      className="text-xs font-medium text-gray-400 border border-gray-200 rounded-lg px-3 py-2 hover:border-red-300 hover:text-red-500"
-                    >
-                      Remove last
-                    </button>
-                  )}
-                </div>
+                <button
+                  type="button"
+                  onClick={handleAddDateRow}
+                  className="w-full text-xs font-medium text-gray-500 border border-dashed border-gray-300 rounded-lg py-2 mt-2 hover:border-primary-400 hover:text-primary-600 hover:bg-primary-50"
+                >
+                  + Add Date
+                </button>
               )}
 
               {unscheduledPairs.length > 0 && (
