@@ -596,6 +596,8 @@ class ExamGroupViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
                 )
                 created_exams.append(exam)
 
+            subject_ids = data.get('subject_ids') or []
+
             all_exam_subjects = []
             for exam in created_exams:
                 class_subjects = ClassSubject.objects.filter(
@@ -603,6 +605,8 @@ class ExamGroupViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
                     class_obj=exam.class_obj,
                     is_active=True,
                 ).select_related('subject')
+                if subject_ids:
+                    class_subjects = class_subjects.filter(subject_id__in=subject_ids)
                 for cs in class_subjects:
                     slot = date_sheet_map.get((exam.class_obj_id, cs.subject_id), {})
                     all_exam_subjects.append(ExamSubject(

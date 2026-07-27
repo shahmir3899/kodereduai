@@ -453,6 +453,13 @@ class ExamGroupWizardCreateSerializer(serializers.Serializer):
     class_ids = serializers.ListField(
         child=serializers.IntegerField(), min_length=1,
     )
+    subject_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        default=list,
+        help_text="Optional: restrict created ExamSubjects to these subjects. "
+                   "Empty/omitted keeps the default of every ClassSubject assigned to each class.",
+    )
     default_total_marks = serializers.DecimalField(
         max_digits=6, decimal_places=2, default=100.00, required=False,
     )

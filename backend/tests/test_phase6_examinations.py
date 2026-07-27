@@ -519,6 +519,44 @@ class TestExamGroupWizardAndPublishAll:
         assert {e.class_obj_id for e in exams} == {d['class_1'].id, d['class_2'].id}
         assert all(e.exam_group_id == group.id for e in exams)
 
+    def test_g1b_wizard_create_respects_subject_ids_filter(self, exam_prereqs, api):
+        """G1b: an explicit subject_ids list narrows ExamSubjects to that subset;
+        omitting it (test_g1) keeps every ClassSubject assigned to the class."""
+        d = exam_prereqs
+        token = d['tokens']['admin']
+        sid = d['SID_A']
+        school = d['school_a']
+
+        ClassSubject.objects.create(school=school, class_obj=d['class_1'], subject=d['subj_math'])
+        ClassSubject.objects.create(school=school, class_obj=d['class_1'], subject=d['subj_eng'])
+        ClassSubject.objects.create(school=school, class_obj=d['class_2'], subject=d['subj_math'])
+
+        et = ExamType.objects.create(school=school, name=f'{P6}FilteredType', weight=Decimal('50.00'))
+        resp = api.post('/api/examinations/exam-groups/wizard-create/', {
+            'academic_year': d['academic_year'].id,
+            'term': d['term_1'].id,
+            'exam_type': et.id,
+            'name': f'{P6}Filtered Group',
+            'class_ids': [d['class_1'].id, d['class_2'].id],
+            'subject_ids': [d['subj_math'].id],
+            'default_total_marks': '100',
+            'default_passing_marks': '33',
+            'start_date': '2026-04-01',
+            'end_date': '2026-04-05',
+        }, token, sid)
+        assert resp.status_code == 201, f"status={resp.status_code} body={resp.content[:300]}"
+        data = resp.json()
+
+        # Only Math for each of the 2 classes -- English is excluded even though
+        # class_1 has it assigned, because it wasn't in subject_ids.
+        assert data['subjects_created'] == 2, data
+
+        group = ExamGroup.objects.get(id=data['group_id'])
+        subjects_in_group = set(
+            ExamSubject.objects.filter(exam__exam_group=group).values_list('subject_id', flat=True)
+        )
+        assert subjects_in_group == {d['subj_math'].id}, subjects_in_group
+
     def test_g2_group_actions_resolve_under_exam_groups_not_404(self, exam_prereqs, api):
         """G2: download-date-sheet/update-date-by-subject/publish-all resolve under
         /exam-groups/, confirming they are no longer stranded under /student-responses/."""
