@@ -81,6 +81,7 @@ export default function ExamWizard({ onClose, onSuccess }) {
   const examTypes = examTypesRes?.data?.results || examTypesRes?.data || EMPTY_ARRAY
   const classes = classesFromHook || EMPTY_ARRAY
   const allClassSubjects = allClassSubjectsRes?.data?.results || allClassSubjectsRes?.data || EMPTY_ARRAY
+  const selectedClasses = classes.filter(c => wizardData.class_ids.includes(c.id))
 
   // Class → subject count map
   const subjectCountMap = useMemo(() => {
@@ -169,35 +170,86 @@ export default function ExamWizard({ onClose, onSuccess }) {
     return Array.from({ length: days }, (_, i) => addDaysToDateString(wizardData.start_date, i))
   }, [wizardData.start_date, wizardData.end_date])
 
-  // `${classId}|${date}` -> subjectId, derived from date_sheet for cell rendering.
-  const cellSubjectByClassDate = useMemo(() => {
+  // `${classId}|${date}` -> [subjectId, ...], derived from date_sheet for cell rendering.
+  // A cell can hold more than one subject (e.g. two periods on the same day).
+  const cellSubjectsByClassDate = useMemo(() => {
     const map = {}
     Object.entries(wizardData.date_sheet).forEach(([key, val]) => {
       if (!val?.exam_date) return
       const [classId, subjectId] = key.split('_').map(Number)
-      map[`${classId}|${val.exam_date}`] = subjectId
+      const mapKey = `${classId}|${val.exam_date}`
+      if (!map[mapKey]) map[mapKey] = []
+      map[mapKey].push(subjectId)
     })
     return map
   }, [wizardData.date_sheet])
 
-  // Assign (or clear, if subjectIdStr is '') a subject to a class+date cell.
-  // A given subject only ever occupies one date per class: picking it into a
-  // new cell moves it there; picking a different subject into an occupied
-  // cell frees the one it replaces.
-  const handleCellAssign = (classId, date, subjectIdStr) => {
-    const previousSubjectId = cellSubjectByClassDate[`${classId}|${date}`]
+  // Replace a class+date cell's subject set. Subjects removed from the
+  // selection go back to unscheduled; subjects newly checked move onto this
+  // date (freeing whatever date they occupied before, since a subject only
+  // ever sits on one date per class).
+  const handleCellSubjectsChange = (classId, date, nextSubjectIds) => {
+    const previousIds = cellSubjectsByClassDate[`${classId}|${date}`] || []
+    const nextSet = new Set(nextSubjectIds)
+    const prevSet = new Set(previousIds)
+    const added = nextSubjectIds.filter(id => !prevSet.has(id))
+    const removed = previousIds.filter(id => !nextSet.has(id))
+    if (added.length === 0 && removed.length === 0) return
+
     setWizardData(prev => {
       const nextDateSheet = { ...prev.date_sheet }
-      if (previousSubjectId) {
-        const previousKey = `${classId}_${previousSubjectId}`
-        nextDateSheet[previousKey] = { ...(nextDateSheet[previousKey] || {}), exam_date: '' }
-      }
-      if (subjectIdStr) {
-        const newKey = `${classId}_${Number(subjectIdStr)}`
-        nextDateSheet[newKey] = { ...(nextDateSheet[newKey] || {}), exam_date: date }
-      }
+      removed.forEach(subjectId => {
+        const key = `${classId}_${subjectId}`
+        nextDateSheet[key] = { ...(nextDateSheet[key] || {}), exam_date: '' }
+      })
+      added.forEach(subjectId => {
+        const key = `${classId}_${subjectId}`
+        nextDateSheet[key] = { ...(nextDateSheet[key] || {}), exam_date: date }
+      })
       return { ...prev, date_sheet: nextDateSheet }
     })
+  }
+
+  // Toggle one subject in/out of a class+date cell — what the popover
+  // checkboxes call on each click.
+  const toggleCellSubject = (classId, date, subjectId) => {
+    const current = cellSubjectsByClassDate[`${classId}|${date}`] || []
+    const next = current.includes(subjectId)
+      ? current.filter(id => id !== subjectId)
+      : [...current, subjectId]
+    handleCellSubjectsChange(classId, date, next)
+  }
+
+  // Which cell's subject picker is open — `${classId}|${date}` or null.
+  // Only one cell is open at a time; clicking outside the open popover closes it.
+  const [openCell, setOpenCell] = useState(null)
+  useEffect(() => {
+    if (!openCell) return
+    const handlePointerDown = (e) => {
+      if (!e.target.closest(`[data-cell-key="${openCell}"]`)) setOpenCell(null)
+    }
+    document.addEventListener('mousedown', handlePointerDown)
+    return () => document.removeEventListener('mousedown', handlePointerDown)
+  }, [openCell])
+
+  // Append/remove one trailing day to Step 3's grid without going back to
+  // Step 1. Removing is only offered for the very last row, and only while
+  // it's empty, so the range can't develop a gap or silently drop data.
+  const handleAddDateRow = () => {
+    if (!wizardData.end_date) return
+    setOpenCell(null)
+    update('end_date', addDaysToDateString(wizardData.end_date, 1))
+  }
+
+  const lastDateRow = dateRange[dateRange.length - 1]
+  const lastDateRowIsEmpty = lastDateRow
+    ? selectedClasses.every(cls => (cellSubjectsByClassDate[`${cls.id}|${lastDateRow}`] || []).length === 0)
+    : false
+
+  const handleRemoveLastDateRow = () => {
+    if (!lastDateRow || !lastDateRowIsEmpty || dateRange.length <= 1) return
+    setOpenCell(null)
+    update('end_date', addDaysToDateString(wizardData.end_date, -1))
   }
 
   // Selected subjects still not placed on any date.
@@ -362,7 +414,6 @@ export default function ExamWizard({ onClose, onSuccess }) {
     wizardMut.mutate(payload)
   }
 
-  const selectedClasses = classes.filter(c => wizardData.class_ids.includes(c.id))
   const dateSheetCount = Object.values(wizardData.date_sheet).filter(v => v?.exam_date).length
 
   return (
@@ -620,7 +671,7 @@ export default function ExamWizard({ onClose, onSuccess }) {
             <div>
               <div className="mb-4">
                 <p className="text-sm font-medium text-gray-700">Assign Exam Dates</p>
-                <p className="text-xs text-gray-500">Click a cell to assign one subject to that class on that date. Start/end times can be set afterward from the Date Sheet.</p>
+                <p className="text-xs text-gray-500">Click a cell to check off every subject that class sits on that date. Start/end times can be set afterward from the Date Sheet.</p>
                 {autoAdjustedEndDate && (
                   <p className="text-xs text-amber-600 mt-1">
                     End date adjusted to {autoAdjustedEndDate.to} to fit {autoAdjustedEndDate.subjectCount} subject{autoAdjustedEndDate.subjectCount !== 1 ? 's' : ''} (one exam day each).
@@ -646,31 +697,97 @@ export default function ExamWizard({ onClose, onSuccess }) {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {dateRange.map(date => (
-                        <tr key={date} className="hover:bg-gray-50">
-                          <td className="px-3 py-2 font-medium text-gray-800 text-xs whitespace-nowrap">{date}</td>
-                          {selectedClasses.map(cls => {
-                            const classLabel = cls.section ? `${cls.name} - ${cls.section}` : cls.name
-                            return (
-                              <td key={cls.id} className="px-2 py-1.5">
-                                <select
-                                  aria-label={`${date} - ${classLabel}`}
-                                  value={cellSubjectByClassDate[`${cls.id}|${date}`] || ''}
-                                  onChange={e => handleCellAssign(cls.id, date, e.target.value)}
-                                  className="input text-xs py-1 w-full"
-                                >
-                                  <option value="">—</option>
-                                  {(subjectsByClass[cls.id] || []).map(row => (
-                                    <option key={row.subjectId} value={row.subjectId}>{row.subjectName}</option>
-                                  ))}
-                                </select>
-                              </td>
-                            )
-                          })}
-                        </tr>
-                      ))}
+                      {dateRange.map((date, dateIdx) => {
+                        const openUpward = dateIdx >= Math.floor(dateRange.length / 2)
+                        return (
+                          <tr key={date} className="hover:bg-gray-50">
+                            <td className="px-3 py-2 font-medium text-gray-800 text-xs whitespace-nowrap">{date}</td>
+                            {selectedClasses.map(cls => {
+                              const classLabel = cls.section ? `${cls.name} - ${cls.section}` : cls.name
+                              const cellKey = `${cls.id}|${date}`
+                              const selectedIds = cellSubjectsByClassDate[cellKey] || []
+                              const classSubjectOptions = subjectsByClass[cls.id] || []
+                              const isOpen = openCell === cellKey
+                              return (
+                                <td key={cls.id} className="px-2 py-1.5 relative" data-cell-key={cellKey}>
+                                  <button
+                                    type="button"
+                                    aria-label={`${date} - ${classLabel}`}
+                                    onClick={() => setOpenCell(isOpen ? null : cellKey)}
+                                    className={`w-full min-h-[30px] text-left rounded border px-2 py-1 flex flex-wrap gap-1 items-center text-xs ${isOpen ? 'border-primary-500 ring-1 ring-primary-200 bg-primary-50' : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'}`}
+                                  >
+                                    {selectedIds.length === 0 ? (
+                                      <span className="text-gray-300">+ Add subjects</span>
+                                    ) : selectedIds.map(id => {
+                                      const subj = classSubjectOptions.find(r => r.subjectId === id)
+                                      return (
+                                        <span key={id} className="inline-flex items-center bg-primary-100 text-primary-700 rounded-full px-2 py-0.5 text-[11px] font-medium">
+                                          {subj?.subjectName || id}
+                                        </span>
+                                      )
+                                    })}
+                                  </button>
+
+                                  {isOpen && (
+                                    <div className={`absolute z-20 left-0 w-48 bg-white border border-gray-300 rounded-lg shadow-lg p-2 ${openUpward ? 'bottom-full mb-1' : 'top-full mt-1'}`}>
+                                      <p className="text-[10px] font-semibold uppercase text-gray-400 px-1 mb-1">{classLabel} · {date}</p>
+                                      <div className="max-h-40 overflow-auto">
+                                        {classSubjectOptions.length === 0 ? (
+                                          <p className="text-xs text-gray-400 px-1 py-2">No subjects for this class.</p>
+                                        ) : classSubjectOptions.map(row => {
+                                          const isHere = selectedIds.includes(row.subjectId)
+                                          const elsewhereDate = wizardData.date_sheet[`${cls.id}_${row.subjectId}`]?.exam_date
+                                          const isElsewhere = !isHere && elsewhereDate && elsewhereDate !== date
+                                          return (
+                                            <label key={row.subjectId} className="flex items-center gap-2 px-1 py-1 text-xs rounded hover:bg-gray-50 cursor-pointer">
+                                              <input
+                                                type="checkbox"
+                                                checked={isHere}
+                                                onChange={() => toggleCellSubject(cls.id, date, row.subjectId)}
+                                                className="rounded border-gray-300"
+                                              />
+                                              <span className="flex-1">{row.subjectName}</span>
+                                              {isElsewhere && <span className="text-[10px] text-gray-400">{elsewhereDate}</span>}
+                                            </label>
+                                          )
+                                        })}
+                                      </div>
+                                      <div className="flex justify-end pt-1 mt-1 border-t border-gray-100">
+                                        <button type="button" onClick={() => setOpenCell(null)} className="text-xs font-medium text-primary-600 hover:text-primary-700 px-2 py-1">
+                                          Done
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )}
+                                </td>
+                              )
+                            })}
+                          </tr>
+                        )
+                      })}
                     </tbody>
                   </table>
+                </div>
+              )}
+
+              {selectedClasses.length > 0 && dateRange.length > 0 && (
+                <div className="flex items-center gap-2 mt-2">
+                  <button
+                    type="button"
+                    onClick={handleAddDateRow}
+                    className="flex-1 text-xs font-medium text-gray-500 border border-dashed border-gray-300 rounded-lg py-2 hover:border-primary-400 hover:text-primary-600 hover:bg-primary-50"
+                  >
+                    + Add Date
+                  </button>
+                  {lastDateRowIsEmpty && dateRange.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={handleRemoveLastDateRow}
+                      className="text-xs font-medium text-gray-400 border border-gray-200 rounded-lg px-3 py-2 hover:border-red-300 hover:text-red-500"
+                    >
+                      Remove last
+                    </button>
+                  )}
                 </div>
               )}
 

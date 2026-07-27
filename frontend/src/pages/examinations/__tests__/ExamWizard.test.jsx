@@ -92,6 +92,29 @@ async function advanceToStep3(user, dateOpts) {
   })
 }
 
+// Step 3 cells are buttons that open a checkbox popover, not <select>s —
+// these helpers drive that interaction the way a user would.
+async function openCellPicker(user, cellLabel) {
+  await user.click(screen.getByLabelText(cellLabel))
+  return screen.getByLabelText(cellLabel).closest('td')
+}
+
+async function toggleCellSubject(user, cellLabel, subjectName) {
+  const td = await openCellPicker(user, cellLabel)
+  // Scoped by accessible (implicit <label>) name, not text: once a subject is
+  // already checked here its name appears twice in `td` — once as the
+  // closed-state chip, once as the checkbox's label. `exact: false` because a
+  // subject scheduled elsewhere shows its date appended inside the label too.
+  await user.click(within(td).getByLabelText(subjectName, { exact: false }))
+  await user.click(within(td).getByRole('button', { name: 'Done' }))
+}
+
+function cellChipNames(cellLabel) {
+  const button = screen.getByLabelText(cellLabel)
+  if (button.textContent.trim() === '+ Add subjects') return []
+  return [...button.querySelectorAll('span')].map(s => s.textContent.trim())
+}
+
 describe('ExamWizard', () => {
   beforeEach(() => {
     mockGetAcademicYears.mockResolvedValue({ data: [{ id: 1, name: 'Academic Year 2026-27' }] })
@@ -162,9 +185,10 @@ describe('ExamWizard', () => {
       await user.click(screen.getByRole('button', { name: 'Next' }))
       await waitFor(() => expect(screen.getByText('Assign Exam Dates')).toBeInTheDocument())
 
-      const class1Cell = screen.getByLabelText('2026-05-01 - Class 1 - A')
-      const optionLabels = [...class1Cell.querySelectorAll('option')].map(o => o.textContent)
-      expect(optionLabels).toEqual(['—', 'English', 'Mathematics']) // alphabetical; Science excluded
+      const td = await openCellPicker(user, '2026-05-01 - Class 1 - A')
+      expect(within(td).getByText('English')).toBeInTheDocument()
+      expect(within(td).getByText('Mathematics')).toBeInTheDocument()
+      expect(within(td).queryByText('Science')).not.toBeInTheDocument()
     })
   })
 
@@ -195,10 +219,10 @@ describe('ExamWizard', () => {
       expect(screen.getByLabelText('2026-05-03 - Class 1 - A')).toBeInTheDocument()
       expect(screen.getByLabelText('2026-05-01 - Class 2 - B')).toBeInTheDocument()
 
-      // Class 2 only has Math assigned -- its cell offers just that one option.
-      const class2Cell = screen.getByLabelText('2026-05-01 - Class 2 - B')
-      const optionLabels = [...class2Cell.querySelectorAll('option')].map(o => o.textContent)
-      expect(optionLabels).toEqual(['—', 'Mathematics'])
+      // Class 2 only has Math assigned -- its cell picker offers just that one subject.
+      const td = await openCellPicker(user, '2026-05-01 - Class 2 - B')
+      expect(within(td).getByText('Mathematics')).toBeInTheDocument()
+      expect(within(td).queryByText('English')).not.toBeInTheDocument()
     })
 
     it('lists every not-yet-placed subject under "Not yet scheduled"', async () => {
@@ -216,34 +240,77 @@ describe('ExamWizard', () => {
       const user = userEvent.setup()
       await advanceToStep3(user, { startDate: '2026-05-01', endDate: '2026-05-03' })
 
-      await user.selectOptions(screen.getByLabelText('2026-05-01 - Class 1 - A'), '201') // Mathematics
+      await toggleCellSubject(user, '2026-05-01 - Class 1 - A', 'Mathematics')
 
       expect(screen.queryByText('Mathematics (Class 1 - A)')).not.toBeInTheDocument()
       expect(screen.getByText('English (Class 1 - A)')).toBeInTheDocument() // still unscheduled
     })
 
-    it('moves a subject to a new cell rather than duplicating it when reassigned', async () => {
+    it('a cell can hold more than one subject at once', async () => {
       const user = userEvent.setup()
       await advanceToStep3(user, { startDate: '2026-05-01', endDate: '2026-05-03' })
 
-      await user.selectOptions(screen.getByLabelText('2026-05-01 - Class 1 - A'), '201') // Math -> May 1
-      expect(screen.getByLabelText('2026-05-01 - Class 1 - A')).toHaveValue('201')
+      await toggleCellSubject(user, '2026-05-01 - Class 1 - A', 'Mathematics')
+      await toggleCellSubject(user, '2026-05-01 - Class 1 - A', 'English')
 
-      await user.selectOptions(screen.getByLabelText('2026-05-02 - Class 1 - A'), '201') // move Math -> May 2
-      expect(screen.getByLabelText('2026-05-02 - Class 1 - A')).toHaveValue('201')
-      expect(screen.getByLabelText('2026-05-01 - Class 1 - A')).toHaveValue('') // freed, not duplicated
+      expect(cellChipNames('2026-05-01 - Class 1 - A').sort()).toEqual(['English', 'Mathematics'])
+      expect(screen.queryByText('Mathematics (Class 1 - A)')).not.toBeInTheDocument()
+      expect(screen.queryByText('English (Class 1 - A)')).not.toBeInTheDocument()
     })
 
-    it('replacing a cell\'s subject frees the one it displaced', async () => {
+    it('unchecking a subject in a cell frees it back to unscheduled', async () => {
       const user = userEvent.setup()
       await advanceToStep3(user, { startDate: '2026-05-01', endDate: '2026-05-03' })
 
-      await user.selectOptions(screen.getByLabelText('2026-05-01 - Class 1 - A'), '201') // Math
-      await user.selectOptions(screen.getByLabelText('2026-05-01 - Class 1 - A'), '202') // replace with English
+      await toggleCellSubject(user, '2026-05-01 - Class 1 - A', 'Mathematics')
+      expect(cellChipNames('2026-05-01 - Class 1 - A')).toEqual(['Mathematics'])
 
-      expect(screen.getByLabelText('2026-05-01 - Class 1 - A')).toHaveValue('202')
-      expect(screen.getByText('Mathematics (Class 1 - A)')).toBeInTheDocument() // Math is unscheduled again
-      expect(screen.queryByText('English (Class 1 - A)')).not.toBeInTheDocument()
+      await toggleCellSubject(user, '2026-05-01 - Class 1 - A', 'Mathematics') // uncheck
+      expect(cellChipNames('2026-05-01 - Class 1 - A')).toEqual([])
+      expect(screen.getByText('Mathematics (Class 1 - A)')).toBeInTheDocument()
+    })
+
+    it('moves a subject to a new cell rather than duplicating it when checked elsewhere', async () => {
+      const user = userEvent.setup()
+      await advanceToStep3(user, { startDate: '2026-05-01', endDate: '2026-05-03' })
+
+      await toggleCellSubject(user, '2026-05-01 - Class 1 - A', 'Mathematics') // Math -> May 1
+      expect(cellChipNames('2026-05-01 - Class 1 - A')).toEqual(['Mathematics'])
+
+      await toggleCellSubject(user, '2026-05-02 - Class 1 - A', 'Mathematics') // move Math -> May 2
+      expect(cellChipNames('2026-05-02 - Class 1 - A')).toEqual(['Mathematics'])
+      expect(cellChipNames('2026-05-01 - Class 1 - A')).toEqual([]) // freed, not duplicated
+    })
+  })
+
+  describe('Step 3 — Add/Remove Date rows', () => {
+    it('extends the grid by one day when "+ Add Date" is clicked', async () => {
+      const user = userEvent.setup()
+      await advanceToStep3(user, { startDate: '2026-05-01', endDate: '2026-05-03' })
+
+      expect(screen.queryByLabelText('2026-05-04 - Class 1 - A')).not.toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: '+ Add Date' }))
+      expect(screen.getByLabelText('2026-05-04 - Class 1 - A')).toBeInTheDocument()
+    })
+
+    it('removes the trailing empty row, leaving earlier rows untouched', async () => {
+      const user = userEvent.setup()
+      await advanceToStep3(user, { startDate: '2026-05-01', endDate: '2026-05-03' })
+
+      await user.click(screen.getByRole('button', { name: '+ Add Date' }))
+      expect(screen.getByLabelText('2026-05-04 - Class 1 - A')).toBeInTheDocument()
+
+      await user.click(screen.getByRole('button', { name: 'Remove last' }))
+      expect(screen.queryByLabelText('2026-05-04 - Class 1 - A')).not.toBeInTheDocument()
+      expect(screen.getByLabelText('2026-05-01 - Class 1 - A')).toBeInTheDocument()
+    })
+
+    it('does not offer to remove the trailing row once it has an assignment', async () => {
+      const user = userEvent.setup()
+      await advanceToStep3(user, { startDate: '2026-05-01', endDate: '2026-05-03' })
+
+      await toggleCellSubject(user, '2026-05-03 - Class 1 - A', 'Science')
+      expect(screen.queryByRole('button', { name: 'Remove last' })).not.toBeInTheDocument()
     })
   })
 
@@ -252,9 +319,9 @@ describe('ExamWizard', () => {
       const user = userEvent.setup()
       await advanceToStep3(user, { startDate: '2026-05-01', endDate: '2026-05-03' })
 
-      await user.selectOptions(screen.getByLabelText('2026-05-01 - Class 1 - A'), '201') // Math
-      await user.selectOptions(screen.getByLabelText('2026-05-02 - Class 1 - A'), '202') // English
-      await user.selectOptions(screen.getByLabelText('2026-05-01 - Class 2 - B'), '201') // Math
+      await toggleCellSubject(user, '2026-05-01 - Class 1 - A', 'Mathematics')
+      await toggleCellSubject(user, '2026-05-02 - Class 1 - A', 'English')
+      await toggleCellSubject(user, '2026-05-01 - Class 2 - B', 'Mathematics')
 
       await user.click(screen.getByRole('button', { name: 'Next' })) // -> Step 4 Preview
       await waitFor(() => {
