@@ -634,6 +634,27 @@ class TestExamGroupWizardAndPublishAll:
         exam_1 = group.exams.get(class_obj=d['class_1'])
         assert ExamSubject.objects.filter(exam=exam_1).count() == 0
 
+    def test_g1e_partial_update_end_date_only_does_not_500(self, exam_prereqs, api):
+        """G1e: PATCHing just {'end_date': ...} (shrinking the date-sheet range from the
+        Calendar view's per-row delete) must not 500 -- ExamGroupCreateSerializer.validate()
+        used to access data['name']/data['academic_year'] unconditionally, which KeyErrors
+        on any partial update that omits them."""
+        d = exam_prereqs
+        data = self._create_group_with_two_classes(d, api)
+        group_id = data['group_id']
+        token = d['tokens']['admin']
+        sid = d['SID_A']
+
+        resp = api.patch(f'/api/examinations/exam-groups/{group_id}/', {
+            'end_date': '2026-04-04',
+        }, token, sid)
+        assert resp.status_code == 200, f"status={resp.status_code} body={resp.content[:300]}"
+        assert resp.json()['end_date'] == '2026-04-04'
+
+        group = ExamGroup.objects.get(id=group_id)
+        assert str(group.end_date) == '2026-04-04'
+        assert group.name == f'{P6}Group Wizard Test'  # untouched by the partial update
+
     def test_g2_group_actions_resolve_under_exam_groups_not_404(self, exam_prereqs, api):
         """G2: download-date-sheet/update-date-by-subject/publish-all resolve under
         /exam-groups/, confirming they are no longer stranded under /student-responses/."""

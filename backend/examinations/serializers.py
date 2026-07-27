@@ -421,16 +421,22 @@ class ExamGroupCreateSerializer(serializers.ModelSerializer):
         fields = ['academic_year', 'term', 'exam_type', 'name', 'description', 'start_date', 'end_date']
 
     def validate(self, data):
-        if data.get('start_date') and data.get('end_date'):
-            if data['start_date'] > data['end_date']:
-                raise serializers.ValidationError(
-                    {'end_date': 'End date must be on or after start date.'}
-                )
+        # Fall back to the existing instance's values for fields a partial_update
+        # (e.g. just {'end_date': ...} when shrinking the date-sheet range) didn't
+        # submit -- data.get(...) alone would raise a bare KeyError below on those,
+        # since name/academic_year are otherwise unconditionally required.
+        start_date = data.get('start_date', self.instance.start_date if self.instance else None)
+        end_date = data.get('end_date', self.instance.end_date if self.instance else None)
+        if start_date and end_date and start_date > end_date:
+            raise serializers.ValidationError(
+                {'end_date': 'End date must be on or after start date.'}
+            )
         school_id = self.context.get('school_id')
         if school_id:
+            name = data.get('name', self.instance.name if self.instance else None)
+            academic_year = data.get('academic_year', self.instance.academic_year_id if self.instance else None)
             qs = ExamGroup.objects.filter(
-                school_id=school_id, name=data['name'],
-                academic_year=data['academic_year'],
+                school_id=school_id, name=name, academic_year=academic_year,
             )
             if self.instance:
                 qs = qs.exclude(pk=self.instance.pk)
