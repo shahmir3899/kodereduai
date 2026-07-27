@@ -728,7 +728,12 @@ export default function ExamWizard({ onClose, onSuccess }) {
                         return (
                           <tr key={date} className="hover:bg-gray-50">
                             <td className="px-3 py-2 font-medium text-gray-800 text-xs whitespace-nowrap">{date}</td>
-                            {selectedClasses.map(cls => {
+                            {selectedClasses.map((cls, classIdx) => {
+                              // Flip the popover to the cell's left once we're in the
+                              // latter half of the columns, so it opens toward the
+                              // table's horizontal-scroll center instead of running
+                              // off the right edge on a narrow (mobile) viewport.
+                              const openLeft = classIdx >= Math.ceil(selectedClasses.length / 2)
                               const classLabel = cls.section ? `${cls.name} - ${cls.section}` : cls.name
                               const cellKey = `${cls.id}|${date}`
                               const selectedIds = cellSubjectsByClassDate[cellKey] || []
@@ -755,7 +760,7 @@ export default function ExamWizard({ onClose, onSuccess }) {
                                   </button>
 
                                   {isOpen && (
-                                    <div className={`absolute z-20 left-0 w-48 bg-white border border-gray-300 rounded-lg shadow-lg p-2 ${openUpward ? 'bottom-full mb-1' : 'top-full mt-1'}`}>
+                                    <div className={`absolute z-20 w-48 bg-white border border-gray-300 rounded-lg shadow-lg p-2 ${openLeft ? 'right-0' : 'left-0'} ${openUpward ? 'bottom-full mb-1' : 'top-full mt-1'}`}>
                                       <p className="text-[10px] font-semibold uppercase text-gray-400 px-1 mb-1">{classLabel} · {date}</p>
                                       <div className="max-h-40 overflow-auto">
                                         {classSubjectOptions.length === 0 ? (
