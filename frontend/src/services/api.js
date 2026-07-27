@@ -661,6 +661,7 @@ export const examinationsApi = {
   updateDateBySubject: (groupId, data) => api.post(`/api/examinations/exam-groups/${groupId}/update-date-by-subject/`, data),
   updateDateSheet: (groupId, entries) => api.patch(`/api/examinations/exam-groups/${groupId}/date-sheet/`, { date_sheet: entries }),
   downloadDateSheet: (groupId) => api.get(`/api/examinations/exam-groups/${groupId}/download-date-sheet/`, { responseType: 'blob' }),
+  downloadDateSheetPdf: (groupId) => api.get(`/api/examinations/exam-groups/${groupId}/download-date-sheet-pdf/`, { responseType: 'blob' }),
   publishAllExams: (groupId) => api.post(`/api/examinations/exam-groups/${groupId}/publish-all/`),
 
   // Exam Subjects

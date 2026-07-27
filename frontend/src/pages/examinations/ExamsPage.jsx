@@ -28,6 +28,54 @@ const STATUS_STYLES = {
   PUBLISHED: 'bg-purple-100 text-purple-700',
 }
 
+// Pivots the date-sheet GET response (subjects -> their per-class dates) into a
+// Date x Class grid for the calendar preview, mirroring the backend's
+// _build_date_sheet_grid so the in-app view and the downloads read the same way.
+// Column order is taken from the payload's own ordering (already grade_level-sorted
+// server-side) rather than re-sorted here, so it doesn't need class metadata this
+// endpoint doesn't return.
+export function buildDateSheetGrid(subjects) {
+  const columnsById = {}
+  const columnOrder = []
+  const cells = {} // `${examDate}|${examId}` -> [subjectName, ...]
+  const unscheduled = []
+
+  subjects.forEach(sub => {
+    sub.classes.forEach(cls => {
+      if (!columnsById[cls.exam_id]) {
+        columnsById[cls.exam_id] = { examId: cls.exam_id, label: cls.class_name }
+        columnOrder.push(cls.exam_id)
+      }
+      if (!cls.exam_date) {
+        unscheduled.push({ subjectName: sub.subject_name, className: cls.class_name })
+        return
+      }
+      const key = `${cls.exam_date}|${cls.exam_id}`
+      cells[key] = [...(cells[key] || []), sub.subject_name]
+    })
+  })
+
+  const columns = columnOrder.map(id => columnsById[id])
+  const dates = [...new Set(Object.keys(cells).map(key => key.split('|')[0]))].sort()
+
+  const rows = dates.map(dateStr => {
+    // Parse as UTC so the local timezone offset never shifts the calendar date.
+    const dayName = new Date(`${dateStr}T00:00:00Z`).toLocaleDateString('en-US', {
+      weekday: 'long', timeZone: 'UTC',
+    })
+    const rowCells = {}
+    columns.forEach(col => {
+      const names = cells[`${dateStr}|${col.examId}`]
+      rowCells[col.examId] = names ? names.join(' / ') : ''
+    })
+    return { date: dateStr, dayName, cells: rowCells }
+  })
+
+  unscheduled.sort((a, b) => a.className.localeCompare(b.className) || a.subjectName.localeCompare(b.subjectName))
+
+  return { columns, rows, unscheduled }
+}
+
 export default function ExamsPage() {
   const queryClient = useQueryClient()
   const { confirm, ConfirmModalRoot } = useConfirmModal()
@@ -354,6 +402,7 @@ export default function ExamsPage() {
   const DateSheetModal = ({ groupId, onClose: closeDateSheet }) => {
     const [localRows, setLocalRows] = useState([])
     const [saving, setSaving] = useState(new Set())
+    const [viewMode, setViewMode] = useState('table') // 'table' | 'calendar'
 
     const { data: dsRes, isLoading: dsLoading } = useQuery({
       queryKey: ['dateSheet', groupId],
@@ -418,20 +467,56 @@ export default function ExamsPage() {
       }
     }
 
+    const handleDownloadPdf = async () => {
+      try {
+        const res = await examinationsApi.downloadDateSheetPdf(groupId)
+        const url = window.URL.createObjectURL(new Blob([res.data]))
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `date-sheet-${groupId}.pdf`
+        a.click()
+        window.URL.revokeObjectURL(url)
+      } catch {
+        setListError('Failed to download date sheet PDF.')
+      }
+    }
+
+    const grid = useMemo(() => buildDateSheetGrid(dsRes?.data?.subjects || []), [dsRes])
+
     return (
       <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={closeDateSheet}>
         <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[85vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
           <div className="flex items-center justify-between mb-1">
             <div>
               <h2 className="text-lg font-semibold text-gray-900">Date Sheet</h2>
-              <p className="text-xs text-gray-500">Each class–subject row is independent. Changes save on blur.</p>
+              <p className="text-xs text-gray-500">
+                {viewMode === 'table' ? 'Each class–subject row is independent. Changes save on blur.' : 'Read-only calendar preview — switch to Table to edit dates.'}
+              </p>
             </div>
             <div className="flex items-center gap-2">
               <button onClick={handleDownload} className="text-xs px-3 py-1.5 bg-green-50 text-green-700 hover:bg-green-100 rounded-lg font-medium">
                 Download Excel
               </button>
+              <button onClick={handleDownloadPdf} className="text-xs px-3 py-1.5 bg-red-50 text-red-700 hover:bg-red-100 rounded-lg font-medium">
+                Download PDF
+              </button>
               <button onClick={closeDateSheet} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
             </div>
+          </div>
+
+          <div className="flex border-b border-gray-200 mt-2">
+            <button
+              onClick={() => setViewMode('table')}
+              className={`px-3 py-1.5 text-xs font-medium border-b-2 transition-colors ${viewMode === 'table' ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+            >
+              Table
+            </button>
+            <button
+              onClick={() => setViewMode('calendar')}
+              className={`px-3 py-1.5 text-xs font-medium border-b-2 transition-colors ${viewMode === 'calendar' ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+            >
+              Calendar
+            </button>
           </div>
 
           {dsLoading ? (
@@ -440,6 +525,49 @@ export default function ExamsPage() {
             </div>
           ) : localRows.length === 0 ? (
             <p className="text-sm text-gray-500 text-center py-8">No subjects found in this exam group.</p>
+          ) : viewMode === 'calendar' ? (
+            <div className="overflow-auto mt-4">
+              <table className="min-w-full text-sm border border-gray-200">
+                <thead>
+                  <tr className="bg-primary-600 text-white text-xs uppercase">
+                    <th className="px-3 py-2 text-left border border-primary-500">Date</th>
+                    <th className="px-3 py-2 text-left border border-primary-500">Day</th>
+                    {grid.columns.map(col => (
+                      <th key={col.examId} className="px-3 py-2 text-center border border-primary-500">{col.label}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {grid.rows.length === 0 ? (
+                    <tr>
+                      <td colSpan={2 + grid.columns.length} className="px-3 py-6 text-center text-gray-400">
+                        No dates set yet — switch to Table to assign dates.
+                      </td>
+                    </tr>
+                  ) : grid.rows.map(row => (
+                    <tr key={row.date} className="hover:bg-gray-50">
+                      <td className="px-3 py-2 font-medium text-gray-900 border border-gray-200">{row.date}</td>
+                      <td className="px-3 py-2 text-gray-600 border border-gray-200">{row.dayName}</td>
+                      {grid.columns.map(col => (
+                        <td key={col.examId} className="px-3 py-2 text-center border border-gray-200">
+                          {row.cells[col.examId] || <span className="text-gray-300">—</span>}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {grid.unscheduled.length > 0 && (
+                <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                  <p className="text-xs font-medium text-amber-800 mb-1">Not yet scheduled:</p>
+                  <ul className="text-xs text-amber-700 list-disc list-inside">
+                    {grid.unscheduled.map((item, i) => (
+                      <li key={i}>{item.subjectName} ({item.className})</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
           ) : (
             <div className="overflow-auto mt-4">
               <table className="min-w-full text-sm">
