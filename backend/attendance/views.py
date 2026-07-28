@@ -913,6 +913,7 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
         counts = records.aggregate(
             present_count=Count('id', filter=Q(status=AttendanceRecord.AttendanceStatus.PRESENT)),
             absent_count=Count('id', filter=Q(status=AttendanceRecord.AttendanceStatus.ABSENT)),
+            leave_count=Count('id', filter=Q(status=AttendanceRecord.AttendanceStatus.LEAVE)),
         )
         absent_records = records.filter(status=AttendanceRecord.AttendanceStatus.ABSENT)
 
@@ -924,6 +925,7 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
             'total_students': total,
             'present_count': counts.get('present_count') or 0,
             'absent_count': counts.get('absent_count') or 0,
+            'leave_count': counts.get('leave_count') or 0,
             'absent_students': AttendanceRecordSerializer(absent_records, many=True).data,
         })
 
@@ -1195,7 +1197,7 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
         dates_in_month = [date(year, month, day) for day in range(1, last_day + 1)]
 
         # Table headers
-        headers = ['Roll#', 'Student Name'] + [str(d.day) for d in dates_in_month] + ['P', 'A']
+        headers = ['Roll#', 'Student Name'] + [str(d.day) for d in dates_in_month] + ['P', 'A', 'L']
         table_data = [headers]
 
         # Table rows
@@ -1203,6 +1205,7 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
             student_id = student['id']
             present_count = 0
             absent_count = 0
+            leave_count = 0
 
             row = [
                 str(student['roll_number'] or ''),
@@ -1218,11 +1221,15 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
                 elif status_val == 'ABSENT':
                     row.append('A')
                     absent_count += 1
+                elif status_val == 'LEAVE':
+                    row.append('L')
+                    leave_count += 1
                 else:
                     row.append('-')
 
             row.append(str(present_count))
             row.append(str(absent_count))
+            row.append(str(leave_count))
             table_data.append(row)
 
         # Create table with styling

@@ -47,6 +47,7 @@ function StatusDot({ status }) {
     PRESENT: 'bg-green-500',
     ABSENT: 'bg-red-500',
     LATE: 'bg-yellow-500',
+    LEAVE: 'bg-purple-500',
     HOLIDAY: 'bg-gray-300',
     WEEKEND: 'bg-gray-200',
   }
@@ -100,7 +101,8 @@ export default function ChildAttendance() {
   const presentCount = summary.present_count ?? summary.present ?? Object.values(dayStatusMap).filter(s => s === 'PRESENT').length
   const absentCount = summary.absent_count ?? summary.absent ?? Object.values(dayStatusMap).filter(s => s === 'ABSENT').length
   const lateCount = summary.late_count ?? summary.late ?? Object.values(dayStatusMap).filter(s => s === 'LATE').length
-  const totalDays = summary.total_days ?? ((presentCount + absentCount + lateCount) || 0)
+  const leaveCount = summary.leave_count ?? summary.leave ?? Object.values(dayStatusMap).filter(s => s === 'LEAVE').length
+  const totalDays = summary.total_days ?? ((presentCount + absentCount + lateCount + leaveCount) || 0)
   const attendanceRate = totalDays > 0 ? Math.round(((presentCount + lateCount) / totalDays) * 100) : 0
 
   const goToPrevMonth = () => {
@@ -140,6 +142,7 @@ export default function ChildAttendance() {
     if (status === 'PRESENT') return 'bg-green-100 text-green-800 border-green-200'
     if (status === 'ABSENT') return 'bg-red-100 text-red-800 border-red-200'
     if (status === 'LATE') return 'bg-yellow-100 text-yellow-800 border-yellow-200'
+    if (status === 'LEAVE') return 'bg-purple-100 text-purple-800 border-purple-200'
     if (status === 'HOLIDAY') return 'bg-gray-100 text-gray-500 border-gray-200'
     if (isOffDay(day)) return 'bg-gray-50 text-gray-400 border-gray-100'
     return 'bg-white text-gray-700 border-gray-200'
@@ -187,7 +190,7 @@ export default function ChildAttendance() {
       </div>
 
       {/* Summary Bar */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         <div className="bg-green-50 border border-green-200 rounded-xl p-3 text-center">
           <p className="text-xs text-green-600 font-medium">Present</p>
           <p className="text-xl font-bold text-green-700 mt-1">{presentCount}</p>
@@ -199,6 +202,10 @@ export default function ChildAttendance() {
         <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 text-center">
           <p className="text-xs text-yellow-600 font-medium">Late</p>
           <p className="text-xl font-bold text-yellow-700 mt-1">{lateCount}</p>
+        </div>
+        <div className="bg-purple-50 border border-purple-200 rounded-xl p-3 text-center">
+          <p className="text-xs text-purple-600 font-medium">Leave</p>
+          <p className="text-xl font-bold text-purple-700 mt-1">{leaveCount}</p>
         </div>
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-center">
           <p className="text-xs text-blue-600 font-medium">Attendance Rate</p>
@@ -269,6 +276,10 @@ export default function ChildAttendance() {
             <div className="flex items-center gap-1.5">
               <span className="w-3 h-3 rounded bg-yellow-500" />
               <span className="text-xs text-gray-600">Late</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded bg-purple-500" />
+              <span className="text-xs text-gray-600">Leave</span>
             </div>
             <div className="flex items-center gap-1.5">
               <span className="w-3 h-3 rounded bg-gray-300" />

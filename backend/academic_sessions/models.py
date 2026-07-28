@@ -517,3 +517,37 @@ class PromotionEvent(models.Model):
 
     def __str__(self):
         return f"{self.student_id} - {self.get_event_type_display()}"
+
+
+class AttendanceRiskSnapshot(models.Model):
+    """
+    Nightly-precomputed cache of AttendanceRiskService's output per school.
+    Lets the dashboard widget read a cached result instead of recomputing a
+    full academic-year attendance scan on every page load.
+    """
+    school = models.ForeignKey(
+        'schools.School',
+        on_delete=models.CASCADE,
+        related_name='attendance_risk_snapshots',
+    )
+    academic_year = models.ForeignKey(
+        AcademicYear,
+        on_delete=models.CASCADE,
+        related_name='attendance_risk_snapshots',
+    )
+    computed_at = models.DateTimeField(auto_now=True)
+    total_students = models.IntegerField(default=0)
+    at_risk_count = models.IntegerField(default=0)
+    risk_levels = models.JSONField(default=dict, blank=True)
+    students = models.JSONField(default=list, blank=True)
+
+    class Meta:
+        unique_together = ('school', 'academic_year')
+        verbose_name = 'Attendance Risk Snapshot'
+        verbose_name_plural = 'Attendance Risk Snapshots'
+        indexes = [
+            models.Index(fields=['school', 'academic_year']),
+        ]
+
+    def __str__(self):
+        return f"{self.school_id} - {self.academic_year_id}: {self.at_risk_count} at risk ({self.computed_at})"

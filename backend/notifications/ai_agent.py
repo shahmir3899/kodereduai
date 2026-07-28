@@ -211,11 +211,13 @@ class ParentCommunicationAgent:
         total = AttendanceRecord.objects.filter(**filters).count()
         present = AttendanceRecord.objects.filter(**filters, status='PRESENT').count()
         absent = AttendanceRecord.objects.filter(**filters, status='ABSENT').count()
+        leave = AttendanceRecord.objects.filter(**filters, status='LEAVE').count()
 
         return json.dumps({
             'total_records': total,
             'present': present,
             'absent': absent,
+            'leave': leave,
             'rate': f"{round(present / total * 100, 1)}%" if total else 'N/A',
         })
 
@@ -305,12 +307,14 @@ class ParentCommunicationAgent:
         total = records.count()
         present = records.filter(status='PRESENT').count()
         absent = records.filter(status='ABSENT').count()
+        leave = records.filter(status='LEAVE').count()
         absent_dates = list(records.filter(status='ABSENT').values_list('date', flat=True)[:10])
 
         return json.dumps({
             'days_checked': total,
             'present': present,
             'absent': absent,
+            'leave': leave,
             'rate': f"{round(present / total * 100, 1)}%" if total else 'N/A',
             'recent_absences': [str(d) for d in absent_dates],
         })

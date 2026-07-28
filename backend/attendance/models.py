@@ -261,6 +261,7 @@ class AttendanceRecord(models.Model):
     class AttendanceStatus(models.TextChoices):
         PRESENT = 'PRESENT', 'Present'
         ABSENT = 'ABSENT', 'Absent'
+        LEAVE = 'LEAVE', 'Leave'
 
     class Source(models.TextChoices):
         IMAGE_AI = 'IMAGE_AI', 'Image AI'

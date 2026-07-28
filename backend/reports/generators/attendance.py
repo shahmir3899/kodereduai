@@ -41,6 +41,7 @@ class DailyAttendanceReportGenerator(BaseReportGenerator):
         total = records.count()
         present = records.filter(status='PRESENT').count()
         absent = records.filter(status='ABSENT').count()
+        leave = records.filter(status='LEAVE').count()
 
         rows = []
         for r in records:
@@ -63,6 +64,7 @@ class DailyAttendanceReportGenerator(BaseReportGenerator):
                 'Total Students': total,
                 'Present': present,
                 'Absent': absent,
+                'Leave': leave,
                 'Attendance Rate': f"{round(present / total * 100, 1)}%" if total > 0 else 'N/A',
             },
             'table_headers': ['Class', 'Roll #', 'Student Name', 'Status'],
@@ -112,6 +114,7 @@ class MonthlyAttendanceReportGenerator(BaseReportGenerator):
                     'student_name': record.student.name,
                     'present': 0,
                     'absent': 0,
+                    'leave': 0,
                     'total': 0,
                 }
             student_stats[sid]['total'] += 1
@@ -119,6 +122,8 @@ class MonthlyAttendanceReportGenerator(BaseReportGenerator):
                 student_stats[sid]['present'] += 1
             elif record.status == 'ABSENT':
                 student_stats[sid]['absent'] += 1
+            elif record.status == 'LEAVE':
+                student_stats[sid]['leave'] += 1
 
         rows = []
         sorted_stats = sorted(
@@ -134,6 +139,7 @@ class MonthlyAttendanceReportGenerator(BaseReportGenerator):
                 s['student_name'],
                 s['present'],
                 s['absent'],
+                s['leave'],
                 total,
                 f"{rate}%",
             ])
@@ -145,6 +151,6 @@ class MonthlyAttendanceReportGenerator(BaseReportGenerator):
             'summary': {
                 'Total Students': len(rows),
             },
-            'table_headers': ['Class', 'Roll #', 'Name', 'Present', 'Absent', 'Total', 'Rate'],
+            'table_headers': ['Class', 'Roll #', 'Name', 'Present', 'Absent', 'Leave', 'Total', 'Rate'],
             'table_rows': rows,
         }

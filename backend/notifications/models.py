@@ -22,6 +22,7 @@ class NotificationTemplate(models.Model):
         ('TRANSPORT_UPDATE', 'Transport Update'),
         ('LIBRARY_OVERDUE', 'Library Overdue Reminder'),
         ('ASSIGNMENT_DUE', 'Assignment Due Reminder'),
+        ('ATTENDANCE_RISK', 'Attendance Risk Alert'),
     ]
 
     CHANNEL_CHOICES = [

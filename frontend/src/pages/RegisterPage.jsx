@@ -136,7 +136,7 @@ function RegisterTab() {
   const { students, datesWithData, summary } = useMemo(() => {
     const attendanceMap = {}
     const datesSet = new Set()
-    let totalPresent = 0, totalAbsent = 0
+    let totalPresent = 0, totalAbsent = 0, totalLeave = 0
     for (const r of records) {
       const sid = r.student_id || r.student
       if (!attendanceMap[sid]) attendanceMap[sid] = {}
@@ -145,6 +145,7 @@ function RegisterTab() {
       datesSet.add(dayNum)
       if (r.status === 'PRESENT') totalPresent++
       if (r.status === 'ABSENT') totalAbsent++
+      if (r.status === 'LEAVE') totalLeave++
     }
     const studentRows = enrolledStudents
       .map(s => ({ id: s.id, name: s.name, roll: s.roll_number, dates: attendanceMap[s.id] || {} }))
@@ -152,7 +153,7 @@ function RegisterTab() {
     return {
       students: studentRows,
       datesWithData: [...datesSet].sort((a, b) => a - b),
-      summary: { totalStudents: studentRows.length, totalPresent, totalAbsent },
+      summary: { totalStudents: studentRows.length, totalPresent, totalAbsent, totalLeave },
     }
   }, [records, enrolledStudents])
 
@@ -233,11 +234,12 @@ function RegisterTab() {
       ) : (
         <>
           {/* Summary Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
             <div className="card"><p className="text-xs text-gray-500">Students</p><p className="text-xl sm:text-2xl font-bold text-gray-900">{summary.totalStudents}</p></div>
             <div className="card"><p className="text-xs text-gray-500">Days Recorded</p><p className="text-xl sm:text-2xl font-bold text-gray-900">{datesWithData.length}</p></div>
             <div className="card bg-green-50"><p className="text-xs text-gray-500">Present</p><p className="text-xl sm:text-2xl font-bold text-green-600">{summary.totalPresent}</p></div>
             <div className="card bg-red-50"><p className="text-xs text-gray-500">Absent</p><p className="text-xl sm:text-2xl font-bold text-red-600">{summary.totalAbsent}</p></div>
+            <div className="card bg-purple-50"><p className="text-xs text-gray-500">Leave</p><p className="text-xl sm:text-2xl font-bold text-purple-600">{summary.totalLeave}</p></div>
             <div className="card bg-gray-50 col-span-2 sm:col-span-1"><p className="text-xs text-gray-500">OFF Days</p><p className="text-xl sm:text-2xl font-bold text-gray-700">{offDayCount}</p></div>
           </div>
 
@@ -274,12 +276,14 @@ function RegisterTab() {
                     ))}
                     <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase border-b border-l border-gray-200 min-w-[32px]">P</th>
                     <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase border-b border-gray-200 min-w-[32px]">A</th>
+                    <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase border-b border-gray-200 min-w-[32px]">L</th>
                   </tr>
                 </thead>
                 <tbody>
                   {students.map((student, idx) => {
                     const pCount = Object.values(student.dates).filter(s => s === 'PRESENT').length
                     const aCount = Object.values(student.dates).filter(s => s === 'ABSENT').length
+                    const lCount = Object.values(student.dates).filter(s => s === 'LEAVE').length
                     return (
                       <tr key={student.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
                         <td className="sticky left-0 z-10 px-3 py-1.5 text-xs text-gray-600 border-r border-gray-200 font-medium" style={{ backgroundColor: idx % 2 === 0 ? 'white' : '#f9fafb' }}>{student.roll}</td>
@@ -288,12 +292,13 @@ function RegisterTab() {
                           const s = student.dates[day]
                           return (
                             <td key={day} className="px-0 py-1.5 text-center text-xs">
-                              {s === 'PRESENT' ? <span className="text-green-600 font-semibold">P</span> : s === 'ABSENT' ? <span className="text-red-600 font-semibold">A</span> : <span className="text-gray-200">-</span>}
+                              {s === 'PRESENT' ? <span className="text-green-600 font-semibold">P</span> : s === 'ABSENT' ? <span className="text-red-600 font-semibold">A</span> : s === 'LEAVE' ? <span className="text-purple-600 font-semibold">L</span> : <span className="text-gray-200">-</span>}
                             </td>
                           )
                         })}
                         <td className="px-2 py-1.5 text-center text-xs font-bold text-green-700 border-l border-gray-200">{pCount}</td>
                         <td className="px-2 py-1.5 text-center text-xs font-bold text-red-700">{aCount}</td>
+                        <td className="px-2 py-1.5 text-center text-xs font-bold text-purple-700">{lCount}</td>
                       </tr>
                     )
                   })}
@@ -308,6 +313,7 @@ function RegisterTab() {
               {students.map(student => {
                 const pCount = Object.values(student.dates).filter(s => s === 'PRESENT').length
                 const aCount = Object.values(student.dates).filter(s => s === 'ABSENT').length
+                const lCount = Object.values(student.dates).filter(s => s === 'LEAVE').length
                 return (
                   <div key={student.id} className="card py-3">
                     <div className="flex items-center justify-between mb-2">
@@ -318,6 +324,7 @@ function RegisterTab() {
                       <div className="flex gap-3 text-sm">
                         <span className="text-green-600 font-semibold">{pCount}P</span>
                         <span className="text-red-600 font-semibold">{aCount}A</span>
+                        <span className="text-purple-600 font-semibold">{lCount}L</span>
                       </div>
                     </div>
                     {/* Mini calendar grid */}
@@ -335,7 +342,7 @@ function RegisterTab() {
                       {/* Day dots */}
                       {allDays.map(day => {
                         const s = student.dates[day]
-                        const bg = s === 'PRESENT' ? 'bg-green-500' : s === 'ABSENT' ? 'bg-red-500' : 'bg-gray-200'
+                        const bg = s === 'PRESENT' ? 'bg-green-500' : s === 'ABSENT' ? 'bg-red-500' : s === 'LEAVE' ? 'bg-purple-500' : 'bg-gray-200'
                         return (
                           <div key={day} className="flex flex-col items-center" title={`${day}: ${s || 'No data'}`}>
                             <div className={`w-5 h-5 rounded-full ${bg} flex items-center justify-center`}>
@@ -384,6 +391,7 @@ function RegisterTab() {
                         ))}
                         <th className="px-2 py-2 text-center font-medium text-gray-500 border-b border-l border-gray-200">P</th>
                         <th className="px-2 py-2 text-center font-medium text-gray-500 border-b border-gray-200">A</th>
+                        <th className="px-2 py-2 text-center font-medium text-gray-500 border-b border-gray-200">L</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -391,6 +399,7 @@ function RegisterTab() {
                         const weekDays = weeks[activeWeek] || []
                         const pCount = weekDays.filter(d => student.dates[d] === 'PRESENT').length
                         const aCount = weekDays.filter(d => student.dates[d] === 'ABSENT').length
+                        const lCount = weekDays.filter(d => student.dates[d] === 'LEAVE').length
                         return (
                           <tr key={student.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
                             <td className="sticky left-0 z-10 px-2 py-1.5 text-gray-900 font-medium border-r border-gray-200 truncate max-w-[120px]" style={{ backgroundColor: idx % 2 === 0 ? 'white' : '#f9fafb' }} title={student.name}>
@@ -400,12 +409,13 @@ function RegisterTab() {
                               const s = student.dates[day]
                               return (
                                 <td key={day} className="px-1 py-1.5 text-center">
-                                  {s === 'PRESENT' ? <span className="text-green-600 font-bold">P</span> : s === 'ABSENT' ? <span className="text-red-600 font-bold">A</span> : <span className="text-gray-200">-</span>}
+                                  {s === 'PRESENT' ? <span className="text-green-600 font-bold">P</span> : s === 'ABSENT' ? <span className="text-red-600 font-bold">A</span> : s === 'LEAVE' ? <span className="text-purple-600 font-bold">L</span> : <span className="text-gray-200">-</span>}
                                 </td>
                               )
                             })}
                             <td className="px-2 py-1.5 text-center font-bold text-green-700 border-l border-gray-200">{pCount}</td>
                             <td className="px-2 py-1.5 text-center font-bold text-red-700">{aCount}</td>
+                            <td className="px-2 py-1.5 text-center font-bold text-purple-700">{lCount}</td>
                           </tr>
                         )
                       })}

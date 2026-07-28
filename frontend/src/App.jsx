@@ -21,6 +21,7 @@ const DashboardRouter = lazy(() => import('./pages/DashboardRouter'))
 const AttendanceRecordsPage = lazy(() => import('./pages/AttendanceRecordsPage'))
 const ManualEntryPage = lazy(() => import('./pages/ManualEntryPage'))
 const AnomaliesPage = lazy(() => import('./pages/attendance/AnomaliesPage'))
+const AtRiskStudentsPage = lazy(() => import('./pages/attendance/AtRiskStudentsPage'))
 const StudentsPage = lazy(() => import('./pages/StudentsPage'))
 const ClassesGradesPage = lazy(() => import('./pages/ClassesGradesPage'))
 const SuperAdminDashboard = lazy(() => import('./pages/SuperAdminDashboard'))
@@ -409,6 +410,7 @@ function App() {
             <Route path="attendance/register" element={<SchoolRoute><ModuleRoute module="attendance"><AttendanceRecordsPage /></ModuleRoute></SchoolRoute>} />
             <Route path="attendance/manual-entry" element={<SchoolRoute><ModuleRoute module="attendance"><ManualEntryPage /></ModuleRoute></SchoolRoute>} />
             <Route path="attendance/anomalies" element={<SchoolRoute><ModuleRoute module="attendance"><AnomaliesPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="attendance/at-risk" element={<SchoolRoute><ModuleRoute module="attendance"><AdminPrincipalRoute><AtRiskStudentsPage /></AdminPrincipalRoute></ModuleRoute></SchoolRoute>} />
 
             {/* Face Attendance (camera-based) */}
             <Route path="face-attendance" element={<SchoolRoute><CapabilityRoute module="attendance" capability="face_recognition"><FaceAttendancePage /></CapabilityRoute></SchoolRoute>} />

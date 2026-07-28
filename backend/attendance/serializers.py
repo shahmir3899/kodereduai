@@ -329,7 +329,7 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
 class AttendanceBulkEntryItemSerializer(serializers.Serializer):
     """Single student attendance entry."""
     student_id = serializers.IntegerField()
-    status = serializers.ChoiceField(choices=['PRESENT', 'ABSENT'])
+    status = serializers.ChoiceField(choices=['PRESENT', 'ABSENT', 'LEAVE'])
 
 
 class AttendanceBulkEntrySerializer(serializers.Serializer):

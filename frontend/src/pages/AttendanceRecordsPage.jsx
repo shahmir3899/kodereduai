@@ -81,6 +81,7 @@ export default function AttendanceRecordsPage() {
     const datesSet = new Set()
     let totalPresent = 0
     let totalAbsent = 0
+    let totalLeave = 0
 
     for (const r of records) {
       const sid = r.student || r.student_id
@@ -90,6 +91,7 @@ export default function AttendanceRecordsPage() {
       datesSet.add(dayNum)
       if (r.status === 'PRESENT') totalPresent++
       if (r.status === 'ABSENT') totalAbsent++
+      if (r.status === 'LEAVE') totalLeave++
     }
 
     // Build student rows from enrolled students (DB source of truth)
@@ -113,7 +115,8 @@ export default function AttendanceRecordsPage() {
         totalStudents: studentRows.length,
         totalPresent,
         totalAbsent,
-        totalRecords: totalPresent + totalAbsent,
+        totalLeave,
+        totalRecords: totalPresent + totalAbsent + totalLeave,
       },
     }
   }, [records, enrolledStudents])
@@ -256,7 +259,7 @@ export default function AttendanceRecordsPage() {
       ) : (
         <div className="space-y-6">
           {/* Summary Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
             <div className="card">
               <p className="text-xs text-gray-500">Students</p>
               <p className="text-xl sm:text-2xl font-bold text-gray-900">{summary.totalStudents}</p>
@@ -272,6 +275,10 @@ export default function AttendanceRecordsPage() {
             <div className="card bg-red-50">
               <p className="text-xs text-gray-500">Absent</p>
               <p className="text-xl sm:text-2xl font-bold text-red-600">{summary.totalAbsent}</p>
+            </div>
+            <div className="card bg-purple-50">
+              <p className="text-xs text-gray-500">Leave</p>
+              <p className="text-xl sm:text-2xl font-bold text-purple-600">{summary.totalLeave}</p>
             </div>
           </div>
 
@@ -332,12 +339,16 @@ export default function AttendanceRecordsPage() {
                     <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase border-b border-gray-200 min-w-[32px]">
                       A
                     </th>
+                    <th className="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase border-b border-gray-200 min-w-[32px]">
+                      L
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {students.map((student, idx) => {
                     const pCount = Object.values(student.dates).filter((s) => s === 'PRESENT').length
                     const aCount = Object.values(student.dates).filter((s) => s === 'ABSENT').length
+                    const lCount = Object.values(student.dates).filter((s) => s === 'LEAVE').length
 
                     return (
                       <tr
@@ -361,6 +372,8 @@ export default function AttendanceRecordsPage() {
                                 <span className="text-green-600 font-semibold">P</span>
                               ) : s === 'ABSENT' ? (
                                 <span className="text-red-600 font-semibold">A</span>
+                              ) : s === 'LEAVE' ? (
+                                <span className="text-purple-600 font-semibold">L</span>
                               ) : (
                                 <span className="text-gray-200">-</span>
                               )}
@@ -372,6 +385,9 @@ export default function AttendanceRecordsPage() {
                         </td>
                         <td className="px-2 py-1.5 text-center text-xs font-bold text-red-700">
                           {aCount}
+                        </td>
+                        <td className="px-2 py-1.5 text-center text-xs font-bold text-purple-700">
+                          {lCount}
                         </td>
                       </tr>
                     )
@@ -387,6 +403,7 @@ export default function AttendanceRecordsPage() {
             {students.map((student) => {
               const pCount = Object.values(student.dates).filter((s) => s === 'PRESENT').length
               const aCount = Object.values(student.dates).filter((s) => s === 'ABSENT').length
+              const lCount = Object.values(student.dates).filter((s) => s === 'LEAVE').length
               return (
                 <div key={student.id} className="card py-3">
                   <div className="flex items-center justify-between">
@@ -397,6 +414,7 @@ export default function AttendanceRecordsPage() {
                     <div className="flex gap-3 text-sm">
                       <span className="text-green-600 font-semibold">{pCount}P</span>
                       <span className="text-red-600 font-semibold">{aCount}A</span>
+                      <span className="text-purple-600 font-semibold">{lCount}L</span>
                     </div>
                   </div>
                 </div>

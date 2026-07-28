@@ -3,6 +3,7 @@ from datetime import date, timedelta
 
 from django.db.models import Count, Q, F
 from django.db import transaction
+from django.utils import timezone
 from django.utils.dateparse import parse_date
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
@@ -2171,6 +2172,8 @@ class AttendanceRiskView(APIView):
 
     def get(self, request):
         from .attendance_risk_service import AttendanceRiskService
+        from .models import AttendanceRiskSnapshot
+        from schools.models import School
 
         school_id = _resolve_school_id(request)
         if not school_id:
@@ -2193,9 +2196,33 @@ class AttendanceRiskView(APIView):
                 )
             academic_year_id = current.id
 
-        threshold = float(request.query_params.get('threshold', 75))
+        academic_year_id = int(academic_year_id)
 
-        service = AttendanceRiskService(school_id, int(academic_year_id))
+        explicit_threshold = request.query_params.get('threshold')
+        if explicit_threshold is None:
+            school = School.objects.filter(id=school_id).only('id', 'attendance_config').first()
+            threshold = float((school.attendance_config or {}).get('risk_threshold', 75.0)) if school else 75.0
+        else:
+            threshold = float(explicit_threshold)
+
+        # Serve the nightly-precomputed snapshot when it's fresh (today) and no
+        # explicit threshold override was requested — avoids a full academic-year
+        # scan on every dashboard load. Falls back to a live compute otherwise
+        # (first load for a school, stale snapshot, or ad-hoc threshold check).
+        if explicit_threshold is None:
+            snapshot = AttendanceRiskSnapshot.objects.filter(
+                school_id=school_id, academic_year_id=academic_year_id,
+            ).first()
+            if snapshot and snapshot.computed_at.date() == timezone.localdate():
+                return Response({
+                    'total_students': snapshot.total_students,
+                    'at_risk_count': snapshot.at_risk_count,
+                    'risk_levels': snapshot.risk_levels,
+                    'students': snapshot.students,
+                    'cached_at': snapshot.computed_at,
+                })
+
+        service = AttendanceRiskService(school_id, academic_year_id)
         result = service.get_at_risk_students(threshold=threshold)
 
         return Response(result)

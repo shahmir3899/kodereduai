@@ -83,6 +83,15 @@ export default function SettingsPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['currentSchool'] }),
   })
 
+  const [riskThresholdInput, setRiskThresholdInput] = useState(null)
+  const attendanceConfigMutation = useMutation({
+    mutationFn: (data) => schoolsApi.updateAttendanceConfig(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['currentSchool'] })
+      setRiskThresholdInput(null)
+    },
+  })
+
   const handleAssetUpload = (e, assetType) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -388,6 +397,38 @@ export default function SettingsPage() {
                 </div>
                 {examConfigMutation.isError && (
                   <p className="text-sm text-red-600 mt-2">{getErrorMessage(examConfigMutation.error, 'Failed to update exam config')}</p>
+                )}
+              </div>
+
+              {/* Attendance Risk Predictor Settings */}
+              <div className="card">
+                <h3 className="font-medium text-gray-900 mb-1">Attendance Risk Predictor</h3>
+                <p className="text-sm text-gray-500 mb-4">
+                  Students at or below this attendance percentage are flagged as at-risk on the dashboard.
+                </p>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="1"
+                    className="input-field w-24"
+                    value={riskThresholdInput ?? school?.attendance_config?.risk_threshold ?? 75}
+                    onChange={(e) => setRiskThresholdInput(e.target.value)}
+                  />
+                  <span className="text-sm text-gray-500">%</span>
+                  <button
+                    onClick={() => attendanceConfigMutation.mutate({
+                      risk_threshold: Number(riskThresholdInput ?? school?.attendance_config?.risk_threshold ?? 75)
+                    })}
+                    disabled={attendanceConfigMutation.isPending || riskThresholdInput === null}
+                    className="btn-secondary"
+                  >
+                    Save
+                  </button>
+                </div>
+                {attendanceConfigMutation.isError && (
+                  <p className="text-sm text-red-600 mt-2">{getErrorMessage(attendanceConfigMutation.error, 'Failed to update attendance config')}</p>
                 )}
               </div>
             </>

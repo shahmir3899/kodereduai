@@ -91,6 +91,9 @@ export default function AttendanceRiskWidget() {
       <p className="text-sm text-gray-600 mb-3">
         <span className="font-semibold text-gray-900">{result.at_risk_count}</span> student{result.at_risk_count !== 1 ? 's' : ''} at risk out of{' '}
         <span className="font-semibold text-gray-900">{result.total_students}</span> total
+        {result.cached_at && (
+          <span className="text-xs text-gray-400"> · as of {new Date(result.cached_at).toLocaleString()}</span>
+        )}
       </p>
 
       {/* Severity badges */}
@@ -115,14 +118,22 @@ export default function AttendanceRiskWidget() {
                   {student.severity}
                 </span>
               </div>
-              <div className="flex items-center gap-3 mt-1">
+              <div className="flex items-center gap-3 mt-1 flex-wrap">
                 <span className="text-xs text-gray-600">
                   Attendance: <span className="font-semibold">{student.current_rate}%</span>
                 </span>
                 <TrendIndicator trend={student.trend} />
+                {student.consecutive_absent_days > 0 && (
+                  <span className="text-xs text-red-600 font-medium">
+                    {student.consecutive_absent_days}d streak
+                  </span>
+                )}
               </div>
               {student.day_pattern && (
                 <p className="text-xs text-gray-500 mt-1">{student.day_pattern}</p>
+              )}
+              {student.excused_leave_days > 0 && (
+                <p className="text-xs text-gray-400 mt-0.5">{student.excused_leave_days} excused leave day(s) excluded</p>
               )}
             </div>
             <div className="text-right shrink-0">
@@ -137,7 +148,7 @@ export default function AttendanceRiskWidget() {
       {result.at_risk_count > 5 && (
         <div className="mt-3 pt-3 border-t border-gray-100">
           <Link
-            to="/attendance/register"
+            to="/attendance/at-risk"
             className="text-sm text-primary-600 hover:text-primary-700 font-medium inline-flex items-center"
           >
             View all {result.at_risk_count} at-risk students

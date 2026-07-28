@@ -130,6 +130,13 @@ def default_exam_config():
     }
 
 
+def default_attendance_config():
+    """Default attendance configuration per school."""
+    return {
+        "risk_threshold": 75.0,
+    }
+
+
 def default_ai_config():
     """Default AI pipeline configuration per school."""
     return {
@@ -222,6 +229,13 @@ class School(models.Model):
         default=default_exam_config,
         blank=True,
         help_text="Per-school exam config: weighted average toggle, etc."
+    )
+
+    # Attendance configuration (per-school AI risk-predictor threshold, etc.)
+    attendance_config = models.JSONField(
+        default=default_attendance_config,
+        blank=True,
+        help_text="Per-school attendance config: AI risk threshold, etc."
     )
 
     # Status

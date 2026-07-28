@@ -649,6 +649,7 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         total_days = attendance_qs.count()
         total_present = attendance_qs.filter(status='PRESENT').count()
         total_absent = attendance_qs.filter(status='ABSENT').count()
+        total_leave = attendance_qs.filter(status='LEAVE').count()
         attendance_rate = round(total_present / total_days * 100, 1) if total_days > 0 else 0.0
 
         # Fee stats
@@ -688,6 +689,7 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             'attendance_rate': attendance_rate,
             'present_days': total_present,
             'total_absent': total_absent,
+            'total_leave': total_leave,
             'total_days': total_days,
             'total_due': float(fee_total_due),
             'total_paid': float(fee_total_paid),
@@ -711,6 +713,7 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             present=Count('id', filter=Q(status='PRESENT')),
             absent=Count('id', filter=Q(status='ABSENT')),
             late=Count('id', filter=Q(status='LATE')),
+            leave=Count('id', filter=Q(status='LEAVE')),
             total=Count('id'),
         ).order_by('-month')
 
@@ -722,6 +725,7 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
                 'present': r['present'],
                 'absent': r['absent'],
                 'late': r['late'],
+                'leave': r['leave'],
                 'total': r['total'],
                 'rate': rate,
             })
@@ -992,6 +996,7 @@ class StudentDashboardView(APIView):
         total_days = att_qs.count()
         present = att_qs.filter(status='PRESENT').count()
         absent = att_qs.filter(status='ABSENT').count()
+        leave = att_qs.filter(status='LEAVE').count()
 
         # Fee summary
         fee_agg = FeePayment.objects.filter(student=student).aggregate(
@@ -1053,6 +1058,7 @@ class StudentDashboardView(APIView):
                 'total_days': total_days,
                 'present': present,
                 'absent': absent,
+                'leave': leave,
                 'rate': round(present / total_days * 100, 1) if total_days > 0 else 0,
             },
             'fees': {
@@ -1100,6 +1106,7 @@ class StudentAttendanceView(APIView):
                 'present': present,
                 'absent': qs.filter(status='ABSENT').count(),
                 'late': qs.filter(status='LATE').count(),
+                'leave': qs.filter(status='LEAVE').count(),
                 'rate': round(present / total * 100, 1) if total > 0 else 0,
             },
         })

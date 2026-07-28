@@ -497,6 +497,7 @@ class StudyHelperService:
         total = records.count()
         present = records.filter(status='PRESENT').count()
         absent = records.filter(status='ABSENT').count()
+        leave = records.filter(status='LEAVE').count()
         absent_dates = list(
             records.filter(status='ABSENT').values_list('date', flat=True)[:10]
         )
@@ -505,6 +506,7 @@ class StudyHelperService:
             "days_checked": total,
             "present": present,
             "absent": absent,
+            "leave": leave,
             "attendance_rate": f"{round(present / total * 100, 1)}%" if total else "N/A",
             "recent_absences": [str(d) for d in absent_dates],
         }

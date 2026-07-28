@@ -171,11 +171,13 @@ class ChildOverviewView(APIView):
         total_days = att_qs.count()
         total_present = att_qs.filter(status='PRESENT').count()
         total_absent = att_qs.filter(status='ABSENT').count()
+        total_leave = att_qs.filter(status='LEAVE').count()
         attendance_rate = round(total_present / total_days * 100, 1) if total_days > 0 else 0.0
         attendance_summary = {
             'total_days': total_days,
             'present': total_present,
             'absent': total_absent,
+            'leave': total_leave,
             'attendance_rate': attendance_rate,
         }
 

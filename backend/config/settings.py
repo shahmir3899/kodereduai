@@ -419,6 +419,10 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'notifications.tasks.send_class_teacher_attendance_reminders',
         'schedule': crontab(hour='11', minute='0'),
     },
+    'nightly-attendance-risk-snapshot': {
+        'task': 'academic_sessions.tasks.recompute_attendance_risk_snapshots',
+        'schedule': crontab(hour=2, minute=0),
+    },
 }
 
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'

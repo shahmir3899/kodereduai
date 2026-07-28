@@ -1243,7 +1243,8 @@ def trigger_daily_school_report(school, date):
     # --- Student attendance ---
     present = AttendanceRecord.objects.filter(school=school, date=date, status='PRESENT').count()
     absent = AttendanceRecord.objects.filter(school=school, date=date, status='ABSENT').count()
-    total_att = present + absent
+    on_leave = AttendanceRecord.objects.filter(school=school, date=date, status='LEAVE').count()
+    total_att = present + absent + on_leave
     att_rate = round(present / total_att * 100, 1) if total_att else 0
 
     # --- Lesson plans ---
@@ -1283,7 +1284,7 @@ def trigger_daily_school_report(school, date):
     lines = [f"Daily School Report — {school.name} ({date_label})", ""]
     lines.append("📋 Student Attendance")
     if total_att:
-        lines.append(f"  Present: {present}  |  Absent: {absent}  |  Total: {total_att}  |  Rate: {att_rate}%")
+        lines.append(f"  Present: {present}  |  Absent: {absent}  |  Leave: {on_leave}  |  Total: {total_att}  |  Rate: {att_rate}%")
     else:
         lines.append("  No attendance records for today.")
 
@@ -1338,5 +1339,70 @@ def trigger_daily_school_report(school, date):
             logger.error(f"Daily report failed for user {admin_user.id}: {e}")
 
     logger.info(f"Daily school report sent: {sent} admins for {school.name} on {date}")
+    return sent
+
+
+def trigger_attendance_risk_alerts(school, risk_report):
+    """
+    Send a single summary in-app alert to SCHOOL_ADMIN/PRINCIPAL users when
+    the AI Attendance Risk Predictor's nightly recompute finds HIGH-severity
+    students. Called from academic_sessions.tasks.recompute_attendance_risk_snapshots
+    once per school per night — never from the live dashboard request path.
+
+    Args:
+        school: School instance
+        risk_report: dict returned by AttendanceRiskService.get_at_risk_students()
+
+    Returns:
+        Number of admin/principal recipients the alert was sent to.
+    """
+    from .engine import NotificationEngine
+
+    high_risk = [s for s in risk_report.get('students', []) if s.get('severity') == 'HIGH']
+    if not high_risk:
+        return 0
+
+    today = timezone.localdate()
+    names = ', '.join(s['student_name'] for s in high_risk[:10])
+    if len(high_risk) > 10:
+        names += f', and {len(high_risk) - 10} more'
+
+    title = f"Attendance Risk Alert — {len(high_risk)} student{'s' if len(high_risk) != 1 else ''} HIGH risk"
+    body = (
+        f"{len(high_risk)} student(s) at {school.name} are at HIGH risk of falling below the "
+        f"attendance threshold: {names}. Review the Attendance Risk Monitor for details."
+    )
+
+    engine = NotificationEngine(school)
+    admin_users = _get_admin_users(school)
+    sent = 0
+    for admin_user in admin_users:
+        try:
+            if _daily_notification_already_sent(
+                school=school,
+                event_type='ATTENDANCE_RISK',
+                channel='IN_APP',
+                recipient_user=admin_user,
+                title=title,
+                body=body,
+                target_date=today,
+            ):
+                continue
+
+            engine.send(
+                event_type='ATTENDANCE_RISK',
+                channel='IN_APP',
+                context={},
+                recipient_identifier=str(admin_user.id),
+                recipient_type='ADMIN',
+                recipient_user=admin_user,
+                title=title,
+                body=body,
+            )
+            sent += 1
+        except Exception as e:
+            logger.error(f"Attendance risk alert failed for user {admin_user.id}: {e}")
+
+    logger.info(f"Attendance risk alert sent: {sent} admins for {school.name}, {len(high_risk)} HIGH-risk students")
     return sent
 

@@ -393,6 +393,57 @@ class SchoolViewSet(TenantQuerySetMixin, viewsets.ReadOnlyModelViewSet):
             'exam_config': school.exam_config
         })
 
+    @action(detail=False, methods=['get', 'put'])
+    def attendance_config(self, request):
+        """Get or update attendance configuration (AI risk threshold, etc.) for the current school."""
+        school = getattr(request, 'tenant_school', None) or request.user.school
+        if not school:
+            return Response(
+                {'error': 'No school associated with this user.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        if request.method == 'GET':
+            return Response({
+                'attendance_config': school.attendance_config,
+                'school_name': school.name
+            })
+
+        # PUT - Update attendance config
+        from core.permissions import get_effective_role, ADMIN_ROLES
+        role = get_effective_role(request)
+        if role not in ADMIN_ROLES:
+            return Response(
+                {'error': 'Only school admins can update attendance configuration.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        attendance_config = school.attendance_config or {}
+        new_data = request.data
+        if 'risk_threshold' in new_data:
+            try:
+                risk_threshold = float(new_data['risk_threshold'])
+            except (TypeError, ValueError):
+                return Response(
+                    {'error': 'risk_threshold must be a number.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            if not (0 <= risk_threshold <= 100):
+                return Response(
+                    {'error': 'risk_threshold must be between 0 and 100.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            attendance_config['risk_threshold'] = risk_threshold
+
+        school.attendance_config = attendance_config
+        school.save(update_fields=['attendance_config', 'updated_at'])
+
+        return Response({
+            'success': True,
+            'message': 'Attendance configuration updated successfully.',
+            'attendance_config': school.attendance_config
+        })
+
     @action(detail=False, methods=['post'], parser_classes=[MultiPartParser, FormParser])
     def upload_asset(self, request):
         """

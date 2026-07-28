@@ -31,6 +31,7 @@ CARD_BG = '#F8FAFC'
 
 PRESENT_BG, PRESENT_TEXT = '#D1FAE5', '#065F46'
 ABSENT_BG, ABSENT_TEXT = '#FEE2E2', '#991B1B'
+LEAVE_BG, LEAVE_TEXT = '#EDE9FE', '#5B21B6'
 OFF_DAY_BG = '#FEF3C7'
 INFO_BG, INFO_TEXT = '#DBEAFE', '#1E40AF'
 NEUTRAL_BG, NEUTRAL_TEXT = '#F3F4F6', '#374151'
@@ -41,6 +42,7 @@ NEUTRAL_BG, NEUTRAL_TEXT = '#F3F4F6', '#374151'
 ATTENDANCE_STATUS_COLORS = {
     'PRESENT': (PRESENT_BG, PRESENT_TEXT),
     'ABSENT': (ABSENT_BG, ABSENT_TEXT),
+    'LEAVE': (LEAVE_BG, LEAVE_TEXT),
 }
 DEFAULT_STATUS_COLOR = (NEUTRAL_BG, NEUTRAL_TEXT)
 
@@ -656,6 +658,7 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
         attendance_by_date = {rec.date: rec.status for rec in att_qs.only('date', 'status')}
         present = sum(1 for s in attendance_by_date.values() if s == AttendanceRecord.AttendanceStatus.PRESENT)
         absent = sum(1 for s in attendance_by_date.values() if s == AttendanceRecord.AttendanceStatus.ABSENT)
+        leave = sum(1 for s in attendance_by_date.values() if s == AttendanceRecord.AttendanceStatus.LEAVE)
         total_days = len(attendance_by_date)
         att_rate = round(present / total_days * 100, 1) if total_days else 0
         attendance_months = sorted({(d.year, d.month) for d in attendance_by_date.keys()})
@@ -865,6 +868,7 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
             'holiday_dates': holiday_dates,
             'present_count': present,
             'absent_count': absent,
+            'leave_count': leave,
             'working_days': total_days,
             'attendance_rate': att_rate,
             'fee_rows': fee_rows,
@@ -1028,6 +1032,7 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
             elements.append(build_stat_cards([
                 (str(data['present_count']), 'Present', PRESENT_BG, PRESENT_TEXT),
                 (str(data['absent_count']), 'Absent', ABSENT_BG, ABSENT_TEXT),
+                (str(data['leave_count']), 'Leave', LEAVE_BG, LEAVE_TEXT),
                 (f"{data['attendance_rate']}%", 'Attendance %', INFO_BG, INFO_TEXT),
                 (str(data['working_days']), 'Working Days', NEUTRAL_BG, NEUTRAL_TEXT),
             ]))

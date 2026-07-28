@@ -33,6 +33,7 @@ class Student360Service:
         total = qs.count()
         present = qs.filter(status='PRESENT').count()
         absent = qs.filter(status='ABSENT').count()
+        leave = qs.filter(status='LEAVE').count()
         rate = round(present / total * 100, 1) if total > 0 else 0.0
 
         # Trend: compare last 30 records vs previous 30
@@ -68,6 +69,7 @@ class Student360Service:
             'rate': rate,
             'present': present,
             'absent': absent,
+            'leave': leave,
             'total_days': total,
             'trend': trend,
             'risk': risk,

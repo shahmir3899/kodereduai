@@ -232,6 +232,10 @@ export const schoolsApi = {
   getExamConfig: () => api.get('/api/schools/exam_config/'),
   updateExamConfig: (data) => api.put('/api/schools/exam_config/', data),
 
+  // Attendance configuration (AI risk threshold, etc.)
+  getAttendanceConfig: () => api.get('/api/schools/attendance_config/'),
+  updateAttendanceConfig: (data) => api.put('/api/schools/attendance_config/', data),
+
   // School completion timeline
   getCompletion: () => api.get('/api/schools/completion/'),
 

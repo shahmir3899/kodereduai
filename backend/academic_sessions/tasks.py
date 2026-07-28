@@ -306,3 +306,56 @@ def promotion_advisor_task(self, school_id, academic_year_id, class_id):
         logger.exception(f"Promotion advisor failed: {e}")
         mark_task_failed(task_id, str(e))
         raise
+
+
+@shared_task
+def recompute_attendance_risk_snapshots():
+    """
+    Nightly Celery Beat job (not user-triggered, no progress tracking needed —
+    see CLAUDE.md's three background-execution paths). Recomputes the
+    AI Attendance Risk Predictor for every active school's current academic
+    year, caches it in AttendanceRiskSnapshot, and fires an in-app alert to
+    admins/principals for any school with new HIGH-severity students.
+    """
+    from schools.models import School
+    from academic_sessions.models import AcademicYear, AttendanceRiskSnapshot
+    from academic_sessions.attendance_risk_service import AttendanceRiskService
+    from notifications.triggers import trigger_attendance_risk_alerts
+
+    processed_schools = 0
+    alerted_schools = 0
+
+    for school in School.objects.filter(is_active=True):
+        try:
+            academic_year = AcademicYear.objects.filter(
+                school_id=school.id, is_current=True, is_active=True,
+            ).first()
+            if not academic_year:
+                continue
+
+            threshold = (school.attendance_config or {}).get('risk_threshold', 75.0)
+            report = AttendanceRiskService(school.id, academic_year.id).get_at_risk_students(threshold=threshold)
+
+            AttendanceRiskSnapshot.objects.update_or_create(
+                school=school,
+                academic_year=academic_year,
+                defaults={
+                    'total_students': report['total_students'],
+                    'at_risk_count': report['at_risk_count'],
+                    'risk_levels': report['risk_levels'],
+                    'students': report['students'],
+                },
+            )
+            processed_schools += 1
+
+            if report['risk_levels'].get('HIGH', 0) > 0:
+                if trigger_attendance_risk_alerts(school, report):
+                    alerted_schools += 1
+        except Exception as e:
+            logger.error(f"Attendance risk snapshot failed for school {school.id}: {e}")
+
+    logger.info(
+        f"Attendance risk snapshots recomputed for {processed_schools} schools, "
+        f"{alerted_schools} alerted."
+    )
+    return {'processed_schools': processed_schools, 'alerted_schools': alerted_schools}

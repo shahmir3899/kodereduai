@@ -132,11 +132,13 @@ export default function ManualEntryPage() {
     },
   })
 
+  const STATUS_CYCLE = ['NOT_SET', 'PRESENT', 'ABSENT', 'LEAVE']
+
   const toggleStatus = (idx) => {
     if (!isAttendanceApplicable) return
     setAttendanceData(prev => prev.map((item, i) => {
       if (i !== idx) return item
-      const next = item.status === 'NOT_SET' ? 'PRESENT' : item.status === 'PRESENT' ? 'ABSENT' : 'NOT_SET'
+      const next = STATUS_CYCLE[(STATUS_CYCLE.indexOf(item.status) + 1) % STATUS_CYCLE.length]
       return { ...item, status: next }
     }))
   }
@@ -170,6 +172,7 @@ export default function ManualEntryPage() {
 
   const presentCount = attendanceData.filter(a => a.status === 'PRESENT').length
   const absentCount = attendanceData.filter(a => a.status === 'ABSENT').length
+  const leaveCount = attendanceData.filter(a => a.status === 'LEAVE').length
   const notSetCount = attendanceData.filter(a => a.status === 'NOT_SET').length
   const hasExisting = existingRecords.length > 0
 
@@ -269,11 +272,13 @@ export default function ManualEntryPage() {
               <div className="flex gap-2 flex-wrap">
                 <button onClick={() => markAll('PRESENT')} disabled={!isAttendanceApplicable} className="px-3 py-1.5 text-xs font-medium rounded-lg bg-green-100 text-green-700 hover:bg-green-200 disabled:opacity-40 disabled:cursor-not-allowed">Mark All Present</button>
                 <button onClick={() => markAll('ABSENT')} disabled={!isAttendanceApplicable} className="px-3 py-1.5 text-xs font-medium rounded-lg bg-red-100 text-red-700 hover:bg-red-200 disabled:opacity-40 disabled:cursor-not-allowed">Mark All Absent</button>
+                <button onClick={() => markAll('LEAVE')} disabled={!isAttendanceApplicable} className="px-3 py-1.5 text-xs font-medium rounded-lg bg-purple-100 text-purple-700 hover:bg-purple-200 disabled:opacity-40 disabled:cursor-not-allowed">Mark All Leave</button>
                 <button onClick={() => markAll('NOT_SET')} disabled={!isAttendanceApplicable} className="px-3 py-1.5 text-xs font-medium rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-40 disabled:cursor-not-allowed">Reset All</button>
               </div>
               <div className="flex gap-4 text-sm">
                 <span className="text-green-600 font-semibold">{presentCount} Present</span>
                 <span className="text-red-600 font-semibold">{absentCount} Absent</span>
+                <span className="text-purple-600 font-semibold">{leaveCount} Leave</span>
                 {notSetCount > 0 && <span className="text-gray-400">{notSetCount} Not Set</span>}
                 <span className="text-gray-500">{attendanceData.length} Total</span>
               </div>
@@ -308,10 +313,12 @@ export default function ManualEntryPage() {
                             ? 'bg-green-100 text-green-700 hover:bg-green-200'
                             : item.status === 'ABSENT'
                               ? 'bg-red-100 text-red-700 hover:bg-red-200'
-                              : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                              : item.status === 'LEAVE'
+                                ? 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                                : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                         }`}
                       >
-                        {!isAttendanceApplicable ? 'N/A' : item.status === 'PRESENT' ? 'Present' : item.status === 'ABSENT' ? 'Absent' : 'Not Set'}
+                        {!isAttendanceApplicable ? 'N/A' : item.status === 'PRESENT' ? 'Present' : item.status === 'ABSENT' ? 'Absent' : item.status === 'LEAVE' ? 'Leave' : 'Not Set'}
                       </button>
                     </td>
                   </tr>
@@ -338,10 +345,12 @@ export default function ManualEntryPage() {
                       ? 'bg-green-100 text-green-700 hover:bg-green-200'
                       : item.status === 'ABSENT'
                         ? 'bg-red-100 text-red-700 hover:bg-red-200'
-                        : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                        : item.status === 'LEAVE'
+                          ? 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                          : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                   }`}
                 >
-                  {!isAttendanceApplicable ? 'N/A' : item.status === 'PRESENT' ? 'P' : item.status === 'ABSENT' ? 'A' : '—'}
+                  {!isAttendanceApplicable ? 'N/A' : item.status === 'PRESENT' ? 'P' : item.status === 'ABSENT' ? 'A' : item.status === 'LEAVE' ? 'L' : '—'}
                 </button>
               </div>
             ))}
@@ -356,10 +365,10 @@ export default function ManualEntryPage() {
             </div>
             <button
               onClick={handleSave}
-              disabled={bulkSaveMut.isPending || (isAttendanceApplicable && (presentCount + absentCount) === 0)}
+              disabled={bulkSaveMut.isPending || (isAttendanceApplicable && (presentCount + absentCount + leaveCount) === 0)}
               className="btn btn-primary min-w-[180px]"
             >
-              {!isAttendanceApplicable ? 'Attendance Not Applicable (OFF Day)' : bulkSaveMut.isPending ? 'Saving...' : `Save Attendance (${presentCount + absentCount})`}
+              {!isAttendanceApplicable ? 'Attendance Not Applicable (OFF Day)' : bulkSaveMut.isPending ? 'Saving...' : `Save Attendance (${presentCount + absentCount + leaveCount})`}
             </button>
           </div>
         </>

@@ -42,6 +42,7 @@ def _get_attendance_section(school_id, date_obj, academic_year_id):
     counts = records.aggregate(
         present_count=Count('id', filter=Q(status=AttendanceRecord.AttendanceStatus.PRESENT)),
         absent_count=Count('id', filter=Q(status=AttendanceRecord.AttendanceStatus.ABSENT)),
+        leave_count=Count('id', filter=Q(status=AttendanceRecord.AttendanceStatus.LEAVE)),
     )
     absent_records = records.filter(status=AttendanceRecord.AttendanceStatus.ABSENT)
 
@@ -53,6 +54,7 @@ def _get_attendance_section(school_id, date_obj, academic_year_id):
         'total_students': total,
         'present_count': counts.get('present_count') or 0,
         'absent_count': counts.get('absent_count') or 0,
+        'leave_count': counts.get('leave_count') or 0,
         'absent_students': AttendanceRecordSerializer(absent_records, many=True).data,
     }
 
