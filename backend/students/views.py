@@ -18,7 +18,8 @@ from django.db.models.functions import Coalesce
 
 from core.permissions import (
     IsSchoolAdmin, IsSchoolAdminOrReadOnly, HasSchoolAccess, ModuleAccessMixin,
-    IsStudent, IsStudentOrAdmin, CanManageStudentPhoto, get_effective_role, ADMIN_ROLES, ROLE_HIERARCHY,
+    IsStudent, IsStudentOrAdmin, CanManageStudentPhoto, CanEditStudentRecord,
+    CanCreateStudentAccount, get_effective_role, ADMIN_ROLES, ROLE_HIERARCHY,
     get_teacher_combined_scope, get_teacher_session_class_scope, _get_session_class_student_ids,
 )
 from core.mixins import TenantQuerySetMixin, ensure_tenant_schools, ensure_tenant_school_id
@@ -29,6 +30,7 @@ from .serializers import (
     StudentSerializer,
     StudentCreateSerializer,
     StudentUpdateSerializer,
+    StudentTeacherUpdateSerializer,
     StudentBulkCreateSerializer,
     ReclassifyStudentSerializer,
     StudentDocumentSerializer,
@@ -126,12 +128,18 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
     def get_permissions(self):
         if self.action in ('upload_photo', 'remove_photo'):
             return [IsAuthenticated(), CanManageStudentPhoto(), HasSchoolAccess()]
+        if self.action in ('create_user_account', 'bulk_create_accounts'):
+            return [IsAuthenticated(), CanCreateStudentAccount(), HasSchoolAccess()]
+        if self.action in ('update', 'partial_update'):
+            return [IsAuthenticated(), CanEditStudentRecord(), HasSchoolAccess()]
         return super().get_permissions()
 
     def get_serializer_class(self):
         if self.action == 'create':
             return StudentCreateSerializer
         if self.action in ('update', 'partial_update'):
+            if get_effective_role(self.request) == 'TEACHER':
+                return StudentTeacherUpdateSerializer
             return StudentUpdateSerializer
         if self.action == 'bulk_create':
             return StudentBulkCreateSerializer
@@ -519,7 +527,10 @@ class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         if not school_id:
             return Response({'error': 'No school associated.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        students = Student.objects.filter(
+        # Scoped through get_queryset() (not a raw Student.objects lookup) so a
+        # TEACHER can only bulk-create accounts for students within their
+        # assigned classes, matching the single-student create_user_account path.
+        students = self.get_queryset().filter(
             id__in=student_ids, school_id=school_id,
         ).prefetch_related('user_profile')
 

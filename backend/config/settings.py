@@ -423,6 +423,26 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'academic_sessions.tasks.recompute_attendance_risk_snapshots',
         'schedule': crontab(hour=2, minute=0),
     },
+    'nightly-student-risk-snapshot': {
+        # Staggered 30 min after the attendance snapshot job to spread DB load.
+        'task': 'academic_sessions.tasks.recompute_student_risk_snapshots',
+        'schedule': crontab(hour=2, minute=30),
+    },
+    'cleanup-old-face-sessions': {
+        # Existed since Phase 2 but was never scheduled (flagged in the
+        # original investigation and design doc §8) — fixing that omission
+        # here alongside the new live-detection-event purge below.
+        'task': 'face_attendance.tasks.cleanup_old_face_sessions',
+        'schedule': crontab(hour=1, minute=0),
+    },
+    'cleanup-old-live-detection-events': {
+        # No 'hours' kwarg on purpose — the task reads
+        # FACE_RECOGNITION_SETTINGS['LIVE_EVENT_RETENTION_HOURS'] itself, so
+        # tuning the retention window doesn't require touching this schedule.
+        # Staggered 30 min after the face-session cleanup above.
+        'task': 'face_attendance.tasks.cleanup_old_live_detection_events',
+        'schedule': crontab(hour=1, minute=30),
+    },
 }
 
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
@@ -595,11 +615,28 @@ ATTENDANCE_AI_SETTINGS = {
 # Face Recognition Settings
 # =============================================================================
 FACE_RECOGNITION_SETTINGS = {
-    # Distance thresholds (L2 / Euclidean from dlib)
-    # Lower distance = better match
-    'HIGH_CONFIDENCE_THRESHOLD': 0.40,   # Auto-match (very confident)
-    'MEDIUM_CONFIDENCE_THRESHOLD': 0.55,  # Flag for review
-    # Anything >= MEDIUM is IGNORED (low confidence)
+    # Distance thresholds (L2 / Euclidean), keyed by embedding_version.
+    # Different embedding models produce numerically incomparable vector
+    # spaces with different score distributions, so thresholds cannot be
+    # shared across versions — add a new key here for each new model.
+    # Lower distance = better match. Anything >= medium is IGNORED.
+    'THRESHOLDS': {
+        'dlib_v1': {
+            'HIGH_CONFIDENCE_THRESHOLD': 0.40,   # Auto-match (very confident)
+            'MEDIUM_CONFIDENCE_THRESHOLD': 0.55,  # Flag for review
+        },
+        # face-api.js's face-recognition model is a direct TF.js port of the
+        # same dlib ResNet architecture, so its L2 distance distribution is
+        # expected to be close to dlib_v1's — these values reuse dlib_v1's
+        # numbers as a starting point ONLY. Design doc §2 flags this as
+        # needing empirical validation once real faceapi_v1 enrollment/match
+        # data exists; do not treat these as tuned.
+        'faceapi_v1': {
+            'HIGH_CONFIDENCE_THRESHOLD': 0.40,
+            'MEDIUM_CONFIDENCE_THRESHOLD': 0.55,
+        },
+    },
+    'DEFAULT_EMBEDDING_VERSION': 'dlib_v1',
 
     # Face detection constraints
     'MAX_FACES_PER_IMAGE': 15,
@@ -615,6 +652,13 @@ FACE_RECOGNITION_SETTINGS = {
     # Storage
     'FACE_CROPS_FOLDER': 'face-crops',  # Supabase folder for cropped faces
     'ENROLLMENT_FOLDER': 'face-enrollment',  # Supabase folder for enrollment photos
+
+    # Retention (design doc §8/§9.3): a FaceLiveDetectionEvent row is only
+    # needed for same-day dedup + same-day admin troubleshooting (Phase 2.5's
+    # live-events log) — once that window passes it's purged regardless of
+    # resulted_in_attendance, since the actual outcome already lives
+    # permanently in AttendanceRecord. See face_attendance.tasks.cleanup_old_live_detection_events.
+    'LIVE_EVENT_RETENTION_HOURS': 48,
 }
 
 # =============================================================================

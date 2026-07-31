@@ -317,6 +317,7 @@ def seed_data(api_client, db):
             student=student,
             school=school_a,
             embedding=fake_embedding.tobytes(),
+            embedding_vector=fake_embedding.astype(np.float32).tolist(),
             embedding_version='dlib_v1',
             source_image_url=f'https://example.com/faces/{student.id}.jpg',
             quality_score=0.85,

@@ -8,11 +8,13 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 
 from academic_sessions.models import AcademicYear
+from academics.models import ClassTeacherAssignment
 from attendance.models import AttendanceRecord
 from finance.models import Account, FeePayment
-from schools.models import Organization, School
+from hr.models import StaffMember
+from schools.models import Organization, School, UserSchoolMembership
 
-from .models import Class, Student
+from .models import Class, Student, StudentProfile
 
 
 def _make_school():
@@ -165,3 +167,141 @@ class StudentComprehensiveReportGeneratorTests(TestCase):
         matching = FeePayment.objects.filter(q, student=self.student)
         # Both Jan and Feb 2026 payments fall within Nov 2025 - Feb 2026.
         self.assertEqual(matching.count(), 2)
+
+
+class TeacherStudentEditScopeTests(TestCase):
+    """
+    TEACHER role can edit basic profile fields (+ photo, covered elsewhere)
+    and create portal accounts, but only for students in classes where they
+    hold a ClassTeacherAssignment — and cannot touch lifecycle/class fields
+    or perform admin-only actions (create, delete) even for their own
+    students.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.school = _make_school()
+        cls.class_a = Class.objects.create(school=cls.school, name='Class A', grade_level=1)
+        cls.class_b = Class.objects.create(school=cls.school, name='Class B', grade_level=2)
+        cls.student_a = Student.objects.create(
+            school=cls.school, class_obj=cls.class_a, roll_number='1', name='Student A',
+        )
+        cls.student_b = Student.objects.create(
+            school=cls.school, class_obj=cls.class_b, roll_number='1', name='Student B',
+        )
+
+        cls.teacher_user = get_user_model().objects.create_user(
+            username='scoped_teacher',
+            email='scoped_teacher@test.com',
+            password='test12345',
+            role='TEACHER',
+        )
+        UserSchoolMembership.objects.create(
+            user=cls.teacher_user, school=cls.school, role='TEACHER',
+            is_default=True, is_active=True,
+        )
+        staff = StaffMember.objects.create(
+            school=cls.school, user=cls.teacher_user, first_name='Scoped', last_name='Teacher',
+        )
+        # academic_year left null so the assignment matches regardless of
+        # whether a current AcademicYear exists (see _resolve_scope_academic_year_id).
+        ClassTeacherAssignment.objects.create(
+            school=cls.school, class_obj=cls.class_a, teacher=staff, is_active=True,
+        )
+
+    def setUp(self):
+        self.client = APIClient()
+        self.client.force_authenticate(self.teacher_user)
+        self.school_header = {'HTTP_X_SCHOOL_ID': str(self.school.id)}
+
+    def test_teacher_can_edit_own_student_basic_fields(self):
+        response = self.client.patch(
+            f'/api/students/{self.student_a.id}/',
+            {'name': 'Student A Updated', 'parent_phone': '+923001234567'},
+            format='json',
+            **self.school_header,
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.student_a.refresh_from_db()
+        self.assertEqual(self.student_a.name, 'Student A Updated')
+        self.assertEqual(self.student_a.parent_phone, '+923001234567')
+
+    def test_teacher_cannot_change_status_or_class_via_edit(self):
+        response = self.client.patch(
+            f'/api/students/{self.student_a.id}/',
+            {
+                'name': 'Student A',
+                'is_active': False,
+                'status': 'WITHDRAWN',
+                'class_obj': self.class_b.id,
+            },
+            format='json',
+            **self.school_header,
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.student_a.refresh_from_db()
+        self.assertTrue(self.student_a.is_active)
+        self.assertEqual(self.student_a.status, 'ACTIVE')
+        self.assertEqual(self.student_a.class_obj_id, self.class_a.id)
+
+    def test_teacher_cannot_edit_student_outside_scope(self):
+        response = self.client.patch(
+            f'/api/students/{self.student_b.id}/',
+            {'name': 'Student B Updated'},
+            format='json',
+            **self.school_header,
+        )
+        self.assertEqual(response.status_code, 404)
+        self.student_b.refresh_from_db()
+        self.assertEqual(self.student_b.name, 'Student B')
+
+    def test_teacher_cannot_create_student(self):
+        response = self.client.post(
+            '/api/students/',
+            {
+                'school': self.school.id, 'class_obj': self.class_a.id,
+                'roll_number': '99', 'name': 'New Student',
+            },
+            format='json',
+            **self.school_header,
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_teacher_cannot_delete_own_student(self):
+        response = self.client.delete(
+            f'/api/students/{self.student_a.id}/',
+            **self.school_header,
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(Student.objects.filter(id=self.student_a.id).exists())
+
+    def test_teacher_can_create_user_account_for_own_student(self):
+        response = self.client.post(
+            f'/api/students/{self.student_a.id}/create-user-account/',
+            {'username': 'student_a_login', 'password': 'testpass123', 'confirm_password': 'testpass123'},
+            format='json',
+            **self.school_header,
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertTrue(StudentProfile.objects.filter(student=self.student_a).exists())
+
+    def test_teacher_cannot_create_user_account_outside_scope(self):
+        response = self.client.post(
+            f'/api/students/{self.student_b.id}/create-user-account/',
+            {'username': 'student_b_login', 'password': 'testpass123', 'confirm_password': 'testpass123'},
+            format='json',
+            **self.school_header,
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_teacher_bulk_create_accounts_scoped_to_own_students(self):
+        response = self.client.post(
+            '/api/students/bulk-create-accounts/',
+            {'student_ids': [self.student_a.id, self.student_b.id], 'default_password': 'testpass123'},
+            format='json',
+            **self.school_header,
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['created_count'], 1)
+        self.assertEqual(response.data['created'][0]['student_id'], self.student_a.id)
+        self.assertFalse(StudentProfile.objects.filter(student=self.student_b).exists())

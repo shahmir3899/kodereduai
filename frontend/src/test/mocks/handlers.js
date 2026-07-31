@@ -795,13 +795,28 @@ export const handlers = [
   ])),
 
   // Face Attendance
+  // Default: no Tier B device installed (the common case today, e.g. The
+  // Focus Montessori) — Tier B tests override this per-test with server.use(...).
   http.get('/api/face-attendance/status/', () =>
     HttpResponse.json({
       face_recognition_available: true,
       thresholds: { high: 0.40, medium: 0.55 },
       enrolled_faces: 4,
       model: 'dlib_v1',
+      tier_a_available: true,
+      tier_c_available: true,
+      tier_b_status: 'not_installed',
     })
+  ),
+  http.get('/api/face-attendance/devices/', () =>
+    HttpResponse.json({ count: 0, results: [] })
+  ),
+  http.patch('/api/face-attendance/devices/:id/', async ({ request }) => {
+    const body = await request.json()
+    return HttpResponse.json({ id: 1, ...body })
+  }),
+  http.get('/api/face-attendance/live/events/', () =>
+    HttpResponse.json({ count: 0, results: [] })
   ),
   http.get('/api/face-attendance/sessions/', () =>
     HttpResponse.json({
@@ -886,8 +901,8 @@ export const handlers = [
     HttpResponse.json({
       count: 2,
       results: [
-        { id: 1, student: 1, student_name: 'Ali Hassan', student_roll: '1', class_name: 'Class 1A', quality_score: 0.85, source_image_url: 'https://example.com/face1.jpg', created_at: '2026-02-18' },
-        { id: 2, student: 2, student_name: 'Sara Khan', student_roll: '2', class_name: 'Class 1A', quality_score: 0.78, source_image_url: 'https://example.com/face2.jpg', created_at: '2026-02-18' },
+        { id: 1, student: 1, student_name: 'Ali Hassan', student_roll: '1', class_name: 'Class 1A', quality_score: 0.85, embedding_version: 'dlib_v1', source_image_url: 'https://example.com/face1.jpg', created_at: '2026-02-18' },
+        { id: 2, student: 2, student_name: 'Sara Khan', student_roll: '2', class_name: 'Class 1A', quality_score: 0.78, embedding_version: 'dlib_v1', source_image_url: 'https://example.com/face2.jpg', created_at: '2026-02-18' },
       ],
     })
   ),

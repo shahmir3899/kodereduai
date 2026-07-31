@@ -307,6 +307,43 @@ class CanManageStudentPhoto(permissions.BasePermission):
         return role in ADMIN_ROLES or role == 'TEACHER'
 
 
+class CanEditStudentRecord(permissions.BasePermission):
+    """
+    Student profile-edit policy for the update/partial_update actions:
+    - SUPER_ADMIN/SCHOOL_ADMIN/PRINCIPAL: full field set (StudentUpdateSerializer)
+    - TEACHER: restricted field set (StudentTeacherUpdateSerializer — no class
+      reassignment or lifecycle status changes), and only for students within
+      their assigned scope (enforced by the ViewSet's tenant-scoped
+      get_queryset/get_object, same pattern as CanManageStudentPhoto)
+    """
+    message = "You don't have permission to edit this student's data."
+
+    def has_permission(self, request, view):
+        if not request.user.is_authenticated:
+            return False
+
+        role = get_effective_role(request)
+        return role in ADMIN_ROLES or role == 'TEACHER'
+
+
+class CanCreateStudentAccount(permissions.BasePermission):
+    """
+    Permission for creating a student's portal (user) account, single or bulk.
+    - SUPER_ADMIN/SCHOOL_ADMIN/PRINCIPAL: any student in the school
+    - TEACHER: only students within their assigned scope (single: enforced by
+      get_object/get_queryset; bulk: enforced by an explicit teacher-scope
+      filter in the view)
+    """
+    message = "You don't have permission to create a portal account for this student."
+
+    def has_permission(self, request, view):
+        if not request.user.is_authenticated:
+            return False
+
+        role = get_effective_role(request)
+        return role in ADMIN_ROLES or role == 'TEACHER'
+
+
 class CanEditCurriculum(permissions.BasePermission):
     """
     Curriculum edit policy:
@@ -607,13 +644,35 @@ class ModuleAccessMixin:
 
     Returns 403 if the module is disabled for the current school.
     Super admins bypass this check (they access admin endpoints, not school endpoints).
+
+    School resolution deliberately mirrors ensure_tenant_school_id rather than
+    trusting request.tenant_school directly: TenantMiddleware.process_view()
+    only populates tenant_school when request.user is already authenticated
+    *at middleware time*, which is only true for session auth. JWT auth runs
+    later, inside the view (APIView.initial() -> perform_authentication()),
+    so for every JWT-only request — the only auth path real traffic in this
+    app uses — tenant_school was never set and this check was silently a
+    no-op. ensure_tenant_school_id() re-derives the school id lazily, once
+    the JWT user is known, by re-checking the X-School-ID header against
+    that user's accessible schools; when a session already populated
+    tenant_school/tenant_school_id correctly, ensure_tenant_school_id()
+    short-circuits to the existing id, so that path's behavior is unchanged.
     """
     required_module = None
 
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
         if self.required_module and not request.user.is_super_admin:
+            school_id = ensure_tenant_school_id(request)
             school = getattr(request, 'tenant_school', None)
+            if school_id and (not school or school.id != school_id):
+                from schools.models import School
+                school = School.objects.filter(id=school_id).first()
+                # Cache the resolved school so any other code later in this
+                # request's lifecycle that reads request.tenant_school sees
+                # a consistent value instead of the stale None middleware left.
+                request.tenant_school = school
+
             if school and not school.get_enabled_module(self.required_module):
                 from rest_framework.exceptions import PermissionDenied
                 from core.module_registry import MODULE_REGISTRY

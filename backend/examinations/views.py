@@ -3560,3 +3560,45 @@ class PaperFeedbackViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Read
     def get_queryset(self):
         qs = super().get_queryset()
         return qs.select_related('paper_upload', 'confirmed_by').order_by('-created_at')
+
+
+class AcademicRiskView(APIView):
+    """AI Academic Risk Predictor - identifies students trending toward failing grades."""
+    permission_classes = [IsAuthenticated, HasSchoolAccess]
+
+    def get(self, request):
+        from .academic_risk_service import AcademicRiskService
+        from academic_sessions.models import AcademicYear
+
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response(
+                {'detail': 'No school context found.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        academic_year_id = request.query_params.get('academic_year')
+
+        if not academic_year_id:
+            current = AcademicYear.objects.filter(
+                school_id=school_id, is_current=True, is_active=True,
+            ).first()
+            if not current:
+                return Response(
+                    {'detail': 'No current academic year set for this school.'},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            academic_year_id = current.id
+
+        explicit_threshold = request.query_params.get('threshold')
+        if explicit_threshold is None:
+            from schools.models import School
+            school = School.objects.filter(id=school_id).only('id', 'academic_risk_config').first()
+            threshold = float((school.academic_risk_config or {}).get('risk_pass_threshold', 40.0)) if school else 40.0
+        else:
+            threshold = float(explicit_threshold)
+
+        service = AcademicRiskService(school_id, int(academic_year_id))
+        result = service.get_at_risk_students(threshold=threshold)
+
+        return Response(result)

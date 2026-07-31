@@ -2226,3 +2226,54 @@ class AttendanceRiskView(APIView):
         result = service.get_at_risk_students(threshold=threshold)
 
         return Response(result)
+
+
+class StudentRiskScoreView(APIView):
+    """Composite AI Student Risk Score - blends attendance, fee default, and academic risk."""
+    permission_classes = [IsAuthenticated, HasSchoolAccess]
+
+    def get(self, request):
+        from .student_risk_score_service import StudentRiskScoreService
+        from .models import StudentRiskSnapshot
+
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response(
+                {'detail': 'No school context found.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        academic_year_id = request.query_params.get('academic_year')
+
+        if not academic_year_id:
+            current = AcademicYear.objects.filter(
+                school_id=school_id, is_current=True, is_active=True,
+            ).first()
+            if not current:
+                return Response(
+                    {'detail': 'No current academic year set for this school.'},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            academic_year_id = current.id
+
+        academic_year_id = int(academic_year_id)
+
+        # Always cache-first here — this is the most expensive of the risk
+        # endpoints (it runs three sub-scans), so there's no live "explicit
+        # override" escape hatch the way AttendanceRiskView has for threshold.
+        snapshot = StudentRiskSnapshot.objects.filter(
+            school_id=school_id, academic_year_id=academic_year_id,
+        ).first()
+        if snapshot and snapshot.computed_at.date() == timezone.localdate():
+            return Response({
+                'total_students': snapshot.total_students,
+                'at_risk_count': snapshot.at_risk_count,
+                'risk_levels': snapshot.risk_levels,
+                'students': snapshot.students,
+                'cached_at': snapshot.computed_at,
+            })
+
+        service = StudentRiskScoreService(school_id, academic_year_id)
+        result = service.get_student_risk_scores()
+
+        return Response(result)

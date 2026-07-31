@@ -418,3 +418,23 @@ class FollowupView(ModuleAccessMixin, APIView):
 
         serializer = EnquiryListSerializer(queryset, many=True)
         return Response(serializer.data)
+
+
+class ConversionLikelihoodView(APIView):
+    """AI Admissions Conversion Likelihood - scores open enquiries by likelihood to convert."""
+    permission_classes = [IsAuthenticated, HasSchoolAccess]
+
+    def get(self, request):
+        from .conversion_likelihood_service import ConversionLikelihoodService
+
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response(
+                {'detail': 'No school context found.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        service = ConversionLikelihoodService(school_id)
+        result = service.get_scored_enquiries()
+
+        return Response(result)

@@ -9,6 +9,7 @@ from .views import (
     AdmissionEnquiryViewSet,
     AdmissionNoteViewSet,
     FollowupView,
+    ConversionLikelihoodView,
 )
 
 router = DefaultRouter()
@@ -21,6 +22,7 @@ urlpatterns = [
     # Followups
     path('followups/today/', FollowupView.as_view(), {'followup_type': 'today'}, name='followup-today'),
     path('followups/overdue/', FollowupView.as_view(), {'followup_type': 'overdue'}, name='followup-overdue'),
+    path('conversion-likelihood/', ConversionLikelihoodView.as_view(), name='conversion-likelihood'),
 
     # Nested: enquiry notes
     path(

@@ -1,8 +1,9 @@
 """
 Face embedding generation and storage service.
 
-Generates 128-dimensional embeddings using face_recognition (dlib)
-and stores/retrieves them as binary in the database.
+Generates 128-dimensional embeddings using face_recognition (dlib) and
+stores them both as legacy binary (embedding) and as a pgvector column
+(embedding_vector, used for matching) in the database.
 """
 
 import logging
@@ -84,11 +85,6 @@ class EmbeddingService:
         """Convert numpy embedding to bytes for storage."""
         return embedding.astype(np.float64).tobytes()
 
-    @staticmethod
-    def bytes_to_embedding(data):
-        """Convert stored bytes back to numpy embedding."""
-        return np.frombuffer(data, dtype=np.float64)
-
     def store_embedding(self, student_id, school_id, embedding, source_image_url='',
                         quality_score=0.0):
         """
@@ -104,25 +100,66 @@ class EmbeddingService:
         Returns:
             StudentFaceEmbedding instance
         """
+        vector = embedding.astype(np.float32).tolist()
         return StudentFaceEmbedding.objects.create(
             student_id=student_id,
             school_id=school_id,
             embedding=self.embedding_to_bytes(embedding),
+            embedding_vector=vector,
             embedding_version=EMBEDDING_VERSION,
             source_image_url=source_image_url,
             quality_score=quality_score,
         )
 
-    def get_class_embeddings(self, class_obj_id, school_id):
+    @staticmethod
+    def store_client_embedding(student_id, school_id, embedding, embedding_version,
+                                quality_score=0.0, source_image_url=''):
         """
-        Load all active face embeddings for a class.
+        Store an embedding that was already extracted client-side (Tier A
+        guided enrollment — face-api.js runs in the browser, see design doc
+        §5). Unlike store_embedding(), this never touches face_recognition,
+        so it doesn't require dlib to be installed or an EmbeddingService
+        instance (which imports it in __init__).
+        """
+        vector = np.asarray(embedding, dtype=np.float64)
+        return StudentFaceEmbedding.objects.create(
+            student_id=student_id,
+            school_id=school_id,
+            embedding=EmbeddingService.embedding_to_bytes(vector),
+            embedding_vector=vector.astype(np.float32).tolist(),
+            embedding_version=embedding_version,
+            source_image_url=source_image_url,
+            quality_score=quality_score,
+        )
 
-        Returns a dict: {student_id: [numpy embeddings]}
-        This is class-scoped — NEVER loads embeddings from other classes.
+    @staticmethod
+    def _active_embedded_student_ids(student_ids, school_id, embedding_version):
+        """Of the given student IDs, return those with an active embedding for this version."""
+        if not student_ids:
+            return set()
+        return set(
+            StudentFaceEmbedding.objects.filter(
+                student_id__in=student_ids,
+                school_id=school_id,
+                is_active=True,
+                embedding_version=embedding_version,
+            ).values_list('student_id', flat=True)
+        )
+
+    @staticmethod
+    def get_class_student_ids(class_obj_id, school_id, embedding_version=None):
+        """
+        Return the set of student IDs in this class that have an active
+        embedding for the given version, ready to hand to FaceMatcher.
+
+        This is class-scoped — NEVER includes students from other classes.
+        Used by Tier C matching and CLASS-scoped Tier B devices. Does not
+        need face_recognition, so it's callable without instantiating
+        EmbeddingService (e.g. from the lightweight Tier B endpoint).
         """
         from students.models import Student
 
-        # Get student IDs in this class
+        version = embedding_version or EMBEDDING_VERSION
         class_student_ids = set(
             Student.objects.filter(
                 class_obj_id=class_obj_id,
@@ -130,23 +167,23 @@ class EmbeddingService:
                 is_active=True,
             ).values_list('id', flat=True)
         )
+        return EmbeddingService._active_embedded_student_ids(class_student_ids, school_id, version)
 
-        if not class_student_ids:
-            return {}
+    @staticmethod
+    def get_school_student_ids(school_id, embedding_version=None):
+        """
+        Return the set of student IDs anywhere in the school that have an
+        active embedding for the given version, ready to hand to
+        FaceMatcher. Used by SCHOOL-scoped Tier B devices (e.g. an
+        entrance camera) — NOT class-scoped.
+        """
+        from students.models import Student
 
-        # Load embeddings only for these students
-        embeddings_qs = StudentFaceEmbedding.objects.filter(
-            student_id__in=class_student_ids,
-            school_id=school_id,
-            is_active=True,
-        ).values_list('student_id', 'embedding')
-
-        # Group by student
-        student_embeddings = {}
-        for student_id, emb_bytes in embeddings_qs:
-            emb = self.bytes_to_embedding(bytes(emb_bytes))
-            if student_id not in student_embeddings:
-                student_embeddings[student_id] = []
-            student_embeddings[student_id].append(emb)
-
-        return student_embeddings
+        version = embedding_version or EMBEDDING_VERSION
+        school_student_ids = set(
+            Student.objects.filter(
+                school_id=school_id,
+                is_active=True,
+            ).values_list('id', flat=True)
+        )
+        return EmbeddingService._active_embedded_student_ids(school_student_ids, school_id, version)

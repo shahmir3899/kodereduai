@@ -78,11 +78,32 @@ api.interceptors.response.use(
           return api(originalRequest)
         } catch (refreshError) {
           // Refresh failed - clear tokens and redirect to login
+          window.dispatchEvent(new CustomEvent('api-error', {
+            detail: { message: 'Your session has expired. Please log in again.' },
+          }))
           clearAuthState()
           window.location.href = '/login'
           return Promise.reject(refreshError)
         }
       }
+
+      // 401 with no refresh token at all — never logged in / already logged out
+      window.dispatchEvent(new CustomEvent('api-error', {
+        detail: { message: 'You are not logged in. Please log in to continue.' },
+      }))
+      clearAuthState()
+      window.location.href = '/login'
+      return Promise.reject(error)
+    }
+
+    // 403 — authenticated but not permitted to do this. Prefer the backend's
+    // specific reason (e.g. "Only School Admins can perform this action.")
+    // over a generic message so users know *why*, not just that it failed.
+    if (error.response && error.response.status === 403) {
+      const backendMessage = error.response.data?.detail || error.response.data?.message
+      window.dispatchEvent(new CustomEvent('api-error', {
+        detail: { message: backendMessage || 'You are not authorized to perform this action.' },
+      }))
     }
 
     // 5xx server errors — dispatch global toast event
@@ -494,6 +515,9 @@ export const hrApi = {
   getDocuments: (params) => api.get('/api/hr/documents/', { params }),
   createDocument: (data) => api.post('/api/hr/documents/', data),
   deleteDocument: (id) => api.delete(`/api/hr/documents/${id}/`),
+
+  // Staff Risk Predictor
+  getStaffRisk: (params) => api.get('/api/hr/staff-risk/', { params }),
 }
 
 // Academics (Subjects & Timetable) API
@@ -627,6 +651,9 @@ export const sessionsApi = {
   // Attendance Risk Predictor
   getAttendanceRisk: (params) => api.get('/api/sessions/attendance-risk/', { params }),
 
+  // Composite Student Risk Score
+  getStudentRiskScore: (params) => api.get('/api/sessions/student-risk-score/', { params }),
+
   // Academic Calendar
   getCalendarEntries: (params) => api.get('/api/sessions/calendar-entries/', { params }),
   createCalendarEntry: (data) => api.post('/api/sessions/calendar-entries/', data),
@@ -706,6 +733,9 @@ export const examinationsApi = {
   // AI Comments
   generateComments: (examId, force = false) =>
     api.post(`/api/examinations/exams/${examId}/generate-comments/`, { force }),
+
+  // Academic Risk Predictor
+  getAcademicRisk: (params) => api.get('/api/examinations/academic-risk/', { params }),
 }
 
 // Auth API (school switching + profile)
@@ -874,6 +904,9 @@ export const admissionsApi = {
   // Followups
   getTodayFollowups: () => api.get('/api/admissions/followups/today/'),
   getOverdueFollowups: () => api.get('/api/admissions/followups/overdue/'),
+
+  // Conversion Likelihood Predictor
+  getConversionLikelihood: (params) => api.get('/api/admissions/conversion-likelihood/', { params }),
 }
 
 // Student Portal API
@@ -1210,6 +1243,9 @@ export const inventoryApi = {
   // AI Suggestions
   aiSuggest: (data) => api.post('/api/inventory/ai-suggest/', data),
 
+  // Reorder Prediction
+  getReorderPrediction: (params) => api.get('/api/inventory/reorder-prediction/', { params }),
+
   // Search helpers
   searchUsers: (params) => api.get('/api/users/', { params }),
 }
@@ -1296,8 +1332,29 @@ export const faceAttendanceApi = {
   // Delete face enrollment
   deleteEnrollment: (id) => api.delete(`/api/face-attendance/enrollments/${id}/`),
 
-  // Check face recognition status
+  // Check face recognition status (also reports tier_a/b/c_enabled for the school)
   getStatus: () => api.get('/api/face-attendance/status/'),
+
+  // Tier B: capture devices (list/edit only — provisioning is admin-only, see Django admin)
+  getDevices: (params) => api.get('/api/face-attendance/devices/', { params }),
+  updateDevice: (id, data) => api.patch(`/api/face-attendance/devices/${id}/`, data),
+
+  // Tier B: live-match troubleshooting log
+  getLiveEvents: (params) => api.get('/api/face-attendance/live/events/', { params }),
+
+  // Tier A: mobile-browser live match — same endpoint as Tier B, JWT auth instead of device key
+  liveMatch: (data) => api.post('/api/face-attendance/live/match/', data),
+
+  // Tier A: guided client-side enrollment (embedding already extracted in-browser)
+  enrollWithEmbedding: (data) => api.post('/api/face-attendance/enroll/', data),
+
+  // Tier A: operator's correct/wrong label on a live-match result — feeds
+  // future faceapi_v1 threshold tuning (only the capturing operator can
+  // verify this, since no image is ever stored)
+  submitLiveMatchFeedback: (eventId, isCorrect) => api.post(
+    `/api/face-attendance/live/events/${eventId}/feedback/`,
+    { is_correct: isCorrect },
+  ),
 }
 
 // ─── Question Paper Builder (Examinations) ──────────────────────────────────

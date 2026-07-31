@@ -1,10 +1,13 @@
 import { useQuery } from '@tanstack/react-query'
 import { academicsApi } from '../services/api'
 
-export function useClassSubjects(classId) {
+export function useClassSubjects(classId, sessionClassId) {
   const { data, isLoading, error } = useQuery({
-    queryKey: ['classSubjects', classId],
-    queryFn: () => academicsApi.getClassSubjectsByClass(classId),
+    queryKey: ['classSubjects', classId, sessionClassId],
+    queryFn: () => academicsApi.getClassSubjects({
+      class_obj: classId,
+      ...(sessionClassId && { session_class: sessionClassId }),
+    }),
     enabled: !!classId,
     // Subject-teacher assignments change occasionally (HR reassignment), but not
     // every few seconds — avoid refetching on every tab focus across consumers.

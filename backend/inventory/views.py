@@ -420,3 +420,32 @@ def ai_suggest_inventory(request):
     result = suggest_inventory_items(school, user_context)
 
     return Response(result)
+
+
+class ReorderPredictionView(ModuleAccessMixin, APIView):
+    """AI Inventory Reorder Prediction - flags items likely to stock out soon."""
+    required_module = 'inventory'
+    permission_classes = [IsAuthenticated, InventoryRoleAccessPermission, HasSchoolAccess]
+
+    def get(self, request):
+        from .reorder_prediction_service import ReorderPredictionService
+        from schools.models import School
+
+        school_id = ensure_tenant_school_id(request)
+        if not school_id:
+            return Response(
+                {'detail': 'No school associated with your account.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        explicit_lookahead = request.query_params.get('lookahead_days')
+        if explicit_lookahead is None:
+            school = School.objects.filter(id=school_id).only('id', 'inventory_config').first()
+            lookahead_days = int((school.inventory_config or {}).get('reorder_lookahead_days', 14)) if school else 14
+        else:
+            lookahead_days = int(explicit_lookahead)
+
+        service = ReorderPredictionService(school_id)
+        result = service.get_items_to_reorder(lookahead_days=lookahead_days)
+
+        return Response(result)

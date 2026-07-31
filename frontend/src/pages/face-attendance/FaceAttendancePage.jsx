@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
@@ -9,7 +9,25 @@ import LoadingSpinner from '../../components/LoadingSpinner'
 import ClassSelector from '../../components/ClassSelector'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
+import { useFaceAttendanceStatus } from '../../hooks/useFaceAttendanceStatus'
 import { getClassSelectorScope, getResolvedMasterClassId, resolveSessionClassId } from '../../utils/classScope'
+import FaceLiveCapturePage from './FaceLiveCapturePage'
+
+const TIER_B_STATUS_BADGE = {
+  active: { label: 'Fixed Camera: Active', className: 'bg-green-100 text-green-700' },
+  inactive: { label: 'Fixed Camera: Offline', className: 'bg-gray-100 text-gray-600' },
+}
+
+// Tabs are two capture modes ("Group Photo" — Tier C, "Mobile Capture" —
+// Tier A) plus the existing session history. Consolidated 2026-07: Mobile
+// Capture used to live at its own /face-attendance/live-capture route,
+// disconnected from this page — that route now redirects here with
+// ?tab=mobile so old links/bookmarks keep working.
+const TABS = [
+  { id: 'group-photo', label: 'Group Photo' },
+  { id: 'mobile-capture', label: 'Mobile Capture' },
+  { id: 'sessions', label: 'Sessions' },
+]
 
 export default function FaceAttendancePage() {
   const { activeSchool, isTeacher } = useAuth()
@@ -18,8 +36,9 @@ export default function FaceAttendancePage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const fileInputRef = useRef(null)
+  const [searchParams] = useSearchParams()
 
-  const [tab, setTab] = useState('capture') // capture | sessions
+  const [tab, setTab] = useState(searchParams.get('tab') === 'mobile' ? 'mobile-capture' : 'group-photo')
   const [selectedClass, setSelectedClass] = useState('')
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
   const [uploadStep, setUploadStep] = useState(null) // null | 'uploading' | 'creating'
@@ -39,12 +58,8 @@ export default function FaceAttendancePage() {
     queryKey: 'teacherFaceAttendanceClasses',
   })
 
-  // Load face recognition status
-  const { data: statusData } = useQuery({
-    queryKey: ['faceStatus'],
-    queryFn: () => faceAttendanceApi.getStatus(),
-  })
-  const faceStatus = statusData?.data
+  // Load face recognition status (also carries the Tier B device status badge below)
+  const { status: faceStatus, tierBStatus } = useFaceAttendanceStatus()
 
   // Load recent sessions
   const { data: sessionsData, isLoading: sessionsLoading } = useQuery({
@@ -138,15 +153,36 @@ export default function FaceAttendancePage() {
     <div className="max-w-6xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Face Attendance</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold text-gray-900">Face Attendance</h1>
+            {TIER_B_STATUS_BADGE[tierBStatus] && (
+              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${TIER_B_STATUS_BADGE[tierBStatus].className}`}>
+                {TIER_B_STATUS_BADGE[tierBStatus].label}
+              </span>
+            )}
+          </div>
           <p className="text-sm text-gray-500 mt-1">Camera-based multi-student attendance</p>
         </div>
-        <button
-          onClick={() => navigate('/face-attendance/enrollment')}
-          className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
-        >
-          Manage Enrollments
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => navigate('/face-attendance/bulk-enrollment')}
+            className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            Bulk Enrollment
+          </button>
+          <button
+            onClick={() => navigate('/face-attendance/devices')}
+            className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            Capture Devices
+          </button>
+          <button
+            onClick={() => navigate('/face-attendance/enrollment')}
+            className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            Manage Enrollments
+          </button>
+        </div>
       </div>
 
       {/* Status banner */}
@@ -181,22 +217,24 @@ export default function FaceAttendancePage() {
 
       {/* Tabs */}
       <div className="flex border-b border-gray-200 mb-6">
-        {['capture', 'sessions'].map((t) => (
+        {TABS.map(({ id, label }) => (
           <button
-            key={t}
-            onClick={() => setTab(t)}
+            key={id}
+            onClick={() => setTab(id)}
             className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${
-              tab === t
+              tab === id
                 ? 'border-blue-500 text-blue-600'
                 : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
-            {t === 'capture' ? 'Capture' : 'Sessions'}
+            {label}
           </button>
         ))}
       </div>
 
-      {tab === 'capture' && (
+      {tab === 'mobile-capture' && <FaceLiveCapturePage />}
+
+      {tab === 'group-photo' && (
         <div className="bg-white rounded-lg border p-6">
           <h2 className="text-lg font-semibold mb-4">Capture Group Photo</h2>
 

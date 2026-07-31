@@ -21,6 +21,19 @@ vi.mock('../../../components/Toast', () => ({
   }),
 }))
 
+// Pre-existing infra gap (flagged, not fixed, in the Phase 2.5 summary):
+// renderWithProviders doesn't wrap children in an AcademicYearProvider, so
+// every face-attendance page calling useAcademicYear() crashes without this
+// per-file mock — same convention already used for AuthContext/Toast above.
+vi.mock('../../../contexts/AcademicYearContext', () => ({
+  useAcademicYear: () => ({ activeAcademicYear: { id: 1, name: '2025-2026' } }),
+}))
+
+// Same pre-existing gap, second context this page needs that renderWithProviders doesn't supply.
+vi.mock('../../../contexts/BackgroundTaskContext', () => ({
+  useBackgroundTasks: () => ({ addTask: vi.fn() }),
+}))
+
 const mockNavigate = vi.fn()
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom')
@@ -30,8 +43,24 @@ vi.mock('react-router-dom', async () => {
   }
 })
 
+const mockDetectSingleFace = vi.fn()
+vi.mock('../../../utils/faceApiLoader', () => ({
+  loadFaceApiModels: vi.fn(() => Promise.resolve()),
+  detectSingleFace: (...args) => mockDetectSingleFace(...args),
+  estimateQualityScore: () => 0.82,
+  TIER_A_EMBEDDING_VERSION: 'faceapi_v1',
+}))
+
+function mockGetUserMedia(implementation) {
+  Object.defineProperty(window.navigator, 'mediaDevices', {
+    configurable: true,
+    value: { getUserMedia: implementation },
+  })
+}
+
 beforeEach(() => {
   mockNavigate.mockClear()
+  mockDetectSingleFace.mockReset()
 })
 
 describe('FaceEnrollmentPage', () => {
@@ -122,6 +151,88 @@ describe('FaceEnrollmentPage', () => {
     // Wait for enrollment summary to appear
     await waitFor(() => {
       expect(screen.getByText(/students enrolled/)).toBeInTheDocument()
+    })
+  })
+
+  describe('Tier A guided capture', () => {
+    it('always shows the Live Capture toggle (no longer tier-gated)', async () => {
+      renderWithProviders(<FaceEnrollmentPage />)
+      await waitFor(() => {
+        expect(screen.getByText('Face Enrollment')).toBeInTheDocument()
+      })
+      expect(screen.getByText('Live Capture')).toBeInTheDocument()
+    })
+
+    it('shows a version badge distinguishing dlib_v1 and faceapi_v1 rows for the same student', async () => {
+      server.use(
+        http.get('/api/face-attendance/enrollments/', () =>
+          HttpResponse.json({
+            count: 2,
+            results: [
+              { id: 1, student: 1, student_name: 'Ali Hassan', student_roll: '1', class_name: 'Class 1A', quality_score: 0.85, embedding_version: 'dlib_v1', created_at: '2026-02-18' },
+              { id: 3, student: 1, student_name: 'Ali Hassan', student_roll: '1', class_name: 'Class 1A', quality_score: 0.9, embedding_version: 'faceapi_v1', created_at: '2026-02-19' },
+            ],
+          })
+        )
+      )
+      renderWithProviders(<FaceEnrollmentPage />)
+      await waitFor(() => {
+        expect(screen.getAllByText('Ali Hassan')).toHaveLength(2)
+      })
+      expect(screen.getByText('dlib_v1')).toBeInTheDocument()
+      expect(screen.getByText('faceapi_v1')).toBeInTheDocument()
+    })
+
+    it('captures a face client-side and submits via the embedding-shaped enroll payload', async () => {
+      let postedBody = null
+      server.use(
+        http.post('/api/face-attendance/enroll/', async ({ request }) => {
+          postedBody = await request.json()
+          return HttpResponse.json(
+            { id: 5, student: 1, embedding_version: 'faceapi_v1', quality_score: postedBody.quality_score },
+            { status: 201 },
+          )
+        })
+      )
+      mockGetUserMedia(vi.fn(() => Promise.resolve({ getTracks: () => [] })))
+      mockDetectSingleFace.mockResolvedValue({ descriptor: new Float32Array(128).fill(0.01) })
+
+      const user = userEvent.setup()
+      renderWithProviders(<FaceEnrollmentPage />)
+
+      await user.click(await screen.findByText('Live Capture'))
+
+      // Select class then student (shared selectors above the capture panel).
+      // Note: for a non-teacher role, ClassSelector's placeholder is
+      // "All Classes" (showAllOption=true), not "Select class..." — the
+      // pre-existing baseline tests in this file assert the latter and are
+      // consequently broken independent of Tier A (confirmed via git stash
+      // against the unmodified component); this test uses the real label.
+      await waitFor(() => {
+        const classSelect = screen.getByDisplayValue('All Classes')
+        expect(classSelect.querySelectorAll('option').length).toBeGreaterThan(1)
+      })
+      await user.selectOptions(screen.getByDisplayValue('All Classes'), '1')
+      await waitFor(() => {
+        expect(screen.getByDisplayValue('Select student...').querySelectorAll('option').length).toBeGreaterThan(1)
+      })
+      const studentSelect = screen.getByDisplayValue('Select student...')
+      const studentOptionValue = studentSelect.querySelectorAll('option')[1].value
+      await user.selectOptions(studentSelect, studentOptionValue)
+
+      await user.click(screen.getByText('Enable Camera'))
+      await waitFor(() => expect(screen.getByText('Capture Face')).not.toBeDisabled())
+      await user.click(screen.getByText('Capture Face'))
+
+      await waitFor(() => {
+        expect(screen.getByText('Confirm & Enroll')).toBeInTheDocument()
+      })
+      await user.click(screen.getByText('Confirm & Enroll'))
+
+      await waitFor(() => {
+        expect(postedBody).toMatchObject({ embedding_version: 'faceapi_v1' })
+      })
+      expect(postedBody.embedding).toHaveLength(128)
     })
   })
 })

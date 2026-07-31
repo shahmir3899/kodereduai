@@ -1368,7 +1368,7 @@ class LessonPlanViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         from academic_sessions.utils import annotate_session_class_display
 
         queryset = super().get_queryset().select_related(
-            'school', 'academic_year', 'class_obj', 'subject', 'teacher',
+            'school', 'academic_year', 'class_obj', 'session_class', 'subject', 'teacher',
         ).prefetch_related(
             'attachments', 'planned_topics', 'planned_subtopics',
             'lesson_objectives__objective__topic',
@@ -1383,7 +1383,13 @@ class LessonPlanViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
             return queryset.none()
 
         class_id = scope['class_obj_id']
-        if class_id:
+        session_class_id = scope['session_class_id']
+        if session_class_id:
+            queryset = queryset.filter(
+                Q(session_class_id=session_class_id) |
+                Q(session_class__isnull=True, class_obj_id=class_id)
+            )
+        elif class_id:
             queryset = queryset.filter(class_obj_id=class_id)
 
         # Filter by subject
@@ -1535,6 +1541,7 @@ class LessonPlanViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
 
         school_id = vd['school']
         class_obj_id = vd['class_obj']
+        session_class_id = vd.get('session_class')
         subject_id = vd['subject']
 
         teaching_dates = []
@@ -1563,6 +1570,7 @@ class LessonPlanViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
             conflicts = LessonPlan.objects.filter(
                 school_id=school_id,
                 class_obj_id=class_obj_id,
+                session_class_id=session_class_id,
                 subject_id=subject_id,
                 lesson_date__in=teaching_dates,
                 is_active=True,
@@ -1593,6 +1601,7 @@ class LessonPlanViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
                     exists = LessonPlan.objects.filter(
                         school_id=school_id,
                         class_obj_id=class_obj_id,
+                        session_class_id=session_class_id,
                         subject_id=subject_id,
                         lesson_date=d,
                         is_active=True,
@@ -1611,6 +1620,7 @@ class LessonPlanViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
                     'school': school_id,
                     'academic_year': vd.get('academic_year'),
                     'class_obj': class_obj_id,
+                    'session_class': session_class_id,
                     'subject': subject_id,
                     'teacher': vd['teacher'],
                     'title': title,
@@ -1639,7 +1649,7 @@ class LessonPlanViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         created_qs = (
             LessonPlan.objects.filter(id__in=created_ids)
             .select_related(
-                'school', 'academic_year', 'class_obj', 'subject', 'teacher',
+                'school', 'academic_year', 'class_obj', 'session_class', 'subject', 'teacher',
             )
             .prefetch_related('attachments', 'planned_topics', 'planned_subtopics')
             .order_by('lesson_date')

@@ -1,21 +1,64 @@
 """
 Class-scoped face matching service.
 
-Matches detected face embeddings against enrolled student embeddings.
-Enforces strict class-scoping, conflict resolution, and confidence thresholds.
+Matches detected face embeddings against enrolled student embeddings via a
+pgvector nearest-neighbor query (one query per detected face), scoped to the
+requesting class/school/embedding version. Enforces strict class-scoping,
+conflict resolution, and per-embedding-version confidence thresholds.
 """
 
 import logging
 from dataclasses import dataclass, field
 
-import numpy as np
 from django.conf import settings
+from pgvector.django import L2Distance
+
+from face_attendance.models import StudentFaceEmbedding
 
 logger = logging.getLogger(__name__)
 
 FR_SETTINGS = getattr(settings, 'FACE_RECOGNITION_SETTINGS', {})
-HIGH_THRESHOLD = FR_SETTINGS.get('HIGH_CONFIDENCE_THRESHOLD', 0.40)
-MEDIUM_THRESHOLD = FR_SETTINGS.get('MEDIUM_CONFIDENCE_THRESHOLD', 0.55)
+DEFAULT_EMBEDDING_VERSION = FR_SETTINGS.get('DEFAULT_EMBEDDING_VERSION', 'dlib_v1')
+
+# Rows pulled per face before de-duplicating by student. Class rosters are
+# small (tens of students), so this comfortably covers every enrolled
+# student even with a few embeddings each.
+CANDIDATE_FETCH_LIMIT = 20
+
+
+def get_thresholds(embedding_version=None):
+    """Return {'high': float, 'medium': float} thresholds for an embedding version."""
+    version = embedding_version or DEFAULT_EMBEDDING_VERSION
+    all_thresholds = FR_SETTINGS.get('THRESHOLDS', {})
+    thresholds = all_thresholds.get(version) or next(iter(all_thresholds.values()), {})
+    return {
+        'high': thresholds.get('HIGH_CONFIDENCE_THRESHOLD', 0.40),
+        'medium': thresholds.get('MEDIUM_CONFIDENCE_THRESHOLD', 0.55),
+    }
+
+
+def distance_to_confidence(distance):
+    """
+    Convert L2 distance to confidence percentage.
+
+    Uses: confidence = max(0, (1 - distance/0.6)) * 100
+    Lower distance = higher confidence.
+    """
+    return round(max(0.0, (1.0 - distance / 0.6)) * 100, 1)
+
+
+def _classify_from_thresholds(distance, thresholds):
+    if distance < thresholds['high']:
+        return 'AUTO_MATCHED'
+    elif distance < thresholds['medium']:
+        return 'FLAGGED'
+    else:
+        return 'IGNORED'
+
+
+def classify_match(distance, embedding_version=None):
+    """Classify match confidence level based on distance for an embedding version."""
+    return _classify_from_thresholds(distance, get_thresholds(embedding_version))
 
 
 @dataclass
@@ -30,122 +73,113 @@ class MatchResult:
     alternatives: list = field(default_factory=list)
 
 
-def distance_to_confidence(distance):
-    """
-    Convert L2 distance to confidence percentage.
-
-    Uses: confidence = max(0, (1 - distance/0.6)) * 100
-    Lower distance = higher confidence.
-    """
-    return round(max(0.0, (1.0 - distance / 0.6)) * 100, 1)
-
-
-def classify_match(distance):
-    """
-    Classify match confidence level based on distance.
-
-    Returns match_status string.
-    """
-    if distance < HIGH_THRESHOLD:
-        return 'AUTO_MATCHED'
-    elif distance < MEDIUM_THRESHOLD:
-        return 'FLAGGED'
-    else:
-        return 'IGNORED'
-
-
 class FaceMatcher:
     """
-    Matches detected face embeddings against enrolled class embeddings.
+    Matches detected face embeddings against an enrolled candidate set.
 
     Rules (non-negotiable):
-    - Match ONLY within the selected class/section
+    - Match ONLY within the candidate set the caller supplies (a class
+      roster for Tier C / CLASS-scoped Tier B devices, or a whole school's
+      roster for SCHOOL-scoped Tier B devices — the caller decides scope,
+      this class never widens or narrows it)
     - Each detected face maps to at most one student
     - If two faces map to the same student, keep higher confidence
     - Prefer false negatives over false positives
     """
 
-    def __init__(self):
-        import face_recognition
-        self._fr = face_recognition
-
-    def match_faces(self, face_embeddings, class_embeddings, student_names=None):
+    def match_faces(self, face_embeddings, class_student_ids, school_id,
+                     student_names=None, embedding_version=None):
         """
-        Match detected face embeddings against class student embeddings.
+        Match detected face embeddings against a candidate student roster.
 
         Args:
             face_embeddings: list of (face_index, numpy.ndarray) tuples
-            class_embeddings: dict {student_id: [numpy.ndarray, ...]}
+            class_student_ids: iterable of student IDs eligible for matching
+                (already scoped by the caller — class or whole-school)
+            school_id: School PK (tenant scope)
             student_names: dict {student_id: name} for result labeling
+            embedding_version: embedding space to match against (defaults to
+                FACE_RECOGNITION_SETTINGS['DEFAULT_EMBEDDING_VERSION'])
 
         Returns:
             list[MatchResult]: One result per detected face
         """
-        if not class_embeddings:
+        student_names = student_names or {}
+        version = embedding_version or DEFAULT_EMBEDDING_VERSION
+        thresholds = get_thresholds(version)
+        student_ids = list(class_student_ids)
+
+        if not student_ids:
             logger.warning('No enrolled embeddings found for class')
             return [
                 MatchResult(face_index=idx, match_status='IGNORED')
                 for idx, _ in face_embeddings
             ]
 
-        student_names = student_names or {}
-
-        # Build flat arrays for vectorized comparison
-        enrolled_student_ids = []
-        enrolled_embeddings = []
-        for sid, embs in class_embeddings.items():
-            for emb in embs:
-                enrolled_student_ids.append(sid)
-                enrolled_embeddings.append(emb)
-
-        enrolled_array = np.array(enrolled_embeddings)
-
-        # Match each detected face
-        raw_matches = []
-        for face_index, face_emb in face_embeddings:
-            distances = self._fr.face_distance(enrolled_array, face_emb)
-
-            # Sort by distance (best matches first)
-            sorted_indices = np.argsort(distances)
-
-            best_idx = sorted_indices[0]
-            best_distance = float(distances[best_idx])
-            best_student_id = enrolled_student_ids[best_idx]
-
-            # Build alternatives (top 3 unique students, excluding best)
-            alternatives = []
-            seen_students = {best_student_id}
-            for idx in sorted_indices[1:]:
-                alt_sid = enrolled_student_ids[idx]
-                if alt_sid in seen_students:
-                    continue
-                seen_students.add(alt_sid)
-                alt_dist = float(distances[idx])
-                if alt_dist < MEDIUM_THRESHOLD and len(alternatives) < 3:
-                    alternatives.append({
-                        'student_id': alt_sid,
-                        'name': student_names.get(alt_sid, ''),
-                        'confidence': distance_to_confidence(alt_dist),
-                        'distance': round(alt_dist, 4),
-                    })
-
-            result = MatchResult(
-                face_index=face_index,
-                student_id=best_student_id,
-                student_name=student_names.get(best_student_id, ''),
-                distance=best_distance,
-                confidence=distance_to_confidence(best_distance),
-                match_status=classify_match(best_distance),
-                alternatives=alternatives,
+        raw_matches = [
+            self._match_single_face(
+                face_index, face_emb, student_ids, school_id, version,
+                student_names, thresholds,
             )
-            raw_matches.append(result)
+            for face_index, face_emb in face_embeddings
+        ]
 
         # Conflict resolution: if two faces match the same student,
         # keep the one with the lower distance (higher confidence)
-        resolved = self._resolve_conflicts(raw_matches, student_names)
-        return resolved
+        return self._resolve_conflicts(raw_matches, thresholds)
 
-    def _resolve_conflicts(self, matches, student_names):
+    def _match_single_face(self, face_index, face_emb, student_ids, school_id,
+                            version, student_names, thresholds):
+        rows = list(
+            StudentFaceEmbedding.objects.filter(
+                school_id=school_id,
+                student_id__in=student_ids,
+                is_active=True,
+                embedding_version=version,
+            )
+            .annotate(distance=L2Distance('embedding_vector', face_emb.tolist()))
+            .order_by('distance')
+            .values_list('student_id', 'distance')[:CANDIDATE_FETCH_LIMIT]
+        )
+
+        if not rows:
+            return MatchResult(face_index=face_index, match_status='IGNORED')
+
+        best_student_id, best_distance = rows[0]
+        best_distance = float(best_distance)
+
+        # Build alternatives (top 3 unique students, excluding best)
+        alternatives = []
+        seen_students = {best_student_id}
+        for student_id, distance in rows[1:]:
+            if student_id in seen_students:
+                continue
+            seen_students.add(student_id)
+            distance = float(distance)
+            if distance < thresholds['medium'] and len(alternatives) < 3:
+                alternatives.append({
+                    'student_id': student_id,
+                    'name': student_names.get(student_id, ''),
+                    'confidence': distance_to_confidence(distance),
+                    'distance': round(distance, 4),
+                })
+
+        return MatchResult(
+            face_index=face_index,
+            student_id=best_student_id,
+            student_name=student_names.get(best_student_id, ''),
+            distance=best_distance,
+            confidence=distance_to_confidence(best_distance),
+            match_status=self._classify(best_distance, thresholds),
+            alternatives=alternatives,
+        )
+
+    @staticmethod
+    def _classify(distance, thresholds):
+        """Classify match confidence level based on distance."""
+        return _classify_from_thresholds(distance, thresholds)
+
+    def _resolve_conflicts(self, matches, thresholds):
         """
         Resolve cases where multiple faces match the same student.
 
@@ -159,9 +193,7 @@ class FaceMatcher:
         for match in matches:
             if match.match_status == 'IGNORED' or match.student_id is None:
                 continue
-            if match.student_id not in student_claims:
-                student_claims[match.student_id] = []
-            student_claims[match.student_id].append(match)
+            student_claims.setdefault(match.student_id, []).append(match)
 
         # Resolve conflicts
         for student_id, claimants in student_claims.items():
@@ -192,7 +224,7 @@ class FaceMatcher:
                         loser.student_name = alt.get('name', '')
                         loser.distance = alt['distance']
                         loser.confidence = alt['confidence']
-                        loser.match_status = classify_match(alt['distance'])
+                        loser.match_status = self._classify(alt['distance'], thresholds)
                         reassigned = True
                         break
 

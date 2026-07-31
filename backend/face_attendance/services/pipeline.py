@@ -20,8 +20,8 @@ from face_attendance.models import (
 )
 
 from .face_detector import FaceDetector, load_image_from_url, encode_face_crop_to_jpeg
-from .embedding_service import EmbeddingService
-from .matcher import FaceMatcher, HIGH_THRESHOLD, MEDIUM_THRESHOLD
+from .embedding_service import EmbeddingService, EMBEDDING_VERSION
+from .matcher import FaceMatcher, get_thresholds
 
 logger = logging.getLogger(__name__)
 
@@ -104,8 +104,8 @@ class FaceAttendancePipeline:
             self._update_progress(4)
             logger.info(f'[{session.id}] Stage 4: Matching against class embeddings')
 
-            class_embeddings = self.embedding_service.get_class_embeddings(
-                session.class_obj_id, session.school_id
+            class_student_ids = self.embedding_service.get_class_student_ids(
+                session.class_obj_id, session.school_id, embedding_version=EMBEDDING_VERSION
             )
 
             # Get student names for labeling
@@ -123,7 +123,8 @@ class FaceAttendancePipeline:
             ]
 
             match_results = self.matcher.match_faces(
-                face_embedding_pairs, class_embeddings, student_names
+                face_embedding_pairs, class_student_ids, session.school_id,
+                student_names=student_names, embedding_version=EMBEDDING_VERSION,
             )
 
             # Stage 5: Store results
@@ -195,10 +196,7 @@ class FaceAttendancePipeline:
             session.faces_matched = matched_count
             session.faces_flagged = flagged_count
             session.faces_ignored = ignored_count
-            session.thresholds_used = {
-                'high': HIGH_THRESHOLD,
-                'medium': MEDIUM_THRESHOLD,
-            }
+            session.thresholds_used = get_thresholds(EMBEDDING_VERSION)
             session.status = FaceAttendanceSession.Status.NEEDS_REVIEW
             session.save()
 
@@ -210,7 +208,7 @@ class FaceAttendancePipeline:
                 'matched': matched_count,
                 'flagged': flagged_count,
                 'ignored': ignored_count,
-                'enrolled_students': len(class_embeddings),
+                'enrolled_students': len(class_student_ids),
             }
             logger.info(f'[{session.id}] Pipeline complete: {result}')
             return result

@@ -459,6 +459,17 @@ class LessonPlan(models.Model):
         related_name='lesson_plans',
         verbose_name='Class',
     )
+    session_class = models.ForeignKey(
+        'academic_sessions.SessionClass',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='lesson_plans',
+        help_text=(
+            'Section/session class this plan applies to. Null means it applies to '
+            'every section of the master class (legacy behavior, kept for old rows).'
+        ),
+    )
     subject = models.ForeignKey(
         'academics.Subject',
         on_delete=models.CASCADE,
@@ -528,6 +539,9 @@ class LessonPlan(models.Model):
         ordering = ['-lesson_date']
         verbose_name = 'Lesson Plan'
         verbose_name_plural = 'Lesson Plans'
+        indexes = [
+            models.Index(fields=['session_class']),
+        ]
 
     def __str__(self):
         return f"{self.title} - {self.class_obj.name} ({self.lesson_date})"

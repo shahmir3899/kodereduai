@@ -1,0 +1,18 @@
+# Tier B on-prem face-capture device.
+# See README.md for first-time setup (getting a device key from Django admin).
+services:
+  face-capture-device:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    logging:
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: "5"
+    # Uncomment if CAMERA_SOURCE is a local device index (e.g. "0") rather
+    # than an RTSP URL — a USB webcam needs to be passed through explicitly.
+    # Not needed for RTSP cameras, which are reached over the network.
+    # devices:
+    #   - /dev/video0:/dev/video0

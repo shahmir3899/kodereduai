@@ -20,6 +20,7 @@ from face_attendance.services.matcher import (
 )
 from face_attendance.services.embedding_service import EmbeddingService
 from face_attendance.services.face_detector import FaceDetector, DetectedFace
+from face_attendance.models import StudentFaceEmbedding
 
 
 # =====================================================================
@@ -76,106 +77,119 @@ class TestClassifyMatch:
 
 
 # =====================================================================
-# LEVEL B1 (continued): FaceMatcher — Matching Logic
+# LEVEL B1 (continued): FaceMatcher — Matching Logic (pgvector-backed)
 # =====================================================================
 
 
-@pytest.fixture
-def mock_fr():
-    """Mock face_recognition module for FaceMatcher."""
-    mock = MagicMock()
-    # Default: face_distance returns L2 norms
-    mock.face_distance.side_effect = lambda enrolled, face: np.array([
-        float(np.linalg.norm(e - face)) for e in enrolled
-    ])
-    return mock
+def _enroll(student, school_id, vector, version='dlib_v1'):
+    """Create a StudentFaceEmbedding row with both legacy bytes and the pgvector column."""
+    return StudentFaceEmbedding.objects.create(
+        student=student,
+        school_id=school_id,
+        embedding=np.asarray(vector, dtype=np.float64).tobytes(),
+        embedding_vector=np.asarray(vector, dtype=np.float32).tolist(),
+        embedding_version=version,
+        quality_score=0.9,
+        is_active=True,
+    )
 
 
+@pytest.mark.django_db
 @pytest.mark.face_attendance
 class TestFaceMatcherMatching:
-    """B1g-k: Face matching logic."""
+    """B1g-k: Face matching logic against real pgvector-backed rows."""
 
-    def test_empty_embeddings_returns_all_ignored(self, mock_fr):
-        """B1j: No enrolled students → all IGNORED."""
-        matcher = FaceMatcher.__new__(FaceMatcher)
-        matcher._fr = mock_fr
+    @pytest.fixture(autouse=True)
+    def _require_postgres(self):
+        # match_faces() runs pgvector L2Distance queries, which don't exist
+        # on SQLite. Same skip convention as lms/tests/test_embeddings.py.
+        from django.db import connection
+        if connection.vendor != 'postgresql':
+            pytest.skip('FaceMatcher matching requires PostgreSQL (pgvector L2Distance)')
 
+    def test_empty_class_returns_all_ignored(self, seed_data):
+        """B1j: No enrolled students → all IGNORED (no DB query needed)."""
+        matcher = FaceMatcher()
         face_embs = [(0, np.zeros(128)), (1, np.ones(128))]
-        results = matcher.match_faces(face_embs, {})
+        results = matcher.match_faces(face_embs, [], seed_data['SID_A'])
 
         assert len(results) == 2
         assert all(r.match_status == 'IGNORED' for r in results)
 
-    def test_single_face_single_student(self, mock_fr):
+    def test_single_face_single_student(self, seed_data):
         """B1k: 1 face, 1 enrolled → correct match."""
+        student = seed_data['students'][4]  # Hamza Raza (class 2, no seeded embedding)
         rng = np.random.default_rng(42)
         student_emb = rng.standard_normal(128)
         # Face is very close to the student (noise * 0.02 → distance ≈ 0.23)
         face_emb = student_emb + rng.standard_normal(128) * 0.02
+        _enroll(student, seed_data['SID_A'], student_emb)
 
-        matcher = FaceMatcher.__new__(FaceMatcher)
-        matcher._fr = mock_fr
-
+        matcher = FaceMatcher()
         results = matcher.match_faces(
-            [(0, face_emb)],
-            {100: [student_emb]},
-            {100: 'Ali Hassan'},
+            [(0, face_emb)], [student.id], seed_data['SID_A'],
+            student_names={student.id: student.name},
         )
 
         assert len(results) == 1
-        assert results[0].student_id == 100
+        assert results[0].student_id == student.id
         assert results[0].confidence > 0
 
-    def test_match_faces_returns_sorted_by_distance(self, mock_fr):
+    def test_match_faces_returns_sorted_by_distance(self, seed_data):
         """B1g: Results preserve face_index order."""
+        student_a = seed_data['students'][4]
+        student_b = seed_data['students'][5]
         rng = np.random.default_rng(42)
         student_emb = rng.standard_normal(128)
         face_0 = student_emb + rng.standard_normal(128) * 0.01  # very close
         face_1 = student_emb + rng.standard_normal(128) * 0.5   # far
+        _enroll(student_a, seed_data['SID_A'], student_emb)
+        _enroll(student_b, seed_data['SID_A'], rng.standard_normal(128))
 
-        matcher = FaceMatcher.__new__(FaceMatcher)
-        matcher._fr = mock_fr
-
+        matcher = FaceMatcher()
         results = matcher.match_faces(
             [(0, face_0), (1, face_1)],
-            {100: [student_emb], 200: [rng.standard_normal(128)]},
+            [student_a.id, student_b.id],
+            seed_data['SID_A'],
         )
 
         assert len(results) == 2
         assert results[0].face_index == 0
         assert results[1].face_index == 1
 
-    def test_conflict_resolution_keeps_best_match(self, mock_fr):
+    def test_conflict_resolution_keeps_best_match(self, seed_data):
         """B1h: Two faces → same student → lower distance wins."""
+        student = seed_data['students'][4]
         student_emb = np.zeros(128)
         face_close = student_emb + np.ones(128) * 0.01   # distance ≈ 0.11 → AUTO_MATCHED
         face_far = student_emb + np.ones(128) * 0.03     # distance ≈ 0.34 → AUTO_MATCHED
+        _enroll(student, seed_data['SID_A'], student_emb)
 
-        matcher = FaceMatcher.__new__(FaceMatcher)
-        matcher._fr = mock_fr
-
+        matcher = FaceMatcher()
         results = matcher.match_faces(
             [(0, face_close), (1, face_far)],
-            {100: [student_emb]},
+            [student.id],
+            seed_data['SID_A'],
         )
 
-        # Both initially match student 100, conflict resolution keeps the closer one
-        active_100 = [r for r in results if r.student_id == 100 and r.match_status != 'IGNORED']
-        assert len(active_100) == 1
-        assert active_100[0].face_index == 0  # closer face wins
+        # Both initially match the student, conflict resolution keeps the closer one
+        active = [r for r in results if r.student_id == student.id and r.match_status != 'IGNORED']
+        assert len(active) == 1
+        assert active[0].face_index == 0  # closer face wins
 
-    def test_conflict_resolution_demotes_loser_to_ignored(self, mock_fr):
+    def test_conflict_resolution_demotes_loser_to_ignored(self, seed_data):
         """B1i: Loser with no alternatives → IGNORED."""
+        student = seed_data['students'][4]
         student_emb = np.zeros(128)
         face_close = student_emb + np.ones(128) * 0.01   # distance ≈ 0.11
         face_far = student_emb + np.ones(128) * 0.03     # distance ≈ 0.34
+        _enroll(student, seed_data['SID_A'], student_emb)  # only one student enrolled
 
-        matcher = FaceMatcher.__new__(FaceMatcher)
-        matcher._fr = mock_fr
-
+        matcher = FaceMatcher()
         results = matcher.match_faces(
             [(0, face_close), (1, face_far)],
-            {100: [student_emb]},  # only one student enrolled
+            [student.id],
+            seed_data['SID_A'],
         )
 
         # The loser should be IGNORED (no alternatives)
@@ -191,13 +205,13 @@ class TestFaceMatcherMatching:
 @pytest.mark.django_db
 @pytest.mark.face_attendance
 class TestEmbeddingBytesRoundtrip:
-    """B2a: numpy ↔ bytes conversion is lossless."""
+    """B2a: numpy ↔ bytes conversion is lossless (legacy embedding column)."""
 
     def test_roundtrip(self):
-        """B2a: embedding_to_bytes → bytes_to_embedding is identity."""
+        """B2a: embedding_to_bytes → np.frombuffer is identity."""
         original = np.random.default_rng(42).standard_normal(128).astype(np.float64)
         as_bytes = EmbeddingService.embedding_to_bytes(original)
-        recovered = EmbeddingService.bytes_to_embedding(as_bytes)
+        recovered = np.frombuffer(as_bytes, dtype=np.float64)
         np.testing.assert_array_equal(original, recovered)
 
 
@@ -207,9 +221,7 @@ class TestEmbeddingStorage:
     """B2b-e: Embedding storage and class-scoped retrieval."""
 
     def test_store_embedding_creates_record(self, seed_data):
-        """B2b: store_embedding creates a StudentFaceEmbedding in DB."""
-        from face_attendance.models import StudentFaceEmbedding
-
+        """B2b: store_embedding creates a StudentFaceEmbedding with both columns set."""
         student = seed_data['students'][4]  # Hamza Raza (class 2)
         emb = np.random.default_rng(99).standard_normal(128).astype(np.float64)
 
@@ -226,23 +238,25 @@ class TestEmbeddingStorage:
 
         assert result.id is not None
         assert result.student_id == student.id
+        assert result.embedding_vector is not None
+        assert len(result.embedding_vector) == 128
         assert StudentFaceEmbedding.objects.filter(id=result.id).exists()
 
-    def test_get_class_embeddings_scoped(self, seed_data):
-        """B2c: Only returns embeddings for students in the specified class."""
+    def test_get_class_student_ids_scoped(self, seed_data):
+        """B2c: Only returns student IDs for students in the specified class."""
         svc = EmbeddingService.__new__(EmbeddingService)
         svc._fr = MagicMock()
 
         class_1 = seed_data['classes'][0]
-        result = svc.get_class_embeddings(class_1.id, seed_data['SID_A'])
+        result = svc.get_class_student_ids(class_1.id, seed_data['SID_A'])
 
-        # Should have embeddings for class 1 students only (first 4)
+        # Should have IDs for class 1 students only (first 4, seeded with embeddings)
         class_1_student_ids = {s.id for s in seed_data['students'][:4]}
-        assert set(result.keys()).issubset(class_1_student_ids)
+        assert result.issubset(class_1_student_ids)
         assert len(result) > 0
 
-    def test_get_class_embeddings_excludes_inactive(self, seed_data):
-        """B2d: Inactive embeddings not returned."""
+    def test_get_class_student_ids_excludes_inactive(self, seed_data):
+        """B2d: Students with only an inactive embedding are excluded."""
         svc = EmbeddingService.__new__(EmbeddingService)
         svc._fr = MagicMock()
 
@@ -252,7 +266,7 @@ class TestEmbeddingStorage:
         emb.save()
 
         class_1 = seed_data['classes'][0]
-        result = svc.get_class_embeddings(class_1.id, seed_data['SID_A'])
+        result = svc.get_class_student_ids(class_1.id, seed_data['SID_A'])
 
         deactivated_student = seed_data['students'][0]
         assert deactivated_student.id not in result
@@ -261,17 +275,15 @@ class TestEmbeddingStorage:
         emb.is_active = True
         emb.save()
 
-    def test_get_class_embeddings_empty_class(self, seed_data):
-        """B2e: Class with no enrollments → empty dict."""
-        from students.models import Class
-
+    def test_get_class_student_ids_empty_class(self, seed_data):
+        """B2e: Class with no enrollments → empty set."""
+        # Class 3 has no face embeddings seeded
         svc = EmbeddingService.__new__(EmbeddingService)
         svc._fr = MagicMock()
 
-        # Class 3 has no face embeddings seeded
         class_3 = seed_data['classes'][2]
-        result = svc.get_class_embeddings(class_3.id, seed_data['SID_A'])
-        assert result == {}
+        result = svc.get_class_student_ids(class_3.id, seed_data['SID_A'])
+        assert result == set()
 
 
 # =====================================================================

@@ -137,6 +137,20 @@ def default_attendance_config():
     }
 
 
+def default_academic_risk_config():
+    """Default academic risk predictor configuration per school."""
+    return {
+        "risk_pass_threshold": 40.0,
+    }
+
+
+def default_inventory_config():
+    """Default inventory configuration per school."""
+    return {
+        "reorder_lookahead_days": 14,
+    }
+
+
 def default_ai_config():
     """Default AI pipeline configuration per school."""
     return {
@@ -236,6 +250,20 @@ class School(models.Model):
         default=default_attendance_config,
         blank=True,
         help_text="Per-school attendance config: AI risk threshold, etc."
+    )
+
+    # Academic risk predictor configuration (per-school pass threshold)
+    academic_risk_config = models.JSONField(
+        default=default_academic_risk_config,
+        blank=True,
+        help_text="Per-school academic risk config: AI pass-rate threshold, etc."
+    )
+
+    # Inventory configuration (per-school reorder lookahead window, etc.)
+    inventory_config = models.JSONField(
+        default=default_inventory_config,
+        blank=True,
+        help_text="Per-school inventory config: AI reorder lookahead window, etc."
     )
 
     # Status

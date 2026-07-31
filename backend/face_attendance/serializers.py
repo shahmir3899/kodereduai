@@ -6,7 +6,10 @@ import numpy as np
 from rest_framework import serializers
 
 from students.models import Student, Class
-from .models import FaceAttendanceSession, StudentFaceEmbedding, FaceDetectionResult
+from .models import (
+    FaceAttendanceSession, StudentFaceEmbedding, FaceDetectionResult,
+    FaceCaptureDevice, FaceLiveDetectionEvent,
+)
 
 
 class StudentMinimalSerializer(serializers.ModelSerializer):
@@ -192,7 +195,117 @@ class StudentFaceEmbeddingSerializer(serializers.ModelSerializer):
 
 
 class FaceEnrollSerializer(serializers.Serializer):
-    """Enroll a student's face from an uploaded photo."""
+    """Enroll a student's face from an uploaded photo (legacy dlib/Celery path)."""
 
     student_id = serializers.PrimaryKeyRelatedField(queryset=Student.objects.all())
     image_url = serializers.URLField(max_length=500)
+
+
+class FaceEnrollWithEmbeddingSerializer(serializers.Serializer):
+    """
+    Enroll a student's face from a vector already extracted client-side
+    (Tier A guided capture — face-api.js, design doc §5). Synchronous, no
+    Celery dispatch: there's no server-side detection work left once the
+    browser already produced the embedding.
+    """
+
+    student_id = serializers.PrimaryKeyRelatedField(queryset=Student.objects.all())
+    embedding = serializers.ListField(
+        child=serializers.FloatField(),
+        min_length=128,
+        max_length=128,
+        help_text='128-d face embedding vector, already extracted client-side',
+    )
+    embedding_version = serializers.CharField(max_length=20)
+    quality_score = serializers.FloatField(required=False, default=0.0, min_value=0.0, max_value=1.0)
+
+
+class LiveMatchRequestSerializer(serializers.Serializer):
+    """
+    Tier B live-match ingest payload. The embedding is already extracted
+    on-prem — no image ever reaches this endpoint.
+    """
+
+    embedding = serializers.ListField(
+        child=serializers.FloatField(),
+        min_length=128,
+        max_length=128,
+        help_text='128-d face embedding vector, already extracted on-prem',
+    )
+    embedding_version = serializers.CharField(max_length=20)
+    timestamp = serializers.DateTimeField(help_text='Capture-side clock (device/browser)')
+    class_id = serializers.IntegerField(
+        required=False, allow_null=True,
+        help_text='Optional — validated against CLASS-scoped devices, ignored for SCHOOL-scoped ones',
+    )
+
+
+class FaceCaptureDeviceSerializer(serializers.ModelSerializer):
+    """
+    Read + limited edit only — no create/delete here. Devices are
+    provisioned via Django admin (design doc §9.4: no self-service pairing
+    yet), which is also the only place the raw API key is ever shown.
+    is_active/scope_type/class_obj/name are the only editable fields;
+    the online/offline read is left to the frontend to derive from
+    last_seen_at so it can stay live between refetches.
+    """
+
+    class_obj = serializers.PrimaryKeyRelatedField(
+        queryset=Class.objects.all(), required=False, allow_null=True,
+    )
+    class_obj_detail = ClassMinimalSerializer(source='class_obj', read_only=True)
+
+    class Meta:
+        model = FaceCaptureDevice
+        fields = [
+            'id', 'name', 'device_id', 'scope_type', 'class_obj', 'class_obj_detail',
+            'embedding_version', 'is_active', 'last_seen_at', 'created_at',
+        ]
+        read_only_fields = ['id', 'device_id', 'embedding_version', 'last_seen_at', 'created_at']
+
+    def validate(self, attrs):
+        scope_type = attrs.get('scope_type', getattr(self.instance, 'scope_type', None))
+        if 'class_obj' in attrs:
+            class_obj = attrs['class_obj']
+        else:
+            class_obj = getattr(self.instance, 'class_obj', None) if self.instance else None
+
+        if scope_type == FaceCaptureDevice.ScopeType.CLASS and not class_obj:
+            raise serializers.ValidationError('A CLASS-scoped device must have a class selected.')
+        if scope_type == FaceCaptureDevice.ScopeType.SCHOOL and class_obj:
+            raise serializers.ValidationError('A SCHOOL-scoped device must not have a class selected.')
+
+        school = getattr(self.instance, 'school', None)
+        if class_obj and school and class_obj.school_id != school.id:
+            raise serializers.ValidationError('Selected class does not belong to this school.')
+
+        return attrs
+
+
+class FaceMatchFeedbackSerializer(serializers.Serializer):
+    """
+    Operator feedback on a single Tier A live-match result (design doc §10
+    backlog — groundwork for faceapi_v1 threshold tuning). Submitted by the
+    teacher/guard who was physically present at capture time, since that's
+    the only point a Tier A match can ever be verified against reality.
+    """
+
+    is_correct = serializers.BooleanField()
+
+
+class FaceLiveDetectionEventSerializer(serializers.ModelSerializer):
+    """Read-only — troubleshooting log for Tier B live matching (design doc §4)."""
+
+    device_name = serializers.CharField(source='device.name', read_only=True, default=None)
+    class_obj = ClassMinimalSerializer(read_only=True)
+    matched_student = StudentMinimalSerializer(read_only=True)
+
+    class Meta:
+        model = FaceLiveDetectionEvent
+        fields = [
+            'id', 'source_tier', 'device', 'device_name', 'class_obj',
+            'embedding_version', 'client_timestamp', 'received_at',
+            'matched_student', 'confidence', 'distance', 'match_status',
+            'resulted_in_attendance',
+        ]
+        read_only_fields = fields

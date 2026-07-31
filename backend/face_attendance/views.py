@@ -3,21 +3,31 @@ Face attendance views for capture, processing, review, and enrollment.
 """
 
 import logging
-from rest_framework import viewsets, status
+import numpy as np
+from rest_framework import viewsets, status, generics
 from rest_framework.views import APIView
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework_simplejwt.authentication import JWTAuthentication
 from django.utils import timezone
 from django.db import models as db_models
 
-from core.permissions import IsSchoolAdmin, CanConfirmAttendance, ModuleAccessMixin
+from core.permissions import (
+    IsSchoolAdmin, CanConfirmAttendance, ModuleAccessMixin,
+    get_effective_role, get_teacher_class_scope, ADMIN_ROLES,
+)
 from core.mixins import TenantQuerySetMixin, ensure_tenant_school_id
 from core.class_scope import resolve_class_scope
-from students.models import Student
+from students.models import Student, Class
 from attendance.models import AttendanceRecord
-from .models import FaceAttendanceSession, StudentFaceEmbedding, FaceDetectionResult
+from .authentication import DeviceKeyAuthentication, IsAuthenticatedDevice
+from .models import (
+    FaceAttendanceSession, StudentFaceEmbedding, FaceDetectionResult,
+    FaceCaptureDevice, FaceLiveDetectionEvent,
+    FaceMatchThresholdSample,
+)
 from .serializers import (
     FaceAttendanceSessionListSerializer,
     FaceAttendanceSessionDetailSerializer,
@@ -25,7 +35,15 @@ from .serializers import (
     FaceAttendanceConfirmSerializer,
     StudentFaceEmbeddingSerializer,
     FaceEnrollSerializer,
+    FaceEnrollWithEmbeddingSerializer,
+    LiveMatchRequestSerializer,
+    FaceCaptureDeviceSerializer,
+    FaceLiveDetectionEventSerializer,
+    FaceMatchFeedbackSerializer,
 )
+from .services.attendance_writer import upsert_attendance_record
+from .services.embedding_service import EmbeddingService
+from .services.matcher import FaceMatcher
 
 logger = logging.getLogger(__name__)
 
@@ -315,16 +333,13 @@ class FaceAttendanceSessionViewSet(ModuleAccessMixin, TenantQuerySetMixin, views
                 else AttendanceRecord.AttendanceStatus.ABSENT
             )
             try:
-                record, created = AttendanceRecord.objects.update_or_create(
+                record, created = upsert_attendance_record(
                     student=student,
                     date=session.date,
-                    defaults={
-                        'school': session.school,
-                        'academic_year': session.academic_year,
-                        'status': student_status,
-                        'source': AttendanceRecord.Source.FACE_CAMERA,
-                        'face_session': session,
-                    },
+                    school=session.school,
+                    academic_year=session.academic_year,
+                    attendance_status=student_status,
+                    face_session=session,
                 )
                 if created:
                     created_count += 1
@@ -413,6 +428,27 @@ class FaceEnrollmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
     serializer_class = StudentFaceEmbeddingSerializer
     http_method_names = ['get', 'post', 'delete', 'head', 'options']
 
+    def get_permissions(self):
+        """
+        Class-level IsSchoolAdmin is the default and stays in force for the
+        legacy dlib enrollment flow (image_url) and for destroy — Tier C
+        stays admin-only, unchanged (design doc §8). Two narrow exceptions
+        for Tier A, whose entire premise is a teacher capturing their own
+        class rather than an admin:
+        - list/retrieve: read-only, and the serializer never exposes the raw
+          vector (just name/roll/class/quality/version), so opening it to
+          CanConfirmAttendance (admin or teacher) carries no biometric-data
+          exposure risk.
+        - enroll, only when the payload uses the new client-embedding shape
+          (detected by the 'embedding' key, distinct from the legacy
+          {student_id, image_url} shape) — the faceapi_v1 guided-capture path.
+        """
+        if self.action in ('list', 'retrieve'):
+            return [IsAuthenticated(), CanConfirmAttendance()]
+        if self.action == 'enroll' and 'embedding' in self.request.data:
+            return [IsAuthenticated(), CanConfirmAttendance()]
+        return super().get_permissions()
+
     def get_queryset(self):
         qs = StudentFaceEmbedding.objects.select_related(
             'student', 'student__class_obj'
@@ -421,6 +457,15 @@ class FaceEnrollmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
         school_id = ensure_tenant_school_id(self.request)
         if school_id:
             qs = qs.filter(school_id=school_id)
+
+        # A teacher only sees enrollment metadata for their own classes —
+        # list/retrieve were opened up to CanConfirmAttendance above, but
+        # that shouldn't mean whole-school visibility for a teacher role.
+        role = get_effective_role(self.request)
+        if role == 'TEACHER':
+            qs = qs.filter(
+                student__class_obj_id__in=get_teacher_class_scope(self.request, school_id=school_id)
+            )
 
         # Filter by class
         scope = resolve_class_scope(
@@ -444,7 +489,13 @@ class FaceEnrollmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
 
     @action(detail=False, methods=['post'])
     def enroll(self, request):
-        """Enroll a student's face from an uploaded photo."""
+        """Enroll a student's face — legacy photo (dlib/Celery) or client-side embedding (faceapi_v1)."""
+        if 'embedding' in request.data:
+            return self._enroll_with_embedding(request)
+        return self._enroll_from_image(request)
+
+    def _enroll_from_image(self, request):
+        """Legacy path: enroll a student's face from an uploaded photo."""
         serializer = FaceEnrollSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -487,10 +538,464 @@ class FaceEnrollmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
+    def _enroll_with_embedding(self, request):
+        """
+        Tier A path (design doc §5): the embedding was already extracted
+        client-side by face-api.js, so this is synchronous — no Celery
+        dispatch, no face_recognition/dlib involved.
+        """
+        serializer = FaceEnrollWithEmbeddingSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        student = data['student_id']
+        school_id = ensure_tenant_school_id(request) or request.user.school_id
+
+        if student.school_id != school_id:
+            return Response(
+                {'error': 'Student does not belong to your school.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        role = get_effective_role(request)
+        if role == 'TEACHER' and student.class_obj_id not in get_teacher_class_scope(request, school_id=school_id):
+            return Response(
+                {'error': 'You are not assigned as class teacher for this student.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        face_embedding = EmbeddingService.store_client_embedding(
+            student_id=student.id,
+            school_id=school_id,
+            embedding=data['embedding'],
+            embedding_version=data['embedding_version'],
+            quality_score=data['quality_score'],
+        )
+        return Response(
+            StudentFaceEmbeddingSerializer(face_embedding).data,
+            status=status.HTTP_201_CREATED,
+        )
+
     def perform_destroy(self, instance):
         """Soft-delete: deactivate rather than hard delete."""
         instance.is_active = False
         instance.save(update_fields=['is_active'])
+
+
+TIER_A_EMBEDDING_VERSION = 'faceapi_v1'
+
+
+class LiveMatchView(APIView):
+    """
+    POST /api/face-attendance/live/match/
+
+    Shared ingest endpoint for both live tiers: an on-prem device (Tier B,
+    device-key auth) or a teacher's/guard's browser session (Tier A, JWT)
+    posts a single face embedding (already extracted locally) and gets back
+    a match result. Two authentication paths, composed permission (device
+    OR CanConfirmAttendance) — see design doc §4/§8. Stays lightweight by
+    design: no image processing, no Celery dispatch.
+
+    source_tier is deliberately NOT accepted from the client — it's derived
+    from which authentication path succeeded (device key -> TIER_B, JWT ->
+    TIER_A), so a caller can't misdeclare which tier it's reporting as.
+    """
+
+    authentication_classes = [DeviceKeyAuthentication, JWTAuthentication]
+    permission_classes = [IsAuthenticatedDevice | CanConfirmAttendance]
+
+    def post(self, request):
+        serializer = LiveMatchRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        if isinstance(request.auth, FaceCaptureDevice):
+            return self._handle_tier_b(request, data)
+        return self._handle_tier_a(request, data)
+
+    def _handle_tier_b(self, request, data):
+        device = request.auth
+
+        # Coarse gate (unchanged from every other face_attendance view):
+        # the school must have the 'attendance' module enabled at all.
+        if not device.school.get_enabled_module('attendance'):
+            return Response(
+                {'error': 'The Attendance module is not enabled for this school.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # No separate "Tier B enabled" gate: a device that authenticates via
+        # a valid, active API key (DeviceKeyAuthentication) has already
+        # proven the school has Tier B installed — that IS the gate. See
+        # FaceAttendanceStatusView for how tier_b_status is derived for
+        # display purposes only.
+
+        if data['embedding_version'] != device.embedding_version:
+            return Response(
+                {'error': "embedding_version does not match this device's configured version."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if device.scope_type == FaceCaptureDevice.ScopeType.CLASS:
+            class_id = data.get('class_id')
+            if class_id is not None and str(class_id) != str(device.class_obj_id):
+                return Response(
+                    {'error': "class_id does not match this device's assigned class."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            class_obj = device.class_obj
+            candidate_ids = EmbeddingService.get_class_student_ids(
+                class_obj.id, device.school_id, embedding_version=device.embedding_version,
+            )
+            student_names = dict(
+                Student.objects.filter(class_obj=class_obj, is_active=True).values_list('id', 'name')
+            )
+        else:
+            class_obj = None
+            candidate_ids = EmbeddingService.get_school_student_ids(
+                device.school_id, embedding_version=device.embedding_version,
+            )
+            student_names = dict(
+                Student.objects.filter(school_id=device.school_id, is_active=True).values_list('id', 'name')
+            )
+
+        response = self._match_and_record(
+            data=data,
+            school=device.school,
+            school_id=device.school_id,
+            class_obj=class_obj,
+            embedding_version=device.embedding_version,
+            candidate_ids=candidate_ids,
+            student_names=student_names,
+            source_tier=FaceLiveDetectionEvent.SourceTier.TIER_B,
+            device=device,
+            captured_by=None,
+        )
+        FaceCaptureDevice.objects.filter(pk=device.pk).update(last_seen_at=timezone.now())
+        return response
+
+    def _handle_tier_a(self, request, data):
+        # NOT request.tenant_school — TenantMiddleware.process_view() runs
+        # before DRF authentication populates request.user, so for a
+        # header-only JWT request (no Django session) it never resolves
+        # tenant_school/tenant_school_id. ensure_tenant_school_id() is the
+        # existing app-wide workaround (see its docstring in core/mixins.py).
+        school_id = ensure_tenant_school_id(request)
+        if not school_id:
+            return Response(
+                {'error': 'No active school context (X-School-ID header required).'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        from schools.models import School
+        try:
+            school = School.objects.get(pk=school_id)
+        except School.DoesNotExist:
+            return Response({'error': 'Invalid school context.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Coarse gate (unchanged from every other face_attendance view).
+        if not school.get_enabled_module('attendance'):
+            return Response(
+                {'error': 'The Attendance module is not enabled for this school.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # No separate "Tier A enabled" gate — mobile-browser live capture is
+        # unconditionally available to every school (2026-07 product
+        # decision). Availability here is governed only by the coarse
+        # module gate above and the CanConfirmAttendance permission
+        # (admin-or-assigned-teacher) already applied to this view.
+
+        if data['embedding_version'] != TIER_A_EMBEDDING_VERSION:
+            return Response(
+                {'error': f"Tier A embedding_version must be '{TIER_A_EMBEDDING_VERSION}'."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        role = get_effective_role(request)
+        class_id = data.get('class_id')
+
+        if role == 'TEACHER':
+            # A teacher's phone always represents one class in front of
+            # them — unlike an admin/guard, there's no whole-school scope.
+            if not class_id:
+                return Response(
+                    {'error': 'class_id is required for teacher-submitted Tier A events.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if class_id not in get_teacher_class_scope(request, school_id=school.id):
+                return Response(
+                    {'error': 'You are not assigned as class teacher for this class.'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            class_obj = Class.objects.filter(pk=class_id, school_id=school.id).first()
+            if not class_obj:
+                return Response({'error': 'Invalid class_id.'}, status=status.HTTP_400_BAD_REQUEST)
+            candidate_ids = EmbeddingService.get_class_student_ids(
+                class_obj.id, school.id, embedding_version=TIER_A_EMBEDDING_VERSION,
+            )
+            student_names = dict(
+                Student.objects.filter(class_obj=class_obj, is_active=True).values_list('id', 'name')
+            )
+        else:
+            # CanConfirmAttendance only allows ADMIN_ROLES or TEACHER, so
+            # this is an admin/principal — e.g. a gate guard's account.
+            # Whole-school scope when no class_id is given, same as a
+            # SCHOOL-scoped Tier B device.
+            if class_id:
+                class_obj = Class.objects.filter(pk=class_id, school_id=school.id).first()
+                if not class_obj:
+                    return Response({'error': 'Invalid class_id.'}, status=status.HTTP_400_BAD_REQUEST)
+                candidate_ids = EmbeddingService.get_class_student_ids(
+                    class_obj.id, school.id, embedding_version=TIER_A_EMBEDDING_VERSION,
+                )
+                student_names = dict(
+                    Student.objects.filter(class_obj=class_obj, is_active=True).values_list('id', 'name')
+                )
+            else:
+                class_obj = None
+                candidate_ids = EmbeddingService.get_school_student_ids(
+                    school.id, embedding_version=TIER_A_EMBEDDING_VERSION,
+                )
+                student_names = dict(
+                    Student.objects.filter(school_id=school.id, is_active=True).values_list('id', 'name')
+                )
+
+        return self._match_and_record(
+            data=data,
+            school=school,
+            school_id=school.id,
+            class_obj=class_obj,
+            embedding_version=TIER_A_EMBEDDING_VERSION,
+            candidate_ids=candidate_ids,
+            student_names=student_names,
+            source_tier=FaceLiveDetectionEvent.SourceTier.TIER_A,
+            device=None,
+            captured_by=request.user,
+        )
+
+    def _match_and_record(self, *, data, school, school_id, class_obj, embedding_version,
+                           candidate_ids, student_names, source_tier, device, captured_by):
+        """Shared by both tiers: run the pgvector match, apply per-day dedup, write the event."""
+        embedding_array = np.array(data['embedding'], dtype=np.float64)
+        matcher = FaceMatcher()
+        results = matcher.match_faces(
+            [(0, embedding_array)], candidate_ids, school_id,
+            student_names=student_names, embedding_version=embedding_version,
+        )
+        result = results[0]
+
+        event_date = data['timestamp'].date()
+        resulted_in_attendance = False
+        attendance_record = None
+
+        if result.match_status == FaceLiveDetectionEvent.MatchStatus.AUTO_MATCHED and result.student_id:
+            already_marked_today = FaceLiveDetectionEvent.objects.filter(
+                matched_student_id=result.student_id,
+                client_timestamp__date=event_date,
+                resulted_in_attendance=True,
+            ).exists()
+            if not already_marked_today:
+                from academic_sessions.models import AcademicYear
+
+                academic_year = AcademicYear.objects.filter(
+                    school_id=school_id, is_current=True
+                ).first()
+                student = Student.objects.get(pk=result.student_id)
+                attendance_record, _ = upsert_attendance_record(
+                    student=student,
+                    date=event_date,
+                    school=school,
+                    academic_year=academic_year,
+                    attendance_status=AttendanceRecord.AttendanceStatus.PRESENT,
+                )
+                resulted_in_attendance = True
+
+        event = FaceLiveDetectionEvent.objects.create(
+            school=school,
+            class_obj=class_obj,
+            source_tier=source_tier,
+            device=device,
+            captured_by=captured_by,
+            embedding_version=embedding_version,
+            client_timestamp=data['timestamp'],
+            matched_student_id=result.student_id,
+            confidence=result.confidence,
+            distance=None if result.distance == float('inf') else result.distance,
+            match_status=result.match_status,
+            resulted_in_attendance=resulted_in_attendance,
+            attendance_record=attendance_record,
+        )
+
+        return Response({
+            'match_status': result.match_status,
+            'student': (
+                {'id': result.student_id, 'name': result.student_name}
+                if result.student_id else None
+            ),
+            'confidence': result.confidence,
+            'event_id': str(event.id),
+            'attendance_marked': resulted_in_attendance,
+        })
+
+
+class LiveMatchFeedbackView(APIView):
+    """
+    POST /api/face-attendance/live/events/<event_id>/feedback/
+
+    Groundwork for empirically tuning faceapi_v1's thresholds (design doc
+    §10 backlog): Tier A never stores an image, so the operator (teacher/
+    guard) holding the phone at capture time is the only one who can ever
+    say whether a match was actually correct. This endpoint turns that
+    fleeting judgment into a durable, stripped-down labeled sample before
+    the source FaceLiveDetectionEvent gets purged 48h later.
+
+    Only AUTO_MATCHED/FLAGGED events are eligible — those are the only
+    ones that showed the operator a candidate student to confirm/dispute
+    (see FaceLiveCapturePage's feedbackBanner()). Tier B is out of scope:
+    there's no human operator present per-event to supply the label.
+    """
+
+    permission_classes = [IsAuthenticated, CanConfirmAttendance]
+
+    def post(self, request, event_id):
+        try:
+            event = FaceLiveDetectionEvent.objects.select_related('school').get(pk=event_id)
+        except FaceLiveDetectionEvent.DoesNotExist:
+            return Response(
+                {'error': 'Event not found (it may already have been purged).'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if event.source_tier != FaceLiveDetectionEvent.SourceTier.TIER_A:
+            return Response(
+                {'error': 'Feedback is only accepted for Tier A events.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if event.match_status not in (
+            FaceLiveDetectionEvent.MatchStatus.AUTO_MATCHED,
+            FaceLiveDetectionEvent.MatchStatus.FLAGGED,
+        ):
+            return Response(
+                {'error': 'Feedback only applies to AUTO_MATCHED or FLAGGED events.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        role = get_effective_role(request)
+        is_capturing_operator = event.captured_by_id == request.user.id
+        is_school_admin = role in ADMIN_ROLES and event.school_id == ensure_tenant_school_id(request)
+        if not (is_capturing_operator or is_school_admin):
+            return Response(
+                {'error': 'Only the operator who captured this event, or a school admin, can label it.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        serializer = FaceMatchFeedbackSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        FaceMatchThresholdSample.objects.create(
+            school=event.school,
+            source_tier=event.source_tier,
+            embedding_version=event.embedding_version,
+            distance=event.distance,
+            predicted_match_status=event.match_status,
+            is_correct=serializer.validated_data['is_correct'],
+            sample_date=event.client_timestamp.date(),
+        )
+
+        return Response(status=status.HTTP_201_CREATED)
+
+
+class FaceCaptureDeviceViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
+    """
+    Read + limited edit for Tier B devices — school admins manage devices
+    that were provisioned via Django admin (see design doc §9.4).
+
+    list: GET /devices/ — devices for the current school
+    retrieve: GET /devices/{id}/
+    partial_update: PATCH /devices/{id}/ — name/scope_type/class_obj/is_active only
+    No create/destroy: device provisioning (and the one-time key display)
+    stays a Django-admin-only action.
+    """
+
+    required_module = 'attendance'
+    permission_classes = [IsAuthenticated, IsSchoolAdmin]
+    serializer_class = FaceCaptureDeviceSerializer
+    http_method_names = ['get', 'patch', 'head', 'options']
+
+    def get_queryset(self):
+        qs = FaceCaptureDevice.objects.select_related('school', 'class_obj')
+        school_id = ensure_tenant_school_id(self.request)
+        if school_id:
+            qs = qs.filter(school_id=school_id)
+        return qs
+
+
+class FaceLiveDetectionEventListView(ModuleAccessMixin, generics.ListAPIView):
+    """
+    GET /live/events/ — troubleshooting log for Tier B live matching
+    (design doc §4). Read-only, filterable by date and device.
+    """
+
+    required_module = 'attendance'
+    permission_classes = [IsAuthenticated, IsSchoolAdmin]
+    serializer_class = FaceLiveDetectionEventSerializer
+
+    def get_queryset(self):
+        qs = FaceLiveDetectionEvent.objects.select_related(
+            'device', 'class_obj', 'matched_student'
+        )
+        school_id = ensure_tenant_school_id(self.request)
+        if school_id:
+            qs = qs.filter(school_id=school_id)
+        else:
+            return qs.none()
+
+        date_filter = self.request.query_params.get('date')
+        if date_filter:
+            qs = qs.filter(client_timestamp__date=date_filter)
+
+        device_id = self.request.query_params.get('device')
+        if device_id:
+            qs = qs.filter(device_id=device_id)
+
+        return qs
+
+
+
+# A device that hasn't posted a match in this long is reported as inactive
+# rather than active. Mirrors the frontend's own OFFLINE_THRESHOLD_MS
+# (FaceDevicesPage.jsx) — kept as a separate constant here rather than a
+# shared settings value since the two ends change independently in practice.
+TIER_B_OFFLINE_THRESHOLD = timezone.timedelta(minutes=5)
+
+
+def _tier_b_status(school_id):
+    """
+    Tier B has no "enabled" flag — it's a background on-prem device that
+    either exists at a school or doesn't (2026-07 product decision). Status
+    is derived entirely from FaceCaptureDevice rows:
+      - 'not_installed': no active device registered for this school
+      - 'active': at least one active device has posted within the last
+        TIER_B_OFFLINE_THRESHOLD
+      - 'inactive': active device(s) exist, but none have posted recently
+    """
+    if not school_id:
+        return 'not_installed'
+
+    last_seen_values = list(
+        FaceCaptureDevice.objects.filter(
+            school_id=school_id, is_active=True,
+        ).values_list('last_seen_at', flat=True)
+    )
+    if not last_seen_values:
+        return 'not_installed'
+
+    cutoff = timezone.now() - TIER_B_OFFLINE_THRESHOLD
+    if any(seen and seen >= cutoff for seen in last_seen_values):
+        return 'active'
+    return 'inactive'
 
 
 class FaceAttendanceStatusView(ModuleAccessMixin, APIView):
@@ -507,7 +1012,11 @@ class FaceAttendanceStatusView(ModuleAccessMixin, APIView):
             face_available = False
 
         from django.conf import settings
+
+        from face_attendance.services.matcher import get_thresholds
+
         fr_settings = getattr(settings, 'FACE_RECOGNITION_SETTINGS', {})
+        embedding_version = fr_settings.get('EMBEDDING_MODEL', 'dlib_v1')
 
         school_id = ensure_tenant_school_id(request)
         enrollment_count = 0
@@ -518,10 +1027,12 @@ class FaceAttendanceStatusView(ModuleAccessMixin, APIView):
 
         return Response({
             'face_recognition_available': face_available,
-            'thresholds': {
-                'high': fr_settings.get('HIGH_CONFIDENCE_THRESHOLD', 0.40),
-                'medium': fr_settings.get('MEDIUM_CONFIDENCE_THRESHOLD', 0.55),
-            },
+            'thresholds': get_thresholds(embedding_version),
             'enrolled_faces': enrollment_count,
-            'model': fr_settings.get('EMBEDDING_MODEL', 'dlib_v1'),
+            'model': embedding_version,
+            # Tier A/C are unconditionally available to every school — no
+            # per-school flag left to consult (see FaceAttendanceSchoolConfig).
+            'tier_a_available': True,
+            'tier_c_available': True,
+            'tier_b_status': _tier_b_status(school_id),
         })

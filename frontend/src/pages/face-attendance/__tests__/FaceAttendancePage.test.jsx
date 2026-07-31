@@ -21,6 +21,16 @@ vi.mock('../../../components/Toast', () => ({
   }),
 }))
 
+// Pre-existing infra gap (flagged in the Phase 2.5 summary, confirmed via
+// git stash to predate this session): renderWithProviders doesn't wrap
+// children in an AcademicYearProvider, so every face-attendance page calling
+// useAcademicYear() crashes without this per-file mock — same convention
+// already used for AuthContext/Toast above. Every test in this file was
+// silently never executing before this fix.
+vi.mock('../../../contexts/AcademicYearContext', () => ({
+  useAcademicYear: () => ({ activeAcademicYear: { id: 1, name: '2025-2026' } }),
+}))
+
 const mockNavigate = vi.fn()
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom')
@@ -29,6 +39,17 @@ vi.mock('react-router-dom', async () => {
     useNavigate: () => mockNavigate,
   }
 })
+
+// The Mobile Capture tab renders FaceLiveCapturePage inline, which loads
+// face-api.js models on mount — mocked the same way FaceLiveCapturePage's
+// own test file does, so switching tabs here doesn't depend on real
+// network/wasm model loading.
+vi.mock('../../../utils/faceApiLoader', () => ({
+  loadFaceApiModels: vi.fn(() => Promise.resolve()),
+  detectSingleFace: vi.fn(),
+  estimateQualityScore: () => 0.8,
+  TIER_A_EMBEDDING_VERSION: 'faceapi_v1',
+}))
 
 beforeEach(() => {
   mockNavigate.mockClear()
@@ -39,7 +60,8 @@ describe('FaceAttendancePage', () => {
     renderWithProviders(<FaceAttendancePage />)
 
     expect(screen.getByText('Face Attendance')).toBeInTheDocument()
-    expect(screen.getByText('Capture')).toBeInTheDocument()
+    expect(screen.getByText('Group Photo')).toBeInTheDocument()
+    expect(screen.getByText('Mobile Capture')).toBeInTheDocument()
     expect(screen.getByText('Sessions')).toBeInTheDocument()
   })
 
@@ -114,5 +136,85 @@ describe('FaceAttendancePage', () => {
     await user.click(enrollBtn)
 
     expect(mockNavigate).toHaveBeenCalledWith('/face-attendance/enrollment')
+  })
+
+  it('Capture Devices link is always available (no longer tier-gated) and navigates', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<FaceAttendancePage />)
+
+    const devicesBtn = await screen.findByText('Capture Devices')
+    await user.click(devicesBtn)
+
+    expect(mockNavigate).toHaveBeenCalledWith('/face-attendance/devices')
+  })
+
+  it('Bulk Enrollment link is always available (no longer tier-gated) and navigates', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<FaceAttendancePage />)
+
+    const bulkBtn = await screen.findByText('Bulk Enrollment')
+    await user.click(bulkBtn)
+
+    expect(mockNavigate).toHaveBeenCalledWith('/face-attendance/bulk-enrollment')
+  })
+
+  it('switching to the Mobile Capture tab renders the live-capture UI inline', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<FaceAttendancePage />)
+
+    await user.click(screen.getByText('Mobile Capture'))
+
+    await waitFor(() => {
+      expect(screen.getByText(/Loading face recognition model|Enable Camera/)).toBeInTheDocument()
+    })
+  })
+
+  describe('Tier B status indicator', () => {
+    it('shows no badge when tier_b_status is not_installed (default mock)', async () => {
+      renderWithProviders(<FaceAttendancePage />)
+
+      await waitFor(() => {
+        expect(screen.getByText('Manage Enrollments')).toBeInTheDocument()
+      })
+      expect(screen.queryByText(/Fixed Camera/)).not.toBeInTheDocument()
+    })
+
+    it('shows "Fixed Camera: Active" when tier_b_status is active', async () => {
+      server.use(
+        http.get('/api/face-attendance/status/', () =>
+          HttpResponse.json({
+            face_recognition_available: true,
+            thresholds: { high: 0.40, medium: 0.55 },
+            enrolled_faces: 4,
+            model: 'dlib_v1',
+            tier_a_available: true,
+            tier_c_available: true,
+            tier_b_status: 'active',
+          })
+        )
+      )
+
+      renderWithProviders(<FaceAttendancePage />)
+      expect(await screen.findByText('Fixed Camera: Active')).toBeInTheDocument()
+    })
+
+    it('shows "Fixed Camera: Offline" when tier_b_status is inactive', async () => {
+      server.use(
+        http.get('/api/face-attendance/status/', () =>
+          HttpResponse.json({
+            face_recognition_available: true,
+            thresholds: { high: 0.40, medium: 0.55 },
+            enrolled_faces: 4,
+            model: 'dlib_v1',
+            tier_a_available: true,
+            tier_c_available: true,
+            tier_b_status: 'inactive',
+          })
+        )
+      )
+
+      renderWithProviders(<FaceAttendancePage />)
+      expect(await screen.findByText('Fixed Camera: Offline')).toBeInTheDocument()
+    })
   })
 })

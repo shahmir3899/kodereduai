@@ -6,6 +6,7 @@ from .views import (
     LeavePolicyViewSet, LeaveApplicationViewSet,
     StaffAttendanceViewSet, PerformanceAppraisalViewSet,
     StaffQualificationViewSet, StaffDocumentViewSet,
+    StaffRiskView,
 )
 
 router = DefaultRouter()
@@ -22,5 +23,6 @@ router.register(r'qualifications', StaffQualificationViewSet, basename='staff-qu
 router.register(r'documents', StaffDocumentViewSet, basename='staff-document')
 
 urlpatterns = [
+    path('staff-risk/', StaffRiskView.as_view(), name='staff-risk'),
     path('', include(router.urls)),
 ]

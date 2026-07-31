@@ -8,7 +8,7 @@ import { useSessionClasses } from '../../hooks/useSessionClasses'
 import { useClassSubjects } from '../../hooks/useClassSubjects'
 import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
-import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
+import { getClassSelectorScope, getResolvedMasterClassId, resolveSessionClassId } from '../../utils/classScope'
 import { useToast } from '../../components/Toast'
 import TeacherScopeSummary from '../../components/teacher/TeacherScopeSummary'
 import TeacherScopeBadge, { TeacherScopeHint, useTeacherScopeLookup } from '../../components/teacher/TeacherScopeBadge'
@@ -114,8 +114,10 @@ export default function LessonPlansPage() {
   const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
   const resolvedFilterClass = getResolvedMasterClassId(filterClass, activeAcademicYear?.id, sessionClasses)
   const resolvedFormClassObj = getResolvedMasterClassId(form.class_obj, activeAcademicYear?.id, sessionClasses)
-  const { subjects: filterClassSubjects, isLoading: filterSubjectsLoading } = useClassSubjects(resolvedFilterClass)
-  const { subjects: formClassSubjects, assignments: formClassAssignments, isLoading: formSubjectsLoading } = useClassSubjects(resolvedFormClassObj)
+  const resolvedFilterSessionClassId = resolveSessionClassId(filterClass, activeAcademicYear?.id, sessionClasses)
+  const resolvedFormSessionClassId = resolveSessionClassId(form.class_obj, activeAcademicYear?.id, sessionClasses)
+  const { subjects: filterClassSubjects, isLoading: filterSubjectsLoading } = useClassSubjects(resolvedFilterClass, resolvedFilterSessionClassId)
+  const { subjects: formClassSubjects, assignments: formClassAssignments, isLoading: formSubjectsLoading } = useClassSubjects(resolvedFormClassObj, resolvedFormSessionClassId)
 
   // Minimal mode has no visible Teacher field — auto-assign from the class-subject's assigned teacher.
   useEffect(() => {
@@ -198,10 +200,11 @@ export default function LessonPlansPage() {
   const hasValidDateRange = Boolean(exportDateFrom && exportDateTo && exportDateFrom <= exportDateTo)
 
   const { data: plansData, isLoading } = useQuery({
-    queryKey: ['lessonPlans', resolvedFilterClass, filterSubject, activeAcademicYear?.id, exportDateFrom, exportDateTo],
+    queryKey: ['lessonPlans', resolvedFilterClass, resolvedFilterSessionClassId, filterSubject, activeAcademicYear?.id, exportDateFrom, exportDateTo],
     queryFn: () =>
       lmsApi.getLessonPlans({
         ...(resolvedFilterClass && { class_id: resolvedFilterClass }),
+        ...(resolvedFilterSessionClassId && { session_class_id: resolvedFilterSessionClassId }),
         ...(filterSubject && { subject_id: filterSubject }),
         ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
         date_from: exportDateFrom,
@@ -428,7 +431,7 @@ export default function LessonPlansPage() {
 
   const openEditModal = (plan) => {
     const mappedClassObj = classSelectorScope === 'session'
-      ? (sessionClassIdByMaster[String(plan.class_obj)] || '')
+      ? (plan.session_class ? String(plan.session_class) : (sessionClassIdByMaster[String(plan.class_obj)] || ''))
       : (plan.class_obj ? String(plan.class_obj) : '')
 
     const linkedObjectiveRows = (plan.linked_objectives || []).map((objective) =>
@@ -515,6 +518,7 @@ export default function LessonPlansPage() {
       teaching_methods: isMinimal ? '' : form.teaching_methods,
       status: isMinimal ? 'DRAFT' : form.status,
       class_obj: parseInt(resolvedFormClassObj),
+      session_class: resolvedFormSessionClassId ? parseInt(resolvedFormSessionClassId) : null,
       subject: parseInt(form.subject),
       teacher: form.teacher ? parseInt(form.teacher) : null,
       duration_minutes: isMinimal ? 45 : (parseInt(form.duration_minutes) || 45),
@@ -845,6 +849,11 @@ export default function LessonPlansPage() {
                       )}
                       <p className="text-xs text-gray-500 mt-0.5">
                         {plan.class_name || 'N/A'} | {plan.subject_name || 'N/A'}
+                        {plan.is_class_wide && (
+                          <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-medium align-middle">
+                            All sections
+                          </span>
+                        )}
                       </p>
                       {isTeacherEnabled && (
                         <TeacherScopeBadge scope={classifyScope({ classId: plan.class_obj, subjectId: plan.subject })} className="mt-1" />
@@ -1030,6 +1039,11 @@ export default function LessonPlansPage() {
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-500">
                         {plan.class_name || '--'}
+                        {plan.is_class_wide && (
+                          <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-medium align-middle">
+                            All sections
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-500">
                         {plan.subject_name || '--'}

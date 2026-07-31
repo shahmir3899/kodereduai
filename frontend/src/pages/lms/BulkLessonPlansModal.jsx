@@ -150,10 +150,11 @@ export default function BulkLessonPlansModal({ onClose, onSuccess, onCreateSingl
   })
 
   const { data: existingPlansData } = useQuery({
-    queryKey: ['lessonPlansBulkExisting', resolvedClass, selectedSubject, activeAcademicYear?.id],
+    queryKey: ['lessonPlansBulkExisting', resolvedClass, selectedSessionClassId, selectedSubject, activeAcademicYear?.id],
     queryFn: () =>
       lmsApi.getLessonPlans({
         class_id: resolvedClass,
+        ...(selectedSessionClassId && { session_class_id: selectedSessionClassId }),
         subject_id: selectedSubject,
         academic_year: activeAcademicYear?.id,
         page_size: 9999,
@@ -336,6 +337,7 @@ export default function BulkLessonPlansModal({ onClose, onSuccess, onCreateSingl
           school: activeSchool?.id,
           academic_year: activeAcademicYear?.id,
           class_obj: parseInt(resolvedClass, 10),
+          session_class: selectedSessionClassId ? parseInt(selectedSessionClassId, 10) : null,
           subject: parseInt(selectedSubject, 10),
           teacher: parseInt(selectedTeacher, 10),
           lesson_date: d,

@@ -11,6 +11,7 @@ import { getNextAvailableRoll } from '../utils/rollSuggestion'
 import ReportPeriodPicker from '../components/ReportPeriodPicker'
 import PhotoCropModal from '../components/PhotoCropModal'
 import { downloadInstantReport } from '../utils/downloadReport'
+import { canManageStudentLifecycle } from '../utils/accessPolicies'
 
 const TABS = ['Overview', 'Attendance', 'Fees', 'Academics', 'Assessment', 'History', 'Documents']
 
@@ -88,7 +89,8 @@ export default function StudentProfilePage() {
   const [recommendedReclassifyRoll, setRecommendedReclassifyRoll] = useState('')
   const queryClient = useQueryClient()
   const { showError, showSuccess } = useToast()
-  const { activeSchool } = useAuth()
+  const { activeSchool, user } = useAuth()
+  const canManageLifecycle = canManageStudentLifecycle(user?.role)
   const { activeAcademicYear } = useAcademicYear()
   const photoInputRef = useRef(null)
   const {
@@ -638,18 +640,22 @@ export default function StudentProfilePage() {
             >
               Edit Profile
             </button>
-            <button
-              onClick={handleOpenStatusModal}
-              className="px-4 py-2 bg-amber-100 text-amber-800 border border-amber-200 rounded-lg hover:bg-amber-200 text-sm"
-            >
-              Update Status
-            </button>
-            <button
-              onClick={handleOpenReclassifyModal}
-              className="px-4 py-2 bg-blue-100 text-blue-800 border border-blue-200 rounded-lg hover:bg-blue-200 text-sm"
-            >
-              Reclassify
-            </button>
+            {canManageLifecycle && (
+              <button
+                onClick={handleOpenStatusModal}
+                className="px-4 py-2 bg-amber-100 text-amber-800 border border-amber-200 rounded-lg hover:bg-amber-200 text-sm"
+              >
+                Update Status
+              </button>
+            )}
+            {canManageLifecycle && (
+              <button
+                onClick={handleOpenReclassifyModal}
+                className="px-4 py-2 bg-blue-100 text-blue-800 border border-blue-200 rounded-lg hover:bg-blue-200 text-sm"
+              >
+                Reclassify
+              </button>
+            )}
             <ReportPeriodPicker
               label={isDownloadingReport ? 'Generating...' : 'Download Report'}
               activeAcademicYearId={activeAcademicYear?.id}
@@ -1186,6 +1192,7 @@ function AttendanceTab({ data, isLoading, error }) {
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="overflow-x-auto">
       <table className="min-w-full divide-y divide-gray-200">
         <thead className="bg-gray-50">
           <tr>
@@ -1214,6 +1221,7 @@ function AttendanceTab({ data, isLoading, error }) {
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   )
 }
@@ -1232,6 +1240,7 @@ function FeesTab({ data, isLoading, error }) {
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="overflow-x-auto">
       <table className="min-w-full divide-y divide-gray-200">
         <thead className="bg-gray-50">
           <tr>
@@ -1260,6 +1269,7 @@ function FeesTab({ data, isLoading, error }) {
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   )
 }
@@ -1277,6 +1287,7 @@ function AcademicsTab({ data, isLoading, error }) {
           <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
             <h3 className="text-sm font-semibold text-gray-900">{exam.exam_name || exam.name || `Exam ${i + 1}`}</h3>
           </div>
+          <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead>
               <tr>
@@ -1306,6 +1317,7 @@ function AcademicsTab({ data, isLoading, error }) {
               })}
             </tbody>
           </table>
+          </div>
         </div>
       ))}
     </div>
@@ -1320,6 +1332,7 @@ function HistoryTab({ data, isLoading, error }) {
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="overflow-x-auto">
       <table className="min-w-full divide-y divide-gray-200">
         <thead className="bg-gray-50">
           <tr>
@@ -1350,6 +1363,7 @@ function HistoryTab({ data, isLoading, error }) {
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   )
 }

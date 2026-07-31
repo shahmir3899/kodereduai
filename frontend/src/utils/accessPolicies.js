@@ -14,3 +14,11 @@ export function canAccessInventoryRoute(role, { assignmentsOnly = false } = {}) 
   if (role === 'TEACHER' || role === 'STAFF') return !!assignmentsOnly
   return true
 }
+
+// Deleting a student record, changing lifecycle status, or reclassifying to
+// another class stay admin/principal-only even though TEACHER can otherwise
+// edit profile fields, upload photos, and create portal accounts for their
+// own students (see backend core.permissions.CanEditStudentRecord).
+export function canManageStudentLifecycle(role) {
+  return role === 'SUPER_ADMIN' || role === 'SCHOOL_ADMIN' || role === 'PRINCIPAL'
+}

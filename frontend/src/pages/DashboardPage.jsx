@@ -11,7 +11,7 @@ import {
 import { Link } from 'react-router-dom'
 
 import SessionHealthWidget from '../components/SessionHealthWidget'
-import AttendanceRiskWidget from '../components/AttendanceRiskWidget'
+import AIInsightsWidget from '../components/AIInsightsWidget'
 import StatCard from '../components/dashboard/StatCard'
 import ModuleHealthCard from '../components/dashboard/ModuleHealthCard'
 import QuickActionGrid from '../components/dashboard/QuickActionGrid'
@@ -518,8 +518,8 @@ export default function DashboardPage({ variant }) {
           {/* Session Health (below the fold) */}
           <SessionHealthWidget />
 
-          {/* Attendance Risk (collapsed) */}
-          <AttendanceRiskWidget />
+          {/* AI Insights (thin cross-module summary) */}
+          <AIInsightsWidget />
         </div>
 
         {/* Right Column (2/5) */}

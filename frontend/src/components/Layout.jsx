@@ -557,6 +557,13 @@ export default function Layout() {
       icon: ChartIcon,
     }] : []),
 
+    ...(isModuleEnabled('examinations') && !isStaffLevel ? [{
+      type: 'item',
+      name: 'Academic Risk',
+      href: '/academics/academic-risk',
+      icon: ExclamationIcon,
+    }] : []),
+
     // HR & Staff group (visible to SCHOOL_ADMIN, PRINCIPAL, HR_MANAGER + module check)
     ...(isModuleEnabled('hr') && (!isStaffLevel || isHRManager)
       ? [{
@@ -574,6 +581,7 @@ export default function Layout() {
             { name: 'Performance', href: '/hr/appraisals', icon: StarIcon },
             { name: 'Documents', href: '/hr/documents', icon: DocumentIcon },
             { name: 'Letter Composer', href: '/hr/letters', icon: DocumentIcon },
+            { name: 'Staff Risk', href: '/hr/risk', icon: ExclamationIcon },
           ],
         }]
       : []),
@@ -587,6 +595,7 @@ export default function Layout() {
         ...(isModuleEnabled('students') ? [
           { name: 'Classes', href: '/classes', icon: TableIcon },
           { name: 'Students', href: '/students', icon: UsersIcon },
+          ...(!isStaffLevel ? [{ name: 'Student Risk Score', href: '/students/risk-score', icon: ExclamationIcon }] : []),
         ] : []),
         ...(!isTeacher && isModuleEnabled('academics') ? [
           { type: 'divider', label: 'Academic Ops' },
@@ -607,10 +616,13 @@ export default function Layout() {
 
     // Admissions (admin only)
     ...(isModuleEnabled('admissions') && !isStaffLevel ? [{
-      type: 'link',
+      type: 'group',
       name: 'Admissions',
-      href: '/admissions',
       icon: UserPlusIcon,
+      children: [
+        { name: 'Enquiries', href: '/admissions', icon: UserPlusIcon },
+        { name: 'Conversion Likelihood', href: '/admissions/conversion-likelihood', icon: ExclamationIcon },
+      ],
     }] : []),
 
     // Transport group
@@ -665,6 +677,7 @@ export default function Layout() {
             { name: 'Items', href: '/inventory/items', icon: FolderIcon },
             { name: 'Transactions', href: '/inventory/transactions', icon: DocumentIcon },
             { name: 'Assignments', href: '/inventory/assignments', icon: UsersIcon },
+            { name: 'Reorder Prediction', href: '/inventory/reorder-prediction', icon: ExclamationIcon },
           ],
     }] : []),
 

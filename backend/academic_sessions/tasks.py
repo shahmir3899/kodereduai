@@ -359,3 +359,47 @@ def recompute_attendance_risk_snapshots():
         f"{alerted_schools} alerted."
     )
     return {'processed_schools': processed_schools, 'alerted_schools': alerted_schools}
+
+
+@shared_task
+def recompute_student_risk_snapshots():
+    """
+    Nightly Celery Beat job (staggered 30 min after recompute_attendance_risk_snapshots
+    to spread DB load — see CELERY_BEAT_SCHEDULE). Recomputes the composite
+    Student Risk Score (attendance + fee default + academic decline) for
+    every active school's current academic year and caches it in
+    StudentRiskSnapshot. Runs independently of the attendance snapshot job
+    rather than depending on it, to avoid task-ordering coupling.
+    """
+    from schools.models import School
+    from academic_sessions.models import AcademicYear, StudentRiskSnapshot
+    from academic_sessions.student_risk_score_service import StudentRiskScoreService
+
+    processed_schools = 0
+
+    for school in School.objects.filter(is_active=True):
+        try:
+            academic_year = AcademicYear.objects.filter(
+                school_id=school.id, is_current=True, is_active=True,
+            ).first()
+            if not academic_year:
+                continue
+
+            report = StudentRiskScoreService(school.id, academic_year.id).get_student_risk_scores()
+
+            StudentRiskSnapshot.objects.update_or_create(
+                school=school,
+                academic_year=academic_year,
+                defaults={
+                    'total_students': report['total_students'],
+                    'at_risk_count': report['at_risk_count'],
+                    'risk_levels': report['risk_levels'],
+                    'students': report['students'],
+                },
+            )
+            processed_schools += 1
+        except Exception as e:
+            logger.error(f"Student risk snapshot failed for school {school.id}: {e}")
+
+    logger.info(f"Student risk snapshots recomputed for {processed_schools} schools.")
+    return {'processed_schools': processed_schools}

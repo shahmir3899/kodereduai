@@ -23,6 +23,7 @@ const ManualEntryPage = lazy(() => import('./pages/ManualEntryPage'))
 const AnomaliesPage = lazy(() => import('./pages/attendance/AnomaliesPage'))
 const AtRiskStudentsPage = lazy(() => import('./pages/attendance/AtRiskStudentsPage'))
 const StudentsPage = lazy(() => import('./pages/StudentsPage'))
+const StudentRiskScorePage = lazy(() => import('./pages/students/StudentRiskScorePage'))
 const ClassesGradesPage = lazy(() => import('./pages/ClassesGradesPage'))
 const SuperAdminDashboard = lazy(() => import('./pages/SuperAdminDashboard'))
 const BrochurePage = lazy(() => import('./pages/admin/BrochurePage'))
@@ -51,6 +52,7 @@ const StaffAttendancePage = lazy(() => import('./pages/hr/StaffAttendancePage'))
 const PerformanceAppraisalPage = lazy(() => import('./pages/hr/PerformanceAppraisalPage'))
 const StaffDocumentsPage = lazy(() => import('./pages/hr/StaffDocumentsPage'))
 const LetterComposerPage = lazy(() => import('./pages/hr/LetterComposerPage'))
+const StaffRiskPage = lazy(() => import('./pages/hr/StaffRiskPage'))
 
 // Academics pages
 const SubjectsPage = lazy(() => import('./pages/academics/SubjectsPage'))
@@ -74,6 +76,7 @@ const ExamPapersPage = lazy(() => import('./pages/examinations/ExamPapersPage'))
 const CurriculumCoveragePage = lazy(() => import('./pages/examinations/CurriculumCoveragePage'))
 const QuestionsPage = lazy(() => import('./pages/examinations/QuestionsPage'))
 const StudentResponsePage = lazy(() => import('./pages/examinations/StudentResponsePage'))
+const AcademicRiskPage = lazy(() => import('./pages/examinations/AcademicRiskPage'))
 
 // Parent Portal pages
 const ParentDashboard = lazy(() => import('./pages/parent/ParentDashboard'))
@@ -89,6 +92,7 @@ const PaymentResultPage = lazy(() => import('./pages/parent/PaymentResultPage'))
 // Admissions pages
 const EnquiriesPage = lazy(() => import('./pages/admissions/EnquiriesPage'))
 const EnquiryForm = lazy(() => import('./pages/admissions/EnquiryForm'))
+const ConversionLikelihoodPage = lazy(() => import('./pages/admissions/ConversionLikelihoodPage'))
 
 // Finance additions
 const DiscountsPage = lazy(() => import('./pages/finance/DiscountsPage'))
@@ -134,6 +138,7 @@ const InventoryDashboard = lazy(() => import('./pages/inventory/InventoryDashboa
 const InventoryItemsPage = lazy(() => import('./pages/inventory/InventoryItemsPage'))
 const StockTransactionsPage = lazy(() => import('./pages/inventory/StockTransactionsPage'))
 const ItemAssignmentsPage = lazy(() => import('./pages/inventory/ItemAssignmentsPage'))
+const ReorderPredictionPage = lazy(() => import('./pages/inventory/ReorderPredictionPage'))
 
 // Messaging
 const MessagesPage = lazy(() => import('./pages/messaging/MessagesPage'))
@@ -145,6 +150,13 @@ const UserGuidePage = lazy(() => import('./pages/UserGuidePage'))
 const FaceAttendancePage = lazy(() => import('./pages/face-attendance/FaceAttendancePage'))
 const FaceReviewPage = lazy(() => import('./pages/face-attendance/FaceReviewPage'))
 const FaceEnrollmentPage = lazy(() => import('./pages/face-attendance/FaceEnrollmentPage'))
+const FaceBulkEnrollmentPage = lazy(() => import('./pages/face-attendance/FaceBulkEnrollmentPage'))
+// Note: FaceLiveCapturePage (Mobile Capture) is no longer routed on its own —
+// it's rendered directly (not lazy) as a tab inside FaceAttendancePage, and
+// /face-attendance/live-capture below redirects there for old deep links.
+// Tier B (fixed on-prem camera) — device management + live-match troubleshooting
+const FaceDevicesPage = lazy(() => import('./pages/face-attendance/FaceDevicesPage'))
+const FaceLiveEventsPage = lazy(() => import('./pages/face-attendance/FaceLiveEventsPage'))
 
 // Error Boundary to catch runtime crashes
 class ErrorBoundary extends Component {
@@ -412,10 +424,30 @@ function App() {
             <Route path="attendance/anomalies" element={<SchoolRoute><ModuleRoute module="attendance"><AnomaliesPage /></ModuleRoute></SchoolRoute>} />
             <Route path="attendance/at-risk" element={<SchoolRoute><ModuleRoute module="attendance"><AdminPrincipalRoute><AtRiskStudentsPage /></AdminPrincipalRoute></ModuleRoute></SchoolRoute>} />
 
-            {/* Face Attendance (camera-based) */}
-            <Route path="face-attendance" element={<SchoolRoute><CapabilityRoute module="attendance" capability="face_recognition"><FaceAttendancePage /></CapabilityRoute></SchoolRoute>} />
-            <Route path="face-attendance/review/:sessionId" element={<SchoolRoute><CapabilityRoute module="attendance" capability="face_recognition"><FaceReviewPage /></CapabilityRoute></SchoolRoute>} />
-            <Route path="face-attendance/enrollment" element={<SchoolRoute><CapabilityRoute module="attendance" capability="face_recognition"><FaceEnrollmentPage /></CapabilityRoute></SchoolRoute>} />
+            {/* Face Attendance (camera-based) — Tier C (group photo) and Tier A (mobile
+                capture) are both unconditionally available to every school (2026-07
+                product decision) — no per-tier flag gate anymore, just normal
+                auth/school-scoping like every other module. */}
+            <Route path="face-attendance" element={<SchoolRoute><FaceAttendancePage /></SchoolRoute>} />
+            <Route path="face-attendance/review/:sessionId" element={<SchoolRoute><FaceReviewPage /></SchoolRoute>} />
+            <Route path="face-attendance/enrollment" element={<SchoolRoute><FaceEnrollmentPage /></SchoolRoute>} />
+
+            {/* Old standalone Tier A route — Mobile Capture is now a tab on the main
+                page, not a disconnected page. Redirect rather than remove so existing
+                bookmarks/deep links (the whole point of Tier A being a phone-friendly
+                gate-side tool) keep working. */}
+            <Route path="face-attendance/live-capture" element={<Navigate to="/face-attendance?tab=mobile" replace />} />
+
+            {/* Face Attendance — Tier A bulk re-enrollment queue (design doc §10 backlog).
+                No AdminPrincipalRoute: it calls the same enroll/ embedding path, gated by
+                CanConfirmAttendance (admin OR teacher), not admin-only. */}
+            <Route path="face-attendance/bulk-enrollment" element={<SchoolRoute><FaceBulkEnrollmentPage /></SchoolRoute>} />
+
+            {/* Face Attendance — Tier B, fixed on-prem camera. Admin-only management
+                pages (matches IsSchoolAdmin backend gate) — no longer tier-flag-gated;
+                they show their own empty state when no device is registered. */}
+            <Route path="face-attendance/devices" element={<SchoolRoute><AdminPrincipalRoute><FaceDevicesPage /></AdminPrincipalRoute></SchoolRoute>} />
+            <Route path="face-attendance/live-events" element={<SchoolRoute><AdminPrincipalRoute><FaceLiveEventsPage /></AdminPrincipalRoute></SchoolRoute>} />
 
             {/* Redirects from old routes */}
             <Route path="attendance/upload" element={<Navigate to="/attendance/manual-entry" replace />} />
@@ -427,6 +459,7 @@ function App() {
 
             <Route path="students" element={<SchoolRoute><ModuleRoute module="students"><ManagementRoute teacherAllowed><StudentsPage /></ManagementRoute></ModuleRoute></SchoolRoute>} />
             <Route path="students/:id" element={<SchoolRoute><ModuleRoute module="students"><ManagementRoute teacherAllowed><StudentProfilePage /></ManagementRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="students/risk-score" element={<SchoolRoute><ModuleRoute module="students"><AdminPrincipalRoute><StudentRiskScorePage /></AdminPrincipalRoute></ModuleRoute></SchoolRoute>} />
             <Route path="classes" element={<SchoolRoute><ModuleRoute module="students"><ManagementRoute teacherAllowed><ClassesGradesPage /></ManagementRoute></ModuleRoute></SchoolRoute>} />
 
             {/* HR routes */}
@@ -442,11 +475,13 @@ function App() {
             <Route path="hr/appraisals" element={<SchoolRoute><ModuleRoute module="hr"><PerformanceAppraisalPage /></ModuleRoute></SchoolRoute>} />
             <Route path="hr/documents" element={<SchoolRoute><ModuleRoute module="hr"><StaffDocumentsPage /></ModuleRoute></SchoolRoute>} />
             <Route path="hr/letters" element={<SchoolRoute><ModuleRoute module="hr"><LetterComposerPage /></ModuleRoute></SchoolRoute>} />
+            <Route path="hr/risk" element={<SchoolRoute><ModuleRoute module="hr"><StaffRiskPage /></ModuleRoute></SchoolRoute>} />
 
             {/* Academics routes */}
             <Route path="academics/subjects" element={<SchoolRoute><ModuleRoute module="academics"><ManagementRoute><SubjectsPage /></ManagementRoute></ModuleRoute></SchoolRoute>} />
             <Route path="academics/timetable" element={<SchoolRoute><ModuleRoute module="academics"><TimetableRoute /></ModuleRoute></SchoolRoute>} />
             <Route path="academics/analytics" element={<SchoolRoute><ModuleRoute module="academics"><AdminPrincipalRoute><AcademicsAnalyticsPage /></AdminPrincipalRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="academics/academic-risk" element={<SchoolRoute><ModuleRoute module="examinations"><AdminPrincipalRoute><AcademicRiskPage /></AdminPrincipalRoute></ModuleRoute></SchoolRoute>} />
             <Route path="academics/calendar" element={<SchoolRoute><ModuleRoute module="academics"><ManagementRoute><AcademicCalendarPage /></ManagementRoute></ModuleRoute></SchoolRoute>} />
             <Route path="academics/sessions" element={<SchoolRoute><ModuleRoute module="academics"><ManagementRoute><AcademicYearsPage /></ManagementRoute></ModuleRoute></SchoolRoute>} />
             <Route path="academics/promotion" element={<SchoolRoute><ModuleRoute module="academics"><ManagementRoute><PromotionPage /></ManagementRoute></ModuleRoute></SchoolRoute>} />
@@ -539,11 +574,13 @@ function App() {
             <Route path="inventory/items" element={<SchoolRoute><ModuleRoute module="inventory"><InventoryRoute><InventoryItemsPage /></InventoryRoute></ModuleRoute></SchoolRoute>} />
             <Route path="inventory/transactions" element={<SchoolRoute><ModuleRoute module="inventory"><InventoryRoute><StockTransactionsPage /></InventoryRoute></ModuleRoute></SchoolRoute>} />
             <Route path="inventory/assignments" element={<SchoolRoute><ModuleRoute module="inventory"><InventoryRoute assignmentsOnly><ItemAssignmentsPage /></InventoryRoute></ModuleRoute></SchoolRoute>} />
+            <Route path="inventory/reorder-prediction" element={<SchoolRoute><ModuleRoute module="inventory"><InventoryRoute><ReorderPredictionPage /></InventoryRoute></ModuleRoute></SchoolRoute>} />
 
             {/* Admissions routes */}
             <Route path="admissions" element={<SchoolRoute><ModuleRoute module="admissions"><EnquiriesPage /></ModuleRoute></SchoolRoute>} />
             <Route path="admissions/new" element={<SchoolRoute><ModuleRoute module="admissions"><EnquiryForm /></ModuleRoute></SchoolRoute>} />
             <Route path="admissions/:id/edit" element={<SchoolRoute><ModuleRoute module="admissions"><EnquiryForm /></ModuleRoute></SchoolRoute>} />
+            <Route path="admissions/conversion-likelihood" element={<SchoolRoute><ModuleRoute module="admissions"><ConversionLikelihoodPage /></ModuleRoute></SchoolRoute>} />
 
             {/* Super Admin routes */}
             <Route

@@ -8,6 +8,7 @@ import { studentsApi, classesApi, schoolsApi } from '../services/api'
 import { useToast } from '../components/Toast'
 import { useSessionClasses } from '../hooks/useSessionClasses'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../utils/classScope'
+import { canManageStudentLifecycle } from '../utils/accessPolicies'
 import { sortClassOptions } from '../utils/classOrdering'
 import { getNextAvailableRoll } from '../utils/rollSuggestion'
 import ClassSelector from '../components/ClassSelector'
@@ -15,6 +16,7 @@ import { exportStudentsPDF, exportStudentsPNG } from './studentExport'
 import { useDebounce } from '../hooks/useDebounce'
 import WhatsAppTick from '../components/WhatsAppTick'
 import ReportPeriodPicker from '../components/ReportPeriodPicker'
+import PhotoCropModal from '../components/PhotoCropModal'
 import { downloadInstantReport } from '../utils/downloadReport'
 
 function StudentAvatar({ student, sizeClass = 'w-8 h-8' }) {
@@ -66,6 +68,7 @@ export default function StudentsPage() {
   const queryClient = useQueryClient()
   const { showError, showSuccess, showWarning } = useToast()
   const isSuperAdmin = user?.role === 'SUPER_ADMIN'
+  const canManageLifecycle = canManageStudentLifecycle(user?.role)
   const fileInputRef = useRef(null)
   const [isGeneratingReports, setIsGeneratingReports] = useState(false)
   const [reportDownloadProgress, setReportDownloadProgress] = useState({ current: 0, total: 0 })
@@ -83,6 +86,8 @@ export default function StudentsPage() {
   const [isUploading, setIsUploading] = useState(false)
   const [showExportMenu, setShowExportMenu] = useState(false)
   const exportRef = useRef(null)
+  const photoInputRef = useRef(null)
+  const [cropImageSrc, setCropImageSrc] = useState(null)
   const [studentForm, setStudentForm] = useState({
     name: '',
     roll_number: '',
@@ -212,6 +217,48 @@ export default function StudentsPage() {
       showError(message)
     },
   })
+
+  // Photo upload/remove — only available once a student exists (edit mode)
+  const uploadPhotoMutation = useMutation({
+    mutationFn: ({ id, file }) => studentsApi.uploadPhoto(id, file),
+    onSuccess: (response) => {
+      queryClient.invalidateQueries({ queryKey: ['students'] })
+      setEditingStudent((prev) => (prev ? { ...prev, photo_url: response.data.photo_url } : prev))
+      showSuccess('Photo uploaded successfully.')
+    },
+    onError: (error) => {
+      showError(error.response?.data?.error || error.response?.data?.detail || 'Failed to upload photo')
+    },
+  })
+
+  const removePhotoMutation = useMutation({
+    mutationFn: (id) => studentsApi.removePhoto(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['students'] })
+      setEditingStudent((prev) => (prev ? { ...prev, photo_url: '' } : prev))
+      showSuccess('Photo removed.')
+    },
+    onError: (error) => {
+      showError(error.response?.data?.error || error.response?.data?.detail || 'Failed to remove photo')
+    },
+  })
+
+  const handlePhotoFileChange = (e) => {
+    const file = e.target.files?.[0]
+    if (file) setCropImageSrc(URL.createObjectURL(file))
+    e.target.value = ''
+  }
+
+  const closeCropModal = () => {
+    if (cropImageSrc) URL.revokeObjectURL(cropImageSrc)
+    setCropImageSrc(null)
+  }
+
+  const handleCropSave = (blob) => {
+    const file = new File([blob], 'photo.jpg', { type: 'image/jpeg' })
+    uploadPhotoMutation.mutate({ id: editingStudent.id, file })
+    closeCropModal()
+  }
 
   // Individual convert handler
   const handleIndividualConvert = async () => {
@@ -1389,7 +1436,9 @@ export default function StudentsPage() {
                 )}
                 <div className="flex gap-3 mt-2 pt-2 border-t border-gray-100">
                   <button onClick={() => openEditModal(student)} className="text-xs text-blue-600 font-medium">Edit</button>
-                  <button onClick={() => setDeleteConfirm(student)} className="text-xs text-red-600 font-medium">Delete</button>
+                  {canManageLifecycle && (
+                    <button onClick={() => setDeleteConfirm(student)} className="text-xs text-red-600 font-medium">Delete</button>
+                  )}
                   {!student.has_user_account && (
                     <button onClick={() => openConvertModal(student)} className="text-xs text-purple-600 font-medium">Create Account</button>
                   )}
@@ -1481,12 +1530,14 @@ export default function StudentsPage() {
                           Create Account
                         </button>
                       )}
-                      <button
-                        onClick={() => setDeleteConfirm(student)}
-                        className="text-sm text-red-600 hover:text-red-800 font-medium"
-                      >
-                        Delete
-                      </button>
+                      {canManageLifecycle && (
+                        <button
+                          onClick={() => setDeleteConfirm(student)}
+                          className="text-sm text-red-600 hover:text-red-800 font-medium"
+                        >
+                          Delete
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -1505,6 +1556,53 @@ export default function StudentsPage() {
             <h2 className="text-xl font-bold text-gray-900 mb-4">
               {editingStudent ? 'Edit Student' : 'Add Student'}
             </h2>
+
+            {editingStudent && (
+              <div className="flex items-center gap-4 mb-4">
+                <div className="relative w-16 h-16 flex-shrink-0 group">
+                  <StudentAvatar student={editingStudent} sizeClass="w-16 h-16" />
+                  <button
+                    type="button"
+                    onClick={() => photoInputRef.current?.click()}
+                    disabled={uploadPhotoMutation.isPending}
+                    title={editingStudent.photo_url ? 'Change photo' : 'Upload photo'}
+                    className="absolute inset-0 rounded-full bg-black/50 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity disabled:opacity-100 disabled:bg-black/30"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                  </button>
+                  <input
+                    ref={photoInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={handlePhotoFileChange}
+                    className="hidden"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <button
+                    type="button"
+                    onClick={() => photoInputRef.current?.click()}
+                    disabled={uploadPhotoMutation.isPending}
+                    className="text-sm font-medium text-primary-600 hover:text-primary-700 text-left"
+                  >
+                    {editingStudent.photo_url ? 'Change Photo' : 'Upload Photo'}
+                  </button>
+                  {editingStudent.photo_url && (
+                    <button
+                      type="button"
+                      onClick={() => removePhotoMutation.mutate(editingStudent.id)}
+                      disabled={removePhotoMutation.isPending}
+                      className="text-sm font-medium text-red-600 hover:text-red-700 text-left"
+                    >
+                      {removePhotoMutation.isPending ? 'Removing...' : 'Remove Photo'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
 
             <div className="space-y-4">
               <div>
@@ -1642,7 +1740,7 @@ export default function StudentsPage() {
                           placeholder="Email address (optional)"
                         />
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         <div>
                           <label className="block text-xs font-medium text-gray-700 mb-1">Password *</label>
                           <PasswordInput
@@ -1771,7 +1869,7 @@ export default function StudentsPage() {
 
       {/* Floating Bulk Convert Action Bar */}
       {selectedStudents.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-40 bg-purple-600 text-white px-6 py-3 rounded-full shadow-lg flex items-center gap-4">
+        <div className="fixed bottom-4 inset-x-4 sm:inset-x-auto sm:bottom-6 sm:left-1/2 sm:-translate-x-1/2 z-40 bg-purple-600 text-white px-4 sm:px-6 py-3 rounded-2xl sm:rounded-full shadow-lg flex flex-wrap items-center justify-center gap-2 sm:gap-4">
           <span className="text-sm font-medium">
             {isGeneratingReports
               ? `Downloading ${reportDownloadProgress.current} of ${reportDownloadProgress.total}...`
@@ -1836,7 +1934,7 @@ export default function StudentsPage() {
                   placeholder="Email (optional)"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Password *</label>
                   <PasswordInput
@@ -1970,6 +2068,14 @@ export default function StudentsPage() {
             )}
           </div>
         </div>
+      )}
+
+      {cropImageSrc && (
+        <PhotoCropModal
+          imageSrc={cropImageSrc}
+          onCancel={closeCropModal}
+          onSave={handleCropSave}
+        />
       )}
     </div>
   )

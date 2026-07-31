@@ -444,6 +444,108 @@ class SchoolViewSet(TenantQuerySetMixin, viewsets.ReadOnlyModelViewSet):
             'attendance_config': school.attendance_config
         })
 
+    @action(detail=False, methods=['get', 'put'])
+    def academic_risk_config(self, request):
+        """Get or update academic risk predictor configuration (AI pass threshold, etc.) for the current school."""
+        school = getattr(request, 'tenant_school', None) or request.user.school
+        if not school:
+            return Response(
+                {'error': 'No school associated with this user.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        if request.method == 'GET':
+            return Response({
+                'academic_risk_config': school.academic_risk_config,
+                'school_name': school.name
+            })
+
+        # PUT - Update academic risk config
+        from core.permissions import get_effective_role, ADMIN_ROLES
+        role = get_effective_role(request)
+        if role not in ADMIN_ROLES:
+            return Response(
+                {'error': 'Only school admins can update academic risk configuration.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        academic_risk_config = school.academic_risk_config or {}
+        new_data = request.data
+        if 'risk_pass_threshold' in new_data:
+            try:
+                risk_pass_threshold = float(new_data['risk_pass_threshold'])
+            except (TypeError, ValueError):
+                return Response(
+                    {'error': 'risk_pass_threshold must be a number.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            if not (0 <= risk_pass_threshold <= 100):
+                return Response(
+                    {'error': 'risk_pass_threshold must be between 0 and 100.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            academic_risk_config['risk_pass_threshold'] = risk_pass_threshold
+
+        school.academic_risk_config = academic_risk_config
+        school.save(update_fields=['academic_risk_config', 'updated_at'])
+
+        return Response({
+            'success': True,
+            'message': 'Academic risk configuration updated successfully.',
+            'academic_risk_config': school.academic_risk_config
+        })
+
+    @action(detail=False, methods=['get', 'put'])
+    def inventory_config(self, request):
+        """Get or update inventory configuration (AI reorder lookahead window, etc.) for the current school."""
+        school = getattr(request, 'tenant_school', None) or request.user.school
+        if not school:
+            return Response(
+                {'error': 'No school associated with this user.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        if request.method == 'GET':
+            return Response({
+                'inventory_config': school.inventory_config,
+                'school_name': school.name
+            })
+
+        # PUT - Update inventory config
+        from core.permissions import get_effective_role, ADMIN_ROLES
+        role = get_effective_role(request)
+        if role not in ADMIN_ROLES:
+            return Response(
+                {'error': 'Only school admins can update inventory configuration.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        inventory_config = school.inventory_config or {}
+        new_data = request.data
+        if 'reorder_lookahead_days' in new_data:
+            try:
+                reorder_lookahead_days = int(new_data['reorder_lookahead_days'])
+            except (TypeError, ValueError):
+                return Response(
+                    {'error': 'reorder_lookahead_days must be a whole number.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            if not (1 <= reorder_lookahead_days <= 365):
+                return Response(
+                    {'error': 'reorder_lookahead_days must be between 1 and 365.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            inventory_config['reorder_lookahead_days'] = reorder_lookahead_days
+
+        school.inventory_config = inventory_config
+        school.save(update_fields=['inventory_config', 'updated_at'])
+
+        return Response({
+            'success': True,
+            'message': 'Inventory configuration updated successfully.',
+            'inventory_config': school.inventory_config
+        })
+
     @action(detail=False, methods=['post'], parser_classes=[MultiPartParser, FormParser])
     def upload_asset(self, request):
         """

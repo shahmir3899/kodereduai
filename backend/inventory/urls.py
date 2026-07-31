@@ -8,7 +8,7 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     InventoryCategoryViewSet, VendorViewSet, InventoryItemViewSet,
     ItemAssignmentViewSet, StockTransactionViewSet, InventoryDashboardView,
-    ai_suggest_inventory,
+    ai_suggest_inventory, ReorderPredictionView,
 )
 
 router = DefaultRouter()
@@ -21,5 +21,6 @@ router.register(r'transactions', StockTransactionViewSet, basename='stock-transa
 urlpatterns = [
     path('dashboard/', InventoryDashboardView.as_view(), name='inventory-dashboard'),
     path('ai-suggest/', ai_suggest_inventory, name='inventory-ai-suggest'),
+    path('reorder-prediction/', ReorderPredictionView.as_view(), name='inventory-reorder-prediction'),
     path('', include(router.urls)),
 ]

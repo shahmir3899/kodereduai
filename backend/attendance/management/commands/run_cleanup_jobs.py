@@ -30,12 +30,13 @@ class Command(BaseCommand):
         parser.add_argument('--transport', action='store_true', help='Cleanup old GPS data and auto-end stale journeys.')
         parser.add_argument('--thresholds', action='store_true', help='Auto-tune OCR accuracy thresholds (weekly).')
         parser.add_argument('--toc-stale', action='store_true', help='Mark stale TOC import jobs timed-out.')
+        parser.add_argument('--face-attendance', action='store_true', help='Cleanup old failed face sessions (90d) and expired live-detection events.')
 
     def handle(self, *args, **options):
         run_all = options['all']
 
         if not any([run_all, options['upload_cleanup'], options['transport'],
-                    options['thresholds'], options['toc_stale']]):
+                    options['thresholds'], options['toc_stale'], options['face_attendance']]):
             self.stderr.write(self.style.ERROR(
                 'Specify at least one job flag or use --all.  Run with --help for options.'
             ))
@@ -52,6 +53,9 @@ class Command(BaseCommand):
 
         if run_all or options['toc_stale']:
             self._toc_stale_cleanup()
+
+        if run_all or options['face_attendance']:
+            self._cleanup_face_attendance()
 
     # ------------------------------------------------------------------
     # helpers
@@ -95,3 +99,16 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(f'  done: {result}'))
         except Exception as exc:
             self.stderr.write(self.style.ERROR(f'  FAILED: {exc}'))
+
+    def _cleanup_face_attendance(self):
+        from face_attendance.tasks import cleanup_old_face_sessions, cleanup_old_live_detection_events
+        for fn, kwargs, label in [
+            (cleanup_old_face_sessions, {}, 'cleanup_old_face_sessions'),
+            (cleanup_old_live_detection_events, {}, 'cleanup_old_live_detection_events'),
+        ]:
+            self.stdout.write(f'Running {label}…')
+            try:
+                result = fn(**kwargs)
+                self.stdout.write(self.style.SUCCESS(f'  done: {result}'))
+            except Exception as exc:
+                self.stderr.write(self.style.ERROR(f'  FAILED: {exc}'))

@@ -5,7 +5,7 @@ from .views import (
     StudentMarkViewSet, StudentResponseViewSet, GradeScaleViewSet, ReportCardView,
     QuestionViewSet, ExamPaperViewSet, PaperUploadViewSet, PaperFeedbackViewSet,
     StudentTermAssessmentView, StudentTermAssessmentRosterView, StudentTermAssessmentBulkSaveView,
-    StudentTermAssessmentAIRemarkView,
+    StudentTermAssessmentAIRemarkView, AcademicRiskView,
 )
 
 router = DefaultRouter()
@@ -30,4 +30,5 @@ urlpatterns = [
     path('student-term-assessment/roster/', StudentTermAssessmentRosterView.as_view(), name='student-term-assessment-roster'),
     path('student-term-assessment/bulk-save/', StudentTermAssessmentBulkSaveView.as_view(), name='student-term-assessment-bulk-save'),
     path('student-term-assessment/ai-remark/', StudentTermAssessmentAIRemarkView.as_view(), name='student-term-assessment-ai-remark'),
+    path('academic-risk/', AcademicRiskView.as_view(), name='academic-risk'),
 ]

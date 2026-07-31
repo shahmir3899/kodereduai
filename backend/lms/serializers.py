@@ -423,6 +423,7 @@ class LessonPlanReadSerializer(serializers.ModelSerializer):
     content_mode = serializers.CharField(read_only=True)
     ai_generated = serializers.BooleanField(read_only=True)
     custom_topics = serializers.ListField(child=serializers.CharField(), read_only=True)
+    is_class_wide = serializers.SerializerMethodField()
 
     class Meta:
         model = LessonPlan
@@ -430,6 +431,7 @@ class LessonPlanReadSerializer(serializers.ModelSerializer):
             'id', 'school', 'school_name',
             'academic_year', 'academic_year_name',
             'class_obj', 'class_name',
+            'session_class', 'is_class_wide',
             'subject', 'subject_name',
             'teacher', 'teacher_name',
             'title', 'description', 'objectives', 'objectives_text',
@@ -444,6 +446,9 @@ class LessonPlanReadSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
 
+    def get_is_class_wide(self, obj):
+        return not obj.session_class_id
+
     def get_linked_objectives(self, obj):
         objectives = [link.objective for link in obj.lesson_objectives.all()]
         return LearningObjectiveSerializer(objectives, many=True).data
@@ -452,6 +457,8 @@ class LessonPlanReadSerializer(serializers.ModelSerializer):
         return self.get_linked_objectives(obj)
 
     def get_class_name(self, obj):
+        if obj.session_class_id:
+            return obj.session_class.label
         session_name = getattr(obj, 'session_display_name', None)
         if session_name:
             section = getattr(obj, 'session_display_section', None)
@@ -484,7 +491,7 @@ class LessonPlanCreateSerializer(serializers.ModelSerializer):
         model = LessonPlan
         fields = [
             'id', 'school', 'academic_year',
-            'class_obj', 'subject', 'teacher',
+            'class_obj', 'session_class', 'subject', 'teacher',
             'title', 'description', 'objectives',
             'lesson_date', 'duration_minutes',
             'materials_needed', 'teaching_methods',
@@ -493,10 +500,22 @@ class LessonPlanCreateSerializer(serializers.ModelSerializer):
             'status', 'is_active',
         ]
         read_only_fields = ['id']
+        extra_kwargs = {
+            'session_class': {'required': False, 'allow_null': True},
+        }
 
     def validate_custom_topics(self, value):
         cleaned = [label.strip() for label in value if label.strip()]
         return cleaned
+
+    def validate(self, attrs):
+        session_class = attrs.get('session_class')
+        class_obj = attrs.get('class_obj') or getattr(self.instance, 'class_obj', None)
+        if session_class and class_obj and session_class.class_obj_id != class_obj.id:
+            raise serializers.ValidationError({
+                'session_class': 'Selected section does not belong to the selected class.',
+            })
+        return attrs
 
     def _merge_topic_ids_from_subtopics(self, topic_ids, subtopic_ids):
         tid_set = {int(x) for x in (topic_ids or []) if x is not None}
@@ -573,6 +592,7 @@ class LessonPlanBulkCreateSerializer(serializers.Serializer):
     school = serializers.IntegerField()
     academic_year = serializers.IntegerField(required=False, allow_null=True)
     class_obj = serializers.IntegerField()
+    session_class = serializers.IntegerField(required=False, allow_null=True)
     subject = serializers.IntegerField()
     teacher = serializers.IntegerField()
     duration_minutes = serializers.IntegerField(default=45, min_value=1, max_value=600)

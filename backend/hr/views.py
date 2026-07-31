@@ -13,6 +13,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
+from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 
 from core.permissions import HasSchoolAccess, get_effective_role, ModuleAccessMixin, ROLE_HIERARCHY, ADMIN_ROLES
@@ -1880,3 +1881,25 @@ class StaffDocumentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mode
             from rest_framework.exceptions import ValidationError
             raise ValidationError({'detail': 'No school associated with your account.'})
         serializer.save(school_id=school_id)
+
+
+class StaffRiskView(APIView):
+    """AI Staff Attrition / Leave-Abuse Risk Predictor."""
+    permission_classes = [IsAuthenticated, HasSchoolAccess]
+
+    def get(self, request):
+        from .staff_risk_service import StaffRiskService
+
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response(
+                {'detail': 'No school context found.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        window_days = int(request.query_params.get('window_days', 90))
+
+        service = StaffRiskService(school_id)
+        result = service.get_at_risk_staff(window_days=window_days)
+
+        return Response(result)

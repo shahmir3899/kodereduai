@@ -230,6 +230,21 @@ class StudentUpdateSerializer(serializers.ModelSerializer):
         return attrs
 
 
+class StudentTeacherUpdateSerializer(StudentUpdateSerializer):
+    """
+    Restricted profile-edit serializer for the TEACHER role: drops class
+    reassignment and lifecycle-status fields, which stay admin/principal-only
+    (via reclassify/status actions). Reuses StudentUpdateSerializer.validate(),
+    which already falls back to the student's existing class_obj when it's
+    absent from attrs.
+    """
+    class Meta(StudentUpdateSerializer.Meta):
+        fields = [
+            f for f in StudentUpdateSerializer.Meta.fields
+            if f not in ('class_obj', 'is_active', 'status', 'status_date', 'status_reason')
+        ]
+
+
 class ReclassifyStudentSerializer(serializers.Serializer):
     academic_year_id = serializers.IntegerField()
     target_class_id = serializers.IntegerField(required=False)
