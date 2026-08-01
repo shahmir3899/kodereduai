@@ -48,7 +48,7 @@ export default function FaceLiveEventsPage() {
         </button>
         <h1 className="text-2xl font-bold text-gray-900">Live Events</h1>
         <p className="text-sm text-gray-500 mt-1">
-          Every match attempt from Tier B cameras — use this to check a camera is detecting people and matching correctly.
+          Every match attempt from Fixed Camera capture devices — use this to check a camera is detecting people and matching correctly.
         </p>
       </div>
 

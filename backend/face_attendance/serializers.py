@@ -204,8 +204,8 @@ class FaceEnrollSerializer(serializers.Serializer):
 class FaceEnrollWithEmbeddingSerializer(serializers.Serializer):
     """
     Enroll a student's face from a vector already extracted client-side
-    (Tier A guided capture — face-api.js, design doc §5). Synchronous, no
-    Celery dispatch: there's no server-side detection work left once the
+    (Live Mobile guided capture — face-api.js, design doc §5). Synchronous,
+    no Celery dispatch: there's no server-side detection work left once the
     browser already produced the embedding.
     """
 
@@ -222,8 +222,9 @@ class FaceEnrollWithEmbeddingSerializer(serializers.Serializer):
 
 class LiveMatchRequestSerializer(serializers.Serializer):
     """
-    Tier B live-match ingest payload. The embedding is already extracted
-    on-prem — no image ever reaches this endpoint.
+    Shared Live Mobile / Fixed Camera live-match ingest payload. The
+    embedding is already extracted client-side or on-prem — no image ever
+    reaches this endpoint.
     """
 
     embedding = serializers.ListField(
@@ -284,17 +285,18 @@ class FaceCaptureDeviceSerializer(serializers.ModelSerializer):
 
 class FaceMatchFeedbackSerializer(serializers.Serializer):
     """
-    Operator feedback on a single Tier A live-match result (design doc §10
-    backlog — groundwork for faceapi_v1 threshold tuning). Submitted by the
-    teacher/guard who was physically present at capture time, since that's
-    the only point a Tier A match can ever be verified against reality.
+    Operator feedback on a single Live Mobile live-match result (design doc
+    §10 backlog — groundwork for faceapi_v1 threshold tuning). Submitted by
+    the teacher/guard who was physically present at capture time, since
+    that's the only point a Live Mobile match can ever be verified against
+    reality.
     """
 
     is_correct = serializers.BooleanField()
 
 
 class FaceLiveDetectionEventSerializer(serializers.ModelSerializer):
-    """Read-only — troubleshooting log for Tier B live matching (design doc §4)."""
+    """Read-only — troubleshooting log for Fixed Camera live matching (design doc §4)."""
 
     device_name = serializers.CharField(source='device.name', read_only=True, default=None)
     class_obj = ClassMinimalSerializer(read_only=True)
@@ -303,7 +305,7 @@ class FaceLiveDetectionEventSerializer(serializers.ModelSerializer):
     class Meta:
         model = FaceLiveDetectionEvent
         fields = [
-            'id', 'source_tier', 'device', 'device_name', 'class_obj',
+            'id', 'source_method', 'device', 'device_name', 'class_obj',
             'embedding_version', 'client_timestamp', 'received_at',
             'matched_student', 'confidence', 'distance', 'match_status',
             'resulted_in_attendance',

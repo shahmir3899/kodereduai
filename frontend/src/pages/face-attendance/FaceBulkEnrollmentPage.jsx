@@ -9,12 +9,12 @@ import ClassSelector from '../../components/ClassSelector'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
 import { getClassSelectorScope, getResolvedMasterClassId, resolveSessionClassId } from '../../utils/classScope'
-import { TIER_A_EMBEDDING_VERSION } from '../../utils/faceApiLoader'
+import { LIVE_MOBILE_EMBEDDING_VERSION } from '../../utils/faceApiLoader'
 import { LiveEnrollCapture } from './FaceEnrollmentPage'
 
 /**
  * Bulk faceapi_v1 enrollment queue — design doc §5/§10 backlog ("bulk
- * re-enrollment tool for Tier A adoption"). Confirmed via investigation
+ * re-enrollment tool for Live Mobile capture adoption"). Confirmed via investigation
  * (see design doc) that server-side batch conversion from existing photos
  * (Path A) isn't viable: no school has any existing StudentFaceEmbedding
  * corpus to convert from yet. So this is Path B — the same guided
@@ -93,10 +93,10 @@ export default function FaceBulkEnrollmentPage() {
   }, [students])
 
   // Only faceapi_v1 rows count as "already enrolled" for this tool — a
-  // student who only has a dlib_v1 row still needs Tier A capture, that's
-  // the entire premise of this rollout (design doc §1).
+  // student who only has a dlib_v1 row still needs Live Mobile capture,
+  // that's the entire premise of this rollout (design doc §1).
   const enrolledFaceApiIds = useMemo(
-    () => new Set(enrollments.filter((e) => e.embedding_version === TIER_A_EMBEDDING_VERSION).map((e) => e.student)),
+    () => new Set(enrollments.filter((e) => e.embedding_version === LIVE_MOBILE_EMBEDDING_VERSION).map((e) => e.student)),
     [enrollments],
   )
 
@@ -118,7 +118,7 @@ export default function FaceBulkEnrollmentPage() {
     mutationFn: ({ studentId, embedding, qualityScore }) => faceAttendanceApi.enrollWithEmbedding({
       student_id: studentId,
       embedding,
-      embedding_version: TIER_A_EMBEDDING_VERSION,
+      embedding_version: LIVE_MOBILE_EMBEDDING_VERSION,
       quality_score: qualityScore,
     }),
   })

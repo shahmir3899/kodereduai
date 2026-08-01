@@ -41,7 +41,7 @@ vi.mock('../../../utils/faceApiLoader', () => ({
   loadFaceApiModels: vi.fn(() => Promise.resolve()),
   detectSingleFace: (...args) => mockDetectSingleFace(...args),
   estimateQualityScore: () => 0.82,
-  TIER_A_EMBEDDING_VERSION: 'faceapi_v1',
+  LIVE_MOBILE_EMBEDDING_VERSION: 'faceapi_v1',
 }))
 
 function mockGetUserMedia(implementation) {

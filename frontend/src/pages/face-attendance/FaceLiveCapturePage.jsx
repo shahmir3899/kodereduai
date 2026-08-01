@@ -7,12 +7,13 @@ import ClassSelector from '../../components/ClassSelector'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
-import { loadFaceApiModels, detectSingleFace, TIER_A_EMBEDDING_VERSION } from '../../utils/faceApiLoader'
+import { loadFaceApiModels, detectSingleFace, LIVE_MOBILE_EMBEDDING_VERSION } from '../../utils/faceApiLoader'
 
 // Only POST a match attempt for a given detection at most this often — a
 // lingering face would otherwise fire on every detection tick. Mirrors the
-// same principle as Tier B's on-prem sampling (design doc §4), applied
-// client-side here since there's no device-level rate limiting for Tier A.
+// same principle as Fixed Camera capture's on-prem sampling (design doc §4),
+// applied client-side here since there's no device-level rate limiting for
+// Live Mobile capture.
 const POST_COOLDOWN_MS = 4000
 const DETECTION_INTERVAL_MS = 1000
 const FEEDBACK_DISPLAY_MS = 4000
@@ -116,7 +117,7 @@ export default function FaceLiveCapturePage() {
     try {
       const res = await matchMutation.mutateAsync({
         embedding,
-        embedding_version: TIER_A_EMBEDDING_VERSION,
+        embedding_version: LIVE_MOBILE_EMBEDDING_VERSION,
         timestamp: new Date().toISOString(),
         ...(resolvedSelectedClass && { class_id: parseInt(resolvedSelectedClass, 10) }),
       })

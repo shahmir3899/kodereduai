@@ -647,6 +647,16 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
         class_name = self._resolve_class_name(student, enrollment_map)
         roll_number = self._resolve_roll_number(student, enrollment_map)
 
+        # Resolve the academic year up front — it already anchors the fee chart's
+        # fixed 12-month window below, and now also bounds the attendance query's
+        # default window. Without this, a request with no explicit period pulled a
+        # student's *entire* attendance history and built one reportlab calendar
+        # table per month with any record — for a multi-year student that's dozens
+        # of heavy Table objects per report, which is what let a bulk "Download
+        # Reports" burst (many students, no period selected) push the single
+        # 512MB web dyno into an OOM kill.
+        academic_year_obj = self._resolve_academic_year(date_from, academic_year_id)
+
         # --- Attendance ---
         from attendance.models import AttendanceRecord
         att_qs = AttendanceRecord.objects.filter(student=student)
@@ -654,6 +664,8 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
             att_qs = att_qs.filter(date__gte=date_from, date__lte=date_to)
         elif academic_year_id:
             att_qs = att_qs.filter(academic_year_id=academic_year_id)
+        elif academic_year_obj:
+            att_qs = att_qs.filter(academic_year_id=academic_year_obj.id)
 
         attendance_by_date = {rec.date: rec.status for rec in att_qs.only('date', 'status')}
         present = sum(1 for s in attendance_by_date.values() if s == AttendanceRecord.AttendanceStatus.PRESENT)
@@ -680,7 +692,6 @@ class StudentComprehensiveReportGenerator(BaseReportGenerator):
         # the report's date_from/date_to — a partial-period chart isn't useful for
         # spotting collection trends, so this always plots the whole year.
         from finance.models import FeePayment
-        academic_year_obj = self._resolve_academic_year(date_from, academic_year_id)
 
         if academic_year_obj:
             months_list = self._twelve_months_from(academic_year_obj.start_date)

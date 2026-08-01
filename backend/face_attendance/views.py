@@ -431,10 +431,10 @@ class FaceEnrollmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
     def get_permissions(self):
         """
         Class-level IsSchoolAdmin is the default and stays in force for the
-        legacy dlib enrollment flow (image_url) and for destroy — Tier C
-        stays admin-only, unchanged (design doc §8). Two narrow exceptions
-        for Tier A, whose entire premise is a teacher capturing their own
-        class rather than an admin:
+        legacy dlib enrollment flow (image_url) and for destroy — Group
+        Photo capture stays admin-only, unchanged (design doc §8). Two narrow
+        exceptions for Live Mobile capture, whose entire premise is a teacher
+        capturing their own class rather than an admin:
         - list/retrieve: read-only, and the serializer never exposes the raw
           vector (just name/roll/class/quality/version), so opening it to
           CanConfirmAttendance (admin or teacher) carries no biometric-data
@@ -540,9 +540,9 @@ class FaceEnrollmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
 
     def _enroll_with_embedding(self, request):
         """
-        Tier A path (design doc §5): the embedding was already extracted
-        client-side by face-api.js, so this is synchronous — no Celery
-        dispatch, no face_recognition/dlib involved.
+        Live Mobile capture path (design doc §5): the embedding was already
+        extracted client-side by face-api.js, so this is synchronous — no
+        Celery dispatch, no face_recognition/dlib involved.
         """
         serializer = FaceEnrollWithEmbeddingSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -582,23 +582,25 @@ class FaceEnrollmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
         instance.save(update_fields=['is_active'])
 
 
-TIER_A_EMBEDDING_VERSION = 'faceapi_v1'
+LIVE_MOBILE_EMBEDDING_VERSION = 'faceapi_v1'
 
 
 class LiveMatchView(APIView):
     """
     POST /api/face-attendance/live/match/
 
-    Shared ingest endpoint for both live tiers: an on-prem device (Tier B,
-    device-key auth) or a teacher's/guard's browser session (Tier A, JWT)
-    posts a single face embedding (already extracted locally) and gets back
-    a match result. Two authentication paths, composed permission (device
-    OR CanConfirmAttendance) — see design doc §4/§8. Stays lightweight by
-    design: no image processing, no Celery dispatch.
+    Shared ingest endpoint for both live capture methods: an on-prem device
+    (Fixed Camera, device-key auth) or a teacher's/guard's browser session
+    (Live Mobile, JWT) posts a single face embedding (already extracted
+    locally) and gets back a match result. Two authentication paths,
+    composed permission (device OR CanConfirmAttendance) — see design doc
+    §4/§8. Stays lightweight by design: no image processing, no Celery
+    dispatch.
 
-    source_tier is deliberately NOT accepted from the client — it's derived
-    from which authentication path succeeded (device key -> TIER_B, JWT ->
-    TIER_A), so a caller can't misdeclare which tier it's reporting as.
+    source_method is deliberately NOT accepted from the client — it's derived
+    from which authentication path succeeded (device key -> Fixed Camera,
+    JWT -> Live Mobile), so a caller can't misdeclare which method it's
+    reporting as.
     """
 
     authentication_classes = [DeviceKeyAuthentication, JWTAuthentication]
@@ -610,10 +612,10 @@ class LiveMatchView(APIView):
         data = serializer.validated_data
 
         if isinstance(request.auth, FaceCaptureDevice):
-            return self._handle_tier_b(request, data)
-        return self._handle_tier_a(request, data)
+            return self._handle_fixed_camera(request, data)
+        return self._handle_live_mobile(request, data)
 
-    def _handle_tier_b(self, request, data):
+    def _handle_fixed_camera(self, request, data):
         device = request.auth
 
         # Coarse gate (unchanged from every other face_attendance view):
@@ -624,11 +626,11 @@ class LiveMatchView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        # No separate "Tier B enabled" gate: a device that authenticates via
-        # a valid, active API key (DeviceKeyAuthentication) has already
-        # proven the school has Tier B installed — that IS the gate. See
-        # FaceAttendanceStatusView for how tier_b_status is derived for
-        # display purposes only.
+        # No separate "Fixed Camera enabled" gate: a device that
+        # authenticates via a valid, active API key (DeviceKeyAuthentication)
+        # has already proven the school has Fixed Camera capture installed —
+        # that IS the gate. See FaceAttendanceStatusView for how
+        # fixed_camera_status is derived for display purposes only.
 
         if data['embedding_version'] != device.embedding_version:
             return Response(
@@ -667,14 +669,14 @@ class LiveMatchView(APIView):
             embedding_version=device.embedding_version,
             candidate_ids=candidate_ids,
             student_names=student_names,
-            source_tier=FaceLiveDetectionEvent.SourceTier.TIER_B,
+            source_method=FaceLiveDetectionEvent.CaptureMethod.FIXED_CAMERA,
             device=device,
             captured_by=None,
         )
         FaceCaptureDevice.objects.filter(pk=device.pk).update(last_seen_at=timezone.now())
         return response
 
-    def _handle_tier_a(self, request, data):
+    def _handle_live_mobile(self, request, data):
         # NOT request.tenant_school — TenantMiddleware.process_view() runs
         # before DRF authentication populates request.user, so for a
         # header-only JWT request (no Django session) it never resolves
@@ -700,15 +702,15 @@ class LiveMatchView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        # No separate "Tier A enabled" gate — mobile-browser live capture is
-        # unconditionally available to every school (2026-07 product
-        # decision). Availability here is governed only by the coarse
-        # module gate above and the CanConfirmAttendance permission
+        # No separate "Live Mobile enabled" gate — mobile-browser live
+        # capture is unconditionally available to every school (confirmed
+        # product decision). Availability here is governed only by the
+        # coarse module gate above and the CanConfirmAttendance permission
         # (admin-or-assigned-teacher) already applied to this view.
 
-        if data['embedding_version'] != TIER_A_EMBEDDING_VERSION:
+        if data['embedding_version'] != LIVE_MOBILE_EMBEDDING_VERSION:
             return Response(
-                {'error': f"Tier A embedding_version must be '{TIER_A_EMBEDDING_VERSION}'."},
+                {'error': f"Live Mobile capture embedding_version must be '{LIVE_MOBILE_EMBEDDING_VERSION}'."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -720,7 +722,7 @@ class LiveMatchView(APIView):
             # them — unlike an admin/guard, there's no whole-school scope.
             if not class_id:
                 return Response(
-                    {'error': 'class_id is required for teacher-submitted Tier A events.'},
+                    {'error': 'class_id is required for teacher-submitted Live Mobile capture events.'},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
             if class_id not in get_teacher_class_scope(request, school_id=school.id):
@@ -732,7 +734,7 @@ class LiveMatchView(APIView):
             if not class_obj:
                 return Response({'error': 'Invalid class_id.'}, status=status.HTTP_400_BAD_REQUEST)
             candidate_ids = EmbeddingService.get_class_student_ids(
-                class_obj.id, school.id, embedding_version=TIER_A_EMBEDDING_VERSION,
+                class_obj.id, school.id, embedding_version=LIVE_MOBILE_EMBEDDING_VERSION,
             )
             student_names = dict(
                 Student.objects.filter(class_obj=class_obj, is_active=True).values_list('id', 'name')
@@ -741,13 +743,13 @@ class LiveMatchView(APIView):
             # CanConfirmAttendance only allows ADMIN_ROLES or TEACHER, so
             # this is an admin/principal — e.g. a gate guard's account.
             # Whole-school scope when no class_id is given, same as a
-            # SCHOOL-scoped Tier B device.
+            # SCHOOL-scoped Fixed Camera device.
             if class_id:
                 class_obj = Class.objects.filter(pk=class_id, school_id=school.id).first()
                 if not class_obj:
                     return Response({'error': 'Invalid class_id.'}, status=status.HTTP_400_BAD_REQUEST)
                 candidate_ids = EmbeddingService.get_class_student_ids(
-                    class_obj.id, school.id, embedding_version=TIER_A_EMBEDDING_VERSION,
+                    class_obj.id, school.id, embedding_version=LIVE_MOBILE_EMBEDDING_VERSION,
                 )
                 student_names = dict(
                     Student.objects.filter(class_obj=class_obj, is_active=True).values_list('id', 'name')
@@ -755,7 +757,7 @@ class LiveMatchView(APIView):
             else:
                 class_obj = None
                 candidate_ids = EmbeddingService.get_school_student_ids(
-                    school.id, embedding_version=TIER_A_EMBEDDING_VERSION,
+                    school.id, embedding_version=LIVE_MOBILE_EMBEDDING_VERSION,
                 )
                 student_names = dict(
                     Student.objects.filter(school_id=school.id, is_active=True).values_list('id', 'name')
@@ -766,17 +768,17 @@ class LiveMatchView(APIView):
             school=school,
             school_id=school.id,
             class_obj=class_obj,
-            embedding_version=TIER_A_EMBEDDING_VERSION,
+            embedding_version=LIVE_MOBILE_EMBEDDING_VERSION,
             candidate_ids=candidate_ids,
             student_names=student_names,
-            source_tier=FaceLiveDetectionEvent.SourceTier.TIER_A,
+            source_method=FaceLiveDetectionEvent.CaptureMethod.LIVE_MOBILE,
             device=None,
             captured_by=request.user,
         )
 
     def _match_and_record(self, *, data, school, school_id, class_obj, embedding_version,
-                           candidate_ids, student_names, source_tier, device, captured_by):
-        """Shared by both tiers: run the pgvector match, apply per-day dedup, write the event."""
+                           candidate_ids, student_names, source_method, device, captured_by):
+        """Shared by both capture methods: run the pgvector match, apply per-day dedup, write the event."""
         embedding_array = np.array(data['embedding'], dtype=np.float64)
         matcher = FaceMatcher()
         results = matcher.match_faces(
@@ -814,7 +816,7 @@ class LiveMatchView(APIView):
         event = FaceLiveDetectionEvent.objects.create(
             school=school,
             class_obj=class_obj,
-            source_tier=source_tier,
+            source_method=source_method,
             device=device,
             captured_by=captured_by,
             embedding_version=embedding_version,
@@ -844,16 +846,17 @@ class LiveMatchFeedbackView(APIView):
     POST /api/face-attendance/live/events/<event_id>/feedback/
 
     Groundwork for empirically tuning faceapi_v1's thresholds (design doc
-    §10 backlog): Tier A never stores an image, so the operator (teacher/
-    guard) holding the phone at capture time is the only one who can ever
-    say whether a match was actually correct. This endpoint turns that
+    §10 backlog): Live Mobile capture never stores an image, so the operator
+    (teacher/guard) holding the phone at capture time is the only one who can
+    ever say whether a match was actually correct. This endpoint turns that
     fleeting judgment into a durable, stripped-down labeled sample before
     the source FaceLiveDetectionEvent gets purged 48h later.
 
     Only AUTO_MATCHED/FLAGGED events are eligible — those are the only
     ones that showed the operator a candidate student to confirm/dispute
-    (see FaceLiveCapturePage's feedbackBanner()). Tier B is out of scope:
-    there's no human operator present per-event to supply the label.
+    (see FaceLiveCapturePage's feedbackBanner()). Fixed Camera capture is
+    out of scope: there's no human operator present per-event to supply
+    the label.
     """
 
     permission_classes = [IsAuthenticated, CanConfirmAttendance]
@@ -867,9 +870,9 @@ class LiveMatchFeedbackView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        if event.source_tier != FaceLiveDetectionEvent.SourceTier.TIER_A:
+        if event.source_method != FaceLiveDetectionEvent.CaptureMethod.LIVE_MOBILE:
             return Response(
-                {'error': 'Feedback is only accepted for Tier A events.'},
+                {'error': 'Feedback is only accepted for Live Mobile capture events.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -896,7 +899,7 @@ class LiveMatchFeedbackView(APIView):
 
         FaceMatchThresholdSample.objects.create(
             school=event.school,
-            source_tier=event.source_tier,
+            source_method=event.source_method,
             embedding_version=event.embedding_version,
             distance=event.distance,
             predicted_match_status=event.match_status,
@@ -909,8 +912,8 @@ class LiveMatchFeedbackView(APIView):
 
 class FaceCaptureDeviceViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     """
-    Read + limited edit for Tier B devices — school admins manage devices
-    that were provisioned via Django admin (see design doc §9.4).
+    Read + limited edit for Fixed Camera capture devices — school admins
+    manage devices that were provisioned via Django admin (see design doc §9.4).
 
     list: GET /devices/ — devices for the current school
     retrieve: GET /devices/{id}/
@@ -934,7 +937,7 @@ class FaceCaptureDeviceViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.
 
 class FaceLiveDetectionEventListView(ModuleAccessMixin, generics.ListAPIView):
     """
-    GET /live/events/ — troubleshooting log for Tier B live matching
+    GET /live/events/ — troubleshooting log for Fixed Camera live matching
     (design doc §4). Read-only, filterable by date and device.
     """
 
@@ -968,17 +971,17 @@ class FaceLiveDetectionEventListView(ModuleAccessMixin, generics.ListAPIView):
 # rather than active. Mirrors the frontend's own OFFLINE_THRESHOLD_MS
 # (FaceDevicesPage.jsx) — kept as a separate constant here rather than a
 # shared settings value since the two ends change independently in practice.
-TIER_B_OFFLINE_THRESHOLD = timezone.timedelta(minutes=5)
+FIXED_CAMERA_OFFLINE_THRESHOLD = timezone.timedelta(minutes=5)
 
 
-def _tier_b_status(school_id):
+def _fixed_camera_status(school_id):
     """
-    Tier B has no "enabled" flag — it's a background on-prem device that
-    either exists at a school or doesn't (2026-07 product decision). Status
-    is derived entirely from FaceCaptureDevice rows:
+    Fixed Camera capture has no "enabled" flag — it's a background on-prem
+    device that either exists at a school or doesn't (confirmed product
+    decision). Status is derived entirely from FaceCaptureDevice rows:
       - 'not_installed': no active device registered for this school
       - 'active': at least one active device has posted within the last
-        TIER_B_OFFLINE_THRESHOLD
+        FIXED_CAMERA_OFFLINE_THRESHOLD
       - 'inactive': active device(s) exist, but none have posted recently
     """
     if not school_id:
@@ -992,7 +995,7 @@ def _tier_b_status(school_id):
     if not last_seen_values:
         return 'not_installed'
 
-    cutoff = timezone.now() - TIER_B_OFFLINE_THRESHOLD
+    cutoff = timezone.now() - FIXED_CAMERA_OFFLINE_THRESHOLD
     if any(seen and seen >= cutoff for seen in last_seen_values):
         return 'active'
     return 'inactive'
@@ -1030,9 +1033,10 @@ class FaceAttendanceStatusView(ModuleAccessMixin, APIView):
             'thresholds': get_thresholds(embedding_version),
             'enrolled_faces': enrollment_count,
             'model': embedding_version,
-            # Tier A/C are unconditionally available to every school — no
-            # per-school flag left to consult (see FaceAttendanceSchoolConfig).
-            'tier_a_available': True,
-            'tier_c_available': True,
-            'tier_b_status': _tier_b_status(school_id),
+            # Group Photo and Live Mobile capture are unconditionally
+            # available to every school — no per-school flag left to
+            # consult (see FaceAttendanceSchoolConfig).
+            'group_photo_available': True,
+            'live_mobile_available': True,
+            'fixed_camera_status': _fixed_camera_status(school_id),
         })

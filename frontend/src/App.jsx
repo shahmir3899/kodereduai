@@ -154,7 +154,7 @@ const FaceBulkEnrollmentPage = lazy(() => import('./pages/face-attendance/FaceBu
 // Note: FaceLiveCapturePage (Mobile Capture) is no longer routed on its own —
 // it's rendered directly (not lazy) as a tab inside FaceAttendancePage, and
 // /face-attendance/live-capture below redirects there for old deep links.
-// Tier B (fixed on-prem camera) — device management + live-match troubleshooting
+// Fixed Camera capture (fixed on-prem camera) — device management + live-match troubleshooting
 const FaceDevicesPage = lazy(() => import('./pages/face-attendance/FaceDevicesPage'))
 const FaceLiveEventsPage = lazy(() => import('./pages/face-attendance/FaceLiveEventsPage'))
 
@@ -424,28 +424,29 @@ function App() {
             <Route path="attendance/anomalies" element={<SchoolRoute><ModuleRoute module="attendance"><AnomaliesPage /></ModuleRoute></SchoolRoute>} />
             <Route path="attendance/at-risk" element={<SchoolRoute><ModuleRoute module="attendance"><AdminPrincipalRoute><AtRiskStudentsPage /></AdminPrincipalRoute></ModuleRoute></SchoolRoute>} />
 
-            {/* Face Attendance (camera-based) — Tier C (group photo) and Tier A (mobile
-                capture) are both unconditionally available to every school (2026-07
-                product decision) — no per-tier flag gate anymore, just normal
+            {/* Face Attendance (camera-based) — Group Photo capture and Live Mobile
+                capture are both unconditionally available to every school (confirmed
+                product decision) — no enable/disable gate for either, just normal
                 auth/school-scoping like every other module. */}
             <Route path="face-attendance" element={<SchoolRoute><FaceAttendancePage /></SchoolRoute>} />
             <Route path="face-attendance/review/:sessionId" element={<SchoolRoute><FaceReviewPage /></SchoolRoute>} />
             <Route path="face-attendance/enrollment" element={<SchoolRoute><FaceEnrollmentPage /></SchoolRoute>} />
 
-            {/* Old standalone Tier A route — Mobile Capture is now a tab on the main
-                page, not a disconnected page. Redirect rather than remove so existing
-                bookmarks/deep links (the whole point of Tier A being a phone-friendly
-                gate-side tool) keep working. */}
+            {/* Old standalone Live Mobile route — Mobile Capture is now a tab on the
+                main page, not a disconnected page. Redirect rather than remove so
+                existing bookmarks/deep links (the whole point of Live Mobile capture
+                being a phone-friendly gate-side tool) keep working. */}
             <Route path="face-attendance/live-capture" element={<Navigate to="/face-attendance?tab=mobile" replace />} />
 
-            {/* Face Attendance — Tier A bulk re-enrollment queue (design doc §10 backlog).
-                No AdminPrincipalRoute: it calls the same enroll/ embedding path, gated by
-                CanConfirmAttendance (admin OR teacher), not admin-only. */}
+            {/* Face Attendance — Live Mobile capture bulk re-enrollment queue (design
+                doc §10 backlog). No AdminPrincipalRoute: it calls the same enroll/
+                embedding path, gated by CanConfirmAttendance (admin OR teacher), not
+                admin-only. */}
             <Route path="face-attendance/bulk-enrollment" element={<SchoolRoute><FaceBulkEnrollmentPage /></SchoolRoute>} />
 
-            {/* Face Attendance — Tier B, fixed on-prem camera. Admin-only management
-                pages (matches IsSchoolAdmin backend gate) — no longer tier-flag-gated;
-                they show their own empty state when no device is registered. */}
+            {/* Face Attendance — Fixed Camera capture, fixed on-prem camera. Admin-only
+                management pages (matches IsSchoolAdmin backend gate) — no enable/disable
+                gate; they show their own empty state when no device is registered. */}
             <Route path="face-attendance/devices" element={<SchoolRoute><AdminPrincipalRoute><FaceDevicesPage /></AdminPrincipalRoute></SchoolRoute>} />
             <Route path="face-attendance/live-events" element={<SchoolRoute><AdminPrincipalRoute><FaceLiveEventsPage /></AdminPrincipalRoute></SchoolRoute>} />
 

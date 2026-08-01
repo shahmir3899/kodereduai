@@ -67,7 +67,7 @@ def cleanup_old_live_detection_events(hours=None):
     Purge FaceLiveDetectionEvent rows past their retention window (design
     doc §8/§9.3). A live-detection event's only job is same-day dedup and
     same-day admin troubleshooting (Phase 2.5's live-events log) — once the
-    window passes it's deleted unconditionally, Tier A and Tier B alike,
+    window passes it's deleted unconditionally, Live Mobile and Fixed Camera alike,
     regardless of resulted_in_attendance. The attendance outcome itself is
     untouched: AttendanceRecord is a separate table that already persisted
     the result, so it has no dependency on this row surviving.

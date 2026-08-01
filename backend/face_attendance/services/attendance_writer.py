@@ -1,8 +1,8 @@
 """
 Shared "resolve a match into an attendance write" helper.
 
-Used by both the Tier C review/confirm flow (FaceAttendanceSessionViewSet.confirm)
-and the Tier B live-match endpoint, so the per-day idempotency rule
+Used by both the Group Photo review/confirm flow (FaceAttendanceSessionViewSet.confirm)
+and the Fixed Camera live-match endpoint, so the per-day idempotency rule
 (AttendanceRecord.unique_together = ('student', 'date')) lives in one place
 instead of being duplicated across the batch and streaming paths.
 """

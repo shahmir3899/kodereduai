@@ -13,21 +13,29 @@ import { useFaceAttendanceStatus } from '../../hooks/useFaceAttendanceStatus'
 import { getClassSelectorScope, getResolvedMasterClassId, resolveSessionClassId } from '../../utils/classScope'
 import FaceLiveCapturePage from './FaceLiveCapturePage'
 
-const TIER_B_STATUS_BADGE = {
+const FIXED_CAMERA_STATUS_BADGE = {
   active: { label: 'Fixed Camera: Active', className: 'bg-green-100 text-green-700' },
   inactive: { label: 'Fixed Camera: Offline', className: 'bg-gray-100 text-gray-600' },
 }
 
-// Tabs are two capture modes ("Group Photo" — Tier C, "Mobile Capture" —
-// Tier A) plus the existing session history. Consolidated 2026-07: Mobile
-// Capture used to live at its own /face-attendance/live-capture route,
-// disconnected from this page — that route now redirects here with
-// ?tab=mobile so old links/bookmarks keep working.
+const FIXED_CAMERA_NOTE = "Uses the classroom's installed camera. Attendance is marked automatically as students are recognized — nothing to start here."
+
+// Tabs are two capture methods ("Group Photo" and "Mobile Capture", i.e.
+// Live Mobile capture) plus the existing session history. Consolidated
+// 2026-07: Mobile Capture used to live at its own
+// /face-attendance/live-capture route, disconnected from this page — that
+// route now redirects here with ?tab=mobile so old links/bookmarks keep
+// working.
 const TABS = [
   { id: 'group-photo', label: 'Group Photo' },
   { id: 'mobile-capture', label: 'Mobile Capture' },
   { id: 'sessions', label: 'Sessions' },
 ]
+
+const TAB_NOTES = {
+  'group-photo': 'Snap one photo of the class. A teacher reviews and confirms matches before attendance is recorded.',
+  'mobile-capture': "Point your phone at a student's face for instant recognition. Attendance is marked automatically, no review step.",
+}
 
 export default function FaceAttendancePage() {
   const { activeSchool, isTeacher } = useAuth()
@@ -58,8 +66,8 @@ export default function FaceAttendancePage() {
     queryKey: 'teacherFaceAttendanceClasses',
   })
 
-  // Load face recognition status (also carries the Tier B device status badge below)
-  const { status: faceStatus, tierBStatus } = useFaceAttendanceStatus()
+  // Load face recognition status (also carries the Fixed Camera device status badge below)
+  const { status: faceStatus, fixedCameraStatus } = useFaceAttendanceStatus()
 
   // Load recent sessions
   const { data: sessionsData, isLoading: sessionsLoading } = useQuery({
@@ -155,13 +163,19 @@ export default function FaceAttendancePage() {
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold text-gray-900">Face Attendance</h1>
-            {TIER_B_STATUS_BADGE[tierBStatus] && (
-              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${TIER_B_STATUS_BADGE[tierBStatus].className}`}>
-                {TIER_B_STATUS_BADGE[tierBStatus].label}
+            {FIXED_CAMERA_STATUS_BADGE[fixedCameraStatus] && (
+              <span
+                title={FIXED_CAMERA_NOTE}
+                className={`px-2 py-0.5 rounded-full text-xs font-medium ${FIXED_CAMERA_STATUS_BADGE[fixedCameraStatus].className}`}
+              >
+                {FIXED_CAMERA_STATUS_BADGE[fixedCameraStatus].label}
               </span>
             )}
           </div>
           <p className="text-sm text-gray-500 mt-1">Camera-based multi-student attendance</p>
+          {FIXED_CAMERA_STATUS_BADGE[fixedCameraStatus] && (
+            <p className="text-xs text-gray-400 mt-0.5">{FIXED_CAMERA_NOTE}</p>
+          )}
         </div>
         <div className="flex gap-2">
           <button
@@ -231,6 +245,10 @@ export default function FaceAttendancePage() {
           </button>
         ))}
       </div>
+
+      {TAB_NOTES[tab] && (
+        <p className="text-sm text-gray-500 mb-4">{TAB_NOTES[tab]}</p>
+      )}
 
       {tab === 'mobile-capture' && <FaceLiveCapturePage />}
 

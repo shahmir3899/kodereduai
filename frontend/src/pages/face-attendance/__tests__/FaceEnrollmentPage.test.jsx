@@ -48,7 +48,7 @@ vi.mock('../../../utils/faceApiLoader', () => ({
   loadFaceApiModels: vi.fn(() => Promise.resolve()),
   detectSingleFace: (...args) => mockDetectSingleFace(...args),
   estimateQualityScore: () => 0.82,
-  TIER_A_EMBEDDING_VERSION: 'faceapi_v1',
+  LIVE_MOBILE_EMBEDDING_VERSION: 'faceapi_v1',
 }))
 
 function mockGetUserMedia(implementation) {
@@ -154,8 +154,8 @@ describe('FaceEnrollmentPage', () => {
     })
   })
 
-  describe('Tier A guided capture', () => {
-    it('always shows the Live Capture toggle (no longer tier-gated)', async () => {
+  describe('Live Mobile guided capture', () => {
+    it('always shows the Live Capture toggle (no enable/disable gate)', async () => {
       renderWithProviders(<FaceEnrollmentPage />)
       await waitFor(() => {
         expect(screen.getByText('Face Enrollment')).toBeInTheDocument()
@@ -206,7 +206,7 @@ describe('FaceEnrollmentPage', () => {
       // Note: for a non-teacher role, ClassSelector's placeholder is
       // "All Classes" (showAllOption=true), not "Select class..." — the
       // pre-existing baseline tests in this file assert the latter and are
-      // consequently broken independent of Tier A (confirmed via git stash
+      // consequently broken independent of Live Mobile capture (confirmed via git stash
       // against the unmodified component); this test uses the real label.
       await waitFor(() => {
         const classSelect = screen.getByDisplayValue('All Classes')

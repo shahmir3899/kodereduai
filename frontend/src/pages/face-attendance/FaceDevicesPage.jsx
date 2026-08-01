@@ -144,7 +144,7 @@ export default function FaceDevicesPage() {
         </button>
         <h1 className="text-2xl font-bold text-gray-900">Capture Devices</h1>
         <p className="text-sm text-gray-500 mt-1">
-          Fixed on-prem cameras registered for this school (Tier B). New devices are provisioned by KoderEduAI support.
+          Fixed on-prem cameras registered for this school (Fixed Camera capture). New devices are provisioned by KoderEduAI support.
         </p>
       </div>
 

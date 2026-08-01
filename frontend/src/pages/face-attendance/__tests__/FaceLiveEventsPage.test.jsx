@@ -40,7 +40,7 @@ describe('FaceLiveEventsPage', () => {
           count: 1,
           results: [{
             id: 'evt-1',
-            source_tier: 'TIER_B',
+            source_method: 'FIXED_CAMERA',
             device: 1,
             device_name: 'Front Gate Camera',
             class_obj: null,
@@ -72,7 +72,7 @@ describe('FaceLiveEventsPage', () => {
           count: 1,
           results: [{
             id: 'evt-2',
-            source_tier: 'TIER_B',
+            source_method: 'FIXED_CAMERA',
             device: 1,
             device_name: 'Front Gate Camera',
             class_obj: null,

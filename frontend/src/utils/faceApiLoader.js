@@ -11,7 +11,7 @@ import * as faceapi from 'face-api.js'
 // /models/*, which is outside the frontend build's control.
 const MODEL_URL = '/models'
 
-export const TIER_A_EMBEDDING_VERSION = 'faceapi_v1'
+export const LIVE_MOBILE_EMBEDDING_VERSION = 'faceapi_v1'
 
 let modelsPromise = null
 

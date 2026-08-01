@@ -70,10 +70,10 @@ class FaceCaptureDeviceAdmin(admin.ModelAdmin):
 @admin.register(FaceLiveDetectionEvent)
 class FaceLiveDetectionEventAdmin(admin.ModelAdmin):
     list_display = (
-        'source_tier', 'school', 'class_obj', 'matched_student',
+        'source_method', 'school', 'class_obj', 'matched_student',
         'match_status', 'resulted_in_attendance', 'client_timestamp',
     )
-    list_filter = ('source_tier', 'match_status', 'resulted_in_attendance', 'school')
+    list_filter = ('source_method', 'match_status', 'resulted_in_attendance', 'school')
     search_fields = ('matched_student__name',)
     readonly_fields = ('id', 'received_at')
 
@@ -89,7 +89,7 @@ class FaceMatchThresholdSampleAdmin(admin.ModelAdmin):
 
     list_display = (
         'embedding_version', 'predicted_match_status', 'distance',
-        'is_correct', 'source_tier', 'school', 'sample_date',
+        'is_correct', 'source_method', 'school', 'sample_date',
     )
-    list_filter = ('embedding_version', 'predicted_match_status', 'is_correct', 'source_tier', 'school')
+    list_filter = ('embedding_version', 'predicted_match_status', 'is_correct', 'source_method', 'school')
     readonly_fields = ('created_at',)

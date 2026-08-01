@@ -33,7 +33,7 @@ vi.mock('../../../utils/faceApiLoader', () => ({
   loadFaceApiModels: (...args) => mockLoadFaceApiModels(...args),
   detectSingleFace: (...args) => mockDetectSingleFace(...args),
   estimateQualityScore: () => 0.8,
-  TIER_A_EMBEDDING_VERSION: 'faceapi_v1',
+  LIVE_MOBILE_EMBEDDING_VERSION: 'faceapi_v1',
 }))
 
 function mockGetUserMedia(implementation) {

@@ -79,9 +79,9 @@ class FaceMatcher:
 
     Rules (non-negotiable):
     - Match ONLY within the candidate set the caller supplies (a class
-      roster for Tier C / CLASS-scoped Tier B devices, or a whole school's
-      roster for SCHOOL-scoped Tier B devices — the caller decides scope,
-      this class never widens or narrows it)
+      roster for Group Photo / CLASS-scoped Fixed Camera devices, or a
+      whole school's roster for SCHOOL-scoped Fixed Camera devices — the
+      caller decides scope, this class never widens or narrows it)
     - Each detected face maps to at most one student
     - If two faces map to the same student, keep higher confidence
     - Prefer false negatives over false positives

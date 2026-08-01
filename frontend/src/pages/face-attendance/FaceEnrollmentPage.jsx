@@ -12,7 +12,7 @@ import ClassSelector from '../../components/ClassSelector'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
 import { getClassSelectorScope, getResolvedMasterClassId, resolveSessionClassId } from '../../utils/classScope'
-import { loadFaceApiModels, detectSingleFace, estimateQualityScore, TIER_A_EMBEDDING_VERSION } from '../../utils/faceApiLoader'
+import { loadFaceApiModels, detectSingleFace, estimateQualityScore, LIVE_MOBILE_EMBEDDING_VERSION } from '../../utils/faceApiLoader'
 
 export default function FaceEnrollmentPage() {
   const { activeSchool, isTeacher } = useAuth()
@@ -136,12 +136,12 @@ export default function FaceEnrollmentPage() {
     },
   })
 
-  // Enroll mutation — Tier A, client-side embedding (design doc §5)
+  // Enroll mutation — Live Mobile capture, client-side embedding (design doc §5)
   const enrollEmbeddingMutation = useMutation({
     mutationFn: ({ studentId, embedding, qualityScore }) => faceAttendanceApi.enrollWithEmbedding({
       student_id: studentId,
       embedding,
-      embedding_version: TIER_A_EMBEDDING_VERSION,
+      embedding_version: LIVE_MOBILE_EMBEDDING_VERSION,
       quality_score: qualityScore,
     }),
     onSuccess: () => {
@@ -372,7 +372,7 @@ export default function FaceEnrollmentPage() {
                       {enrollment.student_name}
                       <span
                         className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                          enrollment.embedding_version === TIER_A_EMBEDDING_VERSION
+                          enrollment.embedding_version === LIVE_MOBILE_EMBEDDING_VERSION
                             ? 'bg-purple-100 text-purple-700'
                             : 'bg-gray-100 text-gray-600'
                         }`}

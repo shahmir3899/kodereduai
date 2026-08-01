@@ -26,6 +26,11 @@ vi.mock('../../../hooks/useClasses', () => ({
   }),
 }))
 
+const mockUseSessionClasses = vi.fn()
+vi.mock('../../../hooks/useSessionClasses', () => ({
+  useSessionClasses: (...args) => mockUseSessionClasses(...args),
+}))
+
 vi.mock('../../../services/api', () => ({
   sessionsApi: {
     getAcademicYears: (...args) => mockGetAcademicYears(...args),
@@ -121,6 +126,12 @@ describe('ExamWizard', () => {
     mockGetTerms.mockResolvedValue({ data: [{ id: 11, name: '1st Term' }] })
     mockGetExamTypes.mockResolvedValue({ data: [{ id: 5, name: 'Mid-Term', weight: 50 }] })
     mockGetAllClassSubjects.mockResolvedValue({ data: ALL_CLASS_SUBJECTS })
+    mockUseSessionClasses.mockReturnValue({
+      sessionClasses: [
+        { id: 1, class_obj: 1 },
+        { id: 2, class_obj: 2 },
+      ],
+    })
     mockWizardCreateExamGroup.mockResolvedValue({
       data: { group_id: 99, group_name: 'Mid-Term', exams_created: 2, subjects_created: 4 },
     })
@@ -140,6 +151,44 @@ describe('ExamWizard', () => {
       // Still on Step 1 — required-field errors shown, class-selection UI never appears.
       expect(screen.getAllByText(/Required — Step 3 builds a calendar/).length).toBe(2)
       expect(screen.queryByText('Select classes for this exam')).not.toBeInTheDocument()
+    })
+  })
+
+  describe('Step 2 — class list scoped to the selected academic year', () => {
+    it('excludes a master class with no session class in the selected academic year', async () => {
+      mockUseSessionClasses.mockReturnValue({ sessionClasses: [{ id: 1, class_obj: 1 }] })
+      const user = userEvent.setup()
+      await advanceToStep2(user)
+
+      expect(screen.getByText('Class 1 - A')).toBeInTheDocument()
+      expect(screen.queryByText('Class 2 - B')).not.toBeInTheDocument()
+    })
+
+    it('falls back to the full master-class list when no session classes exist yet for the school', async () => {
+      mockUseSessionClasses.mockReturnValue({ sessionClasses: [] })
+      const user = userEvent.setup()
+      await advanceToStep2(user)
+
+      expect(screen.getByText('Class 1 - A')).toBeInTheDocument()
+      expect(screen.getByText('Class 2 - B')).toBeInTheDocument()
+    })
+
+    it("shows the current year's session-class display_name instead of a stale master-class name", async () => {
+      // A school can rename a grade at the session-class level (e.g.
+      // "Class 1" -> "Junior 1") for the current year without touching the
+      // underlying master class's own `name` field.
+      mockUseSessionClasses.mockReturnValue({
+        sessionClasses: [
+          { id: 1, class_obj: 1, display_name: 'Junior 1' },
+          { id: 2, class_obj: 2 },
+        ],
+      })
+      const user = userEvent.setup()
+      await advanceToStep2(user)
+
+      expect(screen.getByText('Junior 1 - A')).toBeInTheDocument()
+      expect(screen.queryByText('Class 1 - A')).not.toBeInTheDocument()
+      expect(screen.getByText('Class 2 - B')).toBeInTheDocument()
     })
   })
 

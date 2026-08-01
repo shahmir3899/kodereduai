@@ -49,6 +49,7 @@ def exam_prereqs(seed_data, api):
 
     class_1 = classes[0]
     class_2 = classes[1]
+    class_3 = classes[2]
     term_1 = terms[0]
     term_2 = terms[1]
 
@@ -61,6 +62,7 @@ def exam_prereqs(seed_data, api):
         'subj_sci': subj_sci,
         'class_1': class_1,
         'class_2': class_2,
+        'class_3': class_3,
         'term_1': term_1,
         'term_2': term_2,
         'class_1_students': class_1_students,
@@ -654,6 +656,118 @@ class TestExamGroupWizardAndPublishAll:
         group = ExamGroup.objects.get(id=group_id)
         assert str(group.end_date) == '2026-04-04'
         assert group.name == f'{P6}Group Wizard Test'  # untouched by the partial update
+
+    def test_g1f_wizard_create_reuses_existing_group_for_a_new_batch_of_classes(self, exam_prereqs, api):
+        """G1f: calling wizard-create again with the same name/academic_year/term/exam_type
+        but a different set of classes adds those classes into the existing group instead of
+        hitting the ExamGroup (school, name, academic_year) unique constraint."""
+        d = exam_prereqs
+        token = d['tokens']['admin']
+        sid = d['SID_A']
+        school = d['school_a']
+
+        ClassSubject.objects.create(school=school, class_obj=d['class_1'], subject=d['subj_math'])
+        ClassSubject.objects.create(school=school, class_obj=d['class_3'], subject=d['subj_sci'])
+
+        et = ExamType.objects.create(school=school, name=f'{P6}BulkType', weight=Decimal('50.00'))
+        payload = {
+            'academic_year': d['academic_year'].id,
+            'term': d['term_1'].id,
+            'exam_type': et.id,
+            'name': f'{P6}Bulk Wizard Test',
+            'default_total_marks': '100',
+            'default_passing_marks': '33',
+            'start_date': '2026-04-01',
+            'end_date': '2026-04-05',
+        }
+
+        resp1 = api.post('/api/examinations/exam-groups/wizard-create/',
+                          {**payload, 'class_ids': [d['class_1'].id]}, token, sid)
+        assert resp1.status_code == 201, f"status={resp1.status_code} body={resp1.content[:300]}"
+        group_id_1 = resp1.json()['group_id']
+
+        resp2 = api.post('/api/examinations/exam-groups/wizard-create/',
+                          {**payload, 'class_ids': [d['class_3'].id]}, token, sid)
+        assert resp2.status_code == 201, f"status={resp2.status_code} body={resp2.content[:300]}"
+        group_id_2 = resp2.json()['group_id']
+
+        assert group_id_1 == group_id_2, "second call should reuse the same group, not fail or fork a new one"
+        group = ExamGroup.objects.get(id=group_id_1)
+        assert {e.class_obj_id for e in group.exams.all()} == {d['class_1'].id, d['class_3'].id}
+
+    def test_g1g_wizard_create_same_class_twice_still_conflicts(self, exam_prereqs, api):
+        """G1g: reusing the group (test_g1f) must not bypass the per-class active-exam
+        conflict check -- resubmitting the same class for the same exam type/term is still
+        rejected with the friendly 409, not a duplicate Exam."""
+        d = exam_prereqs
+        token = d['tokens']['admin']
+        sid = d['SID_A']
+        school = d['school_a']
+
+        ClassSubject.objects.create(school=school, class_obj=d['class_1'], subject=d['subj_math'])
+
+        et = ExamType.objects.create(school=school, name=f'{P6}RepeatType', weight=Decimal('50.00'))
+        payload = {
+            'academic_year': d['academic_year'].id,
+            'term': d['term_1'].id,
+            'exam_type': et.id,
+            'name': f'{P6}Repeat Wizard Test',
+            'class_ids': [d['class_1'].id],
+            'default_total_marks': '100',
+            'default_passing_marks': '33',
+            'start_date': '2026-04-01',
+            'end_date': '2026-04-05',
+        }
+
+        resp1 = api.post('/api/examinations/exam-groups/wizard-create/', payload, token, sid)
+        assert resp1.status_code == 201, f"status={resp1.status_code} body={resp1.content[:300]}"
+
+        resp2 = api.post('/api/examinations/exam-groups/wizard-create/', payload, token, sid)
+        assert resp2.status_code == 409, f"status={resp2.status_code} body={resp2.content[:300]}"
+        assert resp2.json()['conflicts'][0]['class_id'] == d['class_1'].id
+
+    def test_g1h_wizard_create_same_name_different_exam_type_is_a_friendly_400_not_500(self, exam_prereqs, api):
+        """G1h: a same-named group already existing under a different exam type is a genuine
+        naming collision -- must surface as a clean 400 with a helpful message, not the raw
+        psycopg2 UniqueViolation traceback as an unhandled 500."""
+        d = exam_prereqs
+        token = d['tokens']['admin']
+        sid = d['SID_A']
+        school = d['school_a']
+
+        ClassSubject.objects.create(school=school, class_obj=d['class_1'], subject=d['subj_math'])
+        ClassSubject.objects.create(school=school, class_obj=d['class_2'], subject=d['subj_math'])
+
+        et_a = ExamType.objects.create(school=school, name=f'{P6}CollideA', weight=Decimal('50.00'))
+        et_b = ExamType.objects.create(school=school, name=f'{P6}CollideB', weight=Decimal('50.00'))
+        shared_name = f'{P6}Collision Group'
+
+        resp1 = api.post('/api/examinations/exam-groups/wizard-create/', {
+            'academic_year': d['academic_year'].id,
+            'term': d['term_1'].id,
+            'exam_type': et_a.id,
+            'name': shared_name,
+            'class_ids': [d['class_1'].id],
+            'default_total_marks': '100',
+            'default_passing_marks': '33',
+            'start_date': '2026-04-01',
+            'end_date': '2026-04-05',
+        }, token, sid)
+        assert resp1.status_code == 201, f"status={resp1.status_code} body={resp1.content[:300]}"
+
+        resp2 = api.post('/api/examinations/exam-groups/wizard-create/', {
+            'academic_year': d['academic_year'].id,
+            'term': d['term_1'].id,
+            'exam_type': et_b.id,
+            'name': shared_name,
+            'class_ids': [d['class_2'].id],
+            'default_total_marks': '100',
+            'default_passing_marks': '33',
+            'start_date': '2026-04-01',
+            'end_date': '2026-04-05',
+        }, token, sid)
+        assert resp2.status_code == 400, f"status={resp2.status_code} body={resp2.content[:300]}"
+        assert 'already exists' in resp2.json()['detail']
 
     def test_g2_group_actions_resolve_under_exam_groups_not_404(self, exam_prereqs, api):
         """G2: download-date-sheet/update-date-by-subject/publish-all resolve under

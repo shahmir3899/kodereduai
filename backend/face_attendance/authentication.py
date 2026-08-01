@@ -1,5 +1,5 @@
 """
-Device-key authentication for Tier B on-prem capture devices.
+Device-key authentication for Fixed Camera capture on-prem devices.
 
 Isolated on purpose (design doc §4): on-prem devices have no user account,
 so this does not touch the JWT/session auth or IsSchoolAdmin machinery used

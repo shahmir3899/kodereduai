@@ -28,10 +28,10 @@ def timezone_now():
 
 
 def _make_event(school, when, resulted_in_attendance=False, matched_student=None,
-                 attendance_record=None, source_tier=FaceLiveDetectionEvent.SourceTier.TIER_B):
+                 attendance_record=None, source_method=FaceLiveDetectionEvent.CaptureMethod.FIXED_CAMERA):
     return FaceLiveDetectionEvent.objects.create(
         school=school,
-        source_tier=source_tier,
+        source_method=source_method,
         embedding_version='dlib_v1',
         client_timestamp=when,
         matched_student=matched_student,
@@ -94,14 +94,14 @@ class TestLiveDetectionEventPurge:
         assert record.status == AttendanceRecord.AttendanceStatus.PRESENT
         assert AttendanceRecord.objects.filter(student=student, date=date.today()).exists()
 
-    def test_applies_uniformly_to_tier_a_and_tier_b_events(self, seed_data):
+    def test_applies_uniformly_to_live_mobile_and_fixed_camera_events(self, seed_data):
         old_a = _make_event(
             seed_data['school_a'], when=timezone_now() - timedelta(hours=RETENTION_HOURS + 1),
-            source_tier=FaceLiveDetectionEvent.SourceTier.TIER_A,
+            source_method=FaceLiveDetectionEvent.CaptureMethod.LIVE_MOBILE,
         )
         old_b = _make_event(
             seed_data['school_a'], when=timezone_now() - timedelta(hours=RETENTION_HOURS + 1),
-            source_tier=FaceLiveDetectionEvent.SourceTier.TIER_B,
+            source_method=FaceLiveDetectionEvent.CaptureMethod.FIXED_CAMERA,
         )
         result = cleanup_old_live_detection_events()
         assert result['deleted'] == 2

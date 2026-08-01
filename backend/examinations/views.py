@@ -530,11 +530,15 @@ class ExamGroupViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Check for conflicts (only active exams block new creation)
+        # Check for conflicts (only active exams block new creation). Scoped to
+        # the academic year (not just term) since a master class's id is
+        # reused across years -- without this, two unrelated years' exams for
+        # the same class/type with a blank term could look like a conflict.
         conflicts = []
         for cls in valid_classes:
             existing = Exam.objects.filter(
                 school_id=school_id,
+                academic_year_id=data['academic_year'],
                 exam_type_id=data['exam_type'],
                 class_obj=cls,
                 term_id=data.get('term'),
@@ -552,6 +556,29 @@ class ExamGroupViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
                 'conflicts': conflicts,
             }, status=status.HTTP_409_CONFLICT)
 
+        # An exam group name is unique per (school, name, academic_year). Reuse
+        # an existing group with a matching term/exam_type instead of erroring,
+        # so a school can run the wizard multiple times -- once per batch of
+        # classes -- under the same exam name (e.g. enrolling more classes into
+        # "1st Term Exam 2026-27" later). A same-named group with a different
+        # term/exam_type is a genuine naming collision, not a valid reuse.
+        existing_group = ExamGroup.objects.filter(
+            school_id=school_id,
+            name=data['name'],
+            academic_year_id=data['academic_year'],
+        ).first()
+        if existing_group and (
+            existing_group.term_id != data.get('term')
+            or existing_group.exam_type_id != data['exam_type']
+        ):
+            return Response({
+                'detail': (
+                    f'An exam group named "{data["name"]}" already exists for this '
+                    'academic year with a different exam type or term. Please choose '
+                    'a different name.'
+                ),
+            }, status=status.HTTP_400_BAD_REQUEST)
+
         # Build lookup: (class_id, subject_id) -> {exam_date, start_time, end_time}
         date_sheet_list = data.get('date_sheet', [])
         date_sheet_map = {}
@@ -568,70 +595,78 @@ class ExamGroupViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
         default_total = data.get('default_total_marks', 100)
         default_passing = data.get('default_passing_marks', 33)
 
-        with transaction.atomic():
-            group = ExamGroup.objects.create(
-                school_id=school_id,
-                academic_year_id=data['academic_year'],
-                term_id=data.get('term'),
-                exam_type_id=data['exam_type'],
-                name=data['name'],
-                description=data.get('description', ''),
-                start_date=data.get('start_date'),
-                end_date=data.get('end_date'),
-            )
-
-            created_exams = []
-            for cls in valid_classes:
-                exam = Exam.objects.create(
+        try:
+            with transaction.atomic():
+                group = existing_group or ExamGroup.objects.create(
                     school_id=school_id,
                     academic_year_id=data['academic_year'],
                     term_id=data.get('term'),
                     exam_type_id=data['exam_type'],
-                    class_obj=cls,
-                    exam_group=group,
-                    name=f"{data['name']} - {cls.name}",
+                    name=data['name'],
+                    description=data.get('description', ''),
                     start_date=data.get('start_date'),
                     end_date=data.get('end_date'),
-                    status=Exam.Status.SCHEDULED,
                 )
-                created_exams.append(exam)
 
-            # Per-class subject restriction. A class present here is filtered to
-            # exactly its listed subject_ids -- including an empty list, which
-            # deliberately yields zero ExamSubjects for that class rather than
-            # falling back. A class absent entirely (older clients) keeps every
-            # ClassSubject assigned to it.
-            subject_restriction_by_class = {
-                entry['class_id']: entry.get('subject_ids') or []
-                for entry in (data.get('class_subjects') or [])
-            }
-
-            all_exam_subjects = []
-            for exam in created_exams:
-                class_subjects = ClassSubject.objects.filter(
-                    school_id=school_id,
-                    class_obj=exam.class_obj,
-                    is_active=True,
-                ).select_related('subject')
-                if exam.class_obj_id in subject_restriction_by_class:
-                    class_subjects = class_subjects.filter(
-                        subject_id__in=subject_restriction_by_class[exam.class_obj_id]
-                    )
-                for cs in class_subjects:
-                    slot = date_sheet_map.get((exam.class_obj_id, cs.subject_id), {})
-                    all_exam_subjects.append(ExamSubject(
+                created_exams = []
+                for cls in valid_classes:
+                    exam = Exam.objects.create(
                         school_id=school_id,
-                        exam=exam,
-                        subject=cs.subject,
-                        total_marks=default_total,
-                        passing_marks=default_passing,
-                        exam_date=slot.get('exam_date'),
-                        start_time=slot.get('start_time'),
-                        end_time=slot.get('end_time'),
-                    ))
+                        academic_year_id=data['academic_year'],
+                        term_id=data.get('term'),
+                        exam_type_id=data['exam_type'],
+                        class_obj=cls,
+                        exam_group=group,
+                        name=f"{data['name']} - {cls.name}",
+                        start_date=data.get('start_date'),
+                        end_date=data.get('end_date'),
+                        status=Exam.Status.SCHEDULED,
+                    )
+                    created_exams.append(exam)
 
-            if all_exam_subjects:
-                ExamSubject.objects.bulk_create(all_exam_subjects, ignore_conflicts=True)
+                # Per-class subject restriction. A class present here is filtered to
+                # exactly its listed subject_ids -- including an empty list, which
+                # deliberately yields zero ExamSubjects for that class rather than
+                # falling back. A class absent entirely (older clients) keeps every
+                # ClassSubject assigned to it.
+                subject_restriction_by_class = {
+                    entry['class_id']: entry.get('subject_ids') or []
+                    for entry in (data.get('class_subjects') or [])
+                }
+
+                all_exam_subjects = []
+                for exam in created_exams:
+                    class_subjects = ClassSubject.objects.filter(
+                        school_id=school_id,
+                        class_obj=exam.class_obj,
+                        is_active=True,
+                    ).select_related('subject')
+                    if exam.class_obj_id in subject_restriction_by_class:
+                        class_subjects = class_subjects.filter(
+                            subject_id__in=subject_restriction_by_class[exam.class_obj_id]
+                        )
+                    for cs in class_subjects:
+                        slot = date_sheet_map.get((exam.class_obj_id, cs.subject_id), {})
+                        all_exam_subjects.append(ExamSubject(
+                            school_id=school_id,
+                            exam=exam,
+                            subject=cs.subject,
+                            total_marks=default_total,
+                            passing_marks=default_passing,
+                            exam_date=slot.get('exam_date'),
+                            start_time=slot.get('start_time'),
+                            end_time=slot.get('end_time'),
+                        ))
+
+                if all_exam_subjects:
+                    ExamSubject.objects.bulk_create(all_exam_subjects, ignore_conflicts=True)
+        except IntegrityError:
+            return Response({
+                'detail': (
+                    'This exam could not be created because it conflicts with an '
+                    'existing record. Please refresh the page and try again.'
+                ),
+            }, status=status.HTTP_400_BAD_REQUEST)
 
         return Response({
             'group_id': group.id,

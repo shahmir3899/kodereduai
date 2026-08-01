@@ -1332,25 +1332,27 @@ export const faceAttendanceApi = {
   // Delete face enrollment
   deleteEnrollment: (id) => api.delete(`/api/face-attendance/enrollments/${id}/`),
 
-  // Check face recognition status (also reports tier_a/b/c_enabled for the school)
+  // Check face recognition status (also reports group_photo_available,
+  // live_mobile_available, and fixed_camera_status for the school)
   getStatus: () => api.get('/api/face-attendance/status/'),
 
-  // Tier B: capture devices (list/edit only — provisioning is admin-only, see Django admin)
+  // Fixed Camera capture: devices (list/edit only — provisioning is admin-only, see Django admin)
   getDevices: (params) => api.get('/api/face-attendance/devices/', { params }),
   updateDevice: (id, data) => api.patch(`/api/face-attendance/devices/${id}/`, data),
 
-  // Tier B: live-match troubleshooting log
+  // Fixed Camera capture: live-match troubleshooting log
   getLiveEvents: (params) => api.get('/api/face-attendance/live/events/', { params }),
 
-  // Tier A: mobile-browser live match — same endpoint as Tier B, JWT auth instead of device key
+  // Live Mobile capture: mobile-browser live match — same endpoint as Fixed
+  // Camera capture, JWT auth instead of device key
   liveMatch: (data) => api.post('/api/face-attendance/live/match/', data),
 
-  // Tier A: guided client-side enrollment (embedding already extracted in-browser)
+  // Live Mobile capture: guided client-side enrollment (embedding already extracted in-browser)
   enrollWithEmbedding: (data) => api.post('/api/face-attendance/enroll/', data),
 
-  // Tier A: operator's correct/wrong label on a live-match result — feeds
-  // future faceapi_v1 threshold tuning (only the capturing operator can
-  // verify this, since no image is ever stored)
+  // Live Mobile capture: operator's correct/wrong label on a live-match
+  // result — feeds future faceapi_v1 threshold tuning (only the capturing
+  // operator can verify this, since no image is ever stored)
   submitLiveMatchFeedback: (eventId, isCorrect) => api.post(
     `/api/face-attendance/live/events/${eventId}/feedback/`,
     { is_correct: isCorrect },
@@ -1429,8 +1431,8 @@ export const questionPaperApi = {
 }
 
 export const aiJobsApi = {
-  getAIJobs: (params) => api.get('/api/core/ai-jobs/', { params }),
-  updateAIJob: (id, data) => api.patch(`/api/core/ai-jobs/${id}/`, data),
+  getAIJobs: (params) => api.get('/api/tasks/ai-jobs/', { params }),
+  updateAIJob: (id, data) => api.patch(`/api/tasks/ai-jobs/${id}/`, data),
 }
 
 // Brochure CMS API (Super-admins only)

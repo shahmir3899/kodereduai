@@ -795,17 +795,18 @@ export const handlers = [
   ])),
 
   // Face Attendance
-  // Default: no Tier B device installed (the common case today, e.g. The
-  // Focus Montessori) — Tier B tests override this per-test with server.use(...).
+  // Default: no Fixed Camera device installed (the common case today, e.g.
+  // The Focus Montessori) — Fixed Camera tests override this per-test with
+  // server.use(...).
   http.get('/api/face-attendance/status/', () =>
     HttpResponse.json({
       face_recognition_available: true,
       thresholds: { high: 0.40, medium: 0.55 },
       enrolled_faces: 4,
       model: 'dlib_v1',
-      tier_a_available: true,
-      tier_c_available: true,
-      tier_b_status: 'not_installed',
+      group_photo_available: true,
+      live_mobile_available: true,
+      fixed_camera_status: 'not_installed',
     })
   ),
   http.get('/api/face-attendance/devices/', () =>

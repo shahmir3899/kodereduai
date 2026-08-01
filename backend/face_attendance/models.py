@@ -1,12 +1,12 @@
 """
 Face attendance models for camera-based multi-student attendance.
 
-Tier C (group photo, batch): FaceAttendanceSession, StudentFaceEmbedding,
+Group Photo capture (batch): FaceAttendanceSession, StudentFaceEmbedding,
 FaceDetectionResult.
 
-Tier B (fixed on-prem camera, live/streaming): FaceCaptureDevice,
+Fixed Camera capture (fixed on-prem camera, live/streaming): FaceCaptureDevice,
 FaceAttendanceSchoolConfig, FaceLiveDetectionEvent. See
-docs/face-attendance-live-detection-design.md for the full design.
+docs/FACE_ATTENDANCE.md for the full design.
 """
 
 import hashlib
@@ -281,15 +281,17 @@ class FaceDetectionResult(models.Model):
 
 class FaceAttendanceSchoolConfig(models.Model):
     """
-    Per-school settings for face attendance capture tiers.
+    Per-school settings for face attendance capture methods.
 
-    Product decision (2026-07): Tier A (mobile-browser) and Tier C
-    (group-photo) are unconditionally available to every school — the
-    per-tier enable flags this model used to carry (tier_a_enabled,
-    tier_b_enabled, tier_c_enabled) were removed, not just defaulted on,
-    since nothing consults them anymore. Tier B has no "enabled" concept
-    at all: whether it's available is derived from whether the school has
-    an active, recently-seen FaceCaptureDevice (see
+    Confirmed product decision: Group Photo capture, Live Mobile capture,
+    and Fixed Camera capture are all unconditionally available to every
+    school — no school-level enable/disable gate exists or is wanted for
+    any of them. The per-method enable flags this model used to carry (see
+    migration 0008_remove_tier_enable_flags for the removed field names)
+    were removed, not just defaulted on, since nothing consults them
+    anymore. Fixed Camera capture
+    has no "enabled" concept at all: whether it's available is derived from
+    whether the school has an active, recently-seen FaceCaptureDevice (see
     FaceAttendanceStatusView), not from a flag here. This model still
     exists for genuinely per-school knobs (arrival window, threshold
     overrides) that aren't simple on/off gates.
@@ -302,11 +304,11 @@ class FaceAttendanceSchoolConfig(models.Model):
     )
     live_window_start = models.TimeField(
         null=True, blank=True,
-        help_text='Arrival window start for live tiers (semantics not yet enforced)',
+        help_text='Arrival window start for live capture methods (semantics not yet enforced)',
     )
     live_window_end = models.TimeField(
         null=True, blank=True,
-        help_text='Arrival window end for live tiers (semantics not yet enforced)',
+        help_text='Arrival window end for live capture methods (semantics not yet enforced)',
     )
     threshold_overrides = models.JSONField(
         null=True, blank=True,
@@ -325,7 +327,7 @@ class FaceAttendanceSchoolConfig(models.Model):
 
 class FaceCaptureDevice(models.Model):
     """
-    An on-prem Tier B camera device registered for a school.
+    An on-prem Fixed Camera capture device registered for a school.
 
     Authenticates via a hashed API key (X-Device-Key header), not the
     JWT/session auth used by human users — see
@@ -419,7 +421,7 @@ class FaceCaptureDevice(models.Model):
 
 class FaceLiveDetectionEvent(models.Model):
     """
-    One match attempt from a live capture tier (Tier A or Tier B).
+    One match attempt from a live capture method (Live Mobile or Fixed Camera).
 
     Distinct from FaceAttendanceSession on purpose: a session is "one
     processed photo," this is "one match attempt in a continuous stream" —
@@ -428,9 +430,9 @@ class FaceLiveDetectionEvent(models.Model):
     stored here (biometric-data-retention consideration, see design doc §8/§9.3).
     """
 
-    class SourceTier(models.TextChoices):
-        TIER_A = 'TIER_A', 'Mobile Browser'
-        TIER_B = 'TIER_B', 'Fixed Camera'
+    class CaptureMethod(models.TextChoices):
+        LIVE_MOBILE = 'LIVE_MOBILE', 'Live Mobile Capture'
+        FIXED_CAMERA = 'FIXED_CAMERA', 'Fixed Camera Capture'
 
     class MatchStatus(models.TextChoices):
         AUTO_MATCHED = 'AUTO_MATCHED', 'Auto Matched (High Confidence)'
@@ -453,16 +455,16 @@ class FaceLiveDetectionEvent(models.Model):
         verbose_name='Class',
         help_text='Set when the source device is CLASS-scoped; null for SCHOOL-scoped devices',
     )
-    source_tier = models.CharField(max_length=10, choices=SourceTier.choices)
+    source_method = models.CharField(max_length=15, choices=CaptureMethod.choices)
 
-    # Exactly one of these is populated depending on source_tier.
+    # Exactly one of these is populated depending on source_method.
     device = models.ForeignKey(
         FaceCaptureDevice,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name='detection_events',
-        help_text='Set for Tier B events',
+        help_text='Set for Fixed Camera capture events',
     )
     captured_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -470,7 +472,7 @@ class FaceLiveDetectionEvent(models.Model):
         null=True,
         blank=True,
         related_name='face_live_detection_events_captured',
-        help_text='Set for Tier A events — the teacher/guard whose session posted the embedding',
+        help_text='Set for Live Mobile capture events — the teacher/guard whose session posted the embedding',
     )
 
     embedding_version = models.CharField(max_length=20)
@@ -512,13 +514,13 @@ class FaceLiveDetectionEvent(models.Model):
 
     def __str__(self):
         student_name = self.matched_student.name if self.matched_student else 'Unmatched'
-        return f'{self.source_tier} @ {self.client_timestamp} → {student_name} ({self.match_status})'
+        return f'{self.source_method} @ {self.client_timestamp} → {student_name} ({self.match_status})'
 
 
 class FaceMatchThresholdSample(models.Model):
     """
     A labeled (distance, correct/incorrect) sample for future threshold
-    tuning — see docs/face-attendance-live-detection-design.md §10 backlog
+    tuning — see docs/FACE_ATTENDANCE.md section C
     ("faceapi_v1 threshold empirical tuning").
 
     Deliberately stripped down: no student/class FK, no raw embedding
@@ -531,13 +533,13 @@ class FaceMatchThresholdSample(models.Model):
 
     Only created from operator feedback (see LiveMatchFeedbackView) — the
     operator holding the phone is the only one who can ever know whether a
-    Tier A match was actually correct, since no image is stored to review
+    Live Mobile match was actually correct, since no image is stored to review
     later.
     """
 
-    class SourceTier(models.TextChoices):
-        TIER_A = 'TIER_A', 'Mobile Browser'
-        TIER_B = 'TIER_B', 'Fixed Camera'
+    class CaptureMethod(models.TextChoices):
+        LIVE_MOBILE = 'LIVE_MOBILE', 'Live Mobile Capture'
+        FIXED_CAMERA = 'FIXED_CAMERA', 'Fixed Camera Capture'
 
     class PredictedStatus(models.TextChoices):
         AUTO_MATCHED = 'AUTO_MATCHED', 'Auto Matched (High Confidence)'
@@ -548,7 +550,7 @@ class FaceMatchThresholdSample(models.Model):
         on_delete=models.CASCADE,
         related_name='face_match_threshold_samples',
     )
-    source_tier = models.CharField(max_length=10, choices=SourceTier.choices)
+    source_method = models.CharField(max_length=15, choices=CaptureMethod.choices)
     embedding_version = models.CharField(max_length=20)
     distance = models.FloatField(help_text='Raw L2 distance the system matched on')
     predicted_match_status = models.CharField(max_length=20, choices=PredictedStatus.choices)

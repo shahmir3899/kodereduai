@@ -115,9 +115,9 @@ class EmbeddingService:
     def store_client_embedding(student_id, school_id, embedding, embedding_version,
                                 quality_score=0.0, source_image_url=''):
         """
-        Store an embedding that was already extracted client-side (Tier A
-        guided enrollment — face-api.js runs in the browser, see design doc
-        §5). Unlike store_embedding(), this never touches face_recognition,
+        Store an embedding that was already extracted client-side (Live
+        Mobile guided enrollment — face-api.js runs in the browser, see
+        design doc §5). Unlike store_embedding(), this never touches face_recognition,
         so it doesn't require dlib to be installed or an EmbeddingService
         instance (which imports it in __init__).
         """
@@ -153,9 +153,10 @@ class EmbeddingService:
         embedding for the given version, ready to hand to FaceMatcher.
 
         This is class-scoped — NEVER includes students from other classes.
-        Used by Tier C matching and CLASS-scoped Tier B devices. Does not
-        need face_recognition, so it's callable without instantiating
-        EmbeddingService (e.g. from the lightweight Tier B endpoint).
+        Used by Group Photo matching and CLASS-scoped Fixed Camera devices.
+        Does not need face_recognition, so it's callable without
+        instantiating EmbeddingService (e.g. from the lightweight Fixed
+        Camera endpoint).
         """
         from students.models import Student
 
@@ -174,7 +175,7 @@ class EmbeddingService:
         """
         Return the set of student IDs anywhere in the school that have an
         active embedding for the given version, ready to hand to
-        FaceMatcher. Used by SCHOOL-scoped Tier B devices (e.g. an
+        FaceMatcher. Used by SCHOOL-scoped Fixed Camera devices (e.g. an
         entrance camera) — NOT class-scoped.
         """
         from students.models import Student

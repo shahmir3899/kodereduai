@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { examinationsApi, sessionsApi, academicsApi } from '../../services/api'
 import { useClasses } from '../../hooks/useClasses'
+import { useSessionClasses } from '../../hooks/useSessionClasses'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 
 const STEPS = [
@@ -71,6 +72,7 @@ export default function ExamWizard({ onClose, onSuccess }) {
     queryFn: () => examinationsApi.getExamTypes({ page_size: 9999 }),
   })
   const { classes: classesFromHook } = useClasses()
+  const { sessionClasses } = useSessionClasses(wizardData.academic_year)
   const { data: allClassSubjectsRes } = useQuery({
     queryKey: ['allClassSubjectsForWizard'],
     queryFn: () => academicsApi.getClassSubjects({ page_size: 9999 }),
@@ -79,9 +81,52 @@ export default function ExamWizard({ onClose, onSuccess }) {
   const years = yearsRes?.data?.results || yearsRes?.data || EMPTY_ARRAY
   const terms = termsRes?.data?.results || termsRes?.data || EMPTY_ARRAY
   const examTypes = examTypesRes?.data?.results || examTypesRes?.data || EMPTY_ARRAY
-  const classes = classesFromHook || EMPTY_ARRAY
+
+  // Master classes without a session class in the selected academic year are
+  // stale (e.g. leftover per-section master rows from before a school adopted
+  // year-scoped Session Classes) — exclude them so the picker doesn't offer
+  // classes that aren't actually in use this year. Falls back to the full
+  // master list when the school hasn't set up Session Classes for this year
+  // at all, so schools not yet on that model still see their classes.
+  const classesInSelectedYear = useMemo(() => {
+    const classObjIds = new Set(sessionClasses.map(sc => sc.class_obj).filter(Boolean))
+    if (classObjIds.size === 0) return classesFromHook || EMPTY_ARRAY
+    return (classesFromHook || EMPTY_ARRAY).filter(c => classObjIds.has(c.id))
+  }, [classesFromHook, sessionClasses])
+
+  const classes = wizardData.academic_year ? classesInSelectedYear : (classesFromHook || EMPTY_ARRAY)
   const allClassSubjects = allClassSubjectsRes?.data?.results || allClassSubjectsRes?.data || EMPTY_ARRAY
   const selectedClasses = classes.filter(c => wizardData.class_ids.includes(c.id))
+
+  // A school can rename a grade's session-facing label year to year (e.g.
+  // "Nursery" -> "Junior 1") without renaming the underlying master class, so
+  // the current year's Session Class display_name is the source of truth for
+  // what to show — the master class's own `name` is only a fallback for
+  // schools that haven't set up Session Classes at all (see `classes` above).
+  const sessionDisplayNameByClassObj = useMemo(() => {
+    const map = {}
+    sessionClasses.forEach(sc => {
+      if (sc.class_obj && !map[sc.class_obj]) map[sc.class_obj] = sc.display_name
+    })
+    return map
+  }, [sessionClasses])
+
+  const classLabel = (cls) => {
+    const name = sessionDisplayNameByClassObj[cls.id] || cls.name
+    return cls.section ? `${name} - ${cls.section}` : name
+  }
+
+  // Drop any previously-checked classes that fall out of scope when the
+  // academic year changes (e.g. switching years changes which master classes
+  // are in use), so Step 2/3 never carry a stale selection forward.
+  useEffect(() => {
+    setWizardData(prev => {
+      const validIds = new Set(classes.map(c => c.id))
+      const nextClassIds = prev.class_ids.filter(id => validIds.has(id))
+      if (nextClassIds.length === prev.class_ids.length) return prev
+      return { ...prev, class_ids: nextClassIds }
+    })
+  }, [classes])
 
   // Class → subject count map
   const subjectCountMap = useMemo(() => {
@@ -147,7 +192,7 @@ export default function ExamWizard({ onClose, onSuccess }) {
         rows.push({
           key: `${cs.class_obj}_${cs.subject}`,
           classId: cs.class_obj,
-          className: cls.section ? `${cls.name} - ${cls.section}` : cls.name,
+          className: classLabel(cls),
           subjectId: cs.subject,
           subjectName: cs.subject_name,
           subjectCode: cs.subject_code || '',
@@ -158,7 +203,7 @@ export default function ExamWizard({ onClose, onSuccess }) {
       return s !== 0 ? s : a.className.localeCompare(b.className)
     })
     return rows
-  }, [allClassSubjects, wizardData.class_ids, wizardData.subject_ids_by_class, classes])
+  }, [allClassSubjects, wizardData.class_ids, wizardData.subject_ids_by_class, classes, sessionDisplayNameByClassObj])
 
   // Subjects available per class (for the Step 3 per-cell picker).
   const subjectsByClass = useMemo(() => {
@@ -654,7 +699,7 @@ export default function ExamWizard({ onClose, onSuccess }) {
                             : [...wizardData.class_ids, cls.id]
                           )}
                           className="rounded border-gray-300 text-sky-600 focus:ring-sky-500" />
-                        <span className="flex-1 text-sm font-medium text-gray-800">{cls.name}{cls.section ? ` - ${cls.section}` : ''}</span>
+                        <span className="flex-1 text-sm font-medium text-gray-800">{classLabel(cls)}</span>
                         {subCount > 0 ? (
                           <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">{subCount} subjects</span>
                         ) : (
@@ -730,7 +775,7 @@ export default function ExamWizard({ onClose, onSuccess }) {
                         <th className="px-3 py-2 text-left w-28">Date</th>
                         {selectedClasses.map(cls => (
                           <th key={cls.id} className="px-3 py-2 text-center">
-                            {cls.section ? `${cls.name} - ${cls.section}` : cls.name}
+                            {classLabel(cls)}
                           </th>
                         ))}
                       </tr>
@@ -763,7 +808,7 @@ export default function ExamWizard({ onClose, onSuccess }) {
                               // table's horizontal-scroll center instead of running
                               // off the right edge on a narrow (mobile) viewport.
                               const openLeft = classIdx >= Math.ceil(selectedClasses.length / 2)
-                              const classLabel = cls.section ? `${cls.name} - ${cls.section}` : cls.name
+                              const cellClassLabel = classLabel(cls)
                               const cellKey = `${cls.id}|${date}`
                               const selectedIds = cellSubjectsByClassDate[cellKey] || []
                               const classSubjectOptions = subjectsByClass[cls.id] || []
@@ -772,7 +817,7 @@ export default function ExamWizard({ onClose, onSuccess }) {
                                 <td key={cls.id} className="px-2 py-1.5 relative" data-cell-key={cellKey}>
                                   <button
                                     type="button"
-                                    aria-label={`${date} - ${classLabel}`}
+                                    aria-label={`${date} - ${cellClassLabel}`}
                                     onClick={() => setOpenCell(isOpen ? null : cellKey)}
                                     className={`w-full min-h-[30px] text-left rounded border px-2 py-1 flex flex-wrap gap-1 items-center text-xs ${isOpen ? 'border-primary-500 ring-1 ring-primary-200 bg-primary-50' : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'}`}
                                   >
@@ -790,7 +835,7 @@ export default function ExamWizard({ onClose, onSuccess }) {
 
                                   {isOpen && (
                                     <div className={`absolute z-20 w-48 bg-white border border-gray-300 rounded-lg shadow-lg p-2 ${openLeft ? 'right-0' : 'left-0'} ${openUpward ? 'bottom-full mb-1' : 'top-full mt-1'}`}>
-                                      <p className="text-[10px] font-semibold uppercase text-gray-400 px-1 mb-1">{classLabel} · {date}</p>
+                                      <p className="text-[10px] font-semibold uppercase text-gray-400 px-1 mb-1">{cellClassLabel} · {date}</p>
                                       <div className="max-h-40 overflow-auto">
                                         {classSubjectOptions.length === 0 ? (
                                           <p className="text-xs text-gray-400 px-1 py-2">No subjects for this class.</p>
@@ -890,7 +935,7 @@ export default function ExamWizard({ onClose, onSuccess }) {
                 <div className="space-y-1 max-h-40 overflow-y-auto">
                   {selectedClasses.map(cls => (
                     <div key={cls.id} className="flex items-center justify-between py-1.5 px-3 bg-gray-50 rounded text-sm">
-                      <span className="font-medium text-gray-800">{cls.name}{cls.section ? ` - ${cls.section}` : ''}</span>
+                      <span className="font-medium text-gray-800">{classLabel(cls)}</span>
                       <span className="text-xs text-gray-500">{subjectCountMap[cls.id] || 0} subjects</span>
                     </div>
                   ))}

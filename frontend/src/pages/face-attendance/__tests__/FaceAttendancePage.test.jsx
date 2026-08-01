@@ -48,7 +48,7 @@ vi.mock('../../../utils/faceApiLoader', () => ({
   loadFaceApiModels: vi.fn(() => Promise.resolve()),
   detectSingleFace: vi.fn(),
   estimateQualityScore: () => 0.8,
-  TIER_A_EMBEDDING_VERSION: 'faceapi_v1',
+  LIVE_MOBILE_EMBEDDING_VERSION: 'faceapi_v1',
 }))
 
 beforeEach(() => {
@@ -138,7 +138,7 @@ describe('FaceAttendancePage', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/face-attendance/enrollment')
   })
 
-  it('Capture Devices link is always available (no longer tier-gated) and navigates', async () => {
+  it('Capture Devices link is always available (no enable/disable gate) and navigates', async () => {
     const user = userEvent.setup()
     renderWithProviders(<FaceAttendancePage />)
 
@@ -148,7 +148,7 @@ describe('FaceAttendancePage', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/face-attendance/devices')
   })
 
-  it('Bulk Enrollment link is always available (no longer tier-gated) and navigates', async () => {
+  it('Bulk Enrollment link is always available (no enable/disable gate) and navigates', async () => {
     const user = userEvent.setup()
     renderWithProviders(<FaceAttendancePage />)
 
@@ -169,17 +169,18 @@ describe('FaceAttendancePage', () => {
     })
   })
 
-  describe('Tier B status indicator', () => {
-    it('shows no badge when tier_b_status is not_installed (default mock)', async () => {
+  describe('Fixed Camera status indicator', () => {
+    it('shows no badge when fixed_camera_status is not_installed (default mock)', async () => {
       renderWithProviders(<FaceAttendancePage />)
 
       await waitFor(() => {
         expect(screen.getByText('Manage Enrollments')).toBeInTheDocument()
       })
       expect(screen.queryByText(/Fixed Camera/)).not.toBeInTheDocument()
+      expect(screen.queryByText(/Uses the classroom's installed camera/)).not.toBeInTheDocument()
     })
 
-    it('shows "Fixed Camera: Active" when tier_b_status is active', async () => {
+    it('shows "Fixed Camera: Active" when fixed_camera_status is active', async () => {
       server.use(
         http.get('/api/face-attendance/status/', () =>
           HttpResponse.json({
@@ -187,9 +188,9 @@ describe('FaceAttendancePage', () => {
             thresholds: { high: 0.40, medium: 0.55 },
             enrolled_faces: 4,
             model: 'dlib_v1',
-            tier_a_available: true,
-            tier_c_available: true,
-            tier_b_status: 'active',
+            group_photo_available: true,
+            live_mobile_available: true,
+            fixed_camera_status: 'active',
           })
         )
       )
@@ -198,7 +199,7 @@ describe('FaceAttendancePage', () => {
       expect(await screen.findByText('Fixed Camera: Active')).toBeInTheDocument()
     })
 
-    it('shows "Fixed Camera: Offline" when tier_b_status is inactive', async () => {
+    it('shows "Fixed Camera: Offline" when fixed_camera_status is inactive', async () => {
       server.use(
         http.get('/api/face-attendance/status/', () =>
           HttpResponse.json({
@@ -206,9 +207,9 @@ describe('FaceAttendancePage', () => {
             thresholds: { high: 0.40, medium: 0.55 },
             enrolled_faces: 4,
             model: 'dlib_v1',
-            tier_a_available: true,
-            tier_c_available: true,
-            tier_b_status: 'inactive',
+            group_photo_available: true,
+            live_mobile_available: true,
+            fixed_camera_status: 'inactive',
           })
         )
       )
