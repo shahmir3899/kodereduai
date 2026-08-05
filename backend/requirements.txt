@@ -72,10 +72,17 @@ python-docx>=1.1.2
 openpyxl>=3.1.0
 
 # Face Recognition
-# dlib is face_recognition's actual detection/encoding engine; it was previously
-# unpinned (pulled in transitively) so builds could silently drift versions.
-dlib==19.24.6
-face_recognition==1.3.0
+# dlib is face_recognition's actual detection/encoding engine. The real "dlib"
+# PyPI package ships no prebuilt wheels for any version (source-only), which
+# OOMs Render's build compiling it. dlib-bin is a prebuilt-wheel drop-in, but
+# its wheel metadata doesn't declare Provides-Dist: dlib, so face_recognition
+# must NOT be installed here (it would still resolve its own dlib>=19.7 dep
+# and rebuild from source) — it's installed with --no-deps in build.sh instead,
+# after dlib-bin is already present. face-recognition-models is face_recognition's
+# other real dependency, previously pulled in transitively; now explicit since
+# --no-deps means nothing pulls it in automatically anymore.
+dlib-bin==20.0.1
+face-recognition-models>=0.3.0
 numpy==1.26.4
 
 # Timetable Optimization
