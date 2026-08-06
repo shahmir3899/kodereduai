@@ -392,8 +392,6 @@ export default function SuperAdminDashboard() {
     })
   }
 
-  const allSchoolsOnPageSelected = schools.length > 0 && schools.every((s) => selectedSchoolIds.has(s.id))
-
   const toggleSelectAllOnPage = () => {
     setSelectedSchoolIds((prev) => {
       const next = new Set(prev)
@@ -513,6 +511,7 @@ export default function SuperAdminDashboard() {
   // ── Derived data ──────────────────────────────────────────────────────────
   // Paginated (current page only) — used for the tab tables.
   const schools = schoolsData?.data?.results || schoolsData?.data || []
+  const allSchoolsOnPageSelected = schools.length > 0 && schools.every((s) => selectedSchoolIds.has(s.id))
   const users = usersData?.data?.results || usersData?.data || []
   const orgs = orgsData?.data?.results || orgsData?.data || []
   const memberships = membershipsData?.data?.results || membershipsData?.data || []
