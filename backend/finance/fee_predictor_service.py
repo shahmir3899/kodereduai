@@ -4,8 +4,8 @@ Predicts which families are likely to default on upcoming fees.
 """
 
 import logging
+from collections import defaultdict
 from datetime import date
-from django.db.models import Sum, Count, Q, Avg, F
 from decimal import Decimal
 
 logger = logging.getLogger(__name__)
@@ -56,40 +56,50 @@ class FeeCollectionPredictorService:
         if not target_year:
             target_year = today.year if target_month > today.month else today.year + 1
 
-        students = Student.objects.filter(
+        students = list(Student.objects.filter(
             school_id=self.school_id,
             is_active=True,
-        ).select_related('class_obj')
+        ).select_related('class_obj'))
+        total_students = len(students)
+
+        # Bulk-fetch every payment for every active student in one query and
+        # bucket by student in Python, instead of 6 queries/student — same
+        # bulk-fetch-then-analyze pattern as
+        # academic_sessions.attendance_risk_service.AttendanceRiskService.
+        student_ids = [s.id for s in students]
+        payments_by_student = defaultdict(list)
+        for row in FeePayment.objects.filter(
+            student_id__in=student_ids,
+            school_id=self.school_id,
+        ).order_by('student_id', '-year', '-month').values(
+            'student_id', 'status', 'amount_due', 'amount_paid'
+        ):
+            payments_by_student[row['student_id']].append(row)
 
         predictions = []
 
         for student in students:
-            payments = FeePayment.objects.filter(
-                student=student,
-                school_id=self.school_id,
-            ).order_by('-year', '-month')
-
-            if not payments.exists():
+            payments = payments_by_student.get(student.id)
+            if not payments:
                 continue
 
-            total_payments = payments.count()
-            pending_count = payments.filter(status='PENDING').count()
-            partial_count = payments.filter(status='PARTIAL').count()
+            total_payments = len(payments)
+            pending_count = sum(1 for p in payments if p['status'] == 'UNPAID')
+            partial_count = sum(1 for p in payments if p['status'] == 'PARTIAL')
             late_count = pending_count + partial_count
 
             # Late payment ratio
             late_ratio = late_count / total_payments if total_payments > 0 else 0
 
-            # Recent trend (last 3 months)
-            recent = list(payments[:3])
-            recent_unpaid = sum(1 for p in recent if p.status in ('PENDING', 'PARTIAL'))
+            # Recent trend (last 3 months) — payments are pre-sorted -year, -month per student
+            recent = payments[:3]
+            recent_unpaid = sum(1 for p in recent if p['status'] in ('UNPAID', 'PARTIAL'))
 
             # Outstanding amount
-            outstanding = payments.filter(
-                status__in=['PENDING', 'PARTIAL']
-            ).aggregate(
-                total=Sum(F('amount_due') - F('amount_paid'))
-            )['total'] or Decimal('0')
+            outstanding = sum(
+                (p['amount_due'] - p['amount_paid'] for p in payments if p['status'] in ('UNPAID', 'PARTIAL')),
+                Decimal('0'),
+            )
 
             # Calculate probability
             probability = 0.0
@@ -143,7 +153,7 @@ class FeeCollectionPredictorService:
 
         return {
             'target_period': target_period,
-            'total_students': students.count(),
+            'total_students': total_students,
             'at_risk_count': len([p for p in predictions if p['risk_level'] in ('HIGH', 'MEDIUM')]),
             'predictions': predictions,
         }
