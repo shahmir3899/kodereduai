@@ -9,6 +9,7 @@ from .views import (
     SuperAdminSchoolViewSet,
     SuperAdminOrganizationViewSet,
     SuperAdminMembershipViewSet,
+    SuperAdminActionLogViewSet,
     ModuleRegistryView,
     SchoolViewSet,
 )
@@ -18,6 +19,7 @@ admin_router = DefaultRouter()
 admin_router.register(r'schools', SuperAdminSchoolViewSet, basename='admin-school')
 admin_router.register(r'organizations', SuperAdminOrganizationViewSet, basename='admin-organization')
 admin_router.register(r'memberships', SuperAdminMembershipViewSet, basename='admin-membership')
+admin_router.register(r'activity-log', SuperAdminActionLogViewSet, basename='admin-activity-log')
 
 # Router for regular school endpoints
 router = DefaultRouter()

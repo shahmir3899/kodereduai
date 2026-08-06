@@ -154,6 +154,26 @@ class UserUpdateSerializer(serializers.ModelSerializer):
         ]
 
 
+class AdminResetPasswordSerializer(serializers.Serializer):
+    """
+    Serializer for a super admin resetting another user's password.
+
+    mode='set' (default): set an explicit password immediately.
+    mode='email': send the standard token-based reset-link email instead.
+    """
+    mode = serializers.ChoiceField(choices=['set', 'email'], default='set')
+    new_password = serializers.CharField(required=False, min_length=8, allow_blank=False)
+    confirm_password = serializers.CharField(required=False, allow_blank=False)
+
+    def validate(self, attrs):
+        if attrs.get('mode', 'set') == 'set':
+            if not attrs.get('new_password'):
+                raise serializers.ValidationError({'new_password': 'Required when mode is "set".'})
+            if attrs.get('new_password') != attrs.get('confirm_password'):
+                raise serializers.ValidationError({'confirm_password': "Passwords don't match."})
+        return attrs
+
+
 class ChangePasswordSerializer(serializers.Serializer):
     """
     Serializer for changing user password.

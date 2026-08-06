@@ -2,19 +2,22 @@
 School views for tenant management.
 """
 
-from rest_framework import viewsets, status
+from rest_framework import filters, viewsets, status
 from rest_framework.decorators import action
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from django.apps import apps
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.db.models import Count, Q
 from datetime import timedelta
 
 from core.permissions import IsSuperAdmin, HasSchoolAccess
 from core.mixins import TenantQuerySetMixin
+from core.audit import log_admin_action
+from core.models import AdminActionLog
 from .models import School, Organization, UserSchoolMembership
 from .serializers import (
     SchoolSerializer,
@@ -26,6 +29,7 @@ from .serializers import (
     OrganizationCreateSerializer,
     MembershipSerializer,
     MembershipCreateSerializer,
+    AdminActionLogSerializer,
 )
 
 
@@ -42,6 +46,9 @@ class SuperAdminSchoolViewSet(viewsets.ModelViewSet):
     """
     queryset = School.objects.all()
     permission_classes = [IsAuthenticated, IsSuperAdmin]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['name', 'subdomain', 'contact_email']
+    ordering_fields = ['name', 'created_at', 'is_active', 'student_count', 'user_count']
 
     def get_serializer_class(self):
         if self.action == 'create':
@@ -67,6 +74,7 @@ class SuperAdminSchoolViewSet(viewsets.ModelViewSet):
         school = self.get_object()
         school.is_active = True
         school.save()
+        log_admin_action(request, 'activate', school)
         return Response({'message': f'{school.name} has been activated.'})
 
     @action(detail=True, methods=['post'])
@@ -75,6 +83,7 @@ class SuperAdminSchoolViewSet(viewsets.ModelViewSet):
         school = self.get_object()
         school.is_active = False
         school.save()
+        log_admin_action(request, 'deactivate', school)
         return Response({'message': f'{school.name} has been deactivated.'})
 
     @action(detail=True, methods=['get'])
@@ -128,6 +137,47 @@ class SuperAdminSchoolViewSet(viewsets.ModelViewSet):
             status=status.HTTP_410_GONE,
         )
 
+    @action(detail=False, methods=['post'])
+    def bulk_toggle(self, request):
+        """Activate or deactivate multiple schools at once."""
+        school_ids = request.data.get('school_ids') or []
+        is_active = request.data.get('is_active')
+        if not isinstance(school_ids, list) or not school_ids:
+            return Response({'detail': 'school_ids must be a non-empty list.'}, status=status.HTTP_400_BAD_REQUEST)
+        if is_active is None:
+            return Response({'detail': 'is_active is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        schools = School.objects.filter(id__in=school_ids)
+        count = schools.update(is_active=is_active)
+        AdminActionLog.objects.create(
+            actor=request.user if request.user.is_authenticated else None,
+            action='bulk_activate' if is_active else 'bulk_deactivate',
+            target_type='School',
+            target_repr=f'{count} school(s)',
+            metadata={'school_ids': school_ids},
+        )
+        return Response({'message': f'{count} school(s) {"activated" if is_active else "deactivated"}.'})
+
+    @action(detail=False, methods=['post'], url_path='bulk_reassign_org')
+    def bulk_reassign_org(self, request):
+        """Reassign multiple schools to a different organization (or unassign with a null/blank organization_id)."""
+        school_ids = request.data.get('school_ids') or []
+        organization_id = request.data.get('organization_id')
+        if not isinstance(school_ids, list) or not school_ids:
+            return Response({'detail': 'school_ids must be a non-empty list.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        org = get_object_or_404(Organization, pk=organization_id) if organization_id else None
+        schools = School.objects.filter(id__in=school_ids)
+        count = schools.update(organization=org)
+        AdminActionLog.objects.create(
+            actor=request.user if request.user.is_authenticated else None,
+            action='bulk_reassign_org',
+            target_type='School',
+            target_repr=f'{count} school(s) -> {org.name if org else "no organization"}',
+            metadata={'school_ids': school_ids, 'organization_id': organization_id},
+        )
+        return Response({'message': f'{count} school(s) reassigned.'})
+
     @action(detail=False, methods=['get'])
     def platform_stats(self, request):
         """Platform-wide aggregate statistics for the SuperAdmin overview."""
@@ -138,6 +188,7 @@ class SuperAdminSchoolViewSet(viewsets.ModelViewSet):
         now = timezone.now()
         month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         thirty_days_ago = now - timedelta(days=30)
+        sixty_days_ago = now - timedelta(days=60)
 
         total_schools = School.objects.count()
         active_schools = School.objects.filter(is_active=True).count()
@@ -148,18 +199,22 @@ class SuperAdminSchoolViewSet(viewsets.ModelViewSet):
         uploads_this_month = AttendanceUpload.objects.filter(
             created_at__gte=month_start).count()
 
-        # Recent activity
+        # Recent activity (last 30 days) vs. the 30 days before that, for trend deltas
         recent_schools = School.objects.filter(
             created_at__gte=thirty_days_ago).count()
         recent_users = User.objects.filter(
             created_at__gte=thirty_days_ago).count()
+        previous_period_schools = School.objects.filter(
+            created_at__gte=sixty_days_ago, created_at__lt=thirty_days_ago).count()
+        previous_period_users = User.objects.filter(
+            created_at__gte=sixty_days_ago, created_at__lt=thirty_days_ago).count()
 
         # Per-school breakdown (distinct=True to avoid cross-join inflation)
         school_breakdown = list(
             School.objects.filter(is_active=True).annotate(
                 student_count=Count('students', filter=Q(students__is_active=True), distinct=True),
                 user_count=Count('users', filter=Q(users__is_active=True), distinct=True),
-            ).values('id', 'name', 'student_count', 'user_count', 'created_at')
+            ).values('id', 'name', 'subdomain', 'student_count', 'user_count', 'created_at')
             .order_by('name')
         )
 
@@ -171,6 +226,8 @@ class SuperAdminSchoolViewSet(viewsets.ModelViewSet):
             'uploads_this_month': uploads_this_month,
             'recent_schools': recent_schools,
             'recent_users': recent_users,
+            'previous_period_schools': previous_period_schools,
+            'previous_period_users': previous_period_users,
             'school_breakdown': school_breakdown,
         })
 
@@ -180,6 +237,9 @@ class SuperAdminOrganizationViewSet(viewsets.ModelViewSet):
     ViewSet for Super Admin to manage organizations.
     """
     permission_classes = [IsAuthenticated, IsSuperAdmin]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['name', 'slug']
+    ordering_fields = ['name', 'created_at', 'school_count']
 
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):
@@ -196,12 +256,19 @@ class SuperAdminOrganizationViewSet(viewsets.ModelViewSet):
         # Cascade: disable modules on schools that the org no longer allows
         org.cascade_disabled_modules()
 
+    def perform_destroy(self, instance):
+        log_admin_action(self.request, 'delete', instance)
+        instance.delete()
+
 
 class SuperAdminMembershipViewSet(viewsets.ModelViewSet):
     """
     ViewSet for Super Admin to manage user-school memberships.
     """
     permission_classes = [IsAuthenticated, IsSuperAdmin]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['user__username', 'user__first_name', 'user__last_name', 'school__name']
+    ordering_fields = ['created_at', 'user__username', 'school__name', 'role']
 
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):
@@ -217,6 +284,22 @@ class SuperAdminMembershipViewSet(viewsets.ModelViewSet):
         if school_id:
             qs = qs.filter(school_id=school_id)
         return qs
+
+    def perform_destroy(self, instance):
+        log_admin_action(self.request, 'delete', instance)
+        instance.delete()
+
+
+class SuperAdminActionLogViewSet(viewsets.ReadOnlyModelViewSet):
+    """Read-only feed of AdminActionLog entries for the Activity tab."""
+    serializer_class = AdminActionLogSerializer
+    permission_classes = [IsAuthenticated, IsSuperAdmin]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['action', 'target_type', 'target_repr', 'actor__username']
+    ordering_fields = ['created_at']
+
+    def get_queryset(self):
+        return AdminActionLog.objects.select_related('actor').all()
 
 
 class ModuleRegistryView(APIView):

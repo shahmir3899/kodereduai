@@ -2,7 +2,7 @@
 User views for authentication and user management.
 """
 
-from rest_framework import generics, status, viewsets
+from rest_framework import filters, generics, status, viewsets
 from rest_framework.views import APIView
 from rest_framework.decorators import action
 from rest_framework.parsers import MultiPartParser, FormParser
@@ -13,11 +13,13 @@ from django.contrib.auth import get_user_model
 
 from core.permissions import IsSuperAdmin, IsSchoolAdmin, HasSchoolAccess, ROLE_HIERARCHY, get_effective_role
 from core.mixins import TenantQuerySetMixin, ensure_tenant_school_id
+from core.audit import log_admin_action
 from .serializers import (
     CustomTokenObtainPairSerializer,
     UserSerializer,
     UserCreateSerializer,
     UserUpdateSerializer,
+    AdminResetPasswordSerializer,
     ChangePasswordSerializer,
     ProfileUpdateSerializer,
     CurrentUserSerializer,
@@ -204,6 +206,10 @@ class UserViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
     """
     queryset = User.objects.all()
     permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['username', 'first_name', 'last_name', 'email']
+    ordering_fields = ['username', 'first_name', 'last_name', 'date_joined', 'is_active']
+    ordering = ['username']
 
     def get_serializer_class(self):
         if self.action == 'create':
@@ -301,6 +307,50 @@ class UserViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
             )
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=True, methods=['post'], url_path='reset_password', permission_classes=[IsAuthenticated, IsSuperAdmin])
+    def reset_password(self, request, pk=None):
+        """
+        Super-admin-triggered password reset for another user.
+
+        No admin-facing way to reset a forgotten password existed before this —
+        only self-service change-password (needs the old password) and the
+        public email-token flow. mode='set' sets an explicit password
+        immediately; mode='email' reuses the same token-based reset link the
+        public flow sends, just triggered on the user's behalf.
+        """
+        target_user = self.get_object()
+        serializer = AdminResetPasswordSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        mode = serializer.validated_data.get('mode', 'set')
+
+        if mode == 'email':
+            if not target_user.email:
+                return Response(
+                    {'detail': f'{target_user.username} has no email on file.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            uid = urlsafe_base64_encode(force_bytes(target_user.pk))
+            token = default_token_generator.make_token(target_user)
+            reset_url = f"{getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')}/reset-password?uid={uid}&token={token}"
+            from django.core.mail import send_mail
+            send_mail(
+                subject="Password Reset Request",
+                message=(
+                    "An administrator has requested a password reset for your account. "
+                    f"Click the link to set a new password: {reset_url}"
+                ),
+                from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@example.com'),
+                recipient_list=[target_user.email],
+                fail_silently=True,
+            )
+            log_admin_action(request, 'reset_password_email', target_user)
+            return Response({'message': f'Reset email sent to {target_user.email}.'})
+
+        target_user.set_password(serializer.validated_data['new_password'])
+        target_user.save()
+        log_admin_action(request, 'reset_password_set', target_user)
+        return Response({'message': f'Password reset for {target_user.username}.'})
 
     @action(detail=True, methods=['post'], url_path='remove_photo')
     def remove_photo(self, request, pk=None):

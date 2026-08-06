@@ -4,6 +4,7 @@ School serializers for tenant management.
 
 from rest_framework import serializers
 from django.utils.text import slugify
+from core.models import AdminActionLog
 from .models import School, Organization, UserSchoolMembership
 
 
@@ -236,3 +237,15 @@ class MembershipCreateSerializer(serializers.ModelSerializer):
         if qs.exists():
             raise serializers.ValidationError("This user already has a membership for this school.")
         return data
+
+
+class AdminActionLogSerializer(serializers.ModelSerializer):
+    actor_username = serializers.CharField(source='actor.username', default=None, read_only=True)
+
+    class Meta:
+        model = AdminActionLog
+        fields = [
+            'id', 'actor', 'actor_username', 'action',
+            'target_type', 'target_id', 'target_repr', 'metadata', 'created_at',
+        ]
+        read_only_fields = fields

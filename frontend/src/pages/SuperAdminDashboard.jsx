@@ -1,8 +1,12 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { schoolsApi, usersApi, organizationsApi, membershipsApi } from '../services/api'
+import { schoolsApi, usersApi, organizationsApi, membershipsApi, activityLogApi } from '../services/api'
 import { useConfirmModal } from '../components/ConfirmModal'
 import AvatarUpload from '../components/AvatarUpload'
+import Pagination from '../components/Pagination'
+import { useDebounce } from '../hooks/useDebounce'
+
+const ADMIN_PAGE_SIZE = 20
 
 export default function SuperAdminDashboard() {
   const queryClient = useQueryClient()
@@ -36,6 +40,15 @@ export default function SuperAdminDashboard() {
     phone: '',
   })
 
+  // ── Bulk school selection state ──────────────────────────────────────────
+  const [selectedSchoolIds, setSelectedSchoolIds] = useState(new Set())
+  const [showBulkReassignModal, setShowBulkReassignModal] = useState(false)
+  const [bulkReassignOrgId, setBulkReassignOrgId] = useState('')
+
+  // ── Reset password state ─────────────────────────────────────────────────
+  const [resetPwdUser, setResetPwdUser] = useState(null)
+  const [resetPwdForm, setResetPwdForm] = useState({ mode: 'set', new_password: '', confirm_password: '' })
+
   // ── Organization state ────────────────────────────────────────────────────
   const [showOrgModal, setShowOrgModal] = useState(false)
   const [editingOrg, setEditingOrg] = useState(null)
@@ -51,6 +64,27 @@ export default function SuperAdminDashboard() {
     is_default: false,
   })
 
+  // ── Search / pagination state (one per tab) ─────────────────────────────────
+  const [schoolsSearch, setSchoolsSearch] = useState('')
+  const [schoolsPage, setSchoolsPage] = useState(1)
+  const debouncedSchoolsSearch = useDebounce(schoolsSearch, 300)
+
+  const [usersSearch, setUsersSearch] = useState('')
+  const [usersPage, setUsersPage] = useState(1)
+  const debouncedUsersSearch = useDebounce(usersSearch, 300)
+
+  const [orgsSearch, setOrgsSearch] = useState('')
+  const [orgsPage, setOrgsPage] = useState(1)
+  const debouncedOrgsSearch = useDebounce(orgsSearch, 300)
+
+  const [membershipsSearch, setMembershipsSearch] = useState('')
+  const [membershipsPage, setMembershipsPage] = useState(1)
+  const debouncedMembershipsSearch = useDebounce(membershipsSearch, 300)
+
+  const [activitySearch, setActivitySearch] = useState('')
+  const [activityPage, setActivityPage] = useState(1)
+  const debouncedActivitySearch = useDebounce(activitySearch, 300)
+
   // ── Queries ───────────────────────────────────────────────────────────────
   const { data: platformStatsData } = useQuery({
     queryKey: ['platformStats'],
@@ -59,23 +93,65 @@ export default function SuperAdminDashboard() {
   const pStats = platformStatsData?.data || {}
 
   const { data: schoolsData, isLoading: schoolsLoading } = useQuery({
-    queryKey: ['adminSchools'],
-    queryFn: () => schoolsApi.getAllSchools({ page_size: 9999 }),
+    queryKey: ['adminSchools', schoolsPage, debouncedSchoolsSearch],
+    queryFn: () => schoolsApi.getAllSchools({
+      page: schoolsPage,
+      page_size: ADMIN_PAGE_SIZE,
+      search: debouncedSchoolsSearch || undefined,
+    }),
   })
 
   const { data: usersData, isLoading: usersLoading } = useQuery({
-    queryKey: ['adminUsers'],
-    queryFn: () => usersApi.getUsers({ page_size: 100 }),
+    queryKey: ['adminUsers', usersPage, debouncedUsersSearch],
+    queryFn: () => usersApi.getUsers({
+      page: usersPage,
+      page_size: ADMIN_PAGE_SIZE,
+      search: debouncedUsersSearch || undefined,
+    }),
   })
 
   const { data: orgsData, isLoading: orgsLoading } = useQuery({
-    queryKey: ['adminOrgs'],
-    queryFn: () => organizationsApi.getAll({ page_size: 9999 }),
+    queryKey: ['adminOrgs', orgsPage, debouncedOrgsSearch],
+    queryFn: () => organizationsApi.getAll({
+      page: orgsPage,
+      page_size: ADMIN_PAGE_SIZE,
+      search: debouncedOrgsSearch || undefined,
+    }),
   })
 
   const { data: membershipsData, isLoading: membershipsLoading } = useQuery({
-    queryKey: ['adminMemberships'],
-    queryFn: () => membershipsApi.getAll({ page_size: 9999 }),
+    queryKey: ['adminMemberships', membershipsPage, debouncedMembershipsSearch],
+    queryFn: () => membershipsApi.getAll({
+      page: membershipsPage,
+      page_size: ADMIN_PAGE_SIZE,
+      search: debouncedMembershipsSearch || undefined,
+    }),
+  })
+
+  const { data: activityData, isLoading: activityLoading } = useQuery({
+    queryKey: ['adminActivityLog', activityPage, debouncedActivitySearch],
+    queryFn: () => activityLogApi.getAll({
+      page: activityPage,
+      page_size: ADMIN_PAGE_SIZE,
+      search: debouncedActivitySearch || undefined,
+    }),
+    enabled: activeTab === 'activity',
+  })
+
+  // All schools/users, unpaginated — needed for select dropdowns in modals (school picker,
+  // org picker, membership user/school pickers) which must offer every option, not just the
+  // current page's 20.
+  const { data: allSchoolsData } = useQuery({
+    queryKey: ['adminSchoolsAll'],
+    queryFn: () => schoolsApi.getAllSchools({ page_size: 9999 }),
+  })
+  const { data: allUsersData } = useQuery({
+    queryKey: ['adminUsersAll'],
+    queryFn: () => usersApi.getUsers({ page_size: 9999 }),
+  })
+  const { data: allOrgsData } = useQuery({
+    queryKey: ['adminOrgsAll'],
+    queryFn: () => organizationsApi.getAll({ page_size: 9999 }),
   })
 
   // DEPRECATED 2026-05-13: Module toggling removed (all schools get all modules now).
@@ -88,6 +164,7 @@ export default function SuperAdminDashboard() {
     mutationFn: (data) => schoolsApi.createSchool(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['adminSchools'] })
+      queryClient.invalidateQueries({ queryKey: ['adminSchoolsAll'] })
       setShowAddModal(false)
       setEditingSchool(null)
       setNewSchool({ name: '', subdomain: '', contact_email: '', contact_phone: '', address: '', organization: '' })
@@ -98,6 +175,7 @@ export default function SuperAdminDashboard() {
     mutationFn: ({ id, data }) => schoolsApi.updateSchool(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['adminSchools'] })
+      queryClient.invalidateQueries({ queryKey: ['adminSchoolsAll'] })
       setShowAddModal(false)
       setEditingSchool(null)
       setNewSchool({ name: '', subdomain: '', contact_email: '', contact_phone: '', address: '', organization: '' })
@@ -107,7 +185,35 @@ export default function SuperAdminDashboard() {
   const toggleMutation = useMutation({
     mutationFn: ({ id, isActive }) =>
       isActive ? schoolsApi.deactivateSchool(id) : schoolsApi.activateSchool(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['adminSchools'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['adminSchools'] })
+      queryClient.invalidateQueries({ queryKey: ['adminSchoolsAll'] })
+      queryClient.invalidateQueries({ queryKey: ['platformStats'] })
+      queryClient.invalidateQueries({ queryKey: ['adminActivityLog'] })
+    },
+  })
+
+  const bulkToggleMutation = useMutation({
+    mutationFn: ({ ids, isActive }) => schoolsApi.bulkToggleSchools(ids, isActive),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['adminSchools'] })
+      queryClient.invalidateQueries({ queryKey: ['adminSchoolsAll'] })
+      queryClient.invalidateQueries({ queryKey: ['platformStats'] })
+      queryClient.invalidateQueries({ queryKey: ['adminActivityLog'] })
+      setSelectedSchoolIds(new Set())
+    },
+  })
+
+  const bulkReassignMutation = useMutation({
+    mutationFn: ({ ids, orgId }) => schoolsApi.bulkReassignOrg(ids, orgId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['adminSchools'] })
+      queryClient.invalidateQueries({ queryKey: ['adminSchoolsAll'] })
+      queryClient.invalidateQueries({ queryKey: ['adminActivityLog'] })
+      setSelectedSchoolIds(new Set())
+      setShowBulkReassignModal(false)
+      setBulkReassignOrgId('')
+    },
   })
 
   // User
@@ -138,6 +244,7 @@ export default function SuperAdminDashboard() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['adminUsers'] })
+      queryClient.invalidateQueries({ queryKey: ['adminUsersAll'] })
       queryClient.invalidateQueries({ queryKey: ['adminMemberships'] })
       setShowUserModal(false)
       setEditingUser(null)
@@ -149,6 +256,7 @@ export default function SuperAdminDashboard() {
     mutationFn: ({ id, data }) => usersApi.updateUser(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['adminUsers'] })
+      queryClient.invalidateQueries({ queryKey: ['adminUsersAll'] })
       setShowUserModal(false)
       setEditingUser(null)
       setNewUser(userDefaults)
@@ -157,7 +265,10 @@ export default function SuperAdminDashboard() {
 
   const toggleUserMutation = useMutation({
     mutationFn: ({ id, isActive }) => usersApi.updateUser(id, { is_active: !isActive }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['adminUsers'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['adminUsers'] })
+      queryClient.invalidateQueries({ queryKey: ['adminUsersAll'] })
+    },
   })
 
   const uploadUserPhotoMutation = useMutation({
@@ -176,11 +287,23 @@ export default function SuperAdminDashboard() {
     },
   })
 
+  const resetPasswordMutation = useMutation({
+    mutationFn: ({ id, data }) => usersApi.resetPassword(id, data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['adminActivityLog'] }),
+  })
+
+  const closeResetPwdModal = () => {
+    setResetPwdUser(null)
+    setResetPwdForm({ mode: 'set', new_password: '', confirm_password: '' })
+    resetPasswordMutation.reset()
+  }
+
   // Organization
   const createOrgMutation = useMutation({
     mutationFn: (data) => organizationsApi.create(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['adminOrgs'] })
+      queryClient.invalidateQueries({ queryKey: ['adminOrgsAll'] })
       setShowOrgModal(false)
       setEditingOrg(null)
       setNewOrg({ name: '', slug: '', logo: '' })
@@ -191,6 +314,7 @@ export default function SuperAdminDashboard() {
     mutationFn: ({ id, data }) => organizationsApi.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['adminOrgs'] })
+      queryClient.invalidateQueries({ queryKey: ['adminOrgsAll'] })
       setShowOrgModal(false)
       setEditingOrg(null)
       setNewOrg({ name: '', slug: '', logo: '' })
@@ -199,7 +323,11 @@ export default function SuperAdminDashboard() {
 
   const deleteOrgMutation = useMutation({
     mutationFn: (id) => organizationsApi.delete(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['adminOrgs'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['adminOrgs'] })
+      queryClient.invalidateQueries({ queryKey: ['adminOrgsAll'] })
+      queryClient.invalidateQueries({ queryKey: ['adminActivityLog'] })
+    },
   })
 
   // Membership
@@ -225,7 +353,10 @@ export default function SuperAdminDashboard() {
 
   const deleteMemMutation = useMutation({
     mutationFn: (id) => membershipsApi.delete(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['adminMemberships'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['adminMemberships'] })
+      queryClient.invalidateQueries({ queryKey: ['adminActivityLog'] })
+    },
   })
 
   // ── Handlers ──────────────────────────────────────────────────────────────
@@ -237,6 +368,55 @@ export default function SuperAdminDashboard() {
     } else {
       createSchoolMutation.mutate(payload)
     }
+  }
+
+  const handleToggleSchool = async (school) => {
+    if (school.is_active) {
+      const ok = await confirm({
+        title: 'Deactivate School',
+        message: `Deactivate "${school.name}"? All its users will lose access until it's reactivated.`,
+        variant: 'warning',
+        confirmLabel: 'Deactivate',
+      })
+      if (!ok) return
+    }
+    toggleMutation.mutate({ id: school.id, isActive: school.is_active })
+  }
+
+  const toggleSelectSchool = (id) => {
+    setSelectedSchoolIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const allSchoolsOnPageSelected = schools.length > 0 && schools.every((s) => selectedSchoolIds.has(s.id))
+
+  const toggleSelectAllOnPage = () => {
+    setSelectedSchoolIds((prev) => {
+      const next = new Set(prev)
+      if (allSchoolsOnPageSelected) {
+        schools.forEach((s) => next.delete(s.id))
+      } else {
+        schools.forEach((s) => next.add(s.id))
+      }
+      return next
+    })
+  }
+
+  const handleBulkToggle = async (isActive) => {
+    if (!isActive) {
+      const ok = await confirm({
+        title: 'Deactivate Schools',
+        message: `Deactivate ${selectedSchoolIds.size} selected school(s)? Their users will lose access until reactivated.`,
+        variant: 'warning',
+        confirmLabel: 'Deactivate',
+      })
+      if (!ok) return
+    }
+    bulkToggleMutation.mutate({ ids: Array.from(selectedSchoolIds), isActive })
   }
 
   const openEditSchool = (school) => {
@@ -331,10 +511,23 @@ export default function SuperAdminDashboard() {
   }
 
   // ── Derived data ──────────────────────────────────────────────────────────
+  // Paginated (current page only) — used for the tab tables.
   const schools = schoolsData?.data?.results || schoolsData?.data || []
   const users = usersData?.data?.results || usersData?.data || []
   const orgs = orgsData?.data?.results || orgsData?.data || []
   const memberships = membershipsData?.data?.results || membershipsData?.data || []
+  const activityLog = activityData?.data?.results || activityData?.data || []
+
+  const schoolsCount = schoolsData?.data?.count ?? schools.length
+  const usersCount = usersData?.data?.count ?? users.length
+  const orgsCount = orgsData?.data?.count ?? orgs.length
+  const membershipsCount = membershipsData?.data?.count ?? memberships.length
+  const activityCount = activityData?.data?.count ?? activityLog.length
+
+  // Unpaginated — used for select/checkbox pickers inside modals.
+  const allSchools = allSchoolsData?.data?.results || allSchoolsData?.data || []
+  const allUsers = allUsersData?.data?.results || allUsersData?.data || []
+  const allOrgs = allOrgsData?.data?.results || allOrgsData?.data || []
   // DEPRECATED 2026-05-13: moduleRegistry removed (all schools get all modules now).
 
   const tabs = [
@@ -343,6 +536,7 @@ export default function SuperAdminDashboard() {
     { key: 'users', label: 'Users' },
     { key: 'organizations', label: 'Organizations' },
     { key: 'memberships', label: 'Memberships' },
+    { key: 'activity', label: 'Activity' },
   ]
 
   return (
@@ -401,9 +595,16 @@ export default function SuperAdminDashboard() {
           <div className="card mb-6">
             <h3 className="text-base font-semibold text-gray-900 mb-3">Recent Activity (30 days)</h3>
             <div className="flex gap-6 text-sm text-gray-600">
-              <span>{pStats.recent_schools || 0} new schools</span>
-              <span>{pStats.recent_users || 0} new users</span>
+              <span className="flex items-center gap-2">
+                {pStats.recent_schools || 0} new schools
+                <TrendBadge current={pStats.recent_schools || 0} previous={pStats.previous_period_schools || 0} />
+              </span>
+              <span className="flex items-center gap-2">
+                {pStats.recent_users || 0} new users
+                <TrendBadge current={pStats.recent_users || 0} previous={pStats.previous_period_users || 0} />
+              </span>
             </div>
+            <p className="text-xs text-gray-400 mt-2">vs. {pStats.previous_period_schools || 0} schools / {pStats.previous_period_users || 0} users in the prior 30 days</p>
           </div>
 
           {/* Per-school breakdown */}
@@ -414,7 +615,19 @@ export default function SuperAdminDashboard() {
               <div className="sm:hidden space-y-3">
                 {pStats.school_breakdown.map((s) => (
                   <div key={s.id} className="p-3 border border-gray-200 rounded-lg">
-                    <p className="font-medium text-sm text-gray-900">{s.name}</p>
+                    <div className="flex items-center justify-between">
+                      <p className="font-medium text-sm text-gray-900">{s.name}</p>
+                      {s.subdomain && (
+                        <a
+                          href={`https://${s.subdomain}.kodereduai.pk`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-blue-600 hover:underline shrink-0"
+                        >
+                          Open
+                        </a>
+                      )}
+                    </div>
                     <div className="flex gap-4 mt-1 text-xs text-gray-600">
                       <span>{s.student_count} students</span>
                       <span>{s.user_count} users</span>
@@ -430,6 +643,7 @@ export default function SuperAdminDashboard() {
                       <TH>School</TH>
                       <TH>Students</TH>
                       <TH>Users</TH>
+                      <TH></TH>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
@@ -438,6 +652,18 @@ export default function SuperAdminDashboard() {
                         <td className="px-4 py-3 font-medium text-gray-900">{s.name}</td>
                         <td className="px-4 py-3 text-sm text-gray-900">{s.student_count}</td>
                         <td className="px-4 py-3 text-sm text-gray-900">{s.user_count}</td>
+                        <td className="px-4 py-3 text-sm">
+                          {s.subdomain && (
+                            <a
+                              href={`https://${s.subdomain}.kodereduai.pk`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-600 hover:underline"
+                            >
+                              Open school
+                            </a>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -451,7 +677,7 @@ export default function SuperAdminDashboard() {
       {/* ════════════════════ Schools Tab ════════════════════ */}
       {activeTab === 'schools' && (
         <div className="card">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
             <h2 className="text-lg font-semibold text-gray-900">Schools</h2>
             <button onClick={() => {
               setEditingSchool(null)
@@ -462,8 +688,50 @@ export default function SuperAdminDashboard() {
             </button>
           </div>
 
+          <input
+            type="text"
+            className="input mb-4"
+            placeholder="Search by name, subdomain, or contact email..."
+            value={schoolsSearch}
+            onChange={(e) => { setSchoolsSearch(e.target.value); setSchoolsPage(1) }}
+          />
+
+          {selectedSchoolIds.size > 0 && (
+            <div className="flex items-center gap-3 flex-wrap mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <span className="text-sm font-medium text-blue-800">{selectedSchoolIds.size} selected</span>
+              <button
+                onClick={() => handleBulkToggle(true)}
+                disabled={bulkToggleMutation.isPending}
+                className="text-sm text-green-700 hover:text-green-800 font-medium disabled:opacity-50"
+              >
+                Activate
+              </button>
+              <button
+                onClick={() => handleBulkToggle(false)}
+                disabled={bulkToggleMutation.isPending}
+                className="text-sm text-red-700 hover:text-red-800 font-medium disabled:opacity-50"
+              >
+                Deactivate
+              </button>
+              <button
+                onClick={() => setShowBulkReassignModal(true)}
+                className="text-sm text-blue-700 hover:text-blue-800 font-medium"
+              >
+                Reassign to org...
+              </button>
+              <button
+                onClick={() => setSelectedSchoolIds(new Set())}
+                className="text-sm text-gray-500 hover:text-gray-700 font-medium ml-auto"
+              >
+                Clear selection
+              </button>
+            </div>
+          )}
+
           {schoolsLoading ? (
             <Spinner />
+          ) : schools.length === 0 && debouncedSchoolsSearch ? (
+            <Empty text={`No schools match "${debouncedSchoolsSearch}".`} />
           ) : schools.length === 0 ? (
             <div className="card p-4 sm:p-6">
               <div className="flex items-center gap-3 flex-wrap">
@@ -496,10 +764,25 @@ export default function SuperAdminDashboard() {
                 {schools.map((school) => (
                   <div key={school.id} className="p-3 border border-gray-200 rounded-lg">
                     <div className="flex items-center justify-between mb-1">
-                      <p className="font-medium text-sm text-gray-900">{school.name}</p>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <input
+                          type="checkbox"
+                          checked={selectedSchoolIds.has(school.id)}
+                          onChange={() => toggleSelectSchool(school.id)}
+                          className="rounded border-gray-300 shrink-0"
+                        />
+                        <p className="font-medium text-sm text-gray-900 truncate">{school.name}</p>
+                      </div>
                       <StatusBadge active={school.is_active} />
                     </div>
-                    <p className="text-xs text-gray-500">{school.subdomain}.kodereduai.pk</p>
+                    <a
+                      href={`https://${school.subdomain}.kodereduai.pk`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-blue-600 hover:underline"
+                    >
+                      {school.subdomain}.kodereduai.pk
+                    </a>
                     {school.organization_name && (
                       <p className="text-xs text-purple-600 mt-0.5">{school.organization_name}</p>
                     )}
@@ -508,6 +791,14 @@ export default function SuperAdminDashboard() {
                       <span>{school.user_count || 0} users</span>
                     </div>
                     <div className="flex gap-3 mt-2">
+                      <a
+                        href={`https://${school.subdomain}.kodereduai.pk`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-gray-600 font-medium"
+                      >
+                        Open school
+                      </a>
                       <button
                         onClick={() => openEditSchool(school)}
                         className="text-xs text-blue-600 font-medium"
@@ -515,7 +806,7 @@ export default function SuperAdminDashboard() {
                         Edit
                       </button>
                       <button
-                        onClick={() => toggleMutation.mutate({ id: school.id, isActive: school.is_active })}
+                        onClick={() => handleToggleSchool(school)}
                         disabled={toggleMutation.isPending}
                         className={`text-xs font-medium disabled:opacity-50 ${school.is_active ? 'text-red-600' : 'text-green-600'}`}
                       >
@@ -530,6 +821,14 @@ export default function SuperAdminDashboard() {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
+                      <th className="px-4 py-3 text-left">
+                        <input
+                          type="checkbox"
+                          checked={allSchoolsOnPageSelected}
+                          onChange={toggleSelectAllOnPage}
+                          className="rounded border-gray-300"
+                        />
+                      </th>
                       <TH>School</TH>
                       <TH>Subdomain</TH>
                       <TH>Organization</TH>
@@ -543,15 +842,40 @@ export default function SuperAdminDashboard() {
                     {schools.map((school) => (
                       <tr key={school.id} className="hover:bg-gray-50">
                         <td className="px-4 py-3">
+                          <input
+                            type="checkbox"
+                            checked={selectedSchoolIds.has(school.id)}
+                            onChange={() => toggleSelectSchool(school.id)}
+                            className="rounded border-gray-300"
+                          />
+                        </td>
+                        <td className="px-4 py-3">
                           <p className="font-medium text-gray-900">{school.name}</p>
                           <p className="text-sm text-gray-500">{school.contact_email}</p>
                         </td>
-                        <td className="px-4 py-3 text-sm text-gray-500">{school.subdomain}.kodereduai.pk</td>
+                        <td className="px-4 py-3 text-sm">
+                          <a
+                            href={`https://${school.subdomain}.kodereduai.pk`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:underline"
+                          >
+                            {school.subdomain}.kodereduai.pk
+                          </a>
+                        </td>
                         <td className="px-4 py-3 text-sm text-gray-500">{school.organization_name || '-'}</td>
                         <td className="px-4 py-3 text-sm text-gray-900">{school.student_count || 0}</td>
                         <td className="px-4 py-3 text-sm text-gray-900">{school.user_count || 0}</td>
                         <td className="px-4 py-3"><StatusBadge active={school.is_active} /></td>
                         <td className="px-4 py-3 flex gap-3">
+                          <a
+                            href={`https://${school.subdomain}.kodereduai.pk`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm text-gray-600 hover:text-gray-800 font-medium"
+                          >
+                            Open school
+                          </a>
                           <button
                             onClick={() => openEditSchool(school)}
                             className="text-sm text-blue-600 hover:text-blue-700 font-medium"
@@ -559,7 +883,7 @@ export default function SuperAdminDashboard() {
                             Edit
                           </button>
                           <button
-                            onClick={() => toggleMutation.mutate({ id: school.id, isActive: school.is_active })}
+                            onClick={() => handleToggleSchool(school)}
                             disabled={toggleMutation.isPending}
                             className={`text-sm font-medium disabled:opacity-50 ${school.is_active ? 'text-red-600 hover:text-red-700' : 'text-green-600 hover:text-green-700'}`}
                           >
@@ -571,6 +895,13 @@ export default function SuperAdminDashboard() {
                   </tbody>
                 </table>
               </div>
+              <Pagination
+                page={schoolsPage}
+                totalPages={Math.ceil(schoolsCount / ADMIN_PAGE_SIZE)}
+                totalCount={schoolsCount}
+                onPageChange={setSchoolsPage}
+                itemLabel="schools"
+              />
             </>
           )}
         </div>
@@ -590,10 +921,18 @@ export default function SuperAdminDashboard() {
             </button>
           </div>
 
+          <input
+            type="text"
+            className="input mb-4"
+            placeholder="Search by name, username, or email..."
+            value={usersSearch}
+            onChange={(e) => { setUsersSearch(e.target.value); setUsersPage(1) }}
+          />
+
           {usersLoading ? (
             <Spinner />
           ) : users.length === 0 ? (
-            <Empty text="No users yet." />
+            <Empty text={debouncedUsersSearch ? `No users match "${debouncedUsersSearch}".` : 'No users yet.'} />
           ) : (
             <>
               {/* Mobile */}
@@ -617,6 +956,12 @@ export default function SuperAdminDashboard() {
                         className="text-xs text-blue-600 font-medium"
                       >
                         Edit
+                      </button>
+                      <button
+                        onClick={() => setResetPwdUser(user)}
+                        className="text-xs text-gray-600 font-medium"
+                      >
+                        Reset Password
                       </button>
                       {user.role !== 'SUPER_ADMIN' && (
                         <button
@@ -660,6 +1005,12 @@ export default function SuperAdminDashboard() {
                           >
                             Edit
                           </button>
+                          <button
+                            onClick={() => setResetPwdUser(user)}
+                            className="text-sm text-gray-600 hover:text-gray-800 font-medium"
+                          >
+                            Reset Password
+                          </button>
                           {user.role !== 'SUPER_ADMIN' && (
                             <button
                               onClick={() => toggleUserMutation.mutate({ id: user.id, isActive: user.is_active })}
@@ -675,6 +1026,13 @@ export default function SuperAdminDashboard() {
                   </tbody>
                 </table>
               </div>
+              <Pagination
+                page={usersPage}
+                totalPages={Math.ceil(usersCount / ADMIN_PAGE_SIZE)}
+                totalCount={usersCount}
+                onPageChange={setUsersPage}
+                itemLabel="users"
+              />
             </>
           )}
         </div>
@@ -697,10 +1055,18 @@ export default function SuperAdminDashboard() {
             </button>
           </div>
 
+          <input
+            type="text"
+            className="input mb-4"
+            placeholder="Search by name or slug..."
+            value={orgsSearch}
+            onChange={(e) => { setOrgsSearch(e.target.value); setOrgsPage(1) }}
+          />
+
           {orgsLoading ? (
             <Spinner />
           ) : orgs.length === 0 ? (
-            <Empty text="No organizations yet. Create one to group schools." />
+            <Empty text={debouncedOrgsSearch ? `No organizations match "${debouncedOrgsSearch}".` : 'No organizations yet. Create one to group schools.'} />
           ) : (
             <>
               {/* Mobile */}
@@ -778,6 +1144,13 @@ export default function SuperAdminDashboard() {
                   </tbody>
                 </table>
               </div>
+              <Pagination
+                page={orgsPage}
+                totalPages={Math.ceil(orgsCount / ADMIN_PAGE_SIZE)}
+                totalCount={orgsCount}
+                onPageChange={setOrgsPage}
+                itemLabel="organizations"
+              />
             </>
           )}
         </div>
@@ -797,10 +1170,18 @@ export default function SuperAdminDashboard() {
             </button>
           </div>
 
+          <input
+            type="text"
+            className="input mb-4"
+            placeholder="Search by user or school name..."
+            value={membershipsSearch}
+            onChange={(e) => { setMembershipsSearch(e.target.value); setMembershipsPage(1) }}
+          />
+
           {membershipsLoading ? (
             <Spinner />
           ) : memberships.length === 0 ? (
-            <Empty text="No memberships yet. Assign a user to a school." />
+            <Empty text={debouncedMembershipsSearch ? `No memberships match "${debouncedMembershipsSearch}".` : 'No memberships yet. Assign a user to a school.'} />
           ) : (
             <>
               {/* Mobile */}
@@ -881,6 +1262,86 @@ export default function SuperAdminDashboard() {
                   </tbody>
                 </table>
               </div>
+              <Pagination
+                page={membershipsPage}
+                totalPages={Math.ceil(membershipsCount / ADMIN_PAGE_SIZE)}
+                totalCount={membershipsCount}
+                onPageChange={setMembershipsPage}
+                itemLabel="memberships"
+              />
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ════════════════════ Activity Tab ════════════════════ */}
+      {activeTab === 'activity' && (
+        <div className="card">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900">Activity Log</h2>
+          </div>
+
+          <input
+            type="text"
+            className="input mb-4"
+            placeholder="Search by action, target, or admin username..."
+            value={activitySearch}
+            onChange={(e) => { setActivitySearch(e.target.value); setActivityPage(1) }}
+          />
+
+          {activityLoading ? (
+            <Spinner />
+          ) : activityLog.length === 0 ? (
+            <Empty text={debouncedActivitySearch ? `No activity matches "${debouncedActivitySearch}".` : 'No admin actions recorded yet.'} />
+          ) : (
+            <>
+              {/* Mobile */}
+              <div className="sm:hidden space-y-3">
+                {activityLog.map((entry) => (
+                  <div key={entry.id} className="p-3 border border-gray-200 rounded-lg">
+                    <p className="font-medium text-sm text-gray-900">
+                      {entry.action.replace(/_/g, ' ')} <span className="text-gray-500 font-normal">{entry.target_type}</span>
+                    </p>
+                    <p className="text-xs text-gray-500 truncate">{entry.target_repr}</p>
+                    <div className="flex items-center justify-between mt-1 text-xs text-gray-400">
+                      <span>{entry.actor_username || 'system'}</span>
+                      <span>{new Date(entry.created_at).toLocaleString()}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {/* Desktop */}
+              <div className="hidden sm:block overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <TH>Action</TH>
+                      <TH>Target</TH>
+                      <TH>Admin</TH>
+                      <TH>When</TH>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {activityLog.map((entry) => (
+                      <tr key={entry.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 text-sm font-medium text-gray-900 capitalize">{entry.action.replace(/_/g, ' ')}</td>
+                        <td className="px-4 py-3 text-sm text-gray-500">
+                          <span className="text-gray-700">{entry.target_type}</span> — {entry.target_repr}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-500">{entry.actor_username || 'system'}</td>
+                        <td className="px-4 py-3 text-sm text-gray-500">{new Date(entry.created_at).toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <Pagination
+                page={activityPage}
+                totalPages={Math.ceil(activityCount / ADMIN_PAGE_SIZE)}
+                totalCount={activityCount}
+                onPageChange={setActivityPage}
+                itemLabel="entries"
+              />
             </>
           )}
         </div>
@@ -916,7 +1377,7 @@ export default function SuperAdminDashboard() {
               <select className="input" value={newSchool.organization}
                 onChange={(e) => setNewSchool({ ...newSchool, organization: e.target.value })}>
                 <option value="">None (standalone)</option>
-                {orgs.map((org) => (
+                {allOrgs.map((org) => (
                   <option key={org.id} value={org.id}>{org.name}</option>
                 ))}
               </select>
@@ -1015,9 +1476,9 @@ export default function SuperAdminDashboard() {
                 {newUser.role !== 'SUPER_ADMIN' && (
                   <Field label="Schools * (select one or more)">
                     <div className="space-y-2 max-h-40 overflow-y-auto border border-gray-300 rounded-lg p-3">
-                      {schools.length === 0 ? (
+                      {allSchools.length === 0 ? (
                         <p className="text-sm text-gray-400">No schools available</p>
-                      ) : schools.map((school) => (
+                      ) : allSchools.map((school) => (
                         <label key={school.id} className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
                           <input
                             type="checkbox"
@@ -1123,7 +1584,7 @@ export default function SuperAdminDashboard() {
                   <select className="input" value={newMembership.user}
                     onChange={(e) => setNewMembership({ ...newMembership, user: e.target.value })}>
                     <option value="">Select a user...</option>
-                    {users.filter(u => u.role !== 'SUPER_ADMIN').map((user) => (
+                    {allUsers.filter(u => u.role !== 'SUPER_ADMIN').map((user) => (
                       <option key={user.id} value={user.id}>
                         {user.first_name} {user.last_name} ({user.username})
                       </option>
@@ -1135,7 +1596,7 @@ export default function SuperAdminDashboard() {
                   <select className="input" value={newMembership.school}
                     onChange={(e) => setNewMembership({ ...newMembership, school: e.target.value })}>
                     <option value="">Select a school...</option>
-                    {schools.map((school) => (
+                    {allSchools.map((school) => (
                       <option key={school.id} value={school.id}>{school.name}</option>
                     ))}
                   </select>
@@ -1169,6 +1630,115 @@ export default function SuperAdminDashboard() {
             loading={(editingMem ? updateMemMutation : createMemMutation).isPending}
             label={editingMem ? 'Save Changes' : 'Create Membership'}
           />
+        </Modal>
+      )}
+
+      {/* Bulk Reassign Organization Modal */}
+      {showBulkReassignModal && (
+        <Modal
+          title={`Reassign ${selectedSchoolIds.size} School(s)`}
+          onClose={() => { setShowBulkReassignModal(false); setBulkReassignOrgId('') }}
+        >
+          <div className="space-y-4">
+            <Field label="Organization">
+              <select className="input" value={bulkReassignOrgId}
+                onChange={(e) => setBulkReassignOrgId(e.target.value)}>
+                <option value="">None (standalone)</option>
+                {allOrgs.map((org) => (
+                  <option key={org.id} value={org.id}>{org.name}</option>
+                ))}
+              </select>
+            </Field>
+          </div>
+
+          <MutationError mutation={bulkReassignMutation} fields={['organization_id']} />
+
+          <ModalFooter
+            onCancel={() => { setShowBulkReassignModal(false); setBulkReassignOrgId('') }}
+            onSubmit={() => bulkReassignMutation.mutate({ ids: Array.from(selectedSchoolIds), orgId: bulkReassignOrgId })}
+            disabled={bulkReassignMutation.isPending}
+            loading={bulkReassignMutation.isPending}
+            label="Reassign"
+          />
+        </Modal>
+      )}
+
+      {/* Reset Password Modal */}
+      {resetPwdUser && (
+        <Modal title={`Reset Password: ${resetPwdUser.username}`} onClose={closeResetPwdModal}>
+          {resetPasswordMutation.isSuccess ? (
+            <div>
+              <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg p-3">
+                {resetPasswordMutation.data?.data?.message || 'Password reset successfully.'}
+              </p>
+              <div className="flex justify-end mt-6">
+                <button onClick={closeResetPwdModal} className="btn btn-primary">Done</button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="space-y-4">
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setResetPwdForm({ ...resetPwdForm, mode: 'set' })}
+                    className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium border ${
+                      resetPwdForm.mode === 'set' ? 'bg-primary-50 border-primary-500 text-primary-700' : 'border-gray-300 text-gray-600'
+                    }`}
+                  >
+                    Set new password
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setResetPwdForm({ ...resetPwdForm, mode: 'email' })}
+                    className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium border ${
+                      resetPwdForm.mode === 'email' ? 'bg-primary-50 border-primary-500 text-primary-700' : 'border-gray-300 text-gray-600'
+                    }`}
+                  >
+                    Send reset email
+                  </button>
+                </div>
+
+                {resetPwdForm.mode === 'set' ? (
+                  <>
+                    <Field label="New Password *">
+                      <input type="password" className="input" value={resetPwdForm.new_password}
+                        onChange={(e) => setResetPwdForm({ ...resetPwdForm, new_password: e.target.value })} required />
+                    </Field>
+                    <Field label="Confirm New Password *">
+                      <input type="password" className="input" value={resetPwdForm.confirm_password}
+                        onChange={(e) => setResetPwdForm({ ...resetPwdForm, confirm_password: e.target.value })} required />
+                    </Field>
+                  </>
+                ) : (
+                  <p className="text-sm text-gray-600">
+                    {resetPwdUser.email
+                      ? `A password reset link will be emailed to ${resetPwdUser.email}.`
+                      : 'This user has no email on file, so a reset link cannot be sent. Use "Set new password" instead.'}
+                  </p>
+                )}
+              </div>
+
+              <MutationError mutation={resetPasswordMutation} fields={['new_password', 'confirm_password']} />
+
+              <ModalFooter
+                onCancel={closeResetPwdModal}
+                onSubmit={() => resetPasswordMutation.mutate({
+                  id: resetPwdUser.id,
+                  data: resetPwdForm.mode === 'set'
+                    ? { mode: 'set', new_password: resetPwdForm.new_password, confirm_password: resetPwdForm.confirm_password }
+                    : { mode: 'email' },
+                })}
+                disabled={
+                  resetPasswordMutation.isPending ||
+                  (resetPwdForm.mode === 'set' && (!resetPwdForm.new_password || !resetPwdForm.confirm_password)) ||
+                  (resetPwdForm.mode === 'email' && !resetPwdUser.email)
+                }
+                loading={resetPasswordMutation.isPending}
+                label={resetPwdForm.mode === 'set' ? 'Reset Password' : 'Send Reset Email'}
+              />
+            </>
+          )}
         </Modal>
       )}
 
@@ -1212,6 +1782,17 @@ function RoleBadge({ role, display }) {
   return (
     <span className={`px-2 py-1 rounded-full text-xs font-medium ${cls}`}>
       {display || (role === 'SCHOOL_ADMIN' ? 'School Admin' : role === 'STAFF' ? 'Staff' : role)}
+    </span>
+  )
+}
+
+function TrendBadge({ current, previous }) {
+  if (current === 0 && previous === 0) return null
+  const diff = current - previous
+  const up = diff >= 0
+  return (
+    <span className={`inline-flex items-center gap-0.5 text-xs font-medium ${up ? 'text-green-600' : 'text-red-600'}`}>
+      {up ? '▲' : '▼'} {diff >= 0 ? '+' : ''}{diff}
     </span>
   )
 }

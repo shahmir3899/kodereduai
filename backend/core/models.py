@@ -166,3 +166,38 @@ class QueuedJob(models.Model):
 
     def __str__(self):
         return f"{self.callable_path} ({self.status})"
+
+
+class AdminActionLog(models.Model):
+    """
+    Minimal audit trail for super-admin actions taken in the Platform
+    Administration dashboard (school activate/deactivate, org/membership
+    delete, user password reset, etc). Intentionally a single flat table —
+    not django-simple-history/django-auditlog — since only a handful of
+    action types need tracking here, not full model versioning.
+    """
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='admin_action_logs',
+    )
+    action = models.CharField(max_length=50)
+    target_type = models.CharField(max_length=50)
+    target_id = models.CharField(max_length=50, blank=True, default='')
+    target_repr = models.CharField(max_length=255, blank=True, default='')
+    metadata = models.JSONField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['-created_at']),
+            models.Index(fields=['actor', '-created_at']),
+            models.Index(fields=['target_type', 'target_id']),
+        ]
+
+    def __str__(self):
+        who = self.actor.username if self.actor else 'unknown'
+        return f"{who} {self.action} {self.target_type}:{self.target_id}"

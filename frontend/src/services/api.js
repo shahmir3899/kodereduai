@@ -229,6 +229,8 @@ export const schoolsApi = {
   getPlatformStats: () => api.get('/api/admin/schools/platform_stats/'),
   activateSchool: (id) => api.post(`/api/admin/schools/${id}/activate/`),
   deactivateSchool: (id) => api.post(`/api/admin/schools/${id}/deactivate/`),
+  bulkToggleSchools: (schoolIds, isActive) => api.post('/api/admin/schools/bulk_toggle/', { school_ids: schoolIds, is_active: isActive }),
+  bulkReassignOrg: (schoolIds, organizationId) => api.post('/api/admin/schools/bulk_reassign_org/', { school_ids: schoolIds, organization_id: organizationId || null }),
 
   // DEPRECATED 2026-05-13: Module management removed (all schools get all modules now)
   // DEPRECATED 2026-05-13: Bundle presets removed (flat pricing model)
@@ -769,6 +771,11 @@ export const membershipsApi = {
   delete: (id) => api.delete(`/api/admin/memberships/${id}/`),
 }
 
+// Admin activity log (Super Admin) — read-only audit trail
+export const activityLogApi = {
+  getAll: (params) => api.get('/api/admin/activity-log/', { params }),
+}
+
 // Users API
 export const usersApi = {
   getUsers: (params) => api.get('/api/users/', { params }),
@@ -784,6 +791,7 @@ export const usersApi = {
     })
   },
   removePhoto: (id) => api.post(`/api/users/${id}/remove_photo/`),
+  resetPassword: (id, data) => api.post(`/api/users/${id}/reset_password/`, data),
 }
 
 // Notifications API
