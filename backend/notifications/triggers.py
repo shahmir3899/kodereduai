@@ -161,11 +161,25 @@ def trigger_absence_notification(attendance_record):
             recipient_types_by_user_id[user.id] = 'ADMIN'
 
     # 2) Class teacher recipients for this class and relevant academic year.
+    # When this class has multiple sections, only notify the teacher(s) assigned
+    # to the student's own section (plus any master-class-wide assignment with
+    # no session_class set) rather than every section's class teacher.
+    from academic_sessions.models import StudentEnrollment
+    student_session_class_id = None
+    enrollment_qs = StudentEnrollment.objects.filter(student=student, is_active=True)
+    if attendance_record.academic_year_id:
+        enrollment_qs = enrollment_qs.filter(academic_year_id=attendance_record.academic_year_id)
+    else:
+        enrollment_qs = enrollment_qs.filter(academic_year__is_current=True)
+    enrollment = enrollment_qs.only('session_class_id').first()
+    if enrollment:
+        student_session_class_id = enrollment.session_class_id
+
     teacher_assignments = ClassTeacherAssignment.objects.filter(
         school=school,
         class_obj=student.class_obj,
         is_active=True,
-    ).select_related('teacher__user')
+    ).select_related('teacher__user', 'session_class')
     if attendance_record.academic_year_id:
         teacher_assignments = teacher_assignments.filter(
             Q(academic_year_id=attendance_record.academic_year_id) |
@@ -175,6 +189,10 @@ def trigger_absence_notification(attendance_record):
         teacher_assignments = teacher_assignments.filter(
             Q(academic_year__is_current=True) |
             Q(academic_year__isnull=True)
+        )
+    if student_session_class_id:
+        teacher_assignments = teacher_assignments.filter(
+            Q(session_class_id=student_session_class_id) | Q(session_class__isnull=True)
         )
     for assignment in teacher_assignments:
         teacher_user = getattr(getattr(assignment, 'teacher', None), 'user', None)
@@ -335,22 +353,43 @@ def trigger_fee_reminder(school, month, year):
             sent += 1
 
     # 2) Class teachers: one summary for each assigned class with pending dues.
+    # Section-scoped assignments (session_class set) only see their own section's
+    # pending students, not the whole master class's aggregate.
+    from academic_sessions.models import StudentEnrollment
     teacher_assignments = (
         ClassTeacherAssignment.objects
         .filter(school=school, is_active=True)
         .filter(Q(academic_year__is_current=True) | Q(academic_year__isnull=True))
-        .select_related('teacher__user', 'class_obj')
+        .select_related('teacher__user', 'class_obj', 'session_class')
     )
     for assignment in teacher_assignments:
         teacher_user = getattr(getattr(assignment, 'teacher', None), 'user', None)
         if not teacher_user or not assignment.class_obj_id:
             continue
-        payload = class_totals.get(assignment.class_obj_id)
-        if not payload:
-            continue
-        class_name = payload['class_name']
-        class_amount = payload['amount']
-        names = ', '.join(sorted(set(payload['students'])))
+
+        if assignment.session_class_id:
+            section_student_ids = set(
+                StudentEnrollment.objects.filter(
+                    session_class_id=assignment.session_class_id,
+                    is_active=True,
+                ).values_list('student_id', flat=True)
+            )
+            relevant_ids = section_student_ids & student_totals.keys()
+            if not relevant_ids:
+                continue
+            class_amount = sum(student_totals[sid] for sid in relevant_ids)
+            names = ', '.join(sorted(student_by_id[sid].name for sid in relevant_ids))
+            class_name = assignment.class_obj.name
+            if assignment.session_class.section:
+                class_name = f"{class_name} - {assignment.session_class.section}"
+        else:
+            payload = class_totals.get(assignment.class_obj_id)
+            if not payload:
+                continue
+            class_name = payload['class_name']
+            class_amount = payload['amount']
+            names = ', '.join(sorted(set(payload['students'])))
+
         teacher_title = f"{class_name} — Fee Pending Summary - {month_label}"
         teacher_body = f"Total pending in {class_name}: Rs {class_amount:,.0f}\n{names}"
         if _monthly_notification_already_sent(
@@ -500,22 +539,42 @@ def trigger_fee_pending_in_app(school, month, year):
             )
             sent += 1
 
-    # Class teachers: only assigned classes.
+    # Class teachers: only assigned classes. Section-scoped assignments
+    # (session_class set) only see their own section's pending total.
+    from academic_sessions.models import StudentEnrollment
     teacher_assignments = (
         ClassTeacherAssignment.objects
         .filter(school=school, is_active=True)
         .filter(Q(academic_year__is_current=True) | Q(academic_year__isnull=True))
-        .select_related('teacher__user', 'class_obj')
+        .select_related('teacher__user', 'class_obj', 'session_class')
     )
     for assignment in teacher_assignments:
         teacher_user = getattr(getattr(assignment, 'teacher', None), 'user', None)
         if not teacher_user:
             continue
-        payload = class_totals.get(assignment.class_obj_id)
-        if not payload:
-            continue
-        class_name = payload['class_name']
-        amount_label = f"{payload['amount']:,.0f}"
+
+        if assignment.session_class_id:
+            section_student_ids = set(
+                StudentEnrollment.objects.filter(
+                    session_class_id=assignment.session_class_id,
+                    is_active=True,
+                ).values_list('student_id', flat=True)
+            )
+            relevant_ids = section_student_ids & student_totals.keys()
+            if not relevant_ids:
+                continue
+            amount = sum(student_totals[sid] for sid in relevant_ids)
+            class_name = assignment.class_obj.name if assignment.class_obj else ''
+            if assignment.session_class.section:
+                class_name = f"{class_name} - {assignment.session_class.section}"
+        else:
+            payload = class_totals.get(assignment.class_obj_id)
+            if not payload:
+                continue
+            class_name = payload['class_name']
+            amount = payload['amount']
+
+        amount_label = f"{amount:,.0f}"
         title = f"Fee Pending — {class_name}"
         body = f"An amount of Rs {amount_label} is pending for {class_name}."
         if _monthly_notification_already_sent(
@@ -960,16 +1019,28 @@ def trigger_class_teacher_attendance_pending(school, target_date=None):
         )
 
         if assignment.academic_year_id:
-            students_qs = students_qs.filter(
-                enrollments__academic_year_id=assignment.academic_year_id,
-                enrollments__class_obj_id=class_obj.id,
-                enrollments__is_active=True,
-            ).distinct()
-            attendance_qs = attendance_qs.filter(
-                student__enrollments__academic_year_id=assignment.academic_year_id,
-                student__enrollments__class_obj_id=class_obj.id,
-                student__enrollments__is_active=True,
-            ).distinct()
+            if assignment.session_class_id:
+                students_qs = students_qs.filter(
+                    enrollments__academic_year_id=assignment.academic_year_id,
+                    enrollments__session_class_id=assignment.session_class_id,
+                    enrollments__is_active=True,
+                ).distinct()
+                attendance_qs = attendance_qs.filter(
+                    student__enrollments__academic_year_id=assignment.academic_year_id,
+                    student__enrollments__session_class_id=assignment.session_class_id,
+                    student__enrollments__is_active=True,
+                ).distinct()
+            else:
+                students_qs = students_qs.filter(
+                    enrollments__academic_year_id=assignment.academic_year_id,
+                    enrollments__class_obj_id=class_obj.id,
+                    enrollments__is_active=True,
+                ).distinct()
+                attendance_qs = attendance_qs.filter(
+                    student__enrollments__academic_year_id=assignment.academic_year_id,
+                    student__enrollments__class_obj_id=class_obj.id,
+                    student__enrollments__is_active=True,
+                ).distinct()
         else:
             students_qs = students_qs.filter(class_obj=class_obj)
             attendance_qs = attendance_qs.filter(student__class_obj=class_obj)
@@ -1047,7 +1118,7 @@ def trigger_class_teacher_fee_pending(school, month, year):
     assignments = (
         ClassTeacherAssignment.objects
         .filter(school=school, is_active=True)
-        .select_related('teacher__user', 'class_obj')
+        .select_related('teacher__user', 'class_obj', 'session_class')
     )
 
     sent = 0
@@ -1058,20 +1129,38 @@ def trigger_class_teacher_fee_pending(school, month, year):
 
         class_obj = assignment.class_obj
 
-        # Find unpaid/partial fees for students in this class
-        pending_payments = (
-            FeePayment.objects
-            .filter(
-                school=school,
-                month=month,
-                year=year,
-                status__in=FEE_PENDING_STATUSES,
-                student__class_obj=class_obj,
-                student__is_active=True,
+        # Find unpaid/partial fees for students in this class (or, when the
+        # assignment is section-scoped, only students enrolled in that section).
+        if assignment.session_class_id:
+            pending_payments = (
+                FeePayment.objects
+                .filter(
+                    school=school,
+                    month=month,
+                    year=year,
+                    status__in=FEE_PENDING_STATUSES,
+                    student__enrollments__session_class_id=assignment.session_class_id,
+                    student__enrollments__is_active=True,
+                    student__is_active=True,
+                )
+                .select_related('student')
+                .distinct()
+                .order_by('student__name')
             )
-            .select_related('student')
-            .order_by('student__name')
-        )
+        else:
+            pending_payments = (
+                FeePayment.objects
+                .filter(
+                    school=school,
+                    month=month,
+                    year=year,
+                    status__in=FEE_PENDING_STATUSES,
+                    student__class_obj=class_obj,
+                    student__is_active=True,
+                )
+                .select_related('student')
+                .order_by('student__name')
+            )
 
         if not pending_payments.exists():
             continue
@@ -1095,7 +1184,10 @@ def trigger_class_teacher_fee_pending(school, month, year):
             f"Dear {greeting_name}, following fee are still pending:\n"
             + "\n".join(lines)
         )
-        title = f"Fee Pending — {class_obj.name} ({month_label})"
+        class_label = class_obj.name
+        if assignment.session_class and assignment.session_class.section:
+            class_label = f"{class_obj.name} - {assignment.session_class.section}"
+        title = f"Fee Pending — {class_label} ({month_label})"
 
         try:
             if _notification_already_sent(
@@ -1160,15 +1252,37 @@ def trigger_lesson_plan_published(lesson_plan):
     if lesson_plan.objectives:
         body += f"\n\nObjectives: {lesson_plan.objectives[:200]}"
 
-    students = (
-        Student.objects
-        .filter(
-            class_obj=lesson_plan.class_obj,
-            school=lesson_plan.school,
-            is_active=True,
+    if lesson_plan.session_class_id:
+        # Section-scoped plan: notify only students enrolled in that section
+        # (for the plan's academic year, if known), not the whole master class.
+        enrollment_filter = {
+            'enrollments__session_class_id': lesson_plan.session_class_id,
+            'enrollments__is_active': True,
+        }
+        if lesson_plan.academic_year_id:
+            enrollment_filter['enrollments__academic_year_id'] = lesson_plan.academic_year_id
+        students = (
+            Student.objects
+            .filter(
+                school=lesson_plan.school,
+                is_active=True,
+                **enrollment_filter,
+            )
+            .distinct()
+            .select_related('user_profile__user')
         )
-        .select_related('user_profile__user')
-    )
+    else:
+        # No session_class set: legacy behavior — applies to every section
+        # of the master class.
+        students = (
+            Student.objects
+            .filter(
+                class_obj=lesson_plan.class_obj,
+                school=lesson_plan.school,
+                is_active=True,
+            )
+            .select_related('user_profile__user')
+        )
 
     sent = 0
     target_date = timezone.localdate()

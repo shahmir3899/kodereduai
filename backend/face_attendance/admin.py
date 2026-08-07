@@ -3,7 +3,7 @@ from django.contrib import admin, messages
 from .models import (
     FaceAttendanceSession, StudentFaceEmbedding, FaceDetectionResult,
     FaceAttendanceSchoolConfig, FaceCaptureDevice, FaceLiveDetectionEvent,
-    FaceMatchThresholdSample,
+    FaceMatchThresholdSample, FaceAuditLog,
 )
 
 
@@ -93,3 +93,24 @@ class FaceMatchThresholdSampleAdmin(admin.ModelAdmin):
     )
     list_filter = ('embedding_version', 'predicted_match_status', 'is_correct', 'source_method', 'school')
     readonly_fields = ('created_at',)
+
+
+@admin.register(FaceAuditLog)
+class FaceAuditLogAdmin(admin.ModelAdmin):
+    """
+    Ops-only visibility (Django admin, not a product page — see model
+    docstring: no dedicated viewing/export UI yet). Read-only: rows are
+    only ever written by the event call sites in views.py/pipeline.py,
+    never edited by hand.
+    """
+
+    list_display = ('event_type', 'school', 'student', 'actor', 'created_at')
+    list_filter = ('event_type', 'school')
+    search_fields = ('student__name', 'actor__username')
+    readonly_fields = ('school', 'event_type', 'student', 'actor', 'metadata', 'created_at')
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False

@@ -236,3 +236,59 @@ class FaceMatcher:
                     loser.match_status = 'IGNORED'
 
         return matches
+
+
+class DuplicateFaceError(Exception):
+    """
+    Raised when an enrollment embedding matches an already-enrolled
+    *different* student at AUTO_MATCHED confidence. Carries the matching
+    student's identity so callers (both the synchronous embedding-enroll
+    view and the async legacy-photo Celery pipeline) can surface it —
+    str(err) is deliberately a complete, user-facing message, since the
+    async path's only error-reporting channel is BackgroundTask.error_message
+    (a plain string shown via a toast, see mark_task_failed).
+    """
+
+    def __init__(self, student_id, student_name, confidence):
+        self.student_id = student_id
+        self.student_name = student_name
+        self.confidence = confidence
+        super().__init__(
+            f"Duplicate face detected — this looks like {student_name} (already enrolled, "
+            f"{confidence:.0f}% confidence). If these are different people, retry enrollment "
+            f"with 'Override duplicate check' enabled."
+        )
+
+
+def find_duplicate_enrollment(embedding, school_id, exclude_student_id, embedding_version=None):
+    """
+    Check a new enrollment embedding against every other student's active
+    embeddings in the school (not class-scoped — a duplicate can be enrolled
+    under any class). Reuses FaceMatcher/get_thresholds rather than a
+    separate distance query, so "looks like the same person" means exactly
+    the same thing here as it does for attendance matching.
+
+    Returns a MatchResult if an AUTO_MATCHED-level match against a
+    *different* student was found, else None.
+    """
+    from face_attendance.services.embedding_service import EmbeddingService
+
+    version = embedding_version or DEFAULT_EMBEDDING_VERSION
+    candidate_ids = EmbeddingService.get_school_student_ids(school_id, embedding_version=version)
+    candidate_ids.discard(exclude_student_id)
+    if not candidate_ids:
+        return None
+
+    from students.models import Student
+    student_names = dict(
+        Student.objects.filter(id__in=candidate_ids).values_list('id', 'name')
+    )
+
+    results = FaceMatcher().match_faces(
+        [(0, embedding)], candidate_ids, school_id,
+        student_names=student_names, embedding_version=version,
+    )
+    result = results[0]
+    if result.match_status == 'AUTO_MATCHED' and result.student_id:
+        return result
+    return None

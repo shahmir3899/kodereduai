@@ -67,3 +67,44 @@ export function estimateQualityScore(detection, mediaElement) {
   const sizeScore = Math.min(1, sizeRatio * 6)
   return Math.max(0, Math.min(1, (sizeScore + score) / 2))
 }
+
+/**
+ * Cheap "how many faces are in frame" check — box-only detection, no
+ * landmarks/descriptor pass, since callers that need this (multi-face
+ * rejection during enrollment, pre-submit face count on a group photo) only
+ * care about the count/positions, not identity.
+ */
+export async function detectAllFacesQuick(mediaElement) {
+  const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 })
+  return faceapi.detectAllFaces(mediaElement, options)
+}
+
+// How much of the frame a well-framed face should occupy, and how far its
+// center may drift from the frame center, before we nudge the operator.
+// Shared between Live Mobile Capture (attendance) and Live Capture
+// (enrollment) so "move closer" / "center your face" mean the same thing —
+// tolerance-wise — in both places.
+const MIN_FACE_SIZE_RATIO = 0.12
+const CENTER_TOLERANCE_RATIO = 0.18
+
+/**
+ * Given a single face-api.js detection box (in mediaElement's intrinsic
+ * pixel space) and the media element it came from, returns a framing
+ * verdict: 'too-small' (move closer), 'off-center', or 'good'.
+ */
+export function getFramingHint(box, mediaElement) {
+  const frameWidth = mediaElement.videoWidth || mediaElement.width || 1
+  const frameHeight = mediaElement.videoHeight || mediaElement.height || 1
+  const sizeRatio = (box.width * box.height) / (frameWidth * frameHeight)
+  if (sizeRatio < MIN_FACE_SIZE_RATIO) {
+    return { status: 'too-small', message: 'Move closer' }
+  }
+  const boxCenterX = box.x + box.width / 2
+  const boxCenterY = box.y + box.height / 2
+  const dx = Math.abs(boxCenterX - frameWidth / 2) / frameWidth
+  const dy = Math.abs(boxCenterY - frameHeight / 2) / frameHeight
+  if (dx > CENTER_TOLERANCE_RATIO || dy > CENTER_TOLERANCE_RATIO) {
+    return { status: 'off-center', message: 'Center your face' }
+  }
+  return { status: 'good', message: null }
+}

@@ -569,3 +569,69 @@ class FaceMatchThresholdSample(models.Model):
     def __str__(self):
         verdict = 'correct' if self.is_correct else 'wrong'
         return f'{self.embedding_version} {self.predicted_match_status} d={self.distance:.4f} ({verdict})'
+
+
+class FaceAuditLog(models.Model):
+    """
+    Biometric event audit trail (Phase 3a design doc).
+
+    Deliberately coarse, not a mirror of FaceLiveDetectionEvent: it only
+    records events with a real outcome — an embedding was saved, an
+    attendance record was actually written, or an admin changed who a
+    detection is attributed to — not every match attempt/poll tick. See
+    the call sites in views.py, services/pipeline.py, and services/matcher.py
+    for where each event type is written.
+
+    Retention: purged after AUDIT_LOG_RETENTION_DAYS (see
+    cleanup_old_face_audit_logs) rather than kept indefinitely, since unlike
+    FaceMatchThresholdSample this table keeps student/actor identity
+    attached — same data-minimization posture as FaceLiveDetectionEvent.
+    """
+
+    class EventType(models.TextChoices):
+        ENROLLMENT = 'ENROLLMENT', 'Enrollment'
+        RE_ENROLLMENT = 'RE_ENROLLMENT', 'Re-enrollment'
+        ATTENDANCE_MATCH = 'ATTENDANCE_MATCH', 'Attendance Match'
+        ADMIN_OVERRIDE = 'ADMIN_OVERRIDE', 'Admin Override/Reassignment'
+
+    school = models.ForeignKey(
+        'schools.School',
+        on_delete=models.CASCADE,
+        related_name='face_audit_logs',
+    )
+    event_type = models.CharField(max_length=20, choices=EventType.choices)
+    student = models.ForeignKey(
+        'students.Student',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='face_audit_logs',
+        help_text='Subject of the event. Null for batch-level events (e.g. a whole session confirm).',
+    )
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='face_audit_logs_as_actor',
+        help_text='Admin/teacher who performed the action. Null for device-sourced Fixed Camera events.',
+    )
+    metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Event-specific detail — confidence/distance, session/detection ids, from/to student on overrides.',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Face Audit Log'
+        verbose_name_plural = 'Face Audit Logs'
+        indexes = [
+            models.Index(fields=['school', 'event_type', '-created_at']),
+            models.Index(fields=['school', 'student', '-created_at']),
+        ]
+
+    def __str__(self):
+        subject = self.student.name if self.student_id else 'batch'
+        return f'{self.event_type} — {subject} ({self.created_at:%Y-%m-%d %H:%M})'

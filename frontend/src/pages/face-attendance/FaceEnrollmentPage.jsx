@@ -1,4 +1,4 @@
-import { useMemo, useState, useRef, useEffect, useCallback } from 'react'
+import { useMemo, useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../../contexts/AuthContext'
@@ -12,7 +12,17 @@ import ClassSelector from '../../components/ClassSelector'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
 import { getClassSelectorScope, getResolvedMasterClassId, resolveSessionClassId } from '../../utils/classScope'
-import { loadFaceApiModels, detectSingleFace, estimateQualityScore, LIVE_MOBILE_EMBEDDING_VERSION } from '../../utils/faceApiLoader'
+import {
+  loadFaceApiModels, detectSingleFace, detectAllFacesQuick, estimateQualityScore, getFramingHint,
+  LIVE_MOBILE_EMBEDDING_VERSION,
+} from '../../utils/faceApiLoader'
+import useCameraStream, { cameraButtonLabel } from '../../hooks/useCameraStream'
+import CameraPermissionNotice from '../../components/CameraPermissionNotice'
+
+// How often the continuous lock-on/multi-face check runs while the preview
+// is live — faster than FaceLiveCapturePage's match-posting loop since this
+// is a cheap box-only detection with nothing to POST, just UI feedback.
+const LIVE_DETECTION_INTERVAL_MS = 500
 
 export default function FaceEnrollmentPage() {
   const { activeSchool, isTeacher } = useAuth()
@@ -29,6 +39,12 @@ export default function FaceEnrollmentPage() {
   const [uploading, setUploading] = useState(false)
   const [previewUrl, setPreviewUrl] = useState(null)
   const [enrollMode, setEnrollMode] = useState('photo') // 'photo' (dlib_v1, unchanged) | 'live' (faceapi_v1)
+  // Phase 3a duplicate-enrollment check: off by default, only meaningful
+  // after a "duplicate_face" rejection — see the checkbox next to the
+  // enroll buttons below and DuplicateFaceError's docstring for why the
+  // async (photo) path surfaces this via a plain error toast rather than a
+  // structured dialog.
+  const [overrideDuplicate, setOverrideDuplicate] = useState(false)
   const { sessionClasses } = useSessionClasses(activeAcademicYear?.id, activeSchool?.id)
   const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
   const resolvedSelectedClass = getResolvedMasterClassId(selectedClass, activeAcademicYear?.id, sessionClasses)
@@ -103,12 +119,14 @@ export default function FaceEnrollmentPage() {
       return faceAttendanceApi.enrollFace({
         student_id: parseInt(selectedStudent),
         image_url: imageUrl,
+        override_duplicate: overrideDuplicate,
       })
     },
     onSuccess: (data) => {
       setUploading(false)
       setPreviewUrl(null)
       setSelectedStudent('')
+      setOverrideDuplicate(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
       
       // Register task with background task context for monitoring
@@ -143,14 +161,21 @@ export default function FaceEnrollmentPage() {
       embedding,
       embedding_version: LIVE_MOBILE_EMBEDDING_VERSION,
       quality_score: qualityScore,
+      override_duplicate: overrideDuplicate,
     }),
     onSuccess: () => {
       showSuccess('Face enrolled (faceapi_v1).')
       setSelectedStudent('')
+      setOverrideDuplicate(false)
       queryClient.invalidateQueries({ queryKey: ['faceEnrollments'] })
     },
     onError: (err) => {
-      showError(err.response?.data?.error || err.response?.data?.detail || 'Enrollment failed')
+      const data = err.response?.data
+      if (data?.error === 'duplicate_face') {
+        showError(`${data.message} Tick "Override duplicate check" below and retry if these are different people.`)
+      } else {
+        showError(data?.error || data?.detail || 'Enrollment failed')
+      }
     },
   })
 
@@ -289,7 +314,7 @@ export default function FaceEnrollmentPage() {
               <label className="block text-sm font-medium text-gray-700 mb-1">Student</label>
               <select
                 value={selectedStudent}
-                onChange={(e) => setSelectedStudent(e.target.value)}
+                onChange={(e) => { setSelectedStudent(e.target.value); setOverrideDuplicate(false) }}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
                 disabled={!selectedClass}
               >
@@ -302,6 +327,19 @@ export default function FaceEnrollmentPage() {
                 ))}
               </select>
             </div>
+
+            <label className="flex items-start gap-2 text-xs text-gray-600">
+              <input
+                type="checkbox"
+                checked={overrideDuplicate}
+                onChange={(e) => setOverrideDuplicate(e.target.checked)}
+                className="mt-0.5"
+              />
+              <span>
+                Override duplicate check — only tick this after enrollment was blocked for matching
+                another student, and you&apos;ve confirmed these are different people.
+              </span>
+            </label>
 
             {enrollMode === 'live' ? (
               <LiveEnrollCapture
@@ -429,11 +467,16 @@ export default function FaceEnrollmentPage() {
  */
 export function LiveEnrollCapture({ selectedStudent, onSubmit, submitting }) {
   const [modelStatus, setModelStatus] = useState('loading') // loading | ready | error
-  const [cameraStatus, setCameraStatus] = useState('idle') // idle | requesting | granted | denied | unavailable
+  const { videoRef, cameraStatus, requestCamera } = useCameraStream({ facingMode: 'user' })
   const [captured, setCaptured] = useState(null) // { descriptor, qualityScore } | null
+  const [liveFaceCount, setLiveFaceCount] = useState(0)
+  const [liveFramingStatus, setLiveFramingStatus] = useState('none') // none | too-small | off-center | good | multi
 
-  const videoRef = useRef(null)
-  const streamRef = useRef(null)
+  // Read by handleCapture for a synchronous, up-to-the-moment reject check —
+  // the disabled= state on the Capture button already reflects this, but a
+  // ref guards against the frame having changed between the last tick and
+  // the click (see FaceLiveCapturePage's lastFeedbackRef for the same idea).
+  const liveFaceCountRef = useRef(0)
 
   useEffect(() => {
     let cancelled = false
@@ -443,33 +486,46 @@ export function LiveEnrollCapture({ selectedStudent, onSubmit, submitting }) {
     return () => { cancelled = true }
   }, [])
 
-  const stopCamera = useCallback(() => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop())
-      streamRef.current = null
-    }
-  }, [])
+  const hasCapturedDescriptor = Boolean(captured?.descriptor)
 
-  useEffect(() => () => stopCamera(), [stopCamera])
-
-  const requestCamera = async () => {
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setCameraStatus('unavailable')
+  // Continuous lock-on/multi-face check while the preview is live. Runs as
+  // its own effect (rather than a setInterval captured once like
+  // FaceLiveCapturePage's scan loop) because start/stop here is driven by
+  // camera + capture state, not a manual button — letting the effect's own
+  // dependency array restart the loop on Retake keeps that in sync for free.
+  useEffect(() => {
+    if (cameraStatus !== 'granted' || hasCapturedDescriptor) {
+      liveFaceCountRef.current = 0
+      setLiveFaceCount(0)
+      setLiveFramingStatus('none')
       return
     }
-    setCameraStatus('requesting')
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })
-      streamRef.current = stream
-      if (videoRef.current) videoRef.current.srcObject = stream
-      setCameraStatus('granted')
-    } catch (err) {
-      setCameraStatus(err?.name === 'NotAllowedError' ? 'denied' : 'unavailable')
+    let cancelled = false
+    const tick = async () => {
+      if (!videoRef.current) return
+      const detections = await detectAllFacesQuick(videoRef.current)
+      if (cancelled) return
+      liveFaceCountRef.current = detections.length
+      setLiveFaceCount(detections.length)
+      if (detections.length === 0) {
+        setLiveFramingStatus('none')
+      } else if (detections.length > 1) {
+        setLiveFramingStatus('multi')
+      } else {
+        setLiveFramingStatus(getFramingHint(detections[0].box, videoRef.current).status)
+      }
     }
-  }
+    tick()
+    const id = setInterval(tick, LIVE_DETECTION_INTERVAL_MS)
+    return () => { cancelled = true; clearInterval(id) }
+  }, [cameraStatus, hasCapturedDescriptor])
 
   const handleCapture = async () => {
     if (!videoRef.current) return
+    if (liveFaceCountRef.current > 1) {
+      setCaptured({ error: 'Only one person should be in frame — move others out of view and retry.' })
+      return
+    }
     const detection = await detectSingleFace(videoRef.current)
     if (!detection) {
       setCaptured({ error: 'No single face detected — center one face and retry.' })
@@ -508,16 +564,31 @@ export function LiveEnrollCapture({ selectedStudent, onSubmit, submitting }) {
           muted
           className={`w-full h-full object-cover ${cameraStatus === 'granted' ? '' : 'hidden'}`}
         />
-        {cameraStatus !== 'granted' && (
-          <div className="text-center text-gray-300 text-xs p-4">
-            {cameraStatus === 'idle' && 'Camera access is required to capture a face.'}
-            {cameraStatus === 'requesting' && 'Requesting camera access…'}
-            {cameraStatus === 'denied' && (
-              <span className="text-red-300">Camera access denied — enable it in browser settings.</span>
-            )}
-            {cameraStatus === 'unavailable' && <span className="text-red-300">No camera available.</span>}
+        {cameraStatus === 'granted' && !hasCapturedDescriptor && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+            <div
+              className={`rounded-[50%] w-[46%] h-[80%] transition-colors ${
+                {
+                  none: 'border-2 border-dashed border-white/70',
+                  'too-small': 'border-2 border-dashed border-amber-400',
+                  'off-center': 'border-2 border-dashed border-amber-400',
+                  good: 'border-[3px] border-solid border-green-400',
+                  multi: 'border-[3px] border-solid border-red-500',
+                }[liveFramingStatus]
+              }`}
+            />
+            <span className="absolute bottom-2 text-[11px] text-white/90 bg-black/50 px-2 py-1 rounded">
+              {{
+                none: 'Fill the oval with your face, then capture',
+                'too-small': 'Move closer',
+                'off-center': 'Center your face',
+                good: 'Face locked — ready to capture',
+                multi: 'Only one person should be in frame',
+              }[liveFramingStatus]}
+            </span>
           </div>
         )}
+        <CameraPermissionNotice status={cameraStatus} size="sm" />
       </div>
 
       {captured?.error && (
@@ -538,7 +609,7 @@ export function LiveEnrollCapture({ selectedStudent, onSubmit, submitting }) {
             disabled={cameraStatus === 'requesting'}
             className="px-3 py-2 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 disabled:opacity-50"
           >
-            Enable Camera
+            {cameraButtonLabel(cameraStatus)}
           </button>
         ) : captured?.descriptor ? (
           <>
@@ -559,7 +630,7 @@ export function LiveEnrollCapture({ selectedStudent, onSubmit, submitting }) {
         ) : (
           <button
             onClick={handleCapture}
-            disabled={modelStatus !== 'ready' || !selectedStudent}
+            disabled={modelStatus !== 'ready' || !selectedStudent || liveFaceCount > 1}
             className="px-3 py-2 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Capture Face

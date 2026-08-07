@@ -21,11 +21,11 @@ IS_PRODUCTION = ENVIRONMENT == 'production'
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.getenv(
-    'DJANGO_SECRET_KEY',
+    'EDU_DJANGO_SECRET_KEY',
     'django-insecure-dev-key-change-in-production' if not IS_PRODUCTION else '',
 )
 if IS_PRODUCTION and not SECRET_KEY:
-    raise ValueError('DJANGO_SECRET_KEY must be set in production!')
+    raise ValueError('EDU_DJANGO_SECRET_KEY must be set in production!')
 
 # DEBUG is derived from ENVIRONMENT — no separate toggle needed
 DEBUG = not IS_PRODUCTION
@@ -443,6 +443,14 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'face_attendance.tasks.cleanup_old_live_detection_events',
         'schedule': crontab(hour=1, minute=30),
     },
+    'cleanup-old-face-audit-logs': {
+        # No 'days' kwarg on purpose, same reasoning as the live-detection
+        # cleanup above — see FACE_RECOGNITION_SETTINGS['AUDIT_LOG_RETENTION_DAYS'].
+        # Staggered 30 min after the live-detection-event purge; this is a
+        # much smaller/slower-growing table so a nightly run is plenty.
+        'task': 'face_attendance.tasks.cleanup_old_face_audit_logs',
+        'schedule': crontab(hour=1, minute=45),
+    },
 }
 
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
@@ -519,8 +527,8 @@ logging.getLogger(__name__).info("REDIS_URL=%r", REDIS_URL)
 # =============================================================================
 # AI / LLM Configuration
 # =============================================================================
-GROQ_API_KEY = os.getenv('GROQ_API_KEY', '')
-GROQ_MODEL = os.getenv('GROQ_MODEL', 'llama-3.3-70b-versatile')
+GROQ_API_KEY = os.getenv('EDU_GROQ_API_KEY', '')
+GROQ_MODEL = os.getenv('EDU_GROQ_MODEL', 'llama-3.3-70b-versatile')
 
 # Attendance Register OCR — PARKED (2026-05-13)
 # Set OCR_ENABLED=true only to re-activate the AI register scan feature.
@@ -572,14 +580,14 @@ EMAIL_BACKEND = os.getenv(
     'EMAIL_BACKEND',
     'django.core.mail.backends.console.EmailBackend' if ENVIRONMENT == 'local' else 'django.core.mail.backends.smtp.EmailBackend',
 ).strip().strip('"').strip("'")
-EMAIL_HOST = os.getenv('EMAIL_HOST', 'smtp.gmail.com')
-EMAIL_PORT = int(os.getenv('EMAIL_PORT', '587'))
-EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '').strip()
-EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '').strip()
+EMAIL_HOST = os.getenv('EDU_EMAIL_HOST', 'smtp.gmail.com')
+EMAIL_PORT = int(os.getenv('EDU_EMAIL_PORT', '587'))
+EMAIL_HOST_USER = os.getenv('EDU_EMAIL_HOST_USER', '').strip()
+EMAIL_HOST_PASSWORD = os.getenv('EDU_EMAIL_HOST_PASSWORD', '').strip()
 EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'true').lower() in ('true', '1', 'yes')
-EMAIL_USE_SSL = os.getenv('EMAIL_USE_SSL', 'false').lower() in ('true', '1', 'yes')
+EMAIL_USE_SSL = os.getenv('EDU_EMAIL_USE_SSL', 'false').lower() in ('true', '1', 'yes')
 EMAIL_TIMEOUT = int(os.getenv('EMAIL_TIMEOUT', '20'))
-DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', EMAIL_HOST_USER or 'noreply@koderkids.pk').strip()
+DEFAULT_FROM_EMAIL = os.getenv('EDU_DEFAULT_FROM_EMAIL', EMAIL_HOST_USER or 'noreply@koderkids.pk').strip()
 
 # =============================================================================
 # Careers Application Email Configuration
@@ -675,6 +683,14 @@ FACE_RECOGNITION_SETTINGS = {
     # resulted_in_attendance, since the actual outcome already lives
     # permanently in AttendanceRecord. See face_attendance.tasks.cleanup_old_live_detection_events.
     'LIVE_EVENT_RETENTION_HOURS': 48,
+
+    # FaceAuditLog (Phase 3a) keeps actor/student identity attached — unlike
+    # FaceMatchThresholdSample, it isn't stripped of who's involved — so it
+    # follows FaceLiveDetectionEvent's data-minimization precedent rather
+    # than being kept indefinitely. A year is long enough for a school's own
+    # audit/compliance needs while still bounding the table's growth. See
+    # face_attendance.tasks.cleanup_old_face_audit_logs.
+    'AUDIT_LOG_RETENTION_DAYS': 365,
 }
 
 # =============================================================================

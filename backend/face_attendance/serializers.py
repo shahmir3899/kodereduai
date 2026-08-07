@@ -199,6 +199,10 @@ class FaceEnrollSerializer(serializers.Serializer):
 
     student_id = serializers.PrimaryKeyRelatedField(queryset=Student.objects.all())
     image_url = serializers.URLField(max_length=500)
+    override_duplicate = serializers.BooleanField(
+        required=False, default=False,
+        help_text='Skip the duplicate-enrollment check — admin has confirmed this is a different person.',
+    )
 
 
 class FaceEnrollWithEmbeddingSerializer(serializers.Serializer):
@@ -218,6 +222,10 @@ class FaceEnrollWithEmbeddingSerializer(serializers.Serializer):
     )
     embedding_version = serializers.CharField(max_length=20)
     quality_score = serializers.FloatField(required=False, default=0.0, min_value=0.0, max_value=1.0)
+    override_duplicate = serializers.BooleanField(
+        required=False, default=False,
+        help_text='Skip the duplicate-enrollment check — admin has confirmed this is a different person.',
+    )
 
 
 class LiveMatchRequestSerializer(serializers.Serializer):

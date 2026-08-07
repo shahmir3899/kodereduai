@@ -80,7 +80,7 @@
       ]
     ],
     "extra": {
-      "apiUrl": "https://kodereduai-api.onrender.com",
+      "apiUrl": "https://personal-gateway.onrender.com/educationai",
       "appEnv": "production",
       "allowInsecureHttp": false,
       "router": {

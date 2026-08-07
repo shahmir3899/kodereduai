@@ -1,7 +1,7 @@
 /* ─── Site-wide config ─────────────────────────────── */
 const fallbackApiBase = import.meta.env.DEV
   ? ''
-  : 'https://kodereduai-api.onrender.com';
+  : 'https://personal-gateway.onrender.com/educationai';
 const publicApiBase = (import.meta.env.PUBLIC_MAIN_APP_API_BASE_URL || fallbackApiBase).replace(/\/$/, '');
 
 export const siteConfig = {

@@ -26,7 +26,7 @@ from .authentication import DeviceKeyAuthentication, IsAuthenticatedDevice
 from .models import (
     FaceAttendanceSession, StudentFaceEmbedding, FaceDetectionResult,
     FaceCaptureDevice, FaceLiveDetectionEvent,
-    FaceMatchThresholdSample,
+    FaceMatchThresholdSample, FaceAuditLog,
 )
 from .serializers import (
     FaceAttendanceSessionListSerializer,
@@ -43,7 +43,7 @@ from .serializers import (
 )
 from .services.attendance_writer import upsert_attendance_record
 from .services.embedding_service import EmbeddingService
-from .services.matcher import FaceMatcher
+from .services.matcher import FaceMatcher, find_duplicate_enrollment
 
 logger = logging.getLogger(__name__)
 
@@ -299,16 +299,44 @@ class FaceAttendanceSessionViewSet(ModuleAccessMixin, TenantQuerySetMixin, views
         removed_ids = serializer.validated_data.get('removed_detection_ids', [])
         corrections = serializer.validated_data.get('corrections', [])
 
-        # Apply corrections to detections
+        # Apply corrections to detections. Fetched + saved one at a time
+        # (rather than a single .update()) so the prior matched_student can
+        # be read before it's overwritten — the audit log needs the
+        # from/to pair, not just the new value.
+        student_names_for_audit = {}
+        if corrections:
+            student_names_for_audit = dict(
+                Student.objects.filter(
+                    id__in=[c.get('correct_student_id') for c in corrections if c.get('correct_student_id')]
+                ).values_list('id', 'name')
+            )
         for correction in corrections:
             face_index = correction.get('detection_face_index')
             correct_student_id = correction.get('correct_student_id')
             if face_index is not None and correct_student_id:
-                FaceDetectionResult.objects.filter(
+                detection = FaceDetectionResult.objects.filter(
                     session=session, face_index=face_index
-                ).update(
-                    matched_student_id=correct_student_id,
-                    match_status=FaceDetectionResult.MatchStatus.MANUALLY_MATCHED,
+                ).select_related('matched_student').first()
+                if not detection:
+                    continue
+                from_student_id = detection.matched_student_id
+                from_student_name = detection.matched_student.name if detection.matched_student_id else None
+                detection.matched_student_id = correct_student_id
+                detection.match_status = FaceDetectionResult.MatchStatus.MANUALLY_MATCHED
+                detection.save(update_fields=['matched_student_id', 'match_status'])
+                FaceAuditLog.objects.create(
+                    school=session.school,
+                    event_type=FaceAuditLog.EventType.ADMIN_OVERRIDE,
+                    student_id=correct_student_id,
+                    actor=request.user,
+                    metadata={
+                        'session_id': str(session.id),
+                        'detection_face_index': face_index,
+                        'from_student_id': from_student_id,
+                        'from_student_name': from_student_name,
+                        'to_student_id': correct_student_id,
+                        'to_student_name': student_names_for_audit.get(correct_student_id),
+                    },
                 )
 
         # Mark removed detections
@@ -354,6 +382,23 @@ class FaceAttendanceSessionViewSet(ModuleAccessMixin, TenantQuerySetMixin, views
         session.confirmed_by = request.user
         session.confirmed_at = timezone.now()
         session.save(update_fields=['status', 'confirmed_by', 'confirmed_at'])
+
+        # One batch-level audit row per confirmed session — not per matched
+        # face, which would just duplicate the detections already stored on
+        # the session itself (see FaceAuditLog's docstring).
+        FaceAuditLog.objects.create(
+            school=session.school,
+            event_type=FaceAuditLog.EventType.ATTENDANCE_MATCH,
+            student=None,
+            actor=request.user,
+            metadata={
+                'session_id': str(session.id),
+                'class_id': session.class_obj_id,
+                'present_count': len(present_ids),
+                'total_students': class_students.count(),
+                'source_method': 'GROUP_PHOTO',
+            },
+        )
 
         return Response({
             'success': True,
@@ -522,7 +567,7 @@ class FaceEnrollmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
                 title=f'Enroll face: {student.name}',
                 school_id=school_id,
                 user=request.user,
-                task_args=(student.id, image_url),
+                task_args=(student.id, image_url, request.user.id, serializer.validated_data.get('override_duplicate', False)),
                 progress_total=3,
             )
             return Response({
@@ -564,6 +609,34 @@ class FaceEnrollmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+        duplicate_override_used = data.get('override_duplicate', False)
+        embedding_array = np.array(data['embedding'], dtype=np.float64)
+        duplicate = find_duplicate_enrollment(
+            embedding_array, school_id, exclude_student_id=student.id,
+            embedding_version=data['embedding_version'],
+        )
+        if duplicate and not duplicate_override_used:
+            return Response({
+                'error': 'duplicate_face',
+                'message': (
+                    f"This face closely matches an existing enrollment for "
+                    f"{duplicate.student_name} ({duplicate.confidence:.0f}% confidence)."
+                ),
+                'matched_student': {'id': duplicate.student_id, 'name': duplicate.student_name},
+                'confidence': duplicate.confidence,
+            }, status=status.HTTP_409_CONFLICT)
+        # Overridden (or no duplicate found) — still worth noting on the
+        # audit entry which student it was confused with, if any.
+        duplicate_info = {
+            'matched_student_id': duplicate.student_id,
+            'matched_student_name': duplicate.student_name,
+            'confidence': duplicate.confidence,
+        } if duplicate else None
+
+        had_prior_embedding = StudentFaceEmbedding.objects.filter(
+            student=student, is_active=True
+        ).exists()
+
         face_embedding = EmbeddingService.store_client_embedding(
             student_id=student.id,
             school_id=school_id,
@@ -571,6 +644,20 @@ class FaceEnrollmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
             embedding_version=data['embedding_version'],
             quality_score=data['quality_score'],
         )
+
+        FaceAuditLog.objects.create(
+            school_id=school_id,
+            event_type=FaceAuditLog.EventType.RE_ENROLLMENT if had_prior_embedding else FaceAuditLog.EventType.ENROLLMENT,
+            student=student,
+            actor=request.user,
+            metadata={
+                'embedding_version': data['embedding_version'],
+                'quality_score': data['quality_score'],
+                'source': 'live_capture',
+                **({'duplicate_override': duplicate_info} if duplicate_info else {}),
+            },
+        )
+
         return Response(
             StudentFaceEmbeddingSerializer(face_embedding).data,
             status=status.HTTP_201_CREATED,
@@ -828,6 +915,26 @@ class LiveMatchView(APIView):
             resulted_in_attendance=resulted_in_attendance,
             attendance_record=attendance_record,
         )
+
+        if resulted_in_attendance:
+            # Only the consequential case is audited here — the event
+            # itself already covers every attempt, matched or not; this
+            # table is for "attendance was actually written," not a mirror
+            # of FaceLiveDetectionEvent's per-poll-tick volume.
+            FaceAuditLog.objects.create(
+                school=school,
+                event_type=FaceAuditLog.EventType.ATTENDANCE_MATCH,
+                student_id=result.student_id,
+                actor=captured_by,
+                metadata={
+                    'confidence': result.confidence,
+                    'distance': None if result.distance == float('inf') else result.distance,
+                    'source_method': source_method,
+                    'class_id': class_obj.id if class_obj else None,
+                    'device_id': str(device.device_id) if device else None,
+                    'live_event_id': str(event.id),
+                },
+            )
 
         return Response({
             'match_status': result.match_status,

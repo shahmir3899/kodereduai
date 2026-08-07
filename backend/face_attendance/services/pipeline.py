@@ -17,11 +17,12 @@ from face_attendance.models import (
     FaceAttendanceSession,
     FaceDetectionResult,
     StudentFaceEmbedding,
+    FaceAuditLog,
 )
 
 from .face_detector import FaceDetector, load_image_from_url, encode_face_crop_to_jpeg
 from .embedding_service import EmbeddingService, EMBEDDING_VERSION
-from .matcher import FaceMatcher, get_thresholds
+from .matcher import FaceMatcher, get_thresholds, find_duplicate_enrollment, DuplicateFaceError
 
 logger = logging.getLogger(__name__)
 
@@ -263,10 +264,12 @@ class FaceEnrollmentPipeline:
     Takes a single-face photo, generates embedding, stores it.
     """
 
-    def __init__(self, student_id, image_url, task_id=None):
+    def __init__(self, student_id, image_url, task_id=None, actor_user_id=None, override_duplicate=False):
         self.student_id = student_id
         self.image_url = image_url
         self.task_id = task_id
+        self.actor_user_id = actor_user_id
+        self.override_duplicate = override_duplicate
         self.detector = FaceDetector()
         self.embedding_service = EmbeddingService()
 
@@ -312,6 +315,22 @@ class FaceEnrollmentPipeline:
         blur_norm = min(1.0, blur_score / 500.0)
         quality_score = round(0.4 * size_score + 0.6 * blur_norm, 3)
 
+        # Duplicate-enrollment check (Phase 3a): raises before anything is
+        # stored unless the caller explicitly overrode it. See
+        # DuplicateFaceError's docstring for why str(err) alone is the
+        # entire user-facing message — this task's except block just does
+        # mark_task_failed(str(e)), no structured-error plumbing added.
+        duplicate = find_duplicate_enrollment(
+            embedding, student.school_id, exclude_student_id=student.id,
+            embedding_version=EMBEDDING_VERSION,
+        )
+        if duplicate and not self.override_duplicate:
+            raise DuplicateFaceError(duplicate.student_id, duplicate.student_name, duplicate.confidence)
+
+        had_prior_embedding = StudentFaceEmbedding.objects.filter(
+            student=student, is_active=True
+        ).exists()
+
         # Stage 3: Store embedding
         self._update_progress(3)
         emb_record = self.embedding_service.store_embedding(
@@ -320,6 +339,23 @@ class FaceEnrollmentPipeline:
             embedding=embedding,
             source_image_url=self.image_url,
             quality_score=quality_score,
+        )
+
+        FaceAuditLog.objects.create(
+            school_id=student.school_id,
+            event_type=FaceAuditLog.EventType.RE_ENROLLMENT if had_prior_embedding else FaceAuditLog.EventType.ENROLLMENT,
+            student=student,
+            actor_id=self.actor_user_id,
+            metadata={
+                'embedding_version': EMBEDDING_VERSION,
+                'quality_score': quality_score,
+                'source': 'photo',
+                **({'duplicate_override': {
+                    'matched_student_id': duplicate.student_id,
+                    'matched_student_name': duplicate.student_name,
+                    'confidence': duplicate.confidence,
+                }} if duplicate else {}),
+            },
         )
 
         result = {

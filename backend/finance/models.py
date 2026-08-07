@@ -313,6 +313,11 @@ class FeeStructure(models.Model):
     """
     Defines monthly fee amount. Can be set at class level or overridden per student.
     Student-level FeeStructure takes precedence over class-level.
+
+    Deliberately Master-Class-scoped only (no session_class field): fee amounts are
+    a billing policy set per grade and apply uniformly to every section of that
+    grade. If a school ever needs to charge different sections of the same grade
+    different amounts, that's a per-student FeeStructure override, not a schema gap.
     """
     school = models.ForeignKey(
         'schools.School',

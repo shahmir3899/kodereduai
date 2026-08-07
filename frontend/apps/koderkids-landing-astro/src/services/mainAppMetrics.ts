@@ -50,7 +50,7 @@ const pickValue = (source: Record<string, unknown>, keys: string[]): unknown => 
 export const fetchMainAppMetrics = async (): Promise<LandingMetrics> => {
   const fallbackApiBase = import.meta.env.DEV
     ? ''
-    : 'https://kodereduai-api.onrender.com';
+    : 'https://personal-gateway.onrender.com/educationai';
   const baseUrl = (import.meta.env.PUBLIC_MAIN_APP_API_BASE_URL || fallbackApiBase).replace(/\/$/, '');
   const metricsPath = import.meta.env.PUBLIC_LANDING_METRICS_PATH || '/api/public/landing-metrics/';
   const schoolId = import.meta.env.PUBLIC_SCHOOL_ID;

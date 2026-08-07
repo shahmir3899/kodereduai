@@ -84,9 +84,19 @@ CHUNK_SIZE = 50 * 1024  # 50KB per chunk for streaming parse
 MAX_OCR_SYNC_WAIT_SECONDS = 60
 
 
-def _apply_teacher_dual_scope(queryset, request, class_field='class_obj_id', subject_field='subject_id', school_id=None):
+def _apply_teacher_dual_scope(
+    queryset, request, class_field='class_obj_id', subject_field='subject_id',
+    school_id=None, session_class_field=None,
+):
     """Apply union of class-teacher full scope and subject-teacher scoped visibility.
-    Uses section-class scope for true isolation when teacher has session assignments."""
+
+    Pass `session_class_field` (e.g. 'session_class_id') to opt a model into true
+    section-level isolation when the teacher has session-class assignments: the
+    teacher then sees only their assigned sections' rows, plus legacy rows with
+    no session_class set (which apply to every section of the master class).
+    Leave it unset for models with no session_class field (Book, Chapter, Topic,
+    Assignment, Submission) — behavior for those is unchanged.
+    """
     role = get_effective_role(request)
     if role != 'TEACHER':
         return queryset
@@ -99,12 +109,15 @@ def _apply_teacher_dual_scope(queryset, request, class_field='class_obj_id', sub
 
     predicates = Q()
 
-    if session_ids:
-        # Section-level: only items belonging to teacher's assigned session classes
-        # Session class here resolves to master class for LMS (lesson plans don't store session_class)
-        # So we match on master class IDs that correspond to assigned session classes
+    if session_class_field and session_ids:
+        # Section-level isolation: teacher's assigned sections, plus any
+        # legacy rows (session_class IS NULL) for their assigned master classes.
+        predicates |= Q(**{f'{session_class_field}__in': session_ids})
         if full_class_ids:
-            predicates |= Q(**{f'{class_field}__in': full_class_ids})
+            predicates |= Q(**{
+                f'{session_class_field}__isnull': True,
+                f'{class_field}__in': full_class_ids,
+            })
     elif full_class_ids:
         predicates |= Q(**{f'{class_field}__in': full_class_ids})
 
@@ -1375,7 +1388,9 @@ class LessonPlanViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         )
         queryset = annotate_session_class_display(queryset)
 
-        queryset = _apply_teacher_dual_scope(queryset, self.request)
+        queryset = _apply_teacher_dual_scope(
+            queryset, self.request, session_class_field='session_class_id',
+        )
 
         # Filter by class
         scope = resolve_class_scope(self.request, class_param_names=('class_id', 'class_obj'))

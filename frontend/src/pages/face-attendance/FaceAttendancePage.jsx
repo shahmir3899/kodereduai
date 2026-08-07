@@ -11,12 +11,18 @@ import { useSessionClasses } from '../../hooks/useSessionClasses'
 import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
 import { useFaceAttendanceStatus } from '../../hooks/useFaceAttendanceStatus'
 import { getClassSelectorScope, getResolvedMasterClassId, resolveSessionClassId } from '../../utils/classScope'
+import { loadFaceApiModels, detectAllFacesQuick } from '../../utils/faceApiLoader'
 import FaceLiveCapturePage from './FaceLiveCapturePage'
 
 const FIXED_CAMERA_STATUS_BADGE = {
   active: { label: 'Fixed Camera: Active', className: 'bg-green-100 text-green-700' },
   inactive: { label: 'Fixed Camera: Offline', className: 'bg-gray-100 text-gray-600' },
 }
+
+// Past this many detected faces, matching accuracy in a single photo tends
+// to degrade (smaller faces per-frame, more occlusion) — a soft nudge to
+// split into sub-groups, not a hard limit (server-side has none either).
+const GROUP_PHOTO_SCALE_WARNING_THRESHOLD = 25
 
 const FIXED_CAMERA_NOTE = "Uses the classroom's installed camera. Attendance is marked automatically as students are recognized — nothing to start here."
 
@@ -51,6 +57,12 @@ export default function FaceAttendancePage() {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
   const [uploadStep, setUploadStep] = useState(null) // null | 'uploading' | 'creating'
   const [previewUrl, setPreviewUrl] = useState(null)
+  // Client-side pre-submit check only — informational, doesn't replace or
+  // duplicate the server-side dlib detection pipeline that actually
+  // processes the session after upload.
+  const [previewFaceCount, setPreviewFaceCount] = useState(null) // null = not checked yet
+  const [previewChecking, setPreviewChecking] = useState(false)
+  const previewImgRef = useRef(null)
   const { sessionClasses } = useSessionClasses(activeAcademicYear?.id, activeSchool?.id)
   const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
   const resolvedSelectedClass = getResolvedMasterClassId(selectedClass, activeAcademicYear?.id, sessionClasses)
@@ -132,9 +144,28 @@ export default function FaceAttendancePage() {
     }
 
     // Preview
+    setPreviewFaceCount(null)
     const reader = new FileReader()
     reader.onload = (ev) => setPreviewUrl(ev.target.result)
     reader.readAsDataURL(file)
+  }
+
+  // Runs once the preview <img> has actually loaded pixel data — face-api.js
+  // needs a decoded image, not just a data URL string, to detect on.
+  const handlePreviewImageLoad = async () => {
+    if (!previewImgRef.current) return
+    setPreviewChecking(true)
+    try {
+      await loadFaceApiModels()
+      const detections = await detectAllFacesQuick(previewImgRef.current)
+      setPreviewFaceCount(detections.length)
+    } catch {
+      // Best-effort hint only — if the model fails to load or detection
+      // errors out, just skip the count rather than blocking the upload.
+      setPreviewFaceCount(null)
+    } finally {
+      setPreviewChecking(false)
+    }
   }
 
   const handleCapture = () => {
@@ -286,13 +317,37 @@ export default function FaceAttendancePage() {
             {previewUrl ? (
               <div>
                 <img
+                  ref={previewImgRef}
                   src={previewUrl}
                   alt="Preview"
-                  className="max-h-64 mx-auto rounded-lg mb-4"
+                  className="max-h-64 mx-auto rounded-lg mb-2"
+                  onLoad={handlePreviewImageLoad}
                 />
+                <p className="text-xs mb-4">
+                  {previewChecking && <span className="text-gray-500">Checking photo&hellip;</span>}
+                  {!previewChecking && previewFaceCount === 0 && (
+                    <span className="text-red-600 font-medium">No faces detected in this photo — retake before processing.</span>
+                  )}
+                  {!previewChecking && previewFaceCount > 0 && (
+                    <span className="text-gray-500">
+                      {previewFaceCount} face{previewFaceCount === 1 ? '' : 's'} detected in preview — check this matches who&apos;s in frame before processing.
+                    </span>
+                  )}
+                </p>
+                {!previewChecking && previewFaceCount > GROUP_PHOTO_SCALE_WARNING_THRESHOLD && (
+                  <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-4 -mt-2">
+                    That&apos;s a large group for one photo — matching tends to get less reliable past{' '}
+                    {GROUP_PHOTO_SCALE_WARNING_THRESHOLD} faces. Consider splitting into smaller sub-groups for
+                    more reliable results (this won&apos;t block processing).
+                  </p>
+                )}
                 <div className="flex gap-3 justify-center">
                   <button
-                    onClick={() => { setPreviewUrl(null); if (fileInputRef.current) fileInputRef.current.value = '' }}
+                    onClick={() => {
+                      setPreviewUrl(null)
+                      setPreviewFaceCount(null)
+                      if (fileInputRef.current) fileInputRef.current.value = ''
+                    }}
                     className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm"
                   >
                     Clear

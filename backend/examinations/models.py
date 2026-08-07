@@ -87,7 +87,16 @@ class ExamGroup(models.Model):
 
 
 class Exam(models.Model):
-    """A specific exam instance for a class."""
+    """A specific exam instance for a class.
+
+    Deliberately Master-Class-scoped only (no session_class field): an exam's
+    schedule/paper is assumed to apply uniformly across every section of the
+    grade. Known caveat (see CLASS_SYSTEM_GUIDE.md): ExamViewSet.perform_create's
+    auto-fill of ExamSubject from ClassSubject filters by class_obj alone, which
+    can pull in the union of every section's subject/teacher pairings if sections
+    of this class have different ClassSubject.session_class assignments. Adding a
+    session_class field here is tracked as a Phase 2 schema change, not done yet.
+    """
 
     class Status(models.TextChoices):
         SCHEDULED = 'SCHEDULED', 'Scheduled'

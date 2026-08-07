@@ -172,6 +172,8 @@ npm run build         # frontend/apps/koderkids-landing-astro/ -> its own dist
 - Frontend is Vite + React (NOT Next.js) — no SSR, client-side routing only.
 - Backend root (`backend/`) contains many one-off historical data-repair/diagnostic scripts (`check_*.py`, `recovery_*.py`, `diagnose_*.py`, `rollback_*.py`, etc.) — ad hoc tools tied to specific past incidents, not application code or convention examples.
 
+- Class system (Master Class vs Session Class): see `CLASS_SYSTEM_GUIDE.md` before touching any class-scoping code.
+
 ## Detailed Documentation
 
 Read on demand from `docs/` (not preloaded — these are large):

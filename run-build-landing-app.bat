@@ -6,7 +6,7 @@ set "LANDING_DIR=%ROOT%frontend\apps\koderkids-landing-astro"
 set "LANDING_ENV_PROD=%LANDING_DIR%\.env.production"
 
 if "%LANDING_SITE_URL%"=="" set "LANDING_SITE_URL=https://koderkids.pk"
-if "%LANDING_API_BASE_URL%"=="" set "LANDING_API_BASE_URL=https://kodereduai-api.onrender.com"
+if "%LANDING_API_BASE_URL%"=="" set "LANDING_API_BASE_URL=https://personal-gateway.onrender.com/educationai"
 if "%LANDING_SCHOOL_ID%"=="" set "LANDING_SCHOOL_ID=37"
 
 if not exist "%LANDING_DIR%\package.json" (
