@@ -19,6 +19,14 @@ Multi-tenant school management SaaS (ERP) for K-12 schools, covering attendance,
 | AI/Vision | Google Cloud Vision + Groq LLM (`llama-3.3-70b-versatile`) for OCR reasoning (currently disabled by default, see Gotchas); `face_recognition`/dlib for face-attendance |
 | Deploy | Render.com — **backend only** (see Deployment) |
 
+## Hard Rules
+
+- **Never push to remote or open a PR without explicit approval in chat first.**
+- **Never paste, print, or commit credentials, tokens, connection strings, or API keys** — in `settings.local.json`, chat, commit messages, or any tracked or untracked file. If a command needs a secret, reference it via an env var (`$SOME_VAR` / `os.getenv(...)`), never inline.
+- **Always show `git show` (or an equivalent diff) before a commit is approved.**
+- **Confirm before any destructive git operation** — force push, `reset --hard`, history rewrite, branch deletion.
+- **Confirm before dropping or altering any database table or column.** The Master Class / Session Class migration (`CLASS_SYSTEM_GUIDE.md`) is still mid-rollout — schema changes need explicit sign-off, not just a passing test suite.
+
 ## Directory Structure
 
 ```
