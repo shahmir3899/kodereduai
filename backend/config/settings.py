@@ -452,10 +452,26 @@ CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 # =============================================================================
 REDIS_URL = os.getenv('REDIS_URL', '')
 
+
+def _redis_url_with_db(url, db='1'):
+    """
+    Return `url` pointed at database `db`, replacing any existing path.
+
+    Plain `url.rsplit('/', 1)[0] + '/db'` breaks when `url` has no path
+    segment (e.g. `rediss://user:pass@host:6379`, the shape Upstash gives
+    us) — the last '/' in that string is the second slash of the `rediss://`
+    scheme separator, not a path separator, so the rsplit silently produces
+    `rediss://db` with the host and credentials stripped out entirely.
+    """
+    from urllib.parse import urlsplit, urlunsplit
+    parts = urlsplit(url)
+    return urlunsplit((parts.scheme, parts.netloc, f'/{db}', '', ''))
+
+
 if REDIS_URL:
-    _cache_location = REDIS_URL.rsplit('/', 1)[0] + '/1' if '/' in REDIS_URL else REDIS_URL
+    _cache_location = _redis_url_with_db(REDIS_URL)
 elif CELERY_BROKER_URL.startswith(('redis://', 'rediss://')):
-    _cache_location = CELERY_BROKER_URL.rsplit('/', 1)[0] + '/1'
+    _cache_location = _redis_url_with_db(CELERY_BROKER_URL)
 else:
     _cache_location = ''
 
