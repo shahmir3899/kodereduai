@@ -64,26 +64,42 @@ export default function SuperAdminDashboard() {
     is_default: false,
   })
 
-  // ── Search / pagination state (one per tab) ─────────────────────────────────
+  // ── Search / pagination / sort state (one per tab) ───────────────────────────
+  // Sort state is a DRF `ordering` string: '' (unsorted/default), 'field' (asc),
+  // or '-field' (desc) — toggleOrdering() below cycles through those 3 states.
   const [schoolsSearch, setSchoolsSearch] = useState('')
   const [schoolsPage, setSchoolsPage] = useState(1)
+  const [schoolsOrdering, setSchoolsOrdering] = useState('')
   const debouncedSchoolsSearch = useDebounce(schoolsSearch, 300)
 
   const [usersSearch, setUsersSearch] = useState('')
   const [usersPage, setUsersPage] = useState(1)
+  const [usersOrdering, setUsersOrdering] = useState('')
   const debouncedUsersSearch = useDebounce(usersSearch, 300)
 
   const [orgsSearch, setOrgsSearch] = useState('')
   const [orgsPage, setOrgsPage] = useState(1)
+  const [orgsOrdering, setOrgsOrdering] = useState('')
   const debouncedOrgsSearch = useDebounce(orgsSearch, 300)
 
   const [membershipsSearch, setMembershipsSearch] = useState('')
   const [membershipsPage, setMembershipsPage] = useState(1)
+  const [membershipsOrdering, setMembershipsOrdering] = useState('')
   const debouncedMembershipsSearch = useDebounce(membershipsSearch, 300)
 
   const [activitySearch, setActivitySearch] = useState('')
   const [activityPage, setActivityPage] = useState(1)
   const debouncedActivitySearch = useDebounce(activitySearch, 300)
+
+  const toggleOrdering = (current, key) => {
+    if (current === key) return `-${key}`
+    if (current === `-${key}`) return ''
+    return key
+  }
+
+  const sortStateFor = (ordering) => ordering
+    ? { key: ordering.startsWith('-') ? ordering.slice(1) : ordering, dir: ordering.startsWith('-') ? 'desc' : 'asc' }
+    : null
 
   // ── Queries ───────────────────────────────────────────────────────────────
   const { data: platformStatsData } = useQuery({
@@ -93,38 +109,42 @@ export default function SuperAdminDashboard() {
   const pStats = platformStatsData?.data || {}
 
   const { data: schoolsData, isLoading: schoolsLoading } = useQuery({
-    queryKey: ['adminSchools', schoolsPage, debouncedSchoolsSearch],
+    queryKey: ['adminSchools', schoolsPage, debouncedSchoolsSearch, schoolsOrdering],
     queryFn: () => schoolsApi.getAllSchools({
       page: schoolsPage,
       page_size: ADMIN_PAGE_SIZE,
       search: debouncedSchoolsSearch || undefined,
+      ordering: schoolsOrdering || undefined,
     }),
   })
 
   const { data: usersData, isLoading: usersLoading } = useQuery({
-    queryKey: ['adminUsers', usersPage, debouncedUsersSearch],
+    queryKey: ['adminUsers', usersPage, debouncedUsersSearch, usersOrdering],
     queryFn: () => usersApi.getUsers({
       page: usersPage,
       page_size: ADMIN_PAGE_SIZE,
       search: debouncedUsersSearch || undefined,
+      ordering: usersOrdering || undefined,
     }),
   })
 
   const { data: orgsData, isLoading: orgsLoading } = useQuery({
-    queryKey: ['adminOrgs', orgsPage, debouncedOrgsSearch],
+    queryKey: ['adminOrgs', orgsPage, debouncedOrgsSearch, orgsOrdering],
     queryFn: () => organizationsApi.getAll({
       page: orgsPage,
       page_size: ADMIN_PAGE_SIZE,
       search: debouncedOrgsSearch || undefined,
+      ordering: orgsOrdering || undefined,
     }),
   })
 
   const { data: membershipsData, isLoading: membershipsLoading } = useQuery({
-    queryKey: ['adminMemberships', membershipsPage, debouncedMembershipsSearch],
+    queryKey: ['adminMemberships', membershipsPage, debouncedMembershipsSearch, membershipsOrdering],
     queryFn: () => membershipsApi.getAll({
       page: membershipsPage,
       page_size: ADMIN_PAGE_SIZE,
       search: debouncedMembershipsSearch || undefined,
+      ordering: membershipsOrdering || undefined,
     }),
   })
 
@@ -140,18 +160,24 @@ export default function SuperAdminDashboard() {
 
   // All schools/users, unpaginated — needed for select dropdowns in modals (school picker,
   // org picker, membership user/school pickers) which must offer every option, not just the
-  // current page's 20.
+  // current page's 20. Lazy: only fetched once a modal that actually needs them is open, so
+  // they don't run unconditionally on every dashboard visit.
+  const anyPickerModalOpen = showAddModal || showUserModal || showOrgModal || showMemModal || showBulkReassignModal
+
   const { data: allSchoolsData } = useQuery({
     queryKey: ['adminSchoolsAll'],
     queryFn: () => schoolsApi.getAllSchools({ page_size: 9999 }),
+    enabled: anyPickerModalOpen,
   })
   const { data: allUsersData } = useQuery({
     queryKey: ['adminUsersAll'],
     queryFn: () => usersApi.getUsers({ page_size: 9999 }),
+    enabled: anyPickerModalOpen,
   })
   const { data: allOrgsData } = useQuery({
     queryKey: ['adminOrgsAll'],
     queryFn: () => organizationsApi.getAll({ page_size: 9999 }),
+    enabled: anyPickerModalOpen,
   })
 
   // DEPRECATED 2026-05-13: Module toggling removed (all schools get all modules now).
@@ -728,7 +754,7 @@ export default function SuperAdminDashboard() {
           )}
 
           {schoolsLoading ? (
-            <Spinner />
+            <TableSkeleton />
           ) : schools.length === 0 && debouncedSchoolsSearch ? (
             <Empty text={`No schools match "${debouncedSchoolsSearch}".`} />
           ) : schools.length === 0 ? (
@@ -828,11 +854,11 @@ export default function SuperAdminDashboard() {
                           className="rounded border-gray-300"
                         />
                       </th>
-                      <TH>School</TH>
+                      <TH sortKey="name" activeSort={sortStateFor(schoolsOrdering)} onSort={(k) => { setSchoolsOrdering(toggleOrdering(schoolsOrdering, k)); setSchoolsPage(1) }}>School</TH>
                       <TH>Subdomain</TH>
                       <TH>Organization</TH>
-                      <TH>Students</TH>
-                      <TH>Users</TH>
+                      <TH sortKey="student_count" activeSort={sortStateFor(schoolsOrdering)} onSort={(k) => { setSchoolsOrdering(toggleOrdering(schoolsOrdering, k)); setSchoolsPage(1) }}>Students</TH>
+                      <TH sortKey="user_count" activeSort={sortStateFor(schoolsOrdering)} onSort={(k) => { setSchoolsOrdering(toggleOrdering(schoolsOrdering, k)); setSchoolsPage(1) }}>Users</TH>
                       <TH>Status</TH>
                       <TH>Actions</TH>
                     </tr>
@@ -850,7 +876,7 @@ export default function SuperAdminDashboard() {
                         </td>
                         <td className="px-4 py-3">
                           <p className="font-medium text-gray-900">{school.name}</p>
-                          <p className="text-sm text-gray-500">{school.contact_email}</p>
+                          <p className="text-sm text-gray-500">{school.contact_email || '-'}</p>
                         </td>
                         <td className="px-4 py-3 text-sm">
                           <a
@@ -929,7 +955,7 @@ export default function SuperAdminDashboard() {
           />
 
           {usersLoading ? (
-            <Spinner />
+            <TableSkeleton />
           ) : users.length === 0 ? (
             <Empty text={debouncedUsersSearch ? `No users match "${debouncedUsersSearch}".` : 'No users yet.'} />
           ) : (
@@ -980,7 +1006,7 @@ export default function SuperAdminDashboard() {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
-                      <TH>User</TH>
+                      <TH sortKey="username" activeSort={sortStateFor(usersOrdering)} onSort={(k) => { setUsersOrdering(toggleOrdering(usersOrdering, k)); setUsersPage(1) }}>User</TH>
                       <TH>Role</TH>
                       <TH>School</TH>
                       <TH>Status</TH>
@@ -1063,7 +1089,7 @@ export default function SuperAdminDashboard() {
           />
 
           {orgsLoading ? (
-            <Spinner />
+            <TableSkeleton />
           ) : orgs.length === 0 ? (
             <Empty text={debouncedOrgsSearch ? `No organizations match "${debouncedOrgsSearch}".` : 'No organizations yet. Create one to group schools.'} />
           ) : (
@@ -1105,9 +1131,9 @@ export default function SuperAdminDashboard() {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
-                      <TH>Name</TH>
+                      <TH sortKey="name" activeSort={sortStateFor(orgsOrdering)} onSort={(k) => { setOrgsOrdering(toggleOrdering(orgsOrdering, k)); setOrgsPage(1) }}>Name</TH>
                       <TH>Slug</TH>
-                      <TH>Schools</TH>
+                      <TH sortKey="school_count" activeSort={sortStateFor(orgsOrdering)} onSort={(k) => { setOrgsOrdering(toggleOrdering(orgsOrdering, k)); setOrgsPage(1) }}>Schools</TH>
                       <TH>Status</TH>
                       <TH>Actions</TH>
                     </tr>
@@ -1178,7 +1204,7 @@ export default function SuperAdminDashboard() {
           />
 
           {membershipsLoading ? (
-            <Spinner />
+            <TableSkeleton />
           ) : memberships.length === 0 ? (
             <Empty text={debouncedMembershipsSearch ? `No memberships match "${debouncedMembershipsSearch}".` : 'No memberships yet. Assign a user to a school.'} />
           ) : (
@@ -1218,9 +1244,9 @@ export default function SuperAdminDashboard() {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
-                      <TH>User</TH>
-                      <TH>School</TH>
-                      <TH>Role</TH>
+                      <TH sortKey="user__username" activeSort={sortStateFor(membershipsOrdering)} onSort={(k) => { setMembershipsOrdering(toggleOrdering(membershipsOrdering, k)); setMembershipsPage(1) }}>User</TH>
+                      <TH sortKey="school__name" activeSort={sortStateFor(membershipsOrdering)} onSort={(k) => { setMembershipsOrdering(toggleOrdering(membershipsOrdering, k)); setMembershipsPage(1) }}>School</TH>
+                      <TH sortKey="role" activeSort={sortStateFor(membershipsOrdering)} onSort={(k) => { setMembershipsOrdering(toggleOrdering(membershipsOrdering, k)); setMembershipsPage(1) }}>Role</TH>
                       <TH>Default</TH>
                       <TH>Actions</TH>
                     </tr>
@@ -1289,7 +1315,7 @@ export default function SuperAdminDashboard() {
           />
 
           {activityLoading ? (
-            <Spinner />
+            <TableSkeleton />
           ) : activityLog.length === 0 ? (
             <Empty text={debouncedActivitySearch ? `No activity matches "${debouncedActivitySearch}".` : 'No admin actions recorded yet.'} />
           ) : (
@@ -1299,7 +1325,7 @@ export default function SuperAdminDashboard() {
                 {activityLog.map((entry) => (
                   <div key={entry.id} className="p-3 border border-gray-200 rounded-lg">
                     <p className="font-medium text-sm text-gray-900">
-                      {entry.action.replace(/_/g, ' ')} <span className="text-gray-500 font-normal">{entry.target_type}</span>
+                      <ActionBadge action={entry.action} /> <span className="text-gray-500 font-normal">{entry.target_type}</span>
                     </p>
                     <p className="text-xs text-gray-500 truncate">{entry.target_repr}</p>
                     <div className="flex items-center justify-between mt-1 text-xs text-gray-400">
@@ -1323,7 +1349,7 @@ export default function SuperAdminDashboard() {
                   <tbody className="bg-white divide-y divide-gray-200">
                     {activityLog.map((entry) => (
                       <tr key={entry.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 text-sm font-medium text-gray-900 capitalize">{entry.action.replace(/_/g, ' ')}</td>
+                        <td className="px-4 py-3 text-sm font-medium text-gray-900"><ActionBadge action={entry.action} /></td>
                         <td className="px-4 py-3 text-sm text-gray-500">
                           <span className="text-gray-700">{entry.target_type}</span> — {entry.target_repr}
                         </td>
@@ -1748,14 +1774,37 @@ export default function SuperAdminDashboard() {
 
 // ── Shared Components ─────────────────────────────────────────────────────────
 
-function TH({ children }) {
-  return <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{children}</th>
+function TH({ children, sortKey, activeSort, onSort }) {
+  if (!sortKey) {
+    return <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{children}</th>
+  }
+  const isActive = activeSort?.key === sortKey
+  return (
+    <th
+      onClick={() => onSort(sortKey)}
+      className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer select-none hover:text-gray-700"
+    >
+      <span className="inline-flex items-center gap-1">
+        {children}
+        <span className={`text-[10px] ${isActive ? 'text-gray-700' : 'text-gray-300'}`}>
+          {isActive ? (activeSort.dir === 'asc' ? '▲' : '▼') : '⇅'}
+        </span>
+      </span>
+    </th>
+  )
 }
 
-function Spinner() {
+function TableSkeleton({ rows = 5 }) {
   return (
-    <div className="text-center py-8">
-      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+    <div className="space-y-3 animate-pulse">
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} className="p-3 border border-gray-200 rounded-lg flex items-center gap-4">
+          <div className="h-4 bg-gray-200 rounded w-1/4" />
+          <div className="h-4 bg-gray-200 rounded w-1/6" />
+          <div className="h-4 bg-gray-200 rounded w-1/6 hidden sm:block" />
+          <div className="h-4 bg-gray-200 rounded w-16 hidden sm:block ml-auto" />
+        </div>
+      ))}
     </div>
   )
 }
@@ -1785,6 +1834,27 @@ function RoleBadge({ role, display }) {
   )
 }
 
+const ACTION_META = {
+  activate: { label: 'Activated', color: 'bg-green-500' },
+  bulk_activate: { label: 'Bulk Activated', color: 'bg-green-500' },
+  deactivate: { label: 'Deactivated', color: 'bg-red-500' },
+  bulk_deactivate: { label: 'Bulk Deactivated', color: 'bg-red-500' },
+  delete: { label: 'Deleted', color: 'bg-red-500' },
+  bulk_reassign_org: { label: 'Reassigned Organization', color: 'bg-purple-500' },
+  reset_password_set: { label: 'Password Reset', color: 'bg-blue-500' },
+  reset_password_email: { label: 'Reset Email Sent', color: 'bg-blue-500' },
+}
+
+function ActionBadge({ action }) {
+  const meta = ACTION_META[action] || { label: action.replace(/_/g, ' '), color: 'bg-gray-400' }
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span className={`w-2 h-2 rounded-full shrink-0 ${meta.color}`} />
+      {meta.label}
+    </span>
+  )
+}
+
 function TrendBadge({ current, previous }) {
   if (current === 0 && previous === 0) return null
   const diff = current - previous
@@ -1808,7 +1878,13 @@ function Field({ label, children }) {
 function Modal({ title, onClose, children, scroll }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-      <div className={`bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-md mx-4 ${scroll ? 'max-h-[90vh] overflow-y-auto' : ''}`}>
+      {/* Full-screen sheet below sm (cramped forms — e.g. the User modal's school
+          checkbox list — need the room); centered card at sm+ like before. */}
+      <div
+        className={`bg-white shadow-xl w-full h-full rounded-none p-4 overflow-y-auto
+          sm:h-auto sm:max-w-md sm:mx-4 sm:rounded-xl sm:p-6
+          ${scroll ? 'sm:max-h-[90vh]' : ''}`}
+      >
         <h2 className="text-xl font-bold text-gray-900 mb-4">{title}</h2>
         {children}
       </div>
