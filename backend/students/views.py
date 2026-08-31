@@ -67,7 +67,9 @@ class ClassViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet
         return ClassSerializer
 
     def get_queryset(self):
-        queryset = Class.objects.select_related('school')
+        queryset = Class.objects.select_related('school').annotate(
+            annotated_student_count=Count('students', filter=Q(students__is_active=True))
+        )
 
         active_school_id = ensure_tenant_school_id(self.request)
         if active_school_id:

@@ -208,7 +208,11 @@ class SchoolCalendarEntrySerializer(serializers.ModelSerializer):
 
     def get_class_names(self, obj):
         names = []
-        for class_obj in obj.classes.all().order_by('grade_level', 'name', 'section'):
+        classes = sorted(
+            obj.classes.all(),
+            key=lambda c: (c.grade_level, c.name, c.section or ''),
+        )
+        for class_obj in classes:
             if class_obj.section:
                 names.append(f"{class_obj.name} - {class_obj.section}")
             else:

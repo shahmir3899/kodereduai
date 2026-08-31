@@ -71,9 +71,12 @@ class ClassStudentWithEmbeddingSerializer(serializers.ModelSerializer):
 
     def __init__(self, *args, **kwargs):
         self.matched_student_ids = kwargs.pop('matched_student_ids', set())
+        self.embedded_student_ids = kwargs.pop('embedded_student_ids', None)
         super().__init__(*args, **kwargs)
 
     def get_has_embedding(self, obj):
+        if self.embedded_student_ids is not None:
+            return obj.id in self.embedded_student_ids
         return StudentFaceEmbedding.objects.filter(
             student=obj, is_active=True
         ).exists()
@@ -110,8 +113,14 @@ class FaceAttendanceSessionDetailSerializer(serializers.ModelSerializer):
         students = Student.objects.filter(
             class_obj=obj.class_obj, is_active=True
         ).order_by('roll_number', 'name')
+        embedded_student_ids = set(
+            StudentFaceEmbedding.objects.filter(
+                student__in=students, is_active=True
+            ).values_list('student_id', flat=True)
+        )
         return ClassStudentWithEmbeddingSerializer(
-            students, many=True, matched_student_ids=matched_ids
+            students, many=True, matched_student_ids=matched_ids,
+            embedded_student_ids=embedded_student_ids,
         ).data
 
 

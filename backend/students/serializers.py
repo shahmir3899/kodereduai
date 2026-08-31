@@ -9,7 +9,7 @@ from .models import Class, Student, StudentDocument
 # ── Class ─────────────────────────────────────────────────────
 
 class ClassSerializer(serializers.ModelSerializer):
-    student_count = serializers.IntegerField(read_only=True)
+    student_count = serializers.SerializerMethodField()
     school_name = serializers.CharField(source='school.name', read_only=True)
 
     class Meta:
@@ -20,6 +20,15 @@ class ClassSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def get_student_count(self, obj):
+        # Views that pre-annotate the queryset (e.g. ClassViewSet.get_queryset)
+        # avoid an extra per-row COUNT query; other callers fall back to the
+        # model property.
+        annotated = getattr(obj, 'annotated_student_count', None)
+        if annotated is not None:
+            return annotated
+        return obj.student_count
 
 
 class ClassCreateSerializer(serializers.ModelSerializer):

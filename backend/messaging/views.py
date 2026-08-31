@@ -1,5 +1,5 @@
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Q, Count
 from django.utils import timezone
 from django.contrib.auth import get_user_model
 from rest_framework import viewsets, status
@@ -473,7 +473,6 @@ def _find_existing_thread(user_id, recipient_user_id, student_id, school_id):
         qs = qs.filter(student__isnull=True)
 
     # Return first 2-person thread
-    for thread in qs:
-        if thread.participants.count() == 2:
-            return thread
-    return None
+    return qs.annotate(
+        participant_count=Count('participants')
+    ).filter(participant_count=2).first()

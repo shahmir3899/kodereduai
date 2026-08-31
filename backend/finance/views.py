@@ -3623,27 +3623,23 @@ class StudentDiscountViewSet(ModuleAccessMixin, viewsets.ModelViewSet):
             students_qs = students_qs.filter(class_obj__grade_level=grade_level)
 
         now = tz.now()
-        created_count = 0
-        skipped_count = 0
 
-        for student in students_qs:
-            # Check for existing active assignment
-            existing = StudentDiscount.objects.filter(
+        student_ids = list(students_qs.values_list('id', flat=True))
+        existing_student_ids = set(
+            StudentDiscount.objects.filter(
                 school_id=school_id,
-                student=student,
+                student_id__in=student_ids,
                 discount_id=discount_id if discount_id else None,
                 scholarship_id=scholarship_id if scholarship_id else None,
                 academic_year_id=academic_year_id,
                 is_active=True,
-            ).exists()
+            ).values_list('student_id', flat=True)
+        )
 
-            if existing:
-                skipped_count += 1
-                continue
-
-            StudentDiscount.objects.create(
+        to_create = [
+            StudentDiscount(
                 school_id=school_id,
-                student=student,
+                student_id=student_id,
                 discount_id=discount_id,
                 scholarship_id=scholarship_id,
                 academic_year_id=academic_year_id,
@@ -3651,12 +3647,15 @@ class StudentDiscountViewSet(ModuleAccessMixin, viewsets.ModelViewSet):
                 approved_at=now,
                 is_active=True,
             )
-            created_count += 1
+            for student_id in student_ids
+            if student_id not in existing_student_ids
+        ]
+        StudentDiscount.objects.bulk_create(to_create)
 
         return Response({
-            'created': created_count,
-            'skipped': skipped_count,
-            'total_students': students_qs.count(),
+            'created': len(to_create),
+            'skipped': len(existing_student_ids),
+            'total_students': len(student_ids),
         })
 
 

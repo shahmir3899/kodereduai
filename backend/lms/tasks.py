@@ -103,6 +103,87 @@ def process_toc_import_job(self, job_id: str):
         return {'success': False, 'job_id': str(job.id), 'status': job.status, 'error': str(exc)}
 
 
+@shared_task(bind=True, max_retries=1, time_limit=120)
+def generate_exam_questions_task(self, school_id, book_id, content_kind, page_start, page_end):
+    """Generate exam questions from exercise topics via Groq, asynchronously."""
+    import json
+    from django.conf import settings
+    from core.task_utils import mark_task_success, mark_task_failed, update_task_progress
+    from .content_retrieval import retrieve_topics_for_ai, build_prompt
+    from .models import Book
+
+    task_id = self.request.id
+
+    try:
+        book = Book.objects.select_related('school', 'class_obj', 'subject').get(
+            id=book_id, school_id=school_id,
+        )
+    except Book.DoesNotExist:
+        mark_task_failed(task_id, 'Book not found.')
+        return {'success': False, 'error': 'Book not found.'}
+
+    update_task_progress(task_id, current=0, total=2)
+
+    topic_dicts = retrieve_topics_for_ai(
+        book, content_kind=content_kind, page_start=page_start, page_end=page_end,
+    )
+    if not topic_dicts:
+        mark_task_failed(task_id, 'No matching topics found for the given filters.')
+        return {'success': False, 'error': 'No matching topics found for the given filters.'}
+
+    language_instruction = ''
+    if book.language in Book.RTL_LANGUAGES:
+        lang_name = book.get_language_display()
+        language_instruction = (
+            f'IMPORTANT: Generate all questions and answers in {lang_name}.'
+        )
+
+    prompt = build_prompt(
+        mode='exam',
+        school=book.school,
+        class_obj=book.class_obj,
+        subject=book.subject,
+        book=book,
+        topic_dicts=topic_dicts,
+        language_instruction=language_instruction,
+    )
+
+    if not getattr(settings, 'GROQ_API_KEY', None):
+        mark_task_failed(task_id, 'AI generation is not configured. GROQ_API_KEY is missing.')
+        return {'success': False, 'error': 'AI generation is not configured. GROQ_API_KEY is missing.'}
+
+    update_task_progress(task_id, current=1)
+
+    try:
+        from groq import Groq
+        client = Groq(api_key=settings.GROQ_API_KEY)
+        model_name = getattr(settings, 'GROQ_MODEL', 'llama-3.3-70b-versatile')
+        response = client.chat.completions.create(
+            model=model_name,
+            messages=[{'role': 'user', 'content': prompt}],
+            temperature=0.3,
+            max_tokens=3000,
+        )
+        result_text = response.choices[0].message.content
+        if '```json' in result_text:
+            result_text = result_text.split('```json')[1].split('```')[0]
+        elif '```' in result_text:
+            result_text = result_text.split('```')[1].split('```')[0]
+        result = json.loads(result_text.strip())
+    except json.JSONDecodeError as exc:
+        logger.error('Failed to parse exam AI response: %s', exc)
+        mark_task_failed(task_id, 'Failed to parse AI response. Please try again.')
+        return {'success': False, 'error': 'Failed to parse AI response. Please try again.'}
+    except Exception as exc:
+        logger.error('Exam AI generation failed: %s', exc)
+        mark_task_failed(task_id, str(exc))
+        return {'success': False, 'error': str(exc)}
+
+    result_data = {'success': True, **result}
+    mark_task_success(task_id, result_data=result_data)
+    return result_data
+
+
 @shared_task
 def mark_stale_toc_jobs_timed_out(max_age_minutes: int = 5):
     cutoff = timezone.now() - timezone.timedelta(minutes=max_age_minutes)

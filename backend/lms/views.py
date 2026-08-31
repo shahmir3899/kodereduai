@@ -1279,73 +1279,35 @@ def generate_exam_questions_ai(request):
     page_start = request.data.get('page_start')
     page_end   = request.data.get('page_end')
 
-    topic_dicts = retrieve_topics_for_ai(
-        book,
-        content_kind=content_kind,
-        page_start=page_start,
-        page_end=page_end,
+    from core.models import BackgroundTask
+    from core.task_utils import dispatch_background_task
+    from .tasks import generate_exam_questions_task
+
+    bg_task = dispatch_background_task(
+        celery_task_func=generate_exam_questions_task,
+        task_type=BackgroundTask.TaskType.EXAM_QUESTION_GENERATION,
+        title=f'Generating exam questions for {book.title}',
+        school_id=book.school_id,
+        user=request.user,
+        task_kwargs={
+            'school_id': book.school_id,
+            'book_id': book.id,
+            'content_kind': content_kind,
+            'page_start': page_start,
+            'page_end': page_end,
+        },
+        progress_total=2,
     )
 
-    if not topic_dicts:
-        return Response(
-            {'error': 'No matching topics found for the given filters.'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+    if bg_task.status == BackgroundTask.Status.FAILED:
+        return Response({'error': bg_task.error_message or 'Exam question generation failed.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    if bg_task.status == BackgroundTask.Status.SUCCESS:
+        return Response(bg_task.result_data or {'success': True})
 
-    # Language instruction for RTL books
-    language_instruction = ''
-    if book.language in Book.RTL_LANGUAGES:
-        lang_name = book.get_language_display()
-        language_instruction = (
-            f'IMPORTANT: Generate all questions and answers in {lang_name}.'
-        )
-
-    prompt = build_prompt(
-        mode='exam',
-        school=book.school,
-        class_obj=book.class_obj,
-        subject=book.subject,
-        book=book,
-        topic_dicts=topic_dicts,
-        language_instruction=language_instruction,
-    )
-
-    if not getattr(settings, 'GROQ_API_KEY', None):
-        return Response(
-            {'error': 'AI generation is not configured. GROQ_API_KEY is missing.'},
-            status=status.HTTP_503_SERVICE_UNAVAILABLE,
-        )
-
-    try:
-        from groq import Groq
-        client = Groq(api_key=settings.GROQ_API_KEY)
-        model_name = getattr(settings, 'GROQ_MODEL', 'llama-3.3-70b-versatile')
-        response = client.chat.completions.create(
-            model=model_name,
-            messages=[{'role': 'user', 'content': prompt}],
-            temperature=0.3,
-            max_tokens=3000,
-        )
-        result_text = response.choices[0].message.content
-        # Strip markdown fences
-        if '```json' in result_text:
-            result_text = result_text.split('```json')[1].split('```')[0]
-        elif '```' in result_text:
-            result_text = result_text.split('```')[1].split('```')[0]
-        result = json.loads(result_text.strip())
-        return Response({'success': True, **result})
-    except json.JSONDecodeError as exc:
-        logger.error('Failed to parse exam AI response: %s', exc)
-        return Response(
-            {'error': 'Failed to parse AI response. Please try again.'},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        )
-    except Exception as exc:
-        logger.error('Exam AI generation failed: %s', exc)
-        return Response(
-            {'error': str(exc)},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        )
+    return Response({
+        'task_id': bg_task.celery_task_id,
+        'message': 'Exam question generation started.',
+    }, status=status.HTTP_202_ACCEPTED)
 
 
 # ---------------------------------------------------------------------------
