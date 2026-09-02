@@ -34,10 +34,17 @@ logger = logging.getLogger(__name__)
 
 
 def _resolve_session_class_filter(request):
-    """Resolve session_class_id into (class_obj_id, academic_year_id)."""
+    """Resolve session_class_id into (class_obj_id, academic_year_id, session_class_id).
+
+    class_obj_id/academic_year_id are kept for callers that still need the master
+    class or year (display names, legacy no-session-class filtering); session_class_id
+    is the section-specific id and MUST be used to scope students/records so that two
+    sections sharing one master class (e.g. "Class 2 - A" and "Class 2 - B") don't get
+    pooled together.
+    """
     session_class_id = request.query_params.get('session_class_id')
     if not session_class_id:
-        return (None, None)
+        return (None, None, None)
 
     from academic_sessions.models import SessionClass
 
@@ -47,8 +54,8 @@ def _resolve_session_class_filter(request):
         qs = qs.filter(school_id=school_id)
     session_class = qs.first()
     if not session_class or not session_class.class_obj_id:
-        return (None, None)
-    return (session_class.class_obj_id, session_class.academic_year_id)
+        return (None, None, None)
+    return (session_class.class_obj_id, session_class.academic_year_id, session_class.id)
 
 
 def _resolve_session_class(request):
@@ -205,7 +212,7 @@ class AttendanceUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
         # Resolve scope first so class filtering can remain year-consistent.
         academic_year_id = self.request.query_params.get('academic_year')
         class_id = self.request.query_params.get('class_id')
-        session_class_obj_id, session_class_year_id = _resolve_session_class_filter(self.request)
+        session_class_obj_id, session_class_year_id, _session_class_id = _resolve_session_class_filter(self.request)
         if session_class_obj_id:
             class_id = session_class_obj_id
         if not academic_year_id and session_class_year_id:
@@ -707,7 +714,7 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
         # Resolve scope first so class filtering can remain year-consistent.
         academic_year_id = self.request.query_params.get('academic_year')
         class_id = self.request.query_params.get('class_id')
-        session_class_obj_id, session_class_year_id = _resolve_session_class_filter(self.request)
+        session_class_obj_id, session_class_year_id, session_class_id = _resolve_session_class_filter(self.request)
         if session_class_obj_id:
             class_id = session_class_obj_id
         if not academic_year_id and session_class_year_id:
@@ -715,7 +722,14 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
         if academic_year_id and session_class_year_id and str(academic_year_id) != str(session_class_year_id):
             return queryset.none()
 
-        if class_id:
+        if session_class_id:
+            # Scope to the actual section — class_obj_id alone would pool every
+            # section that shares this master class (e.g. "Class 2 - A"/"Class 2 - B").
+            queryset = queryset.filter(
+                student__enrollments__session_class_id=session_class_id,
+                student__enrollments__is_active=True,
+            )
+        elif class_id:
             if academic_year_id:
                 queryset = queryset.filter(
                     student__enrollments__academic_year_id=academic_year_id,
@@ -757,7 +771,7 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
         no unnecessary JOINs, no pagination COUNT(*) query.
         """
         class_id = request.query_params.get('class_id')
-        session_class_obj_id, session_class_year_id = _resolve_session_class_filter(request)
+        session_class_obj_id, session_class_year_id, session_class_id = _resolve_session_class_filter(request)
         if session_class_obj_id:
             class_id = session_class_obj_id
         date_from = request.query_params.get('date_from')
@@ -788,7 +802,15 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
             )
             .values('student_id', 'date', 'status')
         )
-        if academic_year_id:
+        if session_class_id:
+            # Scope to the actual section — class_obj_id alone would pool every
+            # section that shares this master class.
+            records = records.filter(
+                student__enrollments__session_class_id=session_class_id,
+                student__enrollments__is_active=True,
+                academic_year_id=academic_year_id,
+            )
+        elif academic_year_id:
             records = records.filter(
                 student__enrollments__academic_year_id=academic_year_id,
                 student__enrollments__class_obj_id=class_id,
@@ -822,7 +844,6 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
           }
         """
         from calendar import monthrange as _monthrange
-        from academic_sessions.models import SessionClass
 
         school_id = ensure_tenant_school_id(request)
         if not school_id:
@@ -852,20 +873,24 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
 
         rows = list(records_qs.values('student_id', 'date', 'status', 'student__class_obj_id'))
 
-        # Build class_obj_id → session_class_id lookup for the year
-        sc_qs = SessionClass.objects.filter(school_id=school_id, is_active=True)
+        # Build student_id → session_class_id lookup for the year. Keying by
+        # class_obj_id here would collapse every section sharing a master class
+        # onto whichever SessionClass happened to be picked last — bucket by the
+        # student's own active enrollment instead so sections stay separate.
+        from academic_sessions.models import StudentEnrollment
+        enroll_qs = StudentEnrollment.objects.filter(school_id=school_id, is_active=True)
         if academic_year_id:
-            sc_qs = sc_qs.filter(academic_year_id=academic_year_id)
-        class_obj_to_sc = {
-            sc['class_obj_id']: str(sc['id'])
-            for sc in sc_qs.values('id', 'class_obj_id')
-            if sc['class_obj_id']
+            enroll_qs = enroll_qs.filter(academic_year_id=academic_year_id)
+        student_to_sc = {
+            e['student_id']: str(e['session_class_id'])
+            for e in enroll_qs.values('student_id', 'session_class_id')
+            if e['session_class_id']
         }
 
         # Group rows by session_class_id
         by_class = {}
         for row in rows:
-            sc_id = class_obj_to_sc.get(row['student__class_obj_id'])
+            sc_id = student_to_sc.get(row['student_id'])
             if sc_id is None:
                 sc_id = f"c{row['student__class_obj_id']}" if row['student__class_obj_id'] else '__unknown__'
             if sc_id not in by_class:
@@ -1044,7 +1069,8 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
         academic_year_id = request.query_params.get('academic_year')
 
         # Resolve session_class_id if provided
-        session_class_obj_id, session_class_year_id = _resolve_session_class_filter(request)
+        requested_session_class_id = request.query_params.get('session_class_id')
+        session_class_obj_id, session_class_year_id, session_class_id = _resolve_session_class_filter(request)
         if session_class_obj_id:
             class_id = session_class_obj_id
         if not academic_year_id and session_class_year_id:
@@ -1078,15 +1104,26 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
         except School.DoesNotExist:
             return Response({'error': 'School not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-        # Permission check: teacher can only download assigned classes
+        # Permission check: teacher can only download assigned classes.
+        # get_teacher_session_class_scope returns SessionClass ids, so compare against
+        # the requested session_class_id (not class_id, which is the resolved master
+        # class and would let a teacher assigned to one section download another's PDF).
         user_role = get_effective_role(request)
         if user_role == 'TEACHER':
-            teacher_classes = get_teacher_session_class_scope(request)
-            if class_id not in [str(cid) for cid in teacher_classes]:
-                return Response(
-                    {'error': 'You do not have permission to download this class.'},
-                    status=status.HTTP_403_FORBIDDEN
-                )
+            teacher_session_classes = get_teacher_session_class_scope(request)
+            if requested_session_class_id:
+                if requested_session_class_id not in [str(cid) for cid in teacher_session_classes]:
+                    return Response(
+                        {'error': 'You do not have permission to download this class.'},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+            else:
+                teacher_classes = get_teacher_class_scope(request)
+                if class_id not in [str(cid) for cid in teacher_classes]:
+                    return Response(
+                        {'error': 'You do not have permission to download this class.'},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
 
         # Get class name
         try:
@@ -1103,7 +1140,14 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
 
         # Get enrolled students for the class
         students_qs = Student.objects.filter(school_id=school_id, is_active=True)
-        if academic_year_id:
+        if session_class_id:
+            # Scope to the actual section — class_obj_id alone would pool every
+            # section that shares this master class (duplicate roll numbers).
+            students_qs = students_qs.filter(
+                enrollments__session_class_id=session_class_id,
+                enrollments__is_active=True,
+            )
+        elif academic_year_id:
             students_qs = students_qs.filter(
                 enrollments__academic_year_id=academic_year_id,
                 enrollments__class_obj_id=class_id,
