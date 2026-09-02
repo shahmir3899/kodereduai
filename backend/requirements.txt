@@ -82,11 +82,14 @@ openpyxl>=3.1.0
 # other real dependency, previously pulled in transitively; now explicit since
 # --no-deps means nothing pulls it in automatically anymore. setuptools is
 # also explicit: face_recognition_models still does `from pkg_resources import
-# resource_filename`, and pip-created venvs on Python 3.12 no longer bundle
-# setuptools (and therefore pkg_resources) by default.
+# resource_filename`. pip-created venvs on Python 3.12 no longer bundle
+# setuptools by default, AND setuptools itself has been dropping pkg_resources
+# in its newer releases — so this must be pinned to a version confirmed to
+# still ship pkg_resources, not just "any" setuptools (an unpinned >= resolved
+# to 84.0.0 here, which no longer has pkg_resources at all).
 dlib-bin==20.0.1
 face-recognition-models>=0.3.0
-setuptools>=69.0
+setuptools==75.6.0
 numpy==1.26.4
 
 # Timetable Optimization
