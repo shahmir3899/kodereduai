@@ -33,6 +33,21 @@ class BaseReportGenerator:
         except (TypeError, ValueError):
             return None
 
+    def _session_class_id(self):
+        """Section id from `parameters`, if the caller passed one.
+
+        Filtering by class_obj_id alone pools every section sharing that master
+        class together (e.g. "Class 2 - A" and "Class 2 - B") — callers that scope
+        a report to a class should prefer this over class_obj_id when available.
+        """
+        session_class_id = self.parameters.get('session_class_id') or self.parameters.get('session_class')
+        if session_class_id in (None, ''):
+            return None
+        try:
+            return int(session_class_id)
+        except (TypeError, ValueError):
+            return None
+
     def _get_enrollment_map(self, student_ids):
         academic_year_id = self._academic_year_id()
         if not academic_year_id or not student_ids:

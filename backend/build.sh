@@ -13,6 +13,12 @@ export MAKEFLAGS="-j1"
 
 pip install -r requirements.txt
 
+# face_recognition is deliberately absent from requirements.txt (see comment there):
+# a normal `pip install face_recognition` would still resolve its own dlib>=19.7
+# dependency and rebuild it from source, re-introducing the OOM that dlib-bin exists
+# to avoid. --no-deps installs it against the dlib-bin already present above.
+pip install face_recognition==1.3.0 --no-deps
+
 echo "==> Collecting static files..."
 python manage.py collectstatic --no-input
 

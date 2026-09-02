@@ -17,6 +17,7 @@ class DailyAttendanceReportGenerator(BaseReportGenerator):
         report_date = self.parameters.get('date', date.today())
         class_id = self.parameters.get('class_id')
         academic_year_id = self._academic_year_id()
+        session_class_id = self._session_class_id()
 
         if isinstance(report_date, str):
             report_date = date.fromisoformat(report_date)
@@ -24,7 +25,12 @@ class DailyAttendanceReportGenerator(BaseReportGenerator):
         filters = {'school': self.school, 'date': report_date}
         if academic_year_id:
             filters['academic_year_id'] = academic_year_id
-        if class_id:
+        if session_class_id:
+            # Scope to the actual section — class_obj_id alone would pool every
+            # section that shares this master class.
+            filters['student__enrollments__session_class_id'] = session_class_id
+            filters['student__enrollments__is_active'] = True
+        elif class_id:
             if academic_year_id:
                 filters['student__enrollments__academic_year_id'] = academic_year_id
                 filters['student__enrollments__class_obj_id'] = class_id
@@ -53,7 +59,11 @@ class DailyAttendanceReportGenerator(BaseReportGenerator):
             ])
 
         class_name = ''
-        if class_id:
+        if session_class_id:
+            from academic_sessions.models import SessionClass
+            sc = SessionClass.objects.filter(id=session_class_id).first()
+            class_name = f" - {sc.display_name}" if sc else ''
+        elif class_id:
             cls = Class.objects.filter(id=class_id).first()
             class_name = f" - {cls.name}" if cls else ''
 
@@ -82,6 +92,7 @@ class MonthlyAttendanceReportGenerator(BaseReportGenerator):
         year = self.parameters.get('year', date.today().year)
         class_id = self.parameters.get('class_id')
         academic_year_id = self._academic_year_id()
+        session_class_id = self._session_class_id()
 
         filters = {
             'school': self.school,
@@ -90,7 +101,12 @@ class MonthlyAttendanceReportGenerator(BaseReportGenerator):
         }
         if academic_year_id:
             filters['academic_year_id'] = academic_year_id
-        if class_id:
+        if session_class_id:
+            # Scope to the actual section — class_obj_id alone would pool every
+            # section that shares this master class.
+            filters['student__enrollments__session_class_id'] = session_class_id
+            filters['student__enrollments__is_active'] = True
+        elif class_id:
             if academic_year_id:
                 filters['student__enrollments__academic_year_id'] = academic_year_id
                 filters['student__enrollments__class_obj_id'] = class_id
