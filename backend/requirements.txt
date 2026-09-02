@@ -80,9 +80,13 @@ openpyxl>=3.1.0
 # and rebuild from source) — it's installed with --no-deps in build.sh instead,
 # after dlib-bin is already present. face-recognition-models is face_recognition's
 # other real dependency, previously pulled in transitively; now explicit since
-# --no-deps means nothing pulls it in automatically anymore.
+# --no-deps means nothing pulls it in automatically anymore. setuptools is
+# also explicit: face_recognition_models still does `from pkg_resources import
+# resource_filename`, and pip-created venvs on Python 3.12 no longer bundle
+# setuptools (and therefore pkg_resources) by default.
 dlib-bin==20.0.1
 face-recognition-models>=0.3.0
+setuptools>=69.0
 numpy==1.26.4
 
 # Timetable Optimization

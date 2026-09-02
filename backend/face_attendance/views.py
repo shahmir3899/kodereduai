@@ -1118,7 +1118,13 @@ class FaceAttendanceStatusView(ModuleAccessMixin, APIView):
         try:
             import face_recognition  # noqa: F401
             face_available = True
-        except ImportError:
+        except (ImportError, SystemExit):
+            # face_recognition/api.py calls quit() -> SystemExit (not
+            # ImportError) when its own face_recognition_models dependency
+            # fails to import (e.g. missing pkg_resources). Uncaught,
+            # SystemExit escapes Django's middleware chain entirely — the
+            # response goes out with no CORS headers, which surfaces to the
+            # frontend as a CORS error instead of a normal 500.
             face_available = False
 
         from django.conf import settings
