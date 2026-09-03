@@ -831,6 +831,10 @@ export const notificationsApi = {
   // Analytics
   getAnalytics: (params) => api.get('/api/notifications/analytics/', { params }),
 
+  // Manual "run now" replacements for the old Celery Beat notification jobs.
+  // `data`: { job: 'fee_pending' | 'daily_report' | 'attendance_reminder', month?, year? }
+  runJob: (data) => api.post('/api/notifications/run/', data),
+
   // AI Communication Assistant
   sendChatMessage: (data) => api.post('/api/notifications/ai-chat/', data),
 }

@@ -180,9 +180,152 @@ def _create_marker(
         return False
 
 
+def _process_one_cohort_digest(
+    school,
+    engine,
+    admin_users,
+    academic_year,
+    target_date,
+    class_obj_id,
+    session_class_id,
+    stats: Dict[str, int],
+) -> None:
+    """
+    Run the digest for a single (class, section) cohort, mutating `stats`.
+
+    Shared by the school-wide scan (`process_absence_digest_for_school`, used by
+    the manual backfill command) and the event-driven single-cohort entry point
+    (`process_absence_digest_for_cohort`, called right after a class's register
+    is saved).
+    """
+    stats['cohorts_total'] += 1
+    student_ids = _active_enrollment_student_ids(
+        school.id, academic_year.id, class_obj_id, session_class_id
+    )
+    if not student_ids:
+        stats['cohorts_incomplete'] += 1
+        return
+
+    if is_off_day_for_date(school.id, target_date, class_id=class_obj_id):
+        stats['skipped_off_day'] += 1
+        return
+
+    by_student = _records_for_students(school.id, target_date, student_ids)
+    if len(by_student) < len(student_ids):
+        stats['cohorts_incomplete'] += 1
+        return
+
+    scope_key = _staff_scope_key(class_obj_id, session_class_id)
+    teacher_users = _teachers_for_cohort(
+        school.id, academic_year.id, class_obj_id, session_class_id
+    )
+
+    if not _staff_marker_exists(school.id, target_date, scope_key):
+        absent_records = [
+            by_student[sid]
+            for sid in student_ids
+            if by_student[sid].status == AttendanceRecord.AttendanceStatus.ABSENT
+        ]
+        absent_count = len(absent_records)
+        label = _cohort_class_label(class_obj_id, session_class_id)
+        date_with_day = target_date.strftime('%d %B %Y (%A)')
+        absent_names = ', '.join(
+            sorted(
+                {
+                    (rec.student.name or '').strip()
+                    for rec in absent_records
+                    if getattr(rec, 'student', None)
+                    and getattr(rec.student, 'name', None)
+                }
+            )
+        ) or 'None'
+        title = f'{label} — {absent_count} absent - {date_with_day}'
+        body = absent_names
+
+        if _create_marker(
+            school.id,
+            target_date,
+            AttendanceAbsenceInAppDigestMarker.DigestType.STAFF_CLASS,
+            scope_key,
+        ):
+            stats['cohorts_staff_digest'] += 1
+
+            admin_ids = {u.id for u in admin_users}
+            staff_recipients: List[Tuple[object, str]] = []
+            for user in admin_users:
+                staff_recipients.append((user, 'ADMIN'))
+            for user in teacher_users:
+                if user.id not in admin_ids:
+                    staff_recipients.append((user, 'STAFF'))
+
+            for user, recipient_type in staff_recipients:
+                engine.send(
+                    event_type='ABSENCE',
+                    channel='IN_APP',
+                    context={},
+                    recipient_identifier=str(user.id),
+                    recipient_type=recipient_type,
+                    recipient_user=user,
+                    student=None,
+                    title=title,
+                    body=body,
+                )
+
+    # Parent in-app (own child only); one per absent student per day.
+    date_h = target_date.strftime('%d %B %Y')
+    cohort_label = _cohort_class_label(class_obj_id, session_class_id)
+    for sid in student_ids:
+        rec = by_student.get(sid)
+        if (
+            not rec
+            or rec.status != AttendanceRecord.AttendanceStatus.ABSENT
+        ):
+            continue
+        if _parent_marker_exists(school.id, target_date, sid):
+            continue
+        student = rec.student
+        parents = get_parent_users_for_student(student)
+        if not parents:
+            continue
+
+        delivered = 0
+        for parent_user in parents:
+            log = engine.send(
+                event_type='ABSENCE',
+                channel='IN_APP',
+                context={
+                    'student_name': student.name,
+                    'class_name': cohort_label,
+                    'date': date_h,
+                    'school_name': school.name,
+                    'roll_number': student.roll_number,
+                },
+                recipient_identifier=str(parent_user.id),
+                recipient_type='PARENT',
+                recipient_user=parent_user,
+                student=student,
+                title=f'Absence: {student.name} ({cohort_label})',
+                body=f'{student.name} was marked absent on {date_h}.',
+            )
+            if log and log.status == 'SENT':
+                delivered += 1
+                stats['parent_absence_sent'] += 1
+
+        if delivered:
+            _create_marker(
+                school.id,
+                target_date,
+                AttendanceAbsenceInAppDigestMarker.DigestType.PARENT_STUDENT,
+                scope_key=_parent_scope_key(sid),
+            )
+
+
 def process_absence_digest_for_school(school, target_date) -> Dict[str, int]:
     """
-    Run one digest scan for a single school and calendar date.
+    Run one digest scan for a single school and calendar date, across every
+    cohort. Kept for the manual backfill management command
+    (`run_today_notifications`) — the live save path uses
+    `process_absence_digest_for_cohort` for just the cohort that changed.
 
     Returns counters for observability (not necessarily equal to notifications
     if channel/preference skips).
@@ -217,127 +360,48 @@ def process_absence_digest_for_school(school, target_date) -> Dict[str, int]:
     cohort_keys = _iter_cohort_keys(school.id, academic_year.id)
 
     for class_obj_id, session_class_id in cohort_keys:
-        stats['cohorts_total'] += 1
-        student_ids = _active_enrollment_student_ids(
-            school.id, academic_year.id, class_obj_id, session_class_id
-        )
-        if not student_ids:
-            stats['cohorts_incomplete'] += 1
-            continue
-
-        if is_off_day_for_date(school.id, target_date, class_id=class_obj_id):
-            stats['skipped_off_day'] += 1
-            continue
-
-        by_student = _records_for_students(school.id, target_date, student_ids)
-        if len(by_student) < len(student_ids):
-            stats['cohorts_incomplete'] += 1
-            continue
-
-        scope_key = _staff_scope_key(class_obj_id, session_class_id)
-        teacher_users = _teachers_for_cohort(
-            school.id, academic_year.id, class_obj_id, session_class_id
+        _process_one_cohort_digest(
+            school, engine, admin_users, academic_year, target_date,
+            class_obj_id, session_class_id, stats,
         )
 
-        if not _staff_marker_exists(school.id, target_date, scope_key):
-            absent_records = [
-                by_student[sid]
-                for sid in student_ids
-                if by_student[sid].status == AttendanceRecord.AttendanceStatus.ABSENT
-            ]
-            absent_count = len(absent_records)
-            label = _cohort_class_label(class_obj_id, session_class_id)
-            date_with_day = target_date.strftime('%d %B %Y (%A)')
-            absent_names = ', '.join(
-                sorted(
-                    {
-                        (rec.student.name or '').strip()
-                        for rec in absent_records
-                        if getattr(rec, 'student', None)
-                        and getattr(rec.student, 'name', None)
-                    }
-                )
-            ) or 'None'
-            title = f'{label} — {absent_count} absent - {date_with_day}'
-            body = absent_names
+    return stats
 
-            if _create_marker(
-                school.id,
-                target_date,
-                AttendanceAbsenceInAppDigestMarker.DigestType.STAFF_CLASS,
-                scope_key,
-            ):
-                stats['cohorts_staff_digest'] += 1
 
-                admin_ids = {u.id for u in admin_users}
-                staff_recipients: List[Tuple[object, str]] = []
-                for user in admin_users:
-                    staff_recipients.append((user, 'ADMIN'))
-                for user in teacher_users:
-                    if user.id not in admin_ids:
-                        staff_recipients.append((user, 'STAFF'))
+def process_absence_digest_for_cohort(
+    school, target_date, class_obj_id, session_class_id, academic_year,
+) -> Dict[str, int]:
+    """
+    Run the absence digest for exactly one (class, section) cohort, right after
+    its register was saved — the event-driven replacement for the old 8/9/10
+    o'clock Celery Beat scan. `academic_year` is the AcademicYear the register
+    was saved under (required — a cohort with no current academic year can't be
+    scoped, so callers should skip when they don't have one).
 
-                for user, recipient_type in staff_recipients:
-                    engine.send(
-                        event_type='ABSENCE',
-                        channel='IN_APP',
-                        context={},
-                        recipient_identifier=str(user.id),
-                        recipient_type=recipient_type,
-                        recipient_user=user,
-                        student=None,
-                        title=title,
-                        body=body,
-                    )
+    Idempotent: reuses the same `AttendanceAbsenceInAppDigestMarker` guard as
+    `process_absence_digest_for_school`, so re-saving the same class/date is safe.
+    """
+    stats = {
+        'cohorts_total': 0,
+        'cohorts_incomplete': 0,
+        'cohorts_staff_digest': 0,
+        'parent_absence_sent': 0,
+        'skipped_off_day': 0,
+    }
 
-        # Parent in-app (own child only); one per absent student per day.
-        date_h = target_date.strftime('%d %B %Y')
-        cohort_label = _cohort_class_label(class_obj_id, session_class_id)
-        for sid in student_ids:
-            rec = by_student.get(sid)
-            if (
-                not rec
-                or rec.status != AttendanceRecord.AttendanceStatus.ABSENT
-            ):
-                continue
-            if _parent_marker_exists(school.id, target_date, sid):
-                continue
-            student = rec.student
-            parents = get_parent_users_for_student(student)
-            if not parents:
-                continue
+    try:
+        config = school.notification_config
+    except SchoolNotificationConfig.DoesNotExist:
+        config = None
+    if config and not config.absence_notification_enabled:
+        return stats
 
-            delivered = 0
-            for parent_user in parents:
-                log = engine.send(
-                    event_type='ABSENCE',
-                    channel='IN_APP',
-                    context={
-                        'student_name': student.name,
-                        'class_name': cohort_label,
-                        'date': date_h,
-                        'school_name': school.name,
-                        'roll_number': student.roll_number,
-                    },
-                    recipient_identifier=str(parent_user.id),
-                    recipient_type='PARENT',
-                    recipient_user=parent_user,
-                    student=student,
-                    title=f'Absence: {student.name} ({cohort_label})',
-                    body=f'{student.name} was marked absent on {date_h}.',
-                )
-                if log and log.status == 'SENT':
-                    delivered += 1
-                    stats['parent_absence_sent'] += 1
-
-            if delivered:
-                _create_marker(
-                    school.id,
-                    target_date,
-                    AttendanceAbsenceInAppDigestMarker.DigestType.PARENT_STUDENT,
-                    scope_key=_parent_scope_key(sid),
-                )
-
+    engine = NotificationEngine(school)
+    admin_users = get_admin_users(school)
+    _process_one_cohort_digest(
+        school, engine, admin_users, academic_year, target_date,
+        class_obj_id, session_class_id, stats,
+    )
     return stats
 
 

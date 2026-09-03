@@ -305,6 +305,7 @@ def detect_accuracy_drift():
             if drift:
                 try:
                     from notifications.triggers import trigger_general
+                    from notifications.recipients import get_admin_users
                     trigger_general(
                         school=school,
                         title='AI Accuracy Drift Detected',
@@ -313,7 +314,7 @@ def detect_accuracy_drift():
                             f"to {day_accuracy:.0%} on {yesterday}. "
                             f"Review recent uploads and consider adjusting thresholds."
                         ),
-                        recipient_type='ADMIN',
+                        recipient_users=get_admin_users(school),
                     )
                 except Exception as e:
                     logger.warning(f"[Drift] Failed to send alert for school {school.id}: {e}")
@@ -454,11 +455,12 @@ def detect_attendance_anomalies():
             if today_anomalies > 0:
                 try:
                     from notifications.triggers import trigger_general
+                    from notifications.recipients import get_admin_users
                     trigger_general(
                         school=school,
                         title=f'{today_anomalies} Attendance Anomal{"ies" if today_anomalies > 1 else "y"} Detected',
                         body=f'{today_anomalies} unusual attendance pattern(s) detected on {yesterday}. Review the anomalies page for details.',
-                        recipient_type='ADMIN',
+                        recipient_users=get_admin_users(school),
                     )
                 except Exception as e:
                     logger.warning(f"[Anomaly] Alert failed for school {school.id}: {e}")

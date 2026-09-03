@@ -314,16 +314,18 @@ def recompute_attendance_risk_snapshots():
     Nightly Celery Beat job (not user-triggered, no progress tracking needed —
     see CLAUDE.md's three background-execution paths). Recomputes the
     AI Attendance Risk Predictor for every active school's current academic
-    year, caches it in AttendanceRiskSnapshot, and fires an in-app alert to
-    admins/principals for any school with new HIGH-severity students.
+    year and caches it in AttendanceRiskSnapshot for the Attendance Risk
+    Monitor UI to read.
+
+    No longer fires an in-app alert for HIGH-severity schools — the
+    ATTENDANCE_RISK notification (notifications.triggers.trigger_attendance_risk_alerts)
+    was removed; admins/principals check the Attendance Risk Monitor directly.
     """
     from schools.models import School
     from academic_sessions.models import AcademicYear, AttendanceRiskSnapshot
     from academic_sessions.attendance_risk_service import AttendanceRiskService
-    from notifications.triggers import trigger_attendance_risk_alerts
 
     processed_schools = 0
-    alerted_schools = 0
 
     for school in School.objects.filter(is_active=True):
         try:
@@ -347,18 +349,11 @@ def recompute_attendance_risk_snapshots():
                 },
             )
             processed_schools += 1
-
-            if report['risk_levels'].get('HIGH', 0) > 0:
-                if trigger_attendance_risk_alerts(school, report):
-                    alerted_schools += 1
         except Exception as e:
             logger.error(f"Attendance risk snapshot failed for school {school.id}: {e}")
 
-    logger.info(
-        f"Attendance risk snapshots recomputed for {processed_schools} schools, "
-        f"{alerted_schools} alerted."
-    )
-    return {'processed_schools': processed_schools, 'alerted_schools': alerted_schools}
+    logger.info(f"Attendance risk snapshots recomputed for {processed_schools} schools.")
+    return {'processed_schools': processed_schools}
 
 
 @shared_task

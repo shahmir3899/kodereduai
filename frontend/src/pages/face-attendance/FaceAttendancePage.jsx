@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../../contexts/AuthContext'
@@ -79,7 +79,18 @@ export default function FaceAttendancePage() {
   })
 
   // Load face recognition status (also carries the Fixed Camera device status badge below)
-  const { status: faceStatus, fixedCameraStatus } = useFaceAttendanceStatus()
+  const { status: faceStatusQuery, fixedCameraStatus } = useFaceAttendanceStatus()
+  // Mirrored into local state via an effect rather than read directly from the
+  // query result — on some client browsers the committed DOM was observed to
+  // lag behind an already-updated query cache for this specific banner (the
+  // rest of the page reflected fresh data correctly), so this banner alone
+  // never cleared after face_recognition_available flipped true server-side.
+  // An explicit effect-driven state update forces a normal React commit cycle
+  // instead of relying on the query hook's snapshot being read to date inline.
+  const [faceStatus, setFaceStatus] = useState(faceStatusQuery)
+  useEffect(() => {
+    setFaceStatus(faceStatusQuery)
+  }, [faceStatusQuery])
 
   // Load recent sessions
   const { data: sessionsData, isLoading: sessionsLoading } = useQuery({

@@ -4,7 +4,8 @@ from unittest.mock import patch
 import pytest
 
 from notifications.models import NotificationLog, SchoolNotificationConfig
-from notifications.triggers import trigger_daily_school_report, trigger_lesson_plan_published
+from notifications.recipients import get_admin_users
+from notifications.triggers import trigger_daily_school_report, trigger_general, trigger_lesson_plan_published
 from parents.models import ParentChild, ParentProfile
 from schools.models import UserSchoolMembership
 from students.models import StudentProfile
@@ -204,3 +205,34 @@ class TestNotificationCorrectnessTriggers:
         assert first == expected_recipient_count
         assert second == 0
         assert logs.count() == expected_recipient_count
+
+    def test_trigger_general_accepts_admin_only_recipient_users(self, seed_data):
+        """
+        Regression test for attendance/tasks.py::detect_accuracy_drift() and
+        detect_attendance_anomalies(), which call
+        trigger_general(recipient_users=get_admin_users(school)) to restrict
+        alerts to admins. trigger_general has no `recipient_type` kwarg — it
+        takes `recipient_users` — so this exercises the exact call shape
+        those tasks use and would have caught the TypeError they were
+        silently swallowing via `except Exception`.
+        """
+        school = seed_data['school_a']
+        admin_users = get_admin_users(school)
+        assert admin_users, "seed_data should provide at least one admin/principal for school_a"
+
+        sent = trigger_general(
+            school=school,
+            title='AI Accuracy Drift Detected',
+            body='Attendance AI accuracy dropped from 90% to 70%.',
+            recipient_users=admin_users,
+        )
+
+        assert sent == len(admin_users)
+        for admin_user in admin_users:
+            assert NotificationLog.objects.filter(
+                school=school,
+                channel='IN_APP',
+                event_type='GENERAL',
+                recipient_user=admin_user,
+                title='AI Accuracy Drift Detected',
+            ).exists()

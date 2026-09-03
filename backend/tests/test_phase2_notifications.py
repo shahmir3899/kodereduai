@@ -1315,14 +1315,14 @@ class TestNotificationTriggers:
         ).count()
         assert trigger_count > 0, "trigger_general should create notification logs"
 
-    def test_trigger_fee_reminder_runs_without_error(self, seed_data, api):
-        from notifications.triggers import trigger_fee_reminder
+    def test_trigger_fee_pending_in_app_runs_without_error(self, seed_data, api):
+        from notifications.triggers import trigger_fee_pending_in_app
 
         school = seed_data['school_a']
 
-        # Should not raise an exception even without real WhatsApp config
-        trigger_fee_reminder(school, month=2, year=2026)
-        assert True, "trigger_fee_reminder should run without error"
+        # Should not raise even with no pending fee payments for the period.
+        trigger_fee_pending_in_app(school, month=2, year=2026)
+        assert True, "trigger_fee_pending_in_app should run without error"
 
 
 # ---------------------------------------------------------------------------

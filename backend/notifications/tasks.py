@@ -15,10 +15,16 @@ logger = logging.getLogger(__name__)
 @shared_task
 def run_scheduled_absence_in_app_digest(force: bool = False, now_iso: str | None = None):
     """
-    Three daily scans at 08:00, 09:00, and 10:00 (Asia/Karachi — see CELERY_TIMEZONE).
+    All-schools/all-cohorts absence digest scan. Not on Celery Beat any more —
+    the live path is event-driven: `attendance.views.AttendanceRecordViewSet
+    .bulk_entry` calls `notifications.absence_digest.process_absence_digest_for_cohort`
+    directly for the cohort just saved, right when the register is completed.
+    This all-schools version is kept as a manual backfill tool (see
+    `run_today_notifications` / `run_scheduled_jobs` management commands) for
+    registers saved through some other path, or to catch up after downtime.
 
     For each class cohort, sends consolidated staff digests and parent absent notices
-    only after every enrolled student has an attendance row for today.
+    only after every enrolled student has an attendance row for the target date.
     """
     from django.utils import timezone
 
@@ -48,88 +54,15 @@ def _get_daily_report_send_time(config):
 
 
 @shared_task
-def send_fee_reminders():
-    """
-    Monthly fee reminder task.
-    Sends reminders to parents with unpaid fees for the current month.
-    Scheduler can invoke this task daily; per-school config decides due day.
-    """
-    from schools.models import School
-    from .models import SchoolNotificationConfig
-    from .triggers import trigger_fee_reminder
-
-    now = timezone.now()
-    month = now.month
-    year = now.year
-
-    schools = School.objects.filter(is_active=True)
-    total_sent = 0
-    processed_schools = 0
-
-    for school in schools:
-        try:
-            config = SchoolNotificationConfig.objects.filter(school=school).first()
-            reminder_day = config.fee_reminder_day if config else 5
-
-            if now.day != reminder_day:
-                logger.info(
-                    "Skipped fee reminders",
-                    extra={
-                        'reason_code': 'skipped_due_to_schedule',
-                        'school_id': school.id,
-                        'scheduled_day': reminder_day,
-                        'current_day': now.day,
-                    },
-                )
-                continue
-
-            sent = trigger_fee_reminder(school, month, year)
-            total_sent += sent
-            processed_schools += 1
-        except Exception as e:
-            logger.error(f"Fee reminder failed for {school.name}: {e}")
-
-    logger.info(
-        f"Fee reminders complete: {total_sent} sent across {processed_schools} due schools"
-    )
-    return {'total_sent': total_sent, 'processed_schools': processed_schools}
-
-
-@shared_task
-def send_fee_overdue_alerts():
-    """
-    Weekly check for overdue fees.
-    Sends alerts for fees that are still pending from the previous month.
-    """
-    from schools.models import School
-    from .triggers import trigger_fee_overdue
-
-    now = timezone.now()
-    # Check previous month
-    if now.month == 1:
-        prev_month, prev_year = 12, now.year - 1
-    else:
-        prev_month, prev_year = now.month - 1, now.year
-
-    schools = School.objects.filter(is_active=True)
-    total_sent = 0
-
-    for school in schools:
-        try:
-            sent = trigger_fee_overdue(school, prev_month, prev_year)
-            total_sent += sent
-        except Exception as e:
-            logger.error(f"Fee overdue alert failed for {school.name}: {e}")
-
-    logger.info(f"Fee overdue alerts complete: {total_sent} sent")
-    return {'total_sent': total_sent}
-
-
-@shared_task
 def send_fee_pending_in_app_notifications():
     """
-    Consolidated fee pending in-app notifications.
-    Runs on the 5th and 8th of each month.
+    All-schools sweep for consolidated fee-pending in-app notifications.
+    Not on Celery Beat any more — the live path is event-driven:
+    `finance.tasks.generate_monthly_fees_task` calls
+    `notifications.triggers.trigger_fee_pending_in_app` directly for its school
+    right after fee records are generated. Admins can also re-run it for the
+    current school from the Notifications page ("Send Fee Reminders Now").
+    This all-schools version stays as a manual `run_scheduled_jobs` backfill.
     """
     from schools.models import School
     from .triggers import trigger_fee_pending_in_app
@@ -157,11 +90,12 @@ def send_fee_pending_in_app_notifications():
 @shared_task
 def send_daily_absence_summary():
     """
-    Daily comprehensive school report sent to SCHOOL_ADMIN and PRINCIPAL users.
+    All-schools sweep for the daily school report (SCHOOL_ADMIN/PRINCIPAL).
     Covers: attendance, lesson plans submitted today, pending fees, staff leave.
-    Scheduler can invoke this task frequently; per-school configured
-    daily_absence_summary_time determines when each school is due.
-    Replaces the old absence-only summary; uses trigger_daily_school_report().
+    Not on Celery Beat any more — "end of day" has no single triggering event,
+    so admins run it on demand from the Notifications page
+    ("Generate Daily Report Now", per-school). This all-schools version stays
+    as a manual `run_scheduled_jobs` backfill.
     """
     from schools.models import School
     from .models import SchoolNotificationConfig
@@ -218,38 +152,12 @@ def send_daily_absence_summary():
 
 
 @shared_task
-def send_class_teacher_fee_reminders():
-    """
-    Send consolidated fee-pending notifications to class teachers.
-    Each teacher gets a single in-app message listing unpaid students in
-    their class for the current month.
-    Runs on the 10th and 15th of each month (see CELERY_BEAT_SCHEDULE).
-    """
-    from schools.models import School
-    from .triggers import trigger_class_teacher_fee_pending
-
-    now = timezone.now()
-    month = now.month
-    year = now.year
-
-    schools = School.objects.filter(is_active=True)
-    total_sent = 0
-
-    for school in schools:
-        try:
-            sent = trigger_class_teacher_fee_pending(school, month, year)
-            total_sent += sent
-        except Exception as e:
-            logger.error(f"Class-teacher fee reminder failed for {school.name}: {e}")
-
-    logger.info(f"Class-teacher fee reminders complete: {total_sent} teachers notified")
-    return {'total_sent': total_sent}
-
-
-@shared_task
 def send_class_teacher_attendance_reminders():
     """
-    Send class-teacher reminders at 11:00 when attendance is still unmarked.
+    All-schools sweep for class-teacher "please mark attendance" reminders.
+    Not on Celery Beat any more — the per-school version of this is now an
+    admin-triggered action (see RunNotificationJobView, job='attendance_reminder').
+    Kept callable for the manual `run_scheduled_jobs` backfill command.
 
     Conditions per assignment:
     - Day is not OFF day for that class

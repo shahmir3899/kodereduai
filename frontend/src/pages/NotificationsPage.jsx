@@ -575,6 +575,84 @@ function TemplatesTab() {
   )
 }
 
+// === RUN JOBS PANEL (manual replacements for the old Celery Beat jobs) ===
+
+function RunJobsPanel() {
+  const { showError, showSuccess } = useToast()
+  const now = new Date()
+  const [feeMonth, setFeeMonth] = useState(now.getMonth() + 1)
+  const [feeYear, setFeeYear] = useState(now.getFullYear())
+
+  const runMutation = useMutation({
+    mutationFn: (data) => notificationsApi.runJob(data),
+    onSuccess: (res, variables) => {
+      const { sent } = res.data || {}
+      const labels = {
+        fee_pending: 'Fee reminders',
+        daily_report: 'Daily report',
+        attendance_reminder: 'Attendance reminders',
+      }
+      showSuccess(`${labels[variables.job] || 'Job'} sent (${sent ?? 0}).`)
+    },
+    onError: (err) => showError(err.response?.data?.detail || 'Failed to run job'),
+  })
+
+  const runningJob = runMutation.isPending ? runMutation.variables?.job : null
+
+  return (
+    <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 space-y-3">
+      <div>
+        <p className="text-sm font-semibold text-gray-900">Run Now</p>
+        <p className="text-xs text-gray-500">
+          These used to run automatically on a schedule. Now they fire from the
+          action that causes them (fee generation, attendance saved) — use these
+          buttons to trigger this school's copy on demand.
+        </p>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <select
+          value={feeMonth}
+          onChange={(e) => setFeeMonth(Number(e.target.value))}
+          className="text-xs border-gray-300 rounded-lg"
+        >
+          {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+            <option key={m} value={m}>{m}</option>
+          ))}
+        </select>
+        <input
+          type="number"
+          value={feeYear}
+          onChange={(e) => setFeeYear(Number(e.target.value))}
+          className="text-xs border-gray-300 rounded-lg w-20"
+        />
+        <button
+          onClick={() => runMutation.mutate({ job: 'fee_pending', month: feeMonth, year: feeYear })}
+          disabled={runMutation.isPending}
+          className="px-3 py-1.5 bg-white border border-gray-300 rounded-lg hover:bg-gray-100 text-xs font-medium disabled:opacity-50"
+        >
+          {runningJob === 'fee_pending' ? 'Sending...' : 'Send Fee Reminders Now'}
+        </button>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <button
+          onClick={() => runMutation.mutate({ job: 'daily_report' })}
+          disabled={runMutation.isPending}
+          className="px-3 py-1.5 bg-white border border-gray-300 rounded-lg hover:bg-gray-100 text-xs font-medium disabled:opacity-50"
+        >
+          {runningJob === 'daily_report' ? 'Sending...' : 'Generate Daily Report Now'}
+        </button>
+        <button
+          onClick={() => runMutation.mutate({ job: 'attendance_reminder' })}
+          disabled={runMutation.isPending}
+          className="px-3 py-1.5 bg-white border border-gray-300 rounded-lg hover:bg-gray-100 text-xs font-medium disabled:opacity-50"
+        >
+          {runningJob === 'attendance_reminder' ? 'Sending...' : 'Remind Teachers to Mark Attendance'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // === SEND TAB ===
 
 function SendTab() {
@@ -740,6 +818,7 @@ function SendTab() {
 
   return (
     <div className="max-w-xl space-y-4">
+      <RunJobsPanel />
       <div className="rounded-lg border border-amber-100 bg-amber-50 p-3 text-xs text-amber-800">
         <strong>In-App</strong> already includes mobile push fanout. Push is not a separate send channel here.
       </div>
@@ -1194,7 +1273,7 @@ function SettingsTab() {
                   Sends in-app absence summaries after each class register is complete for the day.
                 </p>
                 <p className="text-[11px] text-amber-700 bg-amber-50 rounded px-2 py-0.5 mt-1.5 inline-block">
-                  In-app scans at 8:00, 9:00, and 10:00 — one message per class for admins/teachers; parents only if their child is absent
+                  Sent the moment a class's register is saved complete — one message per class for admins/teachers; parents only if their child is absent
                 </p>
               </div>
               <ToggleSwitch
@@ -1213,7 +1292,7 @@ function SettingsTab() {
                   Sends in-app fee pending alerts to admins/principal per class, class teachers for assigned classes, and parent/student self notifications.
                 </p>
                 <p className="text-[11px] text-amber-700 bg-amber-50 rounded px-2 py-0.5 mt-1.5 inline-block">
-                  Runs on day 5 and day 8 of each month
+                  Sent right after fees are generated for a month — or on demand from the Send tab
                 </p>
               </div>
               <ToggleSwitch

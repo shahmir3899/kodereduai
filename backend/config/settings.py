@@ -350,27 +350,14 @@ if CELERY_BROKER_URL.startswith('rediss://'):
 from celery.schedules import crontab
 
 CELERY_BEAT_SCHEDULE = {
-    'fee-pending-in-app-5th': {
-        'task': 'notifications.tasks.send_fee_pending_in_app_notifications',
-        'schedule': crontab(day_of_month='5', hour='9', minute='0'),
-    },
-    'fee-pending-in-app-8th': {
-        'task': 'notifications.tasks.send_fee_pending_in_app_notifications',
-        'schedule': crontab(day_of_month='8', hour='9', minute='0'),
-    },
-    'daily-absence-summary': {
-        'task': 'notifications.tasks.send_daily_absence_summary',
-        # Runtime checks per-school daily_absence_summary_time against a
-        # 10-minute window aligned to the cron tick (00, 10, 20, ...). The task
-        # itself dedupes via _daily_notification_already_sent so re-running
-        # within the window is harmless. Every-minute polling was costing
-        # ~1,440 Beat publishes/day to Upstash; every 10 min is ~144/day.
-        'schedule': crontab(minute='*/10'),
-    },
-    'scheduled-absence-in-app-digest': {
-        'task': 'notifications.tasks.run_scheduled_absence_in_app_digest',
-        'schedule': crontab(hour='8,9,10', minute='0'),
-    },
+    # Fee-pending (in-app), daily school report, and the absence digest used to
+    # poll here (day-5/8, every-10-min window, 8/9/10 scan). They're event-driven
+    # now — see finance.tasks.generate_monthly_fees_task and
+    # attendance.views.AttendanceRecordViewSet.bulk_entry — or admin-triggered
+    # from the Notifications page (RunNotificationJobView). The underlying task
+    # functions (notifications.tasks.send_fee_pending_in_app_notifications,
+    # send_daily_absence_summary, run_scheduled_absence_in_app_digest) remain as
+    # manual `run_scheduled_jobs` backfills, just unregistered from Beat.
     'process-notification-queue': {
         'task': 'notifications.tasks.process_notification_queue',
         'schedule': crontab(minute='*/10'),
@@ -415,10 +402,11 @@ CELERY_BEAT_SCHEDULE = {
     # Accuracy drift + anomaly detection tasks intentionally unscheduled —
     # too noisy for daily in-app alerts. Tasks kept in attendance/tasks.py
     # and can be re-enabled manually or per-school as needed.
-    'class-teacher-attendance-reminder-11am': {
-        'task': 'notifications.tasks.send_class_teacher_attendance_reminders',
-        'schedule': crontab(hour='11', minute='0'),
-    },
+    #
+    # class-teacher-attendance-reminder-11am removed — "still not marked by
+    # 11am" is admin-triggered on demand now (RunNotificationJobView,
+    # job='attendance_reminder'); notifications.tasks.send_class_teacher_attendance_reminders
+    # remains as a manual `run_scheduled_jobs` backfill.
     'nightly-attendance-risk-snapshot': {
         'task': 'academic_sessions.tasks.recompute_attendance_risk_snapshots',
         'schedule': crontab(hour=2, minute=0),

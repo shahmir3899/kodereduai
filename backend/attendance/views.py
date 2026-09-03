@@ -1686,6 +1686,25 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
             except Exception as e:
                 errors.append({'student_id': student_id, 'error': str(e)})
 
+        # Event-driven absence digest: check just this cohort now that its
+        # register was (re)saved, instead of waiting on the old 8/9/10 Celery
+        # Beat scan. Scoped to one (class, section) so it's cheap even though
+        # it runs on every save; the marker table still guards against
+        # re-notifying the same recipients if a class is saved twice.
+        if academic_year:
+            try:
+                from schools.models import School
+                from notifications.absence_digest import process_absence_digest_for_cohort
+
+                school = School.objects.get(pk=school_id)
+                process_absence_digest_for_cohort(
+                    school, date, class_id,
+                    session_class.id if session_class else None,
+                    academic_year,
+                )
+            except Exception as e:
+                logger.error(f"Absence digest failed for class {class_id} on {date}: {e}")
+
         return Response({
             'created': created,
             'updated': updated,

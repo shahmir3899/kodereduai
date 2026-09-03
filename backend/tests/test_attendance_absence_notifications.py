@@ -53,7 +53,13 @@ class TestScheduledAbsenceInAppDigests:
             channel='IN_APP',
         ).count()
 
-    def test_manual_bulk_entry_does_not_send_immediate_in_app_absence(self, seed_data, api):
+    def test_manual_bulk_entry_sends_immediate_in_app_absence_digest(self, seed_data, api):
+        """
+        The absence digest is event-driven now: completing a class's register
+        via bulk_entry fires the cohort digest right away (no more waiting on
+        the old 8/9/10 Celery Beat scan). Re-saving the same register on the
+        same date must not duplicate the notification (marker dedupe).
+        """
         class_obj = seed_data['classes'][0]
         s1, s2 = seed_data['students'][0], seed_data['students'][1]
         target_date = str(date.today() + timedelta(days=8))
@@ -79,23 +85,26 @@ class TestScheduledAbsenceInAppDigests:
         }
 
         before = self._absence_log_count(seed_data['school_a'])
-        resp1 = api.post(
-            '/api/attendance/records/bulk_entry/',
-            payload,
-            seed_data['tokens']['admin'],
-            seed_data['SID_A'],
-        )
+        with patch('notifications.absence_digest.is_off_day_for_date', return_value=False):
+            resp1 = api.post(
+                '/api/attendance/records/bulk_entry/',
+                payload,
+                seed_data['tokens']['admin'],
+                seed_data['SID_A'],
+            )
         assert resp1.status_code == 200, resp1.content
-        assert self._absence_log_count(seed_data['school_a']) == before
+        after_first = self._absence_log_count(seed_data['school_a'])
+        assert after_first > before
 
-        resp2 = api.post(
-            '/api/attendance/records/bulk_entry/',
-            payload,
-            seed_data['tokens']['admin'],
-            seed_data['SID_A'],
-        )
+        with patch('notifications.absence_digest.is_off_day_for_date', return_value=False):
+            resp2 = api.post(
+                '/api/attendance/records/bulk_entry/',
+                payload,
+                seed_data['tokens']['admin'],
+                seed_data['SID_A'],
+            )
         assert resp2.status_code == 200, resp2.content
-        assert self._absence_log_count(seed_data['school_a']) == before
+        assert self._absence_log_count(seed_data['school_a']) == after_first
 
     def test_digest_notifies_admin_teacher_and_parent_not_student(self, seed_data, api):
         class_obj = seed_data['classes'][0]
@@ -179,18 +188,15 @@ class TestScheduledAbsenceInAppDigests:
                 {'student_id': other.id, 'status': 'PRESENT'},
             ],
         }
-        resp = api.post(
-            '/api/attendance/records/bulk_entry/',
-            payload,
-            seed_data['tokens']['admin'],
-            seed_data['SID_A'],
-        )
-        assert resp.status_code == 200, resp.content
-
         started_at = timezone.now()
         with patch('notifications.absence_digest.is_off_day_for_date', return_value=False):
-            stats = process_absence_digest_for_school(seed_data['school_a'], target_date)
-        assert stats['cohorts_staff_digest'] >= 1
+            resp = api.post(
+                '/api/attendance/records/bulk_entry/',
+                payload,
+                seed_data['tokens']['admin'],
+                seed_data['SID_A'],
+            )
+        assert resp.status_code == 200, resp.content
 
         logs = NotificationLog.objects.filter(
             school=seed_data['school_a'],
@@ -378,17 +384,15 @@ class TestScheduledAbsenceInAppDigests:
                 {'student_id': s2.id, 'status': 'PRESENT'},
             ],
         }
-        resp = api.post(
-            '/api/attendance/records/bulk_entry/',
-            payload,
-            seed_data['tokens']['admin'],
-            seed_data['SID_A'],
-        )
-        assert resp.status_code == 200, resp.content
-
         started_at = timezone.now()
         with patch('notifications.absence_digest.is_off_day_for_date', return_value=False):
-            process_absence_digest_for_school(seed_data['school_a'], target_date)
+            resp = api.post(
+                '/api/attendance/records/bulk_entry/',
+                payload,
+                seed_data['tokens']['admin'],
+                seed_data['SID_A'],
+            )
+        assert resp.status_code == 200, resp.content
 
         assert NotificationLog.objects.filter(
             school=seed_data['school_a'],

@@ -302,6 +302,21 @@ def generate_monthly_fees_task(
             ),
         }
         logger.info(f"{task_id} core generation took {time.monotonic() - t0:.2f}s")
+
+        # Event-driven fee-pending notifications: fire right after generation
+        # instead of waiting on the old day-5/day-8 Celery Beat schedule.
+        # Non-fatal — generation already succeeded, a notification hiccup
+        # shouldn't turn that into a task failure.
+        if created_count or updated_count:
+            try:
+                from schools.models import School
+                from notifications.triggers import trigger_fee_pending_in_app
+
+                school = School.objects.get(pk=school_id)
+                trigger_fee_pending_in_app(school, month, year)
+            except Exception as e:
+                logger.error(f"Fee-pending notification failed for school {school_id} ({month}/{year}): {e}")
+
         mark_task_success(task_id, result_data=result_data)
         return result_data
     except Exception as e:

@@ -642,6 +642,51 @@ class NotificationDiagnosticsView(ModuleAccessMixin, APIView):
         })
 
 
+class RunNotificationJobView(ModuleAccessMixin, APIView):
+    """
+    Admin-triggered replacement for the notification jobs that used to run on
+    Celery Beat (fee-pending scan, daily report, attendance-marking reminder).
+    Scoped to the current tenant school only — unlike the old scheduled tasks,
+    which looped every active school in the database.
+    """
+    required_module = 'notifications'
+    permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
+
+    JOBS = ('fee_pending', 'daily_report', 'attendance_reminder')
+
+    def post(self, request):
+        job = request.data.get('job')
+        if job not in self.JOBS:
+            return Response(
+                {'detail': f"job must be one of {', '.join(self.JOBS)}."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        school_id = ensure_tenant_school_id(request)
+        if not school_id:
+            return Response({'error': 'school_id required'}, status=400)
+
+        from schools.models import School
+        school = School.objects.get(id=school_id)
+        today = timezone.localdate()
+
+        if job == 'fee_pending':
+            from .triggers import trigger_fee_pending_in_app
+            month = int(request.data.get('month') or today.month)
+            year = int(request.data.get('year') or today.year)
+            sent = trigger_fee_pending_in_app(school, month, year)
+            return Response({'job': job, 'sent': sent, 'month': month, 'year': year})
+
+        if job == 'daily_report':
+            from .triggers import trigger_daily_school_report
+            sent = trigger_daily_school_report(school, today)
+            return Response({'job': job, 'sent': sent, 'date': str(today)})
+
+        from .triggers import trigger_class_teacher_attendance_pending
+        sent = trigger_class_teacher_attendance_pending(school, today)
+        return Response({'job': job, 'sent': sent, 'date': str(today)})
+
+
 class CommunicationAgentView(ModuleAccessMixin, APIView):
     """AI-powered parent communication assistant."""
     required_module = 'notifications'

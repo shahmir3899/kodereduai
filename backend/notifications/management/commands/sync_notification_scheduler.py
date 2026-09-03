@@ -12,8 +12,6 @@ Usage (Render Shell):
     python manage.py sync_notification_scheduler --dry-run
 
 What it syncs:
-    * 'daily-absence-summary'              (notifications.tasks.send_daily_absence_summary)
-    * 'scheduled-absence-in-app-digest'    (notifications.tasks.run_scheduled_absence_in_app_digest)
     * 'process-notification-queue'         (notifications.tasks.process_notification_queue)
     * 'dispatch-scheduled-notifications'   (notifications.tasks.dispatch_scheduled_notifications)
     * 'mark-stale-toc-jobs-timed-out'      (lms.tasks.mark_stale_toc_jobs_timed_out)
@@ -33,8 +31,6 @@ from django_celery_beat.models import CrontabSchedule, PeriodicTask
 # Add a name here when you change its schedule in settings.py and need the
 # change to propagate to production Beat without a manual DB edit.
 MANAGED_SCHEDULES = (
-    'daily-absence-summary',
-    'scheduled-absence-in-app-digest',
     'process-notification-queue',
     'dispatch-scheduled-notifications',
     'mark-stale-toc-jobs-timed-out',
@@ -44,6 +40,14 @@ MANAGED_SCHEDULES = (
 # Tasks removed from the codebase — disable their Beat DB rows on next deploy.
 TASKS_TO_DISABLE = (
     'nightly-sibling-detection',
+    # Converted to event-driven / admin-triggered (see RunNotificationJobView
+    # and attendance.views.AttendanceRecordViewSet.bulk_entry /
+    # finance.tasks.generate_monthly_fees_task) — no longer on Beat.
+    'daily-absence-summary',
+    'scheduled-absence-in-app-digest',
+    'fee-pending-in-app-5th',
+    'fee-pending-in-app-8th',
+    'class-teacher-attendance-reminder-11am',
 )
 
 
