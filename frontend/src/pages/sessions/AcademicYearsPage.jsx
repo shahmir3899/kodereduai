@@ -373,7 +373,7 @@ export default function AcademicYearsPage() {
 
           {/* Year Modal */}
           {showYearModal && (
-            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={closeYearModal}>
+            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={closeYearModal}>
               <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-lg font-semibold text-gray-900">{editYearId ? 'Edit Academic Year' : 'Add Academic Year'}</h2>
@@ -537,7 +537,7 @@ export default function AcademicYearsPage() {
 
           {/* Term Modal */}
           {showTermModal && (
-            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={closeTermModal}>
+            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={closeTermModal}>
               <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-lg font-semibold text-gray-900">{editTermId ? 'Edit Term' : 'Add Term'}</h2>
@@ -623,7 +623,7 @@ export default function AcademicYearsPage() {
           )}
 
           {showImportModal && (
-            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={closeImportModal}>
+            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={closeImportModal}>
               <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-lg font-semibold text-gray-900">Import Terms From Previous Session</h2>

@@ -261,7 +261,7 @@ export default function StaffDocumentsPage() {
 
           {/* Qualification Modal */}
           {showQualModal && (
-            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={closeQualModal}>
+            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={closeQualModal}>
               <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-lg font-semibold text-gray-900">{editQualId ? 'Edit Qualification' : 'Add Qualification'}</h2>
@@ -427,7 +427,7 @@ export default function StaffDocumentsPage() {
 
           {/* Document Modal */}
           {showDocModal && (
-            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={closeDocModal}>
+            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={closeDocModal}>
               <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-lg font-semibold text-gray-900">Add Document</h2>

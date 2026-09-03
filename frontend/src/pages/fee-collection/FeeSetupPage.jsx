@@ -647,7 +647,7 @@ export default function FeeSetupPage() {
 
       {/* === ASSIGN MODAL === */}
       {assignModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setAssignModal(null)}>
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={() => setAssignModal(null)}>
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-5" onClick={e => e.stopPropagation()}>
             <h3 className="text-lg font-semibold text-gray-900 mb-1">Assign Discount</h3>
             <p className="text-sm text-gray-600 mb-4">Student: <span className="font-medium">{assignModal.studentName}</span></p>
@@ -703,7 +703,7 @@ export default function FeeSetupPage() {
 
       {/* === BULK ASSIGN MODAL === */}
       {bulkModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setBulkModal(false)}>
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={() => setBulkModal(false)}>
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-5" onClick={e => e.stopPropagation()}>
             <h3 className="text-lg font-semibold text-gray-900 mb-1">Bulk Assign to Class</h3>
             <p className="text-sm text-gray-600 mb-4">
@@ -760,7 +760,7 @@ export default function FeeSetupPage() {
 
       {/* === REMOVE CONFIRMATION === */}
       {removeConfirm && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setRemoveConfirm(null)}>
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={() => setRemoveConfirm(null)}>
           <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-5" onClick={e => e.stopPropagation()}>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Remove Discount?</h3>
             <p className="text-sm text-gray-600 mb-4">This will remove the discount/scholarship assignment from this student.</p>

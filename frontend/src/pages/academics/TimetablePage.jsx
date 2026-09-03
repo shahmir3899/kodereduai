@@ -749,7 +749,7 @@ export default function TimetablePage() {
 
       {/* Cell Edit Modal with Conflict Resolution */}
       {editingCell && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setEditingCell(null)}>
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={() => setEditingCell(null)}>
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold text-gray-900">
@@ -870,7 +870,7 @@ export default function TimetablePage() {
 
       {/* Auto-Generate Confirm Modal */}
       {showAutoGenConfirm && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setShowAutoGenConfirm(false)}>
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={() => setShowAutoGenConfirm(false)}>
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
             <h3 className="text-sm font-semibold text-gray-900 mb-2">AI Auto-Generate Timetable</h3>
             <p className="text-xs text-gray-600 mb-4">
@@ -908,7 +908,7 @@ export default function TimetablePage() {
 
       {/* Quality Score Modal */}
       {showScoreModal && qualityScore && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setShowScoreModal(false)}>
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={() => setShowScoreModal(false)}>
           <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold text-gray-900">Timetable Quality Score</h3>
@@ -950,7 +950,7 @@ export default function TimetablePage() {
 
       {/* Substitute Teacher Modal */}
       {showSubstituteModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setShowSubstituteModal(false)}>
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={() => setShowSubstituteModal(false)}>
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold text-gray-900">Find Substitute Teacher</h3>
@@ -1021,7 +1021,7 @@ export default function TimetablePage() {
 
       {/* Time Slots Modal */}
       {showSlotsModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setShowSlotsModal(false)}>
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={() => setShowSlotsModal(false)}>
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-gray-900">Manage Time Slots</h2>

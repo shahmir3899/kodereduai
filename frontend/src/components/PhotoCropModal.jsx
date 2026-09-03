@@ -60,7 +60,7 @@ export default function PhotoCropModal({ imageSrc, onCancel, onSave }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-black bg-opacity-75">
+    <div className="fixed inset-0 z-[60] flex flex-col bg-black bg-opacity-75">
       <div className="flex items-center justify-between p-4 bg-white border-b">
         <h3 className="text-lg font-semibold text-gray-900">Adjust Photo</h3>
         <button onClick={onCancel} className="p-2 hover:bg-gray-100 rounded-full">

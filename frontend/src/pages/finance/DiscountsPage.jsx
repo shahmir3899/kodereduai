@@ -1161,7 +1161,7 @@ export default function DiscountsPage() {
           DISCOUNT MODAL
           ═══════════════════════════════════════════════════════════════════════ */}
       {showDiscountModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
             <h2 className="text-xl font-bold text-gray-900 mb-4">
               {editingDiscount ? 'Edit Discount' : 'Create Discount'}
@@ -1320,7 +1320,7 @@ export default function DiscountsPage() {
           SCHOLARSHIP MODAL
           ═══════════════════════════════════════════════════════════════════════ */}
       {showScholarshipModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
             <h2 className="text-xl font-bold text-gray-900 mb-4">
               {editingScholarship ? 'Edit Scholarship' : 'Create Scholarship'}
@@ -1443,7 +1443,7 @@ export default function DiscountsPage() {
           ASSIGN MODAL (Single Student)
           ═══════════════════════════════════════════════════════════════════════ */}
       {showAssignModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
             <h2 className="text-xl font-bold text-gray-900 mb-4">Assign Discount / Scholarship</h2>
 
@@ -1592,7 +1592,7 @@ export default function DiscountsPage() {
           BULK ASSIGN MODAL
           ═══════════════════════════════════════════════════════════════════════ */}
       {showBulkAssignModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
             <h2 className="text-xl font-bold text-gray-900 mb-2">Bulk Assign</h2>
             <p className="text-sm text-gray-500 mb-4">
@@ -1720,7 +1720,7 @@ export default function DiscountsPage() {
           DELETE DISCOUNT CONFIRMATION
           ═══════════════════════════════════════════════════════════════════════ */}
       {deleteDiscountConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
             <h2 className="text-xl font-bold text-gray-900 mb-2">Delete Discount</h2>
             <p className="text-gray-600 mb-6">
@@ -1747,7 +1747,7 @@ export default function DiscountsPage() {
           DELETE SCHOLARSHIP CONFIRMATION
           ═══════════════════════════════════════════════════════════════════════ */}
       {deleteScholarshipConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
             <h2 className="text-xl font-bold text-gray-900 mb-2">Delete Scholarship</h2>
             <p className="text-gray-600 mb-6">
@@ -1774,7 +1774,7 @@ export default function DiscountsPage() {
           REMOVE ASSIGNMENT CONFIRMATION
           ═══════════════════════════════════════════════════════════════════════ */}
       {removeAssignConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
             <h2 className="text-xl font-bold text-gray-900 mb-2">Remove Assignment</h2>
             <p className="text-gray-600 mb-6">

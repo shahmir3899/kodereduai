@@ -788,7 +788,7 @@ export default function FinanceDashboardPage() {
 
       {/* Ledger Preview Modal */}
       {ledgerPreviewAccount && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black bg-opacity-50 p-0 sm:p-4">
+        <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black bg-opacity-50 p-0 sm:p-4">
           <div className="bg-white rounded-t-xl sm:rounded-lg shadow-xl w-full max-w-xl max-h-[85vh] sm:max-h-[80vh] flex flex-col">
             <div className="px-4 sm:px-6 pt-4 sm:pt-5 pb-3 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
               <div className="min-w-0">

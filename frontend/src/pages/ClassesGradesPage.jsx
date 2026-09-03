@@ -868,7 +868,7 @@ export default function ClassesGradesPage() {
 
       {/* ───── Class Modal ───── */}
       {showClassModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={closeClassModal}>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" onClick={closeClassModal}>
           <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-gray-900">{editingClass ? 'Edit Class' : 'Add Class'}</h2>
@@ -954,7 +954,7 @@ export default function ClassesGradesPage() {
 
       {/* ───── Delete Confirmation ───── */}
       {deleteConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setDeleteConfirm(null)}>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" onClick={() => setDeleteConfirm(null)}>
           <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
             <h2 className="text-lg font-bold text-gray-900 mb-2">Delete Class</h2>
             <p className="text-gray-600 mb-6">
@@ -976,7 +976,7 @@ export default function ClassesGradesPage() {
 
       {/* ───── Link Master Class Picker Modal ───── */}
       {linkPickerModal.open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={closeLinkPicker}>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" onClick={closeLinkPicker}>
           <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-gray-900">Link Master Class</h2>

@@ -120,7 +120,7 @@ export default function QuestionBankPicker({
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4">
       <div className="bg-white rounded-lg w-full max-w-4xl max-h-[85vh] overflow-hidden border border-gray-200 shadow-xl">
         <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
           <div>

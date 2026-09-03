@@ -825,7 +825,7 @@ export default function PromotionPage() {
           const candidateCount = targetSetupPreview?.target_plan?.candidates?.length || 0
 
           return (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-lg w-full p-5">
             <div className="flex items-start justify-between gap-3 mb-3">
               <div>
@@ -1630,7 +1630,7 @@ export default function PromotionPage() {
 
       {/* Single Correction Modal */}
       {singleCorrectionModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-lg rounded-xl bg-white shadow-xl border border-gray-200">
             <div className="px-5 py-4 border-b border-gray-100">
               <h3 className="text-lg font-semibold text-gray-900">Edit Promotion Result</h3>

@@ -329,7 +329,7 @@ export default function ChildFees() {
 
       {/* Pay Modal */}
       {showPayModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
             <h2 className="text-lg font-bold text-gray-900 mb-4">Choose Payment Method</h2>
             <div className="space-y-2 mb-4">

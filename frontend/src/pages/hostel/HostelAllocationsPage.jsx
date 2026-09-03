@@ -280,7 +280,7 @@ export default function HostelAllocationsPage() {
 
       {/* ============ Allocate Student Modal ============ */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
             <h2 className="text-xl font-bold text-gray-900 mb-4">Allocate Student</h2>
 
@@ -378,7 +378,7 @@ export default function HostelAllocationsPage() {
 
       {/* ============ Vacate Confirmation Modal ============ */}
       {vacateConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
             <h2 className="text-xl font-bold text-gray-900 mb-2">Vacate Student</h2>
             <p className="text-gray-600 mb-4">

@@ -425,7 +425,7 @@ export default function LeaveManagementPage() {
 
           {/* Apply Leave Modal */}
           {applyModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
               <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
                 <h2 className="text-xl font-bold text-gray-900 mb-4">Apply Leave</h2>
                 <form onSubmit={handleApplySubmit} className="space-y-4">
@@ -506,7 +506,7 @@ export default function LeaveManagementPage() {
 
           {/* Approve/Reject Modal */}
           {actionModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
               <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
                 <h2 className="text-xl font-bold text-gray-900 mb-2">
                   {actionModal.type === 'approve' ? 'Approve Leave' : 'Reject Leave'}
@@ -596,7 +596,7 @@ export default function LeaveManagementPage() {
 
           {/* Policy Create/Edit Modal */}
           {policyModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
               <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
                 <h2 className="text-xl font-bold text-gray-900 mb-4">
                   {policyEditId ? 'Edit Leave Policy' : 'Add Leave Policy'}

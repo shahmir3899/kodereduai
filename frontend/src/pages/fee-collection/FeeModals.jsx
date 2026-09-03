@@ -33,7 +33,7 @@ export function PaymentModal({ payment, form, setForm, onSubmit, onClose, isPend
   if (!payment) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50 p-4">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
         <div className="p-6">
           <h3 className="text-lg font-semibold mb-1">Record Payment</h3>
@@ -326,7 +326,7 @@ export function FeeStructureModal({ show, onClose, classList, bulkEffectiveFrom,
   const overrideCount = studentFees.filter(s => s.isOverride).length
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50 p-4">
       <div className={`bg-white rounded-lg shadow-xl w-full flex flex-col ${
         structureMode === 'student' ? 'max-w-4xl max-h-[95vh]' : 'max-w-lg max-h-[80vh]'
       }`}>
@@ -607,7 +607,7 @@ export function IncomeModal({ show, onClose, form, setForm, onSubmit, isPending,
 
   if (!show) return null
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3 sm:p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-3 sm:p-4" onClick={onClose}>
       <div className="w-full max-w-md rounded-xl bg-white shadow-xl" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4 sm:px-6">
@@ -716,7 +716,7 @@ export function IncomeModal({ show, onClose, form, setForm, onSubmit, isPending,
 export function StudentFeeModal({ student, amount, setAmount, onSubmit, onClose, isPending, error, isSuccess }) {
   if (!student) return null
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50 p-4">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-sm">
         <div className="p-6">
           <h3 className="text-lg font-semibold mb-1">Set Student Fee</h3>
@@ -882,7 +882,7 @@ export function CreateSingleFeeModal({ show, onClose, onSubmit, isPending, error
   }))
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50 p-4">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
         <div className="p-6">
           <h3 className="text-lg font-semibold mb-4">Create Fee Record</h3>

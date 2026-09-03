@@ -466,7 +466,7 @@ export default function DepartmentsPage() {
 
       {/* ── Department Modal ────────────────────────────────────────────── */}
       {showDeptModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-md mx-4">
             <h2 className="text-xl font-bold text-gray-900 mb-4">
               {editingDept ? 'Edit Department' : 'Add Department'}
@@ -509,7 +509,7 @@ export default function DepartmentsPage() {
 
       {/* ── Designation Modal ───────────────────────────────────────────── */}
       {showDesigModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-md mx-4">
             <h2 className="text-xl font-bold text-gray-900 mb-4">
               {editingDesig ? 'Edit Designation' : 'Add Designation'}
@@ -555,7 +555,7 @@ export default function DepartmentsPage() {
 
       {/* ── Delete Department Confirmation ──────────────────────────────── */}
       {deleteDeptConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
             <h2 className="text-xl font-bold text-gray-900 mb-2">Delete Department</h2>
             <p className="text-gray-600 mb-6">
@@ -577,7 +577,7 @@ export default function DepartmentsPage() {
 
       {/* ── Delete Designation Confirmation ─────────────────────────────── */}
       {deleteDesigConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
             <h2 className="text-xl font-bold text-gray-900 mb-2">Delete Designation</h2>
             <p className="text-gray-600 mb-6">

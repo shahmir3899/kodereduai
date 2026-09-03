@@ -278,7 +278,7 @@ function InboxTab() {
 
       {/* Mark All Read confirmation */}
       {confirmMarkAll && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
             <h2 className="text-lg font-bold text-gray-900 mb-2">Mark All as Read</h2>
             <p className="text-gray-600 mb-6">
@@ -519,7 +519,7 @@ function TemplatesTab() {
 
       {/* Delete confirmation modal */}
       {deleteConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
             <h2 className="text-lg font-bold text-gray-900 mb-2">Delete Template</h2>
             <p className="text-gray-600 mb-6">
@@ -540,7 +540,7 @@ function TemplatesTab() {
       )}
 
       {previewTemplate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-xl mx-4">
             <h2 className="text-lg font-bold text-gray-900 mb-1">Template Preview</h2>
             <p className="text-xs text-gray-500 mb-4">
@@ -958,7 +958,7 @@ function SendTab() {
       </div>
 
       {placeholderWarning && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-xl mx-4">
             <h2 className="text-lg font-bold text-gray-900 mb-2">Placeholder Warning</h2>
             <p className="text-sm text-gray-600 mb-3">
@@ -1007,7 +1007,7 @@ function SendTab() {
       )}
 
       {confirmSendOpen && mode === 'broadcast' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-lg mx-4">
             <h2 className="text-lg font-bold text-gray-900 mb-2">Confirm Broadcast</h2>
             <p className="text-sm text-gray-600 mb-4">

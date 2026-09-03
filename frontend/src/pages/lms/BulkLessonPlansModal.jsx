@@ -408,7 +408,7 @@ export default function BulkLessonPlansModal({ onClose, onSuccess, onCreateSingl
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onClick={onClose}>
+    <div className="fixed inset-0 bg-black bg-opacity-50 z-[60] flex items-center justify-center p-4" onClick={onClose}>
       <div
         className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6"
         onClick={(e) => e.stopPropagation()}

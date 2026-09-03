@@ -719,7 +719,7 @@ function QuestionModal({ editQuestion, initialClassFilterId, initialSubject, ini
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 overflow-y-auto">
+    <div className="fixed inset-0 bg-black/50 z-[60] overflow-y-auto">
       <div className="min-h-full flex items-start justify-center py-8 px-4">
         <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl">
           {/* Header */}
@@ -1374,7 +1374,7 @@ function SourceContentBlockModal({ contentBlockId, onClose }) {
   const block = data?.data
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 overflow-y-auto">
+    <div className="fixed inset-0 bg-black/50 z-[60] overflow-y-auto">
       <div className="min-h-full flex items-start justify-center py-10 px-4">
         <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl">
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
@@ -1425,7 +1425,7 @@ function SourceContentBlockModal({ contentBlockId, onClose }) {
 
 function DeleteConfirm({ question, onCancel, onConfirm, isLoading }) {
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6">
         <h3 className="text-base font-bold text-gray-900 mb-2">Delete Question?</h3>
         <p className="text-sm text-gray-600 mb-5 line-clamp-3">

@@ -113,7 +113,7 @@ export default function ExamTypesPage() {
       )}
 
       {showModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={closeModal}>
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={closeModal}>
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-gray-900">{editId ? 'Edit Exam Type' : 'Add Exam Type'}</h2>

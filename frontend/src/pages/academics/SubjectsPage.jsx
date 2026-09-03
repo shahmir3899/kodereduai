@@ -679,7 +679,7 @@ export default function SubjectsPage() {
 
           {/* Subject Modal */}
           {!isTeacher && showSubjectModal && (
-            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={closeSubjectModal}>
+            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={closeSubjectModal}>
               <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-lg font-semibold text-gray-900">{editSubjectId ? 'Edit Subject' : 'Add Subject'}</h2>
@@ -850,7 +850,7 @@ export default function SubjectsPage() {
 
           {/* Assignment Modal */}
           {isSchoolAdmin && showAssignModal && (
-            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={closeAssignModal}>
+            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={closeAssignModal}>
               <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-lg font-semibold text-gray-900">{editAssignId ? 'Edit Assignment' : 'Assign Subject to Class'}</h2>
@@ -1110,7 +1110,7 @@ export default function SubjectsPage() {
           )}
 
           {showClassTeacherModal && (
-            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={closeClassTeacherModal}>
+            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={closeClassTeacherModal}>
               <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-lg font-semibold text-gray-900">{editClassTeacherId ? 'Edit Class Teacher' : 'Assign Class Teacher'}</h2>

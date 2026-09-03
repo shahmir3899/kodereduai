@@ -610,7 +610,7 @@ export default function AcademicCalendarPage() {
       </div>
 
       {selectedDateKey && selectedDateInfo && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={closeDayDetailsModal}>
+        <div className="fixed inset-0 bg-black/40 z-[60] flex items-center justify-center p-4" onClick={closeDayDetailsModal}>
           <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[92vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start justify-between gap-3 mb-4">
               <div>
@@ -749,7 +749,7 @@ export default function AcademicCalendarPage() {
       </div>
 
       {showModal && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={closeModal}>
+        <div className="fixed inset-0 bg-black/40 z-[60] flex items-center justify-center p-4" onClick={closeModal}>
           <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[92vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-lg font-semibold text-gray-900 mb-4">
               {editingEntryId ? 'Edit Event / Off Day' : 'Add Event / Off Day'}

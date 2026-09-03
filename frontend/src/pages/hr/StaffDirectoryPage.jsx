@@ -910,7 +910,7 @@ export default function StaffDirectoryPage() {
 
       {/* View Staff Detail Modal */}
       {viewMember && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4" onClick={() => setViewMember(null)}>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50 p-4" onClick={() => setViewMember(null)}>
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             {/* Header */}
             <div className="flex items-center justify-between p-6 border-b border-gray-200">
@@ -1049,7 +1049,7 @@ export default function StaffDirectoryPage() {
 
       {/* Delete Confirmation Modal */}
       {deleteConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
             <h2 className="text-xl font-bold text-gray-900 mb-2">Deactivate Staff Member</h2>
             <p className="text-gray-600 mb-6">
@@ -1074,7 +1074,7 @@ export default function StaffDirectoryPage() {
 
       {/* Quick Add Modal */}
       {showQuickAdd && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setShowQuickAdd(false)}>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" onClick={() => setShowQuickAdd(false)}>
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <div>
@@ -1257,7 +1257,7 @@ export default function StaffDirectoryPage() {
 
       {/* Individual Convert Modal */}
       {showConvertModal && convertMember && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-md mx-4">
             <h2 className="text-lg font-bold text-gray-900 mb-1">Create User Account</h2>
             <p className="text-sm text-gray-500 mb-4">
@@ -1331,7 +1331,7 @@ export default function StaffDirectoryPage() {
 
       {/* Link Existing User Modal */}
       {showLinkModal && linkMember && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-md mx-4">
             <h2 className="text-lg font-bold text-gray-900 mb-1">Link Existing User Account</h2>
             <p className="text-sm text-gray-500 mb-4">
@@ -1395,7 +1395,7 @@ export default function StaffDirectoryPage() {
 
       {/* Bulk Convert Modal */}
       {showBulkConvertModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-md mx-4">
             <h2 className="text-lg font-bold text-gray-900 mb-4">Bulk Create User Accounts</h2>
 
@@ -1502,7 +1502,7 @@ export default function StaffDirectoryPage() {
 
       {/* Bulk Import Modal */}
       {showBulkImport && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={closeBulkImport}>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" onClick={closeBulkImport}>
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <div>

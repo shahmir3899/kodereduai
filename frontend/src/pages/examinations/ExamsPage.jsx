@@ -358,7 +358,7 @@ export function DateSheetModal({ groupId, onClose: closeDateSheet, queryClient, 
   }, [openCell])
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={closeDateSheet}>
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={closeDateSheet}>
       <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[85vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-2 mb-1">
           <div className="min-w-0">
@@ -1394,7 +1394,7 @@ export default function ExamsPage() {
 
       {/* ── Quick Create / Edit Modal ── */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={closeModal}>
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4" onClick={closeModal}>
           <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-gray-900">{editId ? (activeTab === 'exams' ? 'Edit Exam' : 'Edit Test') : 'Create Test'}</h2>

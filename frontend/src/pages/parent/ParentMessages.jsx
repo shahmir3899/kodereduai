@@ -165,7 +165,7 @@ export default function ParentMessages() {
 
       {/* New Message Modal */}
       {showNewMessage && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
           <div className="bg-white rounded-xl w-full max-w-md shadow-xl">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
               <h2 className="text-lg font-semibold text-gray-900">New Message</h2>

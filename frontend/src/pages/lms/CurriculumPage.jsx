@@ -3417,7 +3417,7 @@ export default function CurriculumPage() {
 
       {/* ============ Book Form Modal ============ */}
       {showBookModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
             <h2 className="text-xl font-bold text-gray-900 mb-4">
               {editingBook ? 'Edit Book' : 'Add Book'}
@@ -3521,7 +3521,7 @@ export default function CurriculumPage() {
       />
 
       {showContentRevisionDrawer && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-black bg-opacity-30">
+        <div className="fixed inset-0 z-[60] flex justify-end bg-black bg-opacity-30">
           <div className="h-full w-full max-w-xl bg-white shadow-2xl border-l border-gray-200 overflow-y-auto">
             <div className="sticky top-0 z-10 bg-white border-b border-gray-100 px-4 py-3 flex items-start justify-between gap-3">
               <div>
@@ -3623,7 +3623,7 @@ export default function CurriculumPage() {
 
       {/* ============ Chapter Form Modal ============ */}
       {showChapterModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
             <h2 className="text-xl font-bold text-gray-900 mb-4">
               {editingChapter ? 'Edit Chapter' : 'Add Chapter'}
@@ -3682,7 +3682,7 @@ export default function CurriculumPage() {
 
       {/* ============ Topic Form Modal ============ */}
       {showTopicModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
             <h2 className="text-xl font-bold text-gray-900 mb-4">
               {editingTopic ? 'Edit Topic' : 'Add Topic'}
@@ -3753,7 +3753,7 @@ export default function CurriculumPage() {
 
       {/* ============ Content Block Form Modal ============ */}
       {showContentBlockModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
             <h2 className="text-xl font-bold text-gray-900 mb-4">
               {editingContentBlock ? 'Edit Content Block' : 'Add Content Block'}
@@ -3871,7 +3871,7 @@ export default function CurriculumPage() {
 
       {/* ============ Sub-topic Content Modal ============ */}
       {showSubtopicContentModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
             <h2 className="text-xl font-bold text-gray-900 mb-1">Edit Sub-topic Content</h2>
             <p className="text-sm text-gray-500 mb-4">{editingSubtopic?.title || 'Sub-topic'}</p>
@@ -3919,7 +3919,7 @@ export default function CurriculumPage() {
 
       {/* ============ Table of Contents Import Modal ============ */}
       {showTocModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
           <div ref={tocModalBodyRef} className="bg-white rounded-xl shadow-xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
             <div className="p-4 sm:p-6 border-b border-gray-200">
               <div className="flex items-start justify-between gap-3">

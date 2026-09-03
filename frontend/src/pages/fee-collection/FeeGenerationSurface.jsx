@@ -577,7 +577,7 @@ export default function FeeGenerationSurface({
 	if (!isModal) return content
 
 	return (
-		<div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+		<div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50 p-4">
 			<div className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-y-auto rounded-lg bg-white shadow-xl">
 				{content}
 			</div>

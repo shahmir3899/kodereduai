@@ -594,7 +594,7 @@ export default function ExpensesPage() {
 
       {/* Add/Edit Expense Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3 sm:p-4" onClick={closeModal}>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-3 sm:p-4" onClick={closeModal}>
           <div className="w-full max-w-md rounded-xl bg-white shadow-xl" onClick={e => e.stopPropagation()}>
             {/* Header */}
             <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4 sm:px-6">

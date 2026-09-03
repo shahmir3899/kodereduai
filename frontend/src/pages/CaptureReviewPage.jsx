@@ -494,7 +494,7 @@ function UploadTab({ onUploadSuccess }) {
 
       {/* Crop Modal */}
       {cropModalIndex !== null && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-black bg-opacity-75">
+        <div className="fixed inset-0 z-[60] flex flex-col bg-black bg-opacity-75">
           <div className="flex items-center justify-between p-4 bg-white border-b">
             <h3 className="text-lg font-semibold text-gray-900">Crop Image</h3>
             <button onClick={() => { setCropModalIndex(null); setCrop({ x: 0, y: 0 }); setZoom(1) }} className="p-2 hover:bg-gray-100 rounded-full">
@@ -881,7 +881,7 @@ function ReviewDetail({ uploadId, onBack }) {
 
       {/* Delete Confirm Modal */}
       {showDeleteConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white rounded-lg p-6 max-w-sm w-full mx-4 shadow-xl">
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete Upload?</h3>
             <p className="text-gray-600 mb-4">This will permanently delete this attendance upload.</p>
@@ -895,7 +895,7 @@ function ReviewDetail({ uploadId, onBack }) {
 
       {/* Preview Modal */}
       {showPreviewModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-75">
           <div className="relative w-full h-full p-4">
             <button onClick={() => setShowPreviewModal(false)} className="absolute top-4 right-4 z-10 p-3 bg-white rounded-full shadow-lg hover:bg-gray-100">
               <svg className="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
@@ -994,7 +994,7 @@ function PendingReviewTab({ initialReviewId }) {
       )}
 
       {showDeleteConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white rounded-lg p-6 max-w-sm w-full mx-4 shadow-xl">
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete Upload?</h3>
             <p className="text-gray-600 mb-4">This will permanently delete this attendance upload.</p>
