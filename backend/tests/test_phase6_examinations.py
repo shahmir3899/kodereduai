@@ -126,7 +126,7 @@ class TestExamTypes:
 
         resp = api.get('/api/examinations/exam-types/', token, sid)
         assert resp.status_code == 200
-        data = resp.json()
+        data = resp.json()['results']
         p6_types = [t for t in data if t.get('name', '').startswith(P6)]
         assert len(p6_types) >= 2, f"count={len(p6_types)}"
 
@@ -159,8 +159,9 @@ class TestExamTypes:
         }, token, sid)
         assert resp.status_code == 200, f"status={resp.status_code}"
 
-    def test_a8_soft_delete_exam_type(self, seed_data, api):
-        """A8: Soft-delete sets is_active=False."""
+    def test_a8_hard_delete_exam_type(self, seed_data, api):
+        """A8: Delete permanently removes the exam type (ExamTypeViewSet has no
+        perform_destroy override, so ModelViewSet's default hard-deletes)."""
         token = seed_data['tokens']['admin']
         sid = seed_data['SID_A']
         et_temp = ExamType.objects.create(
@@ -168,8 +169,7 @@ class TestExamTypes:
         )
         resp = api.delete(f'/api/examinations/exam-types/{et_temp.id}/', token, sid)
         assert resp.status_code in (200, 204), f"status={resp.status_code}"
-        et_temp.refresh_from_db()
-        assert et_temp.is_active is False, f"is_active={et_temp.is_active}"
+        assert not ExamType.objects.filter(id=et_temp.id).exists()
 
     def test_a9_school_b_isolation(self, seed_data, api):
         """A9: School B sees no School A exam types."""
@@ -182,7 +182,7 @@ class TestExamTypes:
         resp = api.get('/api/examinations/exam-types/',
                        seed_data['tokens']['admin_b'], seed_data['SID_B'])
         assert resp.status_code == 200
-        data = resp.json()
+        data = resp.json()['results']
         p6_types_b = [t for t in data if t.get('name', '').startswith(P6)]
         assert len(p6_types_b) == 0, f"count={len(p6_types_b)}"
 
@@ -292,7 +292,7 @@ class TestExams:
 
         resp = api.get('/api/examinations/exams/', token, sid)
         assert resp.status_code == 200
-        data = resp.json()
+        data = resp.json()['results']
         p6_exams = [e for e in data if e.get('name', '').startswith(P6)]
         assert len(p6_exams) >= 2, f"count={len(p6_exams)}"
 
@@ -311,7 +311,7 @@ class TestExams:
 
         resp = api.get(f'/api/examinations/exams/?class_obj={d["class_1"].id}', token, sid)
         assert resp.status_code == 200
-        data = resp.json()
+        data = resp.json()['results']
         p6_filtered = [e for e in data if e.get('name', '').startswith(P6)]
         assert len(p6_filtered) >= 1, f"count={len(p6_filtered)}"
 
@@ -330,7 +330,7 @@ class TestExams:
 
         resp = api.get(f'/api/examinations/exams/?exam_type={et_mid_id}', token, sid)
         assert resp.status_code == 200
-        data = resp.json()
+        data = resp.json()['results']
         p6_filtered = [e for e in data if e.get('name', '').startswith(P6)]
         assert len(p6_filtered) >= 1, f"count={len(p6_filtered)}"
 
@@ -349,7 +349,7 @@ class TestExams:
 
         resp = api.get('/api/examinations/exams/?status=SCHEDULED', token, sid)
         assert resp.status_code == 200
-        data = resp.json()
+        data = resp.json()['results']
         p6_scheduled = [e for e in data if e.get('name', '').startswith(P6)]
         assert len(p6_scheduled) >= 1, f"count={len(p6_scheduled)}"
 
@@ -412,8 +412,10 @@ class TestExams:
         assert resp.status_code == 200, f"status={resp.status_code}"
         assert data.get('status') == 'PUBLISHED', f"exam_status={data.get('status')}"
 
-    def test_b12_soft_delete_exam(self, exam_prereqs, api):
-        """B12: Soft-delete sets is_active=False."""
+    def test_b12_hard_delete_exam(self, exam_prereqs, api):
+        """B12: Delete permanently removes the exam (ExamViewSet.perform_destroy
+        hard-deletes, cascading to ExamSubject -> StudentMark -- there is no
+        soft-delete/reactivate path for a standalone exam)."""
         d = exam_prereqs
         token = d['tokens']['admin']
         sid = d['SID_A']
@@ -425,8 +427,7 @@ class TestExams:
         )
         resp = api.delete(f'/api/examinations/exams/{exam_temp.id}/', token, sid)
         assert resp.status_code in (200, 204), f"status={resp.status_code}"
-        exam_temp.refresh_from_db()
-        assert exam_temp.is_active is False, f"is_active={exam_temp.is_active}"
+        assert not Exam.objects.filter(id=exam_temp.id).exists()
 
     def test_b13_duplicate_standalone_tests_allowed(self, exam_prereqs, api):
         """B13: Standalone tests can share exam_type+class+term when they differ by subject."""
@@ -463,9 +464,55 @@ class TestExams:
 
         resp = api.get('/api/examinations/exams/', d['tokens']['admin_b'], d['SID_B'])
         assert resp.status_code == 200
-        data = resp.json()
+        data = resp.json()['results']
         p6_exams_b = [e for e in data if e.get('name', '').startswith(P6)]
         assert len(p6_exams_b) == 0, f"count={len(p6_exams_b)}"
+
+    def test_b15_bulk_delete_exams(self, exam_prereqs, api):
+        """B15: Bulk-delete removes every listed standalone exam in one request."""
+        d = exam_prereqs
+        token = d['tokens']['admin']
+        sid = d['SID_A']
+        et_mid_id, _ = self._create_exam_types(d, api)
+        ids = []
+        for cls, label in [(d['class_1'], 'A'), (d['class_2'], 'B')]:
+            resp = api.post('/api/examinations/exams/', {
+                'academic_year': d['academic_year'].id, 'term': d['term_1'].id,
+                'exam_type': et_mid_id, 'class_obj': cls.id,
+                'name': f'{P6}BulkDelete{label}',
+                'start_date': '2026-03-01', 'end_date': '2026-03-10',
+            }, token, sid)
+            assert resp.status_code == 201, f"status={resp.status_code} body={resp.content[:200]}"
+            exam = Exam.objects.get(school=d['school_a'], name=f'{P6}BulkDelete{label}')
+            ids.append(exam.id)
+
+        resp = api.post('/api/examinations/exams/bulk_delete/', {'ids': ids}, token, sid)
+        assert resp.status_code == 200, f"status={resp.status_code} body={resp.content[:200]}"
+        body = resp.json()
+        assert body['deleted_count'] == 2, body
+        assert not Exam.objects.filter(id__in=ids).exists()
+
+    def test_b16_bulk_delete_respects_tenant_scope(self, exam_prereqs, api):
+        """B16: School B's token can't bulk-delete School A's exam ids -- they're
+        silently excluded (not a 403/404), matching TenantQuerySetMixin scoping."""
+        d = exam_prereqs
+        token = d['tokens']['admin']
+        sid = d['SID_A']
+        et_mid_id, _ = self._create_exam_types(d, api)
+        resp = api.post('/api/examinations/exams/', {
+            'academic_year': d['academic_year'].id, 'term': d['term_1'].id,
+            'exam_type': et_mid_id, 'class_obj': d['class_1'].id,
+            'name': f'{P6}NotYours',
+            'start_date': '2026-03-01', 'end_date': '2026-03-10',
+        }, token, sid)
+        assert resp.status_code == 201, f"status={resp.status_code} body={resp.content[:200]}"
+        exam_id = Exam.objects.get(school=d['school_a'], name=f'{P6}NotYours').id
+
+        resp = api.post('/api/examinations/exams/bulk_delete/', {'ids': [exam_id]},
+                        d['tokens']['admin_b'], d['SID_B'])
+        assert resp.status_code == 200, f"status={resp.status_code}"
+        assert resp.json()['deleted_count'] == 0, resp.json()
+        assert Exam.objects.filter(id=exam_id).exists()
 
 
 # ==================================================================
@@ -520,6 +567,26 @@ class TestExamGroupWizardAndPublishAll:
         assert len(exams) == 2
         assert {e.class_obj_id for e in exams} == {d['class_1'].id, d['class_2'].id}
         assert all(e.exam_group_id == group.id for e in exams)
+
+    def test_g1a_bulk_delete_exam_groups_cascades_children(self, exam_prereqs, api):
+        """G1a: Bulk-deleting exam groups also removes their per-class Exam rows
+        (not just nulling exam_group), matching perform_destroy's cascade-safety
+        fix -- Exam.exam_group is SET_NULL, so a plain queryset.delete() on the
+        groups alone would silently orphan these instead of removing them."""
+        d = exam_prereqs
+        token = d['tokens']['admin']
+        sid = d['SID_A']
+        data = self._create_group_with_two_classes(d, api)
+        group_id = data['group_id']
+        exam_ids = list(ExamGroup.objects.get(id=group_id).exams.values_list('id', flat=True))
+        assert len(exam_ids) == 2
+
+        resp = api.post('/api/examinations/exam-groups/bulk_delete/', {'ids': [group_id]}, token, sid)
+        assert resp.status_code == 200, f"status={resp.status_code} body={resp.content[:200]}"
+        assert resp.json()['deleted_count'] == 1, resp.json()
+        assert not ExamGroup.objects.filter(id=group_id).exists()
+        assert not Exam.objects.filter(id__in=exam_ids).exists(), \
+            "bulk_delete must remove child exams, not just orphan them"
 
     def test_g1b_wizard_create_respects_class_subjects_filter(self, exam_prereqs, api):
         """G1b: an explicit class_subjects entry narrows that class's ExamSubjects to the
@@ -1331,8 +1398,9 @@ class TestExamSubjectsContinuation(TestExamSubjects):
         }, token, sid)
         assert resp.status_code == 200, f"status={resp.status_code}"
 
-    def test_c9_soft_delete_exam_subject(self, exam_prereqs, api):
-        """C9: Soft-delete exam subject sets is_active=False."""
+    def test_c9_hard_delete_exam_subject(self, exam_prereqs, api):
+        """C9: Delete permanently removes the exam subject (ExamSubjectViewSet.
+        perform_destroy hard-deletes, cascading to StudentMark)."""
         d = exam_prereqs
         _, exam_2b_id, _ = self._setup_exam_with_class2(d, api)
         token = d['tokens']['admin']
@@ -1343,8 +1411,7 @@ class TestExamSubjectsContinuation(TestExamSubjects):
         )
         resp = api.delete(f'/api/examinations/exam-subjects/{es_temp.id}/', token, sid)
         assert resp.status_code in (200, 204), f"status={resp.status_code}"
-        es_temp.refresh_from_db()
-        assert es_temp.is_active is False, f"is_active={es_temp.is_active}"
+        assert not ExamSubject.objects.filter(id=es_temp.id).exists()
 
     def test_c10_school_b_isolation(self, exam_prereqs, api):
         """C10: School B sees no exam subjects from School A."""
@@ -1358,7 +1425,7 @@ class TestExamSubjectsContinuation(TestExamSubjects):
         resp = api.get('/api/examinations/exam-subjects/',
                        d['tokens']['admin_b'], d['SID_B'])
         assert resp.status_code == 200
-        data = resp.json()
+        data = resp.json()['results']
         assert len(data) == 0, f"count={len(data)}"
 
 
@@ -1496,7 +1563,7 @@ class TestMarks:
 
         resp = api.get('/api/examinations/marks/', token, sid)
         assert resp.status_code == 200
-        data = resp.json()
+        data = resp.json()['results']
         assert len(data) >= 5, f"count={len(data)}"
         first_mark = data[0]
         assert 'percentage' in first_mark, f"keys={list(first_mark.keys())[:10]}"
@@ -1647,7 +1714,7 @@ class TestMarks:
 
         resp = api.get('/api/examinations/marks/', d['tokens']['admin_b'], d['SID_B'])
         assert resp.status_code == 200
-        data = resp.json()
+        data = resp.json()['results']
         assert len(data) == 0, f"count={len(data)}"
 
 
@@ -1756,7 +1823,7 @@ class TestGradeScales:
 
         resp = api.get('/api/examinations/grade-scales/', token, sid)
         assert resp.status_code == 200
-        data = resp.json()
+        data = resp.json()['results']
         assert len(data) >= 7, f"count={len(data)}"
 
     def test_e8_soft_delete_grade_scale(self, seed_data, api):
@@ -1784,7 +1851,7 @@ class TestGradeScales:
         resp = api.get('/api/examinations/grade-scales/',
                        seed_data['tokens']['admin_b'], seed_data['SID_B'])
         assert resp.status_code == 200
-        data = resp.json()
+        data = resp.json()['results']
         p6_grades_b = [g for g in data if g.get('grade_label', '').startswith(P6)]
         assert len(p6_grades_b) == 0, f"count={len(p6_grades_b)}"
 
@@ -2132,9 +2199,16 @@ class TestResultsAndReportCard:
         assert report_resp.status_code == 200, f"status={report_resp.status_code} body={report_resp.content[:200]}"
 
         data = report_resp.json()
+        # current_class includes the section suffix (e.g. "Class 2 - B") when the
+        # class has one, matching how class labels are built everywhere else
+        # (see ExamWizard's classLabel / _build_date_sheet_grid's column label).
+        class_2_label = (
+            f'{d["class_2"].name} - {d["class_2"].section}'
+            if d['class_2'].section else d['class_2'].name
+        )
         assert data['class_name'] == d['class_1'].name
         assert data['enrollment_info']['class_at_report_session'] == d['class_1'].name
-        assert data['enrollment_info']['current_class'] == d['class_2'].name
+        assert data['enrollment_info']['current_class'] == class_2_label
         assert data['student']['class_name'] == d['class_1'].name
         assert old_enrollment.status == StudentEnrollment.Status.PROMOTED
 
@@ -2171,7 +2245,7 @@ class TestCrossCutting:
         }, token, sid_a)
 
         resp = api.get('/api/examinations/exam-types/', token, sid_b)
-        data = resp.json() if resp.status_code == 200 else []
+        data = resp.json()['results'] if resp.status_code == 200 else []
         p6_wrong = [t for t in data if t.get('name', '').startswith(P6)]
         assert len(p6_wrong) == 0, f"count={len(p6_wrong)}"
 
