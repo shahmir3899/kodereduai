@@ -7,6 +7,7 @@ from decimal import Decimal
 from rest_framework import serializers
 from core.mixins import ensure_tenant_school_id
 from core.permissions import _is_data_restricted_user
+from .class_resolution import resolve_unambiguous_session_class
 from .models import (
     Account, Transfer, FeeStructure, FeePayment, Expense, OtherIncome,
     ExpenseCategory, IncomeCategory, AnnualFeeCategory, MonthlyFeeCategory,
@@ -235,7 +236,28 @@ class FeePaymentSerializer(serializers.ModelSerializer):
 
     def _get_session_class(self, obj):
         enrollment = self._get_active_enrollment(obj)
-        return enrollment.session_class if enrollment and enrollment.session_class else None
+        if enrollment and enrollment.session_class:
+            return enrollment.session_class
+
+        # No enrollment row (or none linked to a session_class) resolved for this
+        # student/year — this happens when the enrollment record was never created
+        # for the year at all, not just deactivated (e.g. a student who left before
+        # session-class tracking was rolled out for their year). Fall back to the
+        # student's master class: if it maps to exactly one active SessionClass for
+        # this academic year, that's an unambiguous placement, so use it rather than
+        # letting the student fall into a separate "master class" bucket that visually
+        # duplicates the class in fee_summary's by_class breakdown. See
+        # finance/class_resolution.py for why this only resolves the unambiguous case.
+        if not obj.student or not obj.academic_year:
+            return None
+        if not hasattr(self, '_fallback_session_class_cache'):
+            self._fallback_session_class_cache = {}
+        cache_key = (obj.school_id, obj.academic_year_id, obj.student.class_obj_id)
+        if cache_key not in self._fallback_session_class_cache:
+            self._fallback_session_class_cache[cache_key] = resolve_unambiguous_session_class(
+                obj.student.class_obj_id, obj.academic_year_id, obj.school_id,
+            )
+        return self._fallback_session_class_cache[cache_key]
 
     def _build_session_class_label(self, session_class):
         if not session_class:

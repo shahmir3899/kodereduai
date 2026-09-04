@@ -764,3 +764,271 @@ class TestFeeSummaryWithdrawnStudentGrouping(TestCase):
         # into "currently enrolled" vs. "left" without a second class row.
         self.assertEqual(by_student['Active Student']['student_status'], 'ACTIVE')
         self.assertEqual(by_student['Withdrawn Student']['student_status'], 'WITHDRAWN')
+
+
+class TestFeeSummaryMissingEnrollmentGrouping(TestCase):
+    """Covers the real-world case behind the still-duplicated "Playgroup" row seen in
+    production: a student with NO StudentEnrollment row at all for the academic year
+    (not merely an inactive one — TestFeeSummaryWithdrawnStudentGrouping above covers
+    that case). Confirms the class_resolution fallback resolves them via their master
+    class when it maps to exactly one active SessionClass for the year."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.school = _make_school()
+        cls.academic_year = AcademicYear.objects.create(
+            school=cls.school,
+            name='2026-2027',
+            start_date=date(2026, 4, 1),
+            end_date=date(2027, 3, 31),
+            is_current=True,
+            is_active=True,
+        )
+        cls.playgroup = Class.objects.create(school=cls.school, name='Playgroup', grade_level=0)
+        cls.session_a = SessionClass.objects.create(
+            school=cls.school,
+            academic_year=cls.academic_year,
+            class_obj=cls.playgroup,
+            display_name='Playgroup',
+            section='',
+            grade_level=0,
+            is_active=True,
+        )
+        cls.student_active = Student.objects.create(
+            school=cls.school,
+            class_obj=cls.playgroup,
+            name='Active Student',
+            roll_number='1',
+            status='ACTIVE',
+        )
+        cls.student_no_enrollment = Student.objects.create(
+            school=cls.school,
+            class_obj=cls.playgroup,
+            name='No Enrollment Student',
+            roll_number='2',
+            status='WITHDRAWN',
+        )
+        StudentEnrollment.objects.create(
+            school=cls.school,
+            student=cls.student_active,
+            academic_year=cls.academic_year,
+            class_obj=cls.playgroup,
+            session_class=cls.session_a,
+            status='ACTIVE',
+            is_active=True,
+            roll_number='1',
+        )
+        # Deliberately no StudentEnrollment row for student_no_enrollment at all —
+        # the case an inactive-enrollment fix can't reach.
+        cls.monthly_cat = MonthlyFeeCategory.objects.create(
+            school=cls.school,
+            name='Tuition Fee',
+            is_active=True,
+        )
+        cls.account = Account.objects.create(
+            school=cls.school,
+            name='Cash Box',
+            account_type=Account.AccountType.CASH,
+        )
+        FeePayment.objects.create(
+            school=cls.school,
+            student=cls.student_active,
+            academic_year=cls.academic_year,
+            fee_type='MONTHLY',
+            monthly_category=cls.monthly_cat,
+            month=4,
+            year=2026,
+            amount_due=Decimal('1500'),
+            amount_paid=Decimal('1500'),
+            base_monthly_fee=Decimal('1500'),
+            payment_date=date(2026, 4, 5),
+            account=cls.account,
+        )
+        FeePayment.objects.create(
+            school=cls.school,
+            student=cls.student_no_enrollment,
+            academic_year=cls.academic_year,
+            fee_type='MONTHLY',
+            monthly_category=cls.monthly_cat,
+            month=5,
+            year=2026,
+            amount_due=Decimal('1500'),
+            amount_paid=Decimal('1500'),
+            base_monthly_fee=Decimal('1500'),
+            payment_date=date(2026, 5, 5),
+            account=cls.account,
+        )
+        cls.user = get_user_model().objects.create_superuser(
+            username='fee_summary_admin2',
+            email='fee_summary_admin2@test.com',
+            password='test12345',
+        )
+
+    def setUp(self):
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+        self.school_header = {'HTTP_X_SCHOOL_ID': str(self.school.id)}
+
+    def test_fee_summary_merges_student_with_no_enrollment_row(self):
+        response = self.client.get(
+            '/api/finance/fee-payments/fee_summary/',
+            {'fee_type': 'MONTHLY', 'academic_year': self.academic_year.id},
+            **self.school_header,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        by_class = response.json()['by_class']
+
+        playgroup_rows = [c for c in by_class if c['class_name'] == 'Playgroup']
+        self.assertEqual(len(playgroup_rows), 1, by_class)
+        row = playgroup_rows[0]
+        self.assertEqual(row['students'], 2)
+        self.assertEqual(row['class_key'], f'session:{self.session_a.id}')
+        self.assertEqual(row['left_count'], 1)
+
+    def test_payment_list_resolves_session_class_with_no_enrollment_row(self):
+        response = self.client.get(
+            '/api/finance/fee-payments/',
+            {'fee_type': 'MONTHLY', 'academic_year': self.academic_year.id, 'page_size': 50},
+            **self.school_header,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        results = response.json()['results']
+        by_student = {r['student_name']: r for r in results}
+
+        self.assertEqual(
+            by_student['No Enrollment Student']['session_class_id'],
+            self.session_a.id,
+        )
+
+
+class TestFeeSummaryAmbiguousSessionClassStaysUnmerged(TestCase):
+    """When a master class has genuinely split into two or more sections and a
+    student has no enrollment row linking them to either, class_resolution must NOT
+    guess — the student stays in the master-class-only fallback bucket rather than
+    being silently assigned to the wrong section."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.school = _make_school()
+        cls.academic_year = AcademicYear.objects.create(
+            school=cls.school,
+            name='2026-2027',
+            start_date=date(2026, 4, 1),
+            end_date=date(2027, 3, 31),
+            is_current=True,
+            is_active=True,
+        )
+        cls.class1 = Class.objects.create(school=cls.school, name='Class 1', grade_level=1)
+        cls.section_a = SessionClass.objects.create(
+            school=cls.school,
+            academic_year=cls.academic_year,
+            class_obj=cls.class1,
+            display_name='Class 1',
+            section='A',
+            grade_level=1,
+            is_active=True,
+        )
+        cls.section_b = SessionClass.objects.create(
+            school=cls.school,
+            academic_year=cls.academic_year,
+            class_obj=cls.class1,
+            display_name='Class 1',
+            section='B',
+            grade_level=1,
+            is_active=True,
+        )
+        cls.student_a = Student.objects.create(
+            school=cls.school,
+            class_obj=cls.class1,
+            name='Section A Student',
+            roll_number='1',
+            status='ACTIVE',
+        )
+        cls.student_unlinked = Student.objects.create(
+            school=cls.school,
+            class_obj=cls.class1,
+            name='Unlinked Student',
+            roll_number='2',
+            status='WITHDRAWN',
+        )
+        StudentEnrollment.objects.create(
+            school=cls.school,
+            student=cls.student_a,
+            academic_year=cls.academic_year,
+            class_obj=cls.class1,
+            session_class=cls.section_a,
+            status='ACTIVE',
+            is_active=True,
+            roll_number='1',
+        )
+        cls.monthly_cat = MonthlyFeeCategory.objects.create(
+            school=cls.school,
+            name='Tuition Fee',
+            is_active=True,
+        )
+        cls.account = Account.objects.create(
+            school=cls.school,
+            name='Cash Box',
+            account_type=Account.AccountType.CASH,
+        )
+        FeePayment.objects.create(
+            school=cls.school,
+            student=cls.student_a,
+            academic_year=cls.academic_year,
+            fee_type='MONTHLY',
+            monthly_category=cls.monthly_cat,
+            month=4,
+            year=2026,
+            amount_due=Decimal('1500'),
+            amount_paid=Decimal('1500'),
+            base_monthly_fee=Decimal('1500'),
+            payment_date=date(2026, 4, 5),
+            account=cls.account,
+        )
+        FeePayment.objects.create(
+            school=cls.school,
+            student=cls.student_unlinked,
+            academic_year=cls.academic_year,
+            fee_type='MONTHLY',
+            monthly_category=cls.monthly_cat,
+            month=5,
+            year=2026,
+            amount_due=Decimal('1500'),
+            amount_paid=Decimal('1500'),
+            base_monthly_fee=Decimal('1500'),
+            payment_date=date(2026, 5, 5),
+            account=cls.account,
+        )
+        cls.user = get_user_model().objects.create_superuser(
+            username='fee_summary_admin3',
+            email='fee_summary_admin3@test.com',
+            password='test12345',
+        )
+
+    def setUp(self):
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+        self.school_header = {'HTTP_X_SCHOOL_ID': str(self.school.id)}
+
+    def test_ambiguous_class_is_not_merged_into_either_section(self):
+        response = self.client.get(
+            '/api/finance/fee-payments/fee_summary/',
+            {'fee_type': 'MONTHLY', 'academic_year': self.academic_year.id},
+            **self.school_header,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        by_class = response.json()['by_class']
+
+        section_a_row = next(c for c in by_class if c['class_key'] == f'session:{self.section_a.id}')
+        self.assertEqual(section_a_row['students'], 1)
+
+        # The unlinked student must not have been guessed into section A or B —
+        # it stays in its own master-class-only bucket.
+        fallback_rows = [c for c in by_class if c['class_key'] not in (
+            f'session:{self.section_a.id}', f'session:{self.section_b.id}',
+        )]
+        self.assertEqual(len(fallback_rows), 1, by_class)
+        self.assertEqual(fallback_rows[0]['students'], 1)

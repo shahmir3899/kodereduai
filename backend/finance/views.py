@@ -52,6 +52,7 @@ from .serializers import (
     FeeBreakdownSerializer,
 )
 from .generation_planner import build_preview_plan
+from .class_resolution import resolve_unambiguous_session_class
 
 logger = logging.getLogger(__name__)
 
@@ -1377,12 +1378,40 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
                     }
 
         # --- By-class breakdown (session-class-aware) ---
+        # Memoized per class_obj_id: covers students with no StudentEnrollment row at
+        # all for this academic year (not just an inactive one — the enrollments query
+        # above already handles that case). Same fallback used by
+        # FeePaymentSerializer._get_session_class so the class_key produced here always
+        # matches what the payment list returns for expand-row matching.
+        fallback_session_class_cache = {}
+
+        def _get_fallback_session_class(class_obj_id):
+            if not academic_year_id or not school_id:
+                return None
+            if class_obj_id not in fallback_session_class_cache:
+                fallback_session_class_cache[class_obj_id] = resolve_unambiguous_session_class(
+                    class_obj_id, academic_year_id, school_id,
+                )
+            return fallback_session_class_cache[class_obj_id]
+
         class_buckets = {}  # key → {class_name, grade_level, section, students: set, total_due, total_collected}
         for payment in qs.values('student_id', 'student__class_obj_id', 'student__class_obj__name',
                                   'student__class_obj__section', 'student__class_obj__grade_level',
                                   'student__status', 'amount_due', 'amount_paid'):
             sid = payment['student_id']
             sc_id = student_session_map.get(sid)
+            if not sc_id:
+                fallback_sc = _get_fallback_session_class(payment['student__class_obj_id'])
+                if fallback_sc:
+                    sc_id = fallback_sc.id
+                    if sc_id not in session_class_meta:
+                        label = f"{fallback_sc.display_name} - {fallback_sc.section}" if fallback_sc.section else fallback_sc.display_name
+                        session_class_meta[sc_id] = {
+                            'display_name': fallback_sc.display_name,
+                            'section': fallback_sc.section,
+                            'grade_level': fallback_sc.grade_level,
+                            'label': label,
+                        }
             # A student is "left" (no longer currently enrolled) for any status other than
             # ACTIVE/REPEAT — e.g. WITHDRAWN, TRANSFERRED, GRADUATED. These students still
             # count toward the class's totals (they were billed while enrolled), but are
