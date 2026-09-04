@@ -729,8 +729,17 @@ class TestFeeSummaryWithdrawnStudentGrouping(TestCase):
         # appear alongside the sc: session-class bucket).
         playgroup_rows = [c for c in by_class if c['class_name'] == 'Playgroup']
         self.assertEqual(len(playgroup_rows), 1, by_class)
-        self.assertEqual(playgroup_rows[0]['students'], 2)
-        self.assertEqual(playgroup_rows[0]['class_key'], f'session:{self.session_a.id}')
+        row = playgroup_rows[0]
+        self.assertEqual(row['students'], 2)
+        self.assertEqual(row['class_key'], f'session:{self.session_a.id}')
+
+        # Withdrawn student's balance is still counted in the class total,
+        # but also broken out separately so staff can tell it apart from a
+        # still-enrolled family's balance.
+        self.assertEqual(row['left_count'], 1)
+        self.assertEqual(Decimal(str(row['left_total_due'])), Decimal('1500'))
+        self.assertEqual(Decimal(str(row['left_total_collected'])), Decimal('1500'))
+        self.assertEqual(Decimal(str(row['total_due'])), Decimal('3000'))
 
     def test_payment_list_resolves_session_class_for_withdrawn_student(self):
         response = self.client.get(
@@ -750,3 +759,8 @@ class TestFeeSummaryWithdrawnStudentGrouping(TestCase):
             by_student['Withdrawn Student']['session_class_id'],
         )
         self.assertEqual(by_student['Withdrawn Student']['session_class_id'], self.session_a.id)
+
+        # student_status lets the frontend split the expanded student list
+        # into "currently enrolled" vs. "left" without a second class row.
+        self.assertEqual(by_student['Active Student']['student_status'], 'ACTIVE')
+        self.assertEqual(by_student['Withdrawn Student']['student_status'], 'WITHDRAWN')

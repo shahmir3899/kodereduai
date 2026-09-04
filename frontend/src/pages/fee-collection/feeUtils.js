@@ -3,6 +3,7 @@ import {
   compareClassLabels,
   getClassSortMeta,
 } from '../../utils/classOrdering'
+import { isLeftStatus } from '../../utils/studentLifecycle'
 
 /**
  * Compute summary data from a list of fee payments.
@@ -41,11 +42,22 @@ export function computeSummaryData(allPayments, month, year, options = {}) {
         total_due: 0,
         total_collected: 0,
         count: 0,
+        left_total_due: 0,
+        left_total_collected: 0,
+        left_count: 0,
       }
     }
     classMap[key].total_due += Number(p.amount_due)
     classMap[key].total_collected += Number(p.amount_paid)
     classMap[key].count++
+    // Sub-total for students no longer currently enrolled — already included
+    // in the totals above, kept separate so the UI can show it apart from a
+    // still-enrolled family's balance. Mirrors fee_summary's is_left check.
+    if (isLeftStatus(p.student_status)) {
+      classMap[key].left_total_due += Number(p.amount_due)
+      classMap[key].left_total_collected += Number(p.amount_paid)
+      classMap[key].left_count++
+    }
 
     const categoryId = p.monthly_category || p.annual_category || null
     const categoryName = p.monthly_category_name || p.annual_category_name || 'Uncategorized'

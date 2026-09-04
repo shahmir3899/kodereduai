@@ -196,6 +196,10 @@ class BulkStudentFeeStructureSerializer(serializers.Serializer):
 class FeePaymentSerializer(serializers.ModelSerializer):
     student_name = serializers.CharField(source='student.name', read_only=True, default='Deleted Student')
     student_roll = serializers.CharField(source='student.roll_number', read_only=True, default=None)
+    # Student lifecycle status (ACTIVE/WITHDRAWN/TRANSFERRED/...) at the time this payment
+    # is viewed — lets the frontend split a class's students into "currently enrolled" vs.
+    # "left" without a second bucket in the class-wise breakdown (see fee_summary below).
+    student_status = serializers.CharField(source='student.status', read_only=True, default='ACTIVE')
     class_name = serializers.SerializerMethodField()
     session_class_id = serializers.SerializerMethodField()
     session_class_name = serializers.SerializerMethodField()
@@ -277,7 +281,7 @@ class FeePaymentSerializer(serializers.ModelSerializer):
         model = FeePayment
         fields = [
             'id', 'school', 'student',
-            'student_name', 'student_roll', 'class_name',
+            'student_name', 'student_roll', 'student_status', 'class_name',
             'session_class_id', 'session_class_name', 'session_class_section', 'session_class_label',
             'class_obj_id',
             'academic_year', 'academic_year_name',

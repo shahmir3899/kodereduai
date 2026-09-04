@@ -66,4 +66,39 @@ describe('feeUtils regression', () => {
       partial_count: 1,
     })
   })
+
+  it('computeSummaryData tracks a left/withdrawn sub-total per class without a second row', () => {
+    const rows = [
+      {
+        id: 1,
+        session_class_id: 11,
+        session_class_label: 'Playgroup',
+        class_name: 'Playgroup',
+        student_status: 'ACTIVE',
+        amount_due: '1500',
+        amount_paid: '1500',
+        status: 'PAID',
+      },
+      {
+        id: 2,
+        session_class_id: 11,
+        session_class_label: 'Playgroup',
+        class_name: 'Playgroup',
+        student_status: 'WITHDRAWN',
+        amount_due: '1500',
+        amount_paid: '1500',
+        status: 'PAID',
+      },
+    ]
+
+    const summary = computeSummaryData(rows, 4, 2026)
+
+    expect(summary.by_class).toHaveLength(1)
+    const [playgroup] = summary.by_class
+    expect(playgroup.count).toBe(2)
+    expect(playgroup.left_count).toBe(1)
+    expect(playgroup.total_due).toBe(3000)
+    expect(playgroup.left_total_due).toBe(1500)
+    expect(playgroup.left_total_collected).toBe(1500)
+  })
 })
