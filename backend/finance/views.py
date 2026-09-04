@@ -420,9 +420,12 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         ).prefetch_related(
             Prefetch(
                 'student__enrollments',
+                # Not filtered to is_active=True: a student withdrawn mid-year still needs
+                # their enrollment resolved here so their earlier months' fee records group
+                # under their real class instead of falling back to a separate bucket
+                # (see fee_summary's class_buckets below for the same fix).
                 queryset=StudentEnrollment.objects.select_related('session_class', 'academic_year')
-                .filter(is_active=True)
-                .order_by('-updated_at', '-id'),
+                .order_by('-is_active', '-updated_at', '-id'),
                 to_attr='prefetched_enrollments',
             )
         )
@@ -1349,11 +1352,17 @@ class FeePaymentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
                 StudentEnrollment.objects
                 .filter(
                     academic_year_id=academic_year_id,
-                    is_active=True,
                     session_class__school_id=school_id,
                     session_class__is_active=True,
                 )
                 .select_related('session_class')
+                # Not filtered to is_active=True: a student withdrawn mid-year still needs
+                # their session_class resolved so their earlier months' fee records group
+                # under their real class instead of falling into the master-class fallback
+                # bucket below (produced two rows for the same visible class name). Ordered
+                # so that if a student has more than one enrollment row for the year, the
+                # active one (if any) is processed last and wins the dict assignment.
+                .order_by('is_active', 'id')
             )
             for enrollment in enrollments:
                 sc = enrollment.session_class

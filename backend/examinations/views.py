@@ -503,7 +503,31 @@ class ExamGroupViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
         return qs
 
     def perform_destroy(self, instance):
-        instance.delete()  # Cascades to Exam → ExamSubject → StudentMark
+        # Exam.exam_group is on_delete=SET_NULL (an exam can outlive its group,
+        # e.g. after a group merge), so deleting the group alone would silently
+        # orphan its per-class Exam rows instead of removing them -- they'd keep
+        # blocking the wizard's per-class conflict check forever while no longer
+        # being visible anywhere as a group. Explicitly delete them first; Exam
+        # cascades (CASCADE) to ExamSubject -> StudentMark on its own.
+        instance.exams.all().delete()
+        instance.delete()
+
+    @action(detail=False, methods=['post'], url_path='bulk_delete')
+    def bulk_delete(self, request):
+        """POST /api/examinations/exam-groups/bulk_delete/  Body: {"ids": [1, 2, 3]}
+
+        Same cascade-safety as perform_destroy above: Exam.exam_group is
+        SET_NULL, so the child Exam rows are deleted explicitly rather than
+        relying on queryset.delete() to cascade them.
+        """
+        ids = request.data.get('ids') or []
+        if not isinstance(ids, list) or not ids:
+            return Response({'detail': 'ids must be a non-empty list.'}, status=status.HTTP_400_BAD_REQUEST)
+        queryset = self.get_queryset().filter(id__in=ids)
+        group_ids = list(queryset.values_list('id', flat=True))
+        Exam.objects.filter(exam_group_id__in=group_ids).delete()
+        queryset.delete()
+        return Response({'requested_count': len(ids), 'deleted_count': len(group_ids)})
 
     @action(detail=False, methods=['post'], url_path='wizard-create')
     def wizard_create(self, request):
@@ -1141,6 +1165,17 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
 
     def perform_destroy(self, instance):
         instance.delete()  # Cascades to ExamSubject → StudentMark
+
+    @action(detail=False, methods=['post'], url_path='bulk_delete')
+    def bulk_delete(self, request):
+        """POST /api/examinations/exams/bulk_delete/  Body: {"ids": [1, 2, 3]}"""
+        ids = request.data.get('ids') or []
+        if not isinstance(ids, list) or not ids:
+            return Response({'detail': 'ids must be a non-empty list.'}, status=status.HTTP_400_BAD_REQUEST)
+        queryset = self.get_queryset().filter(id__in=ids)
+        deleted_count = queryset.count()
+        queryset.delete()  # Cascades (CASCADE) to ExamSubject -> StudentMark
+        return Response({'requested_count': len(ids), 'deleted_count': deleted_count})
 
     @action(detail=True, methods=['post'])
     def publish(self, request, pk=None):
