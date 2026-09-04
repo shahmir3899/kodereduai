@@ -7,6 +7,7 @@ from decimal import Decimal
 from rest_framework import serializers
 from core.mixins import ensure_tenant_school_id
 from core.permissions import _is_data_restricted_user
+from .class_resolution import resolve_unambiguous_session_class
 from .models import (
     Account, Transfer, FeeStructure, FeePayment, Expense, OtherIncome,
     ExpenseCategory, IncomeCategory, AnnualFeeCategory, MonthlyFeeCategory,
@@ -196,6 +197,10 @@ class BulkStudentFeeStructureSerializer(serializers.Serializer):
 class FeePaymentSerializer(serializers.ModelSerializer):
     student_name = serializers.CharField(source='student.name', read_only=True, default='Deleted Student')
     student_roll = serializers.CharField(source='student.roll_number', read_only=True, default=None)
+    # Student lifecycle status (ACTIVE/WITHDRAWN/TRANSFERRED/...) at the time this payment
+    # is viewed — lets the frontend split a class's students into "currently enrolled" vs.
+    # "left" without a second bucket in the class-wise breakdown (see fee_summary below).
+    student_status = serializers.CharField(source='student.status', read_only=True, default='ACTIVE')
     class_name = serializers.SerializerMethodField()
     session_class_id = serializers.SerializerMethodField()
     session_class_name = serializers.SerializerMethodField()
@@ -231,7 +236,28 @@ class FeePaymentSerializer(serializers.ModelSerializer):
 
     def _get_session_class(self, obj):
         enrollment = self._get_active_enrollment(obj)
-        return enrollment.session_class if enrollment and enrollment.session_class else None
+        if enrollment and enrollment.session_class:
+            return enrollment.session_class
+
+        # No enrollment row (or none linked to a session_class) resolved for this
+        # student/year — this happens when the enrollment record was never created
+        # for the year at all, not just deactivated (e.g. a student who left before
+        # session-class tracking was rolled out for their year). Fall back to the
+        # student's master class: if it maps to exactly one active SessionClass for
+        # this academic year, that's an unambiguous placement, so use it rather than
+        # letting the student fall into a separate "master class" bucket that visually
+        # duplicates the class in fee_summary's by_class breakdown. See
+        # finance/class_resolution.py for why this only resolves the unambiguous case.
+        if not obj.student or not obj.academic_year:
+            return None
+        if not hasattr(self, '_fallback_session_class_cache'):
+            self._fallback_session_class_cache = {}
+        cache_key = (obj.school_id, obj.academic_year_id, obj.student.class_obj_id)
+        if cache_key not in self._fallback_session_class_cache:
+            self._fallback_session_class_cache[cache_key] = resolve_unambiguous_session_class(
+                obj.student.class_obj_id, obj.academic_year_id, obj.school_id,
+            )
+        return self._fallback_session_class_cache[cache_key]
 
     def _build_session_class_label(self, session_class):
         if not session_class:
@@ -277,7 +303,7 @@ class FeePaymentSerializer(serializers.ModelSerializer):
         model = FeePayment
         fields = [
             'id', 'school', 'student',
-            'student_name', 'student_roll', 'class_name',
+            'student_name', 'student_roll', 'student_status', 'class_name',
             'session_class_id', 'session_class_name', 'session_class_section', 'session_class_label',
             'class_obj_id',
             'academic_year', 'academic_year_name',
