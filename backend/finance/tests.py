@@ -599,3 +599,154 @@ class TestFeeGenerationSessionClassScoping(TestCase):
         )
         self.assertTrue(FeePayment.objects.filter(student=self.student_a).exists())
         self.assertFalse(FeePayment.objects.filter(student=self.student_b).exists())
+
+
+class TestFeeSummaryWithdrawnStudentGrouping(TestCase):
+    """A student withdrawn mid-year must still be grouped under their real
+    class in fee_summary's by_class breakdown, not split into a second
+    "Playgroup"/"Class 3"-looking row keyed by the master class alone.
+    See CLASS_SYSTEM_GUIDE.md Known Issue 6 for the underlying orphan-link
+    pattern this reproduces."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.school = _make_school()
+        cls.academic_year = AcademicYear.objects.create(
+            school=cls.school,
+            name='2026-2027',
+            start_date=date(2026, 4, 1),
+            end_date=date(2027, 3, 31),
+            is_current=True,
+            is_active=True,
+        )
+        cls.playgroup = Class.objects.create(school=cls.school, name='Playgroup', grade_level=0)
+        cls.session_a = SessionClass.objects.create(
+            school=cls.school,
+            academic_year=cls.academic_year,
+            class_obj=cls.playgroup,
+            display_name='Playgroup',
+            section='',
+            grade_level=0,
+            is_active=True,
+        )
+        cls.student_active = Student.objects.create(
+            school=cls.school,
+            class_obj=cls.playgroup,
+            name='Active Student',
+            roll_number='1',
+            status='ACTIVE',
+        )
+        cls.student_withdrawn = Student.objects.create(
+            school=cls.school,
+            class_obj=cls.playgroup,
+            name='Withdrawn Student',
+            roll_number='2',
+            status='WITHDRAWN',
+        )
+        StudentEnrollment.objects.create(
+            school=cls.school,
+            student=cls.student_active,
+            academic_year=cls.academic_year,
+            class_obj=cls.playgroup,
+            session_class=cls.session_a,
+            status='ACTIVE',
+            is_active=True,
+            roll_number='1',
+        )
+        # Withdrawn mid-year: enrollment left inactive, mirroring how the
+        # withdrawal workflow marks it, but the session_class link is still
+        # the correct historical placement for the months already billed.
+        StudentEnrollment.objects.create(
+            school=cls.school,
+            student=cls.student_withdrawn,
+            academic_year=cls.academic_year,
+            class_obj=cls.playgroup,
+            session_class=cls.session_a,
+            status='WITHDRAWN',
+            is_active=False,
+            roll_number='2',
+        )
+        cls.monthly_cat = MonthlyFeeCategory.objects.create(
+            school=cls.school,
+            name='Tuition Fee',
+            is_active=True,
+        )
+        cls.account = Account.objects.create(
+            school=cls.school,
+            name='Cash Box',
+            account_type=Account.AccountType.CASH,
+        )
+        FeePayment.objects.create(
+            school=cls.school,
+            student=cls.student_active,
+            academic_year=cls.academic_year,
+            fee_type='MONTHLY',
+            monthly_category=cls.monthly_cat,
+            month=4,
+            year=2026,
+            amount_due=Decimal('1500'),
+            amount_paid=Decimal('1500'),
+            base_monthly_fee=Decimal('1500'),
+            payment_date=date(2026, 4, 5),
+            account=cls.account,
+        )
+        FeePayment.objects.create(
+            school=cls.school,
+            student=cls.student_withdrawn,
+            academic_year=cls.academic_year,
+            fee_type='MONTHLY',
+            monthly_category=cls.monthly_cat,
+            month=5,
+            year=2026,
+            amount_due=Decimal('1500'),
+            amount_paid=Decimal('1500'),
+            base_monthly_fee=Decimal('1500'),
+            payment_date=date(2026, 5, 5),
+            account=cls.account,
+        )
+        cls.user = get_user_model().objects.create_superuser(
+            username='fee_summary_admin',
+            email='fee_summary_admin@test.com',
+            password='test12345',
+        )
+
+    def setUp(self):
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+        self.school_header = {'HTTP_X_SCHOOL_ID': str(self.school.id)}
+
+    def test_fee_summary_groups_withdrawn_student_with_active_classmate(self):
+        response = self.client.get(
+            '/api/finance/fee-payments/fee_summary/',
+            {'fee_type': 'MONTHLY', 'academic_year': self.academic_year.id},
+            **self.school_header,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        by_class = response.json()['by_class']
+
+        # Exactly one Playgroup row, not two (mc: fallback bucket must not
+        # appear alongside the sc: session-class bucket).
+        playgroup_rows = [c for c in by_class if c['class_name'] == 'Playgroup']
+        self.assertEqual(len(playgroup_rows), 1, by_class)
+        self.assertEqual(playgroup_rows[0]['students'], 2)
+        self.assertEqual(playgroup_rows[0]['class_key'], f'session:{self.session_a.id}')
+
+    def test_payment_list_resolves_session_class_for_withdrawn_student(self):
+        response = self.client.get(
+            '/api/finance/fee-payments/',
+            {'fee_type': 'MONTHLY', 'academic_year': self.academic_year.id, 'page_size': 50},
+            **self.school_header,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        results = response.json()['results']
+        by_student = {r['student_name']: r for r in results}
+
+        # Both records must resolve to the same class_key the fee_summary
+        # bucket used above, or the frontend's expand-row matching breaks.
+        self.assertEqual(
+            by_student['Active Student']['session_class_id'],
+            by_student['Withdrawn Student']['session_class_id'],
+        )
+        self.assertEqual(by_student['Withdrawn Student']['session_class_id'], self.session_a.id)

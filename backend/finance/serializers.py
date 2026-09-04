@@ -219,10 +219,13 @@ class FeePaymentSerializer(serializers.ModelSerializer):
             return None
 
         try:
+            # Not filtered to is_active=True: a withdrawn student's enrollment must still
+            # resolve here so their earlier months' fee records group under their real
+            # class instead of a separate fallback bucket. Active enrollments are still
+            # preferred via ordering when more than one row exists for the year.
             return obj.student.enrollments.select_related('session_class').filter(
                 academic_year_id=obj.academic_year_id,
-                is_active=True
-            ).order_by('-updated_at', '-id').first()
+            ).order_by('-is_active', '-updated_at', '-id').first()
         except Exception:
             return None
 
