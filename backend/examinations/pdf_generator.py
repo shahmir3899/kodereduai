@@ -13,9 +13,36 @@ import io
 import logging
 from datetime import datetime
 
+import requests
+
 from .paper_export_layout import build_export_layout, resolve_exam_paper_class_name
 
 logger = logging.getLogger(__name__)
+
+
+def _load_logo_stream(school):
+    """Fetch a school's logo bytes ourselves before handing them to ReportLab.
+
+    reportlab.platypus.Image is lazy by default: passing it a URL string just
+    stores the string, and the actual load happens later inside doc.build()
+    via ImageReader, which only does a local open()/PIL read -- it has no
+    HTTP client and can't fetch http(s) URLs at all. School.logo is a Supabase
+    Storage URL, so passing it straight to Image() reliably raises "Cannot
+    open resource" during build(), outside any try/except wrapped around the
+    Image() call itself, taking down the whole PDF. Fetching the bytes here
+    means an unreachable/invalid logo just degrades to "no logo" instead of
+    failing the export.
+    """
+    logo_url = getattr(school, 'logo', None) if school else None
+    if not logo_url:
+        return None
+    try:
+        resp = requests.get(logo_url, timeout=8)
+        resp.raise_for_status()
+        return io.BytesIO(resp.content)
+    except Exception as e:
+        logger.warning(f"Could not fetch school logo: {str(e)}")
+        return None
 
 
 class ExamPaperPDFGenerator:
@@ -111,14 +138,15 @@ class ExamPaperPDFGenerator:
         )
 
         # Header with school logo (if available)
-        if hasattr(self.school, 'logo_url') and self.school.logo_url:
+        logo_stream = _load_logo_stream(self.school)
+        if logo_stream:
             try:
-                logo = Image(self.school.logo_url, width=1*inch, height=1*inch)
+                logo = Image(logo_stream, width=1*inch, height=1*inch)
                 logo.hAlign = 'CENTER'
                 elements.append(logo)
                 elements.append(Spacer(1, 8))
             except Exception as e:
-                logger.warning(f"Could not load school logo: {str(e)}")
+                logger.warning(f"Could not render school logo: {str(e)}")
 
         school_name_style = ParagraphStyle(
             'SchoolName', parent=styles['Heading1'], fontSize=16, alignment=TA_CENTER,
@@ -258,14 +286,15 @@ class ExamPaperPDFGenerator:
         elements = []
         styles = getSampleStyleSheet()
 
-        if hasattr(self.school, 'logo_url') and self.school.logo_url:
+        logo_stream = _load_logo_stream(self.school)
+        if logo_stream:
             try:
-                logo = Image(self.school.logo_url, width=1*inch, height=1*inch)
+                logo = Image(logo_stream, width=1*inch, height=1*inch)
                 logo.hAlign = 'CENTER'
                 elements.append(logo)
                 elements.append(Spacer(1, 8))
             except Exception as e:
-                logger.warning(f"Could not load school logo: {str(e)}")
+                logger.warning(f"Could not render school logo: {str(e)}")
 
         school_name_style = ParagraphStyle(
             'SchoolName', parent=styles['Heading1'], fontSize=16, alignment=TA_CENTER,
@@ -540,14 +569,15 @@ class DateSheetPDFGenerator:
         elements = []
 
         school = self.group.school
-        if school and getattr(school, 'logo', None):
+        logo_stream = _load_logo_stream(school)
+        if logo_stream:
             try:
-                logo = Image(school.logo, width=0.8 * inch, height=0.8 * inch)
+                logo = Image(logo_stream, width=0.8 * inch, height=0.8 * inch)
                 logo.hAlign = 'CENTER'
                 elements.append(logo)
                 elements.append(Spacer(1, 6))
             except Exception as e:
-                logger.warning(f"Could not load school logo: {str(e)}")
+                logger.warning(f"Could not render school logo: {str(e)}")
         if school and getattr(school, 'name', None):
             elements.append(Paragraph(school.name, school_name_style))
 

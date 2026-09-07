@@ -1,4 +1,5 @@
 import io
+import logging
 import re
 from decimal import Decimal
 from django.db import IntegrityError, transaction
@@ -44,6 +45,7 @@ from .serializers import (
 )
 from .tasks import recompute_question_stats
 
+logger = logging.getLogger(__name__)
 
 
 def _resolve_school_id(request):
@@ -792,7 +794,10 @@ class ExamGroupViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
         grid = _build_date_sheet_grid(group, school_id)
 
         import openpyxl
+        from openpyxl.drawing.image import Image as XLImage
         from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
+        from .pdf_generator import _load_logo_stream
 
         wb = openpyxl.Workbook()
         ws = wb.active
@@ -800,16 +805,34 @@ class ExamGroupViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
 
         last_col = 2 + len(grid['columns'])  # Date + Day + one per class
 
-        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=last_col)
-        ws['A1'] = f'Date Sheet - {group.name}'
-        ws['A1'].font = Font(bold=True, size=14)
+        # Logo (if available) pushes the title/subtitle rows down so it doesn't
+        # overlap them -- same _load_logo_stream helper the PDF export uses, so
+        # a bad/unreachable logo degrades to "no logo" here too instead of
+        # failing the whole export.
+        row_offset = 0
+        logo_stream = _load_logo_stream(group.school)
+        if logo_stream:
+            try:
+                xl_logo = XLImage(logo_stream)
+                xl_logo.width = 60
+                xl_logo.height = 60
+                ws.add_image(xl_logo, 'A1')
+                ws.row_dimensions[1].height = 46
+                row_offset = 3
+            except Exception as e:
+                logger.warning(f"Could not embed school logo in date sheet Excel: {str(e)}")
 
-        ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=last_col)
+        title_row = 1 + row_offset
+        subtitle_row = 2 + row_offset
+
+        ws.merge_cells(start_row=title_row, start_column=1, end_row=title_row, end_column=last_col)
+        ws.cell(row=title_row, column=1, value=f'Date Sheet - {group.name}').font = Font(bold=True, size=14)
+
+        ws.merge_cells(start_row=subtitle_row, start_column=1, end_row=subtitle_row, end_column=last_col)
         period = ''
         if group.start_date and group.end_date:
             period = f' | {group.start_date} to {group.end_date}'
-        ws['A2'] = f'Exam Type: {group.exam_type.name}{period}'
-        ws['A2'].font = Font(size=10, color='555555')
+        ws.cell(row=subtitle_row, column=1, value=f'Exam Type: {group.exam_type.name}{period}').font = Font(size=10, color='555555')
 
         header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
         header_font = Font(bold=True, color='FFFFFF', size=10)
@@ -818,7 +841,7 @@ class ExamGroupViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
             top=Side(style='thin'), bottom=Side(style='thin'),
         )
 
-        header_row = 4
+        header_row = 4 + row_offset
         headers = ['Date', 'Day'] + [col['label'] for col in grid['columns']]
         for col_idx, header in enumerate(headers, 1):
             cell = ws.cell(row=header_row, column=col_idx, value=header)
