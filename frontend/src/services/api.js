@@ -1426,6 +1426,7 @@ export const questionPaperApi = {
   createExamPaper: (data) => api.post('/api/examinations/exam-papers/', data),
   updateExamPaper: (id, data) => api.patch(`/api/examinations/exam-papers/${id}/`, data),
   deleteExamPaper: (id) => api.delete(`/api/examinations/exam-papers/${id}/`),
+  bulkDeleteExamPapers: (ids) => api.post('/api/examinations/exam-papers/bulk_delete/', { ids }),
   createFromLessons: (data) => api.post('/api/examinations/exam-papers/create_from_lessons/', data),
   linkLessonPlans: (paperId, data) =>
     api.post(`/api/examinations/exam-papers/${paperId}/link_lesson_plans/`, data),

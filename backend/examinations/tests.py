@@ -445,6 +445,104 @@ class ExamPaperDraftRBACTests(TestCase):
         )
         self.assertEqual(response.status_code, 403)
 
+    def test_teacher_without_class_teacher_scope_cannot_delete_paper(self):
+        """A teacher with no class/subject assignment can't even see the paper via
+        get_queryset (teacher-scope filtering), so the object lookup itself 404s
+        before perform_destroy's manage-scope check would run."""
+        paper = ExamPaper.objects.create(
+            school=self.school, class_obj=self.class_obj, subject=self.subject,
+            paper_title='Guarded Paper',
+        )
+        self.client.force_authenticate(self.teacher_user)
+        response = self.client.delete(
+            f'/api/examinations/exam-papers/{paper.id}/',
+            **self.school_header,
+        )
+        self.assertEqual(response.status_code, 404)
+        paper.refresh_from_db()
+        self.assertTrue(paper.is_active)
+
+    def test_staff_cannot_delete_paper(self):
+        """perform_destroy previously skipped the manage-scope check that create/update
+        already enforce. STAFF isn't filtered out by the teacher-scope branch of
+        get_queryset (that only applies to the TEACHER role), so the paper is visible
+        to them -- this exercises the perform_destroy guard itself, not the queryset
+        filter, and would have 204'd before this fix."""
+        paper = ExamPaper.objects.create(
+            school=self.school, class_obj=self.class_obj, subject=self.subject,
+            paper_title='Guarded Paper',
+        )
+        self.client.force_authenticate(self.staff_user)
+        response = self.client.delete(
+            f'/api/examinations/exam-papers/{paper.id}/',
+            **self.school_header,
+        )
+        self.assertEqual(response.status_code, 403)
+        paper.refresh_from_db()
+        self.assertTrue(paper.is_active)
+
+    def test_principal_can_delete_paper(self):
+        paper = ExamPaper.objects.create(
+            school=self.school, class_obj=self.class_obj, subject=self.subject,
+            paper_title='Deletable Paper',
+        )
+        self.client.force_authenticate(self.principal_user)
+        response = self.client.delete(
+            f'/api/examinations/exam-papers/{paper.id}/',
+            **self.school_header,
+        )
+        self.assertEqual(response.status_code, 204)
+        paper.refresh_from_db()
+        self.assertFalse(paper.is_active)
+
+    def test_bulk_delete_skips_papers_outside_manage_scope(self):
+        """bulk_delete should delete what the caller is allowed to manage and report
+        the rest as skipped, rather than failing the whole request or deleting
+        everything indiscriminately."""
+        allowed_paper = ExamPaper.objects.create(
+            school=self.school, class_obj=self.class_obj, subject=self.subject,
+            paper_title='Bulk Allowed',
+        )
+        other_subject = Subject.objects.create(school=self.school, name='Physics', code='PHY2')
+        blocked_paper = ExamPaper.objects.create(
+            school=self.school, class_obj=self.class_obj, subject=other_subject,
+            paper_title='Bulk Blocked',
+        )
+
+        from academics.models import ClassSubject
+        from hr.models import StaffMember
+
+        subject_teacher_user = get_user_model().objects.create_user(
+            username='exam_bulk_subject_teacher',
+            email='bulk_subject_teacher@test.com',
+            password='test12345',
+            role='TEACHER',
+            school=self.school,
+        )
+        staff = StaffMember.objects.create(
+            school=self.school, user=subject_teacher_user, first_name='Bulk', last_name='Teacher',
+        )
+        ClassSubject.objects.create(
+            school=self.school, class_obj=self.class_obj, subject=self.subject, teacher=staff,
+        )
+
+        self.client.force_authenticate(subject_teacher_user)
+        response = self.client.post(
+            '/api/examinations/exam-papers/bulk_delete/',
+            {'ids': [allowed_paper.id, blocked_paper.id]},
+            format='json',
+            **self.school_header,
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['deleted'], [allowed_paper.id])
+        self.assertEqual(len(response.data['skipped']), 1)
+        self.assertEqual(response.data['skipped'][0]['id'], blocked_paper.id)
+
+        allowed_paper.refresh_from_db()
+        blocked_paper.refresh_from_db()
+        self.assertFalse(allowed_paper.is_active)
+        self.assertTrue(blocked_paper.is_active)
+
 
 # A 1x1 transparent PNG — enough to satisfy Django's ImageField validation.
 TINY_PNG_BYTES = base64.b64decode(
@@ -839,9 +937,16 @@ class PaperExportLayoutTests(TestCase):
         paper = self._make_paper(structure=[])
         self.assertIsNone(build_export_layout(paper))
 
-    def test_fill_blank_group_becomes_one_question_with_standardized_blanks(self):
+    def test_fill_blank_group_becomes_one_question_with_generic_numbered_blanks(self):
         from .paper_export_layout import build_export_layout
 
+        # type_data.items are the *answers* the teacher typed into the composer's "Answer
+        # for blank N" fields (QuestionSlotEditor.jsx) -- mirrored into
+        # type_data.accepted_answers for grading. Printing that text used to leak the
+        # answer straight onto the student paper (e.g. "The capital of Pakistan is" would
+        # actually be an answer like "Islamabad", printed right next to its own blank), so
+        # the export now only prints a generic numbered blank per item and never echoes
+        # its content -- the question stem (question_text) carries the actual prompt.
         paper = self._make_paper(structure=[
             {
                 'key': 'sec_fill', 'title': 'Q1', 'instruction': None,
@@ -852,11 +957,7 @@ class PaperExportLayoutTests(TestCase):
         self._attach_question(
             paper, order=1, section_key='sec_fill',
             question_text='Fill in the blanks:', question_type='FILL_BLANK', marks=5,
-            type_data={'items': [
-                'The capital of Pakistan is ____.',
-                'Water boils at ____ degrees Celsius.',
-                'No marker here',
-            ]},
+            type_data={'items': ['Islamabad', '100', '']},  # third is a discarded empty blank
         )
 
         layout = build_export_layout(paper)
@@ -868,9 +969,8 @@ class PaperExportLayoutTests(TestCase):
         self.assertEqual(item['question_type'], 'FILL_BLANK')
         self.assertEqual(item['marks'], 5)
         self.assertEqual(item['fill_blank_items'], [
-            'The capital of Pakistan is __________.',
-            'Water boils at __________ degrees Celsius.',
-            'No marker here __________',
+            'Blank 1: __________',
+            'Blank 2: __________',
         ])
 
     def test_matching_shuffle_is_deterministic_across_rebuilds(self):
@@ -966,9 +1066,11 @@ class PaperExportLayoutTests(TestCase):
         self.assertEqual(layout['blocks'][0]['type'], 'section')
         self.assertEqual(layout['blocks'][1]['type'], 'unstructured')
         self.assertEqual(len(layout['blocks'][1]['items']), 1)
-        # Numbering is continuous across blocks.
-        self.assertEqual(layout['blocks'][0]['items'][0]['number'], 1)
-        self.assertEqual(layout['blocks'][1]['items'][0]['number'], 2)
+        # The lone section is question group 1, so its one item is its first lettered
+        # part; the unassigned question has no section to belong to, so it just gets
+        # the next plain group number with no letter.
+        self.assertEqual(layout['blocks'][0]['items'][0]['number'], '1(a)')
+        self.assertEqual(layout['blocks'][1]['items'][0]['number'], '2')
 
     def test_docx_generation_smoke_test_structured_and_legacy(self):
         if importlib.util.find_spec('docx') is None:

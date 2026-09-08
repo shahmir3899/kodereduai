@@ -13,13 +13,28 @@ looking exactly as they did before structure/render_options existed.
 """
 
 import random
-import re
 from decimal import Decimal, InvalidOperation
 
 QUESTION_TYPES_WITH_ANSWER_LINES = {'SHORT', 'LONG', 'ESSAY'}
 ANSWER_LINE_COUNTS = {'SHORT': 3, 'LONG': 6, 'ESSAY': 6}
-BLANK_MARKER_RE = re.compile(r'_{2,}')
 BLANK_FILL = '__________'
+
+# Shown next to a section's title when the section author left `instruction` blank,
+# so a student always sees how to answer that question type (e.g. "Question # 2"
+# alone doesn't say how True/False should be marked) without every paper author having
+# to type the same boilerplate. A custom `instruction` on the section always wins.
+DEFAULT_TYPE_INSTRUCTIONS = {
+    'MCQ': 'Choose the correct option.',
+    # Plain ASCII on purpose -- ReportLab's default Helvetica (WinAnsi encoding)
+    # doesn't carry check/cross glyphs, so a literal tick/cross symbol here would
+    # print as a missing-glyph box in the PDF export.
+    'TRUE_FALSE': 'Tick True if the statement is correct, or False if it is incorrect.',
+    'FILL_BLANK': 'Fill in the blanks with the correct word(s).',
+    'MATCHING': 'Match the items in Column A with the correct items in Column B.',
+    'SHORT': 'Answer the following questions briefly.',
+    'LONG': 'Answer the following questions in detail.',
+    'ESSAY': 'Write a detailed answer for the following.',
+}
 
 
 def _to_decimal(value, default='0'):
@@ -78,20 +93,29 @@ def _build_matching_pairs(type_data, rng):
     return [{'left': left, 'right': right} for left, right in zip(lefts, shuffled_rights)]
 
 
-def _format_fill_blank_line(raw_text):
-    """Standardizes a fill-in-the-blank item's blank marker: replaces an existing
-    underscore run with a uniform-length blank, or appends one if the item has none."""
-    text = str(raw_text or '').strip()
-    if BLANK_MARKER_RE.search(text):
-        return BLANK_MARKER_RE.sub(BLANK_FILL, text)
-    return f'{text} {BLANK_FILL}'.strip()
-
-
 def _build_fill_blank_items(type_data):
+    """Each `type_data.items[i]` is the *answer* for blank i, typed into the composer's
+    "Answer for blank N" field (QuestionSlotEditor.jsx) and mirrored into
+    `type_data.accepted_answers` for grading -- it is never a printable prompt. Printing it
+    used to put the answer directly next to the blank meant to test it (e.g. "Photosynthesis
+    __________"), so the paper only gets a generic numbered blank line; the question stem
+    (question_text) is what carries the actual prompt/context."""
     items = type_data.get('items') if isinstance(type_data, dict) else None
     if not isinstance(items, list):
         return []
-    return [_format_fill_blank_line(item) for item in items]
+    blank_count = len([item for item in items if str(item or '').strip()])
+    return [f'Blank {i}: {BLANK_FILL}' for i in range(1, blank_count + 1)]
+
+
+def _part_letter(n):
+    """1 -> 'a', 2 -> 'b', ..., 26 -> 'z', 27 -> 'aa', ... (spreadsheet-column style).
+    A question group is never expected to have anywhere near 26 parts, but this
+    doesn't break if one somehow does."""
+    letters = []
+    while n > 0:
+        n, remainder = divmod(n - 1, 26)
+        letters.append(chr(ord('a') + remainder))
+    return ''.join(reversed(letters))
 
 
 def _build_render_item(paper_question, number, answer_lines_enabled, rng):
@@ -147,9 +171,14 @@ def build_export_layout(exam_paper):
             ],
         }
 
-    Numbering is continuous across every block (sections in structure order, then
-    the trailing unstructured block), independent of the stored question_order
-    values, so it stays correct regardless of how the paper was authored.
+    Each question group ("Question # N" section) numbers its own parts as
+    "N(a)", "N(b)", "N(c)"... (Cambridge/GCSE-style lettered sub-parts) instead of
+    a single counter running through the whole paper -- that used to put e.g. "Q6"
+    as the first item under a heading literally labelled "Question # 2", which read
+    as mismatched. A trailing question with no section at all (the 'unstructured'
+    block) isn't part of any lettered group, so it just gets the next plain group
+    number ("N+1", "N+2"...) with no letter. Numbering is independent of the stored
+    question_order values, so it stays correct regardless of how the paper was authored.
     """
     structure = exam_paper.structure if isinstance(exam_paper.structure, list) else []
     if not structure:
@@ -171,7 +200,7 @@ def build_export_layout(exam_paper):
         by_section_key.setdefault(paper_question.section_key or '', []).append(paper_question)
 
     blocks = []
-    counter = 0
+    group_index = 0  # counts question groups (sections), not individual items
 
     for section in structure:
         if not isinstance(section, dict):
@@ -182,6 +211,7 @@ def build_export_layout(exam_paper):
             blocks.append({'type': 'divider', 'title': section.get('title') or ''})
             continue
 
+        group_index += 1
         key = str(section.get('key') or '')
 
         slots_counted_raw = section.get('slots_counted', section.get('slots_shown', 0))
@@ -192,14 +222,17 @@ def build_export_layout(exam_paper):
         marks_per_question = _to_decimal(section.get('marks_per_question', 0))
 
         items = []
-        for paper_question in by_section_key.get(key, []):
-            counter += 1
-            items.append(_build_render_item(paper_question, counter, answer_lines_enabled, rng))
+        for part_index, paper_question in enumerate(by_section_key.get(key, []), start=1):
+            number = f"{group_index}({_part_letter(part_index)})"
+            items.append(_build_render_item(paper_question, number, answer_lines_enabled, rng))
+
+        section_question_type = str(section.get('question_type') or '').upper()
+        instruction = section.get('instruction') or DEFAULT_TYPE_INSTRUCTIONS.get(section_question_type)
 
         blocks.append({
             'type': 'section',
             'title': section.get('title') or '',
-            'instruction': section.get('instruction') or None,
+            'instruction': instruction,
             'section_marks': Decimal(slots_counted) * marks_per_question,
             'items': items,
         })
@@ -211,8 +244,8 @@ def build_export_layout(exam_paper):
     if unstructured_questions:
         items = []
         for paper_question in unstructured_questions:
-            counter += 1
-            items.append(_build_render_item(paper_question, counter, answer_lines_enabled, rng))
+            group_index += 1
+            items.append(_build_render_item(paper_question, str(group_index), answer_lines_enabled, rng))
         blocks.append({'type': 'unstructured', 'items': items})
 
     return {

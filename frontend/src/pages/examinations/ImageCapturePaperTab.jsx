@@ -221,15 +221,15 @@ export default function ImageCapturePaperTab({ classId, subjectId, readOnly = fa
       {!readOnly && !uploadId && (
         <div
           {...getRootProps()}
-          className={`border-2 border-dashed rounded-lg p-12 text-center cursor-pointer transition ${
+          className={`border-2 border-dashed rounded-lg p-6 sm:p-12 text-center cursor-pointer transition ${
             isDragActive
               ? 'border-blue-500 bg-blue-50'
               : 'border-gray-300 hover:border-gray-400'
           }`}
         >
           <input {...inputProps} />
-          <div className="text-4xl mb-3">📸</div>
-          <p className="text-lg font-medium text-gray-800">
+          <div className="text-3xl sm:text-4xl mb-3">📸</div>
+          <p className="text-base sm:text-lg font-medium text-gray-800">
             {isDragActive ? 'Drop your paper image here' : 'Upload Question Paper Image'}
           </p>
           <p className="text-sm text-gray-500 mt-1">
@@ -369,7 +369,7 @@ export default function ImageCapturePaperTab({ classId, subjectId, readOnly = fa
             />
           </div>
 
-          <div className="flex gap-2 justify-end pt-4 border-t border-gray-200">
+          <div className="flex flex-col sm:flex-row gap-2 sm:justify-end pt-4 border-t border-gray-200">
             <button
               type="button"
               onClick={handleReset}

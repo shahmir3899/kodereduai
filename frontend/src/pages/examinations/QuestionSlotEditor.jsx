@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import RichTextEditor from '../../components/RichTextEditor'
 import QuestionBankPicker, { QUESTION_TYPES, getQuestionReuseCount, toDraftQuestionFromBank } from './QuestionBankPicker'
 
@@ -39,6 +39,7 @@ export default function QuestionSlotEditor({
   saveState,
   lastSavedAt,
   draftReady,
+  draftAlreadyOpen = false,
   classId,
   subjectId,
   structure = [],
@@ -91,9 +92,9 @@ export default function QuestionSlotEditor({
     setCurrentQuestion({ ...EMPTY_QUESTION, options: { A: '', B: '', C: '', D: '' }, type_data: {}, ...overrides })
   }
 
-  const openSlotComposer = (section) => {
+  const openSlotComposer = (section, slotIndex = null) => {
     if (readOnly) return
-    setComposerTarget({ sectionKey: section.key, localId: null })
+    setComposerTarget({ sectionKey: section.key, localId: null, slotIndex })
     resetQuestion({
       question_type: section.question_type,
       marks: Number(section.marks_per_question) || 1,
@@ -102,9 +103,9 @@ export default function QuestionSlotEditor({
     setErrors({})
   }
 
-  const openSlotEdit = (question) => {
+  const openSlotEdit = (question, slotIndex = null) => {
     if (readOnly) return
-    setComposerTarget({ sectionKey: question.section_key || '', localId: question.local_id })
+    setComposerTarget({ sectionKey: question.section_key || '', localId: question.local_id, slotIndex })
     setCurrentQuestion({
       ...EMPTY_QUESTION,
       ...question,
@@ -174,10 +175,9 @@ export default function QuestionSlotEditor({
       }
     }
 
-    if (currentQuestion.question_type === 'FILL_BLANK') {
-      const items = (currentQuestion.type_data?.items || []).filter((value) => String(value || '').trim())
-      if (items.length === 0) newErrors.type_data = 'Add at least one blank.'
-    }
+    // FILL_BLANK blanks/answers are optional -- a question can be created before the
+    // answer is known and filled in later, same as FILL_BLANK's accepted_answers on
+    // the question bank side (QuestionsPage.jsx).
 
     if (currentQuestion.question_type === 'MATCHING') {
       const pairs = (currentQuestion.type_data?.pairs || []).filter(
@@ -189,12 +189,6 @@ export default function QuestionSlotEditor({
     if (currentQuestion.question_type === 'TRUE_FALSE') {
       if (!['true', 'false'].includes(String(currentQuestion.correct_answer || '').toLowerCase())) {
         newErrors.correct_answer = 'Select True or False'
-      }
-    }
-
-    if (['SHORT', 'LONG', 'ESSAY'].includes(currentQuestion.question_type)) {
-      if (!String(currentQuestion.answer_text || '').trim() && !String(currentQuestion.correct_answer || '').trim()) {
-        newErrors.answer_text = 'A model answer is required for grading'
       }
     }
 
@@ -316,7 +310,7 @@ export default function QuestionSlotEditor({
 
   const renderComposer = ({ heading, onCancel, onReset }) => (
     <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 bg-gray-50">
-      <div className="flex items-center justify-between mb-4 gap-2">
+      <div className="flex flex-wrap items-center justify-between mb-4 gap-2">
         <h3 className="text-lg font-semibold text-gray-800">{heading}</h3>
         <div className="flex items-center gap-2">
           <button
@@ -325,7 +319,8 @@ export default function QuestionSlotEditor({
             disabled={!classId || !subjectId}
             className="px-3 py-1.5 border border-blue-300 text-blue-700 rounded-lg text-sm hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            Load from Question Bank
+            <span className="sm:hidden">From Bank</span>
+            <span className="hidden sm:inline">Load from Question Bank</span>
           </button>
           {onCancel && (
             <button
@@ -604,7 +599,7 @@ export default function QuestionSlotEditor({
             )}
             <button
               type="button"
-              onClick={() => openSlotComposer(section)}
+              onClick={() => openSlotComposer(section, slotIndex)}
               className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
             >
               {isBankSource ? 'Type manually' : 'Add question'}
@@ -621,9 +616,9 @@ export default function QuestionSlotEditor({
     return (
       <div
         key={question.local_id}
-        className="flex gap-3 p-3 bg-gray-50 border border-gray-200 rounded-lg"
+        className="flex flex-col sm:flex-row gap-3 p-3 bg-gray-50 border border-gray-200 rounded-lg"
       >
-        <div className="flex-1">
+        <div className="flex-1 min-w-0">
           <div className="font-semibold text-gray-800 flex flex-wrap items-center gap-2">
             <span>
               Slot {slotIndex + 1}{overflow ? ' (overflow)' : ''}. {question.question_type} [{question.marks}M]
@@ -636,7 +631,7 @@ export default function QuestionSlotEditor({
           </div>
           {renderQuestionPreview(question)}
         </div>
-        <div className="flex flex-col gap-1 items-end">
+        <div className="flex flex-row sm:flex-col gap-1 items-center sm:items-end shrink-0">
           {!readOnly && (
             <>
               <div className="flex gap-1">
@@ -657,7 +652,7 @@ export default function QuestionSlotEditor({
               </div>
               <div className="flex gap-2">
                 <button
-                  onClick={() => openSlotEdit(question)}
+                  onClick={() => openSlotEdit(question, slotIndex)}
                   className="px-2 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
                 >
                   Edit
@@ -692,6 +687,29 @@ export default function QuestionSlotEditor({
     const typeLabel = QUESTION_TYPE_LABELS[section.question_type] || section.question_type
     const isOverflow = sectionQuestions.length > section.slots_shown
 
+    // Anchors the composer directly under whichever slot triggered it (openSlotComposer/
+    // openSlotEdit record that slotIndex) instead of always appending it after every slot in
+    // the section — with 5 fill-in-the-blank slots, "add question 1" popping up under slot 5
+    // reads as if it belongs to the wrong question.
+    const renderComposerForSlot = (slotIndex) => {
+      if (readOnly || composerTarget?.sectionKey !== section.key || composerTarget?.slotIndex !== slotIndex) {
+        return null
+      }
+      return (
+        <div className="pt-2">
+          {renderComposer({
+            heading: composerTarget.localId ? 'Edit Question' : `Add question — ${section.title}`,
+            onCancel: closeSlotComposer,
+            onReset: () => resetQuestion({
+              question_type: section.question_type,
+              marks: Number(section.marks_per_question) || 1,
+              section_key: section.key,
+            }),
+          })}
+        </div>
+      )
+    }
+
     return (
       <div key={section.key} className="border border-gray-200 rounded-lg overflow-hidden">
         <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
@@ -703,14 +721,25 @@ export default function QuestionSlotEditor({
         <div className="p-4 space-y-2">
           {Array.from({ length: section.slots_shown }).map((_, slotIndex) => {
             const question = sectionQuestions[slotIndex]
-            return question
-              ? renderFilledSlot(question, slotIndex, sectionQuestions)
-              : renderEmptySlot(section, slotIndex)
+            return (
+              <Fragment key={`slot_${section.key}_${slotIndex}`}>
+                {question
+                  ? renderFilledSlot(question, slotIndex, sectionQuestions)
+                  : renderEmptySlot(section, slotIndex)}
+                {renderComposerForSlot(slotIndex)}
+              </Fragment>
+            )
           })}
 
-          {sectionQuestions.slice(section.slots_shown).map((question, idx) =>
-            renderFilledSlot(question, section.slots_shown + idx, sectionQuestions, true),
-          )}
+          {sectionQuestions.slice(section.slots_shown).map((question, idx) => {
+            const slotIndex = section.slots_shown + idx
+            return (
+              <Fragment key={`overflow_${section.key}_${slotIndex}`}>
+                {renderFilledSlot(question, slotIndex, sectionQuestions, true)}
+                {renderComposerForSlot(slotIndex)}
+              </Fragment>
+            )
+          })}
 
           {isOverflow && (
             <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
@@ -718,7 +747,10 @@ export default function QuestionSlotEditor({
             </p>
           )}
 
-          {!readOnly && composerTarget?.sectionKey === section.key && (
+          {/* Fallback: composer targets this section but not a specific slot (e.g. slot
+              index no longer exists after structure changed) -- keep old bottom placement
+              rather than silently dropping the open composer. */}
+          {!readOnly && composerTarget?.sectionKey === section.key && composerTarget?.slotIndex == null && (
             <div className="pt-2">
               {renderComposer({
                 heading: composerTarget.localId ? 'Edit Question' : `Add question — ${section.title}`,
@@ -834,49 +866,62 @@ export default function QuestionSlotEditor({
               </div>
               <div className="p-4 space-y-2">
                 {unassignedQuestions.map((question) => (
-                  <div key={question.local_id} className="flex gap-3 p-3 bg-white border border-gray-200 rounded-lg">
-                    <div className="flex-1">
-                      <div className="font-semibold text-gray-800">
-                        {question.question_type} [{question.marks}M]
+                  <Fragment key={question.local_id}>
+                    <div className="flex gap-3 p-3 bg-white border border-gray-200 rounded-lg">
+                      <div className="flex-1">
+                        <div className="font-semibold text-gray-800">
+                          {question.question_type} [{question.marks}M]
+                        </div>
+                        {renderQuestionPreview(question)}
                       </div>
-                      {renderQuestionPreview(question)}
-                    </div>
-                    <div className="flex flex-col gap-2 items-end">
-                      {!readOnly && (
-                        <>
-                          <select
-                            value=""
-                            onChange={(e) => handleAssignSection(question.local_id, e.target.value)}
-                            className="text-xs border border-gray-300 rounded px-2 py-1"
-                          >
-                            <option value="">Assign to section...</option>
-                            {structure.filter((section) => section.type !== 'divider').map((section) => (
-                              <option key={section.key} value={section.key}>{section.title}</option>
-                            ))}
-                          </select>
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => openSlotEdit(question)}
-                              className="px-2 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                      <div className="flex flex-col gap-2 items-end">
+                        {!readOnly && (
+                          <>
+                            <select
+                              value=""
+                              onChange={(e) => handleAssignSection(question.local_id, e.target.value)}
+                              className="text-xs border border-gray-300 rounded px-2 py-1"
                             >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => handleRemoveQuestion(question.local_id)}
-                              className="px-2 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200"
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        </>
-                      )}
+                              <option value="">Assign to section...</option>
+                              {structure.filter((section) => section.type !== 'divider').map((section) => (
+                                <option key={section.key} value={section.key}>{section.title}</option>
+                              ))}
+                            </select>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => openSlotEdit(question)}
+                                className="px-2 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => handleRemoveQuestion(question.local_id)}
+                                className="px-2 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200"
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
                     </div>
-                  </div>
+                    {/* Anchor the edit composer directly under the question being edited
+                        instead of always at the bottom of the unassigned list. */}
+                    {!readOnly && composerTarget?.sectionKey === '' && composerTarget?.localId === question.local_id && (
+                      <div className="pt-2">
+                        {renderComposer({
+                          heading: 'Edit Question',
+                          onCancel: closeSlotComposer,
+                          onReset: () => resetQuestion({ section_key: '' }),
+                        })}
+                      </div>
+                    )}
+                  </Fragment>
                 ))}
 
-                {!readOnly && composerTarget?.sectionKey === '' && (
+                {!readOnly && composerTarget?.sectionKey === '' && !composerTarget?.localId && (
                   renderComposer({
-                    heading: composerTarget.localId ? 'Edit Question' : 'Add unassigned question',
+                    heading: 'Add unassigned question',
                     onCancel: closeSlotComposer,
                     onReset: () => resetQuestion({ section_key: '' }),
                   })
@@ -925,7 +970,14 @@ export default function QuestionSlotEditor({
                 : 'bg-green-600 text-white hover:bg-green-700'
             }`}
           >
-            {isLoading ? 'Saving...' : draftReady ? 'Open Draft' : 'Create Draft'}
+            {isLoading
+              ? 'Saving...'
+              // Once you're already viewing this draft's own page, clicking here just
+              // saves in place (there's nowhere new to navigate to) -- label it as
+              // such instead of "Open Draft", which implied it would take you somewhere.
+              : draftReady
+                ? (draftAlreadyOpen ? 'Save Draft' : 'Open Draft')
+                : 'Create Draft'}
           </button>
         </div>
       )}

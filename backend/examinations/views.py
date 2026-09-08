@@ -3079,8 +3079,47 @@ class ExamPaperViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
         serializer.save()
 
     def perform_destroy(self, instance):
+        # Enforce the same class/subject manage-scope as create/update — this was
+        # previously missing, letting any authenticated school user (e.g. a teacher
+        # not assigned to the paper's class/subject) soft-delete any paper.
+        self._validate_paper_manage_scope(instance.class_obj, instance.subject)
         instance.is_active = False
         instance.save()
+
+    @action(detail=False, methods=['post'], url_path='bulk_delete')
+    def bulk_delete(self, request):
+        ids = request.data.get('ids') or []
+        if not isinstance(ids, list) or not ids:
+            raise ValidationError({'ids': ['Provide a non-empty list of exam paper ids.']})
+
+        # Scope to what the caller can already see (tenant + teacher-scope from
+        # get_queryset), so an id outside that scope is reported as skipped rather
+        # than leaking existence via a 404/403 distinction.
+        papers = self.get_queryset().filter(id__in=ids).select_related('class_obj', 'subject')
+        found_by_id = {paper.id: paper for paper in papers}
+
+        deleted = []
+        skipped = []
+        for raw_id in ids:
+            try:
+                paper_id = int(raw_id)
+            except (TypeError, ValueError):
+                skipped.append({'id': raw_id, 'reason': 'Invalid id.'})
+                continue
+            paper = found_by_id.get(paper_id)
+            if paper is None:
+                skipped.append({'id': paper_id, 'reason': 'Not found.'})
+                continue
+            try:
+                self._validate_paper_manage_scope(paper.class_obj, paper.subject)
+            except PermissionDenied:
+                skipped.append({'id': paper_id, 'reason': 'Not permitted to delete this paper.'})
+                continue
+            paper.is_active = False
+            paper.save(update_fields=['is_active'])
+            deleted.append(paper_id)
+
+        return Response({'deleted': deleted, 'skipped': skipped})
 
     def _validate_paper_manage_scope(self, class_obj, subject):
         school_id = _resolve_school_id(self.request)

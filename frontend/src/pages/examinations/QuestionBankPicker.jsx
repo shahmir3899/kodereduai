@@ -120,8 +120,8 @@ export default function QuestionBankPicker({
   }
 
   return (
-    <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg w-full max-w-4xl max-h-[85vh] overflow-hidden border border-gray-200 shadow-xl">
+    <div className="fixed inset-0 z-[60] bg-black/40 flex items-start sm:items-center justify-center p-0 sm:p-4 overflow-y-auto">
+      <div className="bg-white rounded-none sm:rounded-lg w-full max-w-4xl min-h-full sm:min-h-0 sm:max-h-[85vh] flex flex-col overflow-hidden border border-gray-200 shadow-xl">
         <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
           <div>
             <h4 className="text-lg font-semibold text-gray-900">Attach Questions from Bank</h4>
@@ -159,7 +159,7 @@ export default function QuestionBankPicker({
           </select>
         </div>
 
-        <div className="overflow-y-auto max-h-[50vh] p-4 space-y-2">
+        <div className="overflow-y-auto flex-1 sm:max-h-[50vh] p-4 space-y-2">
           {!classId || !subjectId ? (
             <div className="text-sm text-gray-500">Select class and subject in paper setup to load the bank.</div>
           ) : bankLoading ? (

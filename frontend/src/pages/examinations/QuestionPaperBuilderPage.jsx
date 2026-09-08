@@ -3,7 +3,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { questionPaperApi, examinationsApi } from '../../services/api'
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import Toast from '../../components/Toast'
+import { useToast } from '../../components/Toast'
 import ClassSelector from '../../components/ClassSelector'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useAuth } from '../../contexts/AuthContext'
@@ -229,7 +229,7 @@ export default function QuestionPaperBuilderPage() {
   const { activeAcademicYear } = useAcademicYear()
   const resumePaperId = routePaperId || location.state?.paperId || location.state?.draftId || null
   const [activeTab, setActiveTab] = useState(location.state?.lessonPlanId ? 'lesson' : 'manual') // 'manual' | 'image' | 'lesson'
-  const [toast, setToast] = useState(null)
+  const { showError, showSuccess } = useToast()
   const [draftId, setDraftId] = useState(resumePaperId)
   const [manualDraft, setManualDraft] = useState(MANUAL_DRAFT_DEFAULT)
   const [manualDirty, setManualDirty] = useState(false)
@@ -248,6 +248,10 @@ export default function QuestionPaperBuilderPage() {
   const [renderOptions, setRenderOptions] = useState(RENDER_OPTIONS_DEFAULT)
   const [sourceChosen, setSourceChosen] = useState(Boolean(location.state?.lessonPlanId))
   const hasJumpedToStep3Ref = useRef(false)
+  // Raw Master Class id (ExamPaper.class_obj) from a resumed draft, held here so the
+  // late-loading-sessionClasses safety-net effect below can retry the session-class
+  // mapping once sessionClasses arrives, without re-running the whole hydration effect.
+  const resumedMasterClassIdRef = useRef(null)
   // Whether the Paper Title field is still following the auto-generated
   // "Exam - Class - Subject" suggestion. Flips to false the moment the user types
   // into the field directly, or once we resume a draft that already has its own title.
@@ -319,8 +323,18 @@ export default function QuestionPaperBuilderPage() {
 
     setDraftId(paper.id)
     setPaperStatus(paper.status || 'DRAFT')
+    // ExamPaper.class_obj is a FK straight to the Master Class (students.Class), but
+    // this page's paperMetadata.class_obj holds a Session Class id everywhere else
+    // (that's what <ClassSelector scope="session"> options and getResolvedMasterClassId
+    // expect) -- so resuming a draft needs to map the paper's master class id back to
+    // this year's matching session class, or resolvedClassObj comes back empty and the
+    // class/subject fields silently look unset even though the paper has them saved.
+    resumedMasterClassIdRef.current = paper.class_obj || null
+    const resumedSessionClassId = activeAcademicYear?.id
+      ? sessionClasses.find((sc) => String(sc.class_obj) === String(paper.class_obj))?.id
+      : paper.class_obj
     setPaperMetadata({
-      class_obj: paper.class_obj ? String(paper.class_obj) : '',
+      class_obj: resumedSessionClassId ? String(resumedSessionClassId) : '',
       subject: paper.subject ? String(paper.subject) : '',
       exam: paper.exam ? String(paper.exam) : '',
     })
@@ -346,6 +360,21 @@ export default function QuestionPaperBuilderPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resumeDraftRes])
+
+  // Safety net: sessionClasses (useSessionClasses above) can still be loading when the
+  // resumed-draft effect above runs, so the master->session class_obj mapping there can
+  // miss on first pass. Retry once sessionClasses arrives; bail if the user has since
+  // picked a class themselves (paperMetadata.class_obj already set).
+  useEffect(() => {
+    if (!resumedMasterClassIdRef.current || !activeAcademicYear?.id) return
+    if (paperMetadata.class_obj) return
+    const match = sessionClasses.find(
+      (sc) => String(sc.class_obj) === String(resumedMasterClassIdRef.current),
+    )
+    if (match) {
+      setPaperMetadata((prev) => ({ ...prev, class_obj: String(match.id) }))
+    }
+  }, [sessionClasses, activeAcademicYear?.id, paperMetadata.class_obj])
 
   // Keyed purely off paperStatus (defaults to 'DRAFT') rather than also requiring
   // resumePaperId -- a paper created fresh this session (no route/state id) must
@@ -524,7 +553,7 @@ export default function QuestionPaperBuilderPage() {
     },
     onError: (error) => {
       setSaveState('error')
-      setToast({ type: 'error', message: extractAutosaveErrorMessage(error, 'Failed to create draft') })
+      showError(extractAutosaveErrorMessage(error, 'Failed to create draft'))
     },
   })
 
@@ -581,7 +610,7 @@ export default function QuestionPaperBuilderPage() {
       // immediately re-fire it once autosaveMutation.isPending flips back to false --
       // it'll only retry once the user actually changes something.
       lastFailedAutosavePayloadRef.current = variables?.payloadHash || lastFailedAutosavePayloadRef.current
-      setToast({ type: 'error', message: extractAutosaveErrorMessage(error, 'Autosave failed') })
+      showError(extractAutosaveErrorMessage(error, 'Autosave failed'))
     },
   })
 
@@ -614,11 +643,11 @@ export default function QuestionPaperBuilderPage() {
         setSourceChosen(parsed.wizardStep >= 3)
       }
       setSaveState('pending')
-      setToast({ type: 'success', message: 'Recovered unsaved manual draft from this browser.' })
+      showSuccess('Recovered unsaved manual draft from this browser.')
     } catch {
       // Ignore corrupt recovery payloads.
     }
-  }, [recoveryKey, resumePaperId])
+  }, [recoveryKey, resumePaperId, showSuccess])
 
   const recoveryPayload = useDebounce({ paperMetadata, manualDraft, structure, renderOptions, wizardStep }, 400)
   useEffect(() => {
@@ -771,15 +800,15 @@ export default function QuestionPaperBuilderPage() {
 
   const handleManualSubmit = useCallback(async () => {
     if (!(manualDraft.paper_title || '').trim()) {
-      setToast({ type: 'error', message: 'Paper title is required before opening draft.' })
+      showError('Paper title is required before opening draft.')
       return
     }
     if (!resolvedClassObj || !paperMetadata.subject) {
-      setToast({ type: 'error', message: 'Select class and subject before opening draft.' })
+      showError('Select class and subject before opening draft.')
       return
     }
     if ((manualDraft.questions || []).length === 0) {
-      setToast({ type: 'error', message: 'Add at least one question.' })
+      showError('Add at least one question.')
       return
     }
 
@@ -793,7 +822,7 @@ export default function QuestionPaperBuilderPage() {
 
       if (!finalDraftId) {
         setSaveState('error')
-        setToast({ type: 'error', message: 'Draft could not be created.' })
+        showError('Draft could not be created.')
         return
       }
 
@@ -805,7 +834,14 @@ export default function QuestionPaperBuilderPage() {
         payloadHash,
       })
 
-      navigate(`/examinations/papers/${finalDraftId}`)
+      // When we're already sitting on this draft's own URL (routePaperId === finalDraftId),
+      // navigating to the same path is a no-op for React Router -- nothing re-renders, so
+      // the "Open Draft" click otherwise looks like it did nothing. Surface a toast instead.
+      if (routePaperId === String(finalDraftId)) {
+        showSuccess('Draft saved.')
+      } else {
+        navigate(`/examinations/papers/${finalDraftId}`)
+      }
     } catch {
       setSaveState('error')
     }
@@ -819,7 +855,10 @@ export default function QuestionPaperBuilderPage() {
     manualDraft.questions,
     navigate,
     paperMetadata.subject,
+    routePaperId,
     resolvedClassObj,
+    showError,
+    showSuccess,
   ])
 
   // Feedback-only confirm call for image-capture uploads: records the PaperFeedback
@@ -828,10 +867,7 @@ export default function QuestionPaperBuilderPage() {
   const confirmPaperUploadMutation = useMutation({
     mutationFn: ({ uploadId, payload }) => questionPaperApi.confirmPaperUpload(uploadId, payload),
     onError: () => {
-      setToast({
-        type: 'error',
-        message: 'Could not record OCR feedback for the uploaded paper (your draft is unaffected).',
-      })
+      showError('Could not record OCR feedback for the uploaded paper (your draft is unaffected).')
     },
   })
 
@@ -870,8 +906,8 @@ export default function QuestionPaperBuilderPage() {
     setSourceChosen(true)
     setWizardStep(3)
     setPendingImageConfirm({ uploadId: prefill.uploadId, questions: prefill.questions })
-    setToast({ type: 'success', message: 'Prefilled from your uploaded paper — review and edit; it autosaves as you go.' })
-  }, [])
+    showSuccess('Prefilled from your uploaded paper — review and edit; it autosaves as you go.')
+  }, [showSuccess])
 
   const linkLessonPlansMutation = useMutation({
     mutationFn: ({ id, lessonPlanIds }) => questionPaperApi.linkLessonPlans(id, { lesson_plan_ids: lessonPlanIds }),
@@ -909,34 +945,25 @@ export default function QuestionPaperBuilderPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-6">
+      <div className="bg-white border-b border-gray-200 px-4 sm:px-6 py-4 sm:py-6">
         <div className="max-w-6xl mx-auto">
-          <h1 className="text-3xl font-bold text-gray-900">Question Paper Builder</h1>
-          <p className="text-gray-600 mt-1">
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Question Paper Builder</h1>
+          <p className="text-gray-600 mt-1 text-sm sm:text-base">
             Create exam papers by uploading handwritten questions or typing manually
           </p>
         </div>
       </div>
 
-      {/* Toast notifications */}
-      {toast && (
-        <Toast
-          type={toast.type}
-          message={toast.message}
-          onClose={() => setToast(null)}
-        />
-      )}
-
       {/* Main Content */}
-      <div className="max-w-6xl mx-auto px-6 py-8">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
         {/* Wizard step nav */}
-        <div className="flex items-center gap-2 mb-6">
+        <div className="flex items-center gap-1 sm:gap-2 mb-6">
           {WIZARD_STEPS.map((step, index) => (
-            <div key={step.id} className="flex items-center gap-2 flex-1">
+            <div key={step.id} className="flex items-center gap-1 sm:gap-2 flex-1">
               <button
                 type="button"
                 onClick={() => setWizardStep(step.id)}
-                className={`flex-1 flex items-center gap-2 px-4 py-3 rounded-lg border text-left transition ${
+                className={`flex-1 flex items-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-2 sm:py-3 rounded-lg border text-left transition ${
                   wizardStep === step.id
                     ? 'bg-blue-600 border-blue-600 text-white'
                     : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
@@ -944,13 +971,13 @@ export default function QuestionPaperBuilderPage() {
               >
                 <span
                   aria-hidden="true"
-                  className={`w-6 h-6 flex items-center justify-center rounded-full text-xs font-semibold ${
+                  className={`w-5 h-5 sm:w-6 sm:h-6 shrink-0 flex items-center justify-center rounded-full text-[10px] sm:text-xs font-semibold ${
                     wizardStep === step.id ? 'bg-white text-blue-600' : 'bg-gray-100 text-gray-500'
                   }`}
                 >
                   {step.id}.
                 </span>
-                <span className="font-medium text-sm">{step.label}</span>
+                <span className="font-medium text-xs sm:text-sm">{step.label}</span>
               </button>
               {index < WIZARD_STEPS.length - 1 && (
                 <span className="text-gray-300 hidden sm:inline">→</span>
@@ -961,7 +988,7 @@ export default function QuestionPaperBuilderPage() {
 
         {/* Step 1: Paper Setup */}
         {wizardStep === 1 && (
-          <div className="bg-white rounded-lg shadow-sm p-6 mb-6 border border-gray-200">
+          <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6 mb-6 border border-gray-200">
             <h2 className="text-lg font-semibold text-gray-800 mb-4">Paper Setup</h2>
 
             {!isReadOnlyPaper && (
@@ -1148,7 +1175,7 @@ export default function QuestionPaperBuilderPage() {
 
         {/* Step 2: Paper Structure */}
         {wizardStep === 2 && (
-          <div className="bg-white rounded-lg shadow-sm p-6 mb-6 border border-gray-200">
+          <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6 mb-6 border border-gray-200">
             <h2 className="text-lg font-semibold text-gray-800 mb-4">Paper Structure</h2>
             <PaperStructureBuilder
               sections={structure}
@@ -1181,7 +1208,7 @@ export default function QuestionPaperBuilderPage() {
         <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
           {/* Source chooser + content */}
           <div className="xl:col-span-3 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-            <div className="p-8">
+            <div className="p-4 sm:p-6 lg:p-8">
               {structure.length === 0 && (
                 <div className="mb-6 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
                   Define sections in Step 2, or add questions freely.
@@ -1249,6 +1276,7 @@ export default function QuestionPaperBuilderPage() {
                       saveState={saveState}
                       lastSavedAt={lastSavedAt}
                       draftReady={!!draftId}
+                      draftAlreadyOpen={!!draftId && routePaperId === String(draftId)}
                       classId={resolvedClassObj}
                       subjectId={paperMetadata.subject}
                       structure={structure}
@@ -1279,6 +1307,7 @@ export default function QuestionPaperBuilderPage() {
                       saveState={saveState}
                       lastSavedAt={lastSavedAt}
                       draftReady={!!draftId}
+                      draftAlreadyOpen={!!draftId && routePaperId === String(draftId)}
                       classId={resolvedClassObj}
                       subjectId={paperMetadata.subject}
                       structure={structure}

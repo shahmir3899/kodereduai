@@ -664,15 +664,8 @@ class QuestionCreateUpdateSerializer(serializers.ModelSerializer):
             if str(correct_answer).strip().lower() not in {'true', 'false'}:
                 errors['correct_answer'] = 'TRUE_FALSE correct_answer must be TRUE or FALSE.'
 
-        elif question_type == 'FILL_BLANK':
-            accepted_answers = type_data.get('accepted_answers') if isinstance(type_data, dict) else None
-            has_answers = isinstance(accepted_answers, list) and len(accepted_answers) > 0
-            if not has_answers and not str(correct_answer).strip() and not str(answer_text).strip():
-                errors['type_data'] = 'FILL_BLANK requires type_data.accepted_answers or correct_answer/answer_text.'
-
-        elif question_type in {'SHORT', 'LONG', 'ESSAY'}:
-            if not str(answer_text).strip() and not str(correct_answer).strip():
-                errors['answer_text'] = f'{question_type} requires answer_text or correct_answer.'
+        # FILL_BLANK accepted_answers is optional -- a blank can be created without a
+        # known answer and filled in later; grading just can't auto-check it until set.
 
         elif question_type == 'MATCHING':
             left_items = type_data.get('left_items') if isinstance(type_data, dict) else None

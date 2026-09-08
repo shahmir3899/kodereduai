@@ -18,6 +18,7 @@ from urllib.parse import urlparse
 from django.utils.html import strip_tags
 import requests
 
+from .html_sanitize import sanitize_for_docx
 from .paper_export_layout import build_export_layout, resolve_exam_paper_class_name
 
 logger = logging.getLogger(__name__)
@@ -131,7 +132,9 @@ class ExamPaperDOCXGenerator:
             heading_text = f"Q{paper_question.question_order}. ({marks} marks)"
             document.add_paragraph(heading_text)
 
-            question_text = _html_to_text(question.get('question_text'))
+            # question_text is TipTap HTML and can now carry KaTeX equations -- plain
+            # strip_tags() duplicates/garbles those (see html_sanitize module docstring).
+            question_text = sanitize_for_docx(question.get('question_text'))
             document.add_paragraph(question_text or '-')
 
             if question.get('question_type') == 'MCQ':
@@ -150,6 +153,13 @@ class ExamPaperDOCXGenerator:
     def _render_structured(self, document, layout, align, inches):
         """Classic school-paper format for structured papers (non-empty ExamPaper.structure)."""
         from docx.enum.text import WD_TAB_ALIGNMENT
+        from docx.shared import Pt
+
+        # Word's default 'Normal' style adds ~8pt after every paragraph -- with one
+        # question spanning several paragraphs (header, text, options/answer lines)
+        # that compounds into the large gaps between questions users were seeing.
+        # Structured papers only; legacy rendering is untouched.
+        document.styles['Normal'].paragraph_format.space_after = Pt(2)
 
         header = layout['header']
 
@@ -168,11 +178,12 @@ class ExamPaperDOCXGenerator:
         )
         subject_class_p.alignment = align.CENTER
 
-        document.add_paragraph(f"Name: {'_' * 40}")
-        document.add_paragraph(f"Roll No: {'_' * 20}     Date: {'_' * 15}")
-        document.add_paragraph(
-            f"Total Marks: {header['total_marks']}     Time: {header['duration_minutes']} minutes"
-        )
+        self._render_candidate_info_table(document, header, inches)
+
+        time_p = document.add_paragraph(f"Time Allowed: {header['duration_minutes']} minutes")
+        time_p.alignment = align.CENTER
+
+        self._render_examiner_marks_box(document, layout['blocks'], header['total_marks'], align)
 
         if header['instructions']:
             document.add_paragraph('Instructions:')
@@ -186,13 +197,120 @@ class ExamPaperDOCXGenerator:
                 continue
             if block['type'] == 'section':
                 self._render_section_heading(document, block, inches, WD_TAB_ALIGNMENT)
+            # A 'section' block's heading already states the total marks for every
+            # question inside it -- only an 'unstructured' block (questions with no
+            # section wrapper) has nowhere else to show marks, so those keep the
+            # per-question marks suffix.
+            show_marks = block['type'] != 'section'
             for item in block['items']:
-                self._render_question_item(document, item)
+                self._render_question_item(document, item, show_marks)
+                # A deliberate gap between questions -- everything *within* one
+                # question stays tight (Normal style's 2pt above). A question that
+                # ends in a table (MCQ/matching) leaves no trailing paragraph to
+                # attach space_after to, so add one explicitly rather than reaching
+                # for document.paragraphs[-1], which a trailing table would skip past.
+                gap_paragraph = document.add_paragraph()
+                gap_paragraph.paragraph_format.space_after = Pt(10)
 
-        footer = document.add_paragraph(
-            f"Generated on {datetime.now().strftime('%d %B %Y')} | {header['school_name']}"
-        )
-        footer.alignment = align.CENTER
+        # Internal audit info ("Generated on … | Prepared by …") no longer prints on
+        # the student-facing paper -- it belongs on an internal/teacher copy. Word's
+        # page-number field (added below) covers what a running footer needs to say.
+        self._add_page_number_footer(document, align)
+
+    @staticmethod
+    def _set_cell_borders(cell, bottom=False):
+        """No table style involved -- every cell gets explicit borders so a blank
+        fill-in cell can carry just a ruled bottom line instead of a full grid box."""
+        from docx.oxml.ns import qn
+        from docx.oxml import OxmlElement
+
+        tc_pr = cell._tc.get_or_add_tcPr()
+        borders = OxmlElement('w:tcBorders')
+        for edge in ('top', 'left', 'right'):
+            el = OxmlElement(f'w:{edge}')
+            el.set(qn('w:val'), 'nil')
+            borders.append(el)
+        bottom_el = OxmlElement('w:bottom')
+        if bottom:
+            bottom_el.set(qn('w:val'), 'single')
+            bottom_el.set(qn('w:sz'), '6')
+            bottom_el.set(qn('w:color'), '9CA3AF')
+        else:
+            bottom_el.set(qn('w:val'), 'nil')
+        borders.append(bottom_el)
+        tc_pr.append(borders)
+
+    def _render_candidate_info_table(self, document, header, inches):
+        """Ruled fill-in cells (bottom border only) instead of underscore strings --
+        keeps handwriting aligned and reads as a proper candidate-info block rather
+        than plain text, matching the PDF export's candidate table."""
+        table = document.add_table(rows=2, cols=4)
+        table.autofit = True
+        rows = [
+            [('Name:', ''), ('Roll No:', '')],
+            [('Date:', ''), ('Total Marks:', str(header['total_marks']))],
+        ]
+        for row_index, row_pairs in enumerate(rows):
+            cells = table.rows[row_index].cells
+            for pair_index, (label, value) in enumerate(row_pairs):
+                label_cell = cells[pair_index * 2]
+                value_cell = cells[pair_index * 2 + 1]
+                label_cell.text = label
+                label_cell.paragraphs[0].runs[0].bold = True
+                value_cell.text = value
+                self._set_cell_borders(label_cell, bottom=False)
+                self._set_cell_borders(value_cell, bottom=not value)
+
+    def _render_examiner_marks_box(self, document, blocks, total_marks, align):
+        """A 'For Examiner's Use' marks grid (one column per section + Total), matching
+        the printed section marks -- common on Cambridge/CBSE-style papers so a teacher
+        can score without hunting through the paper for each section's mark allocation."""
+        section_blocks = [b for b in blocks if b['type'] == 'section']
+        if not section_blocks:
+            return
+
+        caption = document.add_paragraph("For Examiner's Use")
+        caption.alignment = align.RIGHT
+        caption.runs[0].italic = True
+
+        col_count = len(section_blocks) + 1
+        table = document.add_table(rows=3, cols=col_count)
+        table.style = 'Table Grid'
+        for index, block in enumerate(section_blocks):
+            table.rows[0].cells[index].text = block['title'] or f'Q{index + 1}'
+            table.rows[1].cells[index].text = str(block['section_marks'])
+        table.rows[0].cells[-1].text = 'Total'
+        table.rows[1].cells[-1].text = str(total_marks)
+        for cell in table.rows[0].cells:
+            cell.paragraphs[0].runs[0].bold = True
+
+    def _add_page_number_footer(self, document, align):
+        """Word's PAGE/NUMPAGES fields render as a live 'Page N of M' in every viewer
+        and when printed -- the DOCX equivalent of the PDF's per-page canvas stamp."""
+        from docx.oxml.ns import qn
+        from docx.oxml import OxmlElement
+
+        section = document.sections[0]
+        footer_paragraph = section.footer.paragraphs[0]
+        footer_paragraph.alignment = align.CENTER
+
+        def _add_field(paragraph, field_code):
+            run = paragraph.add_run()
+            fld_char_begin = OxmlElement('w:fldChar')
+            fld_char_begin.set(qn('w:fldCharType'), 'begin')
+            instr_text = OxmlElement('w:instrText')
+            instr_text.set(qn('xml:space'), 'preserve')
+            instr_text.text = field_code
+            fld_char_end = OxmlElement('w:fldChar')
+            fld_char_end.set(qn('w:fldCharType'), 'end')
+            run._r.append(fld_char_begin)
+            run._r.append(instr_text)
+            run._r.append(fld_char_end)
+
+        footer_paragraph.add_run('Page ')
+        _add_field(footer_paragraph, 'PAGE')
+        footer_paragraph.add_run(' of ')
+        _add_field(footer_paragraph, 'NUMPAGES')
 
     def _render_divider_heading(self, document, block, align):
         """A plain print-layout separator (e.g. 'Section A') -- no marks, no questions."""
@@ -200,29 +318,96 @@ class ExamPaperDOCXGenerator:
         heading.alignment = align.CENTER
 
     def _render_section_heading(self, document, block, inches, tab_alignment):
+        """Shaded single-cell 'table' band instead of a plain bold paragraph -- matches
+        the PDF export's section-heading treatment (light fill + left accent bar) so
+        section breaks read as a strong visual break rather than just bold text."""
+        from docx.oxml.ns import qn
+        from docx.oxml import OxmlElement
+
         heading_text = block['title']
         if block['instruction']:
             heading_text = f"{heading_text}. {block['instruction']}"
 
+        table = document.add_table(rows=1, cols=2)
+        table.autofit = True
+        left_cell, right_cell = table.rows[0].cells
+        left_cell.text = heading_text
+        left_cell.paragraphs[0].runs[0].bold = True
+        right_run = right_cell.paragraphs[0].add_run(f"({block['section_marks']})")
+        right_run.bold = True
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+        right_cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
+
+        for cell in (left_cell, right_cell):
+            tc_pr = cell._tc.get_or_add_tcPr()
+            shading = OxmlElement('w:shd')
+            shading.set(qn('w:fill'), 'EEF2FF')
+            tc_pr.append(shading)
+            borders = OxmlElement('w:tcBorders')
+            for edge in ('top', 'bottom', 'right'):
+                el = OxmlElement(f'w:{edge}')
+                el.set(qn('w:val'), 'nil')
+                borders.append(el)
+            tc_pr.append(borders)
+        # Left accent bar on the leading edge of the first cell only.
+        left_borders = left_cell._tc.get_or_add_tcPr().find(qn('w:tcBorders'))
+        left_edge = OxmlElement('w:left')
+        left_edge.set(qn('w:val'), 'single')
+        left_edge.set(qn('w:sz'), '24')
+        left_edge.set(qn('w:color'), '4F46E5')
+        left_borders.append(left_edge)
+        right_borders = right_cell._tc.get_or_add_tcPr().find(qn('w:tcBorders'))
+        right_no_left = OxmlElement('w:left')
+        right_no_left.set(qn('w:val'), 'nil')
+        right_borders.append(right_no_left)
+
+    def _render_question_item(self, document, item, show_marks=True):
+        from docx.shared import Pt, RGBColor
+
+        # Number, question text and the True/False marker sit in one paragraph.
+        # Marks print once, at the section heading (e.g. "Question # 1 (5)") --
+        # repeating them on every sub-question (Q1, Q2, Q3...) duplicated a total
+        # that's already uniform per section, so per-question marks only appear
+        # here when there's no section heading to carry them (show_marks=False otherwise).
+        #
+        # item['number'] is a lettered sub-part ("1(a)") under its question group for
+        # a real section, or a plain group number ("4") for an unassigned question
+        # with no section -- see build_export_layout's docstring. A lettered part
+        # reads fine as "1(a) <text>"; a bare group number still wants its trailing
+        # dot ("4. <text>") to read as a question number.
+        question_text = sanitize_for_docx(item['question_text']) or '-'
+        label = item['number']
+        number_prefix = f"{label} " if '(' in label else f"{label}. "
+
         paragraph = document.add_paragraph()
-        paragraph.paragraph_format.tab_stops.add_tab_stop(inches(6.5), tab_alignment.RIGHT)
-        run = paragraph.add_run(heading_text)
-        run.bold = True
-        paragraph.add_run(f"\t({block['section_marks']})")
-
-    def _render_question_item(self, document, item):
-        document.add_paragraph(f"Q{item['number']}. ({item['marks']} marks)")
-
-        question_text = _html_to_text(item['question_text'])
-        document.add_paragraph(question_text or '-')
+        paragraph.add_run(number_prefix).bold = True
+        paragraph.add_run(question_text)
+        if item['question_type'] == 'TRUE_FALSE':
+            paragraph.add_run('   [ True / False ]').bold = True
+        if show_marks:
+            marks_suffix = f"({item['marks']} mark{'s' if item['marks'] != 1 else ''})"
+            marks_run = paragraph.add_run(f'   {marks_suffix}')
+            marks_run.font.size = Pt(9)
+            marks_run.font.color.rgb = RGBColor(0x6B, 0x72, 0x80)
 
         rendered_extra = False
 
         if item['question_type'] == 'MCQ' and item['options']:
-            for option_key in ('A', 'B', 'C', 'D'):
-                option_value = item['options'].get(option_key)
-                if option_value:
-                    document.add_paragraph(f"{option_key}. {_html_to_text(option_value)}")
+            # 2-column grid (A/B on one row, C/D on the next) instead of stacking all
+            # four vertically -- matches the PDF export and halves the vertical space
+            # MCQ options take on the page.
+            rows = []
+            for left_key, right_key in (('A', 'B'), ('C', 'D')):
+                left_value = item['options'].get(left_key)
+                right_value = item['options'].get(right_key)
+                if left_value or right_value:
+                    rows.append((left_key, left_value, right_key, right_value))
+            if rows:
+                table = document.add_table(rows=len(rows), cols=2)
+                for row_index, (left_key, left_value, right_key, right_value) in enumerate(rows):
+                    cells = table.rows[row_index].cells
+                    cells[0].text = f"{left_key}. {_html_to_text(left_value)}" if left_value else ''
+                    cells[1].text = f"{right_key}. {_html_to_text(right_value)}" if right_value else ''
             rendered_extra = True
 
         elif item['question_type'] == 'FILL_BLANK' and item['fill_blank_items']:
@@ -235,7 +420,8 @@ class ExamPaperDOCXGenerator:
             rendered_extra = True
 
         elif item['question_type'] == 'TRUE_FALSE':
-            document.add_paragraph('True / False')
+            # Marker is already inline in the question paragraph above -- nothing more
+            # to render, just skip the blank-answer-space fallback below.
             rendered_extra = True
 
         if item['answer_lines']:
@@ -243,8 +429,12 @@ class ExamPaperDOCXGenerator:
                 document.add_paragraph('_' * 60)
             rendered_extra = True
 
-        if not rendered_extra:
-            document.add_paragraph('')
+        # No blanket blank-answer-space filler here -- a question only gets extra
+        # room when render_options.answer_lines actually asked for it (above). Every
+        # other question type -- MCQ, Fill-blank, Matching, True/False, or a
+        # SHORT/LONG/ESSAY question with the answer-lines toggle off -- now gets the
+        # same tight gap True/False already had (the per-question gap paragraph in
+        # _render_structured provides the spacing between questions).
 
     def _render_matching_table(self, document, pairs):
         table = document.add_table(rows=len(pairs) + 1, cols=2)

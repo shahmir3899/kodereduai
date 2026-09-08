@@ -14,6 +14,11 @@ function makeSectionId() {
   return `sec_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
 }
 
+/** Section dividers are lettered A, B, C… independently of question numbering. */
+function sectionLetter(index) {
+  return String.fromCharCode(65 + (index % 26))
+}
+
 function autoInstruction(counted) {
   return `Attempt any ${counted} questions.`
 }
@@ -26,7 +31,7 @@ export function makeDefaultSection(index, overrides = {}) {
     local_id: makeSectionId(),
     key: overrides.key || makeSectionId(),
     type: 'question_group',
-    title: overrides.title ?? `Q${index + 1}`,
+    title: overrides.title ?? `Question # ${index + 1}`,
     instruction: overrides.instruction ?? (isChoice ? autoInstruction(slotsCounted) : ''),
     instructionIsAuto: overrides.instructionIsAuto ?? isChoice,
     question_type: overrides.question_type || 'SHORT',
@@ -43,7 +48,7 @@ export function makeDividerRow(overrides = {}) {
     local_id: makeSectionId(),
     key: overrides.key || makeSectionId(),
     type: 'divider',
-    title: overrides.title ?? 'Section',
+    title: overrides.title ?? `Section - ${sectionLetter(overrides.index ?? 0)}`,
   }
 }
 
@@ -52,10 +57,10 @@ export function buildAutoDistribution(totalMarksInput) {
   const total = Number(totalMarksInput) > 0 ? Number(totalMarksInput) : 100
 
   const mcq = makeDefaultSection(0, {
-    title: 'Q1', question_type: 'MCQ', slots_shown: 10, marks_per_question: 1,
+    title: 'Question # 1', question_type: 'MCQ', slots_shown: 10, marks_per_question: 1,
   })
   const short = makeDefaultSection(1, {
-    title: 'Q2', question_type: 'SHORT', slots_shown: 5, marks_per_question: 4,
+    title: 'Question # 2', question_type: 'SHORT', slots_shown: 5, marks_per_question: 4,
   })
 
   const fixedMarks = (mcq.slots_counted * mcq.marks_per_question)
@@ -66,7 +71,7 @@ export function buildAutoDistribution(totalMarksInput) {
   const longMarksAdjusted = longCount > 0 ? Number((remaining / longCount).toFixed(2)) : longMarksPerQuestion
 
   const long = makeDefaultSection(2, {
-    title: 'Q3', question_type: 'LONG', slots_shown: longCount, marks_per_question: longMarksAdjusted,
+    title: 'Question # 3', question_type: 'LONG', slots_shown: longCount, marks_per_question: longMarksAdjusted,
   })
 
   return [mcq, short, long]
@@ -136,12 +141,16 @@ export default function PaperStructureBuilder({
 
   const handleAddRow = () => {
     if (readOnly) return
-    onChange([...sections, makeDefaultSection(sections.length)])
+    // Question numbering (Q1, Q2, …) counts only question groups — section dividers
+    // (Section A, B, …) run on their own independent sequence, see handleAddDivider.
+    const questionCount = sections.filter((section) => section.type !== 'divider').length
+    onChange([...sections, makeDefaultSection(questionCount)])
   }
 
   const handleAddDivider = () => {
     if (readOnly) return
-    onChange([...sections, makeDividerRow()])
+    const dividerCount = sections.filter((section) => section.type === 'divider').length
+    onChange([...sections, makeDividerRow({ index: dividerCount })])
   }
 
   const handleRemoveRow = (localId) => {
@@ -200,15 +209,15 @@ export default function PaperStructureBuilder({
         <div className="space-y-3">
           {sections.map((section, index) => (
             section.type === 'divider' ? (
-              <div key={section.local_id} className="border-2 border-dashed border-gray-300 rounded-lg p-3 bg-gray-50 flex items-center gap-3">
+              <div key={section.local_id} className="border-2 border-dashed border-gray-300 rounded-lg p-3 bg-gray-50 flex flex-wrap items-center gap-2 sm:gap-3">
                 <span className="text-xs font-semibold text-gray-500 uppercase shrink-0">Section</span>
                 <input
                   type="text"
                   value={section.title}
                   disabled={readOnly}
                   onChange={(e) => updateSection(section.local_id, { title: e.target.value })}
-                  placeholder="e.g. Section A: Objective"
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="e.g. Section - A: Objective"
+                  className="flex-1 min-w-[140px] px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
                 {!readOnly && (
                   <div className="flex gap-2 shrink-0">

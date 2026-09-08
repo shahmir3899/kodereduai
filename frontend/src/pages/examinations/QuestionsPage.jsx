@@ -251,7 +251,7 @@ function FillBlankFields({ form, setForm, errors }) {
     <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-200">
       <label className="block text-sm font-semibold text-yellow-800 mb-1">
         Accepted Answers{' '}
-        <span className="font-normal text-gray-600">(comma-separated)</span>
+        <span className="font-normal text-gray-600">(comma-separated, optional)</span>
       </label>
       <input
         type="text"
@@ -673,9 +673,9 @@ function QuestionModal({ editQuestion, initialClassFilterId, initialSubject, ini
       if (left.length < 2 || right.length < 2)
         e.type_data = 'At least 2 pairs required for matching'
     }
-    if (['FILL_BLANK', 'SHORT', 'LONG', 'ESSAY'].includes(form.question_type)) {
-      if (!form.answer_text.trim()) e.answer_text = 'Model answer is required'
-    }
+    // FILL_BLANK accepted answers are optional too, same as SHORT/LONG/ESSAY model
+    // answers -- a blank can be created without a known answer and filled in later;
+    // grading just can't auto-check it until accepted_answers is set.
     return e
   }
 
@@ -960,8 +960,8 @@ function QuestionModal({ editQuestion, initialClassFilterId, initialSubject, ini
                 errors={errors}
                 label={
                   form.question_type === 'ESSAY'
-                    ? 'Marking Guide / Expected Points'
-                    : 'Model Answer'
+                    ? 'Marking Guide / Expected Points (optional)'
+                    : 'Model Answer (optional)'
                 }
               />
             )}

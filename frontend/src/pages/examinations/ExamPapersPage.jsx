@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { questionPaperApi } from '../../services/api'
 import ClassSelector from '../../components/ClassSelector'
 import { useToast } from '../../components/Toast'
+import { useConfirmModal } from '../../components/ConfirmModal'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import { useClassSubjects } from '../../hooks/useClassSubjects'
@@ -25,8 +26,10 @@ const STATUS_STYLE = {
 
 export default function ExamPapersPage() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const { activeAcademicYear } = useAcademicYear()
-  const { showError } = useToast()
+  const { showError, showSuccess, showWarning } = useToast()
+  const { confirm, ConfirmModalRoot } = useConfirmModal()
 
   const [filterClassId, setFilterClassId] = useState('')
   const [filterSubjectId, setFilterSubjectId] = useState('')
@@ -37,6 +40,7 @@ export default function ExamPapersPage() {
   // a loading state — generation embeds a full-page letterhead image and can
   // take several seconds, and with no feedback users assumed the click did nothing.
   const [downloadingKey, setDownloadingKey] = useState(null)
+  const [selectedIds, setSelectedIds] = useState(() => new Set())
 
   const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
   const { sessionClasses } = useSessionClasses(activeAcademicYear?.id)
@@ -75,6 +79,75 @@ export default function ExamPapersPage() {
   const papers = data?.data?.results || data?.data || []
   const count = data?.data?.count || papers.length
   const totalPages = Math.max(1, Math.ceil(count / 20))
+
+  // Selection is page-scoped — ids from a page that's no longer loaded (filter/page
+  // change) would silently vanish from a bulk action, so drop the whole selection
+  // whenever the underlying query changes rather than trying to reconcile it.
+  useEffect(() => {
+    setSelectedIds(new Set())
+  }, [queryParams])
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => questionPaperApi.deleteExamPaper(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['examPapersList'] })
+      showSuccess('Paper deleted.')
+    },
+    onError: (err) => showError(err.response?.data?.detail || 'Failed to delete paper.'),
+  })
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: (ids) => questionPaperApi.bulkDeleteExamPapers(ids),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['examPapersList'] })
+      const { deleted = [], skipped = [] } = res?.data || {}
+      setSelectedIds(new Set())
+      if (deleted.length) showSuccess(`Deleted ${deleted.length} paper${deleted.length === 1 ? '' : 's'}.`)
+      if (skipped.length) showWarning(`${skipped.length} paper${skipped.length === 1 ? '' : 's'} could not be deleted (no permission or not found).`)
+    },
+    onError: (err) => showError(err.response?.data?.detail || 'Failed to delete selected papers.'),
+  })
+
+  const toggleSelectOne = (id) => {
+    setSelectedIds((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const allOnPageSelected = papers.length > 0 && papers.every((paper) => selectedIds.has(paper.id))
+
+  const toggleSelectAllOnPage = () => {
+    setSelectedIds((current) => {
+      if (allOnPageSelected) {
+        const next = new Set(current)
+        papers.forEach((paper) => next.delete(paper.id))
+        return next
+      }
+      const next = new Set(current)
+      papers.forEach((paper) => next.add(paper.id))
+      return next
+    })
+  }
+
+  const handleDeleteOne = async (paper) => {
+    const ok = await confirm({
+      title: 'Delete paper?',
+      message: `Delete "${paper.paper_title}"? This can't be undone from here.`,
+    })
+    if (ok) deleteMutation.mutate(paper.id)
+  }
+
+  const handleBulkDelete = async () => {
+    const ids = Array.from(selectedIds)
+    const ok = await confirm({
+      title: 'Delete selected papers?',
+      message: `Delete ${ids.length} selected paper${ids.length === 1 ? '' : 's'}? This can't be undone from here.`,
+    })
+    if (ok) bulkDeleteMutation.mutate(ids)
+  }
 
   const handleDownload = async (paper, format) => {
     const key = `${paper.id}-${format}`
@@ -216,6 +289,15 @@ export default function ExamPapersPage() {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
+                    <th className="px-4 py-3 text-left w-10">
+                      <input
+                        type="checkbox"
+                        checked={allOnPageSelected}
+                        onChange={toggleSelectAllOnPage}
+                        aria-label="Select all papers on this page"
+                        className="rounded border-gray-300"
+                      />
+                    </th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Title</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Class / Subject</th>
                     <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Questions</th>
@@ -227,6 +309,15 @@ export default function ExamPapersPage() {
                 <tbody className="divide-y divide-gray-100">
                   {papers.map((paper) => (
                     <tr key={paper.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(paper.id)}
+                          onChange={() => toggleSelectOne(paper.id)}
+                          aria-label={`Select ${paper.paper_title}`}
+                          className="rounded border-gray-300"
+                        />
+                      </td>
                       <td className="px-4 py-3">
                         <div className="font-medium text-gray-900">{paper.paper_title}</div>
                         <div className="text-xs text-gray-500">{paper.duration_minutes} min • {paper.total_marks} marks</div>
@@ -271,6 +362,14 @@ export default function ExamPapersPage() {
                           >
                             {downloadingKey === `${paper.id}-docx` ? 'Generating…' : 'DOCX'}
                           </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteOne(paper)}
+                            disabled={deleteMutation.isPending}
+                            className="px-3 py-1.5 rounded border border-red-200 text-red-700 text-xs hover:bg-red-50 disabled:opacity-50"
+                          >
+                            Delete
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -303,6 +402,29 @@ export default function ExamPapersPage() {
           </div>
         )}
       </div>
+
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 bg-white rounded-xl shadow-2xl border border-gray-200 px-4 sm:px-6 py-3 flex items-center gap-3">
+          <span className="text-sm font-medium text-gray-700">{selectedIds.size} selected</span>
+          <button
+            type="button"
+            onClick={handleBulkDelete}
+            disabled={bulkDeleteMutation.isPending}
+            className="px-3 py-1.5 text-red-600 border border-red-300 rounded-lg text-sm hover:bg-red-50 disabled:opacity-50"
+          >
+            {bulkDeleteMutation.isPending ? 'Deleting…' : `Delete Selected (${selectedIds.size})`}
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectedIds(new Set())}
+            className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50"
+          >
+            Clear
+          </button>
+        </div>
+      )}
+
+      <ConfirmModalRoot />
     </div>
   )
 }
