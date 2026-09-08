@@ -992,6 +992,21 @@ class StudentRegistrationView(APIView):
         }, status=status.HTTP_201_CREATED)
 
 
+class StudentProfileView(APIView):
+    """The logged-in student's own profile -- personal, academic, and
+    guardian info. Reuses the admin-facing StudentSerializer (same shape
+    StudentDashboardView already nests under 'student') rather than a
+    second serializer, since a student's own record needs no field
+    reduction beyond what's already scoped by _get_student_for_request."""
+    permission_classes = [IsAuthenticated, IsStudent]
+
+    def get(self, request):
+        student = _get_student_for_request(request)
+        if not student:
+            return Response({'error': 'No student profile linked.'}, status=404)
+        return Response({'student': StudentSerializer(student).data})
+
+
 class StudentDashboardView(APIView):
     """Dashboard data for a logged-in student."""
     permission_classes = [IsAuthenticated, IsStudent]
@@ -1174,6 +1189,53 @@ class StudentTimetableView(APIView):
         return Response({'slots': slot_data, 'entries': entry_data})
 
 
+class StudentExamScheduleView(APIView):
+    """Student's own class exam schedule (date sheet) -- only exams whose
+    schedule has been published for this class, per Exam.schedule_published_at.
+    Deliberately separate from results/marks visibility (see StudentResultsView),
+    which gates on Exam.status=PUBLISHED instead."""
+    permission_classes = [IsAuthenticated, IsStudent]
+
+    def get(self, request):
+        student = _get_student_for_request(request)
+        if not student:
+            return Response({'error': 'No student profile linked.'}, status=404)
+
+        from examinations.models import Exam
+        exams = Exam.objects.filter(
+            school=student.school,
+            class_obj=student.class_obj,
+            is_active=True,
+            schedule_published_at__isnull=False,
+        ).select_related('exam_type', 'exam_group').order_by('start_date').prefetch_related(
+            'exam_subjects__subject',
+        )
+
+        result = []
+        for exam in exams:
+            subjects = [
+                {
+                    'subject_name': es.subject.name,
+                    'subject_code': es.subject.code,
+                    'exam_date': str(es.exam_date) if es.exam_date else None,
+                    'start_time': str(es.start_time) if es.start_time else None,
+                    'end_time': str(es.end_time) if es.end_time else None,
+                }
+                for es in exam.exam_subjects.filter(is_active=True).order_by('exam_date')
+            ]
+            result.append({
+                'exam_id': exam.id,
+                'exam_name': exam.name,
+                'exam_type': exam.exam_type.name if exam.exam_type else None,
+                'exam_group_name': exam.exam_group.name if exam.exam_group else None,
+                'start_date': str(exam.start_date) if exam.start_date else None,
+                'end_date': str(exam.end_date) if exam.end_date else None,
+                'subjects': subjects,
+            })
+
+        return Response(result)
+
+
 class StudentResultsView(APIView):
     """Student's own exam results."""
     permission_classes = [IsAuthenticated, IsStudent]
@@ -1184,9 +1246,10 @@ class StudentResultsView(APIView):
             return Response({'error': 'No student profile linked.'}, status=404)
 
         try:
-            from examinations.models import StudentMark
+            from examinations.models import Exam, StudentMark
             marks = StudentMark.objects.filter(
                 student=student,
+                exam_subject__exam__status=Exam.Status.PUBLISHED,
             ).select_related(
                 'exam_subject', 'exam_subject__exam', 'exam_subject__subject',
             ).order_by('-exam_subject__exam__start_date', 'exam_subject__subject__name')

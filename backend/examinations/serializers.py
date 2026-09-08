@@ -155,8 +155,8 @@ class ExamSerializer(serializers.ModelSerializer):
             'id', 'school', 'academic_year', 'academic_year_name',
             'term', 'term_name', 'exam_type', 'exam_type_name',
             'class_obj', 'class_name', 'exam_group', 'exam_group_name',
-            'name', 'start_date', 'end_date', 'status', 'subjects_count',
-            'is_active', 'created_at', 'updated_at',
+            'name', 'start_date', 'end_date', 'status', 'schedule_published_at',
+            'subjects_count', 'is_active', 'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'school', 'created_at', 'updated_at']
 
@@ -794,16 +794,28 @@ class ExamPaperSerializer(serializers.ModelSerializer):
     question_count = serializers.IntegerField(read_only=True)
     calculated_total_marks = serializers.DecimalField(max_digits=6, decimal_places=2, read_only=True)
     structure_marks_total = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
-    
+    marks_reconciled = serializers.SerializerMethodField()
+
     # NEW: Curriculum alignment - read-only expanded details
     lesson_plans_details = serializers.SerializerMethodField()
     covered_topics = serializers.SerializerMethodField()
     question_topics_summary = serializers.SerializerMethodField()
     overused_questions = serializers.SerializerMethodField()
-    
+
     def get_class_name(self, obj):
         from .paper_export_layout import resolve_exam_paper_class_name
         return resolve_exam_paper_class_name(obj)
+
+    def get_marks_reconciled(self, obj):
+        """Whether structure_marks_total matches total_marks -- mirrors the
+        client-side confirm check in QuestionPaperBuilderPage's step 2->3
+        transition, persisted here so a dismissed/skipped confirm is still
+        visible on any later read of the paper (e.g. a resumed draft, or
+        before export/publish)."""
+        total = obj.total_marks or 0
+        if not total:
+            return True
+        return obj.structure_marks_total == total
 
     def get_lesson_plans_details(self, obj):
         """Return lesson plan details."""
@@ -851,7 +863,7 @@ class ExamPaperSerializer(serializers.ModelSerializer):
             'class_obj', 'class_name', 'subject', 'subject_name',
             'paper_title', 'instructions', 'structure', 'render_options', 'total_marks', 'duration_minutes',
             'paper_questions', 'question_count', 'calculated_total_marks',
-            'structure_marks_total',
+            'structure_marks_total', 'marks_reconciled',
             'lesson_plans_details', 'covered_topics', 'question_topics_summary', 'overused_questions',
             'status', 'generated_by', 'generated_by_name',
             'is_active', 'created_at', 'updated_at',

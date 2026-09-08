@@ -407,7 +407,7 @@ class TestExams:
         exam = Exam.objects.filter(school=d['school_a'], name=f'{P6}Final Exam Class 1A').first()
         assert exam is not None
 
-        resp = api.post(f'/api/examinations/exams/{exam.id}/publish/', {}, token, sid)
+        resp = api.post(f'/api/examinations/exams/{exam.id}/announce-results/', {}, token, sid)
         data = resp.json() if resp.status_code == 200 else {}
         assert resp.status_code == 200, f"status={resp.status_code}"
         assert data.get('status') == 'PUBLISHED', f"exam_status={data.get('status')}"
@@ -837,7 +837,7 @@ class TestExamGroupWizardAndPublishAll:
         assert 'already exists' in resp2.json()['detail']
 
     def test_g2_group_actions_resolve_under_exam_groups_not_404(self, exam_prereqs, api):
-        """G2: download-date-sheet/update-date-by-subject/publish-all resolve under
+        """G2: download-date-sheet/update-date-by-subject/announce-results-all resolve under
         /exam-groups/, confirming they are no longer stranded under /student-responses/."""
         d = exam_prereqs
         data = self._create_group_with_two_classes(d, api)
@@ -855,7 +855,7 @@ class TestExamGroupWizardAndPublishAll:
         assert resp.status_code == 200, f"status={resp.status_code} body={resp.content[:300]}"
         assert resp.json()['updated_count'] == 2  # subj_math appears in both classes
 
-        resp = api.post(f'/api/examinations/exam-groups/{group_id}/publish-all/', {}, token, sid)
+        resp = api.post(f'/api/examinations/exam-groups/{group_id}/announce-results-all/', {}, token, sid)
         assert resp.status_code == 200, f"status={resp.status_code} body={resp.content[:300]}"
 
     def test_g3_group_actions_teacher_forbidden(self, exam_prereqs, api):
@@ -870,18 +870,18 @@ class TestExamGroupWizardAndPublishAll:
         resp = api.get(f'/api/examinations/exam-groups/{group_id}/download-date-sheet/', token, sid)
         assert resp.status_code == 403, f"status={resp.status_code}"
 
-        resp = api.post(f'/api/examinations/exam-groups/{group_id}/publish-all/', {}, token, sid)
+        resp = api.post(f'/api/examinations/exam-groups/{group_id}/announce-results-all/', {}, token, sid)
         assert resp.status_code == 403, f"status={resp.status_code}"
 
     def test_g4_publish_all_sets_status_on_all_child_exams(self, exam_prereqs, api):
-        """G4: publish-all marks every active exam in the group PUBLISHED."""
+        """G4: announce-results-all marks every active exam in the group PUBLISHED."""
         d = exam_prereqs
         data = self._create_group_with_two_classes(d, api)
         group_id = data['group_id']
         token = d['tokens']['admin']
         sid = d['SID_A']
 
-        resp = api.post(f'/api/examinations/exam-groups/{group_id}/publish-all/', {}, token, sid)
+        resp = api.post(f'/api/examinations/exam-groups/{group_id}/announce-results-all/', {}, token, sid)
         assert resp.status_code == 200, f"status={resp.status_code}"
         assert resp.json()['published_count'] == 2
 
@@ -890,8 +890,8 @@ class TestExamGroupWizardAndPublishAll:
         assert statuses == {Exam.Status.PUBLISHED}, statuses
 
     def test_g5_publish_all_notifies_admins_per_exam(self, exam_prereqs, api):
-        """G5: publish-all fires the same EXAM_RESULT notification fan-out a single-exam
-        publish would, once per exam in the group (not merged into one notification)."""
+        """G5: announce-results-all fires the same EXAM_RESULT notification fan-out a single-exam
+        announce-results would, once per exam in the group (not merged into one notification)."""
         from notifications.models import NotificationLog
 
         d = exam_prereqs
@@ -904,7 +904,7 @@ class TestExamGroupWizardAndPublishAll:
             school=d['school_a'], event_type='EXAM_RESULT',
         ).count()
 
-        resp = api.post(f'/api/examinations/exam-groups/{group_id}/publish-all/', {}, token, sid)
+        resp = api.post(f'/api/examinations/exam-groups/{group_id}/announce-results-all/', {}, token, sid)
         assert resp.status_code == 200, f"status={resp.status_code}"
 
         after_count = NotificationLog.objects.filter(
@@ -1989,8 +1989,8 @@ class TestResultsAndReportCard:
             student=s1, marks_obtained=Decimal('95'),
         )
 
-        # Publish final exam
-        api.post(f'/api/examinations/exams/{exam_final.id}/publish/', {}, token, sid)
+        # Announce final exam results
+        api.post(f'/api/examinations/exams/{exam_final.id}/announce-results/', {}, token, sid)
 
         # Grade scales
         grades = [

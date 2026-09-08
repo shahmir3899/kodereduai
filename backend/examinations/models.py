@@ -147,6 +147,13 @@ class Exam(models.Model):
         choices=Status.choices,
         default=Status.SCHEDULED,
     )
+    # Independent of `status`/results: whether this class's exam dates are
+    # visible to its own students/parents/teachers via the exam-schedule
+    # screens. Deliberately separate from `status` -- schedule and results
+    # are announced at different points in the exam lifecycle and to
+    # different effect (see notifications.triggers.trigger_exam_schedule_published
+    # vs trigger_exam_result_published).
+    schedule_published_at = models.DateTimeField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

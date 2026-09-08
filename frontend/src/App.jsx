@@ -58,6 +58,7 @@ const StaffRiskPage = lazy(() => import('./pages/hr/StaffRiskPage'))
 const SubjectsPage = lazy(() => import('./pages/academics/SubjectsPage'))
 const TimetablePage = lazy(() => import('./pages/academics/TimetablePage'))
 const TeacherTimetablePage = lazy(() => import('./pages/academics/TeacherTimetablePage'))
+const TeacherExamSchedule = lazy(() => import('./pages/academics/TeacherExamSchedule'))
 const AcademicsAnalyticsPage = lazy(() => import('./pages/academics/AcademicsAnalyticsPage'))
 const AcademicCalendarPage = lazy(() => import('./pages/academics/AcademicCalendarPage'))
 const AcademicYearsPage = lazy(() => import('./pages/sessions/AcademicYearsPage'))
@@ -84,6 +85,7 @@ const ChildOverview = lazy(() => import('./pages/parent/ChildOverview'))
 const ChildAttendance = lazy(() => import('./pages/parent/ChildAttendance'))
 const ChildFees = lazy(() => import('./pages/parent/ChildFees'))
 const ChildTimetable = lazy(() => import('./pages/parent/ChildTimetable'))
+const ChildExamSchedule = lazy(() => import('./pages/parent/ChildExamSchedule'))
 const ChildExamResults = lazy(() => import('./pages/parent/ChildExamResults'))
 const LeaveApplication = lazy(() => import('./pages/parent/LeaveApplication'))
 const ParentMessages = lazy(() => import('./pages/parent/ParentMessages'))
@@ -109,6 +111,7 @@ const StudentDashboard = lazy(() => import('./pages/student/StudentDashboard'))
 const StudentAttendance = lazy(() => import('./pages/student/StudentAttendance'))
 const StudentFees = lazy(() => import('./pages/student/StudentFees'))
 const StudentTimetable = lazy(() => import('./pages/student/StudentTimetable'))
+const StudentExamSchedule = lazy(() => import('./pages/student/StudentExamSchedule'))
 const StudentResults = lazy(() => import('./pages/student/StudentResults'))
 const StudentAssignments = lazy(() => import('./pages/student/StudentAssignments'))
 const StudentProfileView = lazy(() => import('./pages/student/StudentProfileView'))
@@ -481,6 +484,7 @@ function App() {
             {/* Academics routes */}
             <Route path="academics/subjects" element={<SchoolRoute><ModuleRoute module="academics"><ManagementRoute><SubjectsPage /></ManagementRoute></ModuleRoute></SchoolRoute>} />
             <Route path="academics/timetable" element={<SchoolRoute><ModuleRoute module="academics"><TimetableRoute /></ModuleRoute></SchoolRoute>} />
+            <Route path="academics/exam-schedule" element={<SchoolRoute><ModuleRoute module="examinations"><TeacherExamSchedule /></ModuleRoute></SchoolRoute>} />
             <Route path="academics/analytics" element={<SchoolRoute><ModuleRoute module="academics"><AdminPrincipalRoute><AcademicsAnalyticsPage /></AdminPrincipalRoute></ModuleRoute></SchoolRoute>} />
             <Route path="academics/academic-risk" element={<SchoolRoute><ModuleRoute module="examinations"><AdminPrincipalRoute><AcademicRiskPage /></AdminPrincipalRoute></ModuleRoute></SchoolRoute>} />
             <Route path="academics/calendar" element={<SchoolRoute><ModuleRoute module="academics"><ManagementRoute><AcademicCalendarPage /></ManagementRoute></ModuleRoute></SchoolRoute>} />
@@ -530,6 +534,7 @@ function App() {
             <Route path="parent/children/:studentId/attendance" element={<ParentRoute><ChildAttendance /></ParentRoute>} />
             <Route path="parent/children/:studentId/fees" element={<ParentRoute><ChildFees /></ParentRoute>} />
             <Route path="parent/children/:studentId/timetable" element={<ParentRoute><ChildTimetable /></ParentRoute>} />
+            <Route path="parent/children/:studentId/exam-schedule" element={<ParentRoute><ChildExamSchedule /></ParentRoute>} />
             <Route path="parent/children/:studentId/results" element={<ParentRoute><ChildExamResults /></ParentRoute>} />
             <Route path="parent/leave" element={<ParentRoute><LeaveApplication /></ParentRoute>} />
             <Route path="parent/messages" element={<ParentRoute><ParentMessages /></ParentRoute>} />
@@ -546,6 +551,7 @@ function App() {
             <Route path="student/attendance" element={<StudentRoute><StudentAttendance /></StudentRoute>} />
             <Route path="student/fees" element={<StudentRoute><StudentFees /></StudentRoute>} />
             <Route path="student/timetable" element={<StudentRoute><StudentTimetable /></StudentRoute>} />
+            <Route path="student/exam-schedule" element={<StudentRoute><StudentExamSchedule /></StudentRoute>} />
             <Route path="student/results" element={<StudentRoute><StudentResults /></StudentRoute>} />
             <Route path="student/assignments" element={<StudentRoute><StudentAssignments /></StudentRoute>} />
             <Route path="student/profile" element={<StudentRoute><StudentProfileView /></StudentRoute>} />

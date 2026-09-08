@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { questionPaperApi } from '../../services/api'
 import ClassSelector from '../../components/ClassSelector'
+import { useToast } from '../../components/Toast'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import { useClassSubjects } from '../../hooks/useClassSubjects'
@@ -25,12 +26,17 @@ const STATUS_STYLE = {
 export default function ExamPapersPage() {
   const navigate = useNavigate()
   const { activeAcademicYear } = useAcademicYear()
+  const { showError } = useToast()
 
   const [filterClassId, setFilterClassId] = useState('')
   const [filterSubjectId, setFilterSubjectId] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
+  // Tracks which paper/format is generating so only that row's button shows
+  // a loading state — generation embeds a full-page letterhead image and can
+  // take several seconds, and with no feedback users assumed the click did nothing.
+  const [downloadingKey, setDownloadingKey] = useState(null)
 
   const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
   const { sessionClasses } = useSessionClasses(activeAcademicYear?.id)
@@ -69,6 +75,33 @@ export default function ExamPapersPage() {
   const papers = data?.data?.results || data?.data || []
   const count = data?.data?.count || papers.length
   const totalPages = Math.max(1, Math.ceil(count / 20))
+
+  const handleDownload = async (paper, format) => {
+    const key = `${paper.id}-${format}`
+    setDownloadingKey(key)
+    try {
+      const isPdf = format === 'pdf'
+      const res = isPdf
+        ? await questionPaperApi.generatePDF(paper.id)
+        : await questionPaperApi.generateDOCX(paper.id)
+      const mimeType = isPdf
+        ? 'application/pdf'
+        : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      const blob = new Blob([res.data], { type: mimeType })
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `${paper.paper_title || 'paper'}.${format}`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (err) {
+      showError(err.response?.data?.detail || `Failed to generate ${format.toUpperCase()}. Please try again.`)
+    } finally {
+      setDownloadingKey((current) => (current === key ? null : current))
+    }
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -224,42 +257,19 @@ export default function ExamPapersPage() {
                           </button>
                           <button
                             type="button"
-                            onClick={async () => {
-                              const res = await questionPaperApi.generatePDF(paper.id)
-                              const blob = new Blob([res.data], { type: 'application/pdf' })
-                              const url = window.URL.createObjectURL(blob)
-                              const link = document.createElement('a')
-                              link.href = url
-                              link.download = `${paper.paper_title || 'paper'}.pdf`
-                              document.body.appendChild(link)
-                              link.click()
-                              link.remove()
-                              window.URL.revokeObjectURL(url)
-                            }}
-                            className="px-3 py-1.5 rounded border border-gray-300 text-gray-700 text-xs hover:bg-gray-100"
+                            onClick={() => handleDownload(paper, 'pdf')}
+                            disabled={downloadingKey === `${paper.id}-pdf`}
+                            className="px-3 py-1.5 rounded border border-gray-300 text-gray-700 text-xs hover:bg-gray-100 disabled:opacity-50 disabled:cursor-wait"
                           >
-                            PDF
+                            {downloadingKey === `${paper.id}-pdf` ? 'Generating…' : 'PDF'}
                           </button>
                           <button
                             type="button"
-                            onClick={async () => {
-                              const res = await questionPaperApi.generateDOCX(paper.id)
-                              const blob = new Blob(
-                                [res.data],
-                                { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' },
-                              )
-                              const url = window.URL.createObjectURL(blob)
-                              const link = document.createElement('a')
-                              link.href = url
-                              link.download = `${paper.paper_title || 'paper'}.docx`
-                              document.body.appendChild(link)
-                              link.click()
-                              link.remove()
-                              window.URL.revokeObjectURL(url)
-                            }}
-                            className="px-3 py-1.5 rounded border border-gray-300 text-gray-700 text-xs hover:bg-gray-100"
+                            onClick={() => handleDownload(paper, 'docx')}
+                            disabled={downloadingKey === `${paper.id}-docx`}
+                            className="px-3 py-1.5 rounded border border-gray-300 text-gray-700 text-xs hover:bg-gray-100 disabled:opacity-50 disabled:cursor-wait"
                           >
-                            DOCX
+                            {downloadingKey === `${paper.id}-docx` ? 'Generating…' : 'DOCX'}
                           </button>
                         </div>
                       </td>

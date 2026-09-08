@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
-import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
-import { questionPaperApi, examinationsApi, lmsApi } from '../../services/api'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { questionPaperApi, examinationsApi } from '../../services/api'
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import Toast from '../../components/Toast'
 import ClassSelector from '../../components/ClassSelector'
@@ -18,6 +18,27 @@ import BankFillSource from './BankFillSource'
 import PaperStructureBuilder, { calculateAllocatedMarks } from './PaperStructureBuilder'
 
 const RENDER_OPTIONS_DEFAULT = { answer_lines: false }
+
+// DRF validation errors (e.g. QuestionCreateUpdateSerializer.validate()) come back as
+// {field: [messages]} with no wrapping "detail" key -- only Django ValidationError
+// (core.views.custom_exception_handler) wraps under "detail". Without this, autosave
+// failures fell back to a generic "Autosave failed" toast that hid the actual reason
+// (e.g. "SHORT requires answer_text or correct_answer"), leaving the paper builder
+// stuck retrying the same invalid payload with no clue why.
+function extractAutosaveErrorMessage(error, fallback) {
+  const data = error?.response?.data
+  if (!data) return fallback
+  if (typeof data.detail === 'string') return data.detail
+  if (Array.isArray(data.detail)) return data.detail.join(' ')
+  if (typeof data === 'object') {
+    const messages = Object.entries(data).map(([field, value]) => {
+      const text = Array.isArray(value) ? value.join(' ') : String(value)
+      return field === 'detail' || field === 'non_field_errors' ? text : `${field}: ${text}`
+    })
+    if (messages.length > 0) return messages.join(' | ')
+  }
+  return fallback
+}
 
 const WIZARD_STEPS = [
   { id: 1, label: 'Paper Setup' },
@@ -216,6 +237,11 @@ export default function QuestionPaperBuilderPage() {
   const [lastSavedAt, setLastSavedAt] = useState(null)
   const [coverageCollapsed, setCoverageCollapsed] = useState(false)
   const [paperStatus, setPaperStatus] = useState('DRAFT')
+  // Server-computed allocated-vs-total marks check (ExamPaperSerializer.marks_reconciled),
+  // so a mismatch persists past a dismissed/skipped step-2 confirm and is visible on
+  // any later read of the paper (resumed draft, after an autosave). Defaults true so
+  // a brand-new paper with no structure yet doesn't show a false mismatch warning.
+  const [marksReconciled, setMarksReconciled] = useState(true)
   const [overusedQuestionCounts, setOverusedQuestionCounts] = useState({})
   const [wizardStep, setWizardStep] = useState(location.state?.lessonPlanId ? 3 : 1)
   const [structure, setStructure] = useState([])
@@ -310,6 +336,7 @@ export default function QuestionPaperBuilderPage() {
     setManualDirty(false)
     setSaveState('saved')
     setLastSavedAt(paper.updated_at || new Date().toISOString())
+    setMarksReconciled(paper.marks_reconciled !== false)
     hydrateOverusedQuestionCounts(paper)
 
     if (!hasJumpedToStep3Ref.current) {
@@ -320,7 +347,11 @@ export default function QuestionPaperBuilderPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resumeDraftRes])
 
-  const isReadOnlyPaper = Boolean(resumePaperId && paperStatus && paperStatus !== 'DRAFT')
+  // Keyed purely off paperStatus (defaults to 'DRAFT') rather than also requiring
+  // resumePaperId -- a paper created fresh this session (no route/state id) must
+  // still lock down if its status moves off DRAFT mid-session (e.g. published
+  // from another tab), not just one resumed via a paper id in the URL/route state.
+  const isReadOnlyPaper = paperStatus !== 'DRAFT'
 
   useEffect(() => {
     if (isReadOnlyPaper && activeTab !== 'manual') {
@@ -370,11 +401,15 @@ export default function QuestionPaperBuilderPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoPaperTitle])
 
+  // Coverage only actually changes server-side when an autosave lands (new/removed
+  // questions or lesson-plan links), so it's refetched explicitly from
+  // autosaveMutation.onSuccess and linkLessonPlansMutation.onSuccess rather than
+  // polled blindly -- a fixed interval kept refetching (and re-running the
+  // planned_topics_coverage query) even when nothing had changed since the last tick.
   const { data: coverageStatsRes, isLoading: coverageLoading, isError: coverageError } = useQuery({
-    queryKey: ['paperCoverageStats', draftId, activeTab, manualDraft.questions.length],
+    queryKey: ['paperCoverageStats', draftId],
     queryFn: () => questionPaperApi.getCoverageStats(draftId),
     enabled: !!draftId,
-    refetchInterval: draftId && !isReadOnlyPaper ? 4000 : false,
   })
   const coverageStats = coverageStatsRes?.data || null
   const linkedLessonPlanIds = useMemo(
@@ -382,64 +417,31 @@ export default function QuestionPaperBuilderPage() {
     [coverageStats],
   )
 
-  const linkedLessonPlanQueries = useQueries({
-    queries: linkedLessonPlanIds.map((lessonPlanId) => ({
-      queryKey: ['paper-coverage-lesson-plan', lessonPlanId],
-      queryFn: () => lmsApi.getLessonPlan(lessonPlanId),
-      enabled: !!draftId,
-    })),
-  })
-
-  const lessonPlanTopicIds = useMemo(() => {
-    const set = new Set()
-    linkedLessonPlanQueries.forEach((query) => {
-      const plan = query.data?.data
-      ;(plan?.planned_topics || []).forEach((topic) => set.add(topic.id))
-    })
-    return Array.from(set)
-  }, [linkedLessonPlanQueries])
-
-  const topicStandardsQueries = useQueries({
-    queries: lessonPlanTopicIds.map((topicId) => ({
-      queryKey: ['paper-coverage-topic-standards', topicId],
-      queryFn: () => lmsApi.getTopicStandards(topicId),
-      enabled: !!draftId,
-    })),
-  })
+  // planned_topics_coverage (topic + its SLOs + covered flag, for every topic
+  // planned across the paper's linked lesson plans) is computed server-side in
+  // one query by coverage_stats -- this used to require one request per linked
+  // lesson plan plus one per distinct topic (useQueries fan-out), which scaled
+  // poorly with paper size and re-fired on every 4s coverage poll.
+  const plannedTopicsCoverage = coverageStats?.planned_topics_coverage || []
 
   const allSLOs = useMemo(() => {
     const byId = new Map()
-    topicStandardsQueries.forEach((query) => {
-      const payload = query.data?.data
-      const items = Array.isArray(payload?.results)
-        ? payload.results
-        : (Array.isArray(payload) ? payload : [])
-      items.forEach((slo) => {
-        if (!byId.has(slo.id)) {
-          byId.set(slo.id, slo)
-        }
+    plannedTopicsCoverage.forEach((topic) => {
+      ;(topic.slos || []).forEach((slo) => {
+        if (!byId.has(slo.id)) byId.set(slo.id, slo)
       })
     })
     return Array.from(byId.values())
-  }, [topicStandardsQueries])
-
-  const coveredTopicIds = useMemo(
-    () => new Set((coverageStats?.covered_topics || []).map((topic) => topic.id)),
-    [coverageStats],
-  )
+  }, [plannedTopicsCoverage])
 
   const coveredSLOIds = useMemo(() => {
     const set = new Set()
-    lessonPlanTopicIds.forEach((topicId, index) => {
-      if (!coveredTopicIds.has(topicId)) return
-      const payload = topicStandardsQueries[index]?.data?.data
-      const items = Array.isArray(payload?.results)
-        ? payload.results
-        : (Array.isArray(payload) ? payload : [])
-      items.forEach((slo) => set.add(slo.id))
+    plannedTopicsCoverage.forEach((topic) => {
+      if (!topic.is_covered) return
+      ;(topic.slos || []).forEach((slo) => set.add(slo.id))
     })
     return set
-  }, [coveredTopicIds, lessonPlanTopicIds, topicStandardsQueries])
+  }, [plannedTopicsCoverage])
 
   const coveredSLOs = useMemo(
     () => allSLOs.filter((slo) => coveredSLOIds.has(slo.id)),
@@ -502,6 +504,12 @@ export default function QuestionPaperBuilderPage() {
   const hasRestoredRecoveryRef = useRef(false)
   const lastEnsurePayloadRef = useRef('')
   const lastAutosavePayloadRef = useRef('')
+  // Payload hash of the most recent autosave that the backend rejected. The autosave
+  // effect below skips re-firing while the outgoing payload still hashes to this value,
+  // so a validation failure (e.g. a question missing its required answer field) surfaces
+  // once instead of retrying the identical doomed payload in a tight save/error loop that
+  // reads to the user as "stuck at Saving...".
+  const lastFailedAutosavePayloadRef = useRef('')
 
 
   const ensureDraftMutation = useMutation({
@@ -516,8 +524,7 @@ export default function QuestionPaperBuilderPage() {
     },
     onError: (error) => {
       setSaveState('error')
-      const msg = error?.response?.data?.detail || 'Failed to create draft'
-      setToast({ type: 'error', message: msg })
+      setToast({ type: 'error', message: extractAutosaveErrorMessage(error, 'Failed to create draft') })
     },
   })
 
@@ -560,14 +567,21 @@ export default function QuestionPaperBuilderPage() {
 
       setSaveState('saved')
       setLastSavedAt(new Date().toISOString())
+      setMarksReconciled(paper.marks_reconciled !== false)
       lastAutosavePayloadRef.current = variables?.payloadHash || lastAutosavePayloadRef.current
       localStorage.removeItem(recoveryKey)
       hydrateOverusedQuestionCounts(paper)
+      // Coverage (topics/SLOs/Bloom mix) only changes when questions/structure
+      // actually saved server-side -- refetch it here instead of polling blindly.
+      queryClient.invalidateQueries({ queryKey: ['paperCoverageStats', paper.id] })
     },
-    onError: (error) => {
+    onError: (error, variables) => {
       setSaveState('error')
-      const msg = error?.response?.data?.detail || 'Autosave failed'
-      setToast({ type: 'error', message: msg })
+      // Record this exact payload as a known-failure so the autosave effect won't
+      // immediately re-fire it once autosaveMutation.isPending flips back to false --
+      // it'll only retry once the user actually changes something.
+      lastFailedAutosavePayloadRef.current = variables?.payloadHash || lastFailedAutosavePayloadRef.current
+      setToast({ type: 'error', message: extractAutosaveErrorMessage(error, 'Autosave failed') })
     },
   })
 
@@ -698,10 +712,14 @@ export default function QuestionPaperBuilderPage() {
     if (!manualDirty) return
     if (autosaveMutation.isPending) return
     if (debouncedAutosaveTrigger === lastAutosavePayloadRef.current) return
+    // Same payload that just failed validation server-side -- don't hammer the API
+    // with it again. Only a real edit (which changes the hash) re-arms the retry.
+    if (debouncedAutosaveTrigger === lastFailedAutosavePayloadRef.current) return
 
     const payload = buildAutosavePayload()
     const payloadHash = JSON.stringify(payload)
     if (payloadHash === lastAutosavePayloadRef.current) return
+    if (payloadHash === lastFailedAutosavePayloadRef.current) return
 
     setSaveState('saving')
     autosaveMutation.mutate({
@@ -1299,6 +1317,12 @@ export default function QuestionPaperBuilderPage() {
                   <p className="text-xs text-red-600">Failed to load coverage stats.</p>
                 ) : (
                   <>
+                    {!marksReconciled && (
+                      <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                        ⚠️ Allocated marks (Paper Structure) don't match the paper's total marks.
+                      </p>
+                    )}
+
                     <div className="grid grid-cols-2 gap-2 text-xs">
                       <div className="rounded-md bg-gray-50 p-2">
                         <p className="text-gray-500">Total SLOs</p>

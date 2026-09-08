@@ -354,23 +354,25 @@ export const parentsApi = {
 
 export const studentPortalApi = {
   getDashboard: () =>
-    api.get('/api/student-portal/dashboard/'),
+    api.get('/api/students/portal/dashboard/'),
   getProfile: () =>
-    api.get('/api/student-portal/profile/'),
+    api.get('/api/students/portal/profile/'),
   getAttendance: (params?: Record<string, unknown>) =>
-    api.get('/api/student-portal/attendance/', { params }),
+    api.get('/api/students/portal/attendance/', { params }),
   getFees: (params?: Record<string, unknown>) =>
-    api.get('/api/student-portal/fees/', { params }),
+    api.get('/api/students/portal/fees/', { params }),
   getTimetable: () =>
-    api.get('/api/student-portal/timetable/'),
+    api.get('/api/students/portal/timetable/'),
+  getExamSchedule: () =>
+    api.get('/api/students/portal/exam-schedule/'),
   getExamResults: (params?: Record<string, unknown>) =>
-    api.get('/api/student-portal/exam-results/', { params }),
+    api.get('/api/students/portal/results/', { params }),
   getAssignments: (params?: Record<string, unknown>) =>
-    api.get('/api/student-portal/assignments/', { params }),
+    api.get('/api/students/portal/assignments/', { params }),
   getAssignment: (id: number) =>
-    api.get(`/api/student-portal/assignments/${id}/`),
+    api.get(`/api/students/portal/assignments/${id}/`),
   submitAssignment: (id: number, data: Record<string, unknown>) =>
-    api.post(`/api/student-portal/assignments/${id}/submit/`, data),
+    api.post(`/api/students/portal/assignments/${id}/submit/`, data),
   getStudyHelperHistory: () =>
     api.get('/api/students/portal/study-helper/'),
   sendStudyHelperMessage: (data: Record<string, unknown>) =>

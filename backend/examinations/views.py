@@ -150,13 +150,25 @@ def _is_teacher_class_teacher_for_class(request, class_id, school_id=None):
 
 
 def _can_manage_exam_papers(request, class_id=None, subject_id=None, school_id=None):
-    """Return True when role is allowed to create/update exam papers."""
+    """Return True when role is allowed to create/update exam papers.
+
+    A teacher may manage a paper for (class, subject) either as the class's
+    class-teacher (homeroom-style, covers every subject taught in that class)
+    or as the subject teacher specifically assigned to that class-subject
+    pairing -- the same dual-layer scope _apply_teacher_exam_scope already
+    grants for read access. Previously only the class-teacher branch was
+    checked here, so any class-teacher could create/edit/autosave exam papers
+    for subjects they don't teach in that class.
+    """
     role = get_effective_role(request)
     if role in ADMIN_ROLES:
         return True
     if role != 'TEACHER':
         return False
-    return _is_teacher_class_teacher_for_class(request, class_id, school_id=school_id)
+    return (
+        _is_teacher_class_teacher_for_class(request, class_id, school_id=school_id)
+        or _is_teacher_allowed_for_class_subject(request, class_id, subject_id, school_id=school_id)
+    )
 
 
 def _short_academic_year_name(name):
@@ -908,9 +920,39 @@ class ExamGroupViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-    @action(detail=True, methods=['post'], url_path='publish-all')
-    def publish_all(self, request, pk=None):
-        """Publish all exams in the group, notifying the same recipients a single-exam publish would."""
+    @action(detail=True, methods=['post'], url_path='publish-schedule-all')
+    def publish_schedule_all(self, request, pk=None):
+        """Publish schedules for every exam in the group -- see Exam.publish_schedule."""
+        from django.utils import timezone
+        from notifications.triggers import trigger_exam_schedule_published
+
+        group = self.get_object()
+        exams = list(
+            group.exams.filter(is_active=True).select_related('school', 'class_obj', 'academic_year')
+        )
+        now = timezone.now()
+        Exam.objects.filter(id__in=[exam.id for exam in exams]).update(schedule_published_at=now)
+        for exam in exams:
+            exam.schedule_published_at = now
+            try:
+                trigger_exam_schedule_published(exam)
+            except Exception:
+                # Do not block publish if notification fanout fails.
+                pass
+        return Response({'published_count': len(exams)})
+
+    @action(detail=True, methods=['post'], url_path='unpublish-schedule-all')
+    def unpublish_schedule_all(self, request, pk=None):
+        """Hide schedules for every exam in the group again -- see Exam.unpublish_schedule."""
+        group = self.get_object()
+        exams = list(group.exams.filter(is_active=True))
+        Exam.objects.filter(id__in=[exam.id for exam in exams]).update(schedule_published_at=None)
+        return Response({'unpublished_count': len(exams)})
+
+    @action(detail=True, methods=['post'], url_path='announce-results-all')
+    def announce_results_all(self, request, pk=None):
+        """Announce results for every exam in the group -- this is what the old
+        'publish-all' action used to do -- see Exam.announce_results."""
         from notifications.triggers import trigger_exam_result_published
 
         group = self.get_object()
@@ -926,6 +968,14 @@ class ExamGroupViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
                 # Do not block publish if notification fanout fails.
                 pass
         return Response({'published_count': len(exams)})
+
+    @action(detail=True, methods=['post'], url_path='unpublish-results-all')
+    def unpublish_results_all(self, request, pk=None):
+        """Withdraw announced results for every exam in the group -- see Exam.unpublish_results."""
+        group = self.get_object()
+        exams = list(group.exams.filter(is_active=True))
+        Exam.objects.filter(id__in=[exam.id for exam in exams]).update(status=Exam.Status.COMPLETED)
+        return Response({'unpublished_count': len(exams)})
 
 
 class StudentResponseViewSet(ModuleAccessMixin, viewsets.ModelViewSet):
@@ -1070,6 +1120,9 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
         ungrouped = self.request.query_params.get('ungrouped')
         if ungrouped and ungrouped.lower() == 'true':
             qs = qs.filter(exam_group__isnull=True)
+        schedule_published = self.request.query_params.get('schedule_published')
+        if schedule_published is not None:
+            qs = qs.filter(schedule_published_at__isnull=not (schedule_published.lower() == 'true'))
         is_active = self.request.query_params.get('is_active')
         if is_active is not None:
             qs = qs.filter(is_active=is_active.lower() == 'true')
@@ -1200,8 +1253,37 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
         queryset.delete()  # Cascades (CASCADE) to ExamSubject -> StudentMark
         return Response({'requested_count': len(ids), 'deleted_count': deleted_count})
 
-    @action(detail=True, methods=['post'])
-    def publish(self, request, pk=None):
+    @action(detail=True, methods=['post'], url_path='publish-schedule')
+    def publish_schedule(self, request, pk=None):
+        """Make this class's exam dates visible to its own students/parents/teachers.
+
+        Deliberately independent of `status`/results -- see Exam.schedule_published_at.
+        """
+        from django.utils import timezone
+        from notifications.triggers import trigger_exam_schedule_published
+
+        exam = self.get_object()
+        exam.schedule_published_at = timezone.now()
+        exam.save(update_fields=['schedule_published_at'])
+        try:
+            trigger_exam_schedule_published(exam)
+        except Exception:
+            # Do not block publish if notification fanout fails.
+            pass
+        return Response(ExamSerializer(exam).data)
+
+    @action(detail=True, methods=['post'], url_path='unpublish-schedule')
+    def unpublish_schedule(self, request, pk=None):
+        """Hide this class's exam dates again (e.g. dates are being reworked)."""
+        exam = self.get_object()
+        exam.schedule_published_at = None
+        exam.save(update_fields=['schedule_published_at'])
+        return Response(ExamSerializer(exam).data)
+
+    @action(detail=True, methods=['post'], url_path='announce-results')
+    def announce_results(self, request, pk=None):
+        """Publish this exam's results/report card. This is what the old
+        'publish' action used to do -- see Exam.Status.PUBLISHED."""
         exam = self.get_object()
         exam.status = Exam.Status.PUBLISHED
         exam.save(update_fields=['status'])
@@ -1211,6 +1293,15 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
         except Exception:
             # Do not block publish if notification fanout fails.
             pass
+        return Response(ExamSerializer(exam).data)
+
+    @action(detail=True, methods=['post'], url_path='unpublish-results')
+    def unpublish_results(self, request, pk=None):
+        """Withdraw an announced result, reverting to COMPLETED (marks are
+        entered/finalized, just not announced)."""
+        exam = self.get_object()
+        exam.status = Exam.Status.COMPLETED
+        exam.save(update_fields=['status'])
         return Response(ExamSerializer(exam).data)
 
     @action(detail=True, methods=['post'], url_path='generate-comments')
@@ -3218,13 +3309,47 @@ class ExamPaperViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
     def coverage_stats(self, request, pk=None):
         """
         Get coverage statistics for this exam paper.
-        Returns: topics count, covered topics, lesson plans, etc.
+        Returns: topics count, covered topics, lesson plans, SLO coverage, etc.
+
+        `planned_topics_coverage` inlines every topic planned across the paper's
+        linked lesson plans, each with its SLOs and whether this paper covers it.
+        Added so the frontend coverage panel can render entirely from this one
+        response instead of firing a separate request per linked lesson plan and
+        per distinct topic (the old approach fanned out via useQueries).
         """
+        from lms.models import Topic
+
         exam_paper = self.get_object()
+        covered_topic_ids = set(exam_paper.covered_topics.values_list('id', flat=True))
         slo_coverage_count = exam_paper.covered_topics.filter(
             standard_alignments__isnull=False,
         ).values('standard_alignments__objective_id').distinct().count()
-        
+
+        planned_topics = Topic.objects.filter(
+            lesson_plans__in=exam_paper.lesson_plans.all(),
+        ).distinct().select_related('chapter').prefetch_related('standard_alignments__objective')
+
+        planned_topics_coverage = []
+        all_slo_ids = set()
+        for topic in planned_topics:
+            is_covered = topic.id in covered_topic_ids
+            slos = [
+                {
+                    'id': alignment.objective_id,
+                    'code': alignment.objective.code,
+                    'statement': alignment.objective.statement,
+                }
+                for alignment in topic.standard_alignments.all()
+            ]
+            all_slo_ids.update(slo['id'] for slo in slos)
+            planned_topics_coverage.append({
+                'topic_id': topic.id,
+                'chapter': f"{topic.chapter.chapter_number}: {topic.chapter.title}",
+                'topic': f"{topic.topic_number}: {topic.title}",
+                'is_covered': is_covered,
+                'slos': slos,
+            })
+
         return Response({
             'exam_paper_id': exam_paper.id,
             'paper_title': exam_paper.paper_title,
@@ -3249,6 +3374,8 @@ class ExamPaperViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
                 }
                 for lp in exam_paper.lesson_plans.all()
             ],
+            'planned_topics_coverage': planned_topics_coverage,
+            'total_slo_count': len(all_slo_ids),
             'topic_count': exam_paper.covered_topics.count(),
             'slo_coverage_count': slo_coverage_count,
             # Backward-compatible aliases used by older clients/tests.

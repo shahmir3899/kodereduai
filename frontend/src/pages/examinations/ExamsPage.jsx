@@ -825,10 +825,28 @@ export default function ExamsPage() {
     onError: (err) => setListError(err.response?.data?.detail || 'Failed to delete selected tests.'),
   })
 
-  const publishMut = useMutation({
-    mutationFn: (id) => examinationsApi.publishExam(id),
+  const publishScheduleMut = useMutation({
+    mutationFn: (id) => examinationsApi.publishExamSchedule(id),
     onSuccess: () => { setListError(null); queryClient.invalidateQueries({ queryKey: ['exams'] }); queryClient.invalidateQueries({ queryKey: ['examGroups'] }) },
-    onError: (err) => setListError(err.response?.data?.detail || 'Failed to publish exam.'),
+    onError: (err) => setListError(err.response?.data?.detail || 'Failed to publish exam schedule.'),
+  })
+
+  const unpublishScheduleMut = useMutation({
+    mutationFn: (id) => examinationsApi.unpublishExamSchedule(id),
+    onSuccess: () => { setListError(null); queryClient.invalidateQueries({ queryKey: ['exams'] }); queryClient.invalidateQueries({ queryKey: ['examGroups'] }) },
+    onError: (err) => setListError(err.response?.data?.detail || 'Failed to unpublish exam schedule.'),
+  })
+
+  const announceResultsMut = useMutation({
+    mutationFn: (id) => examinationsApi.announceExamResults(id),
+    onSuccess: () => { setListError(null); queryClient.invalidateQueries({ queryKey: ['exams'] }); queryClient.invalidateQueries({ queryKey: ['examGroups'] }) },
+    onError: (err) => setListError(err.response?.data?.detail || 'Failed to announce results.'),
+  })
+
+  const unpublishResultsMut = useMutation({
+    mutationFn: (id) => examinationsApi.unpublishExamResults(id),
+    onSuccess: () => { setListError(null); queryClient.invalidateQueries({ queryKey: ['exams'] }); queryClient.invalidateQueries({ queryKey: ['examGroups'] }) },
+    onError: (err) => setListError(err.response?.data?.detail || 'Failed to unpublish results.'),
   })
 
   const reactivateMut = useMutation({
@@ -854,10 +872,28 @@ export default function ExamsPage() {
     onError: (err) => setListError(err.response?.data?.detail || 'Failed to delete selected exam groups.'),
   })
 
-  const publishAllMut = useMutation({
-    mutationFn: (id) => examinationsApi.publishAllExams(id),
+  const publishScheduleAllMut = useMutation({
+    mutationFn: (id) => examinationsApi.publishScheduleAll(id),
     onSuccess: () => { setListError(null); queryClient.invalidateQueries({ queryKey: ['examGroups'] }); queryClient.invalidateQueries({ queryKey: ['exams'] }) },
-    onError: (err) => setListError(err.response?.data?.detail || 'Failed to publish exams.'),
+    onError: (err) => setListError(err.response?.data?.detail || 'Failed to publish exam schedules.'),
+  })
+
+  const unpublishScheduleAllMut = useMutation({
+    mutationFn: (id) => examinationsApi.unpublishScheduleAll(id),
+    onSuccess: () => { setListError(null); queryClient.invalidateQueries({ queryKey: ['examGroups'] }); queryClient.invalidateQueries({ queryKey: ['exams'] }) },
+    onError: (err) => setListError(err.response?.data?.detail || 'Failed to unpublish exam schedules.'),
+  })
+
+  const announceResultsAllMut = useMutation({
+    mutationFn: (id) => examinationsApi.announceResultsAll(id),
+    onSuccess: () => { setListError(null); queryClient.invalidateQueries({ queryKey: ['examGroups'] }); queryClient.invalidateQueries({ queryKey: ['exams'] }) },
+    onError: (err) => setListError(err.response?.data?.detail || 'Failed to announce results.'),
+  })
+
+  const unpublishResultsAllMut = useMutation({
+    mutationFn: (id) => examinationsApi.unpublishResultsAll(id),
+    onSuccess: () => { setListError(null); queryClient.invalidateQueries({ queryKey: ['examGroups'] }); queryClient.invalidateQueries({ queryKey: ['exams'] }) },
+    onError: (err) => setListError(err.response?.data?.detail || 'Failed to unpublish results.'),
   })
 
   // ── Modal helpers (Quick Create / Edit) ──
@@ -1172,11 +1208,33 @@ export default function ExamsPage() {
                             Date Sheet
                           </button>
                           <button
-                            onClick={async () => { const ok = await confirm({ title: 'Publish All Exams', message: 'Publish all exams in this group? Results will become visible.', variant: 'warning', confirmLabel: 'Publish All' }); if (ok) publishAllMut.mutate(group.id) }}
-                            className="text-xs px-2 py-1 text-green-600 hover:bg-green-50 rounded"
-                            disabled={publishAllMut.isPending}
+                            onClick={async () => { const ok = await confirm({ title: 'Publish Exam Schedule', message: 'Make this group\'s exam dates visible to students, parents, and teachers for their own classes? They will be notified of the exam dates (not results).', variant: 'warning', confirmLabel: 'Publish Schedule' }); if (ok) publishScheduleAllMut.mutate(group.id) }}
+                            className="text-xs px-2 py-1 text-blue-600 hover:bg-blue-50 rounded"
+                            disabled={publishScheduleAllMut.isPending}
+                            title="Make exam dates visible to students/parents/teachers for their own class"
                           >
-                            Publish All
+                            Publish Schedule
+                          </button>
+                          <button
+                            onClick={async () => { const ok = await confirm({ title: 'Unpublish Exam Schedule', message: 'Hide this group\'s exam dates from students, parents, and teachers again?' }); if (ok) unpublishScheduleAllMut.mutate(group.id) }}
+                            className="text-xs px-2 py-1 text-gray-500 hover:bg-gray-100 rounded"
+                            disabled={unpublishScheduleAllMut.isPending}
+                          >
+                            Unpublish Schedule
+                          </button>
+                          <button
+                            onClick={async () => { const ok = await confirm({ title: 'Announce All Results', message: 'Announce results for all exams in this group? Results will become visible.', variant: 'warning', confirmLabel: 'Announce Results' }); if (ok) announceResultsAllMut.mutate(group.id) }}
+                            className="text-xs px-2 py-1 text-green-600 hover:bg-green-50 rounded"
+                            disabled={announceResultsAllMut.isPending}
+                          >
+                            Announce Results
+                          </button>
+                          <button
+                            onClick={async () => { const ok = await confirm({ title: 'Unpublish Results', message: 'Withdraw announced results for all exams in this group? Results will no longer be visible.' }); if (ok) unpublishResultsAllMut.mutate(group.id) }}
+                            className="text-xs px-2 py-1 text-gray-500 hover:bg-gray-100 rounded"
+                            disabled={unpublishResultsAllMut.isPending}
+                          >
+                            Unpublish Results
                           </button>
                           <button
                             onClick={async () => { const ok = await confirm({ title: 'Delete Exam Group', message: `Delete "${group.name}" and all its class exams?` }); if (ok) deleteGroupMut.mutate(group.id) }}
@@ -1223,12 +1281,30 @@ export default function ExamsPage() {
                                         <td className="px-4 py-2 text-right">
                                           <button onClick={() => openEdit(exam)} className="text-xs text-primary-600 hover:underline mr-2">Edit</button>
                                           {exam.is_active ? (
-                                            exam.status !== 'PUBLISHED' && (
-                                              <button
-                                                onClick={async () => { const ok = await confirm({ title: 'Publish Exam', message: 'Publish this exam? Results will become visible.', variant: 'warning', confirmLabel: 'Publish' }); if (ok) publishMut.mutate(exam.id) }}
-                                                className="text-xs text-green-600 hover:underline mr-2"
-                                              >Publish</button>
-                                            )
+                                            <>
+                                              {exam.schedule_published_at ? (
+                                                <button
+                                                  onClick={async () => { const ok = await confirm({ title: 'Unpublish Exam Schedule', message: 'Hide this class\'s exam dates again?' }); if (ok) unpublishScheduleMut.mutate(exam.id) }}
+                                                  className="text-xs text-gray-500 hover:underline mr-2"
+                                                >Unpublish Schedule</button>
+                                              ) : (
+                                                <button
+                                                  onClick={async () => { const ok = await confirm({ title: 'Publish Exam Schedule', message: 'Make this class\'s exam dates visible to its students, parents, and teachers?', variant: 'warning', confirmLabel: 'Publish Schedule' }); if (ok) publishScheduleMut.mutate(exam.id) }}
+                                                  className="text-xs text-blue-600 hover:underline mr-2"
+                                                >Publish Schedule</button>
+                                              )}
+                                              {exam.status === 'PUBLISHED' ? (
+                                                <button
+                                                  onClick={async () => { const ok = await confirm({ title: 'Unpublish Results', message: 'Withdraw this exam\'s announced results?' }); if (ok) unpublishResultsMut.mutate(exam.id) }}
+                                                  className="text-xs text-gray-500 hover:underline mr-2"
+                                                >Unpublish Results</button>
+                                              ) : (
+                                                <button
+                                                  onClick={async () => { const ok = await confirm({ title: 'Announce Results', message: 'Announce this exam\'s results? Results will become visible.', variant: 'warning', confirmLabel: 'Announce Results' }); if (ok) announceResultsMut.mutate(exam.id) }}
+                                                  className="text-xs text-green-600 hover:underline mr-2"
+                                                >Announce Results</button>
+                                              )}
+                                            </>
                                           ) : (
                                             <button
                                               onClick={async () => { const ok = await confirm({ title: 'Reactivate Exam', message: `Reactivate "${exam.name}"?`, variant: 'primary', confirmLabel: 'Reactivate' }); if (ok) reactivateMut.mutate(exam.id) }}
@@ -1387,12 +1463,30 @@ export default function ExamsPage() {
                         <td className="px-4 py-2 text-right">
                           <button onClick={() => openEdit(exam)} className="text-xs text-primary-600 hover:underline mr-2">Edit</button>
                           {exam.is_active ? (
-                            exam.status !== 'PUBLISHED' && (
-                              <button
-                                onClick={async () => { const ok = await confirm({ title: 'Publish Exam', message: 'Publish this exam? Results will become visible.', variant: 'warning', confirmLabel: 'Publish' }); if (ok) publishMut.mutate(exam.id) }}
-                                className="text-xs text-green-600 hover:underline mr-2"
-                              >Publish</button>
-                            )
+                            <>
+                              {exam.schedule_published_at ? (
+                                <button
+                                  onClick={async () => { const ok = await confirm({ title: 'Unpublish Exam Schedule', message: 'Hide this class\'s exam dates again?' }); if (ok) unpublishScheduleMut.mutate(exam.id) }}
+                                  className="text-xs text-gray-500 hover:underline mr-2"
+                                >Unpublish Schedule</button>
+                              ) : (
+                                <button
+                                  onClick={async () => { const ok = await confirm({ title: 'Publish Exam Schedule', message: 'Make this class\'s exam dates visible to its students, parents, and teachers?', variant: 'warning', confirmLabel: 'Publish Schedule' }); if (ok) publishScheduleMut.mutate(exam.id) }}
+                                  className="text-xs text-blue-600 hover:underline mr-2"
+                                >Publish Schedule</button>
+                              )}
+                              {exam.status === 'PUBLISHED' ? (
+                                <button
+                                  onClick={async () => { const ok = await confirm({ title: 'Unpublish Results', message: 'Withdraw this exam\'s announced results?' }); if (ok) unpublishResultsMut.mutate(exam.id) }}
+                                  className="text-xs text-gray-500 hover:underline mr-2"
+                                >Unpublish Results</button>
+                              ) : (
+                                <button
+                                  onClick={async () => { const ok = await confirm({ title: 'Announce Results', message: 'Announce this exam\'s results? Results will become visible.', variant: 'warning', confirmLabel: 'Announce Results' }); if (ok) announceResultsMut.mutate(exam.id) }}
+                                  className="text-xs text-green-600 hover:underline mr-2"
+                                >Announce Results</button>
+                              )}
+                            </>
                           ) : (
                             <button
                               onClick={async () => { const ok = await confirm({ title: 'Reactivate Exam', message: `Reactivate "${exam.name}"?`, variant: 'primary', confirmLabel: 'Reactivate' }); if (ok) reactivateMut.mutate(exam.id) }}
@@ -1442,9 +1536,20 @@ export default function ExamsPage() {
                     </p>
                     <div className="flex gap-2">
                       <button onClick={() => openEdit(exam)} className="text-xs text-primary-600 hover:underline">Edit</button>
-                      {exam.is_active ? (exam.status !== 'PUBLISHED' && (
-                        <button onClick={async () => { const ok = await confirm({ title: 'Publish Exam', message: 'Publish this exam? Results will become visible.', variant: 'warning', confirmLabel: 'Publish' }); if (ok) publishMut.mutate(exam.id) }} className="text-xs text-green-600 hover:underline">Publish</button>
-                      )) : (
+                      {exam.is_active ? (
+                        <>
+                          {exam.schedule_published_at ? (
+                            <button onClick={async () => { const ok = await confirm({ title: 'Unpublish Exam Schedule', message: 'Hide this class\'s exam dates again?' }); if (ok) unpublishScheduleMut.mutate(exam.id) }} className="text-xs text-gray-500 hover:underline">Unpublish Schedule</button>
+                          ) : (
+                            <button onClick={async () => { const ok = await confirm({ title: 'Publish Exam Schedule', message: 'Make this class\'s exam dates visible to its students, parents, and teachers?', variant: 'warning', confirmLabel: 'Publish Schedule' }); if (ok) publishScheduleMut.mutate(exam.id) }} className="text-xs text-blue-600 hover:underline">Publish Schedule</button>
+                          )}
+                          {exam.status === 'PUBLISHED' ? (
+                            <button onClick={async () => { const ok = await confirm({ title: 'Unpublish Results', message: 'Withdraw this exam\'s announced results?' }); if (ok) unpublishResultsMut.mutate(exam.id) }} className="text-xs text-gray-500 hover:underline">Unpublish Results</button>
+                          ) : (
+                            <button onClick={async () => { const ok = await confirm({ title: 'Announce Results', message: 'Announce this exam\'s results? Results will become visible.', variant: 'warning', confirmLabel: 'Announce Results' }); if (ok) announceResultsMut.mutate(exam.id) }} className="text-xs text-green-600 hover:underline">Announce Results</button>
+                          )}
+                        </>
+                      ) : (
                         <button onClick={async () => { const ok = await confirm({ title: 'Reactivate Exam', message: `Reactivate "${exam.name}"?`, variant: 'primary', confirmLabel: 'Reactivate' }); if (ok) reactivateMut.mutate(exam.id) }} className="text-xs text-blue-600 hover:underline">Reactivate</button>
                       )}
                       <button

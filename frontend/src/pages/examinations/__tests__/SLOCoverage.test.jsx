@@ -122,26 +122,34 @@ vi.mock('../../../services/api', () => ({
   examinationsApi: {
     getExams: vi.fn().mockResolvedValue({ data: { results: [] } }),
   },
-  lmsApi: {
-    getLessonPlan: vi.fn().mockResolvedValue({ data: { id: 21, planned_topics: [{ id: 101 }, { id: 102 }] } }),
-    getTopicStandards: vi
-      .fn()
-      .mockImplementation((topicId) => {
-        if (topicId === 101) {
-          return Promise.resolve({ data: [{ id: 1, code: 'SLO-1', statement: 'Covered SLO' }] })
-        }
-        return Promise.resolve({ data: [{ id: 2, code: 'SLO-2', statement: 'Uncovered SLO' }] })
-      }),
-  },
 }))
 
 describe('SLO Coverage Panel in Paper Builder', () => {
   beforeEach(() => {
+    // planned_topics_coverage is now computed entirely server-side by
+    // coverage_stats (topic + its SLOs + covered flag) -- the page no longer
+    // fans out to lmsApi.getLessonPlan/getTopicStandards per lesson plan/topic.
     mockGetCoverageStats.mockResolvedValue({
       data: {
         covered_topics: [{ id: 101, topic: 'Cells' }],
         linked_lesson_plans: [{ id: 21, title: 'Cells Plan' }],
         slo_coverage_count: 1,
+        planned_topics_coverage: [
+          {
+            topic_id: 101,
+            topic: 'Cells',
+            chapter: 'Ch 1: Biology Basics',
+            is_covered: true,
+            slos: [{ id: 1, code: 'SLO-1', statement: 'Covered SLO' }],
+          },
+          {
+            topic_id: 102,
+            topic: 'Tissues',
+            chapter: 'Ch 1: Biology Basics',
+            is_covered: false,
+            slos: [{ id: 2, code: 'SLO-2', statement: 'Uncovered SLO' }],
+          },
+        ],
       },
     })
   })

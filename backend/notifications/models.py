@@ -17,6 +17,7 @@ class NotificationTemplate(models.Model):
         ('FEE_DUE', 'Fee Due Reminder'),
         ('FEE_OVERDUE', 'Fee Overdue Alert'),
         ('EXAM_RESULT', 'Exam Result Published'),
+        ('EXAM_SCHEDULE', 'Exam Schedule Published'),
         ('GENERAL', 'General Announcement'),
         ('CUSTOM', 'Custom Message'),
         ('TRANSPORT_UPDATE', 'Transport Update'),
