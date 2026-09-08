@@ -18,6 +18,7 @@ import WhatsAppTick from '../components/WhatsAppTick'
 import ReportPeriodPicker from '../components/ReportPeriodPicker'
 import PhotoCropModal from '../components/PhotoCropModal'
 import { downloadInstantReport } from '../utils/downloadReport'
+import { getLifecycleLabel, getLifecycleStyle } from '../utils/studentLifecycle'
 
 function StudentAvatar({ student, sizeClass = 'w-8 h-8' }) {
   if (student.photo_url) {
@@ -40,26 +41,6 @@ function StudentAvatar({ student, sizeClass = 'w-8 h-8' }) {
 
 // Phone format: +92XXXXXXXXXX (E.164) — Excel export forces text format to preserve + prefix
 
-const LIFECYCLE_LABELS = {
-  ACTIVE: 'Active',
-  REPEAT: 'Repeat',
-  TRANSFERRED: 'Transferred',
-  WITHDRAWN: 'Withdrawn',
-  GRADUATED: 'Graduated',
-  SUSPENDED: 'Suspended',
-}
-
-const LIFECYCLE_STYLES = {
-  ACTIVE: 'bg-emerald-100 text-emerald-800',
-  REPEAT: 'bg-amber-100 text-amber-800',
-  TRANSFERRED: 'bg-sky-100 text-sky-800',
-  WITHDRAWN: 'bg-rose-100 text-rose-800',
-  GRADUATED: 'bg-indigo-100 text-indigo-800',
-  SUSPENDED: 'bg-red-100 text-red-800',
-}
-
-const getLifecycleLabel = (status) => LIFECYCLE_LABELS[status] || status || 'Unknown'
-const getLifecycleStyle = (status) => LIFECYCLE_STYLES[status] || 'bg-gray-100 text-gray-700'
 const normalizeClassText = (value) => String(value || '').trim().toLowerCase().replace(/\s+/g, ' ')
 
 export default function StudentsPage() {

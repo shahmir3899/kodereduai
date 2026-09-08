@@ -186,6 +186,18 @@ export default function QuestionSlotEditor({
       if (pairs.length === 0) newErrors.type_data = 'Add at least one complete pair.'
     }
 
+    if (currentQuestion.question_type === 'TRUE_FALSE') {
+      if (!['true', 'false'].includes(String(currentQuestion.correct_answer || '').toLowerCase())) {
+        newErrors.correct_answer = 'Select True or False'
+      }
+    }
+
+    if (['SHORT', 'LONG', 'ESSAY'].includes(currentQuestion.question_type)) {
+      if (!String(currentQuestion.answer_text || '').trim() && !String(currentQuestion.correct_answer || '').trim()) {
+        newErrors.answer_text = 'A model answer is required for grading'
+      }
+    }
+
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors)
       return
@@ -197,6 +209,15 @@ export default function QuestionSlotEditor({
       marks: Number(currentQuestion.marks) || 1,
       marks_override: Number(currentQuestion.marks) || 1,
       section_key: currentQuestion.section_key || '',
+    }
+
+    // Backend grading validation reads type_data.accepted_answers, not the `items`
+    // list the composer below collects (those are the printed blank-line prompts) —
+    // mirror each blank's typed answer into accepted_answers so FILL_BLANK questions
+    // don't fail autosave validation despite the teacher having filled every blank.
+    if (questionRecord.question_type === 'FILL_BLANK') {
+      const items = (questionRecord.type_data?.items || []).filter((value) => String(value || '').trim())
+      questionRecord.type_data = { ...questionRecord.type_data, items, accepted_answers: items }
     }
 
     const nextQuestions = [...questions]
@@ -404,6 +425,27 @@ export default function QuestionSlotEditor({
         </div>
       )}
 
+      {/* True / False answer key */}
+      {currentQuestion.question_type === 'TRUE_FALSE' && (
+        <div className="space-y-2 mb-4 bg-white p-4 rounded border border-gray-200">
+          <p className="text-sm font-semibold text-gray-700">Correct Answer</p>
+          <div className="flex gap-4">
+            {['true', 'false'].map((value) => (
+              <label key={value} className="flex items-center gap-2 text-sm text-gray-700 capitalize">
+                <input
+                  type="radio"
+                  name="true_false_answer"
+                  checked={String(currentQuestion.correct_answer || '').toLowerCase() === value}
+                  onChange={() => setCurrentQuestion({ ...currentQuestion, correct_answer: value })}
+                />
+                {value}
+              </label>
+            ))}
+          </div>
+          {errors.correct_answer && <p className="text-red-500 text-sm">{errors.correct_answer}</p>}
+        </div>
+      )}
+
       {/* Fill in the Blanks */}
       {currentQuestion.question_type === 'FILL_BLANK' && (
         <div className="space-y-2 mb-4 bg-white p-4 rounded border border-gray-200">
@@ -500,6 +542,21 @@ export default function QuestionSlotEditor({
             + Add Pair
           </button>
           {errors.type_data && <p className="text-red-500 text-sm">{errors.type_data}</p>}
+        </div>
+      )}
+
+      {/* Model answer (used for grading — required by the backend for SHORT/LONG/ESSAY) */}
+      {['SHORT', 'LONG', 'ESSAY'].includes(currentQuestion.question_type) && (
+        <div className="space-y-2 mb-4 bg-white p-4 rounded border border-gray-200">
+          <p className="text-sm font-semibold text-gray-700">Model Answer / Marking Guide</p>
+          <textarea
+            value={currentQuestion.answer_text}
+            onChange={(e) => setCurrentQuestion({ ...currentQuestion, answer_text: e.target.value })}
+            placeholder="What should a correct answer contain? Used for grading, not printed on the paper."
+            rows={3}
+            className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+          {errors.answer_text && <p className="text-red-500 text-sm">{errors.answer_text}</p>}
         </div>
       )}
 

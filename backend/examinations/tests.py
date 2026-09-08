@@ -383,6 +383,68 @@ class ExamPaperDraftRBACTests(TestCase):
         )
         self.assertEqual(response.status_code, 403)
 
+    def test_subject_teacher_without_class_teacher_scope_can_create_draft(self):
+        """A teacher assigned to teach this specific class-subject (via ClassSubject)
+        but who is not the class's homeroom class-teacher must still be allowed to
+        manage a paper for that subject. _can_manage_exam_papers used to accept a
+        subject_id parameter but never check it, so only class-teacher scope counted
+        and legitimate subject teachers were blocked with a 403."""
+        from academics.models import ClassSubject
+        from hr.models import StaffMember
+
+        subject_teacher_user = get_user_model().objects.create_user(
+            username='exam_subject_teacher',
+            email='subject_teacher@test.com',
+            password='test12345',
+            role='TEACHER',
+            school=self.school,
+        )
+        staff = StaffMember.objects.create(
+            school=self.school, user=subject_teacher_user, first_name='Subject', last_name='Teacher',
+        )
+        ClassSubject.objects.create(
+            school=self.school, class_obj=self.class_obj, subject=self.subject, teacher=staff,
+        )
+
+        self.client.force_authenticate(subject_teacher_user)
+        response = self.client.post(
+            '/api/examinations/exam-papers/ensure-draft/',
+            self._payload(),
+            format='json',
+            **self.school_header,
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+
+    def test_subject_teacher_for_other_subject_cannot_create_draft(self):
+        """Being assigned to teach a different subject in this class must not grant
+        access to create a paper for this subject."""
+        from academics.models import ClassSubject
+        from hr.models import StaffMember
+
+        other_subject = Subject.objects.create(school=self.school, name='Physics', code='PHY')
+        other_subject_teacher = get_user_model().objects.create_user(
+            username='exam_other_subject_teacher',
+            email='other_subject_teacher@test.com',
+            password='test12345',
+            role='TEACHER',
+            school=self.school,
+        )
+        staff = StaffMember.objects.create(
+            school=self.school, user=other_subject_teacher, first_name='Other', last_name='Teacher',
+        )
+        ClassSubject.objects.create(
+            school=self.school, class_obj=self.class_obj, subject=other_subject, teacher=staff,
+        )
+
+        self.client.force_authenticate(other_subject_teacher)
+        response = self.client.post(
+            '/api/examinations/exam-papers/ensure-draft/',
+            self._payload(),  # payload targets self.subject (Mathematics), not other_subject
+            format='json',
+            **self.school_header,
+        )
+        self.assertEqual(response.status_code, 403)
+
 
 # A 1x1 transparent PNG — enough to satisfy Django's ImageField validation.
 TINY_PNG_BYTES = base64.b64decode(

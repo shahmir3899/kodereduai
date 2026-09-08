@@ -679,9 +679,13 @@ export const examinationsApi = {
   createExam: (data) => api.post('/api/examinations/exams/', data),
   updateExam: (id, data) => api.patch(`/api/examinations/exams/${id}/`, data),
   deleteExam: (id) => api.delete(`/api/examinations/exams/${id}/`),
+  bulkDeleteExams: (ids) => api.post('/api/examinations/exams/bulk_delete/', { ids }),
   bulkTestPreview: (data) => api.post('/api/examinations/exams/bulk-test-preview/', data),
   bulkTestApply: (data) => api.post('/api/examinations/exams/bulk-test-apply/', data),
-  publishExam: (id) => api.post(`/api/examinations/exams/${id}/publish/`),
+  publishExamSchedule: (id) => api.post(`/api/examinations/exams/${id}/publish-schedule/`),
+  unpublishExamSchedule: (id) => api.post(`/api/examinations/exams/${id}/unpublish-schedule/`),
+  announceExamResults: (id) => api.post(`/api/examinations/exams/${id}/announce-results/`),
+  unpublishExamResults: (id) => api.post(`/api/examinations/exams/${id}/unpublish-results/`),
   populateExamSubjects: (id) => api.post(`/api/examinations/exams/${id}/populate-subjects/`),
   getExamResults: (id) => api.get(`/api/examinations/exams/${id}/results/`),
   getClassSummary: (id) => api.get(`/api/examinations/exams/${id}/class_summary/`),
@@ -691,12 +695,16 @@ export const examinationsApi = {
   wizardCreateExamGroup: (data) => api.post('/api/examinations/exam-groups/wizard-create/', data),
   updateExamGroup: (id, data) => api.patch(`/api/examinations/exam-groups/${id}/`, data),
   deleteExamGroup: (id) => api.delete(`/api/examinations/exam-groups/${id}/`),
+  bulkDeleteExamGroups: (ids) => api.post('/api/examinations/exam-groups/bulk_delete/', { ids }),
   getDateSheet: (groupId) => api.get(`/api/examinations/exam-groups/${groupId}/date-sheet/`),
   updateDateBySubject: (groupId, data) => api.post(`/api/examinations/exam-groups/${groupId}/update-date-by-subject/`, data),
   updateDateSheet: (groupId, entries) => api.patch(`/api/examinations/exam-groups/${groupId}/date-sheet/`, { date_sheet: entries }),
   downloadDateSheet: (groupId) => api.get(`/api/examinations/exam-groups/${groupId}/download-date-sheet/`, { responseType: 'blob' }),
   downloadDateSheetPdf: (groupId) => api.get(`/api/examinations/exam-groups/${groupId}/download-date-sheet-pdf/`, { responseType: 'blob' }),
-  publishAllExams: (groupId) => api.post(`/api/examinations/exam-groups/${groupId}/publish-all/`),
+  publishScheduleAll: (groupId) => api.post(`/api/examinations/exam-groups/${groupId}/publish-schedule-all/`),
+  unpublishScheduleAll: (groupId) => api.post(`/api/examinations/exam-groups/${groupId}/unpublish-schedule-all/`),
+  announceResultsAll: (groupId) => api.post(`/api/examinations/exam-groups/${groupId}/announce-results-all/`),
+  unpublishResultsAll: (groupId) => api.post(`/api/examinations/exam-groups/${groupId}/unpublish-results-all/`),
 
   // Exam Subjects
   getExamSubjects: (params) => api.get('/api/examinations/exam-subjects/', { params }),
@@ -874,6 +882,7 @@ export const parentsApi = {
   // getPaymentGateways: (studentId) => api.get(`/api/parents/children/${studentId}/pay-fee/`),
   initiatePayment: (studentId, data) => api.post(`/api/parents/children/${studentId}/pay-fee/`, data),
   getChildTimetable: (studentId) => api.get(`/api/parents/children/${studentId}/timetable/`),
+  getChildExamSchedule: (studentId) => api.get(`/api/parents/children/${studentId}/exam-schedule/`),
   getChildExamResults: (studentId, params) => api.get(`/api/parents/children/${studentId}/exam-results/`, { params }),
 
   // Leave requests
@@ -924,22 +933,26 @@ export const admissionsApi = {
 // Student Portal API
 export const studentPortalApi = {
   // Dashboard
-  getDashboard: () => api.get('/api/student-portal/dashboard/'),
+  getDashboard: () => api.get('/api/students/portal/dashboard/'),
 
   // Profile
-  getProfile: () => api.get('/api/student-portal/profile/'),
+  getProfile: () => api.get('/api/students/portal/profile/'),
 
   // Attendance
-  getAttendance: (params) => api.get('/api/student-portal/attendance/', { params }),
+  getAttendance: (params) => api.get('/api/students/portal/attendance/', { params }),
 
   // Fees
-  getFees: (params) => api.get('/api/student-portal/fees/', { params }),
+  getFees: (params) => api.get('/api/students/portal/fees/', { params }),
 
   // Timetable
-  getTimetable: () => api.get('/api/student-portal/timetable/'),
+  getTimetable: () => api.get('/api/students/portal/timetable/'),
+
+  // Exam Schedule (date sheet) -- own class only, visible once a class's
+  // schedule is published; separate from results/marks visibility below.
+  getExamSchedule: () => api.get('/api/students/portal/exam-schedule/'),
 
   // Exam Results
-  getExamResults: (params) => api.get('/api/student-portal/exam-results/', { params }),
+  getExamResults: (params) => api.get('/api/students/portal/results/', { params }),
 
   // Assignments
   getAssignments: (params) => api.get('/api/students/portal/assignments/', { params }),

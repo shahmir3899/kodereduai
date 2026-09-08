@@ -354,6 +354,66 @@ class ChildTimetableView(APIView):
         return Response(result)
 
 
+class ChildExamScheduleView(APIView):
+    """
+    GET children/<int:student_id>/exam-schedule/
+    Exam schedule (date sheet) for a child's class -- only exams whose
+    schedule has been published for that class, per Exam.schedule_published_at.
+    Deliberately separate from ChildExamResultsView, which gates on
+    Exam.status=PUBLISHED instead.
+    """
+    permission_classes = [IsAuthenticated, IsParentOrAdmin]
+
+    def get(self, request, student_id):
+        if not _verify_child_access(request, student_id):
+            return Response(
+                {'error': 'You do not have access to this child.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        try:
+            student = Student.objects.select_related('class_obj', 'school').get(id=student_id)
+        except Student.DoesNotExist:
+            return Response(
+                {'error': 'Student not found.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        from examinations.models import Exam
+        exams = Exam.objects.filter(
+            school=student.school,
+            class_obj=student.class_obj,
+            is_active=True,
+            schedule_published_at__isnull=False,
+        ).select_related('exam_type', 'exam_group').order_by('start_date').prefetch_related(
+            'exam_subjects__subject',
+        )
+
+        result = []
+        for exam in exams:
+            subjects = [
+                {
+                    'subject_name': es.subject.name,
+                    'subject_code': es.subject.code,
+                    'exam_date': str(es.exam_date) if es.exam_date else None,
+                    'start_time': str(es.start_time) if es.start_time else None,
+                    'end_time': str(es.end_time) if es.end_time else None,
+                }
+                for es in exam.exam_subjects.filter(is_active=True).order_by('exam_date')
+            ]
+            result.append({
+                'exam_id': exam.id,
+                'exam_name': exam.name,
+                'exam_type': exam.exam_type.name if exam.exam_type else None,
+                'exam_group_name': exam.exam_group.name if exam.exam_group else None,
+                'start_date': str(exam.start_date) if exam.start_date else None,
+                'end_date': str(exam.end_date) if exam.end_date else None,
+                'subjects': subjects,
+            })
+
+        return Response(result)
+
+
 class ChildExamResultsView(APIView):
     """
     GET children/<int:student_id>/exam-results/
@@ -369,9 +429,10 @@ class ChildExamResultsView(APIView):
             )
 
         try:
-            from examinations.models import StudentMark
+            from examinations.models import Exam, StudentMark
             marks = StudentMark.objects.filter(
                 student_id=student_id,
+                exam_subject__exam__status=Exam.Status.PUBLISHED,
             ).select_related(
                 'exam_subject', 'exam_subject__exam', 'exam_subject__subject',
             ).order_by('-exam_subject__exam__date', 'exam_subject__subject__name')

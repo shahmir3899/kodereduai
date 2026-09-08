@@ -295,31 +295,40 @@ Add/Edit modal fields:
 
 ## 3.4 Paper Builder page (`/academics/paper-builder`)
 
-Header metadata fields:
-- `Class` (required)
-- `Subject` (required)
-- `Exam` (optional)
+Implemented as a 3-step wizard (`QuestionPaperBuilderPage.jsx`), not top-level tabs —
+"tabs" only appear once, as a one-time source picker inside step 3.
 
-Tab 1: Manual Entry
-- Draft metadata: `paper_title`, `total_marks`, `duration_minutes`, `instructions`
-- Question editor fields:
-  - `question_text`, `question_type`, `difficulty_level`, `marks`
-  - type-specific options/answers
-- Question bank picker integration (loads by class+subject filters)
-- Running total and draft save state
+Step 1: Paper Setup
+- `Class` (required), `Subject` (required), `Exam` (optional)
+- `paper_title` (auto-suggested as "Exam - Class - Subject" until the user types
+  their own), `total_marks`, `duration_minutes`, `instructions`
+- Answer-lines export toggle (`render_options.answer_lines`)
+- Shortcut into image-capture mode directly from this step
 
-Tab 2: Capture from Image
-- Upload handwritten image (jpeg/png/webp)
-- Optional paper metadata (`paper_title`, `total_marks`, `duration_minutes`, `instructions`)
-- OCR-extracted question review/edit UI
-- Confirm action to create paper/questions
+Step 2: Paper Structure
+- Section-by-section builder (`PaperStructureBuilder`): `question_type`,
+  `slots_shown`/`slots_counted` (supports choice questions, e.g. "answer 3 of 5"),
+  `marks_per_question` per section
+- Allocated-vs-total marks mismatch is advisory: a confirm dialog on "Next," not a
+  hard block. The mismatch is also persisted server-side as `marks_reconciled` on
+  the paper (see 4.4), so a dismissed/skipped confirm still surfaces later.
 
-Tab 3: From Lesson Plans
-- `paper_title` (required), `instructions`, `total_marks`, `duration_minutes`
-- Lesson-plan multi-select list
-- Derived topics preview from selected plans
-- Optional AI question generation from selected lessons
-- Create paper from selected lessons
+Step 3: Add Questions + Coverage
+- One-time source picker (mutually exclusive per session): **Type manually**
+  (`ManualEntryPaperTab`), **From question bank / lesson plans** (`BankFillSource`),
+  or **Capture from image** (`ImageCapturePaperTab`)
+- Question editor fields: `question_text`, `question_type`, `difficulty_level`,
+  `marks`, type-specific options/answers
+- Curriculum Coverage sidebar: SLO coverage %, covered/uncovered SLO lists, and a
+  Bloom's-taxonomy distribution chart (warns above 70% Remember/Understand) — all
+  rendered from the single `coverage_stats` response (see 4.4), no per-lesson-plan
+  or per-topic fan-out
+- Marks-mismatch warning banner (from `marks_reconciled`) surfaces here too
+
+Persistence is draft-first, not standard create/update: `ensure-draft` creates the
+`ExamPaper` row lazily once class+subject+title exist client-side, then `autosave`
+debounces (900ms) on every edit. Coverage stats refetch after each successful
+autosave rather than on a timer.
 
 ---
 
@@ -398,7 +407,7 @@ Lesson-plan linked question operations:
 Draft/manual flow:
 - `POST /api/examinations/exam-papers/ensure-draft/`
 - `POST /api/examinations/exam-papers/{id}/autosave/`
-- `GET /api/examinations/exam-papers/{id}/` (resume/read, includes `overused_questions` warning list where `paper_use_count > 3`)
+- `GET /api/examinations/exam-papers/{id}/` (resume/read, includes `overused_questions` warning list where `paper_use_count > 3`, and `marks_reconciled` — whether `structure_marks_total` matches `total_marks`, computed server-side so a dismissed/skipped client-side mismatch confirm still shows up here)
 
 Paper CRUD and lesson-plan alignment:
 - `GET/POST /api/examinations/exam-papers/`
@@ -406,7 +415,12 @@ Paper CRUD and lesson-plan alignment:
 - `POST /api/examinations/exam-papers/create_from_lessons/`
 - `POST /api/examinations/exam-papers/{id}/link_lesson_plans/`
 - `GET /api/examinations/exam-papers/{id}/coverage_stats/`
-  - Coverage stats now include `slo_coverage_count`
+  - Coverage stats include `slo_coverage_count`
+  - `planned_topics_coverage`: every topic planned across the paper's linked lesson
+    plans, each with its SLOs and an `is_covered` flag — computed in one query so
+    the frontend coverage panel doesn't fan out one request per lesson plan plus
+    one per topic (`Topic.objects.filter(lesson_plans__in=...)`, prefetching
+    `standard_alignments__objective`)
 
 Export/review:
 - `GET /api/examinations/exam-papers/{id}/generate-pdf/`
@@ -445,6 +459,7 @@ OCR paper capture flow:
 
 5. Multi-tenant and teacher-scope filtering is enforced in viewsets.
 - Querysets are tenant-scoped and teacher-scoped by class-subject assignment; this is critical when extending APIs.
+- Exam-paper write access (`ensure_draft`, `autosave`, `create_from_lessons`) all route through one `_can_manage_exam_papers(request, class_id, subject_id, school_id)` helper: a teacher may manage a paper for (class, subject) as the class's homeroom class-teacher (all subjects) OR as the subject-teacher specifically assigned to that class-subject pairing — the same dual-layer scope `_apply_teacher_exam_scope` already uses for read access. Both branches must stay wired in; the `subject_id` branch was previously dead code, which wrongly blocked legitimate subject-only teachers from managing their own papers.
 
 6. Route mapping for requested pages.
 - `/academics/curriculum` -> `CurriculumPage.jsx`

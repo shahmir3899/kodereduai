@@ -481,6 +481,110 @@ def trigger_exam_result_published(exam):
     return sent
 
 
+def trigger_exam_schedule_published(exam):
+    """
+    Notify a class's teachers, parents, and students when that class's exam
+    dates are announced -- distinct from trigger_exam_result_published, which
+    fires later once marks are actually announced. Deliberately excludes
+    admins/principals: they set the schedule themselves, so notifying them
+    back would just be noise.
+
+    Recipients cover every teacher connected to the class (its assigned class
+    teacher(s) *and* every subject teacher, per get_teacher_combined_scope's
+    "any class they teach" convention used elsewhere), not just the class
+    teacher -- a subject teacher needs to know their own exam dates too.
+    """
+    from academics.models import ClassTeacherAssignment, ClassSubject
+    from students.models import Student
+    from .engine import NotificationEngine
+
+    school = exam.school
+    config = _get_config(school)
+    # Reuses exam_result_enabled as the umbrella "exam notifications" toggle
+    # rather than adding a dedicated exam_schedule_enabled column -- schedule
+    # and result notifications are different events but the same on/off
+    # decision for a school in practice.
+    if config and not config.exam_result_enabled:
+        logger.info(f"Exam notifications disabled for {school.name}, skipping schedule notice")
+        return 0
+
+    exam_name = exam.name if hasattr(exam, 'name') else str(exam)
+    date_str = exam.start_date.strftime('%d %b %Y') if exam.start_date else 'soon'
+    title = "Upcoming Exam"
+    body = f"{exam_name} starts from {date_str}. Check your Exam Schedule for details."
+    engine = NotificationEngine(school)
+    sent = 0
+    today = timezone.localdate()
+
+    academic_year_filter = Q(academic_year__isnull=True) | Q(academic_year_id=exam.academic_year_id)
+
+    teacher_users = {}
+    for assignment in (
+        ClassTeacherAssignment.objects
+        .filter(school=school, class_obj=exam.class_obj, is_active=True)
+        .filter(academic_year_filter)
+        .select_related('teacher__user')
+    ):
+        teacher_user = getattr(getattr(assignment, 'teacher', None), 'user', None)
+        if teacher_user:
+            teacher_users[teacher_user.id] = teacher_user
+    for class_subject in (
+        ClassSubject.objects
+        .filter(school=school, class_obj=exam.class_obj, is_active=True, teacher__isnull=False)
+        .filter(academic_year_filter)
+        .select_related('teacher__user')
+    ):
+        teacher_user = getattr(class_subject.teacher, 'user', None)
+        if teacher_user:
+            teacher_users[teacher_user.id] = teacher_user
+
+    for teacher_user in teacher_users.values():
+        if _daily_notification_already_sent(
+            school=school, event_type='EXAM_SCHEDULE', channel='IN_APP',
+            recipient_user=teacher_user, title=title, body=body, target_date=today,
+        ):
+            continue
+        engine.send(
+            event_type='EXAM_SCHEDULE', channel='IN_APP', context={},
+            recipient_identifier=str(teacher_user.id), recipient_type='STAFF',
+            recipient_user=teacher_user, title=title, body=body,
+        )
+        sent += 1
+
+    students = Student.objects.filter(
+        school=school, class_obj=exam.class_obj, is_active=True,
+    ).select_related('user_profile__user')
+    for student in students:
+        for parent_user in get_parent_users_for_student(student):
+            if _daily_notification_already_sent(
+                school=school, event_type='EXAM_SCHEDULE', channel='IN_APP',
+                recipient_user=parent_user, title=title, body=body,
+                target_date=today, student=student,
+            ):
+                continue
+            engine.send(
+                event_type='EXAM_SCHEDULE', channel='IN_APP', context={},
+                recipient_identifier=str(parent_user.id), recipient_type='PARENT',
+                recipient_user=parent_user, student=student, title=title, body=body,
+            )
+            sent += 1
+
+        student_user = get_student_user(student)
+        if student_user and not _daily_notification_already_sent(
+            school=school, event_type='EXAM_SCHEDULE', channel='IN_APP',
+            recipient_user=student_user, title=title, body=body,
+            target_date=today, student=student,
+        ):
+            engine.send(
+                event_type='EXAM_SCHEDULE', channel='IN_APP', context={},
+                recipient_identifier=str(student_user.id), recipient_type='PARENT',
+                recipient_user=student_user, student=student, title=title, body=body,
+            )
+            sent += 1
+
+    return sent
+
+
 def trigger_general(school, title, body, recipient_users=None):
     """
     Send a general announcement to staff/admins.

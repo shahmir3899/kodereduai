@@ -1,6 +1,7 @@
 from django.db import models
 from django.conf import settings
 from django.core.validators import MinValueValidator, MaxValueValidator
+from django.core.serializers.json import DjangoJSONEncoder
 from decimal import Decimal
 from pgvector.django import VectorField
 
@@ -147,6 +148,13 @@ class Exam(models.Model):
         choices=Status.choices,
         default=Status.SCHEDULED,
     )
+    # Independent of `status`/results: whether this class's exam dates are
+    # visible to its own students/parents/teachers via the exam-schedule
+    # screens. Deliberately separate from `status` -- schedule and results
+    # are announced at different points in the exam lifecycle and to
+    # different effect (see notifications.triggers.trigger_exam_schedule_published
+    # vs trigger_exam_result_published).
+    schedule_published_at = models.DateTimeField(null=True, blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -930,14 +938,22 @@ class PaperFeedback(models.Model):
         related_name='feedback',
     )
     ai_extracted_json = models.JSONField(
+        encoder=DjangoJSONEncoder,
         help_text="Original AI extraction"
     )
     user_confirmed_json = models.JSONField(
+        encoder=DjangoJSONEncoder,
         help_text="User's corrected version"
     )
     accuracy_metrics = models.JSONField(
+        encoder=DjangoJSONEncoder,
         null=True,
         blank=True,
+        # extraction_confidence (a DecimalField) is stuffed straight into this dict by
+        # confirm_extraction -- plain JSONField can't serialize Decimal and this used
+        # to crash confirm_extraction with a 500 every time OCR set a confidence score.
+        # DjangoJSONEncoder handles Decimal/date/UUID etc. so any future field placed
+        # in here is safe too, not just this one.
         help_text="Calculated accuracy scores"
     )
     correction_notes = models.TextField(

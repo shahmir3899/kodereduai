@@ -1,6 +1,19 @@
 import { Fragment, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getPaymentClassKey } from './feeUtils'
+import { getLifecycleLabel, getLifecycleStyle, isLeftStatus } from '../../utils/studentLifecycle'
+
+// Splits a class's payment rows into "currently enrolled" vs. "left"
+// (withdrawn/transferred/graduated/suspended) sub-groups, mirroring the
+// left_count/left_total_due fields fee_summary already computes for the
+// class-level totals. Left students stay counted in the class row's totals;
+// this only affects how the expanded student list is grouped.
+function splitByLifecycle(students) {
+  const active = []
+  const left = []
+  students.forEach(s => (isLeftStatus(s.student_status) ? left : active).push(s))
+  return { active, left }
+}
 
 export default function FeeSummaryCards({ summaryData, onFilterUnpaid, onFilterPaid }) {
   if (!summaryData) return null
@@ -110,7 +123,24 @@ export function ClassBreakdown({ summaryData, allPayments, month, year, showColl
           const rate = cls.total_due > 0 ? Math.round((cls.total_collected / cls.total_due) * 100) : 0
           const classKey = cls.class_key || cls.class_name || cls.class_id || 'unknown'
           const isExpanded = expandedClasses[classKey]
-          const students = paymentsByClass[classKey] || []
+          const { active: activeStudents, left: leftStudents } = splitByLifecycle(paymentsByClass[classKey] || [])
+          const renderStudent = (s) => {
+            const sBal = Number(s.amount_due) - Number(s.amount_paid)
+            return (
+              <div key={s.id} className="flex items-center justify-between py-1 px-2 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-400 w-6">#{s.student_roll}</span>
+                  <span className="text-gray-900">{s.student_name}</span>
+                  <span className={`px-1.5 py-0.5 rounded ${
+                    s.status === 'PAID' ? 'bg-green-100 text-green-700' :
+                    s.status === 'PARTIAL' ? 'bg-yellow-100 text-yellow-700' :
+                    s.status === 'UNPAID' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
+                  }`}>{s.status}</span>
+                </div>
+                <span className={sBal > 0 ? 'text-orange-700 font-medium' : 'text-green-700'}>{sBal > 0 ? sBal.toLocaleString() : 'Paid'}</span>
+              </div>
+            )
+          }
           return (
             <div key={classKey}>
               <div
@@ -125,7 +155,10 @@ export function ClassBreakdown({ summaryData, allPayments, month, year, showColl
                   )}
                   <div>
                     <p className="text-sm font-medium text-gray-900">{cls.class_name}</p>
-                    <p className="text-xs text-gray-500">{cls.count} students - {rate}%</p>
+                    <p className="text-xs text-gray-500">
+                      {cls.count} students - {rate}%
+                      {cls.left_count > 0 && <span className="text-rose-600"> ({cls.left_count} left)</span>}
+                    </p>
                   </div>
                 </div>
                 <div className="text-right">
@@ -136,25 +169,15 @@ export function ClassBreakdown({ summaryData, allPayments, month, year, showColl
                   </p>
                 </div>
               </div>
-              {isExpanded && students.length > 0 && (
+              {isExpanded && (activeStudents.length > 0 || leftStudents.length > 0) && (
                 <div className="ml-6 mb-2 space-y-1">
-                  {students.map(s => {
-                    const sBal = Number(s.amount_due) - Number(s.amount_paid)
-                    return (
-                      <div key={s.id} className="flex items-center justify-between py-1 px-2 text-xs">
-                        <div className="flex items-center gap-2">
-                          <span className="text-gray-400 w-6">#{s.student_roll}</span>
-                          <span className="text-gray-900">{s.student_name}</span>
-                          <span className={`px-1.5 py-0.5 rounded ${
-                            s.status === 'PAID' ? 'bg-green-100 text-green-700' :
-                            s.status === 'PARTIAL' ? 'bg-yellow-100 text-yellow-700' :
-                            s.status === 'UNPAID' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
-                          }`}>{s.status}</span>
-                        </div>
-                        <span className={sBal > 0 ? 'text-orange-700 font-medium' : 'text-green-700'}>{sBal > 0 ? sBal.toLocaleString() : 'Paid'}</span>
-                      </div>
-                    )
-                  })}
+                  {activeStudents.map(renderStudent)}
+                  {leftStudents.length > 0 && (
+                    <>
+                      <p className="text-[11px] font-medium text-rose-600 uppercase pt-1 px-2">Left / Withdrawn</p>
+                      {leftStudents.map(renderStudent)}
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -182,7 +205,50 @@ export function ClassBreakdown({ summaryData, allPayments, month, year, showColl
               const rate = cls.total_due > 0 ? Math.round((cls.total_collected / cls.total_due) * 100) : 0
               const classKey = cls.class_key || cls.class_name || cls.class_id || 'unknown'
               const isExpanded = expandedClasses[classKey]
-              const students = paymentsByClass[classKey] || []
+              const { active: activeStudents, left: leftStudents } = splitByLifecycle(paymentsByClass[classKey] || [])
+              const renderStudentRow = (s) => {
+                const prevBal = Number(s.previous_balance || 0)
+                const sBal = Number(s.amount_due) - Number(s.amount_paid)
+                return (
+                  <tr key={s.id} className="bg-gray-50/50">
+                    {canExpand && <td></td>}
+                    <td className="py-1.5 pr-4 pl-4 text-xs text-gray-500">
+                      <span className="text-gray-400 mr-2">#{s.student_roll}</span>
+                      {s.student_name}
+                      {isLeftStatus(s.student_status) && (
+                        <span className={`ml-2 px-1.5 py-0.5 rounded-full text-[10px] ${getLifecycleStyle(s.student_status)}`}>
+                          {getLifecycleLabel(s.student_status)}
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-1.5 px-4 text-xs text-center">
+                      <span className={`px-1.5 py-0.5 rounded-full text-xs ${
+                        s.status === 'PAID' ? 'bg-green-100 text-green-700' :
+                        s.status === 'PARTIAL' ? 'bg-yellow-100 text-yellow-700' :
+                        s.status === 'UNPAID' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
+                      }`}>{s.status}</span>
+                    </td>
+                    <td className="py-1.5 px-4 text-xs text-gray-500 text-right">
+                      {Number(s.amount_due).toLocaleString()}
+                      {prevBal > 0 && <span className="text-orange-600 ml-1">(+{prevBal.toLocaleString()})</span>}
+                    </td>
+                    <td className="py-1.5 px-4 text-xs text-green-700 text-right">{Number(s.amount_paid).toLocaleString()}</td>
+                    <td className={`py-1.5 px-4 text-xs font-medium text-right ${sBal > 0 ? 'text-orange-700' : 'text-green-700'}`}>
+                      {sBal > 0 ? sBal.toLocaleString() : 0}
+                    </td>
+                    <td className="py-1.5 pl-4 text-right">
+                      {showCollectLink && s.status !== 'PAID' && s.status !== 'ADVANCE' && (
+                        <Link
+                          to={`/finance/fees/collect?student=${s.student_id || s.id}&month=${month}&year=${year}`}
+                          className="text-xs text-primary-600 hover:text-primary-800"
+                        >
+                          Collect
+                        </Link>
+                      )}
+                    </td>
+                  </tr>
+                )
+              }
               return (
                 <Fragment key={classKey}>
                   <tr
@@ -197,7 +263,10 @@ export function ClassBreakdown({ summaryData, allPayments, month, year, showColl
                       </td>
                     )}
                     <td className="py-2 pr-4 text-sm font-medium text-gray-900">{cls.class_name}</td>
-                    <td className="py-2 px-4 text-sm text-gray-500 text-center">{cls.count}</td>
+                    <td className="py-2 px-4 text-sm text-gray-500 text-center">
+                      {cls.count}
+                      {cls.left_count > 0 && <span className="block text-[10px] text-rose-600">{cls.left_count} left</span>}
+                    </td>
                     <td className="py-2 px-4 text-sm text-gray-900 text-right">{Number(cls.total_due).toLocaleString()}</td>
                     <td className="py-2 px-4 text-sm text-green-700 text-right">{Number(cls.total_collected).toLocaleString()}</td>
                     <td className={`py-2 px-4 text-sm font-medium text-right ${balance > 0 ? 'text-orange-700' : 'text-green-700'}`}>
@@ -207,44 +276,16 @@ export function ClassBreakdown({ summaryData, allPayments, month, year, showColl
                       {rate}%
                     </td>
                   </tr>
-                  {isExpanded && students.map(s => {
-                    const prevBal = Number(s.previous_balance || 0)
-                    const sBal = Number(s.amount_due) - Number(s.amount_paid)
-                    return (
-                      <tr key={s.id} className="bg-gray-50/50">
-                        {canExpand && <td></td>}
-                        <td className="py-1.5 pr-4 pl-4 text-xs text-gray-500">
-                          <span className="text-gray-400 mr-2">#{s.student_roll}</span>
-                          {s.student_name}
-                        </td>
-                        <td className="py-1.5 px-4 text-xs text-center">
-                          <span className={`px-1.5 py-0.5 rounded-full text-xs ${
-                            s.status === 'PAID' ? 'bg-green-100 text-green-700' :
-                            s.status === 'PARTIAL' ? 'bg-yellow-100 text-yellow-700' :
-                            s.status === 'UNPAID' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
-                          }`}>{s.status}</span>
-                        </td>
-                        <td className="py-1.5 px-4 text-xs text-gray-500 text-right">
-                          {Number(s.amount_due).toLocaleString()}
-                          {prevBal > 0 && <span className="text-orange-600 ml-1">(+{prevBal.toLocaleString()})</span>}
-                        </td>
-                        <td className="py-1.5 px-4 text-xs text-green-700 text-right">{Number(s.amount_paid).toLocaleString()}</td>
-                        <td className={`py-1.5 px-4 text-xs font-medium text-right ${sBal > 0 ? 'text-orange-700' : 'text-green-700'}`}>
-                          {sBal > 0 ? sBal.toLocaleString() : 0}
-                        </td>
-                        <td className="py-1.5 pl-4 text-right">
-                          {showCollectLink && s.status !== 'PAID' && s.status !== 'ADVANCE' && (
-                            <Link
-                              to={`/finance/fees/collect?student=${s.student_id || s.id}&month=${month}&year=${year}`}
-                              className="text-xs text-primary-600 hover:text-primary-800"
-                            >
-                              Collect
-                            </Link>
-                          )}
-                        </td>
-                      </tr>
-                    )
-                  })}
+                  {isExpanded && activeStudents.map(renderStudentRow)}
+                  {isExpanded && leftStudents.length > 0 && (
+                    <tr className="bg-gray-50/50">
+                      {canExpand && <td></td>}
+                      <td colSpan={5} className="py-1 pl-4 text-[11px] font-medium text-rose-600 uppercase">
+                        Left / Withdrawn
+                      </td>
+                    </tr>
+                  )}
+                  {isExpanded && leftStudents.map(renderStudentRow)}
                 </Fragment>
               )
             })}

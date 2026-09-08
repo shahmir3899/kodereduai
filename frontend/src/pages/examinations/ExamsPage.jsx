@@ -622,6 +622,11 @@ export default function ExamsPage() {
   const [yearFilter, setYearFilter] = useState('')
   const [activeTab, setActiveTab] = useState('exams') // 'exams' | 'tests'
   const [examStatusFilter, setExamStatusFilter] = useState('active') // 'active' | 'inactive' | 'all'
+  // Bulk-select, one Set per tab -- a group id and a standalone-exam id could
+  // coincidentally collide, and each tab bulk-deletes through a different
+  // endpoint, so they can't share one Set.
+  const [selectedGroupIds, setSelectedGroupIds] = useState(new Set())
+  const [selectedExamIds, setSelectedExamIds] = useState(new Set())
   const selectedFormAcademicYearId = form.academic_year || activeAcademicYear?.id
   const { sessionClasses } = useSessionClasses(selectedFormAcademicYearId)
   const classSelectorScope = getClassSelectorScope(selectedFormAcademicYearId)
@@ -700,6 +705,14 @@ export default function ExamsPage() {
     const t = setTimeout(() => setListError(null), 5000)
     return () => clearTimeout(t)
   }, [listError])
+
+  // Clear both tabs' selections on tab switch -- a group id selected on the
+  // Exams tab has no meaning on the Tests tab (different resource, different
+  // bulk-delete endpoint), so carrying it over would just be stale state.
+  useEffect(() => {
+    setSelectedGroupIds(new Set())
+    setSelectedExamIds(new Set())
+  }, [activeTab])
 
   // ── Queries ──
 
@@ -801,10 +814,39 @@ export default function ExamsPage() {
     onError: (err) => setListError(err.response?.data?.detail || 'Failed to delete exam.'),
   })
 
-  const publishMut = useMutation({
-    mutationFn: (id) => examinationsApi.publishExam(id),
+  const bulkDeleteExamsMut = useMutation({
+    mutationFn: (ids) => examinationsApi.bulkDeleteExams(ids),
+    onSuccess: () => {
+      setListError(null)
+      setSelectedExamIds(new Set())
+      queryClient.invalidateQueries({ queryKey: ['exams'] })
+      queryClient.invalidateQueries({ queryKey: ['examGroups'] })
+    },
+    onError: (err) => setListError(err.response?.data?.detail || 'Failed to delete selected tests.'),
+  })
+
+  const publishScheduleMut = useMutation({
+    mutationFn: (id) => examinationsApi.publishExamSchedule(id),
     onSuccess: () => { setListError(null); queryClient.invalidateQueries({ queryKey: ['exams'] }); queryClient.invalidateQueries({ queryKey: ['examGroups'] }) },
-    onError: (err) => setListError(err.response?.data?.detail || 'Failed to publish exam.'),
+    onError: (err) => setListError(err.response?.data?.detail || 'Failed to publish exam schedule.'),
+  })
+
+  const unpublishScheduleMut = useMutation({
+    mutationFn: (id) => examinationsApi.unpublishExamSchedule(id),
+    onSuccess: () => { setListError(null); queryClient.invalidateQueries({ queryKey: ['exams'] }); queryClient.invalidateQueries({ queryKey: ['examGroups'] }) },
+    onError: (err) => setListError(err.response?.data?.detail || 'Failed to unpublish exam schedule.'),
+  })
+
+  const announceResultsMut = useMutation({
+    mutationFn: (id) => examinationsApi.announceExamResults(id),
+    onSuccess: () => { setListError(null); queryClient.invalidateQueries({ queryKey: ['exams'] }); queryClient.invalidateQueries({ queryKey: ['examGroups'] }) },
+    onError: (err) => setListError(err.response?.data?.detail || 'Failed to announce results.'),
+  })
+
+  const unpublishResultsMut = useMutation({
+    mutationFn: (id) => examinationsApi.unpublishExamResults(id),
+    onSuccess: () => { setListError(null); queryClient.invalidateQueries({ queryKey: ['exams'] }); queryClient.invalidateQueries({ queryKey: ['examGroups'] }) },
+    onError: (err) => setListError(err.response?.data?.detail || 'Failed to unpublish results.'),
   })
 
   const reactivateMut = useMutation({
@@ -819,10 +861,39 @@ export default function ExamsPage() {
     onError: (err) => setListError(err.response?.data?.detail || 'Failed to delete exam group.'),
   })
 
-  const publishAllMut = useMutation({
-    mutationFn: (id) => examinationsApi.publishAllExams(id),
+  const bulkDeleteGroupsMut = useMutation({
+    mutationFn: (ids) => examinationsApi.bulkDeleteExamGroups(ids),
+    onSuccess: () => {
+      setListError(null)
+      setSelectedGroupIds(new Set())
+      queryClient.invalidateQueries({ queryKey: ['examGroups'] })
+      queryClient.invalidateQueries({ queryKey: ['exams'] })
+    },
+    onError: (err) => setListError(err.response?.data?.detail || 'Failed to delete selected exam groups.'),
+  })
+
+  const publishScheduleAllMut = useMutation({
+    mutationFn: (id) => examinationsApi.publishScheduleAll(id),
     onSuccess: () => { setListError(null); queryClient.invalidateQueries({ queryKey: ['examGroups'] }); queryClient.invalidateQueries({ queryKey: ['exams'] }) },
-    onError: (err) => setListError(err.response?.data?.detail || 'Failed to publish exams.'),
+    onError: (err) => setListError(err.response?.data?.detail || 'Failed to publish exam schedules.'),
+  })
+
+  const unpublishScheduleAllMut = useMutation({
+    mutationFn: (id) => examinationsApi.unpublishScheduleAll(id),
+    onSuccess: () => { setListError(null); queryClient.invalidateQueries({ queryKey: ['examGroups'] }); queryClient.invalidateQueries({ queryKey: ['exams'] }) },
+    onError: (err) => setListError(err.response?.data?.detail || 'Failed to unpublish exam schedules.'),
+  })
+
+  const announceResultsAllMut = useMutation({
+    mutationFn: (id) => examinationsApi.announceResultsAll(id),
+    onSuccess: () => { setListError(null); queryClient.invalidateQueries({ queryKey: ['examGroups'] }); queryClient.invalidateQueries({ queryKey: ['exams'] }) },
+    onError: (err) => setListError(err.response?.data?.detail || 'Failed to announce results.'),
+  })
+
+  const unpublishResultsAllMut = useMutation({
+    mutationFn: (id) => examinationsApi.unpublishResultsAll(id),
+    onSuccess: () => { setListError(null); queryClient.invalidateQueries({ queryKey: ['examGroups'] }); queryClient.invalidateQueries({ queryKey: ['exams'] }) },
+    onError: (err) => setListError(err.response?.data?.detail || 'Failed to unpublish results.'),
   })
 
   // ── Modal helpers (Quick Create / Edit) ──
@@ -967,6 +1038,46 @@ export default function ExamsPage() {
 
   const toggleGroup = (id) => setExpandedGroupId(prev => prev === id ? null : id)
 
+  // React Query mutations already carry `.variables` (the argument passed to
+  // the last `.mutate()` call) alongside `.isPending` -- since deleteMut and
+  // deleteGroupMut are each shared across every row's Delete button, this is
+  // how a single row can tell whether *it* is the one currently deleting,
+  // without adding separate per-row state.
+  const isDeletingExam = (id) => deleteMut.isPending && deleteMut.variables === id
+  const isDeletingGroup = (id) => deleteGroupMut.isPending && deleteGroupMut.variables === id
+
+  const toggleGroupSelected = (id) => setSelectedGroupIds(prev => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id); else next.add(id)
+    return next
+  })
+  const toggleExamSelected = (id) => setSelectedExamIds(prev => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id); else next.add(id)
+    return next
+  })
+  const toggleAllExamsSelected = (checked) => {
+    setSelectedExamIds(checked ? new Set(standaloneExams.map(e => e.id)) : new Set())
+  }
+
+  const handleBulkDeleteGroups = async () => {
+    const n = selectedGroupIds.size
+    const ok = await confirm({
+      title: 'Delete Exam Groups',
+      message: `Delete ${n} selected exam group${n !== 1 ? 's' : ''}? This will also delete all their class exams and marks.`,
+    })
+    if (ok) bulkDeleteGroupsMut.mutate([...selectedGroupIds])
+  }
+
+  const handleBulkDeleteExams = async () => {
+    const n = selectedExamIds.size
+    const ok = await confirm({
+      title: 'Delete Tests',
+      message: `Delete ${n} selected test${n !== 1 ? 's' : ''}?`,
+    })
+    if (ok) bulkDeleteExamsMut.mutate([...selectedExamIds])
+  }
+
   return (
     <div>
       {/* Header */}
@@ -1038,6 +1149,13 @@ export default function ExamsPage() {
           {activeTab === 'exams' && (
             groups.length > 0 ? (
             <div>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs text-gray-500">{selectedGroupIds.size > 0 ? `${selectedGroupIds.size} selected` : ''}</p>
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => setSelectedGroupIds(new Set(groups.map(g => g.id)))} className="text-xs text-blue-600 hover:underline">Select All</button>
+                  <button type="button" onClick={() => setSelectedGroupIds(new Set())} className="text-xs text-gray-500 hover:underline">Clear</button>
+                </div>
+              </div>
               <div className="space-y-3">
                 {groups.map(group => {
                   const isExpanded = expandedGroupId === group.id
@@ -1049,6 +1167,14 @@ export default function ExamsPage() {
                         className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50"
                         onClick={() => toggleGroup(group.id)}
                       >
+                        <input
+                          type="checkbox"
+                          checked={selectedGroupIds.has(group.id)}
+                          onChange={() => toggleGroupSelected(group.id)}
+                          onClick={e => e.stopPropagation()}
+                          className="rounded border-gray-300 flex-shrink-0"
+                          aria-label={`Select ${group.name}`}
+                        />
                         <svg className={`w-4 h-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                         </svg>
@@ -1082,18 +1208,40 @@ export default function ExamsPage() {
                             Date Sheet
                           </button>
                           <button
-                            onClick={async () => { const ok = await confirm({ title: 'Publish All Exams', message: 'Publish all exams in this group? Results will become visible.', variant: 'warning', confirmLabel: 'Publish All' }); if (ok) publishAllMut.mutate(group.id) }}
-                            className="text-xs px-2 py-1 text-green-600 hover:bg-green-50 rounded"
-                            disabled={publishAllMut.isPending}
+                            onClick={async () => { const ok = await confirm({ title: 'Publish Exam Schedule', message: 'Make this group\'s exam dates visible to students, parents, and teachers for their own classes? They will be notified of the exam dates (not results).', variant: 'warning', confirmLabel: 'Publish Schedule' }); if (ok) publishScheduleAllMut.mutate(group.id) }}
+                            className="text-xs px-2 py-1 text-blue-600 hover:bg-blue-50 rounded"
+                            disabled={publishScheduleAllMut.isPending}
+                            title="Make exam dates visible to students/parents/teachers for their own class"
                           >
-                            Publish All
+                            Publish Schedule
+                          </button>
+                          <button
+                            onClick={async () => { const ok = await confirm({ title: 'Unpublish Exam Schedule', message: 'Hide this group\'s exam dates from students, parents, and teachers again?' }); if (ok) unpublishScheduleAllMut.mutate(group.id) }}
+                            className="text-xs px-2 py-1 text-gray-500 hover:bg-gray-100 rounded"
+                            disabled={unpublishScheduleAllMut.isPending}
+                          >
+                            Unpublish Schedule
+                          </button>
+                          <button
+                            onClick={async () => { const ok = await confirm({ title: 'Announce All Results', message: 'Announce results for all exams in this group? Results will become visible.', variant: 'warning', confirmLabel: 'Announce Results' }); if (ok) announceResultsAllMut.mutate(group.id) }}
+                            className="text-xs px-2 py-1 text-green-600 hover:bg-green-50 rounded"
+                            disabled={announceResultsAllMut.isPending}
+                          >
+                            Announce Results
+                          </button>
+                          <button
+                            onClick={async () => { const ok = await confirm({ title: 'Unpublish Results', message: 'Withdraw announced results for all exams in this group? Results will no longer be visible.' }); if (ok) unpublishResultsAllMut.mutate(group.id) }}
+                            className="text-xs px-2 py-1 text-gray-500 hover:bg-gray-100 rounded"
+                            disabled={unpublishResultsAllMut.isPending}
+                          >
+                            Unpublish Results
                           </button>
                           <button
                             onClick={async () => { const ok = await confirm({ title: 'Delete Exam Group', message: `Delete "${group.name}" and all its class exams?` }); if (ok) deleteGroupMut.mutate(group.id) }}
-                            className="text-xs px-2 py-1 text-red-600 hover:bg-red-50 rounded"
-                            disabled={deleteGroupMut.isPending}
+                            className="text-xs px-2 py-1 text-red-600 hover:bg-red-50 rounded disabled:opacity-50"
+                            disabled={isDeletingGroup(group.id)}
                           >
-                            Delete
+                            {isDeletingGroup(group.id) ? 'Deleting...' : 'Delete'}
                           </button>
                         </div>
                       </div>
@@ -1133,12 +1281,30 @@ export default function ExamsPage() {
                                         <td className="px-4 py-2 text-right">
                                           <button onClick={() => openEdit(exam)} className="text-xs text-primary-600 hover:underline mr-2">Edit</button>
                                           {exam.is_active ? (
-                                            exam.status !== 'PUBLISHED' && (
-                                              <button
-                                                onClick={async () => { const ok = await confirm({ title: 'Publish Exam', message: 'Publish this exam? Results will become visible.', variant: 'warning', confirmLabel: 'Publish' }); if (ok) publishMut.mutate(exam.id) }}
-                                                className="text-xs text-green-600 hover:underline mr-2"
-                                              >Publish</button>
-                                            )
+                                            <>
+                                              {exam.schedule_published_at ? (
+                                                <button
+                                                  onClick={async () => { const ok = await confirm({ title: 'Unpublish Exam Schedule', message: 'Hide this class\'s exam dates again?' }); if (ok) unpublishScheduleMut.mutate(exam.id) }}
+                                                  className="text-xs text-gray-500 hover:underline mr-2"
+                                                >Unpublish Schedule</button>
+                                              ) : (
+                                                <button
+                                                  onClick={async () => { const ok = await confirm({ title: 'Publish Exam Schedule', message: 'Make this class\'s exam dates visible to its students, parents, and teachers?', variant: 'warning', confirmLabel: 'Publish Schedule' }); if (ok) publishScheduleMut.mutate(exam.id) }}
+                                                  className="text-xs text-blue-600 hover:underline mr-2"
+                                                >Publish Schedule</button>
+                                              )}
+                                              {exam.status === 'PUBLISHED' ? (
+                                                <button
+                                                  onClick={async () => { const ok = await confirm({ title: 'Unpublish Results', message: 'Withdraw this exam\'s announced results?' }); if (ok) unpublishResultsMut.mutate(exam.id) }}
+                                                  className="text-xs text-gray-500 hover:underline mr-2"
+                                                >Unpublish Results</button>
+                                              ) : (
+                                                <button
+                                                  onClick={async () => { const ok = await confirm({ title: 'Announce Results', message: 'Announce this exam\'s results? Results will become visible.', variant: 'warning', confirmLabel: 'Announce Results' }); if (ok) announceResultsMut.mutate(exam.id) }}
+                                                  className="text-xs text-green-600 hover:underline mr-2"
+                                                >Announce Results</button>
+                                              )}
+                                            </>
                                           ) : (
                                             <button
                                               onClick={async () => { const ok = await confirm({ title: 'Reactivate Exam', message: `Reactivate "${exam.name}"?`, variant: 'primary', confirmLabel: 'Reactivate' }); if (ok) reactivateMut.mutate(exam.id) }}
@@ -1147,8 +1313,9 @@ export default function ExamsPage() {
                                           )}
                                           <button
                                             onClick={async () => { const ok = await confirm({ title: 'Delete Exam', message: `Delete "${exam.name}"?` }); if (ok) deleteMut.mutate(exam.id) }}
-                                            className="text-xs text-red-600 hover:underline"
-                                          >Delete</button>
+                                            className="text-xs text-red-600 hover:underline disabled:opacity-50"
+                                            disabled={isDeletingExam(exam.id)}
+                                          >{isDeletingExam(exam.id) ? 'Deleting...' : 'Delete'}</button>
                                         </td>
                                       </tr>
                                     ))}
@@ -1173,7 +1340,11 @@ export default function ExamsPage() {
                                       {exam.is_active ? null : (
                                         <button onClick={async () => { const ok = await confirm({ title: 'Reactivate Exam', message: `Reactivate "${exam.name}"?`, variant: 'primary', confirmLabel: 'Reactivate' }); if (ok) reactivateMut.mutate(exam.id) }} className="text-xs text-blue-600 hover:underline">Reactivate</button>
                                       )}
-                                      <button onClick={async () => { const ok = await confirm({ title: 'Delete Exam', message: `Delete "${exam.name}"?` }); if (ok) deleteMut.mutate(exam.id) }} className="text-xs text-red-600 hover:underline">Delete</button>
+                                      <button
+                                        onClick={async () => { const ok = await confirm({ title: 'Delete Exam', message: `Delete "${exam.name}"?` }); if (ok) deleteMut.mutate(exam.id) }}
+                                        className="text-xs text-red-600 hover:underline disabled:opacity-50"
+                                        disabled={isDeletingExam(exam.id)}
+                                      >{isDeletingExam(exam.id) ? 'Deleting...' : 'Delete'}</button>
                                     </div>
                                   </div>
                                 ))}
@@ -1233,6 +1404,15 @@ export default function ExamsPage() {
                 <table className="min-w-full bg-white rounded-xl shadow-sm border border-gray-200">
                   <thead>
                     <tr className="bg-gray-50 text-xs text-gray-500 uppercase">
+                      <th className="px-4 py-3 text-center w-10">
+                        <input
+                          type="checkbox"
+                          checked={standaloneExams.length > 0 && selectedExamIds.size === standaloneExams.length}
+                          ref={el => { if (el) el.indeterminate = selectedExamIds.size > 0 && selectedExamIds.size < standaloneExams.length }}
+                          onChange={e => toggleAllExamsSelected(e.target.checked)}
+                          className="rounded border-gray-300"
+                        />
+                      </th>
                       <th className="px-4 py-3 text-left">Exam Name</th>
                       <th className="px-4 py-3 text-left">Type</th>
                       <th className="px-4 py-3 text-left">Class</th>
@@ -1246,6 +1426,15 @@ export default function ExamsPage() {
                   <tbody className="divide-y divide-gray-100">
                     {standaloneExams.map(exam => (
                       <tr key={exam.id} className={exam.is_active ? 'hover:bg-gray-50' : 'bg-gray-50 text-gray-400 opacity-75'}>
+                        <td className="px-4 py-2 text-center">
+                          <input
+                            type="checkbox"
+                            checked={selectedExamIds.has(exam.id)}
+                            onChange={() => toggleExamSelected(exam.id)}
+                            className="rounded border-gray-300"
+                            aria-label={`Select ${exam.name}`}
+                          />
+                        </td>
                         <td className="px-4 py-2 text-sm font-medium text-gray-900">{exam.name}</td>
                         <td className="px-4 py-2 text-sm text-gray-600">{exam.exam_type_name}</td>
                         <td className="px-4 py-2 text-sm text-gray-600">{getExamClassLabel(exam)}</td>
@@ -1274,12 +1463,30 @@ export default function ExamsPage() {
                         <td className="px-4 py-2 text-right">
                           <button onClick={() => openEdit(exam)} className="text-xs text-primary-600 hover:underline mr-2">Edit</button>
                           {exam.is_active ? (
-                            exam.status !== 'PUBLISHED' && (
-                              <button
-                                onClick={async () => { const ok = await confirm({ title: 'Publish Exam', message: 'Publish this exam? Results will become visible.', variant: 'warning', confirmLabel: 'Publish' }); if (ok) publishMut.mutate(exam.id) }}
-                                className="text-xs text-green-600 hover:underline mr-2"
-                              >Publish</button>
-                            )
+                            <>
+                              {exam.schedule_published_at ? (
+                                <button
+                                  onClick={async () => { const ok = await confirm({ title: 'Unpublish Exam Schedule', message: 'Hide this class\'s exam dates again?' }); if (ok) unpublishScheduleMut.mutate(exam.id) }}
+                                  className="text-xs text-gray-500 hover:underline mr-2"
+                                >Unpublish Schedule</button>
+                              ) : (
+                                <button
+                                  onClick={async () => { const ok = await confirm({ title: 'Publish Exam Schedule', message: 'Make this class\'s exam dates visible to its students, parents, and teachers?', variant: 'warning', confirmLabel: 'Publish Schedule' }); if (ok) publishScheduleMut.mutate(exam.id) }}
+                                  className="text-xs text-blue-600 hover:underline mr-2"
+                                >Publish Schedule</button>
+                              )}
+                              {exam.status === 'PUBLISHED' ? (
+                                <button
+                                  onClick={async () => { const ok = await confirm({ title: 'Unpublish Results', message: 'Withdraw this exam\'s announced results?' }); if (ok) unpublishResultsMut.mutate(exam.id) }}
+                                  className="text-xs text-gray-500 hover:underline mr-2"
+                                >Unpublish Results</button>
+                              ) : (
+                                <button
+                                  onClick={async () => { const ok = await confirm({ title: 'Announce Results', message: 'Announce this exam\'s results? Results will become visible.', variant: 'warning', confirmLabel: 'Announce Results' }); if (ok) announceResultsMut.mutate(exam.id) }}
+                                  className="text-xs text-green-600 hover:underline mr-2"
+                                >Announce Results</button>
+                              )}
+                            </>
                           ) : (
                             <button
                               onClick={async () => { const ok = await confirm({ title: 'Reactivate Exam', message: `Reactivate "${exam.name}"?`, variant: 'primary', confirmLabel: 'Reactivate' }); if (ok) reactivateMut.mutate(exam.id) }}
@@ -1288,8 +1495,9 @@ export default function ExamsPage() {
                           )}
                           <button
                             onClick={async () => { const ok = await confirm({ title: 'Delete Exam', message: `Delete "${exam.name}"?` }); if (ok) deleteMut.mutate(exam.id) }}
-                            className="text-xs text-red-600 hover:underline"
-                          >Delete</button>
+                            className="text-xs text-red-600 hover:underline disabled:opacity-50"
+                            disabled={isDeletingExam(exam.id)}
+                          >{isDeletingExam(exam.id) ? 'Deleting...' : 'Delete'}</button>
                         </td>
                       </tr>
                     ))}
@@ -1302,9 +1510,18 @@ export default function ExamsPage() {
                 {standaloneExams.map(exam => (
                   <div key={exam.id} className={`card ${exam.is_active ? '' : 'opacity-75'}`}>
                     <div className="flex items-start justify-between mb-2">
-                      <div>
-                        <p className="font-medium text-gray-900 text-sm">{exam.name}</p>
-                        <p className="text-xs text-gray-500">{exam.exam_type_name} · {getExamClassLabel(exam)}</p>
+                      <div className="flex items-start gap-2">
+                        <input
+                          type="checkbox"
+                          checked={selectedExamIds.has(exam.id)}
+                          onChange={() => toggleExamSelected(exam.id)}
+                          className="rounded border-gray-300 mt-1"
+                          aria-label={`Select ${exam.name}`}
+                        />
+                        <div>
+                          <p className="font-medium text-gray-900 text-sm">{exam.name}</p>
+                          <p className="text-xs text-gray-500">{exam.exam_type_name} · {getExamClassLabel(exam)}</p>
+                        </div>
                       </div>
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${exam.is_active ? (STATUS_STYLES[exam.status] || 'bg-gray-100 text-gray-700') : 'bg-gray-100 text-gray-500'}`}>
                         {exam.is_active ? exam.status.replace('_', ' ') : 'Inactive'}
@@ -1319,12 +1536,27 @@ export default function ExamsPage() {
                     </p>
                     <div className="flex gap-2">
                       <button onClick={() => openEdit(exam)} className="text-xs text-primary-600 hover:underline">Edit</button>
-                      {exam.is_active ? (exam.status !== 'PUBLISHED' && (
-                        <button onClick={async () => { const ok = await confirm({ title: 'Publish Exam', message: 'Publish this exam? Results will become visible.', variant: 'warning', confirmLabel: 'Publish' }); if (ok) publishMut.mutate(exam.id) }} className="text-xs text-green-600 hover:underline">Publish</button>
-                      )) : (
+                      {exam.is_active ? (
+                        <>
+                          {exam.schedule_published_at ? (
+                            <button onClick={async () => { const ok = await confirm({ title: 'Unpublish Exam Schedule', message: 'Hide this class\'s exam dates again?' }); if (ok) unpublishScheduleMut.mutate(exam.id) }} className="text-xs text-gray-500 hover:underline">Unpublish Schedule</button>
+                          ) : (
+                            <button onClick={async () => { const ok = await confirm({ title: 'Publish Exam Schedule', message: 'Make this class\'s exam dates visible to its students, parents, and teachers?', variant: 'warning', confirmLabel: 'Publish Schedule' }); if (ok) publishScheduleMut.mutate(exam.id) }} className="text-xs text-blue-600 hover:underline">Publish Schedule</button>
+                          )}
+                          {exam.status === 'PUBLISHED' ? (
+                            <button onClick={async () => { const ok = await confirm({ title: 'Unpublish Results', message: 'Withdraw this exam\'s announced results?' }); if (ok) unpublishResultsMut.mutate(exam.id) }} className="text-xs text-gray-500 hover:underline">Unpublish Results</button>
+                          ) : (
+                            <button onClick={async () => { const ok = await confirm({ title: 'Announce Results', message: 'Announce this exam\'s results? Results will become visible.', variant: 'warning', confirmLabel: 'Announce Results' }); if (ok) announceResultsMut.mutate(exam.id) }} className="text-xs text-green-600 hover:underline">Announce Results</button>
+                          )}
+                        </>
+                      ) : (
                         <button onClick={async () => { const ok = await confirm({ title: 'Reactivate Exam', message: `Reactivate "${exam.name}"?`, variant: 'primary', confirmLabel: 'Reactivate' }); if (ok) reactivateMut.mutate(exam.id) }} className="text-xs text-blue-600 hover:underline">Reactivate</button>
                       )}
-                      <button onClick={async () => { const ok = await confirm({ title: 'Delete Exam', message: `Delete "${exam.name}"?` }); if (ok) deleteMut.mutate(exam.id) }} className="text-xs text-red-600 hover:underline">Delete</button>
+                      <button
+                        onClick={async () => { const ok = await confirm({ title: 'Delete Exam', message: `Delete "${exam.name}"?` }); if (ok) deleteMut.mutate(exam.id) }}
+                        className="text-xs text-red-600 hover:underline disabled:opacity-50"
+                        disabled={isDeletingExam(exam.id)}
+                      >{isDeletingExam(exam.id) ? 'Deleting...' : 'Delete'}</button>
                     </div>
                   </div>
                 ))}
@@ -1391,6 +1623,34 @@ export default function ExamsPage() {
       )}
 
       <ConfirmModalRoot />
+
+      {/* ── Bulk Delete Action Bar ── */}
+      {activeTab === 'exams' && selectedGroupIds.size > 0 && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 bg-white rounded-xl shadow-2xl border border-gray-200 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-center gap-3">
+          <span className="text-sm font-medium text-gray-700">{selectedGroupIds.size} selected</span>
+          <button onClick={() => setSelectedGroupIds(new Set())} className="text-sm text-gray-500 hover:underline">Clear</button>
+          <button
+            onClick={handleBulkDeleteGroups}
+            disabled={bulkDeleteGroupsMut.isPending}
+            className="px-3 py-1.5 text-red-600 border border-red-300 rounded-lg text-sm hover:bg-red-50 disabled:opacity-50"
+          >
+            {bulkDeleteGroupsMut.isPending ? 'Deleting...' : 'Delete Selected'}
+          </button>
+        </div>
+      )}
+      {activeTab === 'tests' && selectedExamIds.size > 0 && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 bg-white rounded-xl shadow-2xl border border-gray-200 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-center gap-3">
+          <span className="text-sm font-medium text-gray-700">{selectedExamIds.size} selected</span>
+          <button onClick={() => setSelectedExamIds(new Set())} className="text-sm text-gray-500 hover:underline">Clear</button>
+          <button
+            onClick={handleBulkDeleteExams}
+            disabled={bulkDeleteExamsMut.isPending}
+            className="px-3 py-1.5 text-red-600 border border-red-300 rounded-lg text-sm hover:bg-red-50 disabled:opacity-50"
+          >
+            {bulkDeleteExamsMut.isPending ? 'Deleting...' : 'Delete Selected'}
+          </button>
+        </div>
+      )}
 
       {/* ── Quick Create / Edit Modal ── */}
       {showModal && (

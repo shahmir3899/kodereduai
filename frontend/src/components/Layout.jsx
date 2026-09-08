@@ -322,6 +322,7 @@ const studentNavGroups = [
   { type: 'item', name: 'Attendance', href: '/student/attendance', icon: ClipboardIcon },
   { type: 'item', name: 'Fees', href: '/student/fees', icon: CurrencyIcon },
   { type: 'item', name: 'Timetable', href: '/student/timetable', icon: ClockIcon },
+  { type: 'item', name: 'Exam Schedule', href: '/student/exam-schedule', icon: CalendarIcon },
   { type: 'item', name: 'Results', href: '/student/results', icon: ChartIcon },
   { type: 'item', name: 'Assignments', href: '/student/assignments', icon: PencilIcon },
   { type: 'item', name: 'AI Study Helper', href: '/student/study-helper', icon: ChatBotIcon },
@@ -508,6 +509,7 @@ export default function Layout() {
         ...(isModuleEnabled('examinations') ? [
           ...(!isTeacher ? [{ name: 'Exam Types', href: '/academics/exam-types', icon: FolderIcon }] : []),
           ...(!isTeacher ? [{ name: 'Exams', href: '/academics/exams', icon: ClipboardIcon }] : []),
+          ...(isTeacher ? [{ name: 'Exam Schedule', href: '/academics/exam-schedule', icon: CalendarIcon }] : []),
           { name: 'Assessments', href: '/assessments', icon: DocumentIcon },
           { name: 'Marks Entry', href: '/academics/marks-entry', icon: DocumentIcon },
           ...(!isTeacher ? [{ name: 'Grade Scale', href: '/academics/grade-scale', icon: SettingsIcon }] : []),
