@@ -3126,22 +3126,29 @@ class ExamPaperViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
                             'manual_questions': [f'question_id {question_id} was not found.']
                         })
 
-            question_payload['subject'] = exam_paper.subject_id
-            serializer = QuestionCreateUpdateSerializer(
-                instance=question_instance,
-                data=question_payload,
-                partial=question_instance is not None,
-                context={'request': self.request},
-            )
-            serializer.is_valid(raise_exception=True)
-
-            if question_instance is None:
+            if question_instance is not None:
+                # Attach-by-reference: the manual/bank-picker UI never lets the user
+                # edit an already-existing question's content inline here -- it always
+                # carries the bank question's own current content through unchanged
+                # (see toDraftQuestionFromBank on the frontend). Re-validating it
+                # against today's content-completeness rules (e.g. "SHORT requires
+                # answer_text") wrongly blocked reusing any older/legitimate question
+                # that predates those rules. Attaching an existing question must always
+                # succeed regardless of its own content state -- only genuinely new
+                # questions go through full validation below.
+                question = question_instance
+            else:
+                question_payload['subject'] = exam_paper.subject_id
+                serializer = QuestionCreateUpdateSerializer(
+                    instance=None,
+                    data=question_payload,
+                    context={'request': self.request},
+                )
+                serializer.is_valid(raise_exception=True)
                 question = serializer.save(
                     school=exam_paper.school,
                     created_by=self.request.user,
                 )
-            else:
-                question = serializer.save()
 
             if assignment is None:
                 assignment = PaperQuestion(

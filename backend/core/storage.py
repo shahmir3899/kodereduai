@@ -85,6 +85,56 @@ class SupabaseStorageService:
         """Check if Supabase is properly configured."""
         return bool(self.url and self.key and self.bucket)
 
+    def upload_file(self, file, folder: str, filename: str) -> str:
+        """
+        Generic upload for callers that don't fit one of the purpose-specific
+        methods below (e.g. exam-paper OCR image capture). Added because
+        PaperUploadViewSet.upload_image() called this exact signature while it
+        never actually existed on this class -- every paper-image upload was
+        failing with AttributeError, caught by the view's broad except and
+        surfaced as a generic 500.
+
+        Args:
+            file: File object from request
+            folder: Storage path prefix (e.g. "papers/{school_id}")
+            filename: Final filename within that folder
+
+        Returns:
+            str: Public URL of uploaded file
+        """
+        if not self.is_configured():
+            raise Exception("Supabase storage not configured")
+
+        path = f"{folder.strip('/')}/{filename}"
+
+        try:
+            file_content = file.read()
+            content_type = getattr(file, 'content_type', 'application/octet-stream')
+
+            logger.info(f"Uploading file: {path} ({len(file_content)} bytes)")
+
+            # Try to remove existing file first (may not exist, that's OK) --
+            # matches upload_school_asset/_upload_profile_photo so a re-upload to
+            # the same path overwrites cleanly instead of erroring on conflict.
+            try:
+                self.client.storage.from_(self.bucket).remove([path])
+            except Exception:
+                pass
+
+            self.client.storage.from_(self.bucket).upload(
+                path=path,
+                file=file_content,
+                file_options={"content-type": content_type}
+            )
+
+            public_url = self.client.storage.from_(self.bucket).get_public_url(path)
+            logger.info(f"Successfully uploaded file: {path}")
+            return public_url
+
+        except Exception as e:
+            logger.error(f"Failed to upload file {path}: {e}")
+            raise Exception(f"Failed to upload file: {e}")
+
     def upload_attendance_image(self, file, school_id: int, class_id: int) -> str:
         """
         Upload attendance image to Supabase Storage.
