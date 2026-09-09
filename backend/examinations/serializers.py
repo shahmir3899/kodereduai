@@ -1033,6 +1033,7 @@ class PaperUploadSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'school', 'exam_paper', 'exam_paper_title',
             'uploaded_by', 'uploaded_by_name', 'image_url',
+            'group_id', 'page_number',
             'context_class', 'context_class_name', 'context_subject', 'context_subject_name',
             'ai_extracted_json', 'extraction_confidence', 'extraction_notes',
             'status', 'error_message', 'created_at', 'processed_at',
@@ -1041,6 +1042,10 @@ class PaperUploadSerializer(serializers.ModelSerializer):
             'id', 'school', 'uploaded_by', 'context_class', 'context_subject',
             'ai_extracted_json', 'extraction_confidence', 'extraction_notes', 'status',
             'error_message', 'created_at', 'processed_at',
+            # group_id/page_number are set once at creation (upload-image view) and
+            # never change afterward -- read-only here so a client can't reassign a
+            # page to a different multi-page session via a later PATCH.
+            'group_id', 'page_number',
         ]
 
 
@@ -1049,6 +1054,11 @@ class PaperUploadCreateSerializer(serializers.Serializer):
     image = serializers.ImageField(required=True)
     class_obj = serializers.IntegerField(required=False, help_text="Class ID for context")
     subject = serializers.IntegerField(required=False, help_text="Subject ID for context")
+    # Multi-page capture: omitted on page 1 (the view generates a new group_id and
+    # returns it); the frontend echoes that same group_id back on page 2, 3, ... so
+    # the OCR task can find and build on the prior pages' extraction.
+    group_id = serializers.UUIDField(required=False, help_text="Reuse the group_id returned from page 1's upload to add a page to the same multi-page capture.")
+    page_number = serializers.IntegerField(required=False, min_value=1, help_text="1-based page order within group_id. Defaults to 1 (or the next number in the group if group_id is given without one).")
 
 
 class PaperFeedbackSerializer(serializers.ModelSerializer):

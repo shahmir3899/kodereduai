@@ -99,7 +99,7 @@ export default function ExamTypesPage() {
                   {item.weight}%
                 </span>
               </div>
-              <p className="text-xs text-gray-500">Weight: {item.weight}% for GPA calculation</p>
+              <p className="text-xs text-gray-500">Weight: {item.weight}% toward the overall grade</p>
               <div className="flex gap-2 mt-3 pt-2 border-t border-gray-100">
                 <button onClick={() => openEdit(item)} className="text-xs text-primary-600 hover:underline">Edit</button>
                 <button
@@ -143,7 +143,7 @@ export default function ExamTypesPage() {
                   onChange={e => setForm(p => ({ ...p, weight: e.target.value }))}
                   className="input w-32"
                 />
-                <p className="text-xs text-gray-400 mt-1">Weightage for GPA calculation (default 100%)</p>
+                <p className="text-xs text-gray-400 mt-1">Weightage toward the overall grade (default 100%)</p>
               </div>
               <div className="flex justify-end gap-3 pt-2">
                 <button type="button" onClick={closeModal} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>

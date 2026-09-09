@@ -18,6 +18,22 @@ export default function ReportCardPage() {
   const [termId, setTermId] = useState('')
   const [search, setSearch] = useState('')
   const [downloading, setDownloading] = useState(false)
+  const [pdfFormat, setPdfFormat] = useState(() => {
+    try {
+      return localStorage.getItem('reportCardFormat') || 'enhanced'
+    } catch {
+      return 'enhanced'
+    }
+  })
+
+  const handleFormatChange = (value) => {
+    setPdfFormat(value)
+    try {
+      localStorage.setItem('reportCardFormat', value)
+    } catch {
+      // Private browsing / storage disabled - the choice just won't persist.
+    }
+  }
 
   const { sessionClasses } = useSessionClasses(yearId)
   const classSelectorScope = getClassSelectorScope(yearId)
@@ -117,7 +133,7 @@ export default function ReportCardPage() {
     if (!report) return
     setDownloading(true)
     try {
-      await exportReportCardPDF({ report, schoolData })
+      await exportReportCardPDF({ report, schoolData, format: pdfFormat })
     } catch (err) {
       console.error('PDF export failed:', err)
     } finally {
@@ -213,7 +229,25 @@ export default function ReportCardPage() {
       ) : (
         <div className="card max-w-3xl mx-auto">
           {/* Actions */}
-          <div className="flex justify-end mb-3">
+          <div className="flex justify-end items-center gap-2 mb-3">
+            <div className="flex items-center bg-gray-100 rounded-lg p-0.5 text-sm">
+              {[
+                { value: 'enhanced', label: 'Enhanced' },
+                { value: 'traditional', label: 'Traditional' },
+              ].map(opt => (
+                <button
+                  key={opt.value}
+                  onClick={() => handleFormatChange(opt.value)}
+                  className={`px-2.5 py-1 rounded-md transition-colors ${
+                    pdfFormat === opt.value
+                      ? 'bg-white shadow-sm text-primary-700 font-medium'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
             <button
               onClick={handleDownloadPDF}
               disabled={downloading}
@@ -328,21 +362,15 @@ export default function ReportCardPage() {
             <p className="text-center text-gray-500 text-sm py-4">No subject marks available.</p>
           )}
 
-          {/* Rank & GPA */}
-          {report.summary && (
+          {/* Position */}
+          {report.summary?.rank && (
             <div className="flex items-center gap-6 pt-4 border-t border-gray-200">
-              {report.summary.rank && (
-                <div>
-                  <p className="text-xs text-gray-500">Rank in Class</p>
-                  <p className="text-lg font-bold text-primary-700">{report.summary.rank}</p>
-                </div>
-              )}
-              {report.summary.gpa && (
-                <div>
-                  <p className="text-xs text-gray-500">GPA</p>
-                  <p className="text-lg font-bold text-primary-700">{Number(report.summary.gpa).toFixed(2)}</p>
-                </div>
-              )}
+              <div>
+                <p className="text-xs text-gray-500">Position in Class</p>
+                <p className="text-lg font-bold text-primary-700">
+                  {report.summary.rank}{report.class_size ? ` of ${report.class_size}` : ''}
+                </p>
+              </div>
             </div>
           )}
         </div>

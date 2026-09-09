@@ -634,7 +634,7 @@ export default function ExamWizard({ onClose, onSuccess }) {
                   <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                     <p className="text-xs text-blue-700">
                       <strong>Weight: {selectedType.weight}%</strong> — Determines how much this exam contributes to the final grade.
-                      If you have Mid-Term (30%) and Final (70%), the GPA is calculated as:
+                      If you have Mid-Term (30%) and Final (70%), the overall percentage is calculated as:
                       <code className="bg-blue-100 px-1 rounded ml-1">0.30 x Mid-Term + 0.70 x Final</code>
                     </p>
                   </div>

@@ -874,11 +874,17 @@ export default function QuestionPaperBuilderPage() {
   const [pendingImageConfirm, setPendingImageConfirm] = useState(null)
   useEffect(() => {
     if (!draftId || !pendingImageConfirm) return
-    const { uploadId, questions } = pendingImageConfirm
+    const { uploadIds, questions } = pendingImageConfirm
     setPendingImageConfirm(null)
-    confirmPaperUploadMutation.mutate({
-      uploadId,
-      payload: { exam_paper_id: draftId, confirmed_data: { questions } },
+    // A multi-page capture confirms every page's PaperUpload row that contributed
+    // to this accepted paper (each accumulated equally into the one merged
+    // questions list) -- not just the single most-recent page, so the learning-loop
+    // feedback and CONFIRMED linkage covers every page the user actually reviewed.
+    uploadIds.forEach((uploadId) => {
+      confirmPaperUploadMutation.mutate({
+        uploadId,
+        payload: { exam_paper_id: draftId, confirmed_data: { questions } },
+      })
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draftId, pendingImageConfirm])
@@ -905,7 +911,7 @@ export default function QuestionPaperBuilderPage() {
     setActiveTab('manual')
     setSourceChosen(true)
     setWizardStep(3)
-    setPendingImageConfirm({ uploadId: prefill.uploadId, questions: prefill.questions })
+    setPendingImageConfirm({ uploadIds: prefill.uploadIds || [prefill.uploadId], questions: prefill.questions })
     showSuccess('Prefilled from your uploaded paper — review and edit; it autosaves as you go.')
   }, [showSuccess])
 

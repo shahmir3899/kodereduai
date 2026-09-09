@@ -877,6 +877,20 @@ class PaperUpload(models.Model):
         max_length=500,
         help_text="Supabase storage URL"
     )
+    group_id = models.UUIDField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text=(
+            "Ties sequential pages of one multi-page paper capture together. "
+            "Null for a standalone single-page upload (all pre-multi-page rows, "
+            "and any single-page capture going forward)."
+        ),
+    )
+    page_number = models.PositiveSmallIntegerField(
+        default=1,
+        help_text="1-based page order within group_id. Meaningless when group_id is null.",
+    )
     context_class = models.ForeignKey(
         'students.Class',
         on_delete=models.SET_NULL,
@@ -923,6 +937,7 @@ class PaperUpload(models.Model):
         indexes = [
             models.Index(fields=['school', 'status']),
             models.Index(fields=['uploaded_by', 'status']),
+            models.Index(fields=['group_id', 'page_number']),
         ]
 
     def __str__(self):

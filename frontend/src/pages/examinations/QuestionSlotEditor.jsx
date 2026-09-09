@@ -280,7 +280,10 @@ export default function QuestionSlotEditor({
 
     const newErrors = {}
 
-    if (!(draftData?.paper_title || '').trim()) newErrors.paperTitle = 'Paper title is required'
+    // This field lives on Step 1 (Paper Setup), not here on Step 3 -- say so
+    // explicitly, since a bare "Paper title is required" next to this button gives
+    // no clue where to actually go fix it.
+    if (!(draftData?.paper_title || '').trim()) newErrors.paperTitle = 'Paper title is required — set it in Step 1: Paper Setup.'
     if (questions.length === 0) newErrors.questions = 'Add at least one question'
 
     if (Object.keys(newErrors).length > 0) {
@@ -288,6 +291,11 @@ export default function QuestionSlotEditor({
       return
     }
 
+    // Clear any stale paperTitle/questions error from a prior failed attempt -- it
+    // was never cleared on success before, so fixing the title and resubmitting
+    // still showed the old "Paper title is required" message even though this
+    // submission is going through fine.
+    setErrors({})
     onSubmitDraft()
   }
 
@@ -960,6 +968,7 @@ export default function QuestionSlotEditor({
           <div className={`mr-auto text-sm ${saveState === 'error' ? 'text-red-600' : 'text-gray-600'}`}>
             {saveStateLabel}
           </div>
+          {errors.paperTitle && <p className="text-red-500 text-sm">{errors.paperTitle}</p>}
           {errors.questions && <p className="text-red-500 text-sm">{errors.questions}</p>}
           <button
             onClick={handleCreatePaper}

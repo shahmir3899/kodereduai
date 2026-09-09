@@ -1441,11 +1441,17 @@ export const questionPaperApi = {
   // Paper Uploads (image capture for OCR)
   getPaperUploads: (params) => api.get('/api/examinations/paper-uploads/', { params }),
   getPaperUpload: (id) => api.get(`/api/examinations/paper-uploads/${id}/`),
-  uploadPaperImage: (file, classObj, subject) => {
+  // groupId/pageNumber chain sequential pages of one multi-page capture together --
+  // omit both for page 1 (the backend generates and returns a group_id); pass that
+  // same group_id back for page 2+ so OCR can build continuation context from prior
+  // pages. page_number is normally left for the backend to auto-compute.
+  uploadPaperImage: (file, classObj, subject, groupId, pageNumber) => {
     const formData = new FormData()
     formData.append('image', file)
     if (classObj) formData.append('class_obj', classObj)
     if (subject) formData.append('subject', subject)
+    if (groupId) formData.append('group_id', groupId)
+    if (pageNumber) formData.append('page_number', pageNumber)
     return api.post('/api/examinations/paper-uploads/upload-image/', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     })

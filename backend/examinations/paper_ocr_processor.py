@@ -29,6 +29,32 @@ GOOGLE_VISION_API_KEY = getattr(settings, 'GOOGLE_VISION_API_KEY', '')
 ALLOWED_QUESTION_TYPES = {'MCQ', 'SHORT', 'LONG', 'ESSAY', 'TRUE_FALSE', 'MATCHING', 'FILL_BLANK'}
 
 
+class LLMParsingError(Exception):
+    """Raised when the Groq LLM step itself is broken (bad model name, API/network
+    failure, or unparseable output the regex fallback also couldn't salvage) -- as
+    opposed to a low-confidence-but-real extraction, which is not an error. Previously
+    _parse_paper_with_llm caught every exception here and returned an empty-but-"success"
+    result, so a dead model name (e.g. a deprecated Groq model) silently produced a
+    blank paper instead of a visible FAILED upload with a real error message."""
+
+
+def _describe_http_error(response: 'requests.Response') -> str:
+    """Extracts the provider's actual error message from a non-2xx response body
+    (Google Vision and Groq both use a {"error": {"message": ...}} shape). Bare
+    response.raise_for_status() text (e.g. "404 Client Error: Not Found for url: ...")
+    discards the body, which is where the actually useful reason lives (e.g. "The
+    model `x` does not exist or you do not have access to it", or "API key not found").
+    Used for both providers here rather than duplicating this per-provider."""
+    try:
+        body = response.json()
+        message = body.get('error', {}).get('message')
+        if message:
+            return f"{response.status_code}: {message}"
+    except (ValueError, AttributeError):
+        pass
+    return f"{response.status_code}: {response.text[:300]}"
+
+
 @dataclass
 class QuestionExtractionResult:
     """Result from question paper OCR extraction."""
@@ -243,7 +269,56 @@ def _wrap_flat_as_structured(flat_questions: List[Dict[str, Any]]) -> Dict[str, 
     }
 
 
-def _build_extraction_prompt(context: Optional[Dict[str, Any]] = None, ocr_text: Optional[str] = None) -> str:
+def _build_continuation_hint(continuation_context: Optional[Dict[str, Any]]) -> str:
+    """Renders the multi-page continuation summary block for _build_extraction_prompt.
+    continuation_context (built in tasks.py from prior pages in the same group) shape:
+        {
+            'page_number': int,              # this page's 1-based number (>= 2)
+            'header': dict | None,           # header already detected on prior page(s)
+            'last_section': dict | None,     # {title, instruction, question_type_guess}
+            'questions_so_far': int,
+            'marks_so_far': float,
+        }
+    Returns '' when continuation_context is falsy (page 1 / standalone upload)."""
+    if not continuation_context:
+        return ''
+
+    page_number = continuation_context.get('page_number')
+    header = continuation_context.get('header') or {}
+    last_section = continuation_context.get('last_section')
+    questions_so_far = continuation_context.get('questions_so_far') or 0
+    marks_so_far = continuation_context.get('marks_so_far') or 0
+
+    header_bits = ', '.join(
+        f"{key}: '{value}'" for key, value in header.items() if value not in (None, '')
+    ) or 'none detected yet'
+
+    if last_section:
+        last_section_bit = (
+            f"ending with section '{last_section.get('title')}' "
+            f"(instruction: {last_section.get('instruction') or 'none'!r}, "
+            f"type {last_section.get('question_type_guess')})"
+        )
+    else:
+        last_section_bit = "with no sections extracted yet"
+
+    return (
+        f"\nMULTI-PAGE CONTEXT: this OCR text is page {page_number} of a multi-page exam "
+        f"paper. Page(s) before this one already had header fields ({header_bits}), "
+        f"{last_section_bit}, totaling {questions_so_far} question(s) and {marks_so_far} "
+        f"mark(s) so far. If this page's content is clearly a continuation of that same "
+        f"section (e.g. more items under the same 'Attempt any N of M' instruction), extend "
+        f"it by re-using that exact section title — otherwise treat this page as new "
+        f"section(s). Do not re-detect header fields already given above unless this page "
+        f"visibly contradicts them (in which case trust what's actually printed on this page)."
+    )
+
+
+def _build_extraction_prompt(
+    context: Optional[Dict[str, Any]] = None,
+    ocr_text: Optional[str] = None,
+    continuation_context: Optional[Dict[str, Any]] = None,
+) -> str:
     """Builds the structured-extraction prompt shared by the text-based (Google Vision
     OCR text -> Groq LLM) and image-based (Groq Vision) pipelines."""
     context_hint = ''
@@ -257,10 +332,11 @@ def _build_extraction_prompt(context: Optional[Dict[str, Any]] = None, ocr_text:
                 f"subject '{subject_name or 'unknown'}'."
             )
 
+    continuation_hint = _build_continuation_hint(continuation_context)
     text_block = f"\n\nRAW OCR TEXT:\n{ocr_text}\n" if ocr_text else ''
 
     return f"""You are extracting a school exam question paper into a strict JSON schema.
-{text_block}{context_hint}
+{text_block}{context_hint}{continuation_hint}
 
 Return ONLY a single valid JSON object (no markdown fences, no extra commentary) with this exact shape:
 {{
@@ -318,6 +394,8 @@ Rules:
 7. Every question needs a question_type and a numeric marks value — if an individual
    question's marks aren't printed, use the section's marks_per_question or your best
    estimate; never leave marks null.
+8. If a MULTI-PAGE CONTEXT block is present above, follow its instructions for whether
+   to continue the previous page's last section or start fresh — otherwise ignore it.
 
 Return ONLY the JSON object described above."""
 
@@ -346,24 +424,34 @@ class PaperOCRProcessor:
         
         logger.info(f"PaperOCRProcessor initialized with provider: {self.vision_provider}")
     
-    def process_paper_image(self, image_url: str, context: Dict[str, Any] = None) -> QuestionExtractionResult:
+    def process_paper_image(
+        self,
+        image_url: str,
+        context: Dict[str, Any] = None,
+        continuation_context: Optional[Dict[str, Any]] = None,
+    ) -> QuestionExtractionResult:
         """
         Process a question paper image and extract questions.
-        
+
         Args:
             image_url: URL to the uploaded image
             context: Optional context (class, subject) for better extraction
-        
+            continuation_context: For page 2+ of a multi-page capture -- a summary of
+                what prior pages in the same group already extracted (header, last
+                section, running question/marks counts). See tasks.py's
+                process_paper_upload_ocr for how this is built. None for a
+                standalone/first-page upload.
+
         Returns:
             QuestionExtractionResult with extracted questions
         """
         try:
             logger.info(f"Processing paper image with {self.vision_provider} provider")
-            
+
             if self.vision_provider == 'google':
-                return self._process_with_google_vision(image_url, context)
+                return self._process_with_google_vision(image_url, context, continuation_context)
             elif self.vision_provider == 'groq':
-                return self._process_with_groq_vision(image_url, context)
+                return self._process_with_groq_vision(image_url, context, continuation_context)
             else:
                 return QuestionExtractionResult(
                     success=False,
@@ -377,7 +465,12 @@ class PaperOCRProcessor:
                 error=f"Processing error: {str(e)}"
             )
     
-    def _process_with_google_vision(self, image_url: str, context: Dict[str, Any] = None) -> QuestionExtractionResult:
+    def _process_with_google_vision(
+        self,
+        image_url: str,
+        context: Dict[str, Any] = None,
+        continuation_context: Optional[Dict[str, Any]] = None,
+    ) -> QuestionExtractionResult:
         """
         Process using Google Cloud Vision API.
         
@@ -402,7 +495,14 @@ class PaperOCRProcessor:
             }
             
             response = requests.post(api_url, json=request_data, timeout=30)
-            response.raise_for_status()
+            if not response.ok:
+                # Read the body before raising -- Google's actual reason (e.g. "API key
+                # not found", "This API method requires billing") lives there, and
+                # raise_for_status()'s exception text only carries the URL and status.
+                return QuestionExtractionResult(
+                    success=False,
+                    error=f"Google Vision API error: {_describe_http_error(response)}"
+                )
             
             result = response.json()
             
@@ -436,7 +536,11 @@ class PaperOCRProcessor:
             logger.info(f"Google Vision extracted {len(full_text)} characters")
 
             # Step 2: Use Groq LLM to parse header/sections/questions from text
-            parsed = self._parse_paper_with_llm(full_text, context)
+            try:
+                parsed = self._parse_paper_with_llm(full_text, context, continuation_context)
+            except LLMParsingError as e:
+                logger.error(f"LLM parsing failed for paper upload: {e}")
+                return QuestionExtractionResult(success=False, error=str(e))
 
             return QuestionExtractionResult(
                 success=True,
@@ -465,10 +569,15 @@ class PaperOCRProcessor:
                 error=f"Processing error: {str(e)}"
             )
     
-    def _process_with_groq_vision(self, image_url: str, context: Dict[str, Any] = None) -> QuestionExtractionResult:
+    def _process_with_groq_vision(
+        self,
+        image_url: str,
+        context: Dict[str, Any] = None,
+        continuation_context: Optional[Dict[str, Any]] = None,
+    ) -> QuestionExtractionResult:
         """
         Process using Groq Vision API (direct image understanding).
-        
+
         Groq's vision model can directly understand and extract questions from images.
         """
         try:
@@ -476,8 +585,8 @@ class PaperOCRProcessor:
                 "Authorization": f"Bearer {self.groq_api_key}",
                 "Content-Type": "application/json"
             }
-            
-            prompt = _build_extraction_prompt(context)
+
+            prompt = _build_extraction_prompt(context, continuation_context=continuation_context)
 
             data = {
                 "model": GROQ_VISION_MODEL,
@@ -500,7 +609,11 @@ class PaperOCRProcessor:
                 json=data,
                 timeout=60
             )
-            response.raise_for_status()
+            if not response.ok:
+                return QuestionExtractionResult(
+                    success=False,
+                    error=f"Groq Vision API error ({GROQ_VISION_MODEL}): {_describe_http_error(response)}"
+                )
 
             result = response.json()
 
@@ -549,63 +662,94 @@ class PaperOCRProcessor:
                 error=f"Processing error: {str(e)}"
             )
     
-    def _parse_paper_with_llm(self, text: str, context: Dict[str, Any] = None) -> Dict[str, Any]:
+    def _parse_paper_with_llm(
+        self,
+        text: str,
+        context: Dict[str, Any] = None,
+        continuation_context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
         """
         Use Groq LLM to parse header/sections/questions from OCR'd text.
 
         Args:
             text: Raw OCR text from Google Vision
             context: Optional context (class_name, subject_name) for better parsing
+            continuation_context: summary of prior page(s) in a multi-page capture —
+                see _build_extraction_prompt for the shape.
 
         Returns:
             dict with normalized 'header', 'sections', flat 'questions', and
             'computed_total_marks' — see _parse_structured_paper / _build_extraction_prompt.
+
+        Raises:
+            LLMParsingError: the Groq call failed outright (bad model, network/API
+                error) or its output couldn't be parsed, AND the regex fallback below
+                also found nothing salvageable. Callers must surface this as a real
+                FAILED upload rather than treating it as a low-confidence success.
         """
+        headers = {
+            "Authorization": f"Bearer {self.groq_api_key}",
+            "Content-Type": "application/json"
+        }
+
+        prompt = _build_extraction_prompt(context, ocr_text=text, continuation_context=continuation_context)
+
+        data = {
+            "model": GROQ_MODEL,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are an expert at parsing exam papers from OCR text. Always "
+                        "return a single valid JSON object exactly matching the requested schema."
+                    )
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            "temperature": 0.1,
+            "max_tokens": 4000
+        }
+
         try:
-            headers = {
-                "Authorization": f"Bearer {self.groq_api_key}",
-                "Content-Type": "application/json"
-            }
-
-            prompt = _build_extraction_prompt(context, ocr_text=text)
-
-            data = {
-                "model": GROQ_MODEL,
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": (
-                            "You are an expert at parsing exam papers from OCR text. Always "
-                            "return a single valid JSON object exactly matching the requested schema."
-                        )
-                    },
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ],
-                "temperature": 0.1,
-                "max_tokens": 4000
-            }
-
             response = requests.post(
                 "https://api.groq.com/openai/v1/chat/completions",
                 headers=headers,
                 json=data,
                 timeout=60
             )
-            response.raise_for_status()
+        except requests.RequestException as e:
+            logger.error(f"Groq API request failed: {e}", exc_info=True)
+            return self._fallback_or_raise(text, f"Could not reach Groq API: {e}")
 
-            result = response.json()
-            content = result['choices'][0]['message']['content'].strip()
+        if not response.ok:
+            error_detail = _describe_http_error(response)
+            logger.error(f"Groq API returned an error: {error_detail}")
+            return self._fallback_or_raise(text, f"Groq API error ({GROQ_MODEL}): {error_detail}")
 
+        result = response.json()
+        content = result['choices'][0]['message']['content'].strip()
+
+        try:
             return _parse_structured_paper(content)
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.error(f"Failed to parse Groq response as JSON: {content[:500]}")
+            return self._fallback_or_raise(text, f"Groq returned unparseable content: {e}")
 
-        except Exception as e:
-            logger.error(f"LLM parsing error: {str(e)}", exc_info=True)
-            # Fallback: basic pattern-based question detection, wrapped into the same schema.
-            flat_questions = self._fallback_question_extraction(text)
+    def _fallback_or_raise(self, text: str, error_detail: str) -> Dict[str, Any]:
+        """Tries the regex-based fallback extractor when the LLM step fails; only
+        treats that as a usable result if it actually found questions, otherwise
+        raises so the caller reports a real FAILED status instead of an empty paper."""
+        flat_questions = self._fallback_question_extraction(text)
+        if flat_questions:
+            logger.warning(
+                f"Groq LLM step failed ({error_detail}); falling back to regex-based "
+                f"extraction, which found {len(flat_questions)} question(s)."
+            )
             return _wrap_flat_as_structured(flat_questions)
+        raise LLMParsingError(error_detail)
     
     def _fallback_question_extraction(self, text: str) -> List[Dict[str, Any]]:
         """

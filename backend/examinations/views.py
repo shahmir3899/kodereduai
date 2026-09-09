@@ -1,6 +1,7 @@
 import io
 import logging
 import re
+from datetime import date
 from decimal import Decimal
 from django.db import IntegrityError, transaction
 from django.db.models import Count, Q
@@ -2269,6 +2270,71 @@ class ReportCardView(ModuleAccessMixin, APIView):
     required_module = 'examinations'
     permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
 
+    @staticmethod
+    def _months_in_range(start_date, end_date):
+        """Calendar month numbers spanned by [start_date, end_date], in chronological
+        order (duplicates if the range exceeds 12 months, which we don't expect here)."""
+        months = []
+        cur = date(start_date.year, start_date.month, 1)
+        end = date(end_date.year, end_date.month, 1)
+        while cur <= end:
+            months.append(cur.month)
+            cur = date(cur.year + 1, 1, 1) if cur.month == 12 else date(cur.year, cur.month + 1, 1)
+        return months
+
+    # The 12 fields a teacher rates on the Assessments page (1-5 stars each),
+    # grouped the same way that page groups them.
+    ASSESSMENT_SKILL_FIELDS = [
+        ('listening', 'Listening'), ('speaking', 'Speaking'), ('writing', 'Writing'),
+        ('reading', 'Reading'), ('participation', 'Participation'), ('confidence', 'Confidence'),
+        ('social_skills', 'Social Skills'),
+    ]
+    ASSESSMENT_BEHAVIOUR_FIELDS = [
+        ('discipline', 'Discipline'), ('respect', 'Respect'), ('teamwork', 'Teamwork'),
+        ('class_participation', 'Class Participation'), ('responsibility', 'Responsibility'),
+    ]
+
+    @staticmethod
+    def _compute_overall_stats(student_id, exams, es_by_exam, marks_by_key, use_weighted):
+        """Same weighted/simple aggregation as the main report, but keyed so it can be
+        run once per classmate for ranking as well as for the report's own student.
+        Returns {'obtained', 'possible', 'percentage'}, or None if the student has no
+        marks recorded at all for these exams (they're excluded from ranking, not
+        counted as last)."""
+        if use_weighted and exams.count() > 1:
+            exam_type_data = {}
+            for exam in exams:
+                et_id = exam.exam_type_id
+                if et_id not in exam_type_data:
+                    exam_type_data[et_id] = {'weight': exam.exam_type.weight, 'obtained': Decimal('0'), 'possible': Decimal('0')}
+                for es_item in es_by_exam.get(exam.id, []):
+                    mark = marks_by_key.get((student_id, es_item.id))
+                    if mark and mark.marks_obtained is not None and not mark.is_absent:
+                        exam_type_data[et_id]['obtained'] += mark.marks_obtained
+                    exam_type_data[et_id]['possible'] += es_item.total_marks
+            total_weight = sum(d['weight'] for d in exam_type_data.values() if d['possible'] > 0)
+            if total_weight <= 0:
+                return None
+            weighted_sum = Decimal('0')
+            for data in exam_type_data.values():
+                if data['possible'] > 0:
+                    weighted_sum += (data['obtained'] / data['possible'] * 100) * (data['weight'] / total_weight)
+            obtained = sum((d['obtained'] for d in exam_type_data.values()), Decimal('0'))
+            possible = sum((d['possible'] for d in exam_type_data.values()), Decimal('0'))
+            return {'obtained': float(obtained), 'possible': float(possible), 'percentage': float(weighted_sum)}
+        else:
+            obtained = Decimal('0')
+            possible = Decimal('0')
+            for exam in exams:
+                for es_item in es_by_exam.get(exam.id, []):
+                    mark = marks_by_key.get((student_id, es_item.id))
+                    if mark and mark.marks_obtained is not None and not mark.is_absent:
+                        obtained += mark.marks_obtained
+                    possible += es_item.total_marks
+            if possible <= 0:
+                return None
+            return {'obtained': float(obtained), 'possible': float(possible), 'percentage': float(obtained / possible * 100)}
+
     def get(self, request):
         student_id = request.query_params.get('student_id')
         academic_year_id = request.query_params.get('academic_year_id')
@@ -2476,13 +2542,113 @@ class ReportCardView(ModuleAccessMixin, APIView):
             school_id, resolve_current_academic_year_id(school_id), student.class_obj,
         )
 
+        # Which exam(s) this report's marks actually came from - a term can hold several
+        # (Quiz/Midterm/Final), and without this a combined table looks like a single exam.
+        report_term = exams[0].term if exams and exams[0].term else None
+        if not report_term and term_id:
+            from academic_sessions.models import Term
+            report_term = Term.objects.filter(pk=term_id, school_id=school_id).first()
+
+        exam_names = [e.name for e in exams]
+        if len(exam_names) == 1:
+            exam_display = exam_names[0]
+        elif len(exam_names) > 1:
+            mode_label = 'weighted' if (use_weighted and exams.count() > 1) else 'combined'
+            exam_display = f"{', '.join(exam_names)} ({mode_label})"
+        else:
+            exam_display = None
+
+        # Attendance and the monthly teacher assessment are both scoped to this term's
+        # date range (or the whole academic year when no term filter was given).
+        if report_term:
+            period_start, period_end = report_term.start_date, report_term.end_date
+        else:
+            period_start, period_end = enrollment.academic_year.start_date, enrollment.academic_year.end_date
+
+        from attendance.models import AttendanceRecord
+        attendance_qs = AttendanceRecord.objects.filter(
+            school_id=school_id, student=student, date__gte=period_start, date__lte=period_end,
+        )
+        attendance_total = attendance_qs.count()
+        attendance_present = attendance_qs.filter(status=AttendanceRecord.AttendanceStatus.PRESENT).count()
+        attendance = {
+            'present': attendance_present,
+            'total': attendance_total,
+            'percentage': round(attendance_present / attendance_total * 100, 2) if attendance_total else None,
+        }
+
+        # Position (rank): the same aggregation run for every other student in this
+        # class - not a filtered subset - so the student with the highest total marks
+        # achieved is Position 1. Percentage is the tie-break / the ranking basis
+        # itself when the school uses weighted exam types (raw sums aren't comparable
+        # across differently-weighted components in that case).
+        class_students = Student.objects.filter(school_id=school_id, class_obj=enrollment.class_obj, is_active=True)
+        class_marks = StudentMark.objects.filter(exam_subject__in=all_exam_subjects, school_id=school_id)
+        marks_by_key = {(m.student_id, m.exam_subject_id): m for m in class_marks}
+        is_weighted_calc = use_weighted and exams.count() > 1
+        class_stats = []
+        for classmate in class_students:
+            stats = self._compute_overall_stats(classmate.id, exams, es_by_exam, marks_by_key, use_weighted)
+            if stats is not None:
+                class_stats.append((classmate.id, stats))
+        class_stats.sort(key=lambda item: item[1]['percentage'] if is_weighted_calc else item[1]['obtained'], reverse=True)
+        rank = None
+        class_size = len(class_stats)
+        for idx, (sid, _stats) in enumerate(class_stats):
+            if sid == student.id:
+                rank = idx + 1
+                break
+
+        # Latest teacher-entered assessment (conduct ratings + remarks) whose month
+        # falls inside this term - per product decision, "latest" wins over averaging.
+        term_months = self._months_in_range(period_start, period_end)
+        assessments = list(StudentTermAssessment.objects.filter(
+            school_id=school_id, student=student, academic_year_id=enrollment.academic_year_id,
+            month__in=term_months,
+        ))
+        latest_assessment = None
+        if assessments:
+            month_order = {m: i for i, m in enumerate(term_months)}
+            latest_assessment = max(assessments, key=lambda a: month_order.get(a.month, -1))
+
+        conduct_assessment = None
+        if latest_assessment:
+            rating_labels = dict(StudentTermAssessment.Rating.choices)
+
+            def _ratings(fields):
+                return [
+                    {
+                        'field': field,
+                        'label': label,
+                        'rating': getattr(latest_assessment, field),
+                        'rating_label': rating_labels.get(getattr(latest_assessment, field)),
+                    }
+                    for field, label in fields
+                ]
+
+            conduct_assessment = {
+                'month': latest_assessment.month,
+                'skills': _ratings(self.ASSESSMENT_SKILL_FIELDS),
+                'behaviour': _ratings(self.ASSESSMENT_BEHAVIOUR_FIELDS),
+                'teacher_remark': latest_assessment.teacher_remark,
+                'principal_remark': latest_assessment.principal_remark,
+            }
+
         return Response({
             'student_name': student.name,
             'roll_number': enrollment.roll_number or student.roll_number,
             'class_name': enrollment_class_name,
             'school_name': student.school.name,
             'academic_year_name': enrollment.academic_year.name,
-            'term_name': exams[0].term.name if exams and exams[0].term else None,
+            'term_name': report_term.name if report_term else None,
+            'exam_display': exam_display,
+            'exam_names': exam_names,
+            'guardian_name': student.guardian_name or student.parent_name or '',
+            'photo_url': student.photo_url or '',
+            'attendance': attendance,
+            'class_size': class_size,
+            'conduct_assessment': conduct_assessment,
+            'promotion_status': enrollment.get_status_display() if enrollment.status else None,
             'enrollment_info': {
                 'enrollment_id': enrollment.id,
                 'class_at_report_session': enrollment_class_name,
@@ -2506,6 +2672,7 @@ class ReportCardView(ModuleAccessMixin, APIView):
                 'total_possible': float(grand_total_possible),
                 'percentage': round(overall_pct, 2),
                 'grade': overall_grade,
+                'rank': rank,
                 'overall_pass': all(s['is_pass'] for s in subject_summaries) if subject_summaries else False,
                 'calculation_mode': 'weighted' if use_weighted and exams.count() > 1 else 'simple',
             },
@@ -3591,7 +3758,13 @@ class PaperUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
 
     @action(detail=False, methods=['post'], url_path='upload-image')
     def upload_image(self, request):
-        """Upload paper image and trigger OCR processing."""
+        """Upload paper image and trigger OCR processing.
+
+        Multi-page capture: omit group_id for page 1 (a new one is generated and
+        returned in the response); pass that same group_id back for page 2, 3, ...
+        so the OCR task can build continuation context from the prior page(s) of
+        this group. page_number is auto-computed server-side when omitted.
+        """
         from core.storage import SupabaseStorageService
         from .tasks import process_paper_upload_ocr
         
@@ -3602,13 +3775,30 @@ class PaperUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
         context_class_id = serializer.validated_data.get('class_obj')
         context_subject_id = serializer.validated_data.get('subject')
         school_id = _resolve_school_id(request)
-        
+
         if not school_id:
             return Response(
                 {'detail': 'School ID is required'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
+        # Multi-page capture: no group_id means this is page 1 of a new session --
+        # generate one for the frontend to echo back on subsequent pages. When a
+        # group_id IS given, compute the next page_number server-side (rather than
+        # trusting the client's own count) so a retried/duplicate request can't
+        # collide with or skip a page number already used in this group.
+        import uuid as uuid_lib
+        group_id = serializer.validated_data.get('group_id')
+        page_number = serializer.validated_data.get('page_number')
+        if group_id is None:
+            group_id = uuid_lib.uuid4()
+            page_number = 1
+        elif page_number is None:
+            last_page_number = PaperUpload.objects.filter(
+                school_id=school_id, group_id=group_id
+            ).order_by('-page_number').values_list('page_number', flat=True).first()
+            page_number = (last_page_number or 0) + 1
+
         try:
             # Upload to Supabase storage
             storage_service = SupabaseStorageService()
@@ -3629,6 +3819,8 @@ class PaperUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
                 school_id=school_id,
                 uploaded_by=request.user,
                 image_url=image_url,
+                group_id=group_id,
+                page_number=page_number,
                 context_class_id=context_class_id,
                 context_subject_id=context_subject_id,
                 status=PaperUpload.Status.PENDING

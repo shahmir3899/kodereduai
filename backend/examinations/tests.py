@@ -14,15 +14,19 @@ from schools.models import Organization, School
 from students.models import Class
 
 from .models import ExamPaper, PaperFeedback, PaperQuestion, PaperUpload, Question
-from .paper_ocr_processor import PaperOCRProcessor, _parse_structured_paper
+from .paper_ocr_processor import PaperOCRProcessor, _build_continuation_hint, _build_extraction_prompt, _parse_structured_paper
+from .tasks import _build_continuation_context
 
 
-def _make_school():
-    org = Organization.objects.create(name='Exam Test Org', slug='exam-test-org')
+def _make_school(suffix=''):
+    """suffix lets a single test class create more than one school without colliding
+    on Organization.slug/School.subdomain's uniqueness constraints -- every existing
+    call site omits it and keeps today's fixed values."""
+    org = Organization.objects.create(name=f'Exam Test Org{suffix}', slug=f'exam-test-org{suffix}')
     return School.objects.create(
         organization=org,
-        name='Exam Test School',
-        subdomain='exam-test-school',
+        name=f'Exam Test School{suffix}',
+        subdomain=f'exam-test-school{suffix}',
     )
 
 
@@ -716,6 +720,146 @@ class PaperOCRProcessorLLMTests(TestCase):
         self.assertIsInstance(parsed['questions'], list)
 
 
+class MultiPageContinuationPromptTests(TestCase):
+    """_build_continuation_hint / _build_extraction_prompt: page 2+ of a multi-page
+    capture must carry forward a summary of prior pages, and page 1 must not."""
+
+    def test_no_continuation_context_produces_empty_hint(self):
+        self.assertEqual(_build_continuation_hint(None), '')
+        self.assertEqual(_build_continuation_hint({}), '')
+
+    def test_continuation_hint_includes_page_number_and_last_section(self):
+        hint = _build_continuation_hint({
+            'page_number': 2,
+            'header': {'class_label': 'FIFTH', 'subject_label': 'SS'},
+            'last_section': {
+                'title': 'Section B',
+                'instruction': 'Attempt any five Questions',
+                'question_type_guess': 'SHORT',
+            },
+            'questions_so_far': 3,
+            'marks_so_far': 15,
+        })
+
+        self.assertIn('page 2', hint)
+        self.assertIn("class_label: 'FIFTH'", hint)
+        self.assertIn("'Section B'", hint)
+        self.assertIn('Attempt any five Questions', hint)
+        self.assertIn('3 question(s)', hint)
+        self.assertIn('15 mark(s)', hint)
+
+    def test_continuation_hint_handles_no_prior_sections(self):
+        hint = _build_continuation_hint({
+            'page_number': 2,
+            'header': {},
+            'last_section': None,
+            'questions_so_far': 0,
+            'marks_so_far': 0,
+        })
+
+        self.assertIn('no sections extracted yet', hint)
+
+    def test_prompt_omits_continuation_block_when_absent(self):
+        # Rule 8's static text always mentions "MULTI-PAGE CONTEXT" (it's a
+        # conditional instruction for the model to follow *if* present) -- so assert
+        # on the dynamic hint's own wording instead of that static phrase.
+        prompt = _build_extraction_prompt(ocr_text='some text', continuation_context=None)
+        self.assertNotIn('is page', prompt)
+        self.assertNotIn('Page(s) before this one', prompt)
+
+    def test_prompt_includes_continuation_block_when_present(self):
+        prompt = _build_extraction_prompt(
+            ocr_text='some text',
+            continuation_context={
+                'page_number': 2,
+                'header': {},
+                'last_section': None,
+                'questions_so_far': 0,
+                'marks_so_far': 0,
+            },
+        )
+        self.assertIn('MULTI-PAGE CONTEXT', prompt)
+
+
+class BuildContinuationContextFromPriorPagesTests(TestCase):
+    """tasks._build_continuation_context reads prior PaperUpload rows in the same
+    group_id, scoped to the same school, to feed the prompt builder above."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.school = _make_school()
+        cls.other_school = _make_school(suffix='-cc')
+        cls.user = get_user_model().objects.create_superuser(
+            username='continuation_admin',
+            email='continuation_admin@test.com',
+            password='test12345',
+        )
+
+    def _make_upload(self, school, group_id, page_number, ai_extracted_json=None):
+        return PaperUpload.objects.create(
+            school=school,
+            uploaded_by=self.user,
+            image_url='https://example.test/p.png',
+            group_id=group_id,
+            page_number=page_number,
+            ai_extracted_json=ai_extracted_json,
+            status=PaperUpload.Status.EXTRACTED,
+        )
+
+    def test_returns_none_for_page_one(self):
+        import uuid
+        page1 = self._make_upload(self.school, uuid.uuid4(), 1)
+        self.assertIsNone(_build_continuation_context(page1))
+
+    def test_returns_none_when_group_id_absent(self):
+        page = PaperUpload.objects.create(
+            school=self.school,
+            uploaded_by=self.user,
+            image_url='https://example.test/p.png',
+            page_number=2,  # nonsensical without a group, but must still short-circuit
+            status=PaperUpload.Status.EXTRACTED,
+        )
+        self.assertIsNone(_build_continuation_context(page))
+
+    def test_summarizes_prior_page_for_page_two(self):
+        import uuid
+        group_id = uuid.uuid4()
+        self._make_upload(self.school, group_id, 1, ai_extracted_json={
+            'header': {'class_label': 'FIFTH', 'subject_label': 'SS'},
+            'sections': [{'title': 'Section A', 'instruction': None, 'question_type_guess': 'MCQ'}],
+            'questions': [{'question_text': 'Q1'}, {'question_text': 'Q2'}],
+            'computed_total_marks': 10,
+        })
+        page2 = self._make_upload(self.school, group_id, 2)
+
+        context = _build_continuation_context(page2)
+
+        self.assertEqual(context['page_number'], 2)
+        self.assertEqual(context['header']['class_label'], 'FIFTH')
+        self.assertEqual(context['last_section']['title'], 'Section A')
+        self.assertEqual(context['questions_so_far'], 2)
+        self.assertEqual(context['marks_so_far'], 10)
+
+    def test_does_not_leak_another_schools_group_id_collision(self):
+        """A group_id that happens to also exist under another school must not
+        contribute that school's extraction data as continuation context."""
+        import uuid
+        group_id = uuid.uuid4()
+        self._make_upload(self.other_school, group_id, 1, ai_extracted_json={
+            'header': {'class_label': 'OTHER SCHOOL CLASS'},
+            'sections': [{'title': 'Other School Section', 'instruction': None, 'question_type_guess': 'MCQ'}],
+            'questions': [{'question_text': 'Q1'}],
+            'computed_total_marks': 5,
+        })
+        page2 = self._make_upload(self.school, group_id, 2)
+
+        context = _build_continuation_context(page2)
+
+        # This school has no prior page in this group_id -- must come back None,
+        # not the other school's data.
+        self.assertIsNone(context)
+
+
 class PaperUploadContextPersistenceTests(TestCase):
     """Uploading with class/subject must persist them on PaperUpload (context only —
     final selection always happens in the UI)."""
@@ -771,6 +915,89 @@ class PaperUploadContextPersistenceTests(TestCase):
         upload = PaperUpload.objects.get(id=response.json()['id'])
         self.assertIsNone(upload.context_class_id)
         self.assertIsNone(upload.context_subject_id)
+
+
+class PaperUploadMultiPageGroupingTests(TestCase):
+    """group_id/page_number let the frontend chain sequential page uploads into one
+    multi-page capture session -- see backend/examinations/tasks.py's continuation
+    context lookup, which relies on this grouping to find the prior page(s)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.school = _make_school()
+        cls.other_school = _make_school(suffix='-2')
+        cls.user = get_user_model().objects.create_superuser(
+            username='multipage_admin',
+            email='multipage_admin@test.com',
+            password='test12345',
+        )
+
+    def setUp(self):
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+        self.school_header = {'HTTP_X_SCHOOL_ID': str(self.school.id)}
+
+    def _upload(self, group_id=None, page_number=None):
+        data = {'image': SimpleUploadedFile('paper.png', TINY_PNG_BYTES, content_type='image/png')}
+        if group_id is not None:
+            data['group_id'] = str(group_id)
+        if page_number is not None:
+            data['page_number'] = page_number
+        return self.client.post(
+            '/api/examinations/paper-uploads/upload-image/',
+            data,
+            format='multipart',
+            **self.school_header,
+        )
+
+    @patch('examinations.tasks.process_paper_upload_ocr')
+    @patch('core.storage.SupabaseStorageService.upload_file')
+    def test_first_page_generates_a_group_id(self, mock_upload_file, mock_ocr_task):
+        mock_upload_file.return_value = 'https://example.test/papers/1/test.png'
+
+        response = self._upload()
+
+        self.assertEqual(response.status_code, 201)
+        body = response.json()
+        self.assertIsNotNone(body['group_id'])
+        self.assertEqual(body['page_number'], 1)
+
+    @patch('examinations.tasks.process_paper_upload_ocr')
+    @patch('core.storage.SupabaseStorageService.upload_file')
+    def test_second_page_reuses_group_id_and_auto_increments_page_number(self, mock_upload_file, mock_ocr_task):
+        mock_upload_file.return_value = 'https://example.test/papers/1/test.png'
+
+        first = self._upload().json()
+        second = self._upload(group_id=first['group_id']).json()
+        third = self._upload(group_id=first['group_id']).json()
+
+        self.assertEqual(second['group_id'], first['group_id'])
+        self.assertEqual(second['page_number'], 2)
+        self.assertEqual(third['page_number'], 3)
+
+    @patch('examinations.tasks.process_paper_upload_ocr')
+    @patch('core.storage.SupabaseStorageService.upload_file')
+    def test_page_number_auto_increment_is_scoped_per_school(self, mock_upload_file, mock_ocr_task):
+        """A group_id colliding across schools (e.g. a crafted request) must not let
+        one school's page count influence another's numbering or grouping."""
+        mock_upload_file.return_value = 'https://example.test/papers/1/test.png'
+
+        first = self._upload().json()
+
+        other_header = {'HTTP_X_SCHOOL_ID': str(self.other_school.id)}
+        other_response = self.client.post(
+            '/api/examinations/paper-uploads/upload-image/',
+            {
+                'image': SimpleUploadedFile('paper.png', TINY_PNG_BYTES, content_type='image/png'),
+                'group_id': first['group_id'],
+            },
+            format='multipart',
+            **other_header,
+        )
+
+        self.assertEqual(other_response.status_code, 201)
+        # Not page 2 -- this school has no prior page in this group_id, so it starts fresh.
+        self.assertEqual(other_response.json()['page_number'], 1)
 
 
 class ConfirmExtractionFeedbackOnlyTests(TestCase):

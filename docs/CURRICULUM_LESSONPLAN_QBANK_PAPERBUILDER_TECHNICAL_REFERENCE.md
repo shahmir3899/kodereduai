@@ -296,7 +296,9 @@ Add/Edit modal fields:
 ## 3.4 Paper Builder page (`/academics/paper-builder`)
 
 Implemented as a 3-step wizard (`QuestionPaperBuilderPage.jsx`), not top-level tabs —
-"tabs" only appear once, as a one-time source picker inside step 3.
+"tabs" only appear once, as a one-time source picker inside step 3. Notifications use
+the shared `useToast()` hook (not a locally-managed `<Toast>` instance) so they queue
+correctly alongside other app-wide toasts.
 
 Step 1: Paper Setup
 - `Class` (required), `Subject` (required), `Exam` (optional)
@@ -304,11 +306,20 @@ Step 1: Paper Setup
   their own), `total_marks`, `duration_minutes`, `instructions`
 - Answer-lines export toggle (`render_options.answer_lines`)
 - Shortcut into image-capture mode directly from this step
+- Resuming a draft maps `ExamPaper.class_obj` (a Master Class id) back to the
+  matching Session Class id for the active academic year, since `paperMetadata.class_obj`
+  and `<ClassSelector scope="session">` work in session-class ids everywhere else on this
+  page. A safety-net effect retries the mapping once `sessionClasses` finishes loading, in
+  case the resume-draft hydration ran first.
+- "Open Draft" on step 1, when already sitting on that draft's own URL, shows a
+  "Draft saved." toast instead of a no-op `navigate()` to the same route.
 
 Step 2: Paper Structure
 - Section-by-section builder (`PaperStructureBuilder`): `question_type`,
   `slots_shown`/`slots_counted` (supports choice questions, e.g. "answer 3 of 5"),
   `marks_per_question` per section
+- Default section titles are `Question # 1`, `Question # 2`, ... (question groups only —
+  divider rows run their own independent `Section - A`, `Section - B`, ... sequence)
 - Allocated-vs-total marks mismatch is advisory: a confirm dialog on "Next," not a
   hard block. The mismatch is also persisted server-side as `marks_reconciled` on
   the paper (see 4.4), so a dismissed/skipped confirm still surfaces later.
@@ -319,6 +330,14 @@ Step 3: Add Questions + Coverage
   or **Capture from image** (`ImageCapturePaperTab`)
 - Question editor fields: `question_text`, `question_type`, `difficulty_level`,
   `marks`, type-specific options/answers
+- FILL_BLANK no longer requires `accepted_answers`/`answer_text` up front (backend and
+  editor both relax this) — a blank can be created before its answer is known and filled
+  in later; it just can't auto-grade until then. Same relaxation applies to
+  SHORT/LONG/ESSAY's `answer_text` requirement.
+- Attaching an existing question from the bank/lesson-plan picker (`BankFillSource`) no
+  longer re-validates its content against today's completeness rules — it's an
+  attach-by-reference that always succeeds, so reusing an older question that predates a
+  since-tightened rule isn't wrongly blocked. Only genuinely new questions are validated.
 - Curriculum Coverage sidebar: SLO coverage %, covered/uncovered SLO lists, and a
   Bloom's-taxonomy distribution chart (warns above 70% Remember/Understand) — all
   rendered from the single `coverage_stats` response (see 4.4), no per-lesson-plan
@@ -329,6 +348,36 @@ Persistence is draft-first, not standard create/update: `ensure-draft` creates t
 `ExamPaper` row lazily once class+subject+title exist client-side, then `autosave`
 debounces (900ms) on every edit. Coverage stats refetch after each successful
 autosave rather than on a timer.
+
+### Exam Papers list page (`ExamPapersPage.jsx`)
+- Row checkboxes + "select all on this page" (selection is page-scoped: changing the
+  filters or page clears it rather than trying to reconcile stale ids)
+- Per-row **Delete** and a floating bulk "Delete Selected (N)" bar, both behind a
+  `useConfirmModal()` confirm dialog — `DELETE /exam-papers/{id}/` and
+  `POST /exam-papers/bulk_delete/` (see 4.4). Bulk delete reports partial failures
+  (`skipped`) as a warning toast rather than failing the whole batch.
+
+### Export layout (PDF/DOCX generation)
+- Numbering changed from one continuous counter across the whole paper to per-group
+  lettered sub-parts, Cambridge/GCSE-style: each section ("Question # N") numbers its
+  own items `N(a)`, `N(b)`, `N(c)`... instead of a running `Q6, Q7, Q8...` that didn't
+  match the section's own heading. A trailing question with no section (the
+  'unstructured' block) isn't part of any lettered group and just gets the next plain
+  group number.
+- A section's instruction line now falls back to a per-question-type default (e.g. "Tick
+  True if the statement is correct, or False if it is incorrect.") when the section
+  author left `instruction` blank, instead of printing nothing — a custom `instruction`
+  on the section still wins. See `DEFAULT_TYPE_INSTRUCTIONS` in `paper_export_layout.py`.
+- FILL_BLANK export no longer prints the stored answer text next to the blank it's
+  meant to test (that used to leak the answer directly on the paper) — it now prints a
+  generic numbered `Blank N: __________` line per blank.
+- Question/instruction HTML (TipTap rich text, including inline KaTeX equations and
+  RTL wrapper divs) is sanitized through `backend/examinations/html_sanitize.py` before
+  reaching either exporter — previously a KaTeX span's `class`/`style` attributes could
+  crash ReportLab's PDF `Paragraph` parser outright, and `strip_tags` in the DOCX path
+  would concatenate KaTeX's MathML glyphs, its `<annotation>` LaTeX source, and stray
+  visual-tree text into garbled duplicated output. RTL shaping itself is still
+  unsolved — the `dir`/`lang` wrapper is dropped, not rendered right-to-left.
 
 ---
 
@@ -411,7 +460,13 @@ Draft/manual flow:
 
 Paper CRUD and lesson-plan alignment:
 - `GET/POST /api/examinations/exam-papers/`
-- `GET/PATCH/DELETE /api/examinations/exam-papers/{id}/`
+- `GET/PATCH/DELETE /api/examinations/exam-papers/{id}/` — `DELETE` (soft-delete via
+  `is_active=False`) now enforces the same `_validate_paper_manage_scope` check as
+  create/update; previously any authenticated school user could soft-delete any paper
+  regardless of class/subject assignment
+- `POST /api/examinations/exam-papers/bulk_delete/` — body `{ids: [...]}`, scoped to the
+  caller's own queryset (tenant + teacher-scope); returns `{deleted: [...], skipped: [{id,
+  reason}]}` rather than erroring the whole batch on one bad/forbidden id
 - `POST /api/examinations/exam-papers/create_from_lessons/`
 - `POST /api/examinations/exam-papers/{id}/link_lesson_plans/`
 - `GET /api/examinations/exam-papers/{id}/coverage_stats/`
@@ -428,7 +483,10 @@ Export/review:
 - `POST /api/examinations/exam-papers/review-questions/`
 
 OCR paper capture flow:
-- `POST /api/examinations/paper-uploads/upload-image/`
+- `POST /api/examinations/paper-uploads/upload-image/` — routes through
+  `SupabaseStorageService.upload_file()`; this method didn't exist until the
+  "paper builder imp" fixes, so every image upload previously failed with an
+  `AttributeError` swallowed into a generic 500
 - `GET /api/examinations/paper-uploads/{id}/`
 - `POST /api/examinations/paper-uploads/{id}/confirm/`
 
@@ -470,4 +528,23 @@ OCR paper capture flow:
 7. Intelligence and audit surfaces are now first-class.
 - AI generation endpoints return `ai_job_id` and can be reviewed/accepted through the central AI job flow.
 - Curriculum and questions support semantic search over embeddings.
+
+8. Exam-paper delete now goes through the same manage-scope check as writes.
+- `perform_destroy` and `bulk_delete` both call `_validate_paper_manage_scope`
+  (see note 5) before soft-deleting — a gap that previously let any authenticated
+  school user delete another teacher's paper.
+
+9. Question content-completeness validation only applies to newly-authored questions.
+- Attaching an existing bank question to a paper (`review-questions` attach-by-reference)
+  skips `QuestionCreateUpdateSerializer` validation entirely and reuses the question's
+  content as-is; FILL_BLANK/SHORT/LONG/ESSAY answer-completeness checks in
+  `QuestionCreateUpdateSerializer` were also relaxed for question *creation* itself —
+  don't reintroduce a hard requirement there without checking both paths.
+
+10. Paper export numbering and rich-text sanitization live in dedicated modules.
+- `paper_export_layout.py` numbers each structure section as its own lettered group
+  (`N(a)`, `N(b)`, ...) rather than one running counter — see 3.4.
+- `html_sanitize.py` is the single place TipTap/KaTeX HTML is cleaned before either
+  the PDF (ReportLab `Paragraph`) or DOCX (`strip_tags`-based) exporter sees it; extend
+  it rather than adding ad hoc tag-stripping in either generator.
 - Content and question editing now keeps revision history for restore and traceability.
