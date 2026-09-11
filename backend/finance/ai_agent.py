@@ -141,59 +141,107 @@ class FinanceAIAgent:
 
             messages.append({"role": "user", "content": user_message})
 
-            # Multi-round tool-calling loop (up to 3 rounds)
+            # Multi-round tool-calling loop (up to 3 rounds).
+            # `.content` can legitimately be None (some Groq models emit only
+            # reasoning on a given turn) — always coalesce before `.strip()`,
+            # otherwise an AttributeError here gets caught by the outer except
+            # and silently degrades every query to the generic fallback text.
             response = client.chat.completions.create(
                 model=settings.GROQ_MODEL,
                 messages=messages,
                 temperature=0.3,
                 max_tokens=1000,
+                reasoning_effort='low',
             )
-            content = response.choices[0].message.content.strip()
+            content = (response.choices[0].message.content or '').strip()
 
             max_tool_rounds = 3
+            executed_any_tool = False
             for _ in range(max_tool_rounds):
+                # Try to parse as JSON tool call
+                if '```json' in content:
+                    json_str = content.split('```json')[1].split('```')[0]
+                elif '```' in content:
+                    json_str = content.split('```')[1].split('```')[0]
+                elif content.startswith('{'):
+                    json_str = content
+                else:
+                    break  # Not a tool call — final answer (may be empty, handled below)
+
                 try:
-                    # Try to parse as JSON tool call
-                    if '```json' in content:
-                        json_str = content.split('```json')[1].split('```')[0]
-                    elif '```' in content:
-                        json_str = content.split('```')[1].split('```')[0]
-                    elif content.strip().startswith('{'):
-                        json_str = content.strip()
-                    else:
-                        break  # Not a tool call — final answer
-
                     tool_call = json.loads(json_str)
-                    if 'tool' not in tool_call:
-                        break
+                except json.JSONDecodeError:
+                    # Model didn't actually return a clean tool call this round —
+                    # treat the prior content as the final answer rather than
+                    # silently discarding it.
+                    break
 
-                    if tool_call.get('tool') == 'none':
-                        return tool_call.get('answer', "I can help with questions about fees, expenses, and school finances.")
+                if 'tool' not in tool_call:
+                    break
 
-                    # Execute tool
-                    tool_name = tool_call.get('tool', '')
-                    params = tool_call.get('params', {})
+                if tool_call.get('tool') == 'none':
+                    return tool_call.get('answer', "I can help with questions about fees, expenses, and school finances.")
+
+                # Execute tool
+                tool_name = tool_call.get('tool', '')
+                params = tool_call.get('params', {})
+                try:
                     data = self._execute_tool(tool_name, params)
+                except Exception as tool_error:
+                    # Don't let a bad tool call fall through to the outer except
+                    # (which would leak the raw, unexecuted JSON to the user via
+                    # the fallback path) — surface a clear message instead.
+                    logger.error(
+                        f"Finance AI tool '{tool_name}' failed: {tool_error}", exc_info=True
+                    )
+                    return (
+                        "I found a matching request but hit an error looking up that "
+                        "data. Please try rephrasing your question."
+                    )
 
-                    # Append tool result and call LLM again
-                    messages.append({"role": "assistant", "content": content})
-                    messages.append({"role": "user", "content": f"Tool result: {json.dumps(data, cls=DecimalEncoder)}"})
+                # Append tool result and call LLM again
+                executed_any_tool = True
+                messages.append({"role": "assistant", "content": content})
+                messages.append({"role": "user", "content": f"Tool result: {json.dumps(data, cls=DecimalEncoder)}"})
 
+                response = client.chat.completions.create(
+                    model=settings.GROQ_MODEL,
+                    messages=messages,
+                    temperature=0.3,
+                    max_tokens=1000,
+                    reasoning_effort='low',
+                )
+                content = (response.choices[0].message.content or '').strip()
+
+            if not content:
+                if executed_any_tool:
+                    # We successfully fetched data but the model failed to
+                    # summarize it (empty content) — ask once more explicitly
+                    # rather than showing a blank chat bubble.
+                    messages.append({
+                        "role": "user",
+                        "content": "Summarize the tool result above in a clear, direct answer.",
+                    })
                     response = client.chat.completions.create(
                         model=settings.GROQ_MODEL,
                         messages=messages,
                         temperature=0.3,
                         max_tokens=1000,
+                        reasoning_effort='low',
                     )
-                    content = response.choices[0].message.content.strip()
-
-                except (json.JSONDecodeError, IndexError, KeyError):
-                    break
+                    content = (response.choices[0].message.content or '').strip()
+                if not content:
+                    return (
+                        "I looked that up but couldn't put together a clear answer. "
+                        "Please try asking again."
+                        if executed_any_tool else
+                        "I couldn't generate a response to that. Please try rephrasing your question."
+                    )
 
             return content
 
         except Exception as e:
-            logger.error(f"Finance AI agent error: {e}")
+            logger.error(f"Finance AI agent error: {e}", exc_info=True)
             return self._fallback_response(user_message)
 
     def _execute_tool(self, tool_name, params):
