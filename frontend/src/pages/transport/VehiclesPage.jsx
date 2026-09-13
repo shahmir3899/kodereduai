@@ -4,6 +4,8 @@ import { transportApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import Spinner from '../../components/ui/Spinner'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
+import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
+import { useViewPreference } from '../../hooks/useViewPreference'
 
 const VEHICLE_TYPES = [
   { value: 'BUS', label: 'Bus' },
@@ -32,6 +34,7 @@ export default function VehiclesPage() {
   const { user } = useAuth()
   const queryClient = useQueryClient()
 
+  const [view, setView] = useViewPreference('vehicles')
   const [showModal, setShowModal] = useState(false)
   const [editingVehicle, setEditingVehicle] = useState(null)
   const [vehicleForm, setVehicleForm] = useState(emptyForm)
@@ -172,34 +175,36 @@ export default function VehiclesPage() {
           </div>
         ) : (
           <>
-            {/* Mobile card view */}
-            <div className="sm:hidden space-y-3">
-              {vehicles.map((vehicle) => (
-                <div key={vehicle.id} className="p-3 border border-gray-200 rounded-lg">
-                  <div className="flex items-center justify-between">
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium text-sm text-gray-900">{vehicle.vehicle_number}</p>
-                      <p className="text-xs text-gray-500">{vehicle.make_model || 'No make/model'}</p>
-                    </div>
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ml-2 ${VEHICLE_TYPE_BADGES[vehicle.vehicle_type] || 'bg-gray-100 text-gray-800'}`}>
-                      {vehicle.vehicle_type}
-                    </span>
-                  </div>
-                  <div className="mt-2 text-xs text-gray-500 space-y-1">
-                    <p>Capacity: {vehicle.capacity || '--'}</p>
-                    {vehicle.driver_name && <p>Driver: {vehicle.driver_name} ({vehicle.driver_phone || '--'})</p>}
-                    <p>Route: {getRouteName(vehicle.assigned_route)}</p>
-                  </div>
-                  <div className="flex gap-3 mt-2 pt-2 border-t border-gray-100">
-                    <button onClick={() => openEditModal(vehicle)} className="text-xs text-blue-600 font-medium">Edit</button>
-                    <button onClick={() => setDeleteConfirm(vehicle)} className="text-xs text-red-600 font-medium">Delete</button>
-                  </div>
-                </div>
-              ))}
+            <div className="flex justify-end mb-3">
+              <ViewToggle view={view} onChange={setView} />
             </div>
 
-            {/* Desktop table view */}
-            <div className="hidden sm:block overflow-x-auto">
+            {view === 'cards' ? (
+            <CardGrid>
+              {vehicles.map((vehicle) => (
+                <RecordCard
+                  key={vehicle.id}
+                  title={vehicle.vehicle_number}
+                  meta={vehicle.make_model || 'No make/model'}
+                  status={
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${VEHICLE_TYPE_BADGES[vehicle.vehicle_type] || 'bg-gray-100 text-gray-800'}`}>
+                      {vehicle.vehicle_type}
+                    </span>
+                  }
+                  fields={[
+                    { label: 'Capacity', value: vehicle.capacity || '--' },
+                    { label: 'Route', value: getRouteName(vehicle.assigned_route) },
+                    ...(vehicle.driver_name ? [{ label: 'Driver', value: `${vehicle.driver_name} (${vehicle.driver_phone || '--'})` }] : []),
+                  ]}
+                  actions={[
+                    { label: 'Edit', tone: 'info', onClick: () => openEditModal(vehicle) },
+                    { label: 'Delete', tone: 'danger', onClick: () => setDeleteConfirm(vehicle) },
+                  ]}
+                />
+              ))}
+            </CardGrid>
+            ) : (
+            <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
@@ -246,6 +251,7 @@ export default function VehiclesPage() {
                 </tbody>
               </table>
             </div>
+            )}
           </>
         )}
       </div>

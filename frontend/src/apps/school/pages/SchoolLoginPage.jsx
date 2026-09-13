@@ -128,9 +128,18 @@ export default function SchoolLoginPage({ school }) {
             </div>
 
             <div className="mb-6">
-              <label className="label" htmlFor="password">
-                Password
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="label" htmlFor="password">
+                  Password
+                </label>
+                <button
+                  type="button"
+                  onClick={() => navigate('/forgot-password')}
+                  className="text-sm text-primary-600 hover:text-primary-700 bg-transparent border-0 p-0 cursor-pointer"
+                >
+                  Forgot password?
+                </button>
+              </div>
               <PasswordInput
                 id="password"
                 className="input bg-blue-100"

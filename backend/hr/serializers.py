@@ -511,7 +511,7 @@ class StaffDocumentSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'school', 'staff_member', 'staff_member_name', 'staff_employee_id',
             'document_type', 'document_type_display',
-            'title', 'file_url', 'notes',
+            'title', 'file_url', 'notes', 'expiry_date',
             'uploaded_at',
         ]
         read_only_fields = [
@@ -524,4 +524,4 @@ class StaffDocumentSerializer(serializers.ModelSerializer):
 class StaffDocumentCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = StaffDocument
-        fields = ['staff_member', 'document_type', 'title', 'file_url', 'notes']
+        fields = ['staff_member', 'document_type', 'title', 'file_url', 'notes', 'expiry_date']

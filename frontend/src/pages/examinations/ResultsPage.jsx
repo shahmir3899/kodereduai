@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { examinationsApi, sessionsApi } from '../../services/api'
+import { examinationsApi } from '../../services/api'
 import ClassSelector from '../../components/ClassSelector'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
@@ -30,11 +30,6 @@ export default function ResultsPage() {
   }, [activeAcademicYear?.id])
 
   // Queries
-  const { data: yearsRes } = useQuery({
-    queryKey: ['academicYears'],
-    queryFn: () => sessionsApi.getAcademicYears({ page_size: 9999 }),
-  })
-
   const { data: examsRes } = useQuery({
     queryKey: ['exams', yearFilter, classFilter, resolvedClassFilter],
     queryFn: () => examinationsApi.getExams({
@@ -78,7 +73,6 @@ export default function ResultsPage() {
     onError: () => setCommentMsg('Failed to generate comments.'),
   })
 
-  const years = yearsRes?.data?.results || yearsRes?.data || []
   const exams = examsRes?.data?.results || examsRes?.data || []
   const results = resultsRes?.data?.results || resultsRes?.data || []
   const summary = summaryRes?.data || null
@@ -94,14 +88,7 @@ export default function ResultsPage() {
 
       {/* Selection */}
       <div className="card mb-4">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Academic Year</label>
-            <select value={yearFilter} onChange={e => { setYearFilter(e.target.value); setSelectedExamId('') }} className="input w-full text-sm">
-              <option value="">All Years</option>
-              {years.map(y => <option key={y.id} value={y.id}>{y.name}</option>)}
-            </select>
-          </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">Class</label>
             <ClassSelector

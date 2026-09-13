@@ -6,6 +6,8 @@ import Spinner from '../../components/ui/Spinner'
 import Badge from '../../components/ui/Badge'
 import { useDebounce } from '../../hooks/useDebounce'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
+import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
+import { useViewPreference } from '../../hooks/useViewPreference'
 
 function getDaysOverdue(dueDateStr) {
   if (!dueDateStr) return 0
@@ -29,6 +31,8 @@ export default function BookIssuePage() {
   const queryClient = useQueryClient()
 
   const [activeTab, setActiveTab] = useState('issue')
+  const [activeView, setActiveView] = useViewPreference('book-issues-active')
+  const [returnView, setReturnView] = useViewPreference('book-issues-return')
 
   // --- Issue Tab State ---
   const [issueForm, setIssueForm] = useState({
@@ -443,38 +447,33 @@ export default function BookIssuePage() {
               </div>
             ) : (
               <>
-                {/* Mobile card view */}
-                <div className="sm:hidden divide-y divide-gray-200">
+                <div className="flex justify-end p-2">
+                  <ViewToggle view={activeView} onChange={setActiveView} />
+                </div>
+
+                {activeView === 'cards' ? (
+                <CardGrid className="p-2">
                   {activeIssues.map((issue) => {
                     const days = getDaysOverdue(issue.due_date)
                     return (
-                      <div key={issue.id} className="p-4">
-                        <div className="flex items-start justify-between mb-1">
-                          <p className="font-medium text-sm text-gray-900">{issue.book_title || issue.book?.title || '-'}</p>
-                          {days > 0 && (
-                            <Badge tone="danger" className="flex-shrink-0 ml-2">
-                              {days}d overdue
-                            </Badge>
-                          )}
-                        </div>
-                        <p className="text-xs text-gray-500">
-                          {issue.borrower_name || '-'} ({issue.borrower_type})
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          Issued: {formatDate(issue.issue_date)} | Due: {formatDate(issue.due_date)}
-                        </p>
-                        <div className="mt-2 pt-2 border-t border-gray-100">
-                          <button onClick={() => handleReturn(issue)} className="text-xs text-blue-600 font-medium">
-                            Return
-                          </button>
-                        </div>
-                      </div>
+                      <RecordCard
+                        key={issue.id}
+                        title={issue.book_title || issue.book?.title || '-'}
+                        meta={`${issue.borrower_name || '-'} (${issue.borrower_type})`}
+                        status={days > 0 ? <Badge tone="danger">{days}d overdue</Badge> : null}
+                        fields={[
+                          { label: 'Issued', value: formatDate(issue.issue_date) },
+                          { label: 'Due', value: formatDate(issue.due_date) },
+                        ]}
+                        actions={[
+                          { label: 'Return', tone: 'info', onClick: () => handleReturn(issue) },
+                        ]}
+                      />
                     )
                   })}
-                </div>
-
-                {/* Desktop table */}
-                <div className="hidden sm:block overflow-x-auto">
+                </CardGrid>
+                ) : (
+                <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                       <tr>
@@ -532,6 +531,7 @@ export default function BookIssuePage() {
                     </tbody>
                   </table>
                 </div>
+                )}
               </>
             )}
           </div>
@@ -576,42 +576,35 @@ export default function BookIssuePage() {
               </div>
             ) : (
               <>
-                {/* Mobile card view */}
-                <div className="sm:hidden divide-y divide-gray-200">
+                <div className="flex justify-end p-2">
+                  <ViewToggle view={returnView} onChange={setReturnView} />
+                </div>
+
+                {returnView === 'cards' ? (
+                <CardGrid className="p-2">
                   {returnIssues.map((issue) => {
                     const days = getDaysOverdue(issue.due_date)
                     const fineAmount = issue.fine_amount || (days > 0 ? days * (issue.fine_per_day || 0) : 0)
                     return (
-                      <div key={issue.id} className="p-4">
-                        <div className="flex items-start justify-between mb-1">
-                          <p className="font-medium text-sm text-gray-900">{issue.book_title || issue.book?.title || '-'}</p>
-                          {days > 0 && (
-                            <Badge tone="danger" className="flex-shrink-0 ml-2">
-                              {days}d overdue
-                            </Badge>
-                          )}
-                        </div>
-                        <p className="text-xs text-gray-500">
-                          {issue.borrower_name || '-'} ({issue.borrower_type})
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          Issued: {formatDate(issue.issue_date)} | Due: {formatDate(issue.due_date)}
-                        </p>
-                        {fineAmount > 0 && (
-                          <p className="text-xs text-red-600 font-medium mt-1">Fine: Rs. {fineAmount}</p>
-                        )}
-                        <div className="mt-2 pt-2 border-t border-gray-100">
-                          <button onClick={() => handleReturn(issue)} className="text-xs text-blue-600 font-medium">
-                            Process Return
-                          </button>
-                        </div>
-                      </div>
+                      <RecordCard
+                        key={issue.id}
+                        title={issue.book_title || issue.book?.title || '-'}
+                        meta={`${issue.borrower_name || '-'} (${issue.borrower_type})`}
+                        status={days > 0 ? <Badge tone="danger">{days}d overdue</Badge> : null}
+                        fields={[
+                          { label: 'Issued', value: formatDate(issue.issue_date) },
+                          { label: 'Due', value: formatDate(issue.due_date) },
+                          ...(fineAmount > 0 ? [{ label: 'Fine', value: `Rs. ${fineAmount}` }] : []),
+                        ]}
+                        actions={[
+                          { label: 'Process Return', tone: 'info', onClick: () => handleReturn(issue) },
+                        ]}
+                      />
                     )
                   })}
-                </div>
-
-                {/* Desktop table */}
-                <div className="hidden sm:block overflow-x-auto">
+                </CardGrid>
+                ) : (
+                <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                       <tr>
@@ -675,6 +668,7 @@ export default function BookIssuePage() {
                     </tbody>
                   </table>
                 </div>
+                )}
               </>
             )}
           </div>

@@ -4,7 +4,24 @@ import { useAuth } from '../../contexts/AuthContext'
 import { messagingApi } from '../../services/api'
 import Spinner from '../../components/ui/Spinner'
 import Button from '../../components/ui/Button'
+import SearchableSelect from '../../components/SearchableSelect'
+import StaffFilter from '../../components/StaffFilter'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
+
+// A parent with multiple kids shows up as one recipient row per child (same
+// user id, different student_id) so the composer can say which child the
+// thread is about -- this key keeps those rows distinct in the picker.
+const recipientKey = (r) => `${r.id}::${r.student_id || ''}`
+
+// Broad audience the user picks first; the many admin-ish roles collapse into
+// one "Staff" bucket so the first choice stays a 3-way pick regardless of how
+// many distinct staff roles a school has -- see messaging recipient-picker
+// feedback (single flat list was unusable once students/parents were mixed in).
+const AUDIENCE_TABS = [
+  { key: 'STAFF', label: 'Staff' },
+  { key: 'PARENT', label: 'Parent' },
+  { key: 'STUDENT', label: 'Student' },
+]
 
 const ROLE_BADGES = {
   SCHOOL_ADMIN: { label: 'Admin', color: 'bg-purple-100 text-purple-700' },
@@ -47,6 +64,8 @@ export default function MessagesPage() {
     message: '',
     message_type: 'GENERAL',
   })
+  const [audience, setAudience] = useState('STAFF')
+  const [selectedRecipientKey, setSelectedRecipientKey] = useState('')
 
   // Fetch threads
   const { data: threadsData, isLoading: threadsLoading } = useQuery({
@@ -74,16 +93,51 @@ export default function MessagesPage() {
   const threadMessages = threadDetail?.messages || []
   const recipients = recipientsData?.data || []
 
-  // Group recipients by role for the picker
-  const groupedRecipients = useMemo(() => {
-    const groups = {}
+  // Recipients regrouped into the 3 broad audience tabs.
+  const audienceGroups = useMemo(() => {
+    const groups = { STAFF: [], PARENT: [], STUDENT: [] }
     recipients.forEach((r) => {
-      const key = r.role
-      if (!groups[key]) groups[key] = []
-      groups[key].push(r)
+      const bucket = r.role === 'PARENT' || r.role === 'STUDENT' ? r.role : 'STAFF'
+      groups[bucket].push(r)
     })
     return groups
   }, [recipients])
+
+  // Default to the first tab that actually has recipients once they load,
+  // rather than always landing on Staff even for a school with none.
+  useEffect(() => {
+    if (recipients.length === 0) return
+    if ((audienceGroups[audience] || []).length > 0) return
+    const firstAvailable = AUDIENCE_TABS.find((tab) => (audienceGroups[tab.key] || []).length > 0)
+    if (firstAvailable) setAudience(firstAvailable.key)
+  }, [audienceGroups, audience, recipients.length])
+
+  const audienceOptions = useMemo(() => {
+    const list = audienceGroups[audience] || []
+    return list.map((r) => ({
+      value: recipientKey(r),
+      label: [
+        r.name,
+        r.student_name ? `(${r.student_name}${r.class_name ? ` - ${r.class_name}` : ''})` : null,
+        r.department || null,
+      ].filter(Boolean).join(' '),
+    }))
+  }, [audienceGroups, audience])
+
+  // StaffFilter expects hr.StaffMember-shaped rows (full_name/user_role/...);
+  // reshape the already-fetched Staff recipients into that shape rather than
+  // issuing a second, separately-scoped hrApi.getStaff() query -- these ids
+  // are already the User ids messaging needs (see messaging/views.py
+  // list_recipients), same as every other bucket.
+  const staffFilterOptions = useMemo(
+    () => (audienceGroups.STAFF || []).map((r) => ({
+      id: r.id,
+      full_name: r.name,
+      user_role: r.role,
+      designation_name: r.department,
+    })),
+    [audienceGroups],
+  )
 
   // Filter threads by search
   const filteredThreads = useMemo(() => {
@@ -122,6 +176,7 @@ export default function MessagesPage() {
       queryClient.invalidateQueries({ queryKey: ['messagingThreads'] })
       setShowNewMessage(false)
       setNewForm({ recipient_user_id: '', student_id: '', subject: '', message: '', message_type: 'GENERAL' })
+      setSelectedRecipientKey('')
       const threadId = response?.data?.id
       if (threadId) {
         setSelectedThread(threadId)
@@ -160,8 +215,9 @@ export default function MessagesPage() {
   }
 
   // When recipient is selected, auto-set message_type and student_id
-  const handleRecipientChange = (recipientId) => {
-    const recipient = recipients.find((r) => r.id === parseInt(recipientId))
+  const handleRecipientChange = (key) => {
+    setSelectedRecipientKey(key)
+    const recipient = recipients.find((r) => recipientKey(r) === key)
     let messageType = 'GENERAL'
     let studentId = ''
 
@@ -179,10 +235,27 @@ export default function MessagesPage() {
 
     setNewForm((prev) => ({
       ...prev,
-      recipient_user_id: recipientId,
+      recipient_user_id: recipient ? String(recipient.id) : '',
       message_type: messageType,
       student_id: studentId ? String(studentId) : '',
     }))
+  }
+
+  // StaffFilter fires a native-input-shaped onChange ({ target: { value } })
+  // rather than a bare value like SearchableSelect -- adapt it onto the same
+  // handleRecipientChange used for every other audience tab. Staff rows have
+  // no student_id, so the composite key is just "<id>::".
+  const handleStaffFilterChange = (e) => {
+    const id = e.target.value
+    handleRecipientChange(id ? `${id}::` : '')
+  }
+
+  // Switching the broad audience tab invalidates whatever was picked in the
+  // other tab's (differently-scoped) recipient list.
+  const handleAudienceChange = (key) => {
+    setAudience(key)
+    setSelectedRecipientKey('')
+    setNewForm((prev) => ({ ...prev, recipient_user_id: '', student_id: '', message_type: 'GENERAL' }))
   }
 
   const getSelectedThreadInfo = () => {
@@ -246,25 +319,48 @@ export default function MessagesPage() {
                     <span className="text-sm text-gray-400">Loading recipients...</span>
                   </div>
                 ) : (
-                  <select
-                    value={newForm.recipient_user_id}
-                    onChange={(e) => handleRecipientChange(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                    required
-                  >
-                    <option value="">-- Select recipient --</option>
-                    {Object.entries(groupedRecipients).map(([role, members]) => (
-                      <optgroup key={role} label={ROLE_BADGES[role]?.label || role}>
-                        {members.map((r) => (
-                          <option key={`${r.id}-${r.student_id || ''}`} value={r.id}>
-                            {r.name}
-                            {r.student_name ? ` (${r.student_name} - ${r.class_name || ''})` : ''}
-                            {r.department ? ` - ${r.department}` : ''}
-                          </option>
-                        ))}
-                      </optgroup>
-                    ))}
-                  </select>
+                  <div className="space-y-2">
+                    <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5">
+                      {AUDIENCE_TABS.map((tab) => {
+                        const count = audienceGroups[tab.key]?.length || 0
+                        if (count === 0) return null
+                        return (
+                          <button
+                            key={tab.key}
+                            type="button"
+                            onClick={() => handleAudienceChange(tab.key)}
+                            className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                              audience === tab.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                            }`}
+                          >
+                            {tab.label} ({count})
+                          </button>
+                        )
+                      })}
+                    </div>
+                    {audience === 'STAFF' ? (
+                      <StaffFilter
+                        options={staffFilterOptions}
+                        value={newForm.recipient_user_id}
+                        onChange={handleStaffFilterChange}
+                        placeholder={staffFilterOptions.length === 0 ? 'No staff to message' : 'Search staff...'}
+                        disabled={staffFilterOptions.length === 0}
+                      />
+                    ) : (
+                      <SearchableSelect
+                        options={audienceOptions}
+                        value={selectedRecipientKey}
+                        onChange={handleRecipientChange}
+                        placeholder={
+                          audienceOptions.length === 0
+                            ? `No ${AUDIENCE_TABS.find((t) => t.key === audience)?.label.toLowerCase() || ''} to message`
+                            : `Search ${AUDIENCE_TABS.find((t) => t.key === audience)?.label.toLowerCase() || ''}...`
+                        }
+                        disabled={audienceOptions.length === 0}
+                        required
+                      />
+                    )}
+                  </div>
                 )}
               </div>
 

@@ -3,6 +3,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { inventoryApi } from '../../services/api'
 import Spinner from '../../components/ui/Spinner'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
+import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
+import { useViewPreference } from '../../hooks/useViewPreference'
 
 function formatDate(dateStr) {
   if (!dateStr) return '-'
@@ -28,6 +30,7 @@ export default function StockTransactionsPage() {
 
   // Filters
   const [typeFilter, setTypeFilter] = useState('')
+  const [view, setView] = useViewPreference('stock-transactions')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
 
@@ -183,36 +186,37 @@ export default function StockTransactionsPage() {
           </div>
         ) : (
           <>
-            {/* Mobile view */}
-            <div className="sm:hidden divide-y divide-gray-200">
-              {transactions.map((tx) => (
-                <div key={tx.id} className="p-4">
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium text-sm text-gray-900 truncate">{tx.item_name || tx.item?.name || '-'}</p>
-                      <p className="text-xs text-gray-500">{formatDate(tx.date)}</p>
-                    </div>
-                    <span className={`flex-shrink-0 ml-2 px-2 py-0.5 rounded text-xs font-medium ${txTypeColors[tx.transaction_type] || 'bg-gray-100 text-gray-700'}`}>
-                      {tx.transaction_type}
-                    </span>
-                  </div>
-                  <div className="text-xs text-gray-500 space-y-0.5">
-                    <p>
-                      Qty: <span className={`font-medium ${tx.quantity > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {tx.quantity > 0 ? '+' : ''}{tx.quantity}
-                      </span>
-                      {' | '}Amount: Rs {Number(tx.total_amount || 0).toLocaleString()}
-                    </p>
-                    {tx.reference_number && <p>Ref: {tx.reference_number}</p>}
-                    {tx.vendor_name && <p>Vendor: {tx.vendor_name}</p>}
-                    {tx.recorded_by_name && <p>By: {tx.recorded_by_name}</p>}
-                  </div>
-                </div>
-              ))}
+            <div className="flex justify-end p-2">
+              <ViewToggle view={view} onChange={setView} />
             </div>
 
-            {/* Desktop table */}
-            <div className="hidden sm:block overflow-x-auto">
+            {view === 'cards' ? (
+            <CardGrid className="p-2">
+              {transactions.map((tx) => (
+                <RecordCard
+                  key={tx.id}
+                  title={tx.item_name || tx.item?.name || '-'}
+                  meta={formatDate(tx.date)}
+                  status={
+                    <span className={`flex-shrink-0 px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap ${txTypeColors[tx.transaction_type] || 'bg-gray-100 text-gray-700'}`}>
+                      {tx.transaction_type}
+                    </span>
+                  }
+                  fields={[
+                    {
+                      label: 'Qty',
+                      value: <span className={tx.quantity > 0 ? 'text-green-600 font-medium' : 'text-red-600 font-medium'}>{tx.quantity > 0 ? '+' : ''}{tx.quantity}</span>,
+                    },
+                    { label: 'Amount', value: `Rs ${Number(tx.total_amount || 0).toLocaleString()}` },
+                    ...(tx.reference_number ? [{ label: 'Ref', value: tx.reference_number, mono: true }] : []),
+                    ...(tx.vendor_name ? [{ label: 'Vendor', value: tx.vendor_name }] : []),
+                    ...(tx.recorded_by_name ? [{ label: 'By', value: tx.recorded_by_name }] : []),
+                  ]}
+                />
+              ))}
+            </CardGrid>
+            ) : (
+            <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
@@ -252,6 +256,7 @@ export default function StockTransactionsPage() {
                 </tbody>
               </table>
             </div>
+            )}
           </>
         )}
       </div>

@@ -1,11 +1,15 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { schoolsApi, usersApi, organizationsApi, membershipsApi, activityLogApi } from '../services/api'
+import { PasswordInput } from '../components'
 import { useConfirmModal } from '../components/ConfirmModal'
 import AvatarUpload from '../components/AvatarUpload'
 import Pagination from '../components/Pagination'
 import { useDebounce } from '../hooks/useDebounce'
 import { useEscapeKey } from '../hooks/useEscapeKey'
+import { usePasswordPolicy } from '../hooks/usePasswordPolicy'
+import { RecordCard, CardGrid, ViewToggle } from '../components/cards'
+import { useViewPreference } from '../hooks/useViewPreference'
 
 const ADMIN_PAGE_SIZE = 20
 
@@ -40,6 +44,8 @@ export default function SuperAdminDashboard() {
     schools: [],
     phone: '',
   })
+  const [userFormError, setUserFormError] = useState('')
+  const { validate: validatePassword } = usePasswordPolicy()
 
   // ── Bulk school selection state ──────────────────────────────────────────
   const [selectedSchoolIds, setSelectedSchoolIds] = useState(new Set())
@@ -49,6 +55,7 @@ export default function SuperAdminDashboard() {
   // ── Reset password state ─────────────────────────────────────────────────
   const [resetPwdUser, setResetPwdUser] = useState(null)
   const [resetPwdForm, setResetPwdForm] = useState({ mode: 'set', new_password: '', confirm_password: '' })
+  const [resetPwdFormError, setResetPwdFormError] = useState('')
 
   // ── Organization state ────────────────────────────────────────────────────
   const [showOrgModal, setShowOrgModal] = useState(false)
@@ -88,6 +95,7 @@ export default function SuperAdminDashboard() {
   const [membershipsOrdering, setMembershipsOrdering] = useState('')
   const debouncedMembershipsSearch = useDebounce(membershipsSearch, 300)
 
+  const [activityView, setActivityView] = useViewPreference('admin-activity-log')
   const [activitySearch, setActivitySearch] = useState('')
   const [activityPage, setActivityPage] = useState(1)
   const debouncedActivitySearch = useDebounce(activitySearch, 300)
@@ -331,6 +339,7 @@ export default function SuperAdminDashboard() {
   const closeResetPwdModal = () => {
     setResetPwdUser(null)
     setResetPwdForm({ mode: 'set', new_password: '', confirm_password: '' })
+    setResetPwdFormError('')
     resetPasswordMutation.reset()
   }
 
@@ -467,6 +476,7 @@ export default function SuperAdminDashboard() {
   }
 
   const handleSaveUser = () => {
+    setUserFormError('')
     if (editingUser) {
       updateUserMutation.mutate({
         id: editingUser.id,
@@ -479,6 +489,11 @@ export default function SuperAdminDashboard() {
         },
       })
     } else {
+      const pwdError = validatePassword(newUser.password, newUser.confirm_password)
+      if (pwdError) {
+        setUserFormError(pwdError)
+        return
+      }
       const { schools: selectedSchools, ...rest } = newUser
       createUserMutation.mutate({
         ...rest,
@@ -489,6 +504,7 @@ export default function SuperAdminDashboard() {
 
   const openEditUser = (user) => {
     setEditingUser(user)
+    setUserFormError('')
     setNewUser({
       username: user.username,
       email: user.email || '',
@@ -980,6 +996,7 @@ export default function SuperAdminDashboard() {
             <button onClick={() => {
               setEditingUser(null)
               setNewUser(userDefaults)
+              setUserFormError('')
               setShowUserModal(true)
             }} className="btn btn-primary">
               Add User
@@ -1344,6 +1361,7 @@ export default function SuperAdminDashboard() {
         <div className="card">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-gray-900">Activity Log</h2>
+            <ViewToggle view={activityView} onChange={setActivityView} />
           </div>
 
           <input
@@ -1360,23 +1378,23 @@ export default function SuperAdminDashboard() {
             <Empty text={debouncedActivitySearch ? `No activity matches "${debouncedActivitySearch}".` : 'No admin actions recorded yet.'} />
           ) : (
             <>
-              {/* Mobile */}
-              <div className="sm:hidden space-y-3">
+              {activityView === 'cards' ? (
+              <CardGrid>
                 {activityLog.map((entry) => (
-                  <div key={entry.id} className="p-3 border border-gray-200 rounded-lg">
-                    <p className="font-medium text-sm text-gray-900">
-                      <ActionBadge action={entry.action} /> <span className="text-gray-500 font-normal">{entry.target_type}</span>
-                    </p>
-                    <p className="text-xs text-gray-500 truncate">{entry.target_repr}</p>
-                    <div className="flex items-center justify-between mt-1 text-xs text-gray-400">
-                      <span>{entry.actor_username || 'system'}</span>
-                      <span>{new Date(entry.created_at).toLocaleString()}</span>
-                    </div>
-                  </div>
+                  <RecordCard
+                    key={entry.id}
+                    title={<ActionBadge action={entry.action} />}
+                    meta={entry.target_type}
+                    fields={[
+                      { label: 'Target', value: entry.target_repr },
+                      { label: 'Admin', value: entry.actor_username || 'system' },
+                      { label: 'When', value: new Date(entry.created_at).toLocaleString() },
+                    ]}
+                  />
                 ))}
-              </div>
-              {/* Desktop */}
-              <div className="hidden sm:block overflow-x-auto">
+              </CardGrid>
+              ) : (
+              <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
@@ -1400,6 +1418,7 @@ export default function SuperAdminDashboard() {
                   </tbody>
                 </table>
               </div>
+              )}
               <Pagination
                 page={activityPage}
                 totalPages={Math.ceil(activityCount / ADMIN_PAGE_SIZE)}
@@ -1478,7 +1497,7 @@ export default function SuperAdminDashboard() {
 
       {/* Add/Edit User Modal */}
       {showUserModal && (
-        <Modal title={editingUser ? 'Edit User' : 'Add User'} onClose={() => { setShowUserModal(false); setEditingUser(null) }} scroll>
+        <Modal title={editingUser ? 'Edit User' : 'Add User'} onClose={() => { setShowUserModal(false); setEditingUser(null); setUserFormError('') }} scroll>
           <div className="space-y-4">
             {editingUser && (
               <div className="flex justify-center">
@@ -1529,13 +1548,15 @@ export default function SuperAdminDashboard() {
             {!editingUser && (
               <>
                 <Field label="Password *">
-                  <input type="password" className="input" value={newUser.password}
-                    onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} required />
+                  <PasswordInput className="input" value={newUser.password}
+                    onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+                    placeholder="Min 8 characters" required />
                 </Field>
 
                 <Field label="Confirm Password *">
-                  <input type="password" className="input" value={newUser.confirm_password}
-                    onChange={(e) => setNewUser({ ...newUser, confirm_password: e.target.value })} required />
+                  <PasswordInput className="input" value={newUser.confirm_password}
+                    onChange={(e) => setNewUser({ ...newUser, confirm_password: e.target.value })}
+                    placeholder="Confirm" required />
                 </Field>
 
                 {newUser.role !== 'SUPER_ADMIN' && (
@@ -1579,6 +1600,11 @@ export default function SuperAdminDashboard() {
             </Field>
           </div>
 
+          {userFormError && (
+            <div className="mt-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+              {userFormError}
+            </div>
+          )}
           <MutationError mutation={editingUser ? updateUserMutation : createUserMutation} fields={['username', 'email', 'password', 'confirm_password']} />
 
           <ModalFooter
@@ -1767,12 +1793,14 @@ export default function SuperAdminDashboard() {
                 {resetPwdForm.mode === 'set' ? (
                   <>
                     <Field label="New Password *">
-                      <input type="password" className="input" value={resetPwdForm.new_password}
-                        onChange={(e) => setResetPwdForm({ ...resetPwdForm, new_password: e.target.value })} required />
+                      <PasswordInput className="input" value={resetPwdForm.new_password}
+                        onChange={(e) => setResetPwdForm({ ...resetPwdForm, new_password: e.target.value })}
+                        placeholder="Min 8 characters" required />
                     </Field>
                     <Field label="Confirm New Password *">
-                      <input type="password" className="input" value={resetPwdForm.confirm_password}
-                        onChange={(e) => setResetPwdForm({ ...resetPwdForm, confirm_password: e.target.value })} required />
+                      <PasswordInput className="input" value={resetPwdForm.confirm_password}
+                        onChange={(e) => setResetPwdForm({ ...resetPwdForm, confirm_password: e.target.value })}
+                        placeholder="Confirm" required />
                     </Field>
                   </>
                 ) : (
@@ -1784,16 +1812,31 @@ export default function SuperAdminDashboard() {
                 )}
               </div>
 
+              {resetPwdFormError && (
+                <div className="mt-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+                  {resetPwdFormError}
+                </div>
+              )}
               <MutationError mutation={resetPasswordMutation} fields={['new_password', 'confirm_password']} />
 
               <ModalFooter
                 onCancel={closeResetPwdModal}
-                onSubmit={() => resetPasswordMutation.mutate({
-                  id: resetPwdUser.id,
-                  data: resetPwdForm.mode === 'set'
-                    ? { mode: 'set', new_password: resetPwdForm.new_password, confirm_password: resetPwdForm.confirm_password }
-                    : { mode: 'email' },
-                })}
+                onSubmit={() => {
+                  setResetPwdFormError('')
+                  if (resetPwdForm.mode === 'set') {
+                    const pwdError = validatePassword(resetPwdForm.new_password, resetPwdForm.confirm_password)
+                    if (pwdError) {
+                      setResetPwdFormError(pwdError)
+                      return
+                    }
+                  }
+                  resetPasswordMutation.mutate({
+                    id: resetPwdUser.id,
+                    data: resetPwdForm.mode === 'set'
+                      ? { mode: 'set', new_password: resetPwdForm.new_password, confirm_password: resetPwdForm.confirm_password }
+                      : { mode: 'email' },
+                  })
+                }}
                 disabled={
                   resetPasswordMutation.isPending ||
                   (resetPwdForm.mode === 'set' && (!resetPwdForm.new_password || !resetPwdForm.confirm_password)) ||

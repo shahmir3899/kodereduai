@@ -77,6 +77,14 @@ If column {day_of_month} is not visible or image is unclear:
         Returns:
             tuple: (base64_string, error_message)
         """
+        from core.url_safety import assert_safe_external_url, UnsafeUrlError
+
+        try:
+            assert_safe_external_url(self.upload.image_url)
+        except UnsafeUrlError as e:
+            logger.warning(f"Rejected unsafe image URL: {e}")
+            return None, "This image URL cannot be fetched."
+
         try:
             logger.info(f"Fetching image from: {self.upload.image_url}")
 

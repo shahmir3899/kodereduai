@@ -5,6 +5,8 @@ import { useAuth } from '../../contexts/AuthContext'
 import Spinner from '../../components/ui/Spinner'
 import Badge from '../../components/ui/Badge'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
+import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
+import { useViewPreference } from '../../hooks/useViewPreference'
 
 function getDaysOverdue(dueDateStr) {
   if (!dueDateStr) return 0
@@ -27,6 +29,7 @@ export default function OverdueBooksPage() {
   const { user } = useAuth()
   const queryClient = useQueryClient()
 
+  const [view, setView] = useViewPreference('overdue-books')
   const [returnConfirm, setReturnConfirm] = useState(null)
 
   useEscapeKey(() => setReturnConfirm(null), !!returnConfirm)
@@ -185,61 +188,45 @@ export default function OverdueBooksPage() {
           </div>
         ) : (
           <>
-            {/* Mobile card view */}
-            <div className="sm:hidden divide-y divide-gray-200">
+            <div className="flex justify-end p-2">
+              <ViewToggle view={view} onChange={setView} />
+            </div>
+
+            {view === 'cards' ? (
+            <CardGrid className="p-2">
               {overdueBooks.map((issue) => {
                 const days = getDaysOverdue(issue.due_date)
                 const fine = issue.fine_amount || (days * (issue.fine_per_day || finePerDay))
                 return (
-                  <div key={issue.id} className="p-4">
-                    <div className="flex items-start justify-between mb-1">
-                      <div className="min-w-0 flex-1">
-                        <p className="font-medium text-sm text-gray-900 truncate">
-                          {issue.book_title || issue.book?.title || '-'}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {issue.borrower_name || '-'}
-                          <span className={`ml-1.5 inline-flex px-1.5 py-0.5 rounded text-xs font-medium ${
-                            issue.borrower_type === 'STUDENT'
-                              ? 'bg-blue-100 text-blue-700'
-                              : 'bg-purple-100 text-purple-700'
-                          }`}>
-                            {issue.borrower_type}
-                          </span>
-                        </p>
-                      </div>
-                      <Badge tone="danger" className="flex-shrink-0 ml-2">
-                        {days}d overdue
-                      </Badge>
-                    </div>
-                    <div className="text-xs text-gray-500 mt-1">
-                      <p>Issued: {formatDate(issue.issue_date)} | Due: {formatDate(issue.due_date)}</p>
-                    </div>
-                    {fine > 0 && (
-                      <p className="text-xs text-red-600 font-medium mt-1">Fine: Rs. {fine}</p>
-                    )}
-                    <div className="flex gap-3 mt-2 pt-2 border-t border-gray-100">
-                      <button
-                        onClick={() => handleReturn(issue)}
-                        className="text-xs text-blue-600 font-medium"
-                      >
-                        Return with Fine
-                      </button>
-                      <button
-                        onClick={() => {/* Placeholder for send reminder */}}
-                        className="text-xs text-gray-500 font-medium"
-                        title="Send reminder (coming soon)"
-                      >
-                        Send Reminder
-                      </button>
-                    </div>
-                  </div>
+                  <RecordCard
+                    key={issue.id}
+                    title={issue.book_title || issue.book?.title || '-'}
+                    meta={
+                      <>
+                        {issue.borrower_name || '-'}
+                        <span className={`ml-1.5 inline-flex px-1.5 py-0.5 rounded text-xs font-medium ${
+                          issue.borrower_type === 'STUDENT' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'
+                        }`}>
+                          {issue.borrower_type}
+                        </span>
+                      </>
+                    }
+                    status={<Badge tone="danger">{days}d overdue</Badge>}
+                    fields={[
+                      { label: 'Issued', value: formatDate(issue.issue_date) },
+                      { label: 'Due', value: formatDate(issue.due_date) },
+                      ...(fine > 0 ? [{ label: 'Fine', value: `Rs. ${fine}` }] : []),
+                    ]}
+                    actions={[
+                      { label: 'Return with Fine', tone: 'info', onClick: () => handleReturn(issue) },
+                      { label: 'Send Reminder', tone: 'muted', onClick: () => {/* Placeholder for send reminder */} },
+                    ]}
+                  />
                 )
               })}
-            </div>
-
-            {/* Desktop table */}
-            <div className="hidden sm:block overflow-x-auto">
+            </CardGrid>
+            ) : (
+            <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
@@ -311,6 +298,7 @@ export default function OverdueBooksPage() {
                 </tbody>
               </table>
             </div>
+            )}
           </>
         )}
       </div>

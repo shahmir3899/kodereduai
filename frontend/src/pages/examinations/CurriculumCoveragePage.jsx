@@ -1,19 +1,27 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { lmsApi } from '../../services/api'
 import ClassSelector from '../../components/ClassSelector'
 import TopicStatusBadge from './TopicStatusBadge'
+import CurriculumTimeline from './CurriculumTimeline'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useAuth } from '../../contexts/AuthContext'
+import { useToast } from '../../components/Toast'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import { useClassSubjects } from '../../hooks/useClassSubjects'
 import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
+import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
+import { useViewPreference } from '../../hooks/useViewPreference'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 import PageHeader from '../../components/ui/PageHeader'
 
 export default function CurriculumCoveragePage() {
   const { isTeacher } = useAuth()
   const { activeAcademicYear } = useAcademicYear()
+  const { showError } = useToast()
+  const queryClient = useQueryClient()
+  const [view, setView] = useViewPreference('curriculum-coverage')
+  const [mode, setMode] = useState('list') // 'list' | 'timeline'
   const [classId, setClassId] = useState('')
   const [subjectId, setSubjectId] = useState('')
   const [coverage, setCoverage] = useState('')
@@ -32,14 +40,16 @@ export default function CurriculumCoveragePage() {
     queryKey: 'teacherCurriculumCoverageClasses',
   })
 
+  const topicsQueryKey = ['curriculumCoverageTopics', resolvedClassId, subjectId, coverage, activeAcademicYear?.id]
   const { data, isLoading } = useQuery({
-    queryKey: ['curriculumCoverageTopics', resolvedClassId, subjectId, coverage, activeAcademicYear?.id],
+    queryKey: topicsQueryKey,
     queryFn: () =>
       lmsApi.getTopics({
         page_size: 999,
         ...(resolvedClassId && { class_id: resolvedClassId }),
         ...(subjectId && { subject_id: subjectId }),
         ...(coverage && { coverage }),
+        ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
       }),
     enabled: Boolean(resolvedClassId && subjectId),
   })
@@ -47,6 +57,20 @@ export default function CurriculumCoveragePage() {
   const topics = data?.data?.results || data?.data || []
   const taughtCount = topics.filter((t) => t.is_covered).length
   const testedCount = topics.filter((t) => t.is_tested).length
+
+  const plannedDateMutation = useMutation({
+    mutationFn: ({ topicId, plannedDate }) =>
+      lmsApi.setTopicPlannedDate(topicId, { academicYear: activeAcademicYear?.id, plannedDate }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: topicsQueryKey }),
+    onError: (err) => showError(err.response?.data?.detail || 'Failed to save planned date.'),
+  })
+  const handlePlannedDateChange = (topicId, value) => {
+    if (!activeAcademicYear?.id) {
+      showError('Select an academic year first.')
+      return
+    }
+    plannedDateMutation.mutate({ topicId, plannedDate: value || null })
+  }
 
   return (
     <div className="space-y-6">
@@ -128,12 +152,54 @@ export default function CurriculumCoveragePage() {
         ) : topics.length === 0 ? (
           <p className="text-sm text-gray-500">No topics found for selected filters.</p>
         ) : (
+          <>
+            <div className="flex justify-between items-center mb-3">
+              <div className="inline-flex items-center bg-gray-100 rounded-lg p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setMode('list')}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${mode === 'list' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  List
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMode('timeline')}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${mode === 'timeline' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  Timeline
+                </button>
+              </div>
+              {mode === 'list' && <ViewToggle view={view} onChange={setView} />}
+            </div>
+
+            {mode === 'timeline' ? (
+              <CurriculumTimeline topics={topics} academicYear={activeAcademicYear} />
+            ) : view === 'cards' ? (
+            <CardGrid>
+              {topics.map((topic) => (
+                <RecordCard
+                  key={topic.id}
+                  title={`${topic.topic_number}. ${topic.title}`}
+                  status={<TopicStatusBadge topic={topic} />}
+                  fields={[
+                    { label: 'Lesson Plans', value: topic.lesson_plan_count || 0 },
+                    { label: 'Questions', value: topic.test_question_count || 0 },
+                    { label: 'Planned Date', value: topic.planned_date || 'Not set' },
+                    { label: 'Taught Date', value: topic.taught_date || 'Not yet' },
+                  ]}
+                />
+              ))}
+            </CardGrid>
+            ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Topic</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Planned Date</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Taught Date</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Lesson Plans</th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Questions</th>
                 </tr>
@@ -145,6 +211,20 @@ export default function CurriculumCoveragePage() {
                       {topic.topic_number}. {topic.title}
                     </td>
                     <td className="px-4 py-3 text-sm"><TopicStatusBadge topic={topic} /></td>
+                    <td className="px-4 py-3 text-sm text-gray-700">
+                      <input
+                        type="date"
+                        defaultValue={topic.planned_date || ''}
+                        onBlur={(e) => {
+                          if (e.target.value !== (topic.planned_date || '')) {
+                            handlePlannedDateChange(topic.id, e.target.value)
+                          }
+                        }}
+                        disabled={!activeAcademicYear?.id || plannedDateMutation.isPending}
+                        className="input text-xs py-1"
+                      />
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-700">{topic.taught_date || <span className="text-gray-400">Not yet</span>}</td>
                     <td className="px-4 py-3 text-sm text-gray-700">{topic.lesson_plan_count || 0}</td>
                     <td className="px-4 py-3 text-sm text-gray-700">{topic.test_question_count || 0}</td>
                   </tr>
@@ -152,6 +232,8 @@ export default function CurriculumCoveragePage() {
               </tbody>
             </table>
           </div>
+            )}
+          </>
         )}
       </div>
     </div>

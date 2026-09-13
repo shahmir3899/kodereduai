@@ -3,8 +3,18 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { hrApi } from '../../services/api'
 import { useToast } from '../../components/Toast'
 import Spinner from '../../components/ui/Spinner'
+import StaffFilter from '../../components/StaffFilter'
 import { useAuth } from '../../contexts/AuthContext'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
+import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
+import { useViewPreference } from '../../hooks/useViewPreference'
+
+const STRIPE_TONE_BY_STATUS = {
+  PENDING: 'warning',
+  APPROVED: 'success',
+  REJECTED: 'danger',
+  CANCELLED: 'neutral',
+}
 
 const statusBadge = {
   PENDING: 'bg-yellow-100 text-yellow-800',
@@ -53,6 +63,7 @@ export default function LeaveManagementPage() {
   // ── Applications State ──
   const [statusFilter, setStatusFilter] = useState('')
   const [search, setSearch] = useState('')
+  const [view, setView] = useViewPreference('leave-management')
   const [applyModal, setApplyModal] = useState(false)
   const [appForm, setAppForm] = useState(EMPTY_APPLICATION)
   const [actionModal, setActionModal] = useState(null) // { type: 'approve'|'reject', leave }
@@ -74,14 +85,8 @@ export default function LeaveManagementPage() {
     queryFn: () => hrApi.getLeavePolicies({ page_size: 9999 }),
   })
 
-  const { data: staffData } = useQuery({
-    queryKey: ['hrStaff'],
-    queryFn: () => hrApi.getStaff({ page_size: 9999 }),
-  })
-
   const allApplications = appData?.data?.results || appData?.data || []
   const allPolicies = policyData?.data?.results || policyData?.data || []
-  const allStaff = staffData?.data?.results || staffData?.data || []
 
   // ── Filtered applications ──
   const filteredApps = useMemo(() => {
@@ -332,45 +337,42 @@ export default function LeaveManagementPage() {
             </div>
           ) : (
             <>
-              {/* Mobile Cards */}
-              <div className="sm:hidden space-y-3">
-                {filteredApps.map((a) => (
-                  <div key={a.id} className="card">
-                    <div className="flex items-center justify-between mb-2">
-                      <div>
-                        <p className="font-semibold text-gray-900">{a.staff_member_name}</p>
-                        {a.leave_policy_name && <p className="text-xs text-gray-500">{a.leave_policy_name}</p>}
-                      </div>
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusBadge[a.status]}`}>
-                        {a.status_display}
-                      </span>
-                    </div>
-                    <div className="text-sm text-gray-500 space-y-1">
-                      {a.leave_type && (
-                        <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${leaveTypeBadge[a.leave_type] || 'bg-gray-100'}`}>
-                          {a.leave_type_display || a.leave_type}
-                        </span>
-                      )}
-                      <p>{a.start_date} to {a.end_date} ({a.total_days} day{a.total_days !== 1 ? 's' : ''})</p>
-                      <p className="truncate">{a.reason}</p>
-                    </div>
-                    <div className="flex justify-end gap-3 mt-3 pt-3 border-t border-gray-100">
-                      {!isSelfService && a.status === 'PENDING' && (
-                        <>
-                          <button onClick={() => { setActionModal({ type: 'approve', leave: a }); setAdminRemarks('') }} className="text-sm text-green-600 hover:text-green-800 font-medium">Approve</button>
-                          <button onClick={() => { setActionModal({ type: 'reject', leave: a }); setAdminRemarks('') }} className="text-sm text-red-600 hover:text-red-800 font-medium">Reject</button>
-                        </>
-                      )}
-                      {(a.status === 'PENDING' || a.status === 'APPROVED') && (
-                        <button onClick={() => cancelMutation.mutate(a.id)} className="text-sm text-gray-600 hover:text-gray-800 font-medium">Cancel</button>
-                      )}
-                    </div>
-                  </div>
-                ))}
+              <div className="flex justify-end mb-3">
+                <ViewToggle view={view} onChange={setView} />
               </div>
 
-              {/* Desktop Table */}
-              <div className="hidden sm:block card overflow-x-auto">
+              {view === 'cards' ? (
+              <CardGrid>
+                {filteredApps.map((a) => (
+                  <RecordCard
+                    key={a.id}
+                    stripeTone={STRIPE_TONE_BY_STATUS[a.status] || 'neutral'}
+                    title={a.staff_member_name}
+                    meta={a.leave_policy_name}
+                    status={
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${statusBadge[a.status]}`}>
+                        {a.status_display}
+                      </span>
+                    }
+                    fields={[
+                      ...(a.leave_type ? [{ label: 'Type', value: a.leave_type_display || a.leave_type }] : []),
+                      { label: 'Dates', value: `${a.start_date} to ${a.end_date}` },
+                      { label: 'Days', value: `${a.total_days} day${a.total_days !== 1 ? 's' : ''}` },
+                    ]}
+                    actions={[
+                      ...(!isSelfService && a.status === 'PENDING' ? [
+                        { label: 'Approve', tone: 'success', onClick: () => { setActionModal({ type: 'approve', leave: a }); setAdminRemarks('') } },
+                        { label: 'Reject', tone: 'danger', onClick: () => { setActionModal({ type: 'reject', leave: a }); setAdminRemarks('') } },
+                      ] : []),
+                      ...((a.status === 'PENDING' || a.status === 'APPROVED') ? [{ label: 'Cancel', tone: 'muted', onClick: () => cancelMutation.mutate(a.id) }] : []),
+                    ]}
+                  >
+                    {a.reason && <p className="text-sm text-gray-500 truncate">{a.reason}</p>}
+                  </RecordCard>
+                ))}
+              </CardGrid>
+              ) : (
+              <div className="card overflow-x-auto">
                 <table className="min-w-full">
                   <thead>
                     <tr className="border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -438,6 +440,7 @@ export default function LeaveManagementPage() {
                   </tbody>
                 </table>
               </div>
+              )}
             </>
           )}
 
@@ -450,18 +453,12 @@ export default function LeaveManagementPage() {
                   {!isSelfService && (
                     <div>
                       <label className="label">Staff Member *</label>
-                      <select
-                        className="input"
+                      <StaffFilter
+                        status="ACTIVE"
                         value={appForm.staff_member}
                         onChange={(e) => setAppForm({ ...appForm, staff_member: e.target.value })}
-                      >
-                        <option value="">Select Staff</option>
-                        {allStaff.filter((s) => s.is_active).map((s) => (
-                          <option key={s.id} value={s.id}>
-                            {s.first_name} {s.last_name}
-                          </option>
-                        ))}
-                      </select>
+                        placeholder="Select Staff"
+                      />
                     </div>
                   )}
                   <div>

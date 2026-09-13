@@ -12,6 +12,17 @@ logger = logging.getLogger(__name__)
 PHOTO_ALLOWED_CONTENT_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 PHOTO_MAX_SIZE_BYTES = 5 * 1024 * 1024
 
+# Staff documents (contracts, IDs, certificates, medical) — unlike a profile photo
+# these are often scans or office docs, not just images, so the allowed set and
+# size cap are both wider.
+DOCUMENT_ALLOWED_CONTENT_TYPES = [
+    'application/pdf',
+    'image/jpeg', 'image/png', 'image/webp',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+]
+DOCUMENT_MAX_SIZE_BYTES = 10 * 1024 * 1024
+
 
 def validate_photo_upload(file):
     """
@@ -24,6 +35,19 @@ def validate_photo_upload(file):
         )
     if file.size > PHOTO_MAX_SIZE_BYTES:
         raise ValueError('File too large. Maximum size is 5MB.')
+
+
+def validate_document_upload(file):
+    """
+    Validate a staff-document upload's content type and size.
+    Raises ValueError with a user-facing message if invalid.
+    """
+    if file.content_type not in DOCUMENT_ALLOWED_CONTENT_TYPES:
+        raise ValueError(
+            f'Invalid file type. Allowed: PDF, JPG, PNG, WEBP, DOC, DOCX'
+        )
+    if file.size > DOCUMENT_MAX_SIZE_BYTES:
+        raise ValueError('File too large. Maximum size is 10MB.')
 
 
 def _process_profile_photo(file_content: bytes, max_dimension: int = 480, quality: int = 85) -> bytes:

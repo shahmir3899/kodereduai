@@ -5,6 +5,8 @@ import { useToast } from '../../components/Toast'
 import { useBackgroundTask } from '../../hooks/useBackgroundTask'
 import Spinner from '../../components/ui/Spinner'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
+import { LedgerCard, CardGrid, ViewToggle, TrendStrip } from '../../components/cards'
+import { useViewPreference } from '../../hooks/useViewPreference'
 
 const statusBadge = {
   DRAFT: 'bg-yellow-100 text-yellow-800',
@@ -25,6 +27,7 @@ export default function PayrollPage() {
   const [month, setMonth] = useState(now.getMonth() + 1)
   const [year, setYear] = useState(now.getFullYear())
   const [statusFilter, setStatusFilter] = useState('')
+  const [view, setView] = useViewPreference('payroll')
   const [generateConfirm, setGenerateConfirm] = useState(false)
   const [detailSlip, setDetailSlip] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null) // payslip object or 'bulk'
@@ -49,6 +52,17 @@ export default function PayrollPage() {
     queryFn: () => hrApi.getPayrollSummary({ month, year }),
   })
 
+  // 6-month net-pay history for the trend strip, one grouped query for every
+  // staff member on the page — only needed in card view.
+  const { data: historyData } = useQuery({
+    queryKey: ['hrPayslipNetPayHistory', month, year],
+    queryFn: () => hrApi.getPayslipNetPayHistory({ month, year, months: 6 }),
+    enabled: view === 'cards',
+  })
+  const netPayHistory = historyData?.data?.history || {}
+  const historyPeriods = historyData?.data?.periods || []
+  const MONTH_ABBR = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
   // Generate payslips (background task)
   const generateTask = useBackgroundTask({
     mutationFn: () => hrApi.generatePayslips({ month, year }),
@@ -56,6 +70,14 @@ export default function PayrollPage() {
     title: `Generating payslips for ${MONTHS[month - 1]} ${year}`,
     onSubmitted: () => setGenerateConfirm(false),
   })
+
+  const buildTrendPoints = (staffId) => {
+    const rows = netPayHistory[String(staffId)] || []
+    return historyPeriods.map((period) => {
+      const match = rows.find((r) => r.month === period.month && r.year === period.year)
+      return { label: MONTH_ABBR[period.month], value: match ? Number(match.net_salary) : 0 }
+    })
+  }
 
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ['hrPayslips', month, year] })
@@ -253,52 +275,39 @@ export default function PayrollPage() {
         </div>
       ) : (
         <>
-          {/* Mobile Cards */}
-          <div className="sm:hidden space-y-3">
-            {filteredPayslips.map((p) => (
-              <div key={p.id} className="card">
-                <div className="flex items-center gap-3 mb-2">
-                  {p.status === 'DRAFT' && (
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.has(p.id)}
-                      onChange={() => toggleSelect(p.id)}
-                      className="h-4 w-4 rounded border-gray-300"
-                    />
-                  )}
-                  <div className="flex-1 flex items-center justify-between">
-                    <div>
-                      <p className="font-semibold text-gray-900">{p.staff_member_name}</p>
-                      {p.staff_employee_id && <p className="text-xs text-gray-500">ID: {p.staff_employee_id}</p>}
-                    </div>
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusBadge[p.status]}`}>
-                      {p.status_display}
-                    </span>
-                  </div>
-                </div>
-                <div className="text-sm text-gray-500 space-y-1">
-                  <p>Basic: {fmt(p.basic_salary)} | Net: {fmt(p.net_salary)}</p>
-                  {p.department_name && <p>Dept: {p.department_name}</p>}
-                </div>
-                <div className="flex justify-end gap-3 mt-3 pt-3 border-t border-gray-100">
-                  <button onClick={() => setDetailSlip(p)} className="text-sm text-gray-600 hover:text-gray-800 font-medium">View</button>
-                  <button onClick={() => handleDownloadPdf(p.id, p.staff_member_name)} className="text-sm text-purple-600 hover:text-purple-800 font-medium">PDF</button>
-                  {p.status === 'DRAFT' && (
-                    <button onClick={() => approveMutation.mutate(p.id)} className="text-sm text-blue-600 hover:text-blue-800 font-medium">Approve</button>
-                  )}
-                  {(p.status === 'DRAFT' || p.status === 'APPROVED') && (
-                    <button onClick={() => markPaidMutation.mutate(p.id)} className="text-sm text-green-600 hover:text-green-800 font-medium">Mark Paid</button>
-                  )}
-                  {p.status === 'DRAFT' && (
-                    <button onClick={() => setDeleteConfirm(p)} className="text-sm text-red-600 hover:text-red-800 font-medium">Delete</button>
-                  )}
-                </div>
-              </div>
-            ))}
+          <div className="flex justify-end mb-3">
+            <ViewToggle view={view} onChange={setView} />
           </div>
 
-          {/* Desktop Table */}
-          <div className="hidden sm:block card overflow-x-auto">
+          {view === 'cards' && (
+          <CardGrid className="mb-3">
+            {filteredPayslips.map((p) => (
+              <LedgerCard
+                key={p.id}
+                title={p.staff_member_name}
+                meta={p.staff_employee_id ? `ID: ${p.staff_employee_id}${p.department_name ? ` · ${p.department_name}` : ''}` : p.department_name}
+                status={<span className={`px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${statusBadge[p.status]}`}>{p.status_display}</span>}
+                breakdown={[
+                  { label: 'Basic', value: p.basic_salary },
+                  { label: 'Allow.', value: p.total_allowances ?? 0 },
+                  { label: 'Deduct.', value: p.total_deductions ?? 0, tone: 'debit' },
+                  { label: 'Net', value: p.net_salary, emphasis: true },
+                ]}
+                trend={<TrendStrip points={buildTrendPoints(p.staff_member)} currentLabel={MONTH_ABBR[month]} />}
+                actions={[
+                  { label: 'View', tone: 'muted', onClick: () => setDetailSlip(p) },
+                  { label: 'PDF', tone: 'accent', onClick: () => handleDownloadPdf(p.id, p.staff_member_name) },
+                  ...(p.status === 'DRAFT' ? [{ label: 'Approve', tone: 'info', onClick: () => approveMutation.mutate(p.id) }] : []),
+                  ...((p.status === 'DRAFT' || p.status === 'APPROVED') ? [{ label: 'Mark Paid', tone: 'success', onClick: () => markPaidMutation.mutate(p.id) }] : []),
+                  ...(p.status === 'DRAFT' ? [{ label: 'Delete', tone: 'danger', onClick: () => setDeleteConfirm(p) }] : []),
+                ]}
+              />
+            ))}
+          </CardGrid>
+          )}
+
+          {view === 'table' && (
+          <div className="card overflow-x-auto">
             <table className="min-w-full">
               <thead>
                 <tr className="border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -386,6 +395,7 @@ export default function PayrollPage() {
               </tbody>
             </table>
           </div>
+          )}
         </>
       )}
 

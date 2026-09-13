@@ -1,13 +1,26 @@
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../../contexts/AuthContext'
-import { useNavigate, Routes, Route } from 'react-router-dom'
+import { useNavigate, useLocation, Routes, Route } from 'react-router-dom'
 import { useSubdomainSchool } from '../../hooks/useSubdomainSchool'
 import api from '../../services/api'
 import App from '../../App'
 import SchoolLoginPage from './pages/SchoolLoginPage'
+import ForgotPasswordPage from '../../pages/ForgotPasswordPage'
+import ResetPasswordPage from '../../pages/ResetPasswordPage'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import { useToast } from '../../components/Toast'
+
+// Password recovery pages normally live in App.jsx's own <Routes>, but App
+// only mounts once a user is signed in (see the `!user` branches below) —
+// so a logged-out visitor hitting /forgot-password or /reset-password would
+// otherwise always land back on SchoolLoginPage regardless of the URL.
+// Checked ahead of the subdomain/login gates so it works whether or not the
+// school has resolved yet.
+const PASSWORD_RECOVERY_ROUTES = {
+  '/forgot-password': ForgotPasswordPage,
+  '/reset-password': ResetPasswordPage,
+}
 
 /**
  * School App Wrapper
@@ -17,6 +30,7 @@ import { useToast } from '../../components/Toast'
  */
 export default function SchoolApp() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { user, loading: authLoading } = useAuth()
   const { showError } = useToast()
   const { subdomain, isSubdomain } = useSubdomainSchool()
@@ -81,6 +95,14 @@ export default function SchoolApp() {
       // already handles it from localStorage, which preserves explicit switches.
     }
   }, [user, schoolData, authLoading])
+
+  // Password recovery, checked ahead of the subdomain/login gates below so it
+  // renders regardless of whether the school has resolved yet or a user is
+  // signed in.
+  const RecoveryPage = PASSWORD_RECOVERY_ROUTES[location.pathname]
+  if (RecoveryPage) {
+    return <RecoveryPage />
+  }
 
   // Loading states
   if (!isSubdomain) {

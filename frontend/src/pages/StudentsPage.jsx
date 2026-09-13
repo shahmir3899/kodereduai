@@ -14,6 +14,7 @@ import { getNextAvailableRoll } from '../utils/rollSuggestion'
 import ClassSelector from '../components/ClassSelector'
 import { exportStudentsPDF, exportStudentsPNG } from './studentExport'
 import { useDebounce } from '../hooks/useDebounce'
+import { usePasswordPolicy } from '../hooks/usePasswordPolicy'
 import WhatsAppTick from '../components/WhatsAppTick'
 import ReportPeriodPicker from '../components/ReportPeriodPicker'
 import PhotoCropModal from '../components/PhotoCropModal'
@@ -23,6 +24,8 @@ import Spinner from '../components/ui/Spinner'
 import { SkeletonTable } from '../components/ui/Skeleton'
 import { useEscapeKey } from '../hooks/useEscapeKey'
 import Badge from '../components/ui/Badge'
+import { RecordCard, CardGrid, ViewToggle } from '../components/cards'
+import { useViewPreference } from '../hooks/useViewPreference'
 
 function StudentAvatar({ student, sizeClass = 'w-8 h-8' }) {
   if (student.photo_url) {
@@ -52,6 +55,7 @@ export default function StudentsPage() {
   const { activeAcademicYear } = useAcademicYear()
   const queryClient = useQueryClient()
   const { showError, showSuccess, showWarning } = useToast()
+  const { validate: validatePassword, validateLength: validatePasswordLength } = usePasswordPolicy()
   const isSuperAdmin = user?.role === 'SUPER_ADMIN'
   const canManageLifecycle = canManageStudentLifecycle(user?.role)
   const fileInputRef = useRef(null)
@@ -87,6 +91,8 @@ export default function StudentsPage() {
     username: '', email: '', password: '', confirm_password: '',
   })
   const [studentUserError, setStudentUserError] = useState('')
+
+  const [view, setView] = useViewPreference('students')
 
   // Convert existing students to users
   const [selectedStudents, setSelectedStudents] = useState(new Set())
@@ -252,12 +258,9 @@ export default function StudentsPage() {
       setConvertError('Username and password are required.')
       return
     }
-    if (convertForm.password.length < 8) {
-      setConvertError('Password must be at least 8 characters.')
-      return
-    }
-    if (convertForm.password !== convertForm.confirm_password) {
-      setConvertError("Passwords don't match.")
+    const pwdError = validatePassword(convertForm.password, convertForm.confirm_password)
+    if (pwdError) {
+      setConvertError(pwdError)
       return
     }
     setIsConverting(true)
@@ -278,8 +281,9 @@ export default function StudentsPage() {
   // Bulk convert handler
   const handleBulkConvert = async () => {
     setBulkConvertError('')
-    if (!bulkConvertPassword || bulkConvertPassword.length < 8) {
-      setBulkConvertError('Default password must be at least 8 characters.')
+    const pwdError = bulkConvertPassword ? validatePasswordLength(bulkConvertPassword) : 'Default password is required.'
+    if (pwdError) {
+      setBulkConvertError(pwdError)
       return
     }
     setIsConverting(true)
@@ -407,12 +411,9 @@ export default function StudentsPage() {
         setStudentUserError('Username and password are required for user account.')
         return
       }
-      if (studentUserForm.password.length < 8) {
-        setStudentUserError('Password must be at least 8 characters.')
-        return
-      }
-      if (studentUserForm.password !== studentUserForm.confirm_password) {
-        setStudentUserError("Passwords don't match.")
+      const pwdError = validatePassword(studentUserForm.password, studentUserForm.confirm_password)
+      if (pwdError) {
+        setStudentUserError(pwdError)
         return
       }
     }
@@ -1366,11 +1367,14 @@ export default function StudentsPage() {
       {/* Students Table */}
       {selectedSchoolId && (
       <div className="card">
-        {/* Results count */}
+        {/* Results count + view toggle */}
         {!isLoading && allStudents.length > 0 && (
-          <div className="mb-4 text-sm text-gray-500">
-            Showing {students.length} of {allStudents.length} students
-            {(selectedClassIds.length > 0 || search) && ' (filtered)'}
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div className="text-sm text-gray-500">
+              Showing {students.length} of {allStudents.length} students
+              {(selectedClassIds.length > 0 || search) && ' (filtered)'}
+            </div>
+            <ViewToggle view={view} onChange={setView} />
           </div>
         )}
 
@@ -1398,14 +1402,14 @@ export default function StudentsPage() {
               ? 'No students found. Add students individually or upload an Excel file.'
               : 'No students match your filter. Try adjusting the class or search criteria.'}
           </div>
-        ) : (
-          <>
-          {/* Mobile card view */}
-          <div className="sm:hidden space-y-2">
+        ) : view === 'cards' ? (
+          <CardGrid>
             {students.map((student) => (
-              <div key={student.id} className="p-3 border border-gray-200 rounded-lg">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 min-w-0 flex-1">
+              <RecordCard
+                key={student.id}
+                highlighted={selectedStudents.has(student.id)}
+                leading={
+                  <div className="flex items-center gap-2">
                     {!student.has_user_account && (
                       <input
                         type="checkbox"
@@ -1414,44 +1418,41 @@ export default function StudentsPage() {
                         className="rounded flex-shrink-0"
                       />
                     )}
-                    <StudentAvatar student={student} sizeClass="w-8 h-8" />
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium text-sm text-gray-900 truncate">{student.name}</p>
-                      <p className="text-xs text-gray-500">Roll #{student.roll_number} | {student.class_name}</p>
-                    </div>
+                    <StudentAvatar student={student} sizeClass="w-9 h-9" />
                   </div>
-                  <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
-                    {student.has_user_account ? (
-                      <span className="px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700" title={student.user_username}>
-                        User
-                      </span>
-                    ) : (
-                      <span className="px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-500">No Account</span>
-                    )}
-                    <span className={`px-2 py-0.5 rounded-full text-xs ${
-                      getLifecycleStyle(student.status)
-                    }`}>
-                      {getLifecycleLabel(student.status)}
-                    </span>
-                  </div>
-                </div>
-                {student.parent_phone && (
-                  <p className="text-xs text-gray-500 mt-1">{student.parent_phone}<WhatsAppTick phone={student.parent_phone} /></p>
-                )}
-                <div className="flex gap-3 mt-2 pt-2 border-t border-gray-100">
-                  <button onClick={() => openEditModal(student)} className="text-xs text-blue-600 font-medium">Edit</button>
-                  {canManageLifecycle && (
-                    <button onClick={() => setDeleteConfirm(student)} className="text-xs text-red-600 font-medium">Delete</button>
-                  )}
-                  {!student.has_user_account && (
-                    <button onClick={() => openConvertModal(student)} className="text-xs text-purple-600 font-medium">Create Account</button>
-                  )}
-                </div>
-              </div>
+                }
+                title={student.name}
+                meta={`Roll #${student.roll_number} · ${student.class_name}`}
+                status={
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${getLifecycleStyle(student.status)}`}>
+                    {getLifecycleLabel(student.status)}
+                  </span>
+                }
+                fields={[
+                  {
+                    label: 'Parent phone',
+                    value: student.parent_phone
+                      ? <span className="inline-flex items-center">{student.parent_phone}<WhatsAppTick phone={student.parent_phone} /></span>
+                      : <span className="text-gray-400 italic">Not set</span>,
+                  },
+                  {
+                    label: 'Account',
+                    value: student.has_user_account
+                      ? <Badge tone="success" title={student.user_username}>{student.user_username || 'User'}</Badge>
+                      : <span className="text-gray-400">No account</span>,
+                  },
+                ]}
+                actions={[
+                  { label: 'View', to: `/students/${student.id}` },
+                  { label: 'Edit', tone: 'info', onClick: () => openEditModal(student) },
+                  ...(!student.has_user_account ? [{ label: 'Create Account', tone: 'accent', onClick: () => openConvertModal(student) }] : []),
+                  ...(canManageLifecycle ? [{ label: 'Delete', tone: 'danger', onClick: () => setDeleteConfirm(student) }] : []),
+                ]}
+              />
             ))}
-          </div>
-          {/* Desktop table view */}
-          <div className="hidden sm:block overflow-x-auto">
+          </CardGrid>
+        ) : (
+          <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
@@ -1548,7 +1549,6 @@ export default function StudentsPage() {
               </tbody>
             </table>
           </div>
-          </>
         )}
       </div>
       )}

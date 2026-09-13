@@ -125,6 +125,8 @@ def fetch_image_bytes(url, timeout=5):
     if not url:
         return None
     try:
+        from core.url_safety import assert_safe_external_url
+        assert_safe_external_url(url)
         import requests
         resp = requests.get(url, timeout=timeout)
         if resp.status_code == 200:

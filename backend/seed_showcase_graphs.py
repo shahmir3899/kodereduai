@@ -196,7 +196,7 @@ def ensure_showcase_graph_data(school_id: int, *, reset: bool = False) -> dict:
         Term,
     )
     from academic_sessions.calendar_rules import is_off_day_for_date
-    from students.models import Class, Student
+    from students.models import Class, Student, StudentDocument, StudentProfile
     from attendance.models import AttendanceRecord, AttendanceUpload
     from academics.models import (
         ClassSubject,
@@ -207,6 +207,7 @@ def ensure_showcase_graph_data(school_id: int, *, reset: bool = False) -> dict:
     )
     from examinations.models import (
         Exam,
+        ExamGroup,
         ExamSubject,
         ExamType,
         GradeScale,
@@ -240,6 +241,24 @@ def ensure_showcase_graph_data(school_id: int, *, reset: bool = False) -> dict:
         StaffQualification,
     )
     from lms.models import Assignment, AssignmentSubmission, Book, Chapter, LessonPlan, Tag, Topic
+    from library.models import BookCategory as LibraryBookCategory
+    from library.models import Book as LibraryBook
+    from library.models import BookIssue, LibraryConfiguration
+    from transport.models import (
+        TransportAssignment,
+        TransportRoute,
+        TransportStop,
+        TransportVehicle,
+    )
+    from inventory.models import InventoryCategory, InventoryItem, StockTransaction
+    from parents.models import ParentChild, ParentInvite, ParentProfile
+    from notifications.models import (
+        NotificationLog,
+        NotificationPreference,
+        NotificationTemplate,
+        SchoolNotificationConfig,
+    )
+    from schools.models import UserSchoolMembership
     from users.models import User
 
     school = School.objects.filter(id=school_id).first()
@@ -304,6 +323,17 @@ def ensure_showcase_graph_data(school_id: int, *, reset: bool = False) -> dict:
         "assignments": 0,
         "assignment_submissions": 0,
         "uploads": 0,
+        "student_documents": 0,
+        "exam_groups": 0,
+        "student_profiles": 0,
+        "library_books": 0,
+        "book_issues": 0,
+        "transport_assignments": 0,
+        "inventory_items": 0,
+        "stock_transactions": 0,
+        "parent_links": 0,
+        "notification_templates": 0,
+        "notification_logs": 0,
     }
 
     # --- Session classes + enrollments ---
@@ -361,6 +391,20 @@ def ensure_showcase_graph_data(school_id: int, *, reset: bool = False) -> dict:
         )
         if enr_created:
             summary["enrollments"] += 1
+
+    # --- Student documents (birth certificate on file for each student) ---
+    for stu in students:
+        _, doc_created = StudentDocument.objects.get_or_create(
+            school=school,
+            student=stu,
+            document_type="BIRTH_CERT",
+            defaults={
+                "title": "Birth Certificate",
+                "file_url": f"https://demo-seed.invalid/students/{school_id}/{stu.class_obj_id}/{stu.id}/birth_cert.pdf",
+            },
+        )
+        if doc_created:
+            summary["student_documents"] += 1
 
     # --- Calendar (holidays) ---
     hol1_start = _clamp_date_to_ay(anchor - timedelta(days=45), ay)
@@ -513,6 +557,14 @@ def ensure_showcase_graph_data(school_id: int, *, reset: bool = False) -> dict:
             if fp_created:
                 summary["fee_payments"] += 1
 
+    # Bootstrap the expense/income categories the specs below key off of —
+    # without this, a school with no categories yet silently skips Expense/
+    # OtherIncome creation (see the `continue` below).
+    for cat_name in ("Rent", "Utilities", "Supplies", "Maintenance"):
+        ExpenseCategory.objects.get_or_create(school=school, name=cat_name)
+    for cat_name in ("Donation", "Event Income"):
+        IncomeCategory.objects.get_or_create(school=school, name=cat_name)
+
     expense_specs = [
         ("Rent", Decimal("45000.00"), 5, "Monthly building rent"),
         ("Utilities", Decimal("15000.00"), 12, "Electricity and water bill"),
@@ -593,6 +645,22 @@ def ensure_showcase_graph_data(school_id: int, *, reset: bool = False) -> dict:
         defaults={"weight": Decimal("40.00"), "is_active": True},
     )
 
+    exam_group, exam_group_created = ExamGroup.objects.get_or_create(
+        school=school,
+        academic_year=ay,
+        term=term,
+        exam_type=etype,
+        name="Cycle Test",
+        defaults={
+            "description": "Cycle test across all classes for this term.",
+            "start_date": term.start_date,
+            "end_date": term.start_date + timedelta(days=5),
+            "is_active": True,
+        },
+    )
+    if exam_group_created:
+        summary["exam_groups"] += 1
+
     for cls in classes:
         exam, ex_created = Exam.objects.update_or_create(
             school=school,
@@ -601,6 +669,7 @@ def ensure_showcase_graph_data(school_id: int, *, reset: bool = False) -> dict:
             term=term,
             defaults={
                 "academic_year": ay,
+                "exam_group": exam_group,
                 "name": f"Cycle Test — {cls.name}",
                 "start_date": term.start_date,
                 "end_date": term.start_date + timedelta(days=5),
@@ -1079,6 +1148,273 @@ def ensure_showcase_graph_data(school_id: int, *, reset: bool = False) -> dict:
             name=name,
             defaults={"tag_type": tag_type, "subject": subject, "school": school},
         )
+
+    # --- Student portal account (for a demo "student" login) ---
+    if students:
+        portal_student = students[0]
+        portal_username = f"demostudent{school_id}"
+        portal_user, portal_user_created = User.objects.get_or_create(
+            username=portal_username,
+            defaults={
+                "email": f"{portal_username}@demo.kodereduai.pk",
+                "first_name": portal_student.name.split()[0] if portal_student.name else "Demo",
+                "last_name": " ".join(portal_student.name.split()[1:]) or "Student",
+                "role": "STAFF",  # legacy base role; real role lives on the membership below
+                "school": school,
+                "organization": school.organization,
+            },
+        )
+        if portal_user_created:
+            portal_user.set_password("Abcd1234")
+            portal_user.save()
+        UserSchoolMembership.objects.get_or_create(
+            user=portal_user,
+            school=school,
+            defaults={"role": "STUDENT", "is_default": True},
+        )
+        _, sp_created = StudentProfile.objects.get_or_create(
+            user=portal_user,
+            student=portal_student,
+            defaults={"school": school},
+        )
+        if sp_created:
+            summary["student_profiles"] += 1
+
+    # --- Library ---
+    fiction_cat, _ = LibraryBookCategory.objects.get_or_create(
+        school=school, name="Fiction", defaults={"description": "Story books and novels"},
+    )
+    reference_cat, _ = LibraryBookCategory.objects.get_or_create(
+        school=school, name="Reference", defaults={"description": "Encyclopedias and reference material"},
+    )
+    library_book_specs = [
+        ("The Adventures of Tom Sawyer", "Mark Twain", fiction_cat),
+        ("Charlotte's Web", "E.B. White", fiction_cat),
+        ("World Atlas", "National Geographic", reference_cat),
+    ]
+    library_books = []
+    for title, author, category in library_book_specs:
+        book, book_created = LibraryBook.objects.get_or_create(
+            school=school,
+            title=title,
+            defaults={
+                "author": author,
+                "category": category,
+                "total_copies": 5,
+                "available_copies": 4,
+                "is_active": True,
+            },
+        )
+        library_books.append(book)
+        if book_created:
+            summary["library_books"] += 1
+
+    LibraryConfiguration.objects.get_or_create(
+        school=school,
+        defaults={
+            "max_books_student": 3,
+            "max_books_staff": 5,
+            "loan_period_days": 14,
+            "fine_per_day": Decimal("5.00"),
+        },
+    )
+
+    for idx, stu in enumerate(students[:2]):
+        book = library_books[idx % len(library_books)]
+        _, issue_created = BookIssue.objects.get_or_create(
+            school=school,
+            book=book,
+            student=stu,
+            defaults={
+                "borrower_type": "STUDENT",
+                "due_date": anchor + timedelta(days=14),
+                "status": "ISSUED",
+                "issued_by": admin_user,
+            },
+        )
+        if issue_created:
+            summary["book_issues"] += 1
+
+    # --- Transport ---
+    route, _ = TransportRoute.objects.get_or_create(
+        school=school,
+        name="Route 1 — North City",
+        defaults={
+            "start_location": "North City Terminal",
+            "end_location": school.name,
+            "estimated_duration_minutes": 35,
+            "is_active": True,
+        },
+    )
+    stop, _ = TransportStop.objects.get_or_create(
+        route=route,
+        stop_order=1,
+        defaults={
+            "name": "Main Market",
+            "pickup_time": time(7, 15),
+            "drop_time": time(14, 15),
+        },
+    )
+    vehicle, _ = TransportVehicle.objects.get_or_create(
+        school=school,
+        vehicle_number=f"TRN-{school_id}-01",
+        defaults={
+            "vehicle_type": "BUS",
+            "capacity": 30,
+            "driver_name": "Demo Driver",
+            "driver_phone": "0300-0000000",
+            "assigned_route": route,
+            "is_active": True,
+        },
+    )
+    for stu in students[:2]:
+        _, ta_created = TransportAssignment.objects.get_or_create(
+            school=school,
+            student=stu,
+            academic_year=ay,
+            defaults={
+                "route": route,
+                "stop": stop,
+                "vehicle": vehicle,
+                "transport_type": "BOTH",
+                "is_active": True,
+            },
+        )
+        if ta_created:
+            summary["transport_assignments"] += 1
+
+    # --- Inventory ---
+    stationery_cat, _ = InventoryCategory.objects.get_or_create(school=school, name="Stationery")
+    lab_cat, _ = InventoryCategory.objects.get_or_create(school=school, name="Lab Equipment")
+    inventory_item_specs = [
+        ("Whiteboard Marker", stationery_cat, "PCS", 120, Decimal("35.00")),
+        ("A4 Paper Ream", stationery_cat, "REAM", 40, Decimal("650.00")),
+        ("Microscope", lab_cat, "SET", 6, Decimal("15000.00")),
+    ]
+    for name, category, unit, qty, price in inventory_item_specs:
+        item, item_created = InventoryItem.objects.get_or_create(
+            school=school,
+            name=name,
+            category=category,
+            defaults={"unit": unit, "current_stock": 0, "unit_price": price, "is_active": True},
+        )
+        if item_created:
+            summary["inventory_items"] += 1
+        # Keyed on a fixed reference number (not the date) so re-running the
+        # seed doesn't re-adjust current_stock via StockTransaction.save().
+        _, txn_created = StockTransaction.objects.get_or_create(
+            school=school,
+            item=item,
+            transaction_type="PURCHASE",
+            reference_number=f"SHOWCASE-INIT-{item.id}",
+            defaults={
+                "quantity": qty,
+                "unit_price": price,
+                "date": ay.start_date,
+                "remarks": "Initial stock — showcase seed",
+                "recorded_by": admin_user,
+            },
+        )
+        if txn_created:
+            summary["stock_transactions"] += 1
+
+    # --- Parents ---
+    if students:
+        parent_username = f"demoparent{school_id}"
+        parent_user, parent_user_created = User.objects.get_or_create(
+            username=parent_username,
+            defaults={
+                "email": f"{parent_username}@demo.kodereduai.pk",
+                "first_name": "Demo",
+                "last_name": "Parent",
+                "role": "STAFF",  # legacy base role; real role lives on the membership below
+                "school": school,
+                "organization": school.organization,
+            },
+        )
+        if parent_user_created:
+            parent_user.set_password("Abcd1234")
+            parent_user.save()
+        UserSchoolMembership.objects.get_or_create(
+            user=parent_user,
+            school=school,
+            defaults={"role": "PARENT", "is_default": True},
+        )
+        parent_profile, _ = ParentProfile.objects.get_or_create(
+            user=parent_user,
+            defaults={"phone": "0300-1112222", "relation_to_default": "FATHER"},
+        )
+        _, pc_created = ParentChild.objects.get_or_create(
+            parent=parent_profile,
+            student=students[0],
+            defaults={"school": school, "relation": "FATHER", "is_primary": True},
+        )
+        if pc_created:
+            summary["parent_links"] += 1
+
+        if len(students) > 1:
+            ParentInvite.objects.get_or_create(
+                school=school,
+                student=students[1],
+                defaults={
+                    "invite_code": f"DEMO-{school_id}-{students[1].id}",
+                    "relation": "MOTHER",
+                    "expires_at": dj_timezone.now() + timedelta(days=30),
+                    "created_by": admin_user,
+                },
+            )
+
+    # --- Notifications ---
+    SchoolNotificationConfig.objects.get_or_create(school=school)
+
+    template_specs = [
+        ("Absence Alert", "ABSENCE", "IN_APP", "{{student_name}} was absent today."),
+        ("Fee Due Reminder", "FEE_DUE", "IN_APP", "Fee payment due for {{student_name}}."),
+    ]
+    templates_by_event = {}
+    for name, event_type, channel, body in template_specs:
+        tmpl, tmpl_created = NotificationTemplate.objects.get_or_create(
+            school=school,
+            name=name,
+            defaults={
+                "event_type": event_type,
+                "channel": channel,
+                "body_template": body,
+                "is_active": True,
+            },
+        )
+        templates_by_event[event_type] = tmpl
+        if tmpl_created:
+            summary["notification_templates"] += 1
+
+    if admin_user:
+        NotificationPreference.objects.get_or_create(
+            school=school,
+            user=admin_user,
+            channel="IN_APP",
+            event_type="ABSENCE",
+            defaults={"is_enabled": True},
+        )
+
+    if students:
+        stu = students[0]
+        _, log_created = NotificationLog.objects.get_or_create(
+            school=school,
+            event_type="ABSENCE",
+            channel="IN_APP",
+            student=stu,
+            defaults={
+                "template": templates_by_event.get("ABSENCE"),
+                "recipient_type": "PARENT",
+                "recipient_identifier": stu.parent_phone or "0300-0000000",
+                "title": "Absence Alert",
+                "body": f"{stu.name} was marked absent today.",
+                "status": "SENT",
+                "sent_at": dj_timezone.now(),
+            },
+        )
+        if log_created:
+            summary["notification_logs"] += 1
 
     # --- Attendance uploads (pipeline KPIs) ---
     statuses = (

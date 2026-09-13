@@ -143,6 +143,8 @@ function InboxTab() {
   const [confirmMarkAll, setConfirmMarkAll] = useState(false)
   const schoolOptions = user?.schools || []
 
+  useEscapeKey(() => setConfirmMarkAll(false), confirmMarkAll)
+
   const { data, isLoading } = useQuery({
     queryKey: ['myNotifications', filter, schoolFilter, page],
     queryFn: () => notificationsApi.getMyNotifications({
@@ -318,6 +320,9 @@ function TemplatesTab() {
   const [form, setForm] = useState({
     name: '', event_type: 'GENERAL', channel: 'IN_APP', subject_template: '', body_template: '', is_active: true,
   })
+
+  useEscapeKey(() => setDeleteConfirm(null), !!deleteConfirm)
+  useEscapeKey(() => setPreviewTemplate(null), !!previewTemplate)
 
   const { data, isLoading } = useQuery({
     queryKey: ['notificationTemplates', page],
@@ -666,9 +671,6 @@ function SendTab() {
   const [audiencePreview, setAudiencePreview] = useState(null)
   const [placeholderWarning, setPlaceholderWarning] = useState(null)
 
-  useEscapeKey(() => setConfirmMarkAll(false), confirmMarkAll)
-  useEscapeKey(() => setDeleteConfirm(null), !!deleteConfirm)
-  useEscapeKey(() => setPreviewTemplate(null), !!previewTemplate)
   useEscapeKey(() => setPlaceholderWarning(null), !!placeholderWarning)
   useEscapeKey(() => setConfirmSendOpen(false), confirmSendOpen && mode === 'broadcast')
   const [form, setForm] = useState({

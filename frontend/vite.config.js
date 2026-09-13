@@ -20,6 +20,8 @@ export default defineConfig({
   },
   server: {
     host: true,          // expose on all network interfaces → accessible from mobile on same WiFi
+    port: process.env.PORT ? Number(process.env.PORT) : 3000,
+    strictPort: !!process.env.PORT,
     proxy: {
       '/api': {
         target: 'http://localhost:8000',

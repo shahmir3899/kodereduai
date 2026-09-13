@@ -4,7 +4,7 @@ import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { useToast } from '../../components/Toast'
 import ClassSelector from '../../components/ClassSelector'
-import { examinationsApi, sessionsApi } from '../../services/api'
+import { examinationsApi } from '../../services/api'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
@@ -141,13 +141,6 @@ export default function AssessmentsPage() {
     autoSelectFirst: true,
     queryKey: 'myAssessmentClasses',
   })
-
-  const { data: academicYearsRes } = useQuery({
-    queryKey: ['monthlyAssessmentAcademicYears'],
-    queryFn: () => sessionsApi.getAcademicYears({ page_size: 9999 }),
-  })
-
-  const academicYears = academicYearsRes?.data?.results || academicYearsRes?.data || []
 
   const resolvedSessionClassId = useMemo(() => {
     if (!selectedClassId) return ''
@@ -394,21 +387,7 @@ export default function AssessmentsPage() {
         </div>
       </div>
 
-      <div className="grid gap-4 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-4">
-        <div>
-          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Academic Year</label>
-          <select
-            value={academicYearId}
-            onChange={(e) => setAcademicYearId(e.target.value)}
-            className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm"
-          >
-            <option value="">Select academic year</option>
-            {academicYears.map((year) => (
-              <option key={year.id} value={year.id}>{year.name}</option>
-            ))}
-          </select>
-        </div>
-
+      <div className="grid gap-4 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-3">
         <div>
           <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Class</label>
           <ClassSelector

@@ -587,8 +587,18 @@ class AttendanceUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
         import requests as req
         from PIL import Image
         from io import BytesIO
+        from core.url_safety import assert_safe_external_url, UnsafeUrlError
 
         upload = self.get_object()
+
+        try:
+            assert_safe_external_url(upload.image_url)
+        except UnsafeUrlError as e:
+            logger.warning(f"Rejected unsafe image URL on test_image: {e}")
+            return Response({
+                'success': False,
+                'error': 'This URL cannot be fetched.',
+            }, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             logger.info(f"Testing image access: {upload.image_url}")
@@ -607,18 +617,20 @@ class AttendanceUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
                 'content_type': response.headers.get('content-type'),
             })
         except req.RequestException as e:
+            # Don't echo the raw exception back to the caller -- it can leak
+            # internal hostnames/ports resolved during the request.
             logger.error(f"Image fetch failed: {e}")
             return Response({
                 'success': False,
                 'url': upload.image_url,
-                'error': str(e),
+                'error': 'Could not fetch the image.',
             }, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             logger.error(f"Image test failed: {e}")
             return Response({
                 'success': False,
                 'url': upload.image_url,
-                'error': str(e),
+                'error': 'Could not process the image.',
             }, status=status.HTTP_400_BAD_REQUEST)
 
 

@@ -261,6 +261,10 @@ class StaffDocument(models.Model):
     file_url = models.URLField(help_text='Supabase storage URL')
     uploaded_at = models.DateTimeField(auto_now_add=True)
     notes = models.TextField(blank=True)
+    expiry_date = models.DateField(
+        null=True, blank=True,
+        help_text='Optional expiry date (contract end, ID/medical cert renewal, etc.)',
+    )
 
     class Meta:
         ordering = ['-uploaded_at']

@@ -18,6 +18,8 @@ from urllib.parse import urlparse
 from django.utils.html import strip_tags
 import requests
 
+from core.url_safety import assert_safe_external_url, UnsafeUrlError
+
 from .html_sanitize import sanitize_for_docx
 from .paper_export_layout import build_export_layout, build_worksheet_export_layout, resolve_exam_paper_class_name
 
@@ -29,6 +31,11 @@ def _fetch_image_stream(url, timeout=8):
     attachment) -- python-docx's add_picture() needs a file-like object or local
     path, not a URL, same as _append_school_logo already does for the school logo."""
     if not url:
+        return None
+    try:
+        assert_safe_external_url(url)
+    except UnsafeUrlError as exc:
+        logger.warning('Rejected unsafe image URL %s: %s', url, exc)
         return None
     try:
         response = requests.get(url, timeout=timeout)

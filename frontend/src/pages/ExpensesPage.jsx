@@ -8,6 +8,8 @@ import { useConfirmModal } from '../components/ConfirmModal'
 import ExpenseCategoryManagerModal from './ExpenseCategoryManagerModal'
 import Button from '../components/ui/Button'
 import { useEscapeKey } from '../hooks/useEscapeKey'
+import { LedgerCard, CardGrid, ViewToggle } from '../components/cards'
+import { useViewPreference } from '../hooks/useViewPreference'
 
 const COLOR_PALETTE = [
   'bg-blue-100 text-blue-800',
@@ -36,6 +38,7 @@ export default function ExpensesPage() {
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
+  const [view, setView] = useViewPreference('expenses')
   const [accountFilter, setAccountFilter] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [editingExpense, setEditingExpense] = useState(null)
@@ -403,35 +406,34 @@ export default function ExpensesPage() {
               </div>
             ) : (
               <>
-                {/* Mobile card view */}
-                <div className="sm:hidden space-y-3">
-                  {expenseList.map((expense) => (
-                    <div key={expense.id} className="border rounded-lg p-3">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${getCategoryColor(expense.category)}`}>
-                          {expense.category_name || 'Uncategorized'}
-                        </span>
-                        <span className="text-sm text-gray-500">{expense.date}</span>
-                      </div>
-                      <p className="text-lg font-bold text-gray-900">{Number(expense.amount).toLocaleString()}</p>
-                      <p className="text-sm text-gray-600 mt-1">Account: {expense.account_name || '-'}</p>
-                      {expense.description && <p className="text-sm text-gray-600 mt-1">{expense.description}</p>}
-                      <div className="mt-2 pt-2 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
-                        <span>By: {expense.recorded_by_name || '-'}</span>
-                        <span>{expense.created_at ? new Date(expense.created_at).toLocaleDateString() : '-'}</span>
-                      </div>
-                      {canWrite && canEditExpense(expense) && (
-                        <div className="flex gap-2 mt-2">
-                          <button onClick={() => openEdit(expense)} className="text-xs text-primary-600 hover:underline">Edit</button>
-                          <button onClick={async () => { const ok = await confirm({ title: 'Delete Expense', message: 'Delete this expense? This cannot be undone.' }); if (ok) deleteMutation.mutate(expense.id) }} className="text-xs text-red-600 hover:underline">Delete</button>
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                <div className="flex justify-end mb-3">
+                  <ViewToggle view={view} onChange={setView} />
                 </div>
 
-                {/* Desktop table */}
-                <div className="hidden sm:block overflow-x-auto">
+                {view === 'cards' ? (
+                <CardGrid>
+                  {expenseList.map((expense) => (
+                    <LedgerCard
+                      key={expense.id}
+                      title={expense.account_name || 'Expense'}
+                      meta={`${expense.date} · ${expense.recorded_by_name || '-'}`}
+                      amount={{ value: expense.amount, tone: 'neutral' }}
+                      status={<span className={`px-2 py-0.5 rounded text-xs font-medium ${getCategoryColor(expense.category)}`}>{expense.category_name || 'Uncategorized'}</span>}
+                      description={expense.description || undefined}
+                      actions={canWrite && canEditExpense(expense) ? [
+                        { label: 'Edit', tone: 'primary', onClick: () => openEdit(expense) },
+                        {
+                          label: 'Delete', tone: 'danger', onClick: async () => {
+                            const ok = await confirm({ title: 'Delete Expense', message: 'Delete this expense? This cannot be undone.' })
+                            if (ok) deleteMutation.mutate(expense.id)
+                          },
+                        },
+                      ] : []}
+                    />
+                  ))}
+                </CardGrid>
+                ) : (
+                <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                       <tr>
@@ -478,6 +480,7 @@ export default function ExpensesPage() {
                     </tbody>
                   </table>
                 </div>
+                )}
               </>
             )}
           </div>

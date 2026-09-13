@@ -3,6 +3,7 @@ HR & Staff Management views.
 """
 
 import logging
+import uuid
 from datetime import date, timedelta
 
 from decimal import Decimal
@@ -11,7 +12,7 @@ from django.db import transaction
 from django.db.models import Count, Q, Sum
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
-from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
@@ -1000,6 +1001,58 @@ class PayslipViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
                 'message': 'Payslip generation started.',
             }, status=202)
 
+    @action(detail=False, methods=['get'])
+    def net_pay_history(self, request):
+        """
+        Last `months` months of net pay per staff member, ending at the given
+        month/year (defaults to current month). One grouped query instead of
+        the frontend firing a separate getPayslips call per month per staff
+        member — the payroll cards' trend strip needs this for every staff
+        member on the page at once, not just one.
+        """
+        school_id = _resolve_school_id(request)
+        if not school_id:
+            return Response({'detail': 'No school associated.'}, status=400)
+
+        try:
+            months_back = min(max(int(request.query_params.get('months', 6)), 1), 12)
+        except (TypeError, ValueError):
+            months_back = 6
+
+        today = date.today()
+        try:
+            end_month = int(request.query_params.get('month', today.month))
+            end_year = int(request.query_params.get('year', today.year))
+        except (TypeError, ValueError):
+            end_month, end_year = today.month, today.year
+
+        periods = []
+        y, m = end_year, end_month
+        for _ in range(months_back):
+            periods.append((y, m))
+            m -= 1
+            if m == 0:
+                m, y = 12, y - 1
+
+        period_filter = Q()
+        for y, m in periods:
+            period_filter |= Q(year=y, month=m)
+
+        rows = Payslip.objects.filter(school_id=school_id).filter(period_filter).values(
+            'staff_member_id', 'month', 'year', 'net_salary',
+        )
+
+        history = {}
+        for row in rows:
+            history.setdefault(str(row['staff_member_id']), []).append({
+                'month': row['month'], 'year': row['year'], 'net_salary': row['net_salary'],
+            })
+
+        return Response({
+            'periods': [{'month': m, 'year': y} for y, m in reversed(periods)],
+            'history': history,
+        })
+
     @action(detail=True, methods=['post'])
     def approve(self, request, pk=None):
         """Approve a draft payslip."""
@@ -1896,7 +1949,9 @@ class StaffDocumentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mode
     """CRUD for staff documents."""
     queryset = StaffDocument.objects.all()
     permission_classes = [IsAuthenticated, IsManagerOrAdminOrReadOnly, HasSchoolAccess]
-
+    # JSON for edits that only touch title/notes/expiry_date; multipart when the
+    # request carries a new/replacement file (see create()/update() below).
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):
@@ -1907,6 +1962,76 @@ class StaffDocumentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mode
         context = super().get_serializer_context()
         context['school_id'] = _resolve_school_id(self.request)
         return context
+
+    def _upload_and_stamp_file_url(self, request, data):
+        """
+        If this request carries a `file` part, validate + upload it to Supabase
+        storage and stamp the resulting URL onto `data['file_url']`. Returns an
+        error Response to short-circuit on, or None to continue.
+
+        `file_url` is a required model field set at creation time (unlike a
+        profile photo, which starts blank and is filled in after the record
+        already exists), so upload has to happen inline here rather than as a
+        separate post-creation action like StaffMemberViewSet.upload_photo.
+        """
+        file = request.FILES.get('file')
+        if not file:
+            return None
+
+        from core.storage import storage_service, validate_document_upload
+
+        try:
+            validate_document_upload(file)
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+        school_id = _resolve_school_id(request) or data.get('school') or data.get('school_id')
+        staff_member_id = data.get('staff_member')
+        ext = file.name.rsplit('.', 1)[-1].lower() if '.' in file.name else 'bin'
+        filename = f"{uuid.uuid4().hex}.{ext}"
+
+        try:
+            url = storage_service.upload_file(
+                file, folder=f"hr-documents/{school_id}/{staff_member_id}", filename=filename,
+            )
+        except Exception as e:
+            return Response({'error': f'Failed to upload file: {e}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        data['file_url'] = url
+        return None
+
+    def create(self, request, *args, **kwargs):
+        data = request.data.copy()
+        error = self._upload_and_stamp_file_url(request, data)
+        if error:
+            return error
+        if 'file_url' not in data or not data['file_url']:
+            return Response({'error': 'A file is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer = self.get_serializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        data = request.data.copy()
+        error = self._upload_and_stamp_file_url(request, data)
+        if error:
+            return error
+
+        serializer = self.get_serializer(instance, data=data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        if getattr(instance, '_prefetched_objects_cache', None):
+            instance._prefetched_objects_cache = {}
+        return Response(serializer.data)
+
+    def partial_update(self, request, *args, **kwargs):
+        kwargs['partial'] = True
+        return self.update(request, *args, **kwargs)
 
     def get_queryset(self):
         queryset = StaffDocument.objects.select_related(

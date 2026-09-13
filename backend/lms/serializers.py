@@ -6,7 +6,7 @@ Uses Read + Create serializer pattern for each model.
 from rest_framework import serializers
 from core.models import AIJob
 from .models import (
-    Book, Chapter, Topic, SubTopic, ContentBlock, ContentRevision, Tag,
+    Book, Chapter, Topic, TopicSchedule, SubTopic, ContentBlock, ContentRevision, Tag,
     LessonPlan, LearningObjective, LessonPlanObjective, CurriculumStandard, StandardObjective, TopicStandardAlignment, LessonAttachment,
     Assignment, AssignmentAttachment, AssignmentSubmission, TOCImportJob,
 )
@@ -140,18 +140,48 @@ class TopicDetailedSerializer(serializers.ModelSerializer):
     is_tested = serializers.BooleanField(read_only=True)
     test_question_count = serializers.IntegerField(read_only=True)
     lesson_plan_count = serializers.IntegerField(read_only=True)
-    
+
+    # Planned/taught dates -- both scoped to whichever academic year the view
+    # put in context (via ?academic_year=), since the same Topic is reused
+    # every year through its Book and has no single "the" date otherwise.
+    # See TopicSchedule for why planned_date isn't just a field on Topic.
+    planned_date = serializers.SerializerMethodField()
+    taught_date = serializers.SerializerMethodField()
+
     # Linked resources
     lesson_plans = serializers.SerializerMethodField()
     test_questions = serializers.SerializerMethodField()
-    
+
+    def get_planned_date(self, obj):
+        """From the prefetched, year-filtered `year_schedule` list set up in
+        TopicViewSet.get_queryset -- falls back to a direct query if the
+        request didn't scope by academic_year (or for a single retrieve)."""
+        academic_year_id = self.context.get('academic_year_id')
+        if not academic_year_id:
+            return None
+        year_schedule = getattr(obj, 'year_schedule', None)
+        if year_schedule is not None:
+            return year_schedule[0].planned_date if year_schedule else None
+        schedule = obj.schedules.filter(academic_year_id=academic_year_id).first()
+        return schedule.planned_date if schedule else None
+
+    def get_taught_date(self, obj):
+        """Earliest lesson_date among this year's active lesson plans that
+        cover the topic -- i.e. when it was first actually taught."""
+        academic_year_id = self.context.get('academic_year_id')
+        lesson_plans = obj.lesson_plans.filter(is_active=True)
+        if academic_year_id:
+            lesson_plans = lesson_plans.filter(academic_year_id=academic_year_id)
+        earliest = lesson_plans.order_by('lesson_date').first()
+        return earliest.lesson_date if earliest else None
+
     def get_lesson_plans(self, obj):
         """Simplified lesson plan list."""
         return [
             {'id': lp.id, 'title': lp.title, 'lesson_date': lp.lesson_date}
             for lp in obj.lesson_plans.filter(is_active=True)
         ]
-    
+
     def get_test_questions(self, obj):
         """Simplified question list."""
         return [
@@ -176,13 +206,16 @@ class TopicDetailedSerializer(serializers.ModelSerializer):
             'is_tested',           # NEW
             'test_question_count', # NEW
             'lesson_plan_count',   # NEW
+            'planned_date',
+            'taught_date',
             'lesson_plans',        # NEW
             'test_questions',      # NEW
             'created_at', 'updated_at'
         ]
         read_only_fields = [
             'id', 'is_covered', 'is_tested', 'test_question_count',
-            'lesson_plan_count', 'lesson_plans', 'test_questions',
+            'lesson_plan_count', 'planned_date', 'taught_date',
+            'lesson_plans', 'test_questions',
             'created_at', 'updated_at'
         ]
 

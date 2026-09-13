@@ -2004,6 +2004,12 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
 
     def get_queryset(self):
         user = self.request.user
+        # PRINCIPAL is branch-scoped: never sees org-level shared accounts,
+        # matching the exclusion balances() already applies (see _resolve_school_id
+        # callers below) — kept in sync here so list/CRUD/ledger/exports agree.
+        role = get_effective_role(self.request)
+        is_principal = role == 'PRINCIPAL'
+
         # Allow admin to fetch inactive accounts via ?include_inactive=true (for gateway config)
         include_inactive = self.request.query_params.get('include_inactive', 'false').lower() == 'true'
         queryset = Account.objects.all() if include_inactive else Account.objects.filter(is_active=True)
@@ -2017,7 +2023,7 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             except School.DoesNotExist:
                 org_id = None
             q = Q(school_id=school_id)
-            if org_id:
+            if org_id and not is_principal:
                 q |= Q(school__isnull=True, organization_id=org_id)
             queryset = queryset.filter(q)
         elif not user.is_super_admin:
@@ -2025,14 +2031,13 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             if tenant_schools:
                 org_id = user.organization_id
                 q = Q(school_id__in=tenant_schools)
-                if org_id:
+                if org_id and not is_principal:
                     q |= Q(school__isnull=True, organization_id=org_id)
                 queryset = queryset.filter(q)
             else:
                 return queryset.none()
 
         # Plan 2: Non-admin users see only accounts they own or marked as staff_visible
-        role = get_effective_role(self.request)
         if role not in ADMIN_ROLES:
             queryset = queryset.filter(
                 Q(staff_visible=True) | Q(account_owner=user)
@@ -2502,8 +2507,11 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
 
             account = Account.objects.get(id=account_id)
 
-            # Get data from ledger endpoint
+            # Get data from ledger endpoint (this enforces tenant/role access —
+            # bail out before touching `account` any further if it's inaccessible).
             ledger_response = self.ledger(request)
+            if getattr(ledger_response, 'status_code', status.HTTP_200_OK) >= 400:
+                return ledger_response
             ledger_data = ledger_response.data
 
             # Create workbook
@@ -2816,10 +2824,12 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
                 'subtotal': subtotal,
             })
 
-        # Shared (org-level) accounts
+        # Shared (org-level) accounts — PRINCIPAL is branch-scoped and never
+        # sees these, same exclusion as balances()/get_queryset().
+        is_principal = get_effective_role(request) == 'PRINCIPAL'
         shared_accounts = Account.objects.filter(
             school__isnull=True, organization_id__in=org_ids, is_active=True
-        ) if org_ids else Account.objects.none()
+        ) if (org_ids and not is_principal) else Account.objects.none()
 
         shared_results = []
         for account in shared_accounts:

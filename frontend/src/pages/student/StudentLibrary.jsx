@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
 import { studentPortalApi } from '../../services/api'
 import Spinner from '../../components/ui/Spinner'
+import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
+import { useViewPreference } from '../../hooks/useViewPreference'
 
 const statusBadge = {
   ISSUED: 'bg-blue-100 text-blue-800',
@@ -10,6 +12,7 @@ const statusBadge = {
 }
 
 export default function StudentLibrary() {
+  const [view, setView] = useViewPreference('student-library-history')
   const { data, isLoading, error } = useQuery({
     queryKey: ['studentLibrary'],
     queryFn: () => studentPortalApi.getLibrary(),
@@ -56,31 +59,54 @@ export default function StudentLibrary() {
           {current.length > 0 && (
             <div className="bg-white rounded-xl border border-gray-200 p-4">
               <h2 className="text-sm font-semibold text-gray-900 mb-3">Currently Issued</h2>
-              <div className="space-y-2">
+              <CardGrid>
                 {current.map((issue) => (
-                  <div key={issue.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">{issue.book_title}</p>
-                      <p className="text-xs text-gray-500">{issue.book_author}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">
-                        Issued {issue.issue_date} · Due {issue.due_date}
-                        {Number(issue.fine_amount) > 0 && <span className="text-red-600"> · Fine: PKR {issue.fine_amount}</span>}
-                      </p>
-                    </div>
-                    <span className={`shrink-0 ml-3 px-2 py-0.5 rounded-full text-xs font-medium ${statusBadge[issue.status] || 'bg-gray-100'}`}>
-                      {issue.status}
-                    </span>
-                  </div>
+                  <RecordCard
+                    key={issue.id}
+                    title={issue.book_title}
+                    meta={issue.book_author}
+                    status={
+                      <span className={`shrink-0 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${statusBadge[issue.status] || 'bg-gray-100'}`}>
+                        {issue.status}
+                      </span>
+                    }
+                    fields={[
+                      { label: 'Issued', value: issue.issue_date },
+                      { label: 'Due', value: issue.due_date },
+                      ...(Number(issue.fine_amount) > 0 ? [{ label: 'Fine', value: <span className="text-red-600">PKR {issue.fine_amount}</span> }] : []),
+                    ]}
+                  />
                 ))}
-              </div>
+              </CardGrid>
             </div>
           )}
 
           {past.length > 0 && (
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <div className="px-4 pt-4">
+              <div className="px-4 pt-4 flex items-center justify-between">
                 <h2 className="text-sm font-semibold text-gray-900 mb-3">Past History</h2>
+                <ViewToggle view={view} onChange={setView} />
               </div>
+              {view === 'cards' ? (
+              <CardGrid className="p-4 pt-1">
+                {past.map((issue) => (
+                  <RecordCard
+                    key={issue.id}
+                    title={issue.book_title}
+                    meta={issue.book_author}
+                    status={
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${statusBadge[issue.status] || 'bg-gray-100'}`}>
+                        {issue.status}
+                      </span>
+                    }
+                    fields={[
+                      { label: 'Issued', value: issue.issue_date },
+                      { label: 'Returned', value: issue.return_date || '—' },
+                    ]}
+                  />
+                ))}
+              </CardGrid>
+              ) : (
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
@@ -110,6 +136,7 @@ export default function StudentLibrary() {
                   </tbody>
                 </table>
               </div>
+              )}
             </div>
           )}
         </>

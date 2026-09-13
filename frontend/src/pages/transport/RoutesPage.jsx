@@ -6,6 +6,8 @@ import LocationPickerMap from '../../components/LocationPickerMap'
 import RouteMapView from '../../components/RouteMapView'
 import Spinner from '../../components/ui/Spinner'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
+import { RouteCard, ViewToggle } from '../../components/cards'
+import { useViewPreference } from '../../hooks/useViewPreference'
 
 function haversineKm(lat1, lon1, lat2, lon2) {
   const R = 6371
@@ -55,6 +57,7 @@ export default function RoutesPage() {
   const [routeForm, setRouteForm] = useState(emptyRouteForm)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [expandedRoute, setExpandedRoute] = useState(null)
+  const [view, setView] = useViewPreference('transport-routes')
   const [showStopModal, setShowStopModal] = useState(false)
   const [editingStop, setEditingStop] = useState(null)
   const [stopForm, setStopForm] = useState(emptyStopForm)
@@ -239,6 +242,35 @@ export default function RoutesPage() {
     setExpandedRoute(expandedRoute === routeId ? null : routeId)
   }
 
+  // Shared between the table's expanded row and the card view's expanded
+  // body — same stop list, same map, same per-stop actions either way.
+  const renderStopsForRoute = (route) => (
+    <>
+      {!stopsLoading && <RouteMapView route={route} stops={stops} />}
+      {stopsLoading ? (
+        <p className="text-xs text-gray-400 py-2">Loading stops...</p>
+      ) : stops.length === 0 ? (
+        <p className="text-xs text-gray-400 py-2">No stops added yet.</p>
+      ) : (
+        <div className="space-y-2 mt-2">
+          {stops.sort((a, b) => (a.stop_order || 0) - (b.stop_order || 0)).map((stop) => (
+            <div key={stop.id} className="flex items-center justify-between bg-white p-2 rounded border border-gray-100">
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-gray-900">#{stop.stop_order} {stop.name}</p>
+                <p className="text-xs text-gray-500">{stop.address || '--'}</p>
+                <p className="text-xs text-gray-400">Pickup: {stop.pickup_time || '--'} | Drop: {stop.drop_time || '--'}</p>
+              </div>
+              <div className="flex gap-2 flex-none ml-2">
+                <button onClick={() => openEditStopModal(stop)} className="text-xs text-blue-600 font-medium">Edit</button>
+                <button onClick={() => deleteStopMutation.mutate(stop.id)} className="text-xs text-red-600 font-medium">Delete</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  )
+
   if (error) {
     return (
       <div className="card text-center py-12">
@@ -296,77 +328,33 @@ export default function RoutesPage() {
           </div>
         ) : (
           <>
-            {/* Mobile card view */}
-            <div className="sm:hidden space-y-3">
-              {routes.map((route) => (
-                <div key={route.id} className="border border-gray-200 rounded-lg">
-                  <div className="p-3">
-                    <div className="flex items-center justify-between">
-                      <p className="font-medium text-sm text-gray-900">{route.name}</p>
-                      <button
-                        onClick={() => toggleExpand(route.id)}
-                        className="text-xs text-primary-600 font-medium"
-                      >
-                        {expandedRoute === route.id ? 'Hide Stops' : 'Show Stops'}
-                      </button>
-                    </div>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {route.start_location || 'Start'} → {route.end_location || 'End'}
-                    </p>
-                    <div className="flex flex-wrap gap-3 mt-2 text-xs text-gray-500">
-                      {route.distance_km && <span>{route.distance_km} km</span>}
-                      {route.estimated_duration_minutes && <span>{route.estimated_duration_minutes} min</span>}
-                      <span>{route.stops_count || 0} stops</span>
-                      <CapacityBadge students={route.students_count || 0} capacity={route.total_capacity} />
-                    </div>
-                    <div className="flex gap-3 mt-2 pt-2 border-t border-gray-100">
-                      <button onClick={() => openEditRouteModal(route)} className="text-xs text-blue-600 font-medium">Edit</button>
-                      <button onClick={() => duplicateRouteMutation.mutate(route.id)} className="text-xs text-emerald-600 font-medium">Duplicate</button>
-                      <button onClick={() => setDeleteConfirm(route)} className="text-xs text-red-600 font-medium">Delete</button>
-                    </div>
-                  </div>
-
-                  {/* Expanded stops (mobile) */}
-                  {expandedRoute === route.id && (
-                    <div className="border-t border-gray-200 bg-gray-50 p-3">
-                      <div className="flex items-center justify-between mb-2">
-                        <p className="text-xs font-semibold text-gray-700 uppercase">Stops</p>
-                        <button onClick={() => openAddStopModal(route.id)} className="text-xs text-primary-600 font-medium">
-                          + Add Stop
-                        </button>
-                      </div>
-                      {!stopsLoading && <RouteMapView route={route} stops={stops} />}
-                      {stopsLoading ? (
-                        <p className="text-xs text-gray-400 py-2">Loading stops...</p>
-                      ) : stops.length === 0 ? (
-                        <p className="text-xs text-gray-400 py-2">No stops added yet.</p>
-                      ) : (
-                        <div className="space-y-2">
-                          {stops.sort((a, b) => (a.stop_order || 0) - (b.stop_order || 0)).map((stop) => (
-                            <div key={stop.id} className="flex items-center justify-between bg-white p-2 rounded border border-gray-100">
-                              <div>
-                                <p className="text-xs font-medium text-gray-900">#{stop.stop_order} {stop.name}</p>
-                                <p className="text-xs text-gray-500">{stop.address || '--'}</p>
-                                <p className="text-xs text-gray-400">
-                                  Pickup: {stop.pickup_time || '--'} | Drop: {stop.drop_time || '--'}
-                                </p>
-                              </div>
-                              <div className="flex gap-2">
-                                <button onClick={() => openEditStopModal(stop)} className="text-xs text-blue-600">Edit</button>
-                                <button onClick={() => deleteStopMutation.mutate(stop.id)} className="text-xs text-red-600">Del</button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))}
+            <div className="flex justify-end mb-3">
+              <ViewToggle view={view} onChange={setView} />
             </div>
 
-            {/* Desktop table view */}
-            <div className="hidden sm:block overflow-x-auto">
+            {view === 'cards' && (
+            <div className="flex flex-col gap-3">
+              {routes.map((route) => (
+                <RouteCard
+                  key={route.id}
+                  title={route.name}
+                  meta={`${route.start_location || 'Start'} → ${route.end_location || 'End'}`}
+                  open={expandedRoute === route.id}
+                  onToggle={() => toggleExpand(route.id)}
+                  onAddStop={() => openAddStopModal(route.id)}
+                  renderStops={() => renderStopsForRoute(route)}
+                  stats={[
+                    ...(route.distance_km ? [{ label: 'Distance', value: `${route.distance_km} km` }] : []),
+                    ...(route.estimated_duration_minutes ? [{ label: 'Duration', value: `${route.estimated_duration_minutes} min` }] : []),
+                    { label: 'Stops', value: route.stops_count || 0 },
+                  ]}
+                />
+              ))}
+            </div>
+            )}
+
+            {view === 'table' && (
+            <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
@@ -492,6 +480,7 @@ export default function RoutesPage() {
                 </tbody>
               </table>
             </div>
+            )}
           </>
         )}
       </div>

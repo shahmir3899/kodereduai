@@ -7,6 +7,8 @@ import { useConfirmModal } from '../../components/ConfirmModal'
 import { GRADE_PRESETS, GRADE_LEVEL_LABELS } from '../../constants/gradePresets'
 import BatchConvertModal from '../../components/BatchConvertModal'
 import Spinner from '../../components/ui/Spinner'
+import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
+import { useViewPreference } from '../../hooks/useViewPreference'
 
 const STATUSES = [
   { key: 'NEW', label: 'New', color: 'bg-blue-100 text-blue-800' },
@@ -26,6 +28,7 @@ export default function EnquiriesPage() {
   const { confirm, ConfirmModalRoot } = useConfirmModal()
 
   // Selection state for batch convert
+  const [view, setView] = useViewPreference('admissions-enquiries')
   const [selected, setSelected] = useState(new Set())
   const [showConvertModal, setShowConvertModal] = useState(false)
 
@@ -356,77 +359,63 @@ export default function EnquiriesPage() {
       {/* Enquiries list */}
       {!isLoading && enquiries.length > 0 && (
         <>
-          {/* Mobile card view */}
-          <div className="sm:hidden space-y-2 mb-4">
+          <div className="flex justify-end mb-3">
+            <ViewToggle view={view} onChange={setView} />
+          </div>
+
+          {view === 'cards' ? (
+          <CardGrid className="mb-4">
             {enquiries.map((enquiry) => (
-              <div
+              <RecordCard
                 key={enquiry.id}
-                className="card !p-3 hover:shadow-md transition-shadow"
-              >
-                <div className="flex items-start gap-2">
-                  {enquiry.status === 'CONFIRMED' && (
+                highlighted={selected.has(enquiry.id)}
+                leading={
+                  enquiry.status === 'CONFIRMED' ? (
                     <input
                       type="checkbox"
                       checked={selected.has(enquiry.id)}
                       onChange={() => toggleSelect(enquiry.id)}
-                      className="mt-1 rounded border-gray-300"
+                      className="rounded border-gray-300 mt-1"
                     />
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between mb-1.5">
-                      <div className="min-w-0 flex-1">
-                        <p className="font-medium text-sm text-gray-900 truncate">{enquiry.name}</p>
-                        <p className="text-xs text-gray-500">{enquiry.father_name} | {enquiry.mobile}</p>
-                      </div>
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ml-2 ${STATUS_COLORS[enquiry.status] || 'bg-gray-100 text-gray-700'}`}>
-                        {enquiry.status_display || enquiry.status}
+                  ) : null
+                }
+                title={enquiry.name}
+                meta={`${enquiry.father_name} · ${enquiry.mobile}`}
+                status={
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${STATUS_COLORS[enquiry.status] || 'bg-gray-100 text-gray-700'}`}>
+                    {enquiry.status_display || enquiry.status}
+                  </span>
+                }
+                fields={[
+                  { label: 'Grade', value: GRADE_LEVEL_LABELS[enquiry.applying_for_grade_level] || 'N/A' },
+                  { label: 'Source', value: enquiry.source_display || (enquiry.source || '').replace(/_/g, ' ') },
+                  ...(enquiry.next_followup_date ? [{
+                    label: 'Follow-up',
+                    value: (
+                      <span className={new Date(enquiry.next_followup_date) < new Date() ? 'text-red-600 font-medium' : ''}>
+                        {enquiry.next_followup_date}
                       </span>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
-                      <span>{GRADE_LEVEL_LABELS[enquiry.applying_for_grade_level] || 'N/A'}</span>
-                      <span className="text-gray-300">|</span>
-                      <span>{enquiry.source_display || (enquiry.source || '').replace(/_/g, ' ')}</span>
-                      {enquiry.next_followup_date && (
-                        <>
-                          <span className="text-gray-300">|</span>
-                          <span className={new Date(enquiry.next_followup_date) < new Date() ? 'text-red-600 font-medium' : ''}>
-                            FU: {enquiry.next_followup_date}
-                          </span>
-                        </>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1 mt-2">
-                      <Link
-                        to={`/admissions/${enquiry.id}/edit`}
-                        className="text-xs text-blue-600 hover:text-blue-800 font-medium"
-                      >
-                        Edit
-                      </Link>
-                      {enquiry.status === 'NEW' && (
-                        <button
-                          onClick={() => statusMut.mutate({ id: enquiry.id, status: 'CONFIRMED' })}
-                          className="text-xs text-green-600 hover:text-green-800 font-medium ml-2"
-                        >
-                          Confirm
-                        </button>
-                      )}
-                      {(enquiry.status === 'NEW' || enquiry.status === 'CONFIRMED') && (
-                        <button
-                          onClick={() => statusMut.mutate({ id: enquiry.id, status: 'CANCELLED' })}
-                          className="text-xs text-red-600 hover:text-red-800 font-medium ml-2"
-                        >
-                          Cancel
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
+                    ),
+                  }] : []),
+                ]}
+                actions={[
+                  { label: 'Edit', tone: 'info', to: `/admissions/${enquiry.id}/edit` },
+                  ...(enquiry.status === 'NEW' ? [{ label: 'Confirm', tone: 'success', onClick: () => statusMut.mutate({ id: enquiry.id, status: 'CONFIRMED' }) }] : []),
+                  ...((enquiry.status === 'NEW' || enquiry.status === 'CONFIRMED') ? [{ label: 'Cancel', tone: 'danger', onClick: () => statusMut.mutate({ id: enquiry.id, status: 'CANCELLED' }) }] : []),
+                  ...(enquiry.status !== 'CONVERTED' && enquiry.status !== 'CANCELLED' ? [{
+                    label: 'Delete',
+                    tone: 'muted',
+                    onClick: async () => {
+                      const ok = await confirm({ title: 'Delete Enquiry', message: 'Delete this enquiry?' })
+                      if (ok) deleteMut.mutate(enquiry.id)
+                    },
+                  }] : []),
+                ]}
+              />
             ))}
-          </div>
-
-          {/* Desktop table view */}
-          <div className="hidden sm:block card overflow-x-auto mb-4">
+          </CardGrid>
+          ) : (
+          <div className="card overflow-x-auto mb-4">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
@@ -532,6 +521,7 @@ export default function EnquiriesPage() {
               </tbody>
             </table>
           </div>
+          )}
 
           {/* Pagination */}
           {totalPages > 1 && (

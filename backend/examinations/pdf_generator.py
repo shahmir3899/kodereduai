@@ -15,6 +15,8 @@ from datetime import datetime
 
 import requests
 
+from core.url_safety import assert_safe_external_url, UnsafeUrlError
+
 from .html_sanitize import sanitize_for_pdf
 from .paper_export_layout import build_export_layout, build_worksheet_export_layout, resolve_exam_paper_class_name
 
@@ -71,6 +73,11 @@ def _load_logo_stream(school):
     if not logo_url:
         return None
     try:
+        assert_safe_external_url(logo_url)
+    except UnsafeUrlError as e:
+        logger.warning(f"Rejected unsafe school logo URL: {e}")
+        return None
+    try:
         resp = requests.get(logo_url, timeout=8)
         resp.raise_for_status()
         return io.BytesIO(resp.content)
@@ -89,6 +96,11 @@ def _load_image_stream(url, timeout=8):
     and takes down the whole PDF. An unreachable/invalid image degrades to
     "no image" instead."""
     if not url:
+        return None
+    try:
+        assert_safe_external_url(url)
+    except UnsafeUrlError as e:
+        logger.warning(f"Rejected unsafe image URL {url}: {e}")
         return None
     try:
         resp = requests.get(url, timeout=timeout)

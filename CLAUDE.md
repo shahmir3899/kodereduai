@@ -132,6 +132,7 @@ Helper script: `run_both_servers.bat` starts backend + main frontend in separate
   const mutation = useMutation({ mutationFn: (d) => api.post(d), onSuccess: () => queryClient.invalidateQueries(['key']) })
   ```
 - Frontend pages live under `src/pages/` (one file per route), shared UI in `src/components/`, cross-cutting state in `src/contexts/`, reusable logic in `src/hooks/`.
+- List pages needing a mobile card view use the shared `src/components/cards/` system (`RecordCard`, `CardGrid`, `StatusPill`, `Avatar`, `ViewToggle` + `useViewPreference`) rather than a new ad hoc mobile-card `<div>` block — see `docs/CARD_SYSTEM.md`.
 - Comments in both backend and frontend explain *why* (a specific incident, a cost tradeoff, a non-obvious ordering requirement), not what the code does — follow that pattern rather than narrating logic.
 
 ## Tests

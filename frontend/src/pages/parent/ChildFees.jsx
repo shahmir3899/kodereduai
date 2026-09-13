@@ -4,6 +4,8 @@ import { useQuery, useMutation } from '@tanstack/react-query'
 import { parentsApi } from '../../services/api'
 import Spinner from '../../components/ui/Spinner'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
+import { LedgerCard, CardGrid, ViewToggle, TrendStrip } from '../../components/cards'
+import { useViewPreference } from '../../hooks/useViewPreference'
 
 const STATUS_COLORS = {
   PAID: 'bg-green-100 text-green-800',
@@ -14,11 +16,21 @@ const STATUS_COLORS = {
   OVERDUE: 'bg-red-100 text-red-800',
 }
 
+const TREND_TONE = {
+  PAID: 'success',
+  ADVANCE: 'success',
+  PARTIAL: 'warning',
+  UNPAID: 'danger',
+  PENDING: 'danger',
+  OVERDUE: 'danger',
+}
+
 export default function ChildFees() {
   const { studentId } = useParams()
   const navigate = useNavigate()
   const currentYear = new Date().getFullYear()
   const [filterYear, setFilterYear] = useState(currentYear)
+  const [view, setView] = useViewPreference('child-fees')
   const [payingFeeId, setPayingFeeId] = useState(null)
   const [selectedGateway, setSelectedGateway] = useState('')
   const [showPayModal, setShowPayModal] = useState(false)
@@ -76,6 +88,16 @@ export default function ChildFees() {
   const fees = feesData?.data
   const payments = fees?.payments || fees?.records || (Array.isArray(fees) ? fees : [])
   const summary = fees?.summary || {}
+
+  const trendPoints = payments
+    .slice()
+    .sort((a, b) => (a.year - b.year) || (a.month - b.month))
+    .slice(-6)
+    .map((p) => ({
+      label: (p.month_name || '').slice(0, 3) || `M${p.month}`,
+      value: parseFloat(p.amount_paid || 0),
+      tone: TREND_TONE[p.status] || 'neutral',
+    }))
 
   const totalDue = summary.total_due ?? payments.reduce((sum, p) => sum + parseFloat(p.amount_due || 0), 0)
   const totalPaid = summary.total_paid ?? payments.reduce((sum, p) => sum + parseFloat(p.amount_paid || 0), 0)
@@ -209,39 +231,28 @@ export default function ChildFees() {
         </div>
       ) : (
         <>
-          {/* Mobile Card View */}
-          <div className="sm:hidden space-y-3">
-            {payments.map((payment, idx) => (
-              <div key={payment.id || idx} className="bg-white rounded-xl border border-gray-200 p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-gray-900">
-                    {payment.month_name || payment.fee_type_name || `${payment.month}/${payment.year}`}
-                  </span>
-                  <span className={`px-2 py-0.5 rounded text-xs font-medium ${STATUS_COLORS[payment.status] || 'bg-gray-100 text-gray-800'}`}>
-                    {payment.status}
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div>
-                    <span className="text-gray-500">Due:</span>{' '}
-                    <span className="font-medium text-gray-900">PKR {parseFloat(payment.amount_due || 0).toLocaleString()}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-500">Paid:</span>{' '}
-                    <span className="font-medium text-green-700">PKR {parseFloat(payment.amount_paid || 0).toLocaleString()}</span>
-                  </div>
-                </div>
-                {payment.payment_date && (
-                  <p className="text-xs text-gray-400 mt-2">
-                    Paid on: {new Date(payment.payment_date).toLocaleDateString()}
-                  </p>
-                )}
-              </div>
-            ))}
+          <div className="flex justify-end mb-3">
+            <ViewToggle view={view} onChange={setView} />
           </div>
 
-          {/* Desktop Table View */}
-          <div className="hidden sm:block bg-white rounded-xl border border-gray-200 overflow-hidden">
+          {view === 'cards' ? (
+          <CardGrid>
+            {payments.map((payment, idx) => (
+              <LedgerCard
+                key={payment.id || idx}
+                title={payment.month_name || payment.fee_type_name || `${payment.month}/${payment.year}`}
+                meta={payment.payment_date ? `Paid ${new Date(payment.payment_date).toLocaleDateString()}` : undefined}
+                status={<span className={`px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap ${STATUS_COLORS[payment.status] || 'bg-gray-100 text-gray-800'}`}>{payment.status}</span>}
+                breakdown={[
+                  { label: 'Due', value: parseFloat(payment.amount_due || 0) },
+                  { label: 'Paid', value: parseFloat(payment.amount_paid || 0), emphasis: true },
+                ]}
+                trend={<TrendStrip points={trendPoints} currentLabel={(payment.month_name || '').slice(0, 3)} formatValue={(v) => `${(v / 1000).toFixed(0)}k`} />}
+              />
+            ))}
+          </CardGrid>
+          ) : (
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
@@ -281,6 +292,7 @@ export default function ChildFees() {
               </table>
             </div>
           </div>
+          )}
         </>
       )}
 

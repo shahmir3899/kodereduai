@@ -10,6 +10,7 @@ import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 import Spinner from '../../components/ui/Spinner'
+import StaffFilter from '../../components/StaffFilter'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 const DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
@@ -407,6 +408,24 @@ export default function TimetablePage() {
 
   const resetSlotForm = () => { setSlotForm(EMPTY_SLOT); setEditSlotId(null); setSlotErrors({}) }
 
+  const [downloadingPdf, setDownloadingPdf] = useState(false)
+  const handleDownloadPdf = async () => {
+    if (!resolvedSelectedClassId) return
+    setDownloadingPdf(true)
+    try {
+      const res = await academicsApi.downloadTimetablePdf(resolvedSelectedClassId)
+      const url = window.URL.createObjectURL(new Blob([res.data]))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `timetable-${selectedClassName || resolvedSelectedClassId}.pdf`
+      a.click()
+      window.URL.revokeObjectURL(url)
+    } catch {
+      setSaveMsg('Failed to download timetable PDF.')
+    }
+    setDownloadingPdf(false)
+  }
+
   // AI Suggest Slots handlers
   const handleSuggestSlots = async () => {
     setLoadingSuggest(true)
@@ -530,6 +549,15 @@ export default function TimetablePage() {
           >
             Time Slots ({slots.length})
           </button>
+          {selectedClassId && (
+            <button
+              onClick={handleDownloadPdf}
+              disabled={downloadingPdf}
+              className="px-3 py-2 text-sm bg-red-50 text-red-700 rounded-lg hover:bg-red-100 disabled:opacity-50"
+            >
+              {downloadingPdf ? 'Downloading...' : 'Download PDF'}
+            </button>
+          )}
           {selectedClassId && classSubjects.length > 0 && (
             <button
               onClick={() => setShowAutoGenConfirm(true)}
@@ -785,16 +813,13 @@ export default function TimetablePage() {
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Teacher</label>
-                <select
+                <StaffFilter
+                  options={staffList}
                   value={cellForm.teacher}
                   onChange={e => handleTeacherChange(e.target.value)}
-                  className="input w-full text-sm"
-                >
-                  <option value="">-- None --</option>
-                  {staffList.map(s => (
-                    <option key={s.id} value={s.id}>{s.full_name}</option>
-                  ))}
-                </select>
+                  showAllOption
+                  allOptionLabel="-- None --"
+                />
               </div>
 
               {/* Conflict Warning */}
@@ -969,10 +994,12 @@ export default function TimetablePage() {
             <div className="flex gap-3 mb-4">
               <div className="flex-1">
                 <label className="block text-xs text-gray-500 mb-1">Absent Teacher</label>
-                <select value={subTeacher} onChange={e => setSubTeacher(e.target.value)} className="input w-full text-sm">
-                  <option value="">-- Select --</option>
-                  {staffList.map(s => <option key={s.id} value={s.id}>{s.full_name}</option>)}
-                </select>
+                <StaffFilter
+                  options={staffList}
+                  value={subTeacher}
+                  onChange={e => setSubTeacher(e.target.value)}
+                  placeholder="-- Select --"
+                />
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Date</label>

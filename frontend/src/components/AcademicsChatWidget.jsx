@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { academicsApi } from '../services/api'
+import { useDraggableWidget } from '../hooks/useDraggableWidget'
 
 const SUGGESTIONS = [
   'When does Class 5A have Science?',
@@ -15,6 +16,7 @@ export default function AcademicsChatWidget() {
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const messagesEndRef = useRef(null)
+  const { panelStyle, onDragHandleMouseDown } = useDraggableWidget('academicsChatWidgetPos', { height: 400 })
 
   const { data: history } = useQuery({
     queryKey: ['academicsAIChatHistory'],
@@ -94,11 +96,15 @@ export default function AcademicsChatWidget() {
       {/* Chat Panel */}
       {isOpen && (
         <div
+          data-draggable-panel
           className="fixed bottom-24 right-6 z-50 w-[85vw] sm:w-96 bg-white rounded-xl shadow-2xl border border-gray-200 flex flex-col"
-          style={{ maxHeight: '70vh' }}
+          style={{ maxHeight: '70vh', ...panelStyle }}
         >
-          {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 flex-shrink-0 bg-indigo-600 rounded-t-xl">
+          {/* Header — drag handle */}
+          <div
+            onMouseDown={onDragHandleMouseDown}
+            className="flex items-center justify-between px-4 py-3 border-b border-gray-200 flex-shrink-0 bg-indigo-600 rounded-t-xl cursor-move select-none"
+          >
             <div>
               <h3 className="text-sm font-semibold text-white">AI Academics Assistant</h3>
               <p className="text-xs text-indigo-200">Ask about schedules, subjects, teachers</p>

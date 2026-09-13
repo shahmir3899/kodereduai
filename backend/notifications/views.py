@@ -33,7 +33,14 @@ from .engine import NotificationEngine
 
 
 def filter_my_notifications_by_school(request, queryset):
-    """Optional ?school_id= — only notifications for schools the user can access."""
+    """
+    Always restrict to schools the user currently has an active membership at —
+    a stale/removed membership or a bad recipient match must never leak a row
+    into someone's inbox just because it was once addressed to them.
+    Optional ?school_id= narrows further to that one school.
+    """
+    queryset = queryset.filter(school_id__in=request.user.get_accessible_school_ids())
+
     raw = request.query_params.get('school_id')
     if raw in (None, ''):
         return queryset
@@ -222,17 +229,16 @@ class UnreadCountView(APIView):
 
     def get(self, request):
         """
-        Unread count is all in-app rows for the user (all schools) so the bell
-        badge does not drop when the UI filters the list to one branch.
-        Optional ?school_id= limits the count when a client needs branch-level counts.
+        Unread count spans every school the user currently belongs to (not just
+        the one the UI has filtered to) so the bell badge does not drop when the
+        list view is scoped to one branch. Optional ?school_id= narrows further.
         """
         qs = NotificationLog.objects.filter(
             recipient_user=request.user,
             channel='IN_APP',
             read_at__isnull=True,
         ).exclude(status='FAILED')
-        if request.query_params.get('school_id') not in (None, ''):
-            qs = filter_my_notifications_by_school(request, qs)
+        qs = filter_my_notifications_by_school(request, qs)
         return Response({'unread_count': qs.count()})
 
 
@@ -260,10 +266,14 @@ class MarkAllReadView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        # Scoped to currently accessible schools — a stale membership or bad
+        # recipient match must not let this action reach past what
+        # MyNotificationsView would even show.
         qs = NotificationLog.objects.filter(
             recipient_user=request.user,
             channel='IN_APP',
             read_at__isnull=True,
+            school_id__in=request.user.get_accessible_school_ids(),
         )
         raw = request.data.get('school_id')
         if raw not in (None, ''):

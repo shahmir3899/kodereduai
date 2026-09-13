@@ -1,9 +1,10 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { academicsApi, lmsApi, hrApi } from '../../services/api'
+import { academicsApi, lmsApi } from '../../services/api'
 import ClassSelector from '../../components/ClassSelector'
 import SubjectSelector from '../../components/SubjectSelector'
+import StaffFilter from '../../components/StaffFilter'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
@@ -14,11 +15,19 @@ import TeacherScopeBadge, { TeacherScopeHint, useTeacherScopeLookup } from '../.
 import LessonPlanTopicsPickerModal from './LessonPlanTopicsPickerModal'
 import Spinner from '../../components/ui/Spinner'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
+import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
+import { useViewPreference } from '../../hooks/useViewPreference'
 
 const STATUS_BADGES = {
   DRAFT: 'bg-gray-100 text-gray-800',
   PUBLISHED: 'bg-green-100 text-green-800',
   CLOSED: 'bg-red-100 text-red-800',
+}
+
+const STRIPE_TONE_BY_STATUS = {
+  DRAFT: 'neutral',
+  PUBLISHED: 'success',
+  CLOSED: 'danger',
 }
 
 const TYPE_BADGES = {
@@ -70,6 +79,7 @@ export default function AssignmentsPage() {
   const { sessionClasses } = useSessionClasses(activeAcademicYear?.id)
   const queryClient = useQueryClient()
   const navigate = useNavigate()
+  const [view, setView] = useViewPreference('assignments')
   const { showError, showSuccess } = useToast()
 
   const [search, setSearch] = useState('')
@@ -156,11 +166,6 @@ export default function AssignmentsPage() {
 
   // -- Data fetching --
 
-  const { data: staffData } = useQuery({
-    queryKey: ['hrStaff'],
-    queryFn: () => hrApi.getStaff({ role: 'TEACHER', page_size: 9999 }),
-  })
-
   const { data: assignmentsData, isLoading } = useQuery({
     queryKey: ['assignments', resolvedFilterClass, filterSubject, filterStatus, filterType, activeAcademicYear?.id],
     queryFn: () =>
@@ -174,7 +179,6 @@ export default function AssignmentsPage() {
       }),
   })
 
-  const staff = staffData?.data?.results || staffData?.data || []
   const allAssignments = assignmentsData?.data?.results || assignmentsData?.data || []
 
   const { data: bulkClassSubjectsRes, isLoading: bulkClassSubjectsLoading } = useQuery({
@@ -661,98 +665,56 @@ export default function AssignmentsPage() {
           )
         ) : (
           <>
-            {/* Results count */}
-            <div className="mb-4 text-sm text-gray-500">
-              Showing {assignments.length} assignment{assignments.length !== 1 ? 's' : ''}
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div className="text-sm text-gray-500">
+                Showing {assignments.length} assignment{assignments.length !== 1 ? 's' : ''}
+              </div>
+              <ViewToggle view={view} onChange={setView} />
             </div>
 
-            {/* Mobile card view */}
-            <div className="sm:hidden space-y-2">
+            {view === 'cards' ? (
+            <CardGrid>
               {assignments.map((a) => (
-                <div key={a.id} className="p-3 border border-gray-200 rounded-lg">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium text-sm text-gray-900 truncate">{a.title}</p>
-                      <p className="text-xs text-gray-500 mt-0.5">
-                        {a.class_name || 'N/A'} | {a.subject_name || 'N/A'}
-                      </p>
-                      <TeacherScopeBadge scope={classifyScope({ classId: a.class_obj, subjectId: a.subject })} className="mt-1" />
-                    </div>
-                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                          TYPE_BADGES[a.assignment_type] || TYPE_BADGES.HOMEWORK
-                        }`}
-                      >
+                <RecordCard
+                  key={a.id}
+                  stripeTone={STRIPE_TONE_BY_STATUS[a.status] || 'neutral'}
+                  title={a.title}
+                  meta={`${a.class_name || 'N/A'} · ${a.subject_name || 'N/A'}`}
+                  status={
+                    <div className="flex flex-col items-end gap-1">
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${TYPE_BADGES[a.assignment_type] || TYPE_BADGES.HOMEWORK}`}>
                         {a.assignment_type}
                       </span>
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                          STATUS_BADGES[a.status] || STATUS_BADGES.DRAFT
-                        }`}
-                      >
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${STATUS_BADGES[a.status] || STATUS_BADGES.DRAFT}`}>
                         {a.status}
                       </span>
                     </div>
-                  </div>
-                  <div className="flex items-center justify-between mt-2 text-xs text-gray-500">
-                    <span
-                      className={
-                        a.assignment_type !== 'DIARY' &&
-                        isDueDatePast(a.due_date) &&
-                        a.status !== 'CLOSED'
-                          ? 'text-red-600 font-medium'
-                          : ''
-                      }
-                    >
-                      {a.assignment_type === 'DIARY' ? 'Date' : 'Due'}: {formatDate(a.due_date)}
-                    </span>
-                    <span>Marks: {a.total_marks ?? '--'}</span>
-                  </div>
-                  <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100">
-                    <button
-                      onClick={() => navigate(`/academics/assignments/${a.id}/submissions`)}
-                      className="text-xs text-primary-600 font-medium"
-                    >
-                      Submissions ({a.submissions_count ?? 0})
-                    </button>
-                    <div className="flex gap-3">
-                      <button
-                        onClick={() => openEditModal(a)}
-                        className="text-xs text-blue-600 font-medium"
-                      >
-                        Edit
-                      </button>
-                      {a.status === 'DRAFT' && (
-                        <button
-                          onClick={() => publishMutation.mutate(a.id)}
-                          className="text-xs text-green-600 font-medium"
-                        >
-                          Publish
-                        </button>
-                      )}
-                      {a.status === 'PUBLISHED' && (
-                        <button
-                          onClick={() => closeMutation.mutate(a.id)}
-                          className="text-xs text-orange-600 font-medium"
-                        >
-                          Close
-                        </button>
-                      )}
-                      <button
-                        onClick={() => setDeleteConfirm(a)}
-                        className="text-xs text-red-600 font-medium"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                </div>
+                  }
+                  fields={[
+                    {
+                      label: a.assignment_type === 'DIARY' ? 'Date' : 'Due',
+                      value: (
+                        <span className={a.assignment_type !== 'DIARY' && isDueDatePast(a.due_date) && a.status !== 'CLOSED' ? 'text-red-600 font-medium' : ''}>
+                          {formatDate(a.due_date)}
+                        </span>
+                      ),
+                    },
+                    { label: 'Marks', value: a.total_marks ?? '--' },
+                  ]}
+                  actions={[
+                    { label: `Submissions (${a.submissions_count ?? 0})`, tone: 'primary', onClick: () => navigate(`/academics/assignments/${a.id}/submissions`) },
+                    { label: 'Edit', tone: 'info', onClick: () => openEditModal(a) },
+                    ...(a.status === 'DRAFT' ? [{ label: 'Publish', tone: 'success', onClick: () => publishMutation.mutate(a.id) }] : []),
+                    ...(a.status === 'PUBLISHED' ? [{ label: 'Close', tone: 'orange', onClick: () => closeMutation.mutate(a.id) }] : []),
+                    { label: 'Delete', tone: 'danger', onClick: () => setDeleteConfirm(a) },
+                  ]}
+                >
+                  <TeacherScopeBadge scope={classifyScope({ classId: a.class_obj, subjectId: a.subject })} />
+                </RecordCard>
               ))}
-            </div>
-
-            {/* Desktop table view */}
-            <div className="hidden sm:block overflow-x-auto">
+            </CardGrid>
+            ) : (
+            <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
@@ -879,6 +841,7 @@ export default function AssignmentsPage() {
                 </tbody>
               </table>
             </div>
+            )}
           </>
         )}
       </div>
@@ -939,18 +902,12 @@ export default function AssignmentsPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="label">Teacher</label>
-                  <select
-                    className="input"
+                  <StaffFilter
+                    role="TEACHER"
                     value={form.teacher}
                     onChange={(e) => setForm({ ...form, teacher: e.target.value })}
-                  >
-                    <option value="">Select Teacher</option>
-                    {staff.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.full_name || t.user_name || `Staff #${t.id}`}
-                      </option>
-                    ))}
-                  </select>
+                    placeholder="Select Teacher"
+                  />
                 </div>
                 <div>
                   <label className="label">Assignment Type</label>

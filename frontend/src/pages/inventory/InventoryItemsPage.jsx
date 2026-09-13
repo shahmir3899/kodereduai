@@ -6,6 +6,8 @@ import Spinner from '../../components/ui/Spinner'
 import { useDebounce } from '../../hooks/useDebounce'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { SkeletonTable } from '../../components/ui/Skeleton'
+import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
+import { useViewPreference } from '../../hooks/useViewPreference'
 
 function formatCurrency(val) {
   return `Rs ${Number(val || 0).toLocaleString()}`
@@ -37,6 +39,7 @@ export default function InventoryItemsPage() {
   const { confirm, ConfirmModalRoot } = useConfirmModal()
 
   // Filters
+  const [view, setView] = useViewPreference('inventory-items')
   const [search, setSearch] = useState('')
   const debouncedSearch = useDebounce(search, 300)
   const [categoryFilter, setCategoryFilter] = useState('')
@@ -477,40 +480,46 @@ export default function InventoryItemsPage() {
           </div>
         ) : (
           <>
-            {/* Mobile card view */}
-            <div className="sm:hidden divide-y divide-gray-200">
+            <div className="flex justify-end p-2">
+              <ViewToggle view={view} onChange={setView} />
+            </div>
+
+            {view === 'cards' ? (
+            <CardGrid className="p-2">
               {items.map((item) => {
                 const badge = getStockBadge(item)
                 return (
-                  <div key={item.id} className="p-4">
-                    <div className="flex items-start justify-between mb-2">
-                      <div className="min-w-0 flex-1">
-                        <p className="font-medium text-sm text-gray-900 truncate">{item.name}</p>
-                        <p className="text-xs text-gray-500">{item.category_name || item.category?.name || 'Uncategorized'}</p>
-                      </div>
-                      <span className={`flex-shrink-0 ml-2 px-2 py-0.5 rounded text-xs font-medium ${badge.cls}`}>
+                  <RecordCard
+                    key={item.id}
+                    title={item.name}
+                    meta={item.category_name || item.category?.name || 'Uncategorized'}
+                    status={
+                      <span className={`flex-shrink-0 px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap ${badge.cls}`}>
                         {badge.label}
                       </span>
-                    </div>
-                    <div className="text-xs text-gray-500 space-y-0.5">
-                      <p>Stock: {item.current_stock} {item.unit} | Min: {item.minimum_stock}</p>
-                      <p>Price: {formatCurrency(item.unit_price)} | Value: {formatCurrency(item.current_stock * item.unit_price)}</p>
-                      {item.location && <p>Location: {item.location}</p>}
-                    </div>
-                    <div className="mt-2 pt-2 border-t border-gray-100 flex gap-3">
-                      <button onClick={() => openItemModal(item)} className="text-xs text-blue-600 font-medium">Edit</button>
-                      <button
-                        onClick={async () => { const ok = await confirm({ title: 'Delete Item', message: `Delete "${item.name}"? This cannot be undone.` }); if (ok) deleteItemMutation.mutate(item.id) }}
-                        className="text-xs text-red-600 font-medium"
-                      >Delete</button>
-                    </div>
-                  </div>
+                    }
+                    fields={[
+                      { label: 'Stock', value: `${item.current_stock} ${item.unit} (min ${item.minimum_stock})` },
+                      { label: 'Price · Value', value: `${formatCurrency(item.unit_price)} · ${formatCurrency(item.current_stock * item.unit_price)}` },
+                      ...(item.location ? [{ label: 'Location', value: item.location }] : []),
+                    ]}
+                    actions={[
+                      { label: 'Edit', tone: 'info', onClick: () => openItemModal(item) },
+                      {
+                        label: 'Delete',
+                        tone: 'danger',
+                        onClick: async () => {
+                          const ok = await confirm({ title: 'Delete Item', message: `Delete "${item.name}"? This cannot be undone.` })
+                          if (ok) deleteItemMutation.mutate(item.id)
+                        },
+                      },
+                    ]}
+                  />
                 )
               })}
-            </div>
-
-            {/* Desktop table */}
-            <div className="hidden sm:block overflow-x-auto">
+            </CardGrid>
+            ) : (
+            <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
@@ -559,6 +568,7 @@ export default function InventoryItemsPage() {
                 </tbody>
               </table>
             </div>
+            )}
           </>
         )}
       </div>

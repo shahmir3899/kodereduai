@@ -8,6 +8,8 @@ import { useSessionClasses } from '../../hooks/useSessionClasses'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 import Spinner from '../../components/ui/Spinner'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
+import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
+import { useViewPreference } from '../../hooks/useViewPreference'
 
 const TRANSPORT_TYPES = [
   { value: 'PICKUP', label: 'Pickup Only' },
@@ -27,6 +29,7 @@ export default function TransportAssignmentsPage() {
   const [showModal, setShowModal] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [showBulkModal, setShowBulkModal] = useState(false)
+  const [view, setView] = useViewPreference('transport-assignments')
   const [selectedStudents, setSelectedStudents] = useState([])
   const [studentSearch, setStudentSearch] = useState('')
   const [modalClassFilter, setModalClassFilter] = useState('')
@@ -392,40 +395,45 @@ export default function TransportAssignmentsPage() {
           </div>
         ) : (
           <>
-            {/* Mobile card view */}
-            <div className="sm:hidden space-y-2">
+            <div className="flex justify-end mb-3">
+              <ViewToggle view={view} onChange={setView} />
+            </div>
+
+            {view === 'cards' ? (
+            <CardGrid>
               {assignments.map((assignment) => (
-                <div key={assignment.id} className="p-3 border border-gray-200 rounded-lg">
-                  <div className="flex items-center gap-3">
+                <RecordCard
+                  key={assignment.id}
+                  highlighted={selectedStudents.includes(assignment.student)}
+                  leading={
                     <input
                       type="checkbox"
                       checked={selectedStudents.includes(assignment.student)}
                       onChange={() => toggleStudentSelection(assignment.student)}
-                      className="rounded border-gray-300"
+                      className="rounded border-gray-300 mt-1"
                     />
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium text-sm text-gray-900">{assignment.student_name}</p>
-                      <p className="text-xs text-gray-500">{assignment.class_name || '--'}</p>
-                    </div>
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ${getTransportTypeBadge(assignment.transport_type)}`}>
+                  }
+                  title={assignment.student_name}
+                  meta={assignment.class_name || '--'}
+                  status={
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${getTransportTypeBadge(assignment.transport_type)}`}>
                       {assignment.transport_type}
                     </span>
-                  </div>
-                  <div className="mt-2 text-xs text-gray-500 space-y-0.5 ml-7">
-                    <p>Route: {assignment.route_name || '--'}</p>
-                    <p>Stop: {assignment.stop_name || '--'}</p>
-                    <p>Pickup: {assignment.stop_pickup_time || '--'} | Drop: {assignment.stop_drop_time || '--'}</p>
-                    <p>Vehicle: {assignment.vehicle_number || '--'}</p>
-                  </div>
-                  <div className="flex gap-3 mt-2 pt-2 border-t border-gray-100 ml-7">
-                    <button onClick={() => setDeleteConfirm(assignment)} className="text-xs text-red-600 font-medium">Remove</button>
-                  </div>
-                </div>
+                  }
+                  fields={[
+                    { label: 'Route', value: assignment.route_name || '--' },
+                    { label: 'Stop', value: assignment.stop_name || '--' },
+                    { label: 'Pickup · Drop', value: `${assignment.stop_pickup_time || '--'} · ${assignment.stop_drop_time || '--'}` },
+                    { label: 'Vehicle', value: assignment.vehicle_number || '--' },
+                  ]}
+                  actions={[
+                    { label: 'Remove', tone: 'danger', onClick: () => setDeleteConfirm(assignment) },
+                  ]}
+                />
               ))}
-            </div>
-
-            {/* Desktop table view */}
-            <div className="hidden sm:block overflow-x-auto">
+            </CardGrid>
+            ) : (
+            <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
@@ -484,6 +492,7 @@ export default function TransportAssignmentsPage() {
                 </tbody>
               </table>
             </div>
+            )}
           </>
         )}
       </div>

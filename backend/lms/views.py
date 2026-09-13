@@ -33,7 +33,7 @@ from core.mixins import TenantQuerySetMixin, ensure_tenant_school_id, ensure_ten
 from core.class_scope import resolve_class_scope
 from academic_sessions.calendar_rules import is_off_day_for_date
 from .models import (
-    Book, Chapter, Topic, SubTopic, ContentBlock, Tag, ContentBlockTag, QuestionTag, LessonPlan, LearningObjective, LessonPlanObjective, CurriculumStandard, StandardObjective, TopicStandardAlignment, Assignment,
+    Book, Chapter, Topic, TopicSchedule, SubTopic, ContentBlock, Tag, ContentBlockTag, QuestionTag, LessonPlan, LearningObjective, LessonPlanObjective, CurriculumStandard, StandardObjective, TopicStandardAlignment, Assignment,
     AssignmentSubmission, TOCImportJob,
 )
 from .content_retrieval import retrieve_topics_for_ai, build_prompt, extract_text_from_blocks
@@ -830,10 +830,27 @@ class TopicViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet
             return TopicDetailedSerializer
         return TopicSerializer
 
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['academic_year_id'] = self.request.query_params.get('academic_year')
+        return context
+
     def get_queryset(self):
+        from django.db.models import Prefetch
+
         queryset = super().get_queryset().select_related(
             'chapter', 'chapter__book'
         ).prefetch_related('lesson_plans', 'test_questions', 'subtopics')
+
+        academic_year_id = self.request.query_params.get('academic_year')
+        if academic_year_id:
+            queryset = queryset.prefetch_related(
+                Prefetch(
+                    'schedules',
+                    queryset=TopicSchedule.objects.filter(academic_year_id=academic_year_id),
+                    to_attr='year_schedule',
+                )
+            )
 
         queryset = _apply_teacher_dual_scope(
             queryset,
@@ -897,6 +914,23 @@ class TopicViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet
     def perform_create(self, serializer):
         """Topic has no school FK — skip tenant injection."""
         serializer.save()
+
+    @action(detail=True, methods=['post'], url_path='set-planned-date')
+    def set_planned_date(self, request, pk=None):
+        """Upsert this topic's planned-teaching date for one academic year --
+        see TopicSchedule for why this isn't just a field on Topic."""
+        topic = self.get_object()
+        academic_year_id = request.data.get('academic_year')
+        if not academic_year_id:
+            return Response({'detail': 'academic_year is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        planned_date = request.data.get('planned_date') or None
+        schedule, _ = TopicSchedule.objects.update_or_create(
+            topic=topic,
+            academic_year_id=academic_year_id,
+            defaults={'planned_date': planned_date},
+        )
+        return Response({'topic': topic.id, 'academic_year': int(academic_year_id), 'planned_date': schedule.planned_date})
 
     @action(detail=True, methods=['get'], url_path='objectives')
     def objectives(self, request, pk=None):

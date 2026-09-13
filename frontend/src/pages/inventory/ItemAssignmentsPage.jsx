@@ -4,6 +4,8 @@ import { inventoryApi } from '../../services/api'
 import Spinner from '../../components/ui/Spinner'
 import { useDebounce } from '../../hooks/useDebounce'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
+import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
+import { useViewPreference } from '../../hooks/useViewPreference'
 
 function formatDate(dateStr) {
   if (!dateStr) return '-'
@@ -28,6 +30,7 @@ export default function ItemAssignmentsPage() {
 
   // Filters & tab
   const [activeTab, setActiveTab] = useState('active') // 'active' | 'returned'
+  const [view, setView] = useViewPreference('item-assignments')
   const [searchUser, setSearchUser] = useState('')
   const debouncedSearchUser = useDebounce(searchUser, 300)
 
@@ -195,47 +198,39 @@ export default function ItemAssignmentsPage() {
           </div>
         ) : (
           <>
-            {/* Mobile view */}
-            <div className="sm:hidden divide-y divide-gray-200">
+            <div className="flex justify-end p-2">
+              <ViewToggle view={view} onChange={setView} />
+            </div>
+
+            {view === 'cards' ? (
+            <CardGrid className="p-2">
               {assignments.map((a) => (
-                <div key={a.id} className="p-4">
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium text-sm text-gray-900 truncate">
-                        {a.item_name || a.item?.name || '-'}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        Assigned to: {a.assigned_to_name || a.assigned_to?.username || '-'}
-                      </p>
-                    </div>
-                    <span className={`flex-shrink-0 ml-2 px-2 py-0.5 rounded text-xs font-medium ${
+                <RecordCard
+                  key={a.id}
+                  title={a.item_name || a.item?.name || '-'}
+                  meta={`Assigned to: ${a.assigned_to_name || a.assigned_to?.username || '-'}`}
+                  status={
+                    <span className={`flex-shrink-0 px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap ${
                       a.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
                     }`}>
                       {a.is_active ? 'Active' : 'Returned'}
                     </span>
-                  </div>
-                  <div className="text-xs text-gray-500 space-y-0.5">
-                    <p>Qty: {a.quantity} | Condition: {a.condition_on_assign}</p>
-                    <p>Assigned: {formatDate(a.assigned_date)}</p>
-                    {a.returned_date && <p>Returned: {formatDate(a.returned_date)} | Condition: {a.condition_on_return}</p>}
-                    {a.notes && <p>Notes: {a.notes}</p>}
-                  </div>
-                  {a.is_active && (
-                    <div className="mt-2 pt-2 border-t border-gray-100">
-                      <button
-                        onClick={() => { setReturnConfirm(a); setReturnCondition('GOOD') }}
-                        className="text-xs text-orange-600 font-medium"
-                      >
-                        Mark Returned
-                      </button>
-                    </div>
-                  )}
-                </div>
+                  }
+                  fields={[
+                    { label: 'Qty · Condition', value: `${a.quantity} · ${a.condition_on_assign}` },
+                    { label: 'Assigned', value: formatDate(a.assigned_date) },
+                    ...(a.returned_date ? [{ label: 'Returned', value: `${formatDate(a.returned_date)} · ${a.condition_on_return}` }] : []),
+                  ]}
+                  actions={a.is_active ? [
+                    { label: 'Mark Returned', tone: 'orange', onClick: () => { setReturnConfirm(a); setReturnCondition('GOOD') } },
+                  ] : []}
+                >
+                  {a.notes && <p className="text-xs text-gray-500">Notes: {a.notes}</p>}
+                </RecordCard>
               ))}
-            </div>
-
-            {/* Desktop table */}
-            <div className="hidden sm:block overflow-x-auto">
+            </CardGrid>
+            ) : (
+            <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
@@ -294,6 +289,7 @@ export default function ItemAssignmentsPage() {
                 </tbody>
               </table>
             </div>
+            )}
           </>
         )}
       </div>

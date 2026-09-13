@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { notificationsApi } from '../services/api'
+import { useDraggableWidget } from '../hooks/useDraggableWidget'
 
 const SUGGESTIONS = [
   'Draft an absence follow-up for student Ahmed',
@@ -14,6 +15,7 @@ export default function CommunicationChatWidget() {
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const messagesEndRef = useRef(null)
+  const { panelStyle, onDragHandleMouseDown } = useDraggableWidget('communicationChatWidgetPos')
 
   useEffect(() => {
     if (isOpen) messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -61,9 +63,12 @@ export default function CommunicationChatWidget() {
   }
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 w-96 h-[500px] bg-white rounded-xl shadow-2xl border border-gray-200 flex flex-col">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 bg-indigo-600 text-white rounded-t-xl">
+    <div data-draggable-panel className="fixed bottom-6 right-6 z-50 w-96 h-[500px] bg-white rounded-xl shadow-2xl border border-gray-200 flex flex-col" style={panelStyle}>
+      {/* Header — drag handle */}
+      <div
+        onMouseDown={onDragHandleMouseDown}
+        className="flex items-center justify-between px-4 py-3 bg-indigo-600 text-white rounded-t-xl cursor-move select-none"
+      >
         <div className="flex items-center gap-2">
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />

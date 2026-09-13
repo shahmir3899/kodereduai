@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { PasswordInput } from '../components'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 
 export default function LoginPage() {
@@ -162,9 +162,14 @@ export default function LoginPage() {
             </div>
 
             <div className="mb-6">
-              <label className="label" htmlFor="password">
-                Password
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="label" htmlFor="password">
+                  Password
+                </label>
+                <Link to="/forgot-password" className="text-sm text-primary-600 hover:text-primary-700">
+                  Forgot password?
+                </Link>
+              </div>
               <PasswordInput
                 id="password"
                 className="input"

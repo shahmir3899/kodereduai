@@ -11,6 +11,8 @@ import { useClassSubjects } from '../../hooks/useClassSubjects'
 import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 import { useDebounce } from '../../hooks/useDebounce'
+import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
+import { useViewPreference } from '../../hooks/useViewPreference'
 
 const STATUS_OPTIONS = [
   { value: '', label: 'All Statuses' },
@@ -38,6 +40,7 @@ export default function ExamPapersPage() {
   const [search, setSearch] = useState('')
   const debouncedSearch = useDebounce(search, 300)
   const [page, setPage] = useState(1)
+  const [view, setView] = useViewPreference('exam-papers')
   // Tracks which paper/format is generating so only that row's button shows
   // a loading state — generation embeds a full-page letterhead image and can
   // take several seconds, and with no feedback users assumed the click did nothing.
@@ -283,6 +286,7 @@ export default function ExamPapersPage() {
             {isLoading ? 'Loading papers...' : `${count} paper${count === 1 ? '' : 's'} found`}
             {isFetching && !isLoading && <span className="ml-2 text-blue-600 text-xs">Refreshing…</span>}
           </p>
+          {!isLoading && papers.length > 0 && <ViewToggle view={view} onChange={setView} />}
         </div>
 
         <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
@@ -290,6 +294,43 @@ export default function ExamPapersPage() {
             <div className="p-8 text-center text-gray-500">Loading papers...</div>
           ) : papers.length === 0 ? (
             <div className="p-8 text-center text-gray-500">No papers found for the selected filters.</div>
+          ) : view === 'cards' ? (
+            <CardGrid className="p-3">
+              {papers.map((paper) => (
+                <RecordCard
+                  key={paper.id}
+                  highlighted={selectedIds.has(paper.id)}
+                  leading={
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(paper.id)}
+                      onChange={() => toggleSelectOne(paper.id)}
+                      aria-label={`Select ${paper.paper_title}`}
+                      className="rounded border-gray-300 mt-1"
+                    />
+                  }
+                  title={paper.paper_title}
+                  meta={`${paper.class_name} · ${paper.subject_name}`}
+                  status={
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${STATUS_STYLE[paper.status] || 'bg-gray-100 text-gray-700'}`}>
+                      {paper.status}
+                    </span>
+                  }
+                  fields={[
+                    { label: 'Duration · Marks', value: `${paper.duration_minutes} min · ${paper.total_marks} marks` },
+                    { label: 'Questions', value: paper.question_count || 0 },
+                    { label: 'Updated', value: paper.updated_at ? new Date(paper.updated_at).toLocaleString() : '—' },
+                  ]}
+                  actions={[
+                    { label: paper.status === 'DRAFT' ? 'Resume' : 'Open', tone: 'info', onClick: () => navigate(`/examinations/papers/${paper.id}`) },
+                    { label: 'Responses', tone: 'success', onClick: () => navigate(`/academics/papers/${paper.id}/responses`) },
+                    { label: downloadingKey === `${paper.id}-pdf` ? 'Generating…' : 'PDF', tone: 'muted', disabled: downloadingKey === `${paper.id}-pdf`, onClick: () => handleDownload(paper, 'pdf') },
+                    { label: downloadingKey === `${paper.id}-docx` ? 'Generating…' : 'DOCX', tone: 'muted', disabled: downloadingKey === `${paper.id}-docx`, onClick: () => handleDownload(paper, 'docx') },
+                    { label: 'Delete', tone: 'danger', disabled: deleteMutation.isPending, onClick: () => handleDeleteOne(paper) },
+                  ]}
+                />
+              ))}
+            </CardGrid>
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">

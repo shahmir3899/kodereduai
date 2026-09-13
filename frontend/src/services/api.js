@@ -422,6 +422,19 @@ export const financeApi = {
   getFeePredictor: (params) => api.get('/api/finance/fee-predictor/', { params }),
 }
 
+// Builds multipart form data for a staff-document create/update — skips
+// null/undefined/empty values so an omitted `file` (edit without replacing
+// it) or blank `expiry_date` doesn't get sent as a literal empty string,
+// which DRF's DateField rejects.
+const buildDocumentFormData = (data) => {
+  const formData = new FormData()
+  Object.entries(data).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === '') return
+    formData.append(key, value)
+  })
+  return formData
+}
+
 // HR & Staff Management API
 export const hrApi = {
   // Dashboard
@@ -473,6 +486,8 @@ export const hrApi = {
   getPayslips: (params) => api.get('/api/hr/payslips/', { params }),
   getPayslip: (id) => api.get(`/api/hr/payslips/${id}/`),
   generatePayslips: (data) => api.post('/api/hr/payslips/generate_payslips/', data),
+  // One grouped query for the payroll card trend strip, instead of a getPayslips call per staff member per month.
+  getPayslipNetPayHistory: (params) => api.get('/api/hr/payslips/net_pay_history/', { params }),
   approvePayslip: (id) => api.post(`/api/hr/payslips/${id}/approve/`),
   markPayslipPaid: (id, data) => api.post(`/api/hr/payslips/${id}/mark_paid/`, data),
   deletePayslip: (id) => api.delete(`/api/hr/payslips/${id}/`),
@@ -514,9 +529,16 @@ export const hrApi = {
   updateQualification: (id, data) => api.patch(`/api/hr/qualifications/${id}/`, data),
   deleteQualification: (id) => api.delete(`/api/hr/qualifications/${id}/`),
 
-  // Staff Documents
+  // Staff Documents — create/update always go as multipart so a `file` (File
+  // object) can ride along; `file` is optional on update (omit to keep the
+  // existing file_url untouched, see StaffDocumentViewSet.update()).
   getDocuments: (params) => api.get('/api/hr/documents/', { params }),
-  createDocument: (data) => api.post('/api/hr/documents/', data),
+  createDocument: (data) => api.post('/api/hr/documents/', buildDocumentFormData(data), {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }),
+  updateDocument: (id, data) => api.patch(`/api/hr/documents/${id}/`, buildDocumentFormData(data), {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }),
   deleteDocument: (id) => api.delete(`/api/hr/documents/${id}/`),
 
   // Staff Risk Predictor
@@ -564,6 +586,8 @@ export const academicsApi = {
   getTimetableByClass: (classId) =>
     api.get('/api/academics/timetable-entries/by_class/', { params: { class_id: classId } }),
   bulkSaveTimetable: (data) => api.post('/api/academics/timetable-entries/bulk_save/', data),
+  downloadTimetablePdf: (classId) =>
+    api.get('/api/academics/timetable-entries/download-pdf/', { params: { class_id: classId }, responseType: 'blob' }),
   checkTeacherConflicts: (params) =>
     api.get('/api/academics/timetable-entries/teacher_conflicts/', { params }),
 
@@ -1110,6 +1134,8 @@ export const lmsApi = {
   createTopic: (data) => api.post('/api/lms/topics/', data),
   updateTopic: (id, data) => api.patch(`/api/lms/topics/${id}/`, data),
   deleteTopic: (id) => api.delete(`/api/lms/topics/${id}/`),
+  setTopicPlannedDate: (topicId, { academicYear, plannedDate }) =>
+    api.post(`/api/lms/topics/${topicId}/set-planned-date/`, { academic_year: academicYear, planned_date: plannedDate }),
 
   // Sub-topics (under topics)
   getSubtopics: (params) => api.get('/api/lms/subtopics/', { params }),

@@ -7,6 +7,7 @@ from datetime import datetime
 
 from django.db.models import Q
 from django.db.utils import OperationalError, ProgrammingError
+from django.http import HttpResponse
 
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
@@ -788,6 +789,54 @@ class TimetableEntryViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mod
             'grid': grid,
             'entries': serializer.data,
         })
+
+    @action(detail=False, methods=['get'], url_path='download-pdf')
+    def download_pdf(self, request):
+        """Export a class's weekly timetable as a printable PDF grid --
+        mirrors the Date Sheet PDF export pattern in examinations."""
+        from .pdf_generator import TimetablePDFGenerator
+
+        class_id = request.query_params.get('class_id')
+        if not class_id:
+            return Response({'detail': 'class_id query param required.'}, status=400)
+
+        # Look up the Class row directly (rather than via an entry) so the
+        # export still works for a class that has no timetable entries yet.
+        from students.models import Class
+        try:
+            cls = Class.objects.select_related('school').get(id=class_id)
+        except Class.DoesNotExist:
+            return Response({'detail': 'Class not found.'}, status=404)
+
+        school_id = _resolve_school_id(request)
+        if school_id and cls.school_id != int(school_id):
+            return Response({'detail': 'Class not found.'}, status=404)
+
+        class_name = f"{cls.name} - {cls.section}" if cls.section else cls.name
+
+        slots = list(TimetableSlot.objects.filter(
+            school_id=cls.school_id, slot_type__in=[TimetableSlot.SlotType.PERIOD, TimetableSlot.SlotType.BREAK,
+                                                      TimetableSlot.SlotType.LUNCH, TimetableSlot.SlotType.ASSEMBLY],
+            is_active=True,
+        ).order_by('order'))
+
+        entries_qs = self.get_queryset().filter(class_obj_id=class_id).select_related('subject', 'teacher')
+        entries = [
+            {
+                'day': e.day,
+                'slot': e.slot_id,
+                'subject_name': e.subject.name if e.subject else None,
+                'subject_code': e.subject.code if e.subject else None,
+                'teacher_name': e.teacher.full_name if e.teacher else None,
+            }
+            for e in entries_qs
+        ]
+
+        pdf_bytes = TimetablePDFGenerator(cls.school, class_name, slots, entries).generate()
+        response = HttpResponse(pdf_bytes, content_type='application/pdf')
+        safe_name = class_name.replace(' ', '_').replace('/', '-')
+        response['Content-Disposition'] = f'attachment; filename="timetable-{safe_name}.pdf"'
+        return response
 
     @action(detail=False, methods=['get'])
     def my_timetable(self, request):

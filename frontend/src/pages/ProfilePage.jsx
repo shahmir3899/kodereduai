@@ -7,6 +7,7 @@ import { useToast } from '../components/Toast'
 import WhatsAppTick from '../components/WhatsAppTick'
 import FieldMatchTick from '../components/FieldMatchTick'
 import AvatarUpload from '../components/AvatarUpload'
+import { usePasswordPolicy } from '../hooks/usePasswordPolicy'
 
 function getApiErrorMessage(error, fallback) {
   const data = error?.response?.data
@@ -167,6 +168,7 @@ function ProfileTab() {
 // ---- Security Tab ----
 function SecurityTab() {
   const { showSuccess, showError } = useToast()
+  const { validate: validatePassword } = usePasswordPolicy()
 
   const [form, setForm] = useState({
     old_password: '',
@@ -199,12 +201,9 @@ function SecurityTab() {
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    if (form.new_password !== form.confirm_password) {
-      showError("New passwords don't match")
-      return
-    }
-    if (form.new_password.length < 8) {
-      showError('New password must be at least 8 characters')
+    const pwdError = validatePassword(form.new_password, form.confirm_password)
+    if (pwdError) {
+      showError(pwdError)
       return
     }
     passwordMutation.mutate(form)

@@ -5,6 +5,8 @@ import { useToast } from '../../components/Toast'
 import Spinner from '../../components/ui/Spinner'
 import Badge from '../../components/ui/Badge'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
+import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
+import { useViewPreference } from '../../hooks/useViewPreference'
 
 const PRESET_DEPARTMENTS = [
   { name: 'Teaching', description: 'Academic teaching staff' },
@@ -44,6 +46,7 @@ const PRESET_DESIGNATIONS = [
 export default function DepartmentsPage() {
   const queryClient = useQueryClient()
   const { showError, showSuccess } = useToast()
+  const [desigView, setDesigView] = useViewPreference('designations')
 
   // Department state
   const [showDeptModal, setShowDeptModal] = useState(false)
@@ -353,45 +356,34 @@ export default function DepartmentsPage() {
             No departments created yet. Use the quick add buttons above or add manually.
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <CardGrid>
             {departments.map((dept) => (
-              <div key={dept.id} className="card">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-base font-semibold text-gray-900">{dept.name}</h3>
-                  <Badge tone="info">
-                    {dept.staff_count || 0} staff
-                  </Badge>
-                </div>
-                {dept.description && (
-                  <p className="text-sm text-gray-500 mb-3">{dept.description}</p>
-                )}
-                <div className="flex justify-end gap-3 pt-3 border-t border-gray-100">
-                  <button
-                    onClick={() => openEditDeptModal(dept)}
-                    className="text-sm text-blue-600 hover:text-blue-800 font-medium"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => handleDeleteDept(dept)}
-                    className="text-sm text-red-600 hover:text-red-800 font-medium"
-                  >
-                    Delete
-                  </button>
-                </div>
-              </div>
+              <RecordCard
+                key={dept.id}
+                title={dept.name}
+                status={<Badge tone="info">{dept.staff_count || 0} staff</Badge>}
+                actions={[
+                  { label: 'Edit', tone: 'info', onClick: () => openEditDeptModal(dept) },
+                  { label: 'Delete', tone: 'danger', onClick: () => handleDeleteDept(dept) },
+                ]}
+              >
+                {dept.description && <p className="text-sm text-gray-500">{dept.description}</p>}
+              </RecordCard>
             ))}
-          </div>
+          </CardGrid>
         )}
       </div>
 
       {/* ── Designations Section ────────────────────────────────────────── */}
       <div>
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
           <h2 className="text-lg font-semibold text-gray-800">Designations</h2>
-          <button onClick={openAddDesigModal} className="btn btn-primary">
-            Add Designation
-          </button>
+          <div className="flex items-center gap-2">
+            {!desigLoading && designations.length > 0 && <ViewToggle view={desigView} onChange={setDesigView} />}
+            <button onClick={openAddDesigModal} className="btn btn-primary">
+              Add Designation
+            </button>
+          </div>
         </div>
 
         {/* Quick Add Designations */}
@@ -433,6 +425,20 @@ export default function DepartmentsPage() {
           <div className="card text-center py-8 text-gray-500">
             No designations created yet. Use the quick add buttons above or add manually.
           </div>
+        ) : desigView === 'cards' ? (
+          <CardGrid>
+            {designations.map((desig) => (
+              <RecordCard
+                key={desig.id}
+                title={desig.name}
+                meta={desig.department_name || '—'}
+                actions={[
+                  { label: 'Edit', tone: 'info', onClick: () => openEditDesigModal(desig) },
+                  { label: 'Delete', tone: 'danger', onClick: () => setDeleteDesigConfirm(desig) },
+                ]}
+              />
+            ))}
+          </CardGrid>
         ) : (
           <div className="card overflow-x-auto">
             <table className="min-w-full">

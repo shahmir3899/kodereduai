@@ -9,8 +9,9 @@ import PaperStructureBuilder, { makeDefaultSection } from './PaperStructureBuild
 import { useToast } from '../../components/Toast'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useClassSubjects } from '../../hooks/useClassSubjects'
+import { useSessionClasses } from '../../hooks/useSessionClasses'
 import { useDebounce } from '../../hooks/useDebounce'
-import { getClassSelectorScope } from '../../utils/classScope'
+import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 
 const QUESTION_TYPE_LABELS = QUESTION_TYPES.reduce((acc, type) => {
   acc[type.value] = type.label
@@ -67,11 +68,18 @@ function NewWorksheetForm() {
   const [classId, setClassId] = useState('')
   const [subjectId, setSubjectId] = useState('')
   const [title, setTitle] = useState('')
-  const { subjects: classSubjects, isLoading: subjectsLoading } = useClassSubjects(classId)
+  // ClassSelector's value is a session-class id when the school uses Session
+  // Classes (see CLASS_SYSTEM_GUIDE.md) -- Worksheet.class_obj is Master-Class-only,
+  // so it (and the subject lookup, which is also keyed by master class_obj)
+  // both need the resolved master id, not the raw selector value. Worksheets
+  // created before this fix always got an empty subject list because of this.
+  const { sessionClasses } = useSessionClasses(activeAcademicYear?.id)
+  const resolvedClassId = getResolvedMasterClassId(classId, activeAcademicYear?.id, sessionClasses)
+  const { subjects: classSubjects, isLoading: subjectsLoading } = useClassSubjects(resolvedClassId)
 
   const createMutation = useMutation({
     mutationFn: () => worksheetApi.ensureDraft({
-      class_obj: classId,
+      class_obj: resolvedClassId,
       subject: subjectId || undefined,
       title: title.trim() || 'Untitled Worksheet',
       source: 'MANUAL',

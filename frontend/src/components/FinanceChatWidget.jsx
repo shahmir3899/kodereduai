@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { financeApi } from '../services/api'
+import { useDraggableWidget } from '../hooks/useDraggableWidget'
 
 const SUGGESTIONS = [
   'How much fee is pending this month?',
@@ -15,6 +16,7 @@ export default function FinanceChatWidget() {
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const messagesEndRef = useRef(null)
+  const { panelStyle, onDragHandleMouseDown } = useDraggableWidget('financeChatWidgetPos', { height: 400 })
 
   // Load chat history (only when widget is open)
   const { data: history } = useQuery({
@@ -95,11 +97,15 @@ export default function FinanceChatWidget() {
       {/* Chat Panel */}
       {isOpen && (
         <div
+          data-draggable-panel
           className="fixed bottom-24 right-6 z-50 w-[85vw] sm:w-96 bg-white rounded-xl shadow-2xl border border-gray-200 flex flex-col"
-          style={{ maxHeight: '70vh' }}
+          style={{ maxHeight: '70vh', ...panelStyle }}
         >
-          {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 flex-shrink-0 bg-primary-600 rounded-t-xl">
+          {/* Header — drag handle */}
+          <div
+            onMouseDown={onDragHandleMouseDown}
+            className="flex items-center justify-between px-4 py-3 border-b border-gray-200 flex-shrink-0 bg-primary-600 rounded-t-xl cursor-move select-none"
+          >
             <div>
               <h3 className="text-sm font-semibold text-white">AI Finance Assistant</h3>
               <p className="text-xs text-primary-200">Ask about fees, expenses, payments</p>

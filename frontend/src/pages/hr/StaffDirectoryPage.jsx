@@ -8,10 +8,13 @@ import { useToast } from '../../components/Toast'
 import { useConfirmModal } from '../../components/ConfirmModal'
 import { useDebounce } from '../../hooks/useDebounce'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
+import { usePasswordPolicy } from '../../hooks/usePasswordPolicy'
 import WhatsAppTick from '../../components/WhatsAppTick'
 import Spinner from '../../components/ui/Spinner'
 import { SkeletonTable } from '../../components/ui/Skeleton'
 import Badge from '../../components/ui/Badge'
+import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
+import { useViewPreference } from '../../hooks/useViewPreference'
 
 const statusBadge = {
   ACTIVE: 'bg-green-100 text-green-800',
@@ -43,6 +46,7 @@ export default function StaffDirectoryPage() {
   const { showError, showSuccess } = useToast()
   const { getAllowableRoles } = useAuth()
   const { confirm, ConfirmModalRoot } = useConfirmModal()
+  const { validate: validatePassword, validateLength: validatePasswordLength } = usePasswordPolicy()
 
   const [search, setSearch] = useState('')
   const debouncedSearch = useDebounce(search, 300)
@@ -71,6 +75,7 @@ export default function StaffDirectoryPage() {
   const fileInputRef = useRef(null)
 
   // Convert existing staff to users
+  const [view, setView] = useViewPreference('staff-directory')
   const [selectedStaff, setSelectedStaff] = useState(new Set())
   const [showConvertModal, setShowConvertModal] = useState(false)
   const [convertMember, setConvertMember] = useState(null)
@@ -208,12 +213,9 @@ export default function StaffDirectoryPage() {
         setQuickErrors('Username and password are required for user account.')
         return
       }
-      if (quickUserForm.password.length < 8) {
-        setQuickErrors('Password must be at least 8 characters.')
-        return
-      }
-      if (quickUserForm.password !== quickUserForm.confirm_password) {
-        setQuickErrors("Passwords don't match.")
+      const pwdError = validatePassword(quickUserForm.password, quickUserForm.confirm_password)
+      if (pwdError) {
+        setQuickErrors(pwdError)
         return
       }
     }
@@ -335,12 +337,9 @@ export default function StaffDirectoryPage() {
       setConvertError('Username and password are required.')
       return
     }
-    if (convertForm.password.length < 8) {
-      setConvertError('Password must be at least 8 characters.')
-      return
-    }
-    if (convertForm.password !== convertForm.confirm_password) {
-      setConvertError("Passwords don't match.")
+    const pwdError = validatePassword(convertForm.password, convertForm.confirm_password)
+    if (pwdError) {
+      setConvertError(pwdError)
       return
     }
     setIsConverting(true)
@@ -360,8 +359,9 @@ export default function StaffDirectoryPage() {
   // Bulk convert handler
   const handleBulkConvert = async () => {
     setBulkConvertError('')
-    if (!bulkConvertPassword || bulkConvertPassword.length < 8) {
-      setBulkConvertError('Default password must be at least 8 characters.')
+    const pwdError = bulkConvertPassword ? validatePasswordLength(bulkConvertPassword) : 'Default password is required.'
+    if (pwdError) {
+      setBulkConvertError(pwdError)
       return
     }
     setIsConverting(true)
@@ -488,6 +488,13 @@ export default function StaffDirectoryPage() {
 
   const submitResetPassword = () => {
     setResetPwdError('')
+    if (resetPwdMode === 'set') {
+      const pwdError = validatePassword(resetPwdForm.new_password, resetPwdForm.confirm_password)
+      if (pwdError) {
+        setResetPwdError(pwdError)
+        return
+      }
+    }
     const data = resetPwdMode === 'set'
       ? { mode: 'set', new_password: resetPwdForm.new_password, confirm_password: resetPwdForm.confirm_password }
       : { mode: 'email' }
@@ -676,6 +683,12 @@ export default function StaffDirectoryPage() {
         </div>
       </div>
 
+      {!isLoading && allStaff.length > 0 && (
+        <div className="flex justify-end mb-3">
+          <ViewToggle view={view} onChange={setView} />
+        </div>
+      )}
+
       {/* Loading */}
       {isLoading ? (
         <div className="hidden sm:block card overflow-x-auto">
@@ -727,116 +740,68 @@ export default function StaffDirectoryPage() {
             No staff members match your filters.
           </div>
         )
+      ) : view === 'cards' ? (
+        <CardGrid>
+          {filteredStaff.map((member) => (
+            <RecordCard
+              key={member.id}
+              highlighted={selectedStaff.has(member.id)}
+              leading={
+                !member.user ? (
+                  <input
+                    type="checkbox"
+                    checked={selectedStaff.has(member.id)}
+                    onChange={() => toggleStaffSelection(member.id)}
+                    className="rounded flex-shrink-0 mt-1"
+                  />
+                ) : null
+              }
+              title={`${member.first_name} ${member.last_name}`}
+              meta={member.employee_id ? `ID: ${member.employee_id}` : undefined}
+              status={
+                <span className={`px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${statusBadge[member.employment_status] || 'bg-gray-100 text-gray-800'}`}>
+                  {member.employment_status}
+                </span>
+              }
+              fields={[
+                { label: 'Department', value: member.department_name || '—' },
+                { label: 'Designation', value: member.designation_name || '—' },
+                {
+                  label: 'Contact',
+                  value: (member.email || member.phone) ? (
+                    <span className="inline-flex flex-col">
+                      {member.email && <span className="truncate">{member.email}</span>}
+                      {member.phone && <span className="inline-flex items-center text-xs text-gray-500">{member.phone}<WhatsAppTick phone={member.phone} /></span>}
+                    </span>
+                  ) : <span className="text-gray-400">—</span>,
+                },
+                {
+                  label: 'Account',
+                  value: member.user
+                    ? <Badge tone="success" title={member.user_username}>{member.user_username || 'User'}</Badge>
+                    : <span className="text-gray-400">No account</span>,
+                },
+              ]}
+              actions={[
+                { label: 'View', tone: 'muted', onClick: () => setViewMember(member) },
+                { label: 'Edit', tone: 'info', to: `/hr/staff/${member.id}/edit` },
+                ...(!member.user ? [
+                  { label: 'Create Account', tone: 'accent', onClick: () => openConvertModal(member) },
+                  { label: 'Link Account', tone: 'indigo', onClick: () => openLinkModal(member) },
+                ] : [
+                  { label: 'Unlink', tone: 'orange', onClick: () => handleUnlinkUser(member) },
+                  { label: 'Reset Password', tone: 'teal', onClick: () => openResetPwdModal(member) },
+                ]),
+                member.is_active
+                  ? { label: 'Deactivate', tone: 'danger', onClick: () => setDeleteConfirm(member) }
+                  : { label: 'Reactivate', tone: 'success', onClick: () => reactivateMutation.mutate(member.id) },
+              ]}
+            />
+          ))}
+        </CardGrid>
       ) : (
         <>
-          {/* Mobile Cards */}
-          <div className="sm:hidden space-y-3">
-            {filteredStaff.map((member) => (
-              <div key={member.id} className="card">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    {!member.user && (
-                      <input
-                        type="checkbox"
-                        checked={selectedStaff.has(member.id)}
-                        onChange={() => toggleStaffSelection(member.id)}
-                        className="rounded flex-shrink-0"
-                      />
-                    )}
-                    <div>
-                      <p className="font-semibold text-gray-900">
-                        {member.first_name} {member.last_name}
-                      </p>
-                      {member.employee_id && (
-                        <p className="text-xs text-gray-500">ID: {member.employee_id}</p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    {member.user ? (
-                      <span className="px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700" title={member.user_username}>User</span>
-                    ) : (
-                      <span className="px-2 py-0.5 rounded-full text-xs bg-gray-100 text-gray-500">No Account</span>
-                    )}
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusBadge[member.employment_status] || 'bg-gray-100 text-gray-800'}`}>
-                      {member.employment_status}
-                    </span>
-                  </div>
-                </div>
-                <div className="text-sm text-gray-500 space-y-1">
-                  {member.department_name && <p>Dept: {member.department_name}</p>}
-                  {member.designation_name && <p>Role: {member.designation_name}</p>}
-                  {member.email && <p>{member.email}</p>}
-                  {member.phone && <p>{member.phone}<WhatsAppTick phone={member.phone} /></p>}
-                </div>
-                <div className="flex justify-end gap-3 mt-3 pt-3 border-t border-gray-100">
-                  <button
-                    onClick={() => setViewMember(member)}
-                    className="text-sm text-gray-600 hover:text-gray-800 font-medium"
-                  >
-                    View
-                  </button>
-                  <Link
-                    to={`/hr/staff/${member.id}/edit`}
-                    className="text-sm text-blue-600 hover:text-blue-800 font-medium"
-                  >
-                    Edit
-                  </Link>
-                  {!member.user && (
-                    <button
-                      onClick={() => openConvertModal(member)}
-                      className="text-sm text-purple-600 hover:text-purple-800 font-medium"
-                    >
-                      Create Account
-                    </button>
-                  )}
-                  {!member.user && (
-                    <button
-                      onClick={() => openLinkModal(member)}
-                      className="text-sm text-indigo-600 hover:text-indigo-800 font-medium"
-                    >
-                      Link Account
-                    </button>
-                  )}
-                  {member.user && (
-                    <button
-                      onClick={() => handleUnlinkUser(member)}
-                      className="text-sm text-orange-600 hover:text-orange-800 font-medium"
-                    >
-                      Unlink
-                    </button>
-                  )}
-                  {member.user && (
-                    <button
-                      onClick={() => openResetPwdModal(member)}
-                      className="text-sm text-teal-600 hover:text-teal-800 font-medium"
-                    >
-                      Reset Password
-                    </button>
-                  )}
-                  {member.is_active ? (
-                    <button
-                      onClick={() => setDeleteConfirm(member)}
-                      className="text-sm text-red-600 hover:text-red-800 font-medium"
-                    >
-                      Deactivate
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => reactivateMutation.mutate(member.id)}
-                      disabled={reactivateMutation.isPending}
-                      className="text-sm text-green-600 hover:text-green-800 font-medium"
-                    >
-                      Reactivate
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Desktop Table */}
-          <div className="hidden sm:block card overflow-x-auto">
+          <div className="card overflow-x-auto">
             <table className="min-w-full">
               <thead>
                 <tr className="border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">

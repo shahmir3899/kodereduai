@@ -2,7 +2,10 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { hrApi } from '../../services/api'
 import { useConfirmModal } from '../../components/ConfirmModal'
+import { useToast } from '../../components/Toast'
 import Spinner from '../../components/ui/Spinner'
+import StatCard from '../../components/dashboard/StatCard'
+import StaffFilter from '../../components/StaffFilter'
 import { useDebounce } from '../../hooks/useDebounce'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 
@@ -50,8 +53,10 @@ const ratingLabels = { 1: 'Poor', 2: 'Below Average', 3: 'Average', 4: 'Good', 5
 export default function PerformanceAppraisalPage() {
   const queryClient = useQueryClient()
   const { confirm, ConfirmModalRoot } = useConfirmModal()
+  const { showSuccess, showError } = useToast()
   const [search, setSearch] = useState('')
   const debouncedSearch = useDebounce(search, 300)
+  const [ratingFilter, setRatingFilter] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [editId, setEditId] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
@@ -68,14 +73,29 @@ export default function PerformanceAppraisalPage() {
     queryFn: () => hrApi.getStaff({ employment_status: 'ACTIVE', page_size: 500 }),
   })
 
-  const appraisals = appraisalRes?.data?.results || appraisalRes?.data || []
+  const allAppraisals = appraisalRes?.data?.results || appraisalRes?.data || []
   const staffList = staffRes?.data?.results || staffRes?.data || []
+  const appraisals = ratingFilter
+    ? allAppraisals.filter(a => String(a.rating) === ratingFilter)
+    : allAppraisals
+
+  // KPI summary — computed client-side from the already-fetched appraisal list,
+  // no extra endpoint needed.
+  const avgRating = allAppraisals.length
+    ? (allAppraisals.reduce((sum, a) => sum + (a.rating || 0), 0) / allAppraisals.length).toFixed(1)
+    : '-'
+  const reviewedStaffCount = new Set(allAppraisals.map(a => a.staff_member)).size
+  const ratingCounts = [1, 2, 3, 4, 5].map(r => ({
+    rating: r,
+    count: allAppraisals.filter(a => a.rating === r).length,
+  }))
 
   const createMutation = useMutation({
     mutationFn: (data) => hrApi.createAppraisal(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['hrAppraisals'] })
       closeModal()
+      showSuccess('Appraisal created successfully!')
     },
     onError: (err) => setErrors(err.response?.data || { detail: 'Failed to create appraisal' }),
   })
@@ -85,13 +105,18 @@ export default function PerformanceAppraisalPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['hrAppraisals'] })
       closeModal()
+      showSuccess('Appraisal updated successfully!')
     },
     onError: (err) => setErrors(err.response?.data || { detail: 'Failed to update appraisal' }),
   })
 
   const deleteMutation = useMutation({
     mutationFn: (id) => hrApi.deleteAppraisal(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['hrAppraisals'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['hrAppraisals'] })
+      showSuccess('Appraisal deleted successfully!')
+    },
+    onError: (err) => showError(err.response?.data?.detail || 'Failed to delete appraisal'),
   })
 
   const openCreate = () => {
@@ -153,8 +178,37 @@ export default function PerformanceAppraisalPage() {
         </button>
       </div>
 
-      {/* Search */}
-      <div className="mb-4">
+      {/* KPI Summary */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <StatCard label="Total Appraisals" value={allAppraisals.length} color="blue" />
+        <StatCard label="Average Rating" value={avgRating} subtitle={avgRating !== '-' ? ratingLabels[Math.round(avgRating)] : undefined} color="amber" />
+        <StatCard
+          label="Staff Reviewed"
+          value={`${reviewedStaffCount} / ${staffList.length}`}
+          subtitle="active staff with a review on file"
+          color="green"
+        />
+        <div className="card">
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Rating Distribution</p>
+          <div className="space-y-1">
+            {ratingCounts.map(({ rating, count }) => (
+              <div key={rating} className="flex items-center gap-2">
+                <span className="text-xs text-gray-500 w-3">{rating}★</span>
+                <div className="flex-1 bg-gray-200 rounded-full h-1.5 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-yellow-400"
+                    style={{ width: `${allAppraisals.length ? (count / allAppraisals.length) * 100 : 0}%` }}
+                  />
+                </div>
+                <span className="text-xs text-gray-500 w-4 text-right">{count}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Search & Filter */}
+      <div className="flex flex-col sm:flex-row gap-3 mb-4">
         <input
           type="text"
           placeholder="Search by staff name..."
@@ -162,6 +216,16 @@ export default function PerformanceAppraisalPage() {
           onChange={e => setSearch(e.target.value)}
           className="input w-full sm:w-72"
         />
+        <select
+          value={ratingFilter}
+          onChange={e => setRatingFilter(e.target.value)}
+          className="input w-full sm:w-48"
+        >
+          <option value="">All ratings</option>
+          {[5, 4, 3, 2, 1].map(r => (
+            <option key={r} value={r}>{r} star{r > 1 ? 's' : ''} — {ratingLabels[r]}</option>
+          ))}
+        </select>
       </div>
 
       {isLoading ? (
@@ -325,17 +389,12 @@ export default function PerformanceAppraisalPage() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Staff Member *</label>
-                <select
+                <StaffFilter
+                  options={staffList}
                   value={form.staff_member}
                   onChange={e => setForm(p => ({ ...p, staff_member: e.target.value }))}
-                  className="input w-full"
-                  required
-                >
-                  <option value="">Select staff...</option>
-                  {staffList.map(s => (
-                    <option key={s.id} value={s.id}>{s.full_name} ({s.employee_id})</option>
-                  ))}
-                </select>
+                  placeholder="Select staff..."
+                />
                 {errors.staff_member && <p className="text-xs text-red-600 mt-1">{errors.staff_member}</p>}
               </div>
 

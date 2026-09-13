@@ -23,7 +23,6 @@ export default function FeeOverviewPage() {
   const [feeType, setFeeType] = useState(initialFeeType)
   const [annualCategoryFilter, setAnnualCategoryFilter] = useState(initialAnnualCategory)
   const [monthlyCategoryFilter, setMonthlyCategoryFilter] = useState(initialMonthlyCategory)
-  const [showCharts, setShowCharts] = useState(false)
 
   const { allPayments, summaryData, annualCategories, monthlyCategories, isLoading } = useFeeOverview({
     month, year,
@@ -239,6 +238,9 @@ export default function FeeOverviewPage() {
           {/* KPI Summary Cards */}
           <FeeSummaryCards summaryData={summaryData} />
 
+          {/* Charts (moved up so they're visible without extra clicks) */}
+          <FeeCharts summaryData={summaryData} />
+
           {summaryData?.by_category?.length > 0 && (
             <div className="card mb-4">
               <div className="flex items-center justify-between mb-3">
@@ -309,22 +311,6 @@ export default function FeeOverviewPage() {
           <div className="mt-4">
             <PendingStudents paymentList={allPayments} />
           </div>
-
-          {/* Charts toggle */}
-          <button
-            onClick={() => setShowCharts(!showCharts)}
-            className="flex items-center gap-2 mt-4 mb-4 px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors"
-          >
-            <svg
-              className={`w-4 h-4 transition-transform ${showCharts ? 'rotate-90' : ''}`}
-              fill="none" stroke="currentColor" viewBox="0 0 24 24"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-            {showCharts ? 'Hide' : 'Show'} Charts
-          </button>
-
-          {showCharts && <FeeCharts summaryData={summaryData} />}
 
           {/* Empty state */}
           {!summaryData && (

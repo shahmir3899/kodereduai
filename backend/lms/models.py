@@ -226,6 +226,46 @@ class Topic(models.Model):
         return self.lesson_plans.filter(is_active=True).count()
 
 
+class TopicSchedule(models.Model):
+    """When a Topic is planned to be taught, for one specific academic year.
+
+    Topics live on a Book, and Books are scoped to a class only (not a year) --
+    the same book/chapter/topic rows are reused every year that class studies
+    it. A 'planned date' therefore can't live directly on Topic without one
+    year's date bleeding into every other year the book is reused; this table
+    scopes it per (topic, academic_year) instead. See Curriculum Coverage page
+    feedback (major UI proposal) for the redesign this supports.
+    """
+    topic = models.ForeignKey(
+        Topic,
+        on_delete=models.CASCADE,
+        related_name='schedules',
+    )
+    academic_year = models.ForeignKey(
+        'academic_sessions.AcademicYear',
+        on_delete=models.CASCADE,
+        related_name='topic_schedules',
+    )
+    planned_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text='When this topic is planned to be taught this academic year',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('topic', 'academic_year')
+        indexes = [
+            models.Index(fields=['topic', 'academic_year']),
+        ]
+        verbose_name = 'Topic Schedule'
+        verbose_name_plural = 'Topic Schedules'
+
+    def __str__(self):
+        return f"{self.topic} — {self.academic_year} plan: {self.planned_date or 'unset'}"
+
+
 class SubTopic(models.Model):
     """Fine-grained unit under a topic (e.g. section or activity) for lesson planning."""
 

@@ -1,11 +1,17 @@
 import React, { useState, useEffect } from 'react'
-import { PasswordInput } from '../components'
-import { useSearchParams, useNavigate } from 'react-router-dom'
+import { PasswordInput, AuthCardLayout } from '../components'
+import { useSearchParams, useNavigate, Link } from 'react-router-dom'
 import { validatePasswordResetToken, confirmPasswordReset } from '../services/auth'
+import { usePasswordPolicy } from '../hooks/usePasswordPolicy'
 
+// Titled "Choose a New Password" rather than "Reset Password" — the admin-initiated
+// flows (Staff Directory, Super Admin) already use "Reset Password" as the label for
+// setting/emailing someone else's password, and reusing it here for this self-service,
+// emailed-link flow made the two easy to confuse when referenced by name.
 export default function ResetPasswordPage() {
   const [params] = useSearchParams()
   const navigate = useNavigate()
+  const { validate } = usePasswordPolicy()
   const uid = params.get('uid') || ''
   const token = params.get('token') || ''
   const [valid, setValid] = useState(null)
@@ -28,6 +34,11 @@ export default function ResetPasswordPage() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
+    const pwdError = validate(newPassword, confirmPassword)
+    if (pwdError) {
+      setError(pwdError)
+      return
+    }
     setSubmitting(true)
     try {
       await confirmPasswordReset(uid, token, newPassword, confirmPassword)
@@ -41,40 +52,46 @@ export default function ResetPasswordPage() {
 
   if (valid === false) {
     return (
-      <div className="max-w-md mx-auto mt-16 p-6 card">
-        <h2 className="text-xl font-bold mb-4">Reset Password</h2>
+      <AuthCardLayout subtitle="Reset your password">
+        <h2 className="text-xl sm:text-2xl font-semibold text-gray-800 mb-4">Link expired</h2>
         <p className="text-red-600">This reset link is invalid or expired.</p>
-      </div>
+        <Link to="/forgot-password" className="mt-6 inline-block text-sm text-primary-600 hover:text-primary-700">
+          Request a new link
+        </Link>
+      </AuthCardLayout>
     )
   }
   if (success) {
     return (
-      <div className="max-w-md mx-auto mt-16 p-6 card">
-        <h2 className="text-xl font-bold mb-4">Password Reset Successful</h2>
-        <p>Your password has been reset. Redirecting to login...</p>
-      </div>
+      <AuthCardLayout subtitle="Reset your password">
+        <h2 className="text-xl sm:text-2xl font-semibold text-gray-800 mb-4">Password updated</h2>
+        <p className="text-gray-600">Your password has been reset. Redirecting to sign in...</p>
+      </AuthCardLayout>
     )
   }
   if (valid === null) {
     return null
   }
   return (
-    <div className="max-w-md mx-auto mt-16 p-6 card">
-      <h2 className="text-xl font-bold mb-4">Reset Password</h2>
+    <AuthCardLayout subtitle="Reset your password">
+      <h2 className="text-xl sm:text-2xl font-semibold text-gray-800 mb-4 sm:mb-6">Choose a New Password</h2>
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="block mb-1 font-medium">New Password</label>
+          <label className="label" htmlFor="new_password">New Password</label>
           <PasswordInput
+            id="new_password"
             className="input w-full"
             value={newPassword}
             onChange={e => setNewPassword(e.target.value)}
+            placeholder="Min 8 characters"
             required
             minLength={8}
           />
         </div>
         <div>
-          <label className="block mb-1 font-medium">Confirm Password</label>
+          <label className="label" htmlFor="confirm_password">Confirm Password</label>
           <PasswordInput
+            id="confirm_password"
             className="input w-full"
             value={confirmPassword}
             onChange={e => setConfirmPassword(e.target.value)}
@@ -83,10 +100,10 @@ export default function ResetPasswordPage() {
           />
         </div>
         {error && <div className="text-red-600 text-sm">{error}</div>}
-        <button type="submit" className="btn btn-primary w-full" disabled={submitting}>
+        <button type="submit" className="w-full btn btn-primary py-3" disabled={submitting}>
           {submitting ? 'Resetting...' : 'Reset Password'}
         </button>
       </form>
-    </div>
+    </AuthCardLayout>
   )
 }

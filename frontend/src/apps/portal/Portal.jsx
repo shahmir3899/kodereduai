@@ -1,11 +1,22 @@
 import { useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { useToast } from '../../components/Toast'
 import LoginPage from '../../pages/LoginPage'
+import ForgotPasswordPage from '../../pages/ForgotPasswordPage'
+import ResetPasswordPage from '../../pages/ResetPasswordPage'
 import App from '../../App'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import { clearAuthState } from '../../services/authStorage'
+
+// Same gap as SchoolApp.jsx: these pages live in App.jsx's own <Routes>, which
+// only mounts once a user is signed in, so a logged-out visit to
+// /forgot-password or /reset-password would otherwise always fall through to
+// LoginPage regardless of the URL.
+const PASSWORD_RECOVERY_ROUTES = {
+  '/forgot-password': ForgotPasswordPage,
+  '/reset-password': ResetPasswordPage,
+}
 
 /**
  * Super Admin Portal
@@ -17,6 +28,7 @@ export default function Portal() {
   const { user, loading } = useAuth()
   const { showError } = useToast()
   const navigate = useNavigate()
+  const location = useLocation()
 
   // Check if user is super admin
   useEffect(() => {
@@ -27,6 +39,11 @@ export default function Portal() {
       }
     }
   }, [user, loading, showError, navigate])
+
+  const RecoveryPage = PASSWORD_RECOVERY_ROUTES[location.pathname]
+  if (RecoveryPage) {
+    return <RecoveryPage />
+  }
 
   if (loading) {
     return <LoadingSpinner />

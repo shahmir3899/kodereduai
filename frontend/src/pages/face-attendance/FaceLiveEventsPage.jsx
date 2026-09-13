@@ -3,6 +3,8 @@ import { useNavigate, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { faceAttendanceApi } from '../../services/api'
 import LoadingSpinner from '../../components/LoadingSpinner'
+import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
+import { useViewPreference } from '../../hooks/useViewPreference'
 
 function matchStatusLabel(event) {
   if (event.matched_student) return event.matched_student.name
@@ -19,6 +21,7 @@ function matchStatusClass(event) {
 export default function FaceLiveEventsPage() {
   const navigate = useNavigate()
   const [date, setDate] = useState(new Date().toISOString().split('T')[0])
+  const [view, setView] = useViewPreference('face-live-events')
   const [deviceId, setDeviceId] = useState('')
 
   const { data: devicesData } = useQuery({
@@ -97,11 +100,36 @@ export default function FaceLiveEventsPage() {
         )}
       </div>
 
-      <div className="bg-white rounded-lg border overflow-x-auto">
+      {!isLoading && events.length > 0 && (
+        <div className="flex justify-end">
+          <ViewToggle view={view} onChange={setView} />
+        </div>
+      )}
+
+      <div className={`bg-white rounded-lg border ${view === 'cards' ? '' : 'overflow-x-auto'}`}>
         {isLoading ? (
           <div className="p-8"><LoadingSpinner /></div>
         ) : events.length === 0 ? (
           <div className="p-8 text-center text-gray-500 text-sm">No live events for this filter.</div>
+        ) : view === 'cards' ? (
+          <CardGrid className="p-3">
+            {events.map((event) => (
+              <RecordCard
+                key={event.id}
+                title={<span className={matchStatusClass(event)}>{matchStatusLabel(event)}</span>}
+                meta={new Date(event.client_timestamp).toLocaleString()}
+                status={event.resulted_in_attendance ? (
+                  <span className="text-green-700 text-xs font-medium whitespace-nowrap">Marked present</span>
+                ) : (
+                  <span className="text-gray-400 text-xs whitespace-nowrap">No</span>
+                )}
+                fields={[
+                  { label: 'Device', value: event.device_name || '—' },
+                  { label: 'Confidence', value: event.confidence ? `${event.confidence.toFixed(1)}%` : '—' },
+                ]}
+              />
+            ))}
+          </CardGrid>
         ) : (
           <table className="min-w-full text-sm">
             <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">

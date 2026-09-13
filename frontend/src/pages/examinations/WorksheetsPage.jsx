@@ -11,6 +11,8 @@ import { useClassSubjects } from '../../hooks/useClassSubjects'
 import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 import { useDebounce } from '../../hooks/useDebounce'
+import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
+import { useViewPreference } from '../../hooks/useViewPreference'
 
 const STATUS_OPTIONS = [
   { value: '', label: 'All Statuses' },
@@ -42,6 +44,7 @@ export default function WorksheetsPage() {
   const [search, setSearch] = useState('')
   const debouncedSearch = useDebounce(search, 300)
   const [page, setPage] = useState(1)
+  const [view, setView] = useViewPreference('worksheets')
   const [downloadingKey, setDownloadingKey] = useState(null)
 
   const classSelectorScope = getClassSelectorScope(activeAcademicYear?.id)
@@ -229,16 +232,46 @@ export default function WorksheetsPage() {
           </div>
         </div>
 
-        <p className="text-sm text-gray-500">
-          {isLoading ? 'Loading worksheets...' : `${count} worksheet${count === 1 ? '' : 's'} found`}
-          {isFetching && !isLoading && <span className="ml-2 text-blue-600 text-xs">Refreshing…</span>}
-        </p>
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-gray-500">
+            {isLoading ? 'Loading worksheets...' : `${count} worksheet${count === 1 ? '' : 's'} found`}
+            {isFetching && !isLoading && <span className="ml-2 text-blue-600 text-xs">Refreshing…</span>}
+          </p>
+          {!isLoading && worksheets.length > 0 && <ViewToggle view={view} onChange={setView} />}
+        </div>
 
         <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
           {isLoading ? (
             <div className="p-8 text-center text-gray-500">Loading worksheets...</div>
           ) : worksheets.length === 0 ? (
             <div className="p-8 text-center text-gray-500">No worksheets found for the selected filters.</div>
+          ) : view === 'cards' ? (
+            <CardGrid className="p-3">
+              {worksheets.map((worksheet) => (
+                <RecordCard
+                  key={worksheet.id}
+                  title={worksheet.title}
+                  meta={`${worksheet.class_name}${worksheet.subject_name ? ` · ${worksheet.subject_name}` : ''}`}
+                  status={
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${STATUS_STYLE[worksheet.status] || 'bg-gray-100 text-gray-700'}`}>
+                      {worksheet.status}
+                    </span>
+                  }
+                  fields={[
+                    { label: 'Items', value: worksheet.item_count || 0 },
+                    { label: 'Source', value: worksheet.source },
+                    { label: 'Updated', value: worksheet.updated_at ? new Date(worksheet.updated_at).toLocaleString() : '—' },
+                  ]}
+                  actions={[
+                    { label: worksheet.status === 'DRAFT' ? 'Resume' : 'Open', tone: 'info', onClick: () => navigate(`/academics/worksheets/${worksheet.id}`) },
+                    { label: 'Duplicate', tone: 'muted', disabled: duplicateMutation.isPending, onClick: () => duplicateMutation.mutate(worksheet.id) },
+                    { label: downloadingKey === `${worksheet.id}-pdf` ? 'Generating…' : 'PDF', tone: 'muted', disabled: downloadingKey === `${worksheet.id}-pdf`, onClick: () => handleDownload(worksheet, 'pdf') },
+                    { label: downloadingKey === `${worksheet.id}-docx` ? 'Generating…' : 'DOCX', tone: 'muted', disabled: downloadingKey === `${worksheet.id}-docx`, onClick: () => handleDownload(worksheet, 'docx') },
+                    { label: 'Delete', tone: 'danger', disabled: deleteMutation.isPending, onClick: () => handleDeleteOne(worksheet) },
+                  ]}
+                />
+              ))}
+            </CardGrid>
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">

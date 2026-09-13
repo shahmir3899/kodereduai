@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query'
-import { lmsApi, academicsApi, hrApi } from '../../services/api'
+import { lmsApi, academicsApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useToast } from '../../components/Toast'
@@ -13,6 +13,7 @@ import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/cla
 import LessonPlanAIModal from './LessonPlanAIModal'
 import { normalizeLessonPlanText } from './lessonPlanTextUtils'
 import Spinner from '../../components/ui/Spinner'
+import StaffFilter from '../../components/StaffFilter'
 
 const STEPS = [
   { num: 1, label: 'Class & Date' },
@@ -218,11 +219,6 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
     enabled: !!resolvedSelectedClass,
   })
 
-  const { data: staffData } = useQuery({
-    queryKey: ['hrStaffTeachers'],
-    queryFn: () => hrApi.getStaff({ employment_status: 'ACTIVE', role: 'TEACHER', page_size: 9999 }),
-  })
-
   const { data: booksData, isLoading: booksLoading } = useQuery({
     queryKey: ['booksForClassSubject', resolvedSelectedClass, selectedSubject],
     queryFn: () => lmsApi.getBooksForClassSubject({ class_id: resolvedSelectedClass, subject_id: selectedSubject }),
@@ -230,7 +226,6 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
   })
 
   const classSubjects = classSubjectsData?.data?.results || classSubjectsData?.data || []
-  const staff = staffData?.data?.results || staffData?.data || []
   const books = booksData?.data || booksData?.data?.results || []
 
   const syncObjectivesAfterSave = async (response) => {
@@ -588,18 +583,13 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="label">Teacher</label>
-                <select
-                  className="input w-full"
+                <StaffFilter
+                  role="TEACHER"
+                  status="ACTIVE"
                   value={selectedTeacher}
                   onChange={(e) => setSelectedTeacher(e.target.value)}
-                >
-                  <option value="">Select Teacher</option>
-                  {staff.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.full_name || t.user_name || `Staff #${t.id}`}
-                    </option>
-                  ))}
-                </select>
+                  placeholder="Select Teacher"
+                />
               </div>
               <div>
                 <label className="label">Lesson Date *</label>

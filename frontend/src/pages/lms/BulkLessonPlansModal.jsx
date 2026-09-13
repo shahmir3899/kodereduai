@@ -9,7 +9,7 @@ import {
   startOfMonth,
   endOfMonth,
 } from 'date-fns'
-import { lmsApi, academicsApi, hrApi, sessionsApi } from '../../services/api'
+import { lmsApi, academicsApi, sessionsApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useToast } from '../../components/Toast'
@@ -25,6 +25,7 @@ import {
 import LessonPlanAIModal from './LessonPlanAIModal'
 import LessonPlanTopicsPickerModal from './LessonPlanTopicsPickerModal'
 import { normalizeLessonPlanText, deriveAutoTitleFromCurriculumSummary } from './lessonPlanTextUtils'
+import StaffFilter from '../../components/StaffFilter'
 
 const STEPS = [
   { num: 1, label: 'Class & range' },
@@ -135,11 +136,6 @@ export default function BulkLessonPlansModal({ onClose, onSuccess, onCreateSingl
     enabled: !!resolvedClass,
   })
 
-  const { data: staffData } = useQuery({
-    queryKey: ['hrStaffTeachersBulk'],
-    queryFn: () => hrApi.getStaff({ employment_status: 'ACTIVE', role: 'TEACHER', page_size: 9999 }),
-  })
-
   const { data: dayStatusData, isFetching: calendarLoading } = useQuery({
     queryKey: ['calendarDayStatus', dateFrom, dateTo, activeAcademicYear?.id],
     queryFn: () =>
@@ -165,7 +161,6 @@ export default function BulkLessonPlansModal({ onClose, onSuccess, onCreateSingl
   })
 
   const classSubjects = classSubjectsData?.data?.results || classSubjectsData?.data || []
-  const staff = staffData?.data?.results || staffData?.data || []
   const daysMap = dayStatusData?.data?.days || {}
 
   const existingDateSet = useMemo(() => {
@@ -546,18 +541,13 @@ export default function BulkLessonPlansModal({ onClose, onSuccess, onCreateSingl
                   <label className="label">
                     Teacher {isMinimal ? '(no default found — please choose)' : '*'}
                   </label>
-                  <select
-                    className="input w-full"
+                  <StaffFilter
+                    role="TEACHER"
+                    status="ACTIVE"
                     value={selectedTeacher}
                     onChange={(e) => setSelectedTeacher(e.target.value)}
-                  >
-                    <option value="">Select teacher</option>
-                    {staff.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.full_name || t.user_name || `Staff #${t.id}`}
-                      </option>
-                    ))}
-                  </select>
+                    placeholder="Select teacher"
+                  />
                 </div>
                 {!isMinimal && (
                   <div>

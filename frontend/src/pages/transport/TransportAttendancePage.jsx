@@ -3,6 +3,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { transportApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import Spinner from '../../components/ui/Spinner'
+import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
+import { useViewPreference } from '../../hooks/useViewPreference'
 
 const BOARDING_STATUSES = [
   { value: 'BOARDED', label: 'Boarded', color: 'bg-green-100 text-green-800 border-green-300', activeColor: 'bg-green-500 text-white' },
@@ -17,6 +19,7 @@ export default function TransportAttendancePage() {
   const today = new Date().toISOString().split('T')[0]
   const [selectedDate, setSelectedDate] = useState(today)
   const [selectedRoute, setSelectedRoute] = useState('')
+  const [view, setView] = useViewPreference('transport-attendance')
   const [attendanceMap, setAttendanceMap] = useState({})
   const [isSaving, setIsSaving] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
@@ -256,20 +259,24 @@ export default function TransportAttendancePage() {
               </div>
             )}
 
-            {/* Mobile card view */}
-            <div className="sm:hidden space-y-2">
+            <div className="flex justify-end mb-3">
+              <ViewToggle view={view} onChange={setView} />
+            </div>
+
+            {view === 'cards' ? (
+            <CardGrid>
               {assignments.map((assignment) => {
                 const currentStatus = attendanceMap[assignment.student]
                 return (
-                  <div key={assignment.id} className="p-3 border border-gray-200 rounded-lg">
-                    <div className="flex items-center justify-between mb-2">
-                      <div>
-                        <p className="font-medium text-sm text-gray-900">{assignment.student_name}</p>
-                        <p className="text-xs text-gray-500">
-                          {assignment.class_name || '--'} | Stop: {assignment.stop_name || '--'}
-                        </p>
-                      </div>
-                    </div>
+                  <RecordCard
+                    key={assignment.id}
+                    title={assignment.student_name}
+                    fields={[
+                      { label: 'Class', value: assignment.class_name || '--' },
+                      { label: 'Stop', value: assignment.stop_name || '--' },
+                      { label: 'Vehicle', value: assignment.vehicle_number || '--' },
+                    ]}
+                  >
                     <div className="flex gap-2">
                       {BOARDING_STATUSES.map((status) => (
                         <button
@@ -285,13 +292,12 @@ export default function TransportAttendancePage() {
                         </button>
                       ))}
                     </div>
-                  </div>
+                  </RecordCard>
                 )
               })}
-            </div>
-
-            {/* Desktop table view */}
-            <div className="hidden sm:block overflow-x-auto">
+            </CardGrid>
+            ) : (
+            <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
@@ -334,6 +340,7 @@ export default function TransportAttendancePage() {
                 </tbody>
               </table>
             </div>
+            )}
 
             {/* Bottom Save button for long lists */}
             {assignments.length > 10 && (

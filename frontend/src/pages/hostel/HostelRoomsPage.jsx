@@ -5,6 +5,8 @@ import { useAuth } from '../../contexts/AuthContext'
 import Spinner from '../../components/ui/Spinner'
 import Badge from '../../components/ui/Badge'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
+import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
+import { useViewPreference } from '../../hooks/useViewPreference'
 
 const emptyHostelForm = {
   name: '',
@@ -30,6 +32,8 @@ export default function HostelRoomsPage() {
   const queryClient = useQueryClient()
 
   const [activeTab, setActiveTab] = useState('hostels')
+  const [hostelsView, setHostelsView] = useViewPreference('hostels')
+  const [roomsView, setRoomsView] = useViewPreference('hostel-rooms')
   const [selectedHostel, setSelectedHostel] = useState('')
 
   // Hostel modal
@@ -316,43 +320,43 @@ export default function HostelRoomsPage() {
             </div>
           ) : (
             <>
-              {/* Mobile card view */}
-              <div className="sm:hidden divide-y divide-gray-200">
+              <div className="flex justify-end p-2">
+                <ViewToggle view={hostelsView} onChange={setHostelsView} />
+              </div>
+
+              {hostelsView === 'cards' ? (
+              <CardGrid className="p-2">
                 {hostels.map((hostel) => (
-                  <div key={hostel.id} className="p-4">
-                    <div className="flex items-start justify-between mb-2">
-                      <div className="min-w-0 flex-1">
-                        <p className="font-medium text-sm text-gray-900 truncate">{hostel.name}</p>
-                        <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${hostelTypeColors[hostel.hostel_type] || 'bg-gray-100 text-gray-700'}`}>
-                          {hostel.hostel_type}
-                        </span>
-                      </div>
-                      <span className={`flex-shrink-0 ml-2 px-2 py-0.5 rounded text-xs font-medium ${
+                  <RecordCard
+                    key={hostel.id}
+                    title={hostel.name}
+                    meta={
+                      <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${hostelTypeColors[hostel.hostel_type] || 'bg-gray-100 text-gray-700'}`}>
+                        {hostel.hostel_type}
+                      </span>
+                    }
+                    status={
+                      <span className={`flex-shrink-0 px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap ${
                         hostel.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
                       }`}>
                         {hostel.is_active ? 'Active' : 'Inactive'}
                       </span>
-                    </div>
-                    <div className="text-xs text-gray-500 space-y-0.5">
-                      <p>Capacity: {hostel.capacity || 0} | Occupancy: {hostel.current_occupancy ?? hostel.occupancy ?? 0}</p>
-                      {hostel.warden_name && <p>Warden: {hostel.warden_name}</p>}
-                    </div>
-                    <div className="flex gap-3 mt-3 pt-2 border-t border-gray-100">
-                      <button
-                        onClick={() => { setSelectedHostel(String(hostel.id)); setActiveTab('rooms') }}
-                        className="text-xs text-green-600 font-medium"
-                      >
-                        View Rooms
-                      </button>
-                      <button onClick={() => openEditHostel(hostel)} className="text-xs text-blue-600 font-medium">Edit</button>
-                      <button onClick={() => openDeleteConfirm(hostel, 'hostel')} className="text-xs text-red-600 font-medium">Delete</button>
-                    </div>
-                  </div>
+                    }
+                    fields={[
+                      { label: 'Capacity', value: hostel.capacity || 0 },
+                      { label: 'Occupancy', value: hostel.current_occupancy ?? hostel.occupancy ?? 0 },
+                      ...(hostel.warden_name ? [{ label: 'Warden', value: hostel.warden_name }] : []),
+                    ]}
+                    actions={[
+                      { label: 'View Rooms', tone: 'success', onClick: () => { setSelectedHostel(String(hostel.id)); setActiveTab('rooms') } },
+                      { label: 'Edit', tone: 'info', onClick: () => openEditHostel(hostel) },
+                      { label: 'Delete', tone: 'danger', onClick: () => openDeleteConfirm(hostel, 'hostel') },
+                    ]}
+                  />
                 ))}
-              </div>
-
-              {/* Desktop table */}
-              <div className="hidden sm:block overflow-x-auto">
+              </CardGrid>
+              ) : (
+              <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
@@ -409,6 +413,7 @@ export default function HostelRoomsPage() {
                   </tbody>
                 </table>
               </div>
+              )}
             </>
           )}
         </div>
@@ -457,34 +462,37 @@ export default function HostelRoomsPage() {
                 </div>
               ) : (
                 <>
-                  {/* Mobile card view */}
-                  <div className="sm:hidden divide-y divide-gray-200">
+                  <div className="flex justify-end p-2">
+                    <ViewToggle view={roomsView} onChange={setRoomsView} />
+                  </div>
+
+                  {roomsView === 'cards' ? (
+                  <CardGrid className="p-2">
                     {rooms.map((room) => (
-                      <div key={room.id} className="p-4">
-                        <div className="flex items-start justify-between mb-2">
-                          <div className="min-w-0 flex-1">
-                            <p className="font-medium text-sm text-gray-900">Room {room.room_number}</p>
-                            <p className="text-xs text-gray-500">Floor {room.floor} | {room.room_type}</p>
-                          </div>
-                          <span className={`flex-shrink-0 ml-2 px-2 py-0.5 rounded text-xs font-medium ${
+                      <RecordCard
+                        key={room.id}
+                        title={`Room ${room.room_number}`}
+                        meta={`Floor ${room.floor} · ${room.room_type}`}
+                        status={
+                          <span className={`flex-shrink-0 px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap ${
                             room.is_available ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
                           }`}>
                             {room.is_available ? 'Available' : 'Full'}
                           </span>
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          <p>Capacity: {room.capacity} | Occupancy: {room.current_occupancy ?? room.occupancy ?? 0}</p>
-                        </div>
-                        <div className="flex gap-3 mt-3 pt-2 border-t border-gray-100">
-                          <button onClick={() => openEditRoom(room)} className="text-xs text-blue-600 font-medium">Edit</button>
-                          <button onClick={() => openDeleteConfirm(room, 'room')} className="text-xs text-red-600 font-medium">Delete</button>
-                        </div>
-                      </div>
+                        }
+                        fields={[
+                          { label: 'Capacity', value: room.capacity },
+                          { label: 'Occupancy', value: room.current_occupancy ?? room.occupancy ?? 0 },
+                        ]}
+                        actions={[
+                          { label: 'Edit', tone: 'info', onClick: () => openEditRoom(room) },
+                          { label: 'Delete', tone: 'danger', onClick: () => openDeleteConfirm(room, 'room') },
+                        ]}
+                      />
                     ))}
-                  </div>
-
-                  {/* Desktop table */}
-                  <div className="hidden sm:block overflow-x-auto">
+                  </CardGrid>
+                  ) : (
+                  <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
                       <thead className="bg-gray-50">
                         <tr>
@@ -535,6 +543,7 @@ export default function HostelRoomsPage() {
                       </tbody>
                     </table>
                   </div>
+                  )}
                 </>
               )}
             </div>

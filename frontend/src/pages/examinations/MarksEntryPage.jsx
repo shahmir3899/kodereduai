@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { examinationsApi, sessionsApi, studentsApi } from '../../services/api'
+import { examinationsApi, studentsApi } from '../../services/api'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import ClassSelector from '../../components/ClassSelector'
 import TeacherScopeSummary from '../../components/teacher/TeacherScopeSummary'
@@ -70,11 +70,6 @@ export default function MarksEntryPage() {
   }
 
   // Queries
-  const { data: yearsRes } = useQuery({
-    queryKey: ['academicYears'],
-    queryFn: () => sessionsApi.getAcademicYears({ page_size: 9999 }),
-  })
-
   const { data: examTypesRes } = useQuery({
     queryKey: ['examTypesForMarksEntry'],
     queryFn: () => examinationsApi.getExamTypes({ page_size: 9999, is_active: true }),
@@ -103,7 +98,6 @@ export default function MarksEntryPage() {
     enabled: !!selectedSubjectId,
   })
 
-  const years = yearsRes?.data?.results || yearsRes?.data || []
   const examTypes = examTypesRes?.data?.results || examTypesRes?.data || []
 
   const exams = examsRes?.data?.results || examsRes?.data || []
@@ -336,14 +330,7 @@ export default function MarksEntryPage() {
 
       {/* Selection Bar */}
       <div className="card mb-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Academic Year</label>
-            <select value={yearFilter} onChange={e => { setYearFilter(e.target.value); setSelectedExamId(''); setSelectedSubjectId(''); setMarksData([]) }} className="input w-full text-sm">
-              <option value="">All Years</option>
-              {years.map(y => <option key={y.id} value={y.id}>{y.name}</option>)}
-            </select>
-          </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">Class</label>
             <ClassSelector

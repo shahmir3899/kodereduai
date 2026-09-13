@@ -11,6 +11,7 @@ import BulkTestModal from './BulkTestModal'
 import { useConfirmModal } from '../../components/ConfirmModal'
 import Spinner from '../../components/ui/Spinner'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
+import { useToast } from '../../components/Toast'
 
 const createEmptyForm = (academicYearId = '', termId = '') => ({
   academic_year: academicYearId ? String(academicYearId) : '',
@@ -605,6 +606,7 @@ export function DateSheetModal({ groupId, onClose: closeDateSheet, queryClient, 
 export default function ExamsPage() {
   const queryClient = useQueryClient()
   const { confirm, ConfirmModalRoot } = useConfirmModal()
+  const { showSuccess } = useToast()
   const { activeAcademicYear, currentTerm } = useAcademicYear()
   const { activeSchool } = useAuth()
   const getDefaultForm = () => createEmptyForm(activeAcademicYear?.id, currentTerm?.id)
@@ -877,25 +879,45 @@ export default function ExamsPage() {
 
   const publishScheduleAllMut = useMutation({
     mutationFn: (id) => examinationsApi.publishScheduleAll(id),
-    onSuccess: () => { setListError(null); queryClient.invalidateQueries({ queryKey: ['examGroups'] }); queryClient.invalidateQueries({ queryKey: ['exams'] }) },
+    onSuccess: (res) => {
+      setListError(null)
+      queryClient.invalidateQueries({ queryKey: ['examGroups'] })
+      queryClient.invalidateQueries({ queryKey: ['exams'] })
+      showSuccess(`Published exam schedule for ${res?.data?.published_count ?? 'all'} exam(s).`)
+    },
     onError: (err) => setListError(err.response?.data?.detail || 'Failed to publish exam schedules.'),
   })
 
   const unpublishScheduleAllMut = useMutation({
     mutationFn: (id) => examinationsApi.unpublishScheduleAll(id),
-    onSuccess: () => { setListError(null); queryClient.invalidateQueries({ queryKey: ['examGroups'] }); queryClient.invalidateQueries({ queryKey: ['exams'] }) },
+    onSuccess: (res) => {
+      setListError(null)
+      queryClient.invalidateQueries({ queryKey: ['examGroups'] })
+      queryClient.invalidateQueries({ queryKey: ['exams'] })
+      showSuccess(`Unpublished exam schedule for ${res?.data?.unpublished_count ?? 'all'} exam(s).`)
+    },
     onError: (err) => setListError(err.response?.data?.detail || 'Failed to unpublish exam schedules.'),
   })
 
   const announceResultsAllMut = useMutation({
     mutationFn: (id) => examinationsApi.announceResultsAll(id),
-    onSuccess: () => { setListError(null); queryClient.invalidateQueries({ queryKey: ['examGroups'] }); queryClient.invalidateQueries({ queryKey: ['exams'] }) },
+    onSuccess: (res) => {
+      setListError(null)
+      queryClient.invalidateQueries({ queryKey: ['examGroups'] })
+      queryClient.invalidateQueries({ queryKey: ['exams'] })
+      showSuccess(`Announced results for ${res?.data?.published_count ?? 'all'} exam(s).`)
+    },
     onError: (err) => setListError(err.response?.data?.detail || 'Failed to announce results.'),
   })
 
   const unpublishResultsAllMut = useMutation({
     mutationFn: (id) => examinationsApi.unpublishResultsAll(id),
-    onSuccess: () => { setListError(null); queryClient.invalidateQueries({ queryKey: ['examGroups'] }); queryClient.invalidateQueries({ queryKey: ['exams'] }) },
+    onSuccess: (res) => {
+      setListError(null)
+      queryClient.invalidateQueries({ queryKey: ['examGroups'] })
+      queryClient.invalidateQueries({ queryKey: ['exams'] })
+      showSuccess(`Unpublished results for ${res?.data?.unpublished_count ?? 'all'} exam(s).`)
+    },
     onError: (err) => setListError(err.response?.data?.detail || 'Failed to unpublish results.'),
   })
 

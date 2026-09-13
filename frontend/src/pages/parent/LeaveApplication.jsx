@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { parentsApi } from '../../services/api'
 import Spinner from '../../components/ui/Spinner'
+import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
+import { useViewPreference } from '../../hooks/useViewPreference'
 
 const STATUS_COLORS = {
   PENDING: 'bg-yellow-100 text-yellow-800',
@@ -16,6 +18,7 @@ const TABS = ['Apply for Leave', 'My Requests']
 export default function LeaveApplication() {
   const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState('Apply for Leave')
+  const [view, setView] = useViewPreference('parent-leave-requests')
 
   // Form state
   const [formData, setFormData] = useState({
@@ -288,36 +291,32 @@ export default function LeaveApplication() {
             </div>
           ) : (
             <>
-              {/* Mobile Cards */}
-              <div className="sm:hidden space-y-3">
+              <div className="flex justify-end mb-3">
+                <ViewToggle view={view} onChange={setView} />
+              </div>
+
+              {view === 'cards' ? (
+              <CardGrid>
                 {requests.map((req) => (
-                  <div key={req.id} className="bg-white rounded-xl border border-gray-200 p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium text-gray-900">{req.student_name || 'Child'}</span>
-                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${STATUS_COLORS[req.status] || 'bg-gray-100 text-gray-800'}`}>
+                  <RecordCard
+                    key={req.id}
+                    title={req.student_name || 'Child'}
+                    status={
+                      <span className={`px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap ${STATUS_COLORS[req.status] || 'bg-gray-100 text-gray-800'}`}>
                         {req.status}
                       </span>
-                    </div>
-                    <div className="text-sm text-gray-600 space-y-1">
-                      <p>
-                        {new Date(req.start_date).toLocaleDateString()} - {new Date(req.end_date).toLocaleDateString()}
-                        <span className="text-gray-400 ml-1">
-                          ({getDayCount(req.start_date, req.end_date)} days)
-                        </span>
-                      </p>
-                      <p className="text-xs text-gray-500 line-clamp-2">{req.reason}</p>
-                    </div>
-                    {req.status === 'PENDING' && (
-                      <div className="mt-3 pt-3 border-t border-gray-100">
-                        <button
-                          onClick={() => cancelMutation.mutate(req.id)}
-                          disabled={cancelMutation.isPending}
-                          className="text-xs text-red-600 hover:text-red-700 font-medium"
-                        >
-                          Cancel Request
-                        </button>
-                      </div>
-                    )}
+                    }
+                    fields={[
+                      {
+                        label: 'Dates',
+                        value: `${new Date(req.start_date).toLocaleDateString()} - ${new Date(req.end_date).toLocaleDateString()} (${getDayCount(req.start_date, req.end_date)}d)`,
+                      },
+                    ]}
+                    actions={req.status === 'PENDING' ? [
+                      { label: 'Cancel Request', tone: 'danger', disabled: cancelMutation.isPending, onClick: () => cancelMutation.mutate(req.id) },
+                    ] : []}
+                  >
+                    <p className="text-xs text-gray-500 line-clamp-2">{req.reason}</p>
                     {req.admin_remarks && (
                       <div className="mt-2 p-2 bg-gray-50 rounded-lg">
                         <p className="text-xs text-gray-500">
@@ -325,12 +324,11 @@ export default function LeaveApplication() {
                         </p>
                       </div>
                     )}
-                  </div>
+                  </RecordCard>
                 ))}
-              </div>
-
-              {/* Desktop Table */}
-              <div className="hidden sm:block bg-white rounded-xl border border-gray-200 overflow-hidden">
+              </CardGrid>
+              ) : (
+              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                 <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
@@ -382,6 +380,7 @@ export default function LeaveApplication() {
                   </table>
                 </div>
               </div>
+              )}
             </>
           )}
         </>

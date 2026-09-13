@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query'
-import { lmsApi, hrApi, schoolsApi } from '../../services/api'
+import { lmsApi, schoolsApi } from '../../services/api'
 import ClassSelector from '../../components/ClassSelector'
 import { useAuth } from '../../contexts/AuthContext'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
@@ -8,7 +8,7 @@ import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import { useClassSubjects } from '../../hooks/useClassSubjects'
 import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
-import { useMediaQuery } from '../../hooks/useMediaQuery'
+import { useViewPreference } from '../../hooks/useViewPreference'
 import { getClassSelectorScope, getResolvedMasterClassId, resolveSessionClassId } from '../../utils/classScope'
 import { useToast } from '../../components/Toast'
 import TeacherScopeSummary from '../../components/teacher/TeacherScopeSummary'
@@ -18,6 +18,8 @@ import LessonPlanTopicsPickerModal from './LessonPlanTopicsPickerModal'
 import { exportLessonPlansPDF } from './lessonPlansExportPdf'
 import { normalizeLessonPlanText, deriveAutoTitleFromCurriculumSummary } from './lessonPlanTextUtils'
 import Spinner from '../../components/ui/Spinner'
+import StaffFilter from '../../components/StaffFilter'
+import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
 
 const STATUS_BADGES = {
   DRAFT: 'bg-gray-100 text-gray-800',
@@ -96,7 +98,7 @@ export default function LessonPlansPage() {
   const { sessionClasses } = useSessionClasses(activeAcademicYear?.id)
   const queryClient = useQueryClient()
   const { showError, showSuccess } = useToast()
-  const isDesktop = useMediaQuery('(min-width: 640px)')
+  const [view, setView] = useViewPreference('lesson-plans')
 
   const [search, setSearch] = useState('')
   const [exportDateFrom, setExportDateFrom] = useState('')
@@ -193,12 +195,6 @@ export default function LessonPlansPage() {
     staleTime: 5 * 60_000,
   })
 
-  const { data: staffData } = useQuery({
-    queryKey: ['hrStaff'],
-    queryFn: () => hrApi.getStaff({ status: 'ACTIVE', page_size: 9999 }),
-    staleTime: 2 * 60_000,
-  })
-
   const hasValidDateRange = Boolean(exportDateFrom && exportDateTo && exportDateFrom <= exportDateTo)
 
   const { data: plansData, isLoading } = useQuery({
@@ -218,7 +214,6 @@ export default function LessonPlansPage() {
     enabled: !!resolvedFilterClass && hasValidDateRange,
   })
 
-  const staff = staffData?.data?.results || staffData?.data || []
   const allPlans = hasValidDateRange ? (plansData?.data?.results || plansData?.data || []) : []
 
   // Client-side search (date range is already applied server-side above)
@@ -806,10 +801,8 @@ export default function LessonPlansPage() {
               </div>
             )}
 
-            {/* Mobile card view — only mounted below the sm breakpoint, not just CSS-hidden */}
-            {!isDesktop && (
-            <div className="space-y-2 p-2">
-              <label className="flex items-center gap-2 px-1 pb-1 text-xs text-gray-600">
+            <div className="flex items-center justify-between gap-2 px-2 pt-2">
+              <label className="flex items-center gap-2 text-xs text-gray-600">
                 <input
                   type="checkbox"
                   checked={allVisibleSelected}
@@ -820,19 +813,65 @@ export default function LessonPlansPage() {
                 />
                 Select all ({plans.length})
               </label>
+              <ViewToggle view={view} onChange={setView} />
+            </div>
+
+            {view === 'cards' ? (
+            <CardGrid className="p-2">
               {plans.map((plan) => (
-                <div key={plan.id} className="p-3 border border-gray-200 rounded-lg">
-                  <div className="flex items-start justify-between gap-2">
+                <RecordCard
+                  key={plan.id}
+                  stripeTone={plan.status === 'PUBLISHED' ? 'success' : 'neutral'}
+                  highlighted={selectedIds.has(plan.id)}
+                  leading={
                     <input
                       type="checkbox"
                       className="mt-1"
                       checked={selectedIds.has(plan.id)}
                       onChange={() => toggleSelectPlan(plan.id)}
                     />
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium text-sm text-gray-900 truncate">{plan.title}</p>
+                  }
+                  title={plan.title}
+                  status={
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ${
+                        STATUS_BADGES[plan.status] || STATUS_BADGES.DRAFT
+                      }`}
+                    >
+                      {plan.status}
+                    </span>
+                  }
+                  fields={[
+                    {
+                      label: 'Class · Subject',
+                      value: (
+                        <>
+                          {plan.class_name || 'N/A'} · {plan.subject_name || 'N/A'}
+                          {plan.is_class_wide && (
+                            <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-medium align-middle">
+                              All sections
+                            </span>
+                          )}
+                        </>
+                      ),
+                    },
+                    { label: 'Date · Duration', value: `${formatDate(plan.lesson_date)} · ${plan.duration_minutes || '--'} min` },
+                  ]}
+                  actions={[
+                    { label: 'Edit', tone: 'info', onClick: () => openEditModal(plan) },
+                    ...(plan.status === 'DRAFT' ? [{ label: 'Publish', tone: 'success', onClick: () => publishMutation.mutate(plan.id) }] : []),
+                    { label: 'Delete', tone: 'danger', onClick: () => setDeleteConfirm(plan) },
+                  ]}
+                >
+                  {(plan.description?.trim() ||
+                    (Array.isArray(plan.linked_objectives) && plan.linked_objectives.length > 0) ||
+                    plan.planned_topics?.length > 0 ||
+                    plan.custom_topics?.length > 0 ||
+                    plan.ai_generated ||
+                    isTeacherEnabled) && (
+                    <div className="text-xs">
                       {plan.description?.trim() && (
-                        <p className="text-xs text-gray-600 mt-0.5 line-clamp-2 whitespace-pre-wrap break-words">
+                        <p className="text-gray-600 mt-0.5 line-clamp-2 whitespace-pre-wrap break-words">
                           {plan.description.trim()}
                         </p>
                       )}
@@ -853,87 +892,44 @@ export default function LessonPlansPage() {
                           )}
                         </div>
                       )}
-                      <p className="text-xs text-gray-500 mt-0.5">
-                        {plan.class_name || 'N/A'} | {plan.subject_name || 'N/A'}
-                        {plan.is_class_wide && (
-                          <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-medium align-middle">
-                            All sections
-                          </span>
-                        )}
-                      </p>
                       {isTeacherEnabled && (
                         <TeacherScopeBadge scope={classifyScope({ classId: plan.class_obj, subjectId: plan.subject })} className="mt-1" />
                       )}
-                      <p className="text-xs text-gray-500">
-                        {formatDate(plan.lesson_date)} | {plan.duration_minutes || '--'} min
-                      </p>
-                    </div>
-                    <span
-                      className={`px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ${
-                        STATUS_BADGES[plan.status] || STATUS_BADGES.DRAFT
-                      }`}
-                    >
-                      {plan.status}
-                    </span>
-                  </div>
-                  {plan.planned_topics?.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-1.5">
-                      {plan.planned_topics.slice(0, 3).map((topic) => (
-                        <span key={topic.id} className="px-1.5 py-0.5 bg-blue-50 text-blue-700 text-xs rounded">
-                          {topic.title}
+                      {plan.planned_topics?.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1.5">
+                          {plan.planned_topics.slice(0, 3).map((topic) => (
+                            <span key={topic.id} className="px-1.5 py-0.5 bg-blue-50 text-blue-700 text-xs rounded">
+                              {topic.title}
+                            </span>
+                          ))}
+                          {plan.planned_topics.length > 3 && (
+                            <span className="text-xs text-gray-500">+{plan.planned_topics.length - 3} more</span>
+                          )}
+                        </div>
+                      )}
+                      {plan.custom_topics?.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1.5">
+                          {plan.custom_topics.slice(0, 3).map((label, index) => (
+                            <span key={`${label}-${index}`} className="px-1.5 py-0.5 bg-amber-50 text-amber-800 text-xs rounded">
+                              {label}
+                            </span>
+                          ))}
+                          {plan.custom_topics.length > 3 && (
+                            <span className="text-xs text-gray-500">+{plan.custom_topics.length - 3} more</span>
+                          )}
+                        </div>
+                      )}
+                      {plan.ai_generated && (
+                        <span className="inline-block mt-1 px-1.5 py-0.5 bg-purple-50 text-purple-700 text-xs rounded">
+                          AI Generated
                         </span>
-                      ))}
-                      {plan.planned_topics.length > 3 && (
-                        <span className="text-xs text-gray-500">+{plan.planned_topics.length - 3} more</span>
                       )}
                     </div>
                   )}
-                  {plan.custom_topics?.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-1.5">
-                      {plan.custom_topics.slice(0, 3).map((label, index) => (
-                        <span key={`${label}-${index}`} className="px-1.5 py-0.5 bg-amber-50 text-amber-800 text-xs rounded">
-                          {label}
-                        </span>
-                      ))}
-                      {plan.custom_topics.length > 3 && (
-                        <span className="text-xs text-gray-500">+{plan.custom_topics.length - 3} more</span>
-                      )}
-                    </div>
-                  )}
-                  {plan.ai_generated && (
-                    <span className="inline-block mt-1 px-1.5 py-0.5 bg-purple-50 text-purple-700 text-xs rounded">
-                      AI Generated
-                    </span>
-                  )}
-                  <div className="flex gap-3 mt-2 pt-2 border-t border-gray-100">
-                    <button
-                      onClick={() => openEditModal(plan)}
-                      className="text-xs text-blue-600 font-medium"
-                    >
-                      Edit
-                    </button>
-                    {plan.status === 'DRAFT' && (
-                      <button
-                        onClick={() => publishMutation.mutate(plan.id)}
-                        className="text-xs text-green-600 font-medium"
-                      >
-                        Publish
-                      </button>
-                    )}
-                    <button
-                      onClick={() => setDeleteConfirm(plan)}
-                      className="text-xs text-red-600 font-medium"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </div>
+                </RecordCard>
               ))}
-            </div>
-            )}
-
-            {/* Desktop table view — only mounted at/above the sm breakpoint */}
-            {isDesktop && (
+            </CardGrid>
+            ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
@@ -1278,18 +1274,13 @@ export default function LessonPlansPage() {
                     <label className="label">
                       Teacher{isMinimal ? ' (no default found — please choose)' : ''}
                     </label>
-                    <select
-                      className="input"
+                    <StaffFilter
+                      role="TEACHER"
+                      status="ACTIVE"
                       value={form.teacher}
                       onChange={(e) => setForm({ ...form, teacher: e.target.value })}
-                    >
-                      <option value="">Select Teacher</option>
-                      {staff.map((t) => (
-                        <option key={t.id} value={t.id}>
-                          {t.full_name || t.user_name || `Staff #${t.id}`}
-                        </option>
-                      ))}
-                    </select>
+                      placeholder="Select Teacher"
+                    />
                   </div>
                 )}
                 <div>

@@ -4,6 +4,7 @@ import { hrApi } from '../../services/api'
 import { useToast } from '../../components/Toast'
 import StatCard from '../../components/dashboard/StatCard'
 import Spinner from '../../components/ui/Spinner'
+import StaffFilter from '../../components/StaffFilter'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 const EMPTY_FORM = {
@@ -97,12 +98,6 @@ export default function SalaryManagementPage() {
     queryFn: () => hrApi.getSalaryStructures({ page_size: 9999 }),
   })
 
-  // Fetch staff for dropdown
-  const { data: staffData } = useQuery({
-    queryKey: ['hrStaff'],
-    queryFn: () => hrApi.getStaff({ page_size: 9999 }),
-  })
-
   // Fetch departments for filter
   const { data: deptData } = useQuery({
     queryKey: ['hrDepartments'],
@@ -141,7 +136,6 @@ export default function SalaryManagementPage() {
   })
 
   const allSalaries = salaryData?.data?.results || salaryData?.data || []
-  const allStaff = staffData?.data?.results || staffData?.data || []
   const departments = deptData?.data?.results || deptData?.data || []
 
   const filteredSalaries = useMemo(() => {
@@ -408,19 +402,13 @@ export default function SalaryManagementPage() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="label">Staff Member *</label>
-                <select
-                  className="input"
+                <StaffFilter
+                  status="ACTIVE"
                   value={form.staff_member}
                   onChange={(e) => setForm({ ...form, staff_member: e.target.value })}
+                  placeholder="Select Staff"
                   disabled={!!editId}
-                >
-                  <option value="">Select Staff</option>
-                  {allStaff.filter((s) => s.is_active && s.employment_status === 'ACTIVE').map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.first_name} {s.last_name} {s.employee_id ? `(${s.employee_id})` : ''}
-                    </option>
-                  ))}
-                </select>
+                />
               </div>
 
               <div>

@@ -9,13 +9,18 @@ import { useConfirmModal } from '../components/ConfirmModal'
 import Spinner from '../components/ui/Spinner'
 import Button from '../components/ui/Button'
 import { useEscapeKey } from '../hooks/useEscapeKey'
+import { usePasswordPolicy } from '../hooks/usePasswordPolicy'
+import { RecordCard, CardGrid, ViewToggle } from '../components/cards'
+import { useViewPreference } from '../hooks/useViewPreference'
 
 export default function SettingsPage() {
   const queryClient = useQueryClient()
   const { isSchoolAdmin, isSuperAdmin, getAllowableRoles } = useAuth()
   const { confirm, ConfirmModalRoot } = useConfirmModal()
+  const { validate: validatePassword } = usePasswordPolicy()
   const canManageUsers = isSchoolAdmin && !isSuperAdmin
   const [searchParams, setSearchParams] = useSearchParams()
+  const [view, setView] = useViewPreference('settings-users')
 
   const getInitialTab = () => {
     const tab = searchParams.get('tab')
@@ -194,12 +199,9 @@ export default function SettingsPage() {
         setUserError('Username and password are required.')
         return
       }
-      if (userForm.password !== userForm.confirm_password) {
-        setUserError("Passwords don't match.")
-        return
-      }
-      if (userForm.password.length < 8) {
-        setUserError('Password must be at least 8 characters.')
+      const pwdError = validatePassword(userForm.password, userForm.confirm_password)
+      if (pwdError) {
+        setUserError(pwdError)
         return
       }
       createUserMutation.mutate(userForm)
@@ -489,7 +491,10 @@ export default function SettingsPage() {
 
           {/* User List */}
           <div className="card">
-            <h3 className="font-medium text-gray-900 mb-4">School Users ({filteredUsers.length})</h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-medium text-gray-900">School Users ({filteredUsers.length})</h3>
+              {!usersLoading && filteredUsers.length > 0 && <ViewToggle view={view} onChange={setView} />}
+            </div>
             {usersLoading ? (
               <div className="text-center py-8 text-gray-500">Loading...</div>
             ) : filteredUsers.length === 0 ? (
@@ -497,46 +502,37 @@ export default function SettingsPage() {
                 <p className="text-gray-500 mb-2">No users found</p>
                 <p className="text-sm text-gray-400">Click "Add User" to create a new user</p>
               </div>
+            ) : view === 'cards' ? (
+              <CardGrid>
+                {filteredUsers.map((u) => (
+                  <RecordCard
+                    key={u.id}
+                    title={u.first_name || u.last_name ? `${u.first_name} ${u.last_name}`.trim() : u.username}
+                    meta={u.email || `@${u.username}`}
+                    status={
+                      <span className={`px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap ${ROLE_COLORS[u.role] || 'bg-gray-100 text-gray-800'}`}>
+                        {ROLE_LABELS[u.role] || u.role}
+                      </span>
+                    }
+                    fields={[
+                      {
+                        label: 'Status',
+                        value: (
+                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${u.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
+                            {u.is_active ? 'Active' : 'Inactive'}
+                          </span>
+                        ),
+                      },
+                    ]}
+                    actions={allowableRoles.includes(u.role) ? [
+                      { label: 'Edit', tone: 'primary', onClick: () => openEditUser(u) },
+                      { label: u.is_active ? 'Deactivate' : 'Activate', tone: u.is_active ? 'danger' : 'success', onClick: () => toggleUserActiveMutation.mutate({ id: u.id, is_active: !u.is_active }) },
+                    ] : []}
+                  />
+                ))}
+              </CardGrid>
             ) : (
-              <>
-                {/* Mobile */}
-                <div className="sm:hidden space-y-3">
-                  {filteredUsers.map((u) => (
-                    <div key={u.id} className="border rounded-lg p-3">
-                      <div className="flex items-center justify-between mb-2">
-                        <div>
-                          <span className="font-medium text-gray-900">{u.first_name || u.last_name ? `${u.first_name} ${u.last_name}`.trim() : u.username}</span>
-                          <p className="text-xs text-gray-500">{u.username}</p>
-                        </div>
-                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${ROLE_COLORS[u.role] || 'bg-gray-100 text-gray-800'}`}>
-                          {ROLE_LABELS[u.role] || u.role}
-                        </span>
-                      </div>
-                      {u.email && <p className="text-sm text-gray-600">{u.email}</p>}
-                      <div className="flex items-center justify-between mt-2">
-                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${u.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
-                          {u.is_active ? 'Active' : 'Inactive'}
-                        </span>
-                        <div className="flex gap-2">
-                          {allowableRoles.includes(u.role) && (
-                            <button onClick={() => openEditUser(u)} className="text-xs text-primary-600 hover:underline">Edit</button>
-                          )}
-                          {allowableRoles.includes(u.role) && (
-                            <button
-                              onClick={() => toggleUserActiveMutation.mutate({ id: u.id, is_active: !u.is_active })}
-                              className={`text-xs ${u.is_active ? 'text-red-600' : 'text-green-600'} hover:underline`}
-                            >
-                              {u.is_active ? 'Deactivate' : 'Activate'}
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Desktop */}
-                <div className="hidden sm:block overflow-x-auto">
+                <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                       <tr>
@@ -585,7 +581,6 @@ export default function SettingsPage() {
                     </tbody>
                   </table>
                 </div>
-              </>
             )}
           </div>
         </div>

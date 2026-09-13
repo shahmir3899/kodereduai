@@ -4,6 +4,7 @@ import { PasswordInput } from '../components'
 import { useToast } from '../components/Toast'
 import { parentsApi } from '../services/api'
 import { getErrorMessage } from '../utils/errorUtils'
+import { usePasswordPolicy } from '../hooks/usePasswordPolicy'
 
 const EMPTY_FORM = {
   invite_code: '',
@@ -21,6 +22,7 @@ export default function ParentRegisterPage() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const { showSuccess } = useToast()
+  const { validate: validatePassword } = usePasswordPolicy()
   const [form, setForm] = useState({ ...EMPTY_FORM, invite_code: searchParams.get('code') || '' })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -31,12 +33,9 @@ export default function ParentRegisterPage() {
     e.preventDefault()
     setError('')
 
-    if (form.password !== form.confirm_password) {
-      setError("Passwords don't match.")
-      return
-    }
-    if (form.password.length < 8) {
-      setError('Password must be at least 8 characters.')
+    const pwdError = validatePassword(form.password, form.confirm_password)
+    if (pwdError) {
+      setError(pwdError)
       return
     }
 

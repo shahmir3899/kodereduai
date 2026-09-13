@@ -5,6 +5,8 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useToast } from '../../components/Toast'
 import Badge from '../../components/ui/Badge'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
+import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
+import { useViewPreference } from '../../hooks/useViewPreference'
 
 // ============================================
 // MARKUP PREVIEW HELPER
@@ -45,6 +47,7 @@ export default function LetterComposerPage() {
   // History
   const [selectedLetter, setSelectedLetter] = useState(null)
   const [deleteConfirmId, setDeleteConfirmId] = useState(null)
+  const [view, setView] = useViewPreference('letter-history')
   const [showUpdateDialog, setShowUpdateDialog] = useState(false)
 
   // PDF generation
@@ -765,15 +768,38 @@ export default function LetterComposerPage() {
       <div className="card">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-bold text-gray-900">Letter History</h2>
-          {loadingLetters && (
-            <span className="text-xs text-gray-400">Loading...</span>
-          )}
+          <div className="flex items-center gap-3">
+            {loadingLetters && (
+              <span className="text-xs text-gray-400">Loading...</span>
+            )}
+            {letters.length > 0 && <ViewToggle view={view} onChange={setView} />}
+          </div>
         </div>
 
         {letters.length === 0 ? (
           <p className="text-center text-sm text-gray-500 py-8">
             No letters yet. Generate a letter to see it here.
           </p>
+        ) : view === 'cards' ? (
+          <CardGrid>
+            {letters.map(letter => (
+              <RecordCard
+                key={letter.id}
+                title={letter.subject}
+                meta={letter.recipient}
+                status={
+                  <span className="inline-block px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-xs font-medium whitespace-nowrap">
+                    {letter.template_display}
+                  </span>
+                }
+                fields={[{ label: 'Date', value: formatDate(letter.created_at) }]}
+                actions={[
+                  { label: 'Load', tone: 'info', onClick: () => loadLetter(letter.id) },
+                  { label: deleteConfirmId === letter.id ? 'Confirm?' : 'Delete', tone: 'danger', onClick: () => handleDelete(letter.id) },
+                ]}
+              />
+            ))}
+          </CardGrid>
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">

@@ -5,6 +5,8 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useDebounce } from '../../hooks/useDebounce'
 import Spinner from '../../components/ui/Spinner'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
+import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
+import { useViewPreference } from '../../hooks/useViewPreference'
 
 const emptyBookForm = {
   title: '',
@@ -31,6 +33,7 @@ export default function BookCatalogPage() {
   const [categoryFilter, setCategoryFilter] = useState('')
 
   // Book modal
+  const [view, setView] = useViewPreference('book-catalog')
   const [showBookModal, setShowBookModal] = useState(false)
   const [editingBook, setEditingBook] = useState(null)
   const [bookForm, setBookForm] = useState(emptyBookForm)
@@ -331,42 +334,42 @@ export default function BookCatalogPage() {
           )
         ) : (
           <>
-            {/* Mobile card view */}
-            <div className="sm:hidden divide-y divide-gray-200">
+            <div className="flex justify-end p-2">
+              <ViewToggle view={view} onChange={setView} />
+            </div>
+
+            {view === 'cards' ? (
+            <CardGrid className="p-2">
               {books.map((book) => {
                 const available = (book.available_copies ?? (book.total_copies - (book.issued_copies || 0)))
                 return (
-                  <div key={book.id} className="p-4">
-                    <div className="flex items-start justify-between mb-2">
-                      <div className="min-w-0 flex-1">
-                        <p className="font-medium text-sm text-gray-900 truncate">{book.title}</p>
-                        <p className="text-xs text-gray-500">{book.author}</p>
-                      </div>
-                      <span className={`flex-shrink-0 ml-2 px-2 py-0.5 rounded-full text-xs font-medium ${
+                  <RecordCard
+                    key={book.id}
+                    title={book.title}
+                    meta={book.author}
+                    status={
+                      <span className={`flex-shrink-0 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${
                         available > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
                       }`}>
                         {available} avail.
                       </span>
-                    </div>
-                    <div className="text-xs text-gray-500 space-y-0.5">
-                      {book.isbn && <p>ISBN: {book.isbn}</p>}
-                      {book.category_name && <p>Category: {book.category_name}</p>}
-                      {book.shelf_location && <p>Shelf: {book.shelf_location}</p>}
-                    </div>
-                    <div className="flex gap-3 mt-3 pt-2 border-t border-gray-100">
-                      {available > 0 && (
-                        <button onClick={() => openIssueModal(book)} className="text-xs text-amber-600 font-medium">Issue</button>
-                      )}
-                      <button onClick={() => openEditBook(book)} className="text-xs text-blue-600 font-medium">Edit</button>
-                      <button onClick={() => setDeleteConfirm(book)} className="text-xs text-red-600 font-medium">Delete</button>
-                    </div>
-                  </div>
+                    }
+                    fields={[
+                      ...(book.isbn ? [{ label: 'ISBN', value: book.isbn, mono: true }] : []),
+                      ...(book.category_name ? [{ label: 'Category', value: book.category_name }] : []),
+                      ...(book.shelf_location ? [{ label: 'Shelf', value: book.shelf_location }] : []),
+                    ]}
+                    actions={[
+                      ...(available > 0 ? [{ label: 'Issue', tone: 'amber', onClick: () => openIssueModal(book) }] : []),
+                      { label: 'Edit', tone: 'info', onClick: () => openEditBook(book) },
+                      { label: 'Delete', tone: 'danger', onClick: () => setDeleteConfirm(book) },
+                    ]}
+                  />
                 )
               })}
-            </div>
-
-            {/* Desktop table view */}
-            <div className="hidden sm:block overflow-x-auto">
+            </CardGrid>
+            ) : (
+            <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
@@ -428,6 +431,7 @@ export default function BookCatalogPage() {
                 </tbody>
               </table>
             </div>
+            )}
           </>
         )}
       </div>

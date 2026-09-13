@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { hrApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import { useToast } from '../../components/Toast'
+import { usePasswordPolicy } from '../../hooks/usePasswordPolicy'
 import WhatsAppTick from '../../components/WhatsAppTick'
 import AvatarUpload from '../../components/AvatarUpload'
 import Spinner from '../../components/ui/Spinner'
@@ -53,6 +54,7 @@ export default function StaffFormPage() {
   const queryClient = useQueryClient()
   const { showError, showSuccess } = useToast()
   const { getAllowableRoles } = useAuth()
+  const { validate: validatePassword } = usePasswordPolicy()
   const isEdit = !!id
 
   const [form, setForm] = useState(EMPTY_FORM)
@@ -229,12 +231,9 @@ export default function StaffFormPage() {
         setStaffUserError('Username and password are required.')
         return
       }
-      if (staffUserForm.password.length < 8) {
-        setStaffUserError('Password must be at least 8 characters.')
-        return
-      }
-      if (staffUserForm.password !== staffUserForm.confirm_password) {
-        setStaffUserError("Passwords don't match.")
+      const pwdError = validatePassword(staffUserForm.password, staffUserForm.confirm_password)
+      if (pwdError) {
+        setStaffUserError(pwdError)
         return
       }
     }

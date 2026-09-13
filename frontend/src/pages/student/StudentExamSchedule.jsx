@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
 import { studentPortalApi } from '../../services/api'
 import Spinner from '../../components/ui/Spinner'
+import { RecordCard, CardGrid, ViewToggle } from '../../components/cards'
+import { useViewPreference } from '../../hooks/useViewPreference'
 
 function formatTime(time) {
   if (!time) return ''
@@ -14,6 +16,7 @@ function formatTime(time) {
 }
 
 export default function StudentExamSchedule() {
+  const [view, setView] = useViewPreference('student-exam-schedule')
   const { data, isLoading, error } = useQuery({
     queryKey: ['studentExamSchedule'],
     queryFn: () => studentPortalApi.getExamSchedule(),
@@ -55,6 +58,11 @@ export default function StudentExamSchedule() {
         </div>
       ) : (
         <div className="space-y-4">
+          {exams.some((exam) => exam.subjects.length > 0) && (
+            <div className="flex justify-end">
+              <ViewToggle view={view} onChange={setView} />
+            </div>
+          )}
           {exams.map(exam => (
             <div key={exam.exam_id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
               <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between flex-wrap gap-1">
@@ -68,6 +76,19 @@ export default function StudentExamSchedule() {
               </div>
               {exam.subjects.length === 0 ? (
                 <p className="px-4 py-3 text-sm text-gray-500">Subject dates not set yet.</p>
+              ) : view === 'cards' ? (
+                <CardGrid className="p-3">
+                  {exam.subjects.map((s, i) => (
+                    <RecordCard
+                      key={i}
+                      title={s.subject_name}
+                      fields={[
+                        { label: 'Date', value: s.exam_date || '—' },
+                        { label: 'Time', value: s.start_time ? `${formatTime(s.start_time)} - ${formatTime(s.end_time)}` : '—' },
+                      ]}
+                    />
+                  ))}
+                </CardGrid>
               ) : (
                 <table className="min-w-full text-sm">
                   <thead>

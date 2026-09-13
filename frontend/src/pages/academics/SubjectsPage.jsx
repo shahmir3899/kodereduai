@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { academicsApi, hrApi } from '../../services/api'
+import { academicsApi } from '../../services/api'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import { useAuth } from '../../contexts/AuthContext'
 import ClassSelector from '../../components/ClassSelector'
@@ -14,6 +14,7 @@ import {
 } from '../../utils/classScope'
 import Spinner from '../../components/ui/Spinner'
 import Badge from '../../components/ui/Badge'
+import StaffFilter from '../../components/StaffFilter'
 
 const SEVERITY_STYLES = {
   red: { bg: 'bg-red-50', border: 'border-red-200', badge: 'bg-red-100 text-red-700', icon: 'text-red-500' },
@@ -123,23 +124,6 @@ export default function SubjectsPage() {
     enabled: tab === 'classTeachers' && !!activeAcademicYear?.id,
   })
 
-  const { data: staffData } = useQuery({
-    queryKey: ['hrStaffActive'],
-    queryFn: () => hrApi.getStaff({ employment_status: 'ACTIVE', page_size: 500 }),
-  })
-
-  const { data: teacherStaffData, isLoading: teacherStaffLoading } = useQuery({
-    queryKey: ['hrTeacherStaffActive'],
-    queryFn: async () => {
-      // Try role-filtered first; some backends don't support role param so fall back to all active staff
-      try {
-        const res = await hrApi.getStaff({ role: 'TEACHER', employment_status: 'ACTIVE', page_size: 500 })
-        const list = Array.isArray(res?.data) ? res.data : res?.data?.results ?? []
-        if (list.length > 0) return res
-      } catch (_) { /* fall through */ }
-      return hrApi.getStaff({ employment_status: 'ACTIVE', page_size: 500 })
-    },
-  })
 
   // AI Insights queries
   const { data: workloadRes, isLoading: workloadLoading } = useQuery({
@@ -174,8 +158,6 @@ export default function SubjectsPage() {
       return sid && allowedSessionClassIds.has(String(sid))
     })
   }, [isTeacher, rawClassTeacherAssignments, sessionClassOptions])
-  const staffList = extractList(staffData)
-  const teacherStaffList = extractList(teacherStaffData)
   const workloadData = workloadRes?.data || {}
   const gapData = gapRes?.data || {}
 
@@ -406,6 +388,11 @@ export default function SubjectsPage() {
 
   const handleClassTeacherSubmit = (e) => {
     e.preventDefault()
+
+    if (!classTeacherForm.session_class || !classTeacherForm.teacher) {
+      showError('Please select a class section and a teacher')
+      return
+    }
 
     const payload = {
       session_class: parseInt(classTeacherForm.session_class) || classTeacherForm.session_class,
@@ -983,14 +970,13 @@ export default function SubjectsPage() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Teacher</label>
-                    <select
+                    <StaffFilter
+                      status="ACTIVE"
                       value={assignForm.teacher}
                       onChange={e => setAssignForm(p => ({ ...p, teacher: e.target.value }))}
-                      className="input w-full"
-                    >
-                      <option value="">Unassigned</option>
-                      {staffList.map(s => <option key={s.id} value={s.id}>{s.full_name} ({s.employee_id})</option>)}
-                    </select>
+                      showAllOption
+                      allOptionLabel="Unassigned"
+                    />
                   </div>
                   <div className="flex items-center pt-2">
                     {editAssignId && (
@@ -1146,18 +1132,13 @@ export default function SubjectsPage() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Teacher *</label>
-                    <select
+                    <StaffFilter
+                      role="TEACHER"
+                      status="ACTIVE"
                       value={classTeacherForm.teacher}
                       onChange={e => setClassTeacherForm(p => ({ ...p, teacher: e.target.value }))}
-                      className="input w-full"
-                      required
-                      disabled={teacherStaffLoading}
-                    >
-                      <option value="">{teacherStaffLoading ? 'Loading teachers...' : `Select teacher... (${teacherStaffList.length})`}</option>
-                      {teacherStaffList.map(teacher => (
-                        <option key={teacher.id} value={teacher.id}>{teacher.full_name} {teacher.employee_id ? `(${teacher.employee_id})` : ''}</option>
-                      ))}
-                    </select>
+                      placeholder="Select teacher..."
+                    />
                     <p className="text-xs text-amber-700 mt-2">
                       Only active staff marked as teachers are listed here. If someone is missing, update their user role to TEACHER from Staff/User management.
                     </p>
