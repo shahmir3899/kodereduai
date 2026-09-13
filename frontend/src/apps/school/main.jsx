@@ -6,6 +6,7 @@ import { AuthProvider } from '../../contexts/AuthContext'
 import { AcademicYearProvider } from '../../contexts/AcademicYearContext'
 import { ToastProvider } from '../../components/Toast'
 import { BackgroundTaskProvider } from '../../contexts/BackgroundTaskContext'
+import { ThemeProvider } from '../../contexts/ThemeContext'
 import SchoolApp from './SchoolApp'
 import '../../index.css'
 
@@ -22,18 +23,20 @@ const queryClient = new QueryClient({
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <AuthProvider>
-          <AcademicYearProvider>
-            <ToastProvider>
-              <BackgroundTaskProvider>
-                <SchoolApp />
-              </BackgroundTaskProvider>
-            </ToastProvider>
-          </AcademicYearProvider>
-        </AuthProvider>
-      </BrowserRouter>
-    </QueryClientProvider>
+    <ThemeProvider>
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <AuthProvider>
+            <AcademicYearProvider>
+              <ToastProvider>
+                <BackgroundTaskProvider>
+                  <SchoolApp />
+                </BackgroundTaskProvider>
+              </ToastProvider>
+            </AcademicYearProvider>
+          </AuthProvider>
+        </BrowserRouter>
+      </QueryClientProvider>
+    </ThemeProvider>
   </React.StrictMode>,
 )

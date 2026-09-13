@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { attendanceApi, sessionsApi } from '../../services/api'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import ClassSelector from '../ClassSelector'
+import Spinner from '../ui/Spinner'
 
 function getDaysInMonth(year, month) {
   return new Date(year, month + 1, 0).getDate()
@@ -175,7 +176,7 @@ export default function RegisterTab() {
         </div>
       ) : isLoading ? (
         <div className="card text-center py-12">
-          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600 mx-auto"></div>
+          <Spinner size="h-10 w-10" className="mx-auto" />
           <p className="mt-4 text-gray-500">Loading register...</p>
         </div>
       ) : (

@@ -8,6 +8,7 @@ import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
 import { useClassSubjects } from '../../hooks/useClassSubjects'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { isRTLLanguage } from '../../components/RTLWrapper'
 
 const LANGUAGES = [
@@ -108,6 +109,8 @@ export default function AddBookModal({
       subject: parseInt(selectedSubject, 10),
     })
   }
+
+  useEscapeKey(onClose, isOpen)
 
   if (!isOpen) return null
 

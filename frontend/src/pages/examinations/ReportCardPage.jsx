@@ -7,6 +7,7 @@ import ClassSelector from '../../components/ClassSelector'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
 import { buildSessionOrMasterClassParams, getClassSelectorScope } from '../../utils/classScope'
+import Spinner from '../../components/ui/Spinner'
 
 export default function ReportCardPage() {
   const { activeAcademicYear } = useAcademicYear()
@@ -222,7 +223,7 @@ export default function ReportCardPage() {
         </div>
       ) : reportLoading ? (
         <div className="text-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+          <Spinner size="md" className="mx-auto" />
         </div>
       ) : !report ? (
         <div className="card text-center py-8 text-gray-500">No report card data available.</div>

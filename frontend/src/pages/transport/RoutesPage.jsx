@@ -4,6 +4,8 @@ import { transportApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import LocationPickerMap from '../../components/LocationPickerMap'
 import RouteMapView from '../../components/RouteMapView'
+import Spinner from '../../components/ui/Spinner'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 function haversineKm(lat1, lon1, lat2, lon2) {
   const R = 6371
@@ -213,6 +215,10 @@ export default function RoutesPage() {
     setStopRouteId(null)
   }
 
+  useEscapeKey(closeRouteModal, showModal)
+  useEscapeKey(() => setDeleteConfirm(null), !!deleteConfirm)
+  useEscapeKey(closeStopModal, showStopModal)
+
   const handleStopSubmit = () => {
     if (!stopForm.name.trim()) return
 
@@ -260,7 +266,7 @@ export default function RoutesPage() {
       <div className="card">
         {isLoading ? (
           <div className="text-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+            <Spinner size="md" className="mx-auto" />
             <p className="text-gray-500 mt-2">Loading routes...</p>
           </div>
         ) : routes.length === 0 ? (
@@ -433,7 +439,7 @@ export default function RoutesPage() {
 
                               {stopsLoading ? (
                                 <div className="text-center py-4">
-                                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600 mx-auto"></div>
+                                  <Spinner size="sm" className="mx-auto" />
                                   <p className="text-gray-500 mt-1 text-xs">Loading stops...</p>
                                 </div>
                               ) : stops.length === 0 ? (

@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { transportApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
+import Spinner from '../../components/ui/Spinner'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 const VEHICLE_TYPES = [
   { value: 'BUS', label: 'Bus' },
@@ -105,6 +107,9 @@ export default function VehiclesPage() {
     setVehicleForm(emptyForm)
   }
 
+  useEscapeKey(closeModal, showModal)
+  useEscapeKey(() => setDeleteConfirm(null), !!deleteConfirm)
+
   const handleSubmit = () => {
     if (!vehicleForm.vehicle_number.trim()) return
 
@@ -154,7 +159,7 @@ export default function VehiclesPage() {
       <div className="card">
         {isLoading ? (
           <div className="text-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+            <Spinner size="md" className="mx-auto" />
             <p className="text-gray-500 mt-2">Loading vehicles...</p>
           </div>
         ) : vehicles.length === 0 ? (

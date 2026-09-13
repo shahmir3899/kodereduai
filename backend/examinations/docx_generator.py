@@ -19,9 +19,24 @@ from django.utils.html import strip_tags
 import requests
 
 from .html_sanitize import sanitize_for_docx
-from .paper_export_layout import build_export_layout, resolve_exam_paper_class_name
+from .paper_export_layout import build_export_layout, build_worksheet_export_layout, resolve_exam_paper_class_name
 
 logger = logging.getLogger(__name__)
+
+
+def _fetch_image_stream(url, timeout=8):
+    """Fetch bytes for a Supabase-hosted image URL (a Diagram Mode question/option
+    attachment) -- python-docx's add_picture() needs a file-like object or local
+    path, not a URL, same as _append_school_logo already does for the school logo."""
+    if not url:
+        return None
+    try:
+        response = requests.get(url, timeout=timeout)
+        response.raise_for_status()
+        return io.BytesIO(response.content)
+    except Exception as exc:
+        logger.warning('Could not fetch image %s: %s', url, exc)
+        return None
 
 
 def _html_to_text(value):
@@ -361,8 +376,22 @@ class ExamPaperDOCXGenerator:
         right_no_left.set(qn('w:val'), 'nil')
         right_borders.append(right_no_left)
 
+    def _embed_option_image(self, cell, image_url):
+        """Add an MCQ option's diagram (e.g. "which shape is a rhombus?") as a new
+        paragraph inside its table cell, below the option's text/letter."""
+        if not image_url:
+            return
+        from docx.shared import Inches
+        image_stream = _fetch_image_stream(image_url)
+        if not image_stream:
+            return
+        try:
+            cell.add_paragraph().add_run().add_picture(image_stream, width=Inches(1.4))
+        except Exception as exc:
+            logger.warning('Could not embed option diagram in DOCX: %s', exc)
+
     def _render_question_item(self, document, item, show_marks=True):
-        from docx.shared import Pt, RGBColor
+        from docx.shared import Inches, Pt, RGBColor
 
         # Number, question text and the True/False marker sit in one paragraph.
         # Marks print once, at the section heading (e.g. "Question # 1 (5)") --
@@ -390,12 +419,21 @@ class ExamPaperDOCXGenerator:
             marks_run.font.size = Pt(9)
             marks_run.font.color.rgb = RGBColor(0x6B, 0x72, 0x80)
 
+        if item.get('question_image_url'):
+            image_stream = _fetch_image_stream(item['question_image_url'])
+            if image_stream:
+                try:
+                    document.add_picture(image_stream, width=Inches(3))
+                except Exception as exc:
+                    logger.warning('Could not embed question diagram in DOCX: %s', exc)
+
         rendered_extra = False
 
         if item['question_type'] == 'MCQ' and item['options']:
             # 2-column grid (A/B on one row, C/D on the next) instead of stacking all
             # four vertically -- matches the PDF export and halves the vertical space
             # MCQ options take on the page.
+            option_images = item.get('option_images') or {}
             rows = []
             for left_key, right_key in (('A', 'B'), ('C', 'D')):
                 left_value = item['options'].get(left_key)
@@ -408,6 +446,8 @@ class ExamPaperDOCXGenerator:
                     cells = table.rows[row_index].cells
                     cells[0].text = f"{left_key}. {_html_to_text(left_value)}" if left_value else ''
                     cells[1].text = f"{right_key}. {_html_to_text(right_value)}" if right_value else ''
+                    self._embed_option_image(cells[0], option_images.get(left_key))
+                    self._embed_option_image(cells[1], option_images.get(right_key))
             rendered_extra = True
 
         elif item['question_type'] == 'FILL_BLANK' and item['fill_blank_items']:
@@ -446,3 +486,80 @@ class ExamPaperDOCXGenerator:
             cells = table.rows[row_index].cells
             cells[0].text = pair['left']
             cells[1].text = pair['right']
+
+
+class WorksheetDOCXGenerator(ExamPaperDOCXGenerator):
+    """Generate branded .docx worksheets.
+
+    Subclasses ExamPaperDOCXGenerator purely to reuse its section/question
+    rendering helpers (_render_divider_heading, _render_section_heading,
+    _render_question_item, _add_page_number_footer, _append_school_logo) --
+    none of those touch self.exam_paper, so they render identically for a
+    worksheet. No candidate total-marks cell, no examiner-marks box, and no
+    legacy flat-list fallback (a worksheet's structure is never empty).
+    """
+
+    def __init__(self, worksheet):
+        self.worksheet = worksheet
+        self.school = worksheet.school
+
+    def generate(self):
+        from docx import Document
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+        from docx.shared import Inches, Pt
+
+        document = Document()
+        document.styles['Normal'].paragraph_format.space_after = Pt(2)
+        self._append_school_logo(document, Inches(1.15))
+
+        layout = build_worksheet_export_layout(self.worksheet)
+        header = layout['header']
+
+        school_heading = document.add_heading(header['school_name'], level=1)
+        school_heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        title_heading = document.add_heading(header['paper_title'], level=2)
+        title_heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        subtitle_bits = [f"Class: {header['class_name']}"]
+        if header['subject_name']:
+            subtitle_bits.append(f"Subject: {header['subject_name']}")
+        subtitle_p = document.add_paragraph('    '.join(subtitle_bits))
+        subtitle_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        name_date_table = document.add_table(rows=1, cols=4)
+        name_date_table.autofit = True
+        cells = name_date_table.rows[0].cells
+        cells[0].text = 'Name:'
+        cells[0].paragraphs[0].runs[0].bold = True
+        cells[2].text = 'Date:'
+        cells[2].paragraphs[0].runs[0].bold = True
+        for cell in cells:
+            self._set_cell_borders(cell, bottom=False)
+
+        if header['instructions']:
+            document.add_paragraph('Instructions:')
+            instructions_text = _html_to_text(header['instructions'])
+            for line in [entry.strip() for entry in instructions_text.splitlines() if entry.strip()]:
+                document.add_paragraph(line, style='List Bullet')
+
+        from docx.enum.text import WD_TAB_ALIGNMENT
+
+        for block in layout['blocks']:
+            if block['type'] == 'divider':
+                self._render_divider_heading(document, block, WD_ALIGN_PARAGRAPH)
+                continue
+            if block['type'] == 'section':
+                self._render_section_heading(document, block, Inches, WD_TAB_ALIGNMENT)
+            show_marks = block['type'] != 'section'
+            for item in block['items']:
+                self._render_question_item(document, item, show_marks)
+                gap_paragraph = document.add_paragraph()
+                gap_paragraph.paragraph_format.space_after = Pt(10)
+
+        self._add_page_number_footer(document, WD_ALIGN_PARAGRAPH)
+
+        output = io.BytesIO()
+        document.save(output)
+        logger.info('Generated DOCX for Worksheet %s', self.worksheet.id)
+        return output.getvalue()

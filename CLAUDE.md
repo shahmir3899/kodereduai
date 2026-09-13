@@ -96,7 +96,7 @@ Helper script: `run_both_servers.bat` starts backend + main frontend in separate
 ## Frontend/Backend Communication
 
 - **Multi-tenancy:** every request includes an `X-School-ID` header. `core.middleware.TenantMiddleware` resolves the active school from header → subdomain → user default. All querysets are filtered by `school_id`.
-- **Auth:** JWT (SimpleJWT). Login returns `{access, refresh, user}`. Access token has `user_id`, `role`, `school_id`. Roles: `SUPER_ADMIN`, `SCHOOL_ADMIN`, `PRINCIPAL`, `HR_MANAGER`, `ACCOUNTANT`, `TEACHER`, `STAFF`, `PARENT`, `STUDENT`. Lifetimes: 1 day access / 7 day refresh locally, 1 hour / 1 day in production.
+- **Auth:** JWT (SimpleJWT). Login returns `{access, refresh, user}`. Access token has `user_id`, `role`, `school_id`. Roles: `SUPER_ADMIN`, `SCHOOL_ADMIN`, `PRINCIPAL`, `MANAGER`, `ACCOUNTANT`, `TEACHER`, `STAFF`, `DRIVER`, `PARENT`, `STUDENT`. Lifetimes: 1 day access / 7 day refresh locally, 1 hour / 1 day in production.
 - `frontend/src/services/api.js` is a single Axios instance with request/response interceptors: attaches `Authorization`/`X-School-ID`, strips `Content-Type` on GET/HEAD, auto-refreshes the access token on 401 and retries once, dispatches a global `api-error` window event on 5xx/network errors. API calls are grouped into per-domain objects (e.g. `attendanceApi`), not one flat client.
 - **Pagination:** all list endpoints return `{count, next, previous, results}` via `core.pagination.FlexiblePageNumberPagination`, default `page_size=20`, override with `?page_size=N`.
 - **Errors:** DRF `EXCEPTION_HANDLER` is `core.views.custom_exception_handler` — don't bypass with ad hoc try/except in views.

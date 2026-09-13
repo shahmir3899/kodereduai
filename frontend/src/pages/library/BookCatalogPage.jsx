@@ -3,6 +3,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { libraryApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import { useDebounce } from '../../hooks/useDebounce'
+import Spinner from '../../components/ui/Spinner'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 const emptyBookForm = {
   title: '',
@@ -195,6 +197,11 @@ export default function BookCatalogPage() {
     setIssueForm({ borrower_type: 'STUDENT', borrower_id: '', due_date: '', notes: '' })
   }
 
+  useEscapeKey(closeBookModal, showBookModal)
+  useEscapeKey(closeCategoryModal, showCategoryModal)
+  useEscapeKey(() => setDeleteConfirm(null), !!deleteConfirm)
+  useEscapeKey(closeIssueModal, showIssueModal)
+
   // ---- Submit Handlers ----
 
   const handleBookSubmit = (e) => {
@@ -287,7 +294,7 @@ export default function BookCatalogPage() {
       <div className="bg-white rounded-lg shadow-sm">
         {booksLoading ? (
           <div className="text-center py-16">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+            <Spinner size="md" className="mx-auto" />
             <p className="text-gray-500 mt-3">Loading books...</p>
           </div>
         ) : books.length === 0 ? (

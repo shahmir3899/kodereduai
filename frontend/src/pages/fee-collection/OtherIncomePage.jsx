@@ -5,6 +5,7 @@ import { IncomeModal } from './FeeModals'
 import { MONTHS } from './FeeFilters'
 import { useToast } from '../../components/Toast'
 import { useConfirmModal } from '../../components/ConfirmModal'
+import Button from '../../components/ui/Button'
 
 export default function OtherIncomePage() {
   const { user, isStaffMember } = useAuth()
@@ -61,9 +62,9 @@ export default function OtherIncomePage() {
           <p className="text-sm text-gray-600">Track non-fee income like sales, donations, and other revenue</p>
         </div>
         {canWrite && (
-          <button onClick={() => setShowIncomeModal(true)} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm">
+          <Button onClick={() => setShowIncomeModal(true)}>
             Add Income
-          </button>
+          </Button>
         )}
       </div>
 

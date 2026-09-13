@@ -16,6 +16,7 @@ import { useToast } from '../../components/Toast'
 import ClassSelector from '../../components/ClassSelector'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 import {
   getClassSelectorScope,
   getResolvedMasterClassId,
@@ -80,6 +81,7 @@ function emptyRow() {
 }
 
 export default function BulkLessonPlansModal({ onClose, onSuccess, onCreateSingle }) {
+  useEscapeKey(onClose)
   const { activeSchool } = useAuth()
   const { activeAcademicYear } = useAcademicYear()
   const queryClient = useQueryClient()

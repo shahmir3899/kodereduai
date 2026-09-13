@@ -22,6 +22,7 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | GET | /api/users/ | List users. Params: search, role, is_active |
 | POST | /api/users/ | Create user |
 | GET/PUT/DELETE | /api/users/{id}/ | User detail |
+| POST | /api/users/{id}/reset_password/ | Admin-triggered password reset for another user. Body: `{mode: 'set'\|'email', new_password?, confirm_password?}` (`mode` defaults to `'set'`). SUPER_ADMIN can target any user; SCHOOL_ADMIN/PRINCIPAL are scoped to their own school and further limited by `ROLE_HIERARCHY` (e.g. a PRINCIPAL can't reset a SCHOOL_ADMIN's password) |
 | POST | /api/admin/users/create/ | Super admin user creation |
 
 ## Schools (Admin)
@@ -30,6 +31,7 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | GET/POST | /api/admin/schools/ | List/create schools |
 | GET/PUT/DELETE | /api/admin/schools/{id}/ | School detail |
 | GET | /api/admin/schools/platform_stats/ | Platform-wide statistics |
+| GET | /api/admin/schools/demo_insights/ | Demo funnel: credential-emails-sent and demo-school-login counts (total + today/last_3d/last_7d), login role breakdown, recent-activity feed. Cached 60s. See "Demo Insights" in `docs/DEMO_SHOWCASE_DATA.md` |
 | POST | /api/admin/schools/{id}/activate/ | Activate school |
 | POST | /api/admin/schools/{id}/deactivate/ | Deactivate school |
 | GET | /api/admin/schools/{id}/stats/ | School statistics |
@@ -88,6 +90,8 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | GET | /api/students/portal/timetable/ | View timetable |
 | GET | /api/students/portal/results/ | View results |
 | GET | /api/students/portal/assignments/ | View assignments |
+| GET | /api/students/portal/library/ | View own book issues (StudentLibraryView) |
+| GET | /api/students/portal/transport/ | View own route/vehicle/stop assignment (StudentTransportView) |
 | POST | /api/students/portal/study-helper/ | AI Study Helper chat. Body: `{message}`. Hybrid: free-form study help + 8 data lookup tools, conversation history. See BACKEND_APPS.md → AI Chatbot Agents |
 | POST | /api/students/admin/generate-invite/ | Generate invite link |
 
@@ -284,12 +288,25 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | GET/POST | /api/examinations/questions/ | subject, exam_type, question_type, difficulty, topics, lesson_plan, search, is_active | Includes `tested_topics` and `tested_topics_details` fields |
 | POST | /api/examinations/questions/generate_from_lesson/ | | Generate AI questions from lesson plan. Body: {lesson_plan_id, question_count (5-20), question_type, difficulty_level}. Returns: {questions: [...], message} |
 | GET | /api/examinations/questions/by_lesson_plan/ | lesson_plan_id | Get all questions covering lesson plan's topics |
+| POST | /api/examinations/questions/{id}/diagram/ | | Diagram Mode: upload/replace a drawn or pasted image for one slot. Multipart body: {slot: question\|option_a\|option_b\|option_c\|option_d\|answer, file}. Returns {slot, <field>_image_url, message} |
+| POST | /api/examinations/questions/{id}/remove_diagram/ | | Diagram Mode: clear one slot's image. Body: {slot} |
 | GET/POST | /api/examinations/exam-papers/ | class_obj, subject, exam, status, search, is_active | Includes `lesson_plans`, `lesson_plans_details`, `covered_topics`, `question_topics_summary` fields |
 | POST | /api/examinations/exam-papers/{id}/link_lesson_plans/ | | Link lesson plans to paper. Body: {lesson_plan_ids: [1,2,3]} |
 | GET | /api/examinations/exam-papers/{id}/coverage_stats/ | | Get coverage stats: topics tested, questions per topic, linked lessons |
 | POST | /api/examinations/exam-papers/create_from_lessons/ | | Create paper from lesson plans. Body: {lesson_plan_ids, class_id, subject_id, paper_title, instructions, total_marks, duration_minutes} |
 | GET | /api/examinations/exam-papers/{id}/generate-pdf/ | | Generate PDF of exam paper |
 | POST | /api/examinations/exam-papers/review-questions/ | | Grammar/spelling review. Body: {questions: [text1, text2]} |
+| **WORKSHEETS (NEW — 2026-09)** | | | |
+| GET/POST | /api/examinations/worksheets/ | class_obj, subject, status, tested_topics, search, is_active | List/create worksheets. No exam/total_marks/duration_minutes fields (unlike exam-papers) |
+| GET/PATCH/DELETE | /api/examinations/worksheets/{id}/ | | Delete is soft (is_active=False) |
+| POST | /api/examinations/worksheets/ensure-draft/ | | Create or resume a server-backed draft. Body: {draft_id?, class_obj, subject?, title, instructions?, structure?, render_options?} |
+| POST | /api/examinations/worksheets/{id}/autosave/ | | Autosave draft metadata + manual items. Body: {title?, instructions?, structure?, render_options?, tested_topics?, manual_items: [{question_id?, item_order, section_key, marks_override?, question_text, question_type, ...}]}. Full manual_items list replaces existing items each call, same as exam-papers' autosave/manual_questions |
+| POST | /api/examinations/worksheets/{id}/duplicate/ | | Clone a worksheet (with its items) as a new DRAFT — for reusing one worksheet across sections of the same class |
+| GET | /api/examinations/worksheets/{id}/generate-pdf/ | | Generate branded PDF (no answer key — worksheets are usually ungraded) |
+| GET | /api/examinations/worksheets/{id}/generate-docx/ | | Generate branded DOCX |
+| POST | /api/examinations/worksheet-uploads/upload-image/ | | Upload a worksheet image and trigger OCR extraction (same PaperOCRProcessor pipeline as paper-uploads). Multipart body: {image, class_obj?, subject?, group_id?, page_number?} |
+| GET | /api/examinations/worksheet-uploads/{id}/ | | Poll extraction status (PENDING/PROCESSING/EXTRACTED/REVIEWED/CONFIRMED/FAILED) |
+| POST | /api/examinations/worksheet-uploads/{id}/confirm/ | | Link a confirmed upload to a worksheet. Body: {worksheet_id}. Requires upload status=EXTRACTED |
 | **MONTHLY ASSESSMENTS** | | | |
 | GET/POST | /api/examinations/student-term-assessment/ | student_id, academic_year, month (all required, GET) | Single student/month upsert (Student Profile "Assessment" tab, and roster page's per-row save). POST body: {student, academic_year, month, ...12 rating fields (1-5\|null), teacher_remark, principal_remark}. Non-admin saves never overwrite an existing principal_remark |
 | GET | /api/examinations/student-term-assessment/roster/ | academic_year, month, session_class or class_obj | One row per enrolled student, merging in that month's existing assessment (if any) |
@@ -313,7 +330,7 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | POST | /api/notifications/{id}/mark-read/ | Mark as read |
 | POST | /api/notifications/mark-all-read/ | Mark all read |
 | POST | /api/notifications/send/ | Send notification to single recipient |
-| POST | /api/notifications/broadcast/ | Broadcast notification to all users of a role. Body: {event_type, channel, recipient_type, title, body, context?}. recipient_type: PARENT\|TEACHER\|STAFF\|SCHOOL_ADMIN\|PRINCIPAL\|HR_MANAGER\|ACCOUNTANT\|STUDENT. Returns {sent, failed, skipped, total_recipients} |
+| POST | /api/notifications/broadcast/ | Broadcast notification to all users of a role. Body: {event_type, channel, recipient_type, title, body, context?}. recipient_type: PARENT\|TEACHER\|STAFF\|SCHOOL_ADMIN\|PRINCIPAL\|MANAGER\|ACCOUNTANT\|STUDENT. Returns {sent, failed, skipped, total_recipients} |
 | GET | /api/notifications/analytics/ | Analytics. Params: days (7\|30\|90, default=all time) |
 | POST | /api/notifications/ai-chat/ | Parent Communication AI chat. Body: `{message}`. Multi-round tool calling (15 tools), conversation history. See BACKEND_APPS.md → AI Chatbot Agents |
 
@@ -351,6 +368,8 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | POST | /api/parents/children/{student_id}/pay-fee/ | Pay fee |
 | GET | /api/parents/children/{student_id}/timetable/ | Child timetable |
 | GET | /api/parents/children/{student_id}/exam-results/ | Child results |
+| GET | /api/parents/children/{student_id}/library/ | Child's book issues (ChildLibraryView, ownership-verified) |
+| GET | /api/parents/children/{student_id}/transport/ | Child's route/vehicle/stop assignment (ChildTransportView, ownership-verified) |
 | GET/POST | /api/parents/leave-requests/ | Leave requests |
 | GET | /api/parents/messages/threads/ | Message threads |
 | POST | /api/parents/messages/ | Send message (**POST only**) |
@@ -484,7 +503,7 @@ Pagination: All list endpoints return `{count, next, previous, results}`. Defaul
 | POST | /api/reports/custom-letters/generate-pdf/ | Generate letter PDF (sync). Body: {letter_id} OR {recipient, subject, body_text, line_spacing} |
 | POST | /api/reports/custom-letters/ai-draft/ | AI-draft letter content. Body: {prompt, template_type?, employee_context?}. Returns {subject, body_text} |
 
-**NOTE:** Letter Composer is under the HR module in the frontend. Permission: ADMIN_ROLES + HR_MANAGER. PDF uses school letterhead from `school.letterhead_url` as background. AI draft uses Groq LLM with fallback to template matching.
+**NOTE:** Letter Composer is under the HR module in the frontend. Permission: ADMIN_ROLES + MANAGER. PDF uses school letterhead from `school.letterhead_url` as background. AI draft uses Groq LLM with fallback to template matching.
 
 ## Tasks
 | Method | URL | Description |

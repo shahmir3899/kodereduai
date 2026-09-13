@@ -4,6 +4,7 @@ import { examinationsApi, sessionsApi, academicsApi } from '../../services/api'
 import { useClasses } from '../../hooks/useClasses'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 const STEPS = [
   { num: 1, label: 'Details' },
@@ -38,6 +39,7 @@ function daysBetweenInclusive(startStr, endStr) {
 const EMPTY_ARRAY = []
 
 export default function ExamWizard({ onClose, onSuccess }) {
+  useEscapeKey(onClose)
   const queryClient = useQueryClient()
   const { activeAcademicYear, currentTerm } = useAcademicYear()
 

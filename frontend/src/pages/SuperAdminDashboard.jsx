@@ -5,6 +5,7 @@ import { useConfirmModal } from '../components/ConfirmModal'
 import AvatarUpload from '../components/AvatarUpload'
 import Pagination from '../components/Pagination'
 import { useDebounce } from '../hooks/useDebounce'
+import { useEscapeKey } from '../hooks/useEscapeKey'
 
 const ADMIN_PAGE_SIZE = 20
 
@@ -107,6 +108,15 @@ export default function SuperAdminDashboard() {
     queryFn: () => schoolsApi.getPlatformStats(),
   })
   const pStats = platformStatsData?.data || {}
+
+  // Demo funnel (credential emails sent vs. actual demo-school logins) — only
+  // needed on the Overview tab, so don't fetch it on every dashboard visit.
+  const { data: demoInsightsData } = useQuery({
+    queryKey: ['demoInsights'],
+    queryFn: () => schoolsApi.getDemoInsights(),
+    enabled: activeTab === 'overview',
+  })
+  const demoStats = demoInsightsData?.data || {}
 
   const { data: schoolsData, isLoading: schoolsLoading } = useQuery({
     queryKey: ['adminSchools', schoolsPage, debouncedSchoolsSearch, schoolsOrdering],
@@ -631,6 +641,36 @@ export default function SuperAdminDashboard() {
             </div>
             <p className="text-xs text-gray-400 mt-2">vs. {pStats.previous_period_schools || 0} schools / {pStats.previous_period_users || 0} users in the prior 30 days</p>
           </div>
+
+          {/* Demo Funnel — credential emails sent (landing page) vs. actual demo-school
+              logins. Tier 1 only: shared demo credentials mean a login can't be tied
+              back to the specific visitor who was emailed, so this reports funnel
+              volume on each side, not per-visitor correlation. */}
+          <div className="card mb-6">
+            <h3 className="text-base font-semibold text-gray-900 mb-3">Demo Funnel</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+              <DemoFunnelStat label="Credential Emails Sent" total={demoStats.emails_sent_total} byWindow={demoStats.emails_sent_by_window} />
+              <DemoFunnelStat label="Demo Logins" total={demoStats.logins_total} byWindow={demoStats.logins_by_window} />
+            </div>
+            {demoStats.logins_by_role?.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-4">
+                {demoStats.logins_by_role.map((r) => (
+                  <span key={r.role || 'unknown'} className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded-full font-medium">
+                    {r.role || 'Unknown'}: {r.count}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Recent Demo Activity — credential emails and logins merged into one
+              time-sorted feed so a superadmin can eyeball recent funnel activity. */}
+          {(demoStats.recent_recipients?.length > 0 || demoStats.recent_logins?.length > 0) && (
+            <div className="card mb-6">
+              <h3 className="text-base font-semibold text-gray-900 mb-3">Recent Demo Activity</h3>
+              <DemoActivityFeed recipients={demoStats.recent_recipients} logins={demoStats.recent_logins} />
+            </div>
+          )}
 
           {/* Per-school breakdown */}
           {pStats.school_breakdown?.length > 0 && (
@@ -1866,6 +1906,54 @@ function TrendBadge({ current, previous }) {
   )
 }
 
+function DemoFunnelStat({ label, total, byWindow }) {
+  return (
+    <div>
+      <p className="text-sm text-gray-500">{label}</p>
+      <p className="text-2xl sm:text-3xl font-bold text-gray-900">{total || 0}</p>
+      <p className="text-xs text-gray-400">
+        {byWindow?.today || 0} today &middot; {byWindow?.last_3d || 0} last 3d &middot; {byWindow?.last_7d || 0} last 7d
+      </p>
+    </div>
+  )
+}
+
+// Merges the two Tier-1 demo-funnel feeds (credential emails sent, demo logins)
+// into one time-sorted list — there's no per-visitor link between the two
+// (shared demo credentials), so each row is tagged by which side it came from.
+function DemoActivityFeed({ recipients = [], logins = [] }) {
+  const events = [
+    ...recipients.map((r) => ({
+      kind: 'email',
+      at: r.created_at,
+      label: `Email sent → ${r.name || 'Unknown'}${r.school ? ` (${r.school})` : ''}`,
+    })),
+    ...logins.map((l) => ({
+      kind: 'login',
+      at: l.created_at,
+      label: `Login → ${l.username || 'unknown'} (${l.role || 'no role'})`,
+    })),
+  ].sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 20)
+
+  if (events.length === 0) return <Empty text="No demo activity yet." />
+
+  return (
+    <ul className="divide-y divide-gray-100">
+      {events.map((e, i) => (
+        <li key={i} className="py-2 flex items-center justify-between gap-3 text-sm">
+          <span className="flex items-center gap-2 min-w-0">
+            <span className={`px-2 py-0.5 rounded-full text-xs font-medium shrink-0 ${e.kind === 'email' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}>
+              {e.kind === 'email' ? 'Email' : 'Login'}
+            </span>
+            <span className="text-gray-700 truncate">{e.label}</span>
+          </span>
+          <span className="text-xs text-gray-400 shrink-0">{new Date(e.at).toLocaleString()}</span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 function Field({ label, children }) {
   return (
     <div>
@@ -1876,6 +1964,7 @@ function Field({ label, children }) {
 }
 
 function Modal({ title, onClose, children, scroll }) {
+  useEscapeKey(onClose)
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
       {/* Full-screen sheet below sm (cramped forms — e.g. the User modal's school

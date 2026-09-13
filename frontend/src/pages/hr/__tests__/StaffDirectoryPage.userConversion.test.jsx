@@ -12,7 +12,7 @@ vi.mock('../../../contexts/AuthContext', () => ({
     user: { id: 1, role: 'SCHOOL_ADMIN', username: 'admin' },
     activeSchool: { id: 1, name: 'Test School', role: 'SCHOOL_ADMIN', is_default: true },
     isModuleEnabled: () => true,
-    getAllowableRoles: () => ['PRINCIPAL', 'HR_MANAGER', 'ACCOUNTANT', 'TEACHER', 'STAFF'],
+    getAllowableRoles: () => ['PRINCIPAL', 'MANAGER', 'ACCOUNTANT', 'TEACHER', 'STAFF'],
   }),
 }))
 

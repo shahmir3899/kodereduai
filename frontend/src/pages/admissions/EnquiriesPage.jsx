@@ -6,6 +6,7 @@ import { useToast } from '../../components/Toast'
 import { useConfirmModal } from '../../components/ConfirmModal'
 import { GRADE_PRESETS, GRADE_LEVEL_LABELS } from '../../constants/gradePresets'
 import BatchConvertModal from '../../components/BatchConvertModal'
+import Spinner from '../../components/ui/Spinner'
 
 const STATUSES = [
   { key: 'NEW', label: 'New', color: 'bg-blue-100 text-blue-800' },
@@ -329,7 +330,7 @@ export default function EnquiriesPage() {
       {/* Loading */}
       {isLoading && (
         <div className="flex items-center justify-center py-16">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" />
+          <Spinner size="md" />
         </div>
       )}
 

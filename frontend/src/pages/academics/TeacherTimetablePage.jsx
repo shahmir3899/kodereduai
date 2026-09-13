@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { academicsApi } from '../../services/api'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
+import Spinner from '../../components/ui/Spinner'
 
 const DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
 const DAY_LABELS = { MON: 'Mon', TUE: 'Tue', WED: 'Wed', THU: 'Thu', FRI: 'Fri', SAT: 'Sat' }
@@ -56,7 +57,7 @@ export default function TeacherTimetablePage() {
 
       {isLoading ? (
         <div className="text-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+          <Spinner size="md" className="mx-auto" />
         </div>
       ) : slots.length === 0 ? (
         <div className="card text-center py-8 text-gray-500">

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { questionPaperApi } from '../../services/api'
+import { questionPaperApi, lmsApi } from '../../services/api'
 import ClassSelector from '../../components/ClassSelector'
 import { useToast } from '../../components/Toast'
 import { useConfirmModal } from '../../components/ConfirmModal'
@@ -10,6 +10,7 @@ import { useSessionClasses } from '../../hooks/useSessionClasses'
 import { useClassSubjects } from '../../hooks/useClassSubjects'
 import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
+import { useDebounce } from '../../hooks/useDebounce'
 
 const STATUS_OPTIONS = [
   { value: '', label: 'All Statuses' },
@@ -35,6 +36,7 @@ export default function ExamPapersPage() {
   const [filterSubjectId, setFilterSubjectId] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [search, setSearch] = useState('')
+  const debouncedSearch = useDebounce(search, 300)
   const [page, setPage] = useState(1)
   // Tracks which paper/format is generating so only that row's button shows
   // a loading state — generation embeds a full-page letterhead image and can
@@ -60,6 +62,10 @@ export default function ExamPapersPage() {
     },
     autoSelectFirst: true,
     queryKey: 'teacherExamPaperListClasses',
+    // Same combined class-teacher-OR-subject-teacher scope as
+    // QuestionPaperBuilderPage — this list page shares the same
+    // _can_manage_exam_papers backend permission, so it needs the same fix.
+    fetchClasses: () => lmsApi.getMyLessonPlanClasses(),
   })
 
   const queryParams = useMemo(() => ({
@@ -68,8 +74,8 @@ export default function ExamPapersPage() {
     ...(resolvedClassId && { class_obj: resolvedClassId }),
     ...(filterSubjectId && { subject: filterSubjectId }),
     ...(filterStatus && { status: filterStatus }),
-    ...(search.trim() && { search: search.trim() }),
-  }), [filterStatus, filterSubjectId, page, resolvedClassId, search])
+    ...(debouncedSearch.trim() && { search: debouncedSearch.trim() }),
+  }), [debouncedSearch, filterStatus, filterSubjectId, page, resolvedClassId])
 
   const { data, isLoading, isFetching } = useQuery({
     queryKey: ['examPapersList', queryParams],

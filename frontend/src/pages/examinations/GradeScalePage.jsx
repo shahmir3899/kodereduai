@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { examinationsApi } from '../../services/api'
 import { useConfirmModal } from '../../components/ConfirmModal'
+import Spinner from '../../components/ui/Spinner'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 const EMPTY_FORM = { grade_label: '', min_percentage: '', max_percentage: '', gpa_points: '', order: '' }
 
@@ -52,6 +54,8 @@ export default function GradeScalePage() {
     setEditId(item.id); setErrors({}); setShowModal(true)
   }
   const closeModal = () => { setShowModal(false); setEditId(null); setForm(EMPTY_FORM); setErrors({}) }
+
+  useEscapeKey(closeModal, showModal)
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -111,7 +115,7 @@ export default function GradeScalePage() {
 
       {isLoading ? (
         <div className="text-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+          <Spinner size="md" className="mx-auto" />
         </div>
       ) : items.length === 0 ? (
         <div className="card text-center py-8 text-gray-500">

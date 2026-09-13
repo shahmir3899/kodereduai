@@ -9,6 +9,7 @@ import * as XLSX from 'xlsx'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
+import Spinner from '../../components/ui/Spinner'
 
 export default function MarksEntryPage() {
   const queryClient = useQueryClient()
@@ -508,7 +509,7 @@ export default function MarksEntryPage() {
         </div>
       ) : (marksLoading || studentsLoading) ? (
         <div className="text-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+          <Spinner size="md" className="mx-auto" />
         </div>
       ) : marksData.length === 0 ? (
         <div className="card text-center py-8 text-gray-500">

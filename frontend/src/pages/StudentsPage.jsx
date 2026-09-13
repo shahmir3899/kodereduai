@@ -19,6 +19,10 @@ import ReportPeriodPicker from '../components/ReportPeriodPicker'
 import PhotoCropModal from '../components/PhotoCropModal'
 import { downloadInstantReport } from '../utils/downloadReport'
 import { getLifecycleLabel, getLifecycleStyle } from '../utils/studentLifecycle'
+import Spinner from '../components/ui/Spinner'
+import { SkeletonTable } from '../components/ui/Skeleton'
+import { useEscapeKey } from '../hooks/useEscapeKey'
+import Badge from '../components/ui/Badge'
 
 function StudentAvatar({ student, sizeClass = 'w-8 h-8' }) {
   if (student.photo_url) {
@@ -359,6 +363,12 @@ export default function StudentsPage() {
     setStudentUserForm({ username: '', email: '', password: '', confirm_password: '' })
     setStudentUserError('')
   }
+
+  useEscapeKey(closeModal, showModal)
+  useEscapeKey(() => setDeleteConfirm(null), !!deleteConfirm)
+  useEscapeKey(() => setShowBulkModal(false), showBulkModal)
+  useEscapeKey(() => { setShowConvertModal(false); setConvertStudent(null) }, showConvertModal && !!convertStudent)
+  useEscapeKey(() => setShowBulkConvertModal(false), showBulkConvertModal)
 
   const parseRollError = (error) => {
     const rollError = error?.response?.data?.roll_number
@@ -1365,9 +1375,22 @@ export default function StudentsPage() {
         )}
 
         {isLoading ? (
-          <div className="text-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
-            <p className="text-gray-500 mt-2">Loading students...</p>
+          <div className="hidden sm:block overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase w-10"></th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Roll No</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Class</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Parent Phone</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Account</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Lifecycle</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+                </tr>
+              </thead>
+              <SkeletonTable rows={6} cols={8} />
+            </table>
           </div>
         ) : students.length === 0 ? (
           <div className="text-center py-8 text-gray-500">
@@ -1476,9 +1499,9 @@ export default function StudentsPage() {
                     </td>
                     <td className="px-4 py-3">
                       {student.has_user_account ? (
-                        <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700" title={student.user_username}>
+                        <Badge tone="success" title={student.user_username}>
                           {student.user_username || 'User'}
-                        </span>
+                        </Badge>
                       ) : (
                         <span className="text-xs text-gray-400">No Account</span>
                       )}

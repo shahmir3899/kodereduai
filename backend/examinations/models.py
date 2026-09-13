@@ -412,6 +412,13 @@ class Question(models.Model):
     option_b = models.TextField(blank=True, default='')
     option_c = models.TextField(blank=True, default='')
     option_d = models.TextField(blank=True, default='')
+    # Diagram Mode (drawn/pasted figure per option, e.g. "which shape is a rhombus?") --
+    # same URLField shape as question_image_url, rendered as its own ReportLab Image
+    # flowable rather than embedded in option text.
+    option_a_image_url = models.URLField(max_length=500, blank=True, null=True)
+    option_b_image_url = models.URLField(max_length=500, blank=True, null=True)
+    option_c_image_url = models.URLField(max_length=500, blank=True, null=True)
+    option_d_image_url = models.URLField(max_length=500, blank=True, null=True)
     correct_answer = models.CharField(
         max_length=250,
         blank=True,
@@ -422,6 +429,9 @@ class Question(models.Model):
         default='',
         help_text='Long-form expected answer/model answer for subjective questions',
     )
+    # Diagram Mode: a worked-out/model-answer diagram, teacher-facing only (see
+    # AnswerKeyPdfGenerator / wherever answer_text is surfaced for grading reference).
+    answer_image_url = models.URLField(max_length=500, blank=True, null=True)
     type_data = models.JSONField(
         blank=True,
         default=dict,
@@ -503,8 +513,13 @@ class Question(models.Model):
             'option_b': self.option_b,
             'option_c': self.option_c,
             'option_d': self.option_d,
+            'option_a_image_url': self.option_a_image_url,
+            'option_b_image_url': self.option_b_image_url,
+            'option_c_image_url': self.option_c_image_url,
+            'option_d_image_url': self.option_d_image_url,
             'correct_answer': self.correct_answer,
             'answer_text': self.answer_text,
+            'answer_image_url': self.answer_image_url,
             'type_data': self.type_data or {},
             'tested_topics': [topic.id for topic in topics],
             'tested_topics_details': [
@@ -991,6 +1006,254 @@ class PaperFeedback(models.Model):
 
     def __str__(self):
         return f"Feedback for Upload #{self.paper_upload.id}"
+
+
+class Worksheet(models.Model):
+    """A printable practice/homework sheet -- a sibling of ExamPaper, not a
+    special case of it. Deliberately has no exam/exam_subject/total_marks/
+    duration_minutes: worksheets carry no exam-lifecycle or grading semantics,
+    and forcing those through ExamPaper would mean nullable fields everywhere
+    plus a confusing status vocabulary. Manual authoring, question-bank reuse,
+    and image-scan capture all build the same `structure`/WorksheetItem shape
+    the exam Paper Builder uses, so export (paper_export_layout.py) is shared.
+    """
+
+    class Status(models.TextChoices):
+        DRAFT = 'DRAFT', 'Draft'
+        READY = 'READY', 'Ready'
+        PUBLISHED = 'PUBLISHED', 'Published'
+
+    class Source(models.TextChoices):
+        MANUAL = 'MANUAL', 'Manual'
+        SCAN = 'SCAN', 'Image Scan'
+        BANK = 'BANK', 'Question Bank'
+
+    school = models.ForeignKey(
+        'schools.School',
+        on_delete=models.CASCADE,
+        related_name='worksheets',
+    )
+    class_obj = models.ForeignKey(
+        'students.Class',
+        on_delete=models.CASCADE,
+        related_name='worksheets',
+    )
+    subject = models.ForeignKey(
+        'academics.Subject',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='worksheets',
+        help_text="Optional: some worksheets (e.g. general revision) span subjects",
+    )
+    title = models.CharField(max_length=250, help_text="e.g., 'Fractions Practice Sheet'")
+    tested_topics = models.ManyToManyField(
+        'lms.Topic',
+        blank=True,
+        related_name='worksheets',
+        help_text='Curriculum topics this worksheet practises',
+    )
+    instructions = models.TextField(blank=True, help_text="General instructions for students")
+    structure = models.JSONField(
+        blank=True,
+        default=list,
+        help_text='List of section dicts -- same shape as ExamPaper.structure, so '
+                   'paper_export_layout.py renders both without duplicating that logic.',
+    )
+    render_options = models.JSONField(
+        blank=True,
+        default=dict,
+        help_text='Render options (e.g., answer_lines).',
+    )
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
+    source = models.CharField(max_length=20, choices=Source.choices, default=Source.MANUAL)
+    questions = models.ManyToManyField(
+        Question,
+        through='WorksheetItem',
+        related_name='worksheets',
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_worksheets',
+    )
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['school', 'class_obj']),
+            models.Index(fields=['school', 'subject']),
+            models.Index(fields=['status']),
+        ]
+
+    def __str__(self):
+        return f"{self.title} ({self.class_obj.name})"
+
+    @property
+    def item_count(self):
+        return self.items.count()
+
+
+class WorksheetItem(models.Model):
+    """Through model for ordering questions on a worksheet -- field names and
+    helper methods deliberately mirror PaperQuestion so the shared rendering
+    body in paper_export_layout.py can treat either as the same shape."""
+
+    worksheet = models.ForeignKey(
+        Worksheet,
+        on_delete=models.CASCADE,
+        related_name='items',
+    )
+    question = models.ForeignKey(
+        Question,
+        on_delete=models.CASCADE,
+        related_name='worksheet_assignments',
+    )
+    item_order = models.PositiveIntegerField(help_text="Display order on the worksheet (1, 2, 3...)")
+    section_key = models.CharField(max_length=50, blank=True, default='')
+    marks_override = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Optional -- worksheets are usually ungraded, but a teacher may still mark homework",
+    )
+    item_snapshot = models.JSONField(
+        blank=True,
+        default=dict,
+        help_text='Frozen copy of the question at the time it was attached or saved into the worksheet.',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('worksheet', 'question')
+        ordering = ['item_order']
+        indexes = [
+            models.Index(fields=['worksheet', 'item_order']),
+        ]
+
+    def __str__(self):
+        return f"{self.worksheet.title} - Item {self.item_order}"
+
+    def get_marks(self):
+        """Return override marks or default question marks -- same contract as
+        PaperQuestion.get_marks(), 0 when neither is set (ungraded worksheet item)."""
+        if self.marks_override is not None:
+            return self.marks_override
+        return self.question.marks or Decimal('0')
+
+    def build_item_snapshot(self):
+        def _decimal_str(value):
+            if value is None:
+                return None
+            return f"{Decimal(value):.2f}"
+
+        snapshot = self.question.build_snapshot()
+        snapshot.update({
+            'item_order': self.item_order,
+            'marks_override': _decimal_str(self.marks_override),
+            'effective_marks': _decimal_str(self.get_marks()),
+        })
+        return snapshot
+
+    def sync_item_snapshot(self, save=True):
+        self.item_snapshot = self.build_item_snapshot()
+        if save:
+            self.save(update_fields=['item_snapshot'])
+        return self.item_snapshot
+
+    def get_question_data(self):
+        if self.item_snapshot:
+            return self.item_snapshot
+        return self.build_item_snapshot()
+
+
+class WorksheetUpload(models.Model):
+    """Stores uploaded images of worksheets for OCR extraction. Kept as its own
+    model rather than a nullable `worksheet` FK bolted onto PaperUpload --
+    that would blur "exam paper capture" and "worksheet capture" in one table.
+    The OCR extraction itself (PaperOCRProcessor) is shared code; only this
+    thin Django model differs from PaperUpload.
+    """
+
+    class Status(models.TextChoices):
+        PENDING = 'PENDING', 'Pending'
+        PROCESSING = 'PROCESSING', 'Processing'
+        EXTRACTED = 'EXTRACTED', 'Extracted'
+        REVIEWED = 'REVIEWED', 'Reviewed'
+        CONFIRMED = 'CONFIRMED', 'Confirmed'
+        FAILED = 'FAILED', 'Failed'
+
+    school = models.ForeignKey(
+        'schools.School',
+        on_delete=models.CASCADE,
+        related_name='worksheet_uploads',
+    )
+    worksheet = models.ForeignKey(
+        Worksheet,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='uploads',
+        help_text="Linked after confirmation",
+    )
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='worksheet_uploads',
+    )
+    image_url = models.URLField(max_length=500, help_text="Supabase storage URL")
+    group_id = models.UUIDField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="Ties sequential pages of one multi-page worksheet capture together.",
+    )
+    page_number = models.PositiveSmallIntegerField(
+        default=1,
+        help_text="1-based page order within group_id. Meaningless when group_id is null.",
+    )
+    context_class = models.ForeignKey(
+        'students.Class',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='worksheet_uploads',
+        help_text="Uploader's optional class context; final selection always happens in the UI.",
+    )
+    context_subject = models.ForeignKey(
+        'academics.Subject',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='worksheet_uploads',
+        help_text="Uploader's optional subject context; final selection always happens in the UI.",
+    )
+    ai_extracted_json = models.JSONField(null=True, blank=True, help_text="Structured questions extracted by AI")
+    extraction_confidence = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    extraction_notes = models.TextField(blank=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    error_message = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    processed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['school', 'status']),
+            models.Index(fields=['uploaded_by', 'status']),
+            models.Index(fields=['group_id', 'page_number']),
+        ]
+
+    def __str__(self):
+        return f"Worksheet upload by {self.uploaded_by} - {self.status}"
 
 
 class StudentTermAssessment(models.Model):

@@ -128,7 +128,9 @@ def _build_render_item(paper_question, number, answer_lines_enabled, rng):
         'question_type': question_type,
         'marks': paper_question.get_marks(),
         'question_text': data.get('question_text') or '',
+        'question_image_url': data.get('question_image_url') or None,
         'options': None,
+        'option_images': None,
         'fill_blank_items': None,
         'matching_pairs': None,
         'answer_lines': 0,
@@ -141,6 +143,17 @@ def _build_render_item(paper_question, number, answer_lines_enabled, rng):
             'C': data.get('option_c') or '',
             'D': data.get('option_d') or '',
         }
+        # Diagram Mode (e.g. "which of these is a rhombus?") -- a dict rather than a
+        # flat per-letter field so a generator can skip the whole block with one
+        # `if item['option_images']:` when no option on this question has one.
+        option_images = {
+            'A': data.get('option_a_image_url') or None,
+            'B': data.get('option_b_image_url') or None,
+            'C': data.get('option_c_image_url') or None,
+            'D': data.get('option_d_image_url') or None,
+        }
+        if any(option_images.values()):
+            item['option_images'] = option_images
     elif question_type == 'FILL_BLANK':
         fill_items = _build_fill_blank_items(type_data)
         if fill_items:
@@ -184,20 +197,34 @@ def build_export_layout(exam_paper):
     if not structure:
         return None
 
-    answer_lines_enabled = bool((exam_paper.render_options or {}).get('answer_lines'))
-    rng = random.Random(exam_paper.id)
-
-    paper_questions = list(
-        exam_paper.paper_questions.select_related('question').order_by('question_order', 'id')
+    blocks = _build_blocks(
+        structure,
+        list(exam_paper.paper_questions.select_related('question').order_by('question_order', 'id')),
+        exam_paper.render_options,
+        exam_paper.id,
     )
+
+    return {
+        'header': _build_header(exam_paper),
+        'blocks': blocks,
+    }
+
+
+def _build_blocks(structure, items, render_options, seed):
+    """Shared section/numbering body for both build_export_layout and
+    build_worksheet_export_layout -- `items` is any list of objects exposing
+    `.section_key`, `.get_marks()`, `.get_question_data()` (PaperQuestion and
+    WorksheetItem both do, by design)."""
+    answer_lines_enabled = bool((render_options or {}).get('answer_lines'))
+    rng = random.Random(seed)
 
     known_keys = {
         str(section.get('key')) for section in structure
         if isinstance(section, dict) and str(section.get('type', 'question_group')).lower() != 'divider'
     }
     by_section_key = {}
-    for paper_question in paper_questions:
-        by_section_key.setdefault(paper_question.section_key or '', []).append(paper_question)
+    for item in items:
+        by_section_key.setdefault(item.section_key or '', []).append(item)
 
     blocks = []
     group_index = 0  # counts question groups (sections), not individual items
@@ -221,10 +248,10 @@ def build_export_layout(exam_paper):
             slots_counted = 0
         marks_per_question = _to_decimal(section.get('marks_per_question', 0))
 
-        items = []
-        for part_index, paper_question in enumerate(by_section_key.get(key, []), start=1):
+        render_items = []
+        for part_index, item in enumerate(by_section_key.get(key, []), start=1):
             number = f"{group_index}({_part_letter(part_index)})"
-            items.append(_build_render_item(paper_question, number, answer_lines_enabled, rng))
+            render_items.append(_build_render_item(item, number, answer_lines_enabled, rng))
 
         section_question_type = str(section.get('question_type') or '').upper()
         instruction = section.get('instruction') or DEFAULT_TYPE_INSTRUCTIONS.get(section_question_type)
@@ -234,21 +261,55 @@ def build_export_layout(exam_paper):
             'title': section.get('title') or '',
             'instruction': instruction,
             'section_marks': Decimal(slots_counted) * marks_per_question,
-            'items': items,
+            'items': render_items,
         })
 
-    unstructured_questions = [
-        paper_question for paper_question in paper_questions
-        if (paper_question.section_key or '') not in known_keys
+    unstructured_items = [
+        item for item in items
+        if (item.section_key or '') not in known_keys
     ]
-    if unstructured_questions:
-        items = []
-        for paper_question in unstructured_questions:
+    if unstructured_items:
+        render_items = []
+        for item in unstructured_items:
             group_index += 1
-            items.append(_build_render_item(paper_question, str(group_index), answer_lines_enabled, rng))
-        blocks.append({'type': 'unstructured', 'items': items})
+            render_items.append(_build_render_item(item, str(group_index), answer_lines_enabled, rng))
+        blocks.append({'type': 'unstructured', 'items': render_items})
+
+    return blocks
+
+
+def _build_worksheet_header(worksheet):
+    from academic_sessions.utils import resolve_class_display_name, resolve_current_academic_year_id
+
+    academic_year_id = resolve_current_academic_year_id(worksheet.school_id)
+    class_name = resolve_class_display_name(worksheet.school_id, academic_year_id, worksheet.class_obj)
 
     return {
-        'header': _build_header(exam_paper),
+        'school_name': worksheet.school.name,
+        'paper_title': worksheet.title,
+        'subject_name': worksheet.subject.name if worksheet.subject_id else None,
+        'class_name': class_name,
+        'instructions': worksheet.instructions or None,
+    }
+
+
+def build_worksheet_export_layout(worksheet):
+    """Worksheet counterpart of build_export_layout -- same block/numbering
+    logic via _build_blocks, but the header carries no exam_name/total_marks/
+    duration_minutes (worksheets have none of those). Unlike exam papers,
+    worksheets are always structure-based (the builder never leaves structure
+    empty), so there is no legacy flat-list fallback to support here.
+    """
+    structure = worksheet.structure if isinstance(worksheet.structure, list) else []
+
+    blocks = _build_blocks(
+        structure,
+        list(worksheet.items.select_related('question').order_by('item_order', 'id')),
+        worksheet.render_options,
+        worksheet.id,
+    )
+
+    return {
+        'header': _build_worksheet_header(worksheet),
         'blocks': blocks,
     }

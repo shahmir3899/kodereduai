@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../../contexts/AuthContext'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { useFeeSetup } from './useFeeSetup'
 import ClassSelector from '../../components/ClassSelector'
 import { financeApi, discountApi, studentsApi } from '../../services/api'
@@ -16,6 +17,7 @@ import AnnualChargesTab from './AnnualChargesTab'
 import FeeGenerationSurface from './FeeGenerationSurface'
 import MonthlyChargesTab from './MonthlyChargesTab'
 import { CreateSingleFeeModal } from './FeeModals'
+import Spinner from '../../components/ui/Spinner'
 
 function calcDiscountOff(discount, scholarship, baseFee) {
   const base = Number(baseFee) || 0
@@ -74,6 +76,10 @@ export default function FeeSetupPage() {
   const [bulkSelectedId, setBulkSelectedId] = useState('')
   const [removeConfirm, setRemoveConfirm] = useState(null) // studentDiscount id
   const [showCreateFeeModal, setShowCreateFeeModal] = useState(false)
+
+  useEscapeKey(() => setAssignModal(null), !!assignModal)
+  useEscapeKey(() => setBulkModal(false), bulkModal)
+  useEscapeKey(() => setRemoveConfirm(null), !!removeConfirm)
 
   const { sessionClasses } = useSessionClasses(activeAcademicYear?.id, activeSchool?.id)
   const resolvedSingleStructClassId = resolveClassIdToMasterClassId(singleStructForm.classId, activeAcademicYear?.id, sessionClasses)
@@ -554,7 +560,7 @@ export default function FeeSetupPage() {
             <div className="text-center py-12 text-gray-400 text-sm">Select a class to view and manage student discounts</div>
           ) : discStudentsLoading || studentDiscountsLoading ? (
             <div className="text-center py-12">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600 mx-auto"></div>
+              <Spinner size="sm" className="mx-auto" />
             </div>
           ) : discGrid.length === 0 ? (
             <div className="text-center py-12 text-gray-400 text-sm">No enrolled students found in this class</div>

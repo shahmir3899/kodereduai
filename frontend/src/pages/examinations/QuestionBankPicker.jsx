@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { questionPaperApi } from '../../services/api'
+import { useDebounce } from '../../hooks/useDebounce'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 export const QUESTION_TYPES = [
   { value: 'MCQ', label: 'Multiple Choice' },
@@ -67,6 +69,7 @@ export default function QuestionBankPicker({
   onAttach,
 }) {
   const [search, setSearch] = useState('')
+  const debouncedSearch = useDebounce(search, 300)
   const [type, setType] = useState(lockedQuestionType || '')
   const [difficulty, setDifficulty] = useState('')
   const [selectedIds, setSelectedIds] = useState([])
@@ -76,11 +79,11 @@ export default function QuestionBankPicker({
   const queryParams = useMemo(() => ({
     ...(classId && { class_id: classId }),
     ...(subjectId && { subject: subjectId }),
-    ...(search.trim() && { search: search.trim() }),
+    ...(debouncedSearch.trim() && { search: debouncedSearch.trim() }),
     ...((lockedQuestionType || type) && { question_type: lockedQuestionType || type }),
     ...(difficulty && { difficulty_level: difficulty }),
     page_size: 50,
-  }), [classId, subjectId, search, type, lockedQuestionType, difficulty])
+  }), [classId, subjectId, debouncedSearch, type, lockedQuestionType, difficulty])
 
   const { data: bankData, isLoading: bankLoading } = useQuery({
     queryKey: ['paperBuilderQuestionBankPicker', queryParams, topicIds],
@@ -99,6 +102,8 @@ export default function QuestionBankPicker({
     const rows = bankData?.data?.results || bankData?.data || []
     return rows.filter((question) => !excludeSet.has(Number(question.id)))
   }, [bankData, excludeSet])
+
+  useEscapeKey(() => { setSelectedIds([]); onClose?.() }, open)
 
   if (!open) return null
 

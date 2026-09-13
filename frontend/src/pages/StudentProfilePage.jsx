@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { studentsApi, examinationsApi } from '../services/api'
+import { studentsApi, examinationsApi, parentsApi } from '../services/api'
 import { useToast } from '../components/Toast'
 import WhatsAppTick from '../components/WhatsAppTick'
 import { useAcademicYear } from '../contexts/AcademicYearContext'
@@ -12,6 +12,10 @@ import ReportPeriodPicker from '../components/ReportPeriodPicker'
 import PhotoCropModal from '../components/PhotoCropModal'
 import { downloadInstantReport } from '../utils/downloadReport'
 import { canManageStudentLifecycle } from '../utils/accessPolicies'
+import Spinner from '../components/ui/Spinner'
+import { useEscapeKey } from '../hooks/useEscapeKey'
+import Badge from '../components/ui/Badge'
+import Button from '../components/ui/Button'
 
 const TABS = ['Overview', 'Attendance', 'Fees', 'Academics', 'Assessment', 'History', 'Documents']
 
@@ -87,6 +91,10 @@ export default function StudentProfilePage() {
   })
   const [reclassifyRollManuallyEdited, setReclassifyRollManuallyEdited] = useState(false)
   const [recommendedReclassifyRoll, setRecommendedReclassifyRoll] = useState('')
+  const [showInviteModal, setShowInviteModal] = useState(false)
+  const [inviteForm, setInviteForm] = useState({ relation: 'FATHER', parent_phone: '' })
+  const [generatedInvite, setGeneratedInvite] = useState(null)
+  const [inviteCopied, setInviteCopied] = useState(false)
   const queryClient = useQueryClient()
   const { showError, showSuccess } = useToast()
   const { activeSchool, user } = useAuth()
@@ -264,6 +272,30 @@ export default function StudentProfilePage() {
       showError(message)
     },
   })
+
+  const generateInviteMutation = useMutation({
+    mutationFn: (payload) => parentsApi.generateInvite({ student_id: id, ...payload }),
+    onSuccess: (res) => {
+      setGeneratedInvite(res.data)
+      setInviteCopied(false)
+    },
+    onError: (error) => {
+      const message = getApiErrorMessage(error, 'Failed to generate parent invite')
+      showError(message)
+    },
+  })
+
+  const closeInviteModal = () => {
+    setShowInviteModal(false)
+    setInviteForm({ relation: 'FATHER', parent_phone: '' })
+    setGeneratedInvite(null)
+    setInviteCopied(false)
+  }
+
+  useEscapeKey(() => setShowEditModal(false), showEditModal)
+  useEscapeKey(() => setShowStatusModal(false), showStatusModal)
+  useEscapeKey(() => setShowReclassifyModal(false), showReclassifyModal)
+  useEscapeKey(closeInviteModal, showInviteModal)
 
   const reclassifyMutation = useMutation({
     mutationFn: (payload) => studentsApi.reclassifyStudent(id, payload),
@@ -501,7 +533,7 @@ export default function StudentProfilePage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" />
+        <Spinner size="md" />
       </div>
     )
   }
@@ -587,9 +619,9 @@ export default function StudentProfilePage() {
                 </span>
               )}
               {student.status && student.status !== 'ACTIVE' && (
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                <Badge tone="neutral">
                   {student.status}
-                </span>
+                </Badge>
               )}
             </div>
             <div className="flex flex-wrap gap-x-6 gap-y-1 mt-1 text-sm text-gray-500">
@@ -624,6 +656,16 @@ export default function StudentProfilePage() {
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
                   No portal account
                 </span>
+              )}
+              {canManageLifecycle && (
+                <button
+                  type="button"
+                  onClick={() => setShowInviteModal(true)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-sky-50 text-sky-700 border border-sky-200 hover:bg-sky-100"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                  Generate Parent Invite
+                </button>
               )}
               {student.status && student.status !== 'ACTIVE' && student.status_reason && (
                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200" title={student.status_reason}>
@@ -873,9 +915,9 @@ export default function StudentProfilePage() {
 
             <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
               <button type="button" onClick={() => setShowEditModal(false)} className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">Cancel</button>
-              <button type="button" onClick={handleSubmitEdit} disabled={updateStudentMutation.isPending} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50">
+              <Button type="button" onClick={handleSubmitEdit} disabled={updateStudentMutation.isPending}>
                 {updateStudentMutation.isPending ? 'Saving...' : 'Save Changes'}
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -931,6 +973,101 @@ export default function StudentProfilePage() {
               <button type="button" onClick={handleSubmitStatus} disabled={updateStatusMutation.isPending} className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50">
                 {updateStatusMutation.isPending ? 'Saving...' : 'Save Status'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showInviteModal && (
+        <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl border border-gray-200 w-full max-w-md">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h2 className="text-lg font-semibold text-gray-900">Generate Parent Invite</h2>
+              <p className="text-sm text-gray-500 mt-1">
+                {generatedInvite
+                  ? 'Share this code or link with the parent/guardian so they can create their own portal account.'
+                  : `Create a one-time invite code linking a parent/guardian account to ${student.name}.`}
+              </p>
+            </div>
+
+            {generatedInvite ? (
+              <div className="p-6 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Invite Code</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 font-mono text-sm"
+                      value={generatedInvite.invite_code}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Registration Link</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-sm"
+                      value={`${window.location.origin}/parent/register?code=${generatedInvite.invite_code}`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(`${window.location.origin}/parent/register?code=${generatedInvite.invite_code}`)
+                        setInviteCopied(true)
+                      }}
+                      className="px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 whitespace-nowrap"
+                    >
+                      {inviteCopied ? 'Copied!' : 'Copy'}
+                    </button>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-400">Expires in 30 days, or once used.</p>
+              </div>
+            ) : (
+              <div className="p-6 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Relation to Student</label>
+                  <select
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                    value={inviteForm.relation}
+                    onChange={(e) => setInviteForm((p) => ({ ...p, relation: e.target.value }))}
+                  >
+                    <option value="FATHER">Father</option>
+                    <option value="MOTHER">Mother</option>
+                    <option value="GUARDIAN">Guardian</option>
+                    <option value="OTHER">Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Parent Phone (optional)</label>
+                  <input
+                    type="text"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                    value={inviteForm.parent_phone}
+                    onChange={(e) => setInviteForm((p) => ({ ...p, parent_phone: e.target.value }))}
+                    placeholder="For verification during registration"
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-2">
+              <button type="button" onClick={closeInviteModal} className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">
+                {generatedInvite ? 'Done' : 'Cancel'}
+              </button>
+              {!generatedInvite && (
+                <button
+                  type="button"
+                  onClick={() => generateInviteMutation.mutate(inviteForm)}
+                  disabled={generateInviteMutation.isPending}
+                  className="px-4 py-2 bg-sky-600 text-white rounded-lg hover:bg-sky-700 disabled:opacity-50"
+                >
+                  {generateInviteMutation.isPending ? 'Generating...' : 'Generate Invite'}
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -1486,13 +1623,9 @@ function AssessmentTab({ studentId, academicYearId, month, onMonthChange, data, 
       </div>
 
       <div className="flex justify-end">
-        <button
-          onClick={handleSave}
-          disabled={saveMutation.isPending}
-          className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50"
-        >
+        <Button onClick={handleSave} disabled={saveMutation.isPending}>
           {saveMutation.isPending ? 'Saving...' : 'Save Assessment'}
-        </button>
+        </Button>
       </div>
     </div>
   )

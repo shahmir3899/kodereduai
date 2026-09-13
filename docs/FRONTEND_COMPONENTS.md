@@ -26,6 +26,8 @@ Main layout wrapper for all authenticated routes. Contains:
 - **Sidebar**: Role-based navigation menu with module availability checks, collapsible sections, active state highlighting
 - **Content**: `<Outlet/>` renders page content
 - Navigation sections: Attendance, Students, Academics, Finance (includes Accounts link at /finance/accounts), HR, Sessions, Admissions, Hostel, Transport, Library, Inventory, Messages, Settings
+- Standalone "My Leave" nav item (`/hr/leave`) shown for TEACHER when the HR module is enabled — routes into `LeaveManagementPage.jsx`'s self-service mode
+- `studentNavGroups` (STUDENT role) includes Library and Transport items (`/student/library`, `/student/transport`)
 
 ### SchoolSwitcher.jsx
 Dropdown for switching active school. Reads from `useAuth().schools`. Calls `POST /api/auth/switch-school/`. Triggers page reload on switch.
@@ -84,7 +86,7 @@ The `/dashboard` route renders **DashboardRouter.jsx** which switches on `effect
 - **DashboardRouter.jsx** — Switcher component. Lazy-loads role-specific dashboards, eagerly imports DashboardPage (most common).
 - **DashboardPage.jsx** — SCHOOL_ADMIN / PRINCIPAL dashboard. Module-aware command center with: 4 KPI StatCards (Students, Attendance Rate, Fee Collection, Staff Present — all module-gated), collapsible AI Insights with module badges, two-column layout with Module Health Grid (10 modules with status dots), Attendance bar, Finance snapshot, Session Health, Attendance Risk (left column); Quick Actions (8 module-gated buttons), NotificationsFeed (right column). Principal variant shows academic-focused quick actions. All sections use `isModuleEnabled()` gating.
 - **TeacherDashboard.jsx** (src/pages/teacher/) — 4 StatCards (Classes Today with "Now: Subject" subtitle, Attendance to Mark, Pending Grading, Upcoming Exams), enhanced timetable with current period highlighting (sky-blue bg + "Now" badge), Exams & Marks Entry section with "Enter Marks" links, Lesson Plans This Week with progress bar (completed/published/draft counts), QuickActionGrid, NotificationsFeed. All sections module-gated.
-- **HRManagerDashboard.jsx** — 6 KPI StatCards (2 rows of 3: Total Staff, On Leave, Pending Leave, Staff Present %, Payroll This Month, Payslip Status), department breakdown with horizontal bar chart, pending leave requests with inline Approve/Reject buttons (useMutation), top absentees table, payroll overview (basic + allowances + deductions = net), QuickActionGrid, NotificationsFeed.
+- **ManagerDashboard.jsx** — 6 HR KPI StatCards (2 rows of 3: Total Staff, On Leave, Pending Leave, Staff Present %, Payroll This Month, Payslip Status) + 4 content KPI StatCards (Lesson Plans, Active Assignments, Question Bank, Exam Papers — count-only queries against existing LMS/exam-content list endpoints), department breakdown with horizontal bar chart, pending leave requests with inline Approve/Reject buttons (useMutation), top absentees table, payroll overview (basic + allowances + deductions = net), QuickActionGrid (HR + content links), NotificationsFeed.
 - **AccountantDashboard.jsx** — 4 enhanced StatCards, fee collection by class table (color-coded rates: green ≥80%, yellow ≥50%, red <50%), recent transactions list (credit/debit formatting), overdue fees list, income vs expense visual bars with net balance, per-account balances with type badges, QuickActionGrid, NotificationsFeed.
 - **StaffDashboard.jsx** (src/pages/staff/) — Resolves myStaffId via `hrApi.getStaff({user: userId})`. 4 StatCards (Attendance This Month, Leave Balance, Last Salary, Notifications), mini attendance calendar grid with color-coded days (present=green, absent=red, leave=amber, today=ring), leave balance breakdown per type, recent payslips with status badges, assigned inventory items, NotificationsFeed.
 - **StudentDashboard.jsx** (src/pages/student/) — Welcome card with gradient, 4 stat cards (Attendance, Fee Due, Assignments, Last Exam Score from `studentPortalApi.getExamResults`), two-column layout: timetable with current period highlighting, assignments with urgency indicators, recent exam results with percentage badges (left); quick links (6 items), NotificationsFeed (right).
@@ -127,6 +129,8 @@ Complex page broken into:
 - **SubjectSelector.jsx** — Reusable subject dropdown. Uses `useSubjects()` hook for data fetching/caching. Same prop interface as ClassSelector. Displays subject name
 - **RTLWrapper.jsx** — Wraps content with `dir="rtl"` for RTL languages (ur, ar, sd, ps). Exports `isRTLLanguage()` helper
 - **SearchableSelect.jsx** — Zero-dependency searchable dropdown. Text-input filtering, keyboard navigation (Arrow keys, Enter, Escape), click-outside close, loading/disabled/clear states. Used in CreateSingleFeeModal for student selection
+- **RichTextEditor.jsx** — TipTap-based rich text editor (bold/italic/lists/tables, inline LaTeX via KaTeX, per-question language/RTL selector). Optional **Diagram Mode** (`diagram` prop: `{ imageUrl, targetLabel, onInsert(file), onRemove }`) lets a user draw or paste a figure via `DiagramCanvas.jsx`. Shared by the exam Paper Builder (`QuestionSlotEditor.jsx`) and, as of 2026-09, the Worksheet builder (`WorksheetBuilderPage.jsx`) — both attach the diagram via the same question-scoped `POST /questions/{id}/diagram/` endpoint
+- **DiagramCanvas.jsx** — Draw-or-paste-image panel opened by `RichTextEditor`'s Diagram Mode toggle; upload-agnostic, hands the picked file back to the caller via `onInsert(file)`
 
 ## Custom Hooks (src/hooks/)
 - **useClasses.js** — Fetches and caches classes via `classesApi.getClasses()`. Returns `{ classes, isLoading, error }`
@@ -146,7 +150,7 @@ Manages authentication state globally.
 - **Methods**: login(username, password), logout(), switchSchool(schoolId), isModuleEnabled(module), getAllowableRoles()
 - **Token storage**: `access_token`, `refresh_token`, `active_school_id` in localStorage
 - **Interceptor**: Axios request interceptor adds `Authorization: Bearer {token}` + `X-School-ID` header. Response interceptor handles 401 → refresh token → retry.
-- **Roles**: SUPER_ADMIN, SCHOOL_ADMIN, PRINCIPAL, HR_MANAGER, ACCOUNTANT, TEACHER, STAFF, PARENT, STUDENT
+- **Roles**: SUPER_ADMIN, SCHOOL_ADMIN, PRINCIPAL, MANAGER, ACCOUNTANT, TEACHER, STAFF, DRIVER, PARENT, STUDENT
 
 ### AcademicYearContext.jsx — `useAcademicYear()`
 Manages academic year selection per school.
@@ -215,6 +219,7 @@ Centralized axios instance with interceptors. Organized into named API modules:
 | hostelApi | /api/hostel/ | getHostels, getRooms, approveGatePass |
 | inventoryApi | /api/inventory/ | getItems, getDashboard, createTransaction |
 | lmsApi | /api/lms/ | getLessonPlans, getAssignments, gradeSubmission |
+| worksheetApi | /api/examinations/worksheets/, /worksheet-uploads/ | **NEW (2026-09):** getWorksheets, ensureDraft, autosaveDraft, duplicateWorksheet, generatePDF, generateDOCX, uploadWorksheetImage, confirmWorksheetUpload — sibling of `questionPaperApi`'s exam-paper methods, same shapes minus exam-lifecycle fields |
 | messagingApi | /api/messaging/ | getThreads, getThread, createThread, reply, markRead, getRecipients, getUnreadCount |
 | tasksApi | /api/tasks/ | getMyTasks, getTask, getAIInsights |
 | reportsApi | /api/reports/ | generateReport, getReportList |

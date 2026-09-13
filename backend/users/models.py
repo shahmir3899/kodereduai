@@ -41,7 +41,7 @@ class User(AbstractUser):
         SUPER_ADMIN = 'SUPER_ADMIN', 'Super Admin'
         SCHOOL_ADMIN = 'SCHOOL_ADMIN', 'School Admin'
         PRINCIPAL = 'PRINCIPAL', 'Principal'
-        HR_MANAGER = 'HR_MANAGER', 'HR Manager'
+        MANAGER = 'MANAGER', 'Manager'
         ACCOUNTANT = 'ACCOUNTANT', 'Accountant'
         TEACHER = 'TEACHER', 'Teacher'
         STAFF = 'STAFF', 'Staff'
@@ -115,9 +115,9 @@ class User(AbstractUser):
         return self.role == self.Role.STAFF
 
     @property
-    def is_hr_manager(self) -> bool:
-        """Check if user is an HR Manager."""
-        return self.role == self.Role.HR_MANAGER
+    def is_manager(self) -> bool:
+        """Check if user is a Manager."""
+        return self.role == self.Role.MANAGER
 
     @property
     def is_teacher(self) -> bool:

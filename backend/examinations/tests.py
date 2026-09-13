@@ -13,7 +13,7 @@ from academics.models import Subject
 from schools.models import Organization, School
 from students.models import Class
 
-from .models import ExamPaper, PaperFeedback, PaperQuestion, PaperUpload, Question
+from .models import ExamPaper, PaperFeedback, PaperQuestion, PaperUpload, Question, Worksheet, WorksheetItem, WorksheetUpload
 from .paper_ocr_processor import PaperOCRProcessor, _build_continuation_hint, _build_extraction_prompt, _parse_structured_paper
 from .tasks import _build_continuation_context
 
@@ -1319,3 +1319,398 @@ class PaperExportLayoutTests(TestCase):
 
         self.assertGreater(len(ExamPaperDOCXGenerator(structured_paper).generate()), 0)
         self.assertGreater(len(ExamPaperDOCXGenerator(legacy_paper).generate()), 0)
+
+    def test_render_item_carries_question_and_option_diagram_urls(self):
+        """Diagram Mode: question_image_url and per-option *_image_url should flow
+        through into the render item unchanged, so PDF/DOCX generators can draw them."""
+        from .paper_export_layout import build_export_layout
+
+        paper = self._make_paper(structure=[
+            {
+                'key': 'sec_mcq', 'title': 'Q1', 'instruction': None,
+                'question_type': 'MCQ', 'slots_shown': 1, 'slots_counted': 1,
+                'marks_per_question': '1',
+            },
+        ])
+        self._attach_question(
+            paper, order=1, section_key='sec_mcq', question_type='MCQ', marks=1,
+            question_image_url='https://cdn.test/question.png',
+            option_a='Square', option_b='Circle', option_c='', option_d='',
+            option_a_image_url='https://cdn.test/option_a.png',
+        )
+
+        layout = build_export_layout(paper)
+        item = layout['blocks'][0]['items'][0]
+
+        self.assertEqual(item['question_image_url'], 'https://cdn.test/question.png')
+        self.assertEqual(item['option_images']['A'], 'https://cdn.test/option_a.png')
+        self.assertIsNone(item['option_images']['B'])
+
+    def test_render_item_option_images_none_when_no_option_has_one(self):
+        from .paper_export_layout import build_export_layout
+
+        paper = self._make_paper(structure=[
+            {
+                'key': 'sec_mcq', 'title': 'Q1', 'instruction': None,
+                'question_type': 'MCQ', 'slots_shown': 1, 'slots_counted': 1,
+                'marks_per_question': '1',
+            },
+        ])
+        self._attach_question(
+            paper, order=1, section_key='sec_mcq', question_type='MCQ', marks=1,
+            option_a='Square', option_b='Circle', option_c='Triangle', option_d='Hexagon',
+        )
+
+        layout = build_export_layout(paper)
+        item = layout['blocks'][0]['items'][0]
+        self.assertIsNone(item['option_images'])
+
+
+class DiagramModeExportRenderingTests(TestCase):
+    """PDF/DOCX must actually draw a Diagram Mode image, not just carry its URL
+    through the layout plan -- see pdf_generator._load_image_stream and
+    docx_generator._fetch_image_stream for why the URL can't be handed to
+    ReportLab/python-docx directly."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.school = _make_school('_diagram_export')
+        cls.class_obj = Class.objects.create(school=cls.school, name='Class 6', grade_level=6)
+        cls.subject = Subject.objects.create(school=cls.school, name='Mathematics', code='MATH_DIAG')
+
+    # 1x1 transparent PNG -- smallest input ReportLab/Pillow will actually decode,
+    # so the smoke test exercises the real Image()/add_picture() call, not a mock.
+    _PNG_BYTES = base64.b64decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='
+    )
+
+    def _make_paper(self):
+        return ExamPaper.objects.create(
+            school=self.school,
+            class_obj=self.class_obj,
+            subject=self.subject,
+            paper_title='Geometry Quiz',
+            total_marks=Decimal('1'),
+            duration_minutes=20,
+            structure=[
+                {
+                    'key': 'sec_mcq', 'title': 'Q1', 'instruction': None,
+                    'question_type': 'MCQ', 'slots_shown': 1, 'slots_counted': 1,
+                    'marks_per_question': '1',
+                },
+            ],
+        )
+
+    def _attach_mcq_with_diagrams(self, paper):
+        question = Question.objects.create(
+            school=self.school,
+            subject=self.subject,
+            question_text='Which of these is a rhombus?',
+            question_type='MCQ',
+            marks=1,
+            question_image_url='https://cdn.test/question.png',
+            option_a='', option_b='Circle', option_c='', option_d='',
+            option_a_image_url='https://cdn.test/option_a.png',
+        )
+        paper_question = PaperQuestion.objects.create(
+            exam_paper=paper, question=question, question_order=1,
+            section_key='sec_mcq', marks_override=1,
+        )
+        paper_question.sync_question_snapshot()
+        return paper_question
+
+    def test_pdf_generation_embeds_question_and_option_diagrams(self):
+        if importlib.util.find_spec('reportlab') is None:
+            self.skipTest('reportlab is not installed in this environment.')
+
+        from .pdf_generator import ExamPaperPDFGenerator
+
+        paper = self._make_paper()
+        self._attach_mcq_with_diagrams(paper)
+
+        with patch('examinations.pdf_generator.requests.get') as mock_get:
+            mock_get.return_value.content = self._PNG_BYTES
+            mock_get.return_value.raise_for_status = lambda: None
+            pdf_bytes = ExamPaperPDFGenerator(paper).generate()
+
+        self.assertGreater(len(pdf_bytes), 0)
+        self.assertGreaterEqual(mock_get.call_count, 2)  # question image + option A image
+
+    def test_docx_generation_embeds_question_and_option_diagrams(self):
+        if importlib.util.find_spec('docx') is None:
+            self.skipTest('python-docx is not installed in this environment.')
+
+        from .docx_generator import ExamPaperDOCXGenerator
+
+        paper = self._make_paper()
+        self._attach_mcq_with_diagrams(paper)
+
+        with patch('examinations.docx_generator.requests.get') as mock_get:
+            mock_get.return_value.content = self._PNG_BYTES
+            mock_get.return_value.raise_for_status = lambda: None
+            docx_bytes = ExamPaperDOCXGenerator(paper).generate()
+
+        self.assertGreater(len(docx_bytes), 0)
+        self.assertGreaterEqual(mock_get.call_count, 2)
+
+
+class WorksheetLifecycleTests(TestCase):
+    """Mirrors ExamPaperDraftAutosaveTests -- ensure-draft -> autosave (manual
+    items) -> generate-pdf/docx -> duplicate, for the Worksheet sibling model."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.school = _make_school('_worksheet')
+        cls.class_obj = Class.objects.create(school=cls.school, name='Class 4', grade_level=4)
+        cls.subject = Subject.objects.create(school=cls.school, name='Mathematics', code='MATH_WS')
+        cls.user = get_user_model().objects.create_superuser(
+            username='worksheet_admin',
+            email='worksheet_admin@test.com',
+            password='test12345',
+        )
+
+    def setUp(self):
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+        self.school_header = {'HTTP_X_SCHOOL_ID': str(self.school.id)}
+
+    def _ensure_draft(self, **overrides):
+        payload = {
+            'class_obj': self.class_obj.id,
+            'subject': self.subject.id,
+            'title': 'Fractions Practice Sheet',
+            'instructions': 'Show your working.',
+        }
+        payload.update(overrides)
+        response = self.client.post(
+            '/api/examinations/worksheets/ensure-draft/',
+            payload,
+            format='json',
+            **self.school_header,
+        )
+        self.assertEqual(response.status_code, 201, response.content)
+        return response.json()
+
+    def test_ensure_draft_creates_server_backed_draft(self):
+        payload = self._ensure_draft()
+
+        self.assertEqual(payload['status'], Worksheet.Status.DRAFT)
+        self.assertEqual(payload['title'], 'Fractions Practice Sheet')
+        self.assertEqual(payload['class_obj'], self.class_obj.id)
+        self.assertEqual(payload['subject'], self.subject.id)
+        self.assertTrue(Worksheet.objects.filter(id=payload['id'], status=Worksheet.Status.DRAFT).exists())
+
+    def test_ensure_draft_rejects_teacher_without_class_subject_scope(self):
+        teacher = get_user_model().objects.create_user(
+            username='ws_unassigned_teacher',
+            email='ws_unassigned_teacher@test.com',
+            password='test12345',
+            role='TEACHER',
+            school=self.school,
+        )
+        self.client.force_authenticate(teacher)
+
+        response = self.client.post(
+            '/api/examinations/worksheets/ensure-draft/',
+            {'class_obj': self.class_obj.id, 'subject': self.subject.id, 'title': 'Not allowed'},
+            format='json',
+            **self.school_header,
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_autosave_creates_items_and_snapshots(self):
+        draft = self._ensure_draft(
+            structure=[
+                {
+                    'key': 'sec_1',
+                    'title': 'Section A',
+                    'question_type': 'SHORT',
+                    'slots_shown': 3,
+                    'slots_counted': 3,
+                    'marks_per_question': '0',
+                }
+            ],
+        )
+
+        autosave_response = self.client.post(
+            f"/api/examinations/worksheets/{draft['id']}/autosave/",
+            {
+                'manual_items': [
+                    {
+                        'question_text': 'Simplify 4/8.',
+                        'question_type': 'SHORT',
+                        'difficulty_level': 'EASY',
+                        'marks': '0',
+                        'answer_text': '1/2',
+                        'item_order': 1,
+                        'section_key': 'sec_1',
+                    }
+                ]
+            },
+            format='json',
+            **self.school_header,
+        )
+
+        self.assertEqual(autosave_response.status_code, 200, autosave_response.content)
+        data = autosave_response.json()
+        self.assertEqual(data['item_count'], 1)
+        self.assertEqual(len(data['items']), 1)
+        self.assertEqual(Question.objects.count(), 1)
+        self.assertEqual(data['items'][0]['section_key'], 'sec_1')
+
+        item = WorksheetItem.objects.get(worksheet_id=draft['id'])
+        self.assertEqual(item.question.question_text, 'Simplify 4/8.')
+        self.assertEqual(item.item_snapshot['question_text'], 'Simplify 4/8.')
+
+    def test_autosave_attaches_existing_bank_question_without_duplicating(self):
+        draft = self._ensure_draft()
+        bank_question = Question.objects.create(
+            school=self.school,
+            subject=self.subject,
+            question_text='Pre-existing bank question',
+            question_type='SHORT',
+            difficulty_level='MEDIUM',
+            marks=Decimal('0'),
+        )
+
+        autosave_response = self.client.post(
+            f"/api/examinations/worksheets/{draft['id']}/autosave/",
+            {
+                'manual_items': [
+                    {
+                        'question_id': bank_question.id,
+                        'question_text': bank_question.question_text,
+                        'question_type': bank_question.question_type,
+                        'item_order': 1,
+                    }
+                ]
+            },
+            format='json',
+            **self.school_header,
+        )
+
+        self.assertEqual(autosave_response.status_code, 200, autosave_response.content)
+        self.assertEqual(Question.objects.count(), 1, 'must reuse the bank question, not duplicate it')
+        item = WorksheetItem.objects.get(worksheet_id=draft['id'])
+        self.assertEqual(item.question_id, bank_question.id)
+
+    def test_duplicate_copies_items_as_new_draft(self):
+        draft = self._ensure_draft()
+        self.client.post(
+            f"/api/examinations/worksheets/{draft['id']}/autosave/",
+            {'manual_items': [{'question_text': 'Q1', 'question_type': 'SHORT', 'item_order': 1}]},
+            format='json',
+            **self.school_header,
+        )
+
+        response = self.client.post(
+            f"/api/examinations/worksheets/{draft['id']}/duplicate/",
+            {},
+            format='json',
+            **self.school_header,
+        )
+        self.assertEqual(response.status_code, 201, response.content)
+        clone = response.json()
+        self.assertNotEqual(clone['id'], draft['id'])
+        self.assertEqual(clone['title'], 'Fractions Practice Sheet (Copy)')
+        self.assertEqual(clone['item_count'], 1)
+        self.assertEqual(Worksheet.objects.count(), 2)
+
+    def test_generate_pdf_and_docx_smoke(self):
+        if importlib.util.find_spec('reportlab') is None or importlib.util.find_spec('docx') is None:
+            self.skipTest('reportlab/python-docx not installed in this environment.')
+
+        draft = self._ensure_draft(
+            structure=[
+                {
+                    'key': 'sec_1', 'title': 'Section A', 'question_type': 'SHORT',
+                    'slots_shown': 1, 'slots_counted': 1, 'marks_per_question': '0',
+                }
+            ],
+        )
+        self.client.post(
+            f"/api/examinations/worksheets/{draft['id']}/autosave/",
+            {'manual_items': [{'question_text': 'Q1', 'question_type': 'SHORT', 'item_order': 1, 'section_key': 'sec_1'}]},
+            format='json',
+            **self.school_header,
+        )
+
+        pdf_response = self.client.get(
+            f"/api/examinations/worksheets/{draft['id']}/generate-pdf/",
+            **self.school_header,
+        )
+        self.assertEqual(pdf_response.status_code, 200)
+        self.assertEqual(pdf_response['Content-Type'], 'application/pdf')
+
+        docx_response = self.client.get(
+            f"/api/examinations/worksheets/{draft['id']}/generate-docx/",
+            **self.school_header,
+        )
+        self.assertEqual(docx_response.status_code, 200)
+
+
+class WorksheetUploadTests(TestCase):
+    """Upload -> OCR (mocked) -> confirm, mirroring PaperUploadContextPersistenceTests
+    but against WorksheetUpload/Worksheet."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.school = _make_school('_worksheet_upload')
+        cls.class_obj = Class.objects.create(school=cls.school, name='Class 5', grade_level=5)
+        cls.subject = Subject.objects.create(school=cls.school, name='English', code='ENG_WS')
+        cls.user = get_user_model().objects.create_superuser(
+            username='worksheet_upload_admin',
+            email='worksheet_upload_admin@test.com',
+            password='test12345',
+        )
+
+    def setUp(self):
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+        self.school_header = {'HTTP_X_SCHOOL_ID': str(self.school.id)}
+
+    def test_confirm_links_worksheet_and_marks_confirmed(self):
+        worksheet = Worksheet.objects.create(
+            school=self.school,
+            class_obj=self.class_obj,
+            subject=self.subject,
+            title='Scanned Worksheet',
+            source=Worksheet.Source.SCAN,
+        )
+        upload = WorksheetUpload.objects.create(
+            school=self.school,
+            uploaded_by=self.user,
+            image_url='https://cdn.test/worksheet.png',
+            status=WorksheetUpload.Status.EXTRACTED,
+            ai_extracted_json={'questions': []},
+        )
+
+        response = self.client.post(
+            f"/api/examinations/worksheet-uploads/{upload.id}/confirm/",
+            {'worksheet_id': worksheet.id},
+            format='json',
+            **self.school_header,
+        )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        upload.refresh_from_db()
+        self.assertEqual(upload.status, WorksheetUpload.Status.CONFIRMED)
+        self.assertEqual(upload.worksheet_id, worksheet.id)
+
+    def test_confirm_requires_extracted_status(self):
+        worksheet = Worksheet.objects.create(
+            school=self.school, class_obj=self.class_obj, subject=self.subject, title='X',
+        )
+        upload = WorksheetUpload.objects.create(
+            school=self.school, uploaded_by=self.user,
+            image_url='https://cdn.test/worksheet.png',
+            status=WorksheetUpload.Status.PENDING,
+        )
+
+        response = self.client.post(
+            f"/api/examinations/worksheet-uploads/{upload.id}/confirm/",
+            {'worksheet_id': worksheet.id},
+            format='json',
+            **self.school_header,
+        )
+        self.assertEqual(response.status_code, 400)

@@ -250,6 +250,65 @@ class SuperAdminSchoolViewSet(viewsets.ModelViewSet):
         cache.set(cache_key, payload, 60)
         return Response(payload)
 
+    @action(detail=False, methods=['get'])
+    def demo_insights(self, request):
+        """
+        Demo-funnel stats for the SuperAdmin overview: how many visitor
+        credential emails went out, and how much the demo school is
+        actually being logged into — broken down by role and by
+        today/last-3-days/last-7-days windows.
+
+        Tier 1 only: demo credentials are a fixed shared login (see
+        CLAUDE.md's Public demo section), so a login can't be tied back
+        to the specific visitor who was emailed — this reports aggregate
+        volume on each side of the funnel, not per-visitor correlation.
+
+        Cached for 60s, same reasoning as platform_stats above.
+        """
+        cache_key = 'admin:demo_insights'
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return Response(cached)
+
+        from django.conf import settings as dj_settings
+        from brochure.models import DemoRequest
+        from core.models import LoginEvent
+
+        now = timezone.now()
+        windows = {
+            'today': now.replace(hour=0, minute=0, second=0, microsecond=0),
+            'last_3d': now - timedelta(days=3),
+            'last_7d': now - timedelta(days=7),
+        }
+
+        emailed_qs = DemoRequest.objects.filter(visitor_credentials_email_sent=True)
+        logins_qs = LoginEvent.objects.filter(school_id=dj_settings.DEMO_SCHOOL_ID)
+
+        payload = {
+            'emails_sent_total': emailed_qs.count(),
+            'emails_sent_by_window': {
+                key: emailed_qs.filter(created_at__gte=since).count()
+                for key, since in windows.items()
+            },
+            'recent_recipients': list(
+                emailed_qs.order_by('-created_at')
+                .values('name', 'email', 'school', 'created_at')[:15]
+            ),
+            'logins_total': logins_qs.count(),
+            'logins_by_window': {
+                key: logins_qs.filter(created_at__gte=since).count()
+                for key, since in windows.items()
+            },
+            'logins_by_role': list(
+                logins_qs.values('role').annotate(count=Count('id')).order_by('-count')
+            ),
+            'recent_logins': list(
+                logins_qs.order_by('-created_at').values('username', 'role', 'created_at')[:15]
+            ),
+        }
+        cache.set(cache_key, payload, 60)
+        return Response(payload)
+
 
 class SuperAdminOrganizationViewSet(viewsets.ModelViewSet):
     """

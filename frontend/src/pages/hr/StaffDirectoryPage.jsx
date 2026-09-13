@@ -5,8 +5,13 @@ import { Link } from 'react-router-dom'
 import { hrApi, usersApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import { useToast } from '../../components/Toast'
+import { useConfirmModal } from '../../components/ConfirmModal'
 import { useDebounce } from '../../hooks/useDebounce'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 import WhatsAppTick from '../../components/WhatsAppTick'
+import Spinner from '../../components/ui/Spinner'
+import { SkeletonTable } from '../../components/ui/Skeleton'
+import Badge from '../../components/ui/Badge'
 
 const statusBadge = {
   ACTIVE: 'bg-green-100 text-green-800',
@@ -24,7 +29,7 @@ const typeBadge = {
   INTERN: 'bg-teal-100 text-teal-800',
 }
 
-const QUICK_ROLE_LABELS = { HR_MANAGER: 'HR Manager', ACCOUNTANT: 'Accountant', TEACHER: 'Teacher', STAFF: 'Staff' }
+const QUICK_ROLE_LABELS = { MANAGER: 'Manager', ACCOUNTANT: 'Accountant', TEACHER: 'Teacher', STAFF: 'Staff' }
 
 const TEACHING_DESIGNATION_PATTERN = /(teacher|lecturer|instructor|professor|tutor|faculty)/i
 
@@ -37,6 +42,7 @@ export default function StaffDirectoryPage() {
   const queryClient = useQueryClient()
   const { showError, showSuccess } = useToast()
   const { getAllowableRoles } = useAuth()
+  const { confirm, ConfirmModalRoot } = useConfirmModal()
 
   const [search, setSearch] = useState('')
   const debouncedSearch = useDebounce(search, 300)
@@ -86,6 +92,13 @@ export default function StaffDirectoryPage() {
   const [linkSearching, setLinkSearching] = useState(false)
   const [linkError, setLinkError] = useState('')
   const [isLinking, setIsLinking] = useState(false)
+
+  // Reset password state (school-scoped admin reset — see users/views.py::UserViewSet.reset_password)
+  const [resetPwdMember, setResetPwdMember] = useState(null)
+  const [resetPwdMode, setResetPwdMode] = useState('set')
+  const [resetPwdForm, setResetPwdForm] = useState({ new_password: '', confirm_password: '' })
+  const [resetPwdError, setResetPwdError] = useState('')
+  const [resetPwdSuccess, setResetPwdSuccess] = useState('')
 
   // Fetch staff
   const { data: staffData, isLoading } = useQuery({
@@ -424,7 +437,13 @@ export default function StaffDirectoryPage() {
   }
 
   const handleUnlinkUser = async (member) => {
-    if (!window.confirm(`Unlink user "${member.user_username}" from ${member.first_name} ${member.last_name}? The user account will NOT be deleted.`)) return
+    const proceed = await confirm({
+      title: 'Unlink user account?',
+      message: `Unlink user "${member.user_username}" from ${member.first_name} ${member.last_name}? The user account will NOT be deleted.`,
+      variant: 'warning',
+      confirmLabel: 'Unlink',
+    })
+    if (!proceed) return
     try {
       await hrApi.unlinkStaffUserAccount(member.id)
       queryClient.invalidateQueries({ queryKey: ['hrStaff'] })
@@ -432,6 +451,47 @@ export default function StaffDirectoryPage() {
     } catch (err) {
       showError(err?.response?.data?.error || 'Failed to unlink user account')
     }
+  }
+
+  const openResetPwdModal = (member) => {
+    setResetPwdMember(member)
+    setResetPwdMode('set')
+    setResetPwdForm({ new_password: '', confirm_password: '' })
+    setResetPwdError('')
+    setResetPwdSuccess('')
+  }
+
+  const closeResetPwdModal = () => {
+    setResetPwdMember(null)
+  }
+
+  useEscapeKey(() => setViewMember(null), !!viewMember)
+  useEscapeKey(() => setDeleteConfirm(null), !!deleteConfirm)
+  useEscapeKey(() => setShowQuickAdd(false), showQuickAdd)
+  useEscapeKey(() => { setShowConvertModal(false); setConvertMember(null) }, showConvertModal && !!convertMember)
+  useEscapeKey(() => { setShowLinkModal(false); setLinkMember(null) }, showLinkModal && !!linkMember)
+  useEscapeKey(closeResetPwdModal, !!resetPwdMember)
+  useEscapeKey(() => setShowBulkConvertModal(false), showBulkConvertModal)
+  useEscapeKey(closeBulkImport, showBulkImport)
+
+  const resetPasswordMutation = useMutation({
+    mutationFn: ({ userId, data }) => usersApi.resetPassword(userId, data),
+    onSuccess: (res) => {
+      setResetPwdError('')
+      setResetPwdSuccess(res?.data?.message || 'Password reset successfully.')
+    },
+    onError: (err) => {
+      const data = err?.response?.data
+      setResetPwdError(data?.new_password?.[0] || data?.confirm_password?.[0] || data?.detail || 'Failed to reset password')
+    },
+  })
+
+  const submitResetPassword = () => {
+    setResetPwdError('')
+    const data = resetPwdMode === 'set'
+      ? { mode: 'set', new_password: resetPwdForm.new_password, confirm_password: resetPwdForm.confirm_password }
+      : { mode: 'email' }
+    resetPasswordMutation.mutate({ userId: resetPwdMember.user, data })
   }
 
   const toggleStaffSelection = useCallback((id) => {
@@ -515,6 +575,7 @@ export default function StaffDirectoryPage() {
 
   return (
     <div>
+      <ConfirmModalRoot />
       <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Staff Directory</h1>
@@ -617,8 +678,23 @@ export default function StaffDirectoryPage() {
 
       {/* Loading */}
       {isLoading ? (
-        <div className="text-center py-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+        <div className="hidden sm:block card overflow-x-auto">
+          <table className="min-w-full">
+            <thead>
+              <tr className="border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="pb-3 pr-2 w-10"></th>
+                <th className="pb-3 pr-4">Name</th>
+                <th className="pb-3 pr-4">Department</th>
+                <th className="pb-3 pr-4">Designation</th>
+                <th className="pb-3 pr-4">Type</th>
+                <th className="pb-3 pr-4">Account</th>
+                <th className="pb-3 pr-4">Status</th>
+                <th className="pb-3 pr-4">Contact</th>
+                <th className="pb-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <SkeletonTable rows={6} cols={9} />
+          </table>
         </div>
       ) : filteredStaff.length === 0 ? (
         allStaff.length === 0 ? (
@@ -730,6 +806,14 @@ export default function StaffDirectoryPage() {
                       Unlink
                     </button>
                   )}
+                  {member.user && (
+                    <button
+                      onClick={() => openResetPwdModal(member)}
+                      className="text-sm text-teal-600 hover:text-teal-800 font-medium"
+                    >
+                      Reset Password
+                    </button>
+                  )}
                   {member.is_active ? (
                     <button
                       onClick={() => setDeleteConfirm(member)}
@@ -826,9 +910,9 @@ export default function StaffDirectoryPage() {
                     </td>
                     <td className="py-3 pr-4">
                       {member.user ? (
-                        <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700" title={member.user_username}>
+                        <Badge tone="success" title={member.user_username}>
                           {member.user_username || 'User'}
-                        </span>
+                        </Badge>
                       ) : (
                         <span className="text-xs text-gray-400">No Account</span>
                       )}
@@ -880,6 +964,14 @@ export default function StaffDirectoryPage() {
                             className="text-sm text-orange-600 hover:text-orange-800 font-medium"
                           >
                             Unlink
+                          </button>
+                        )}
+                        {member.user && (
+                          <button
+                            onClick={() => openResetPwdModal(member)}
+                            className="text-sm text-teal-600 hover:text-teal-800 font-medium"
+                          >
+                            Reset Password
                           </button>
                         )}
                         {member.is_active ? (
@@ -947,9 +1039,9 @@ export default function StaffDirectoryPage() {
                   {viewMember.employment_type}
                 </span>
                 {viewMember.user ? (
-                  <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">Account: {viewMember.user_username}</span>
+                  <Badge tone="success">Account: {viewMember.user_username}</Badge>
                 ) : (
-                  <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-500">No Account</span>
+                  <Badge tone="neutral">No Account</Badge>
                 )}
               </div>
 
@@ -1389,6 +1481,108 @@ export default function StaffDirectoryPage() {
                 Cancel
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reset Password Modal — school-scoped: backend enforces ROLE_HIERARCHY
+          (a SCHOOL_ADMIN/PRINCIPAL can only reset roles they're allowed to
+          create, and only within their own school). */}
+      {resetPwdMember && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white rounded-xl shadow-xl p-4 sm:p-6 w-full max-w-md mx-4">
+            <h2 className="text-lg font-bold text-gray-900 mb-1">Reset Password</h2>
+            <p className="text-sm text-gray-500 mb-4">
+              For: <strong>{resetPwdMember.first_name} {resetPwdMember.last_name}</strong> (@{resetPwdMember.user_username})
+            </p>
+
+            {resetPwdSuccess ? (
+              <>
+                <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg p-3">
+                  {resetPwdSuccess}
+                </p>
+                <div className="flex justify-end mt-6">
+                  <button onClick={closeResetPwdModal} className="btn btn-primary">Done</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex gap-2 mb-4">
+                  <button
+                    type="button"
+                    onClick={() => setResetPwdMode('set')}
+                    className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium border ${
+                      resetPwdMode === 'set' ? 'bg-teal-50 border-teal-500 text-teal-700' : 'border-gray-300 text-gray-600'
+                    }`}
+                  >
+                    Set new password
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setResetPwdMode('email')}
+                    className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium border ${
+                      resetPwdMode === 'email' ? 'bg-teal-50 border-teal-500 text-teal-700' : 'border-gray-300 text-gray-600'
+                    }`}
+                  >
+                    Send reset email
+                  </button>
+                </div>
+
+                {resetPwdMode === 'set' ? (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">New Password *</label>
+                      <PasswordInput
+                        className="input"
+                        value={resetPwdForm.new_password}
+                        onChange={(e) => setResetPwdForm(f => ({ ...f, new_password: e.target.value }))}
+                        placeholder="Min 8 chars"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Confirm *</label>
+                      <PasswordInput
+                        className="input"
+                        value={resetPwdForm.confirm_password}
+                        onChange={(e) => setResetPwdForm(f => ({ ...f, confirm_password: e.target.value }))}
+                        placeholder="Confirm"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-600">
+                    {resetPwdMember.email
+                      ? `A password reset link will be emailed to ${resetPwdMember.email}.`
+                      : 'This staff member has no email on file, so a reset link cannot be sent. Use "Set new password" instead.'}
+                  </p>
+                )}
+
+                {resetPwdError && <p className="text-sm text-red-600 mt-3">{resetPwdError}</p>}
+
+                <div className="flex justify-end space-x-3 mt-6">
+                  <button
+                    onClick={closeResetPwdModal}
+                    className="btn btn-secondary"
+                    disabled={resetPasswordMutation.isPending}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={submitResetPassword}
+                    className="btn btn-primary"
+                    disabled={
+                      resetPasswordMutation.isPending ||
+                      (resetPwdMode === 'set' && (!resetPwdForm.new_password || !resetPwdForm.confirm_password)) ||
+                      (resetPwdMode === 'email' && !resetPwdMember.email)
+                    }
+                  >
+                    {resetPasswordMutation.isPending
+                      ? 'Working...'
+                      : resetPwdMode === 'set' ? 'Reset Password' : 'Send Reset Email'}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

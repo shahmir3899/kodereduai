@@ -5,10 +5,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import App from './App.jsx'
 import { AuthProvider } from './contexts/AuthContext.jsx'
 import { AcademicYearProvider } from './contexts/AcademicYearContext.jsx'
+import { ThemeProvider } from './contexts/ThemeContext.jsx'
 import { ToastProvider } from './components/Toast.jsx'
 import { BackgroundTaskProvider } from './contexts/BackgroundTaskContext.jsx'
 import { schoolsApi } from './services/api'
 import './index.css'
+import Spinner from './components/ui/Spinner'
 
 const VITE_PRELOAD_RELOAD_KEY = 'vite-preload-reloaded-once'
 
@@ -109,7 +111,7 @@ function AppWithSubdomain() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <Spinner size="lg" className="mx-auto" />
           <p className="mt-4 text-gray-600">Loading school...</p>
         </div>
       </div>
@@ -133,18 +135,20 @@ function AppWithSubdomain() {
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <AuthProvider>
-          <AcademicYearProvider>
-            <ToastProvider>
-              <BackgroundTaskProvider>
-                <AppWithSubdomain />
-              </BackgroundTaskProvider>
-            </ToastProvider>
-          </AcademicYearProvider>
-        </AuthProvider>
-      </BrowserRouter>
-    </QueryClientProvider>
+    <ThemeProvider>
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <AuthProvider>
+            <AcademicYearProvider>
+              <ToastProvider>
+                <BackgroundTaskProvider>
+                  <AppWithSubdomain />
+                </BackgroundTaskProvider>
+              </ToastProvider>
+            </AcademicYearProvider>
+          </AuthProvider>
+        </BrowserRouter>
+      </QueryClientProvider>
+    </ThemeProvider>
   </React.StrictMode>,
 )

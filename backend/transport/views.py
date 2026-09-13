@@ -13,7 +13,7 @@ from rest_framework.views import APIView
 
 from core.permissions import (
     IsSchoolAdmin, IsSchoolAdminOrReadOnly, HasSchoolAccess, ModuleAccessMixin,
-    IsDriverOrAdmin, ADMIN_ROLES, get_effective_role,
+    IsDriverOrAdmin, ADMIN_ROLES, get_effective_role, get_parent_children_ids,
 )
 from core.mixins import TenantQuerySetMixin, ensure_tenant_school_id
 
@@ -407,6 +407,16 @@ class TransportAssignmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewset
         transport_type = self.request.query_params.get('transport_type')
         if transport_type:
             queryset = queryset.filter(transport_type=transport_type.upper())
+
+        # Security fix (2026-09): PARENT/STUDENT get read access via
+        # IsSchoolAdminOrReadOnly like everyone else, but with no ownership
+        # scoping that unrestricted read let them see every student's bus
+        # assignment in the school. Scope to their own child(ren)/self.
+        role = get_effective_role(self.request)
+        if role == 'PARENT':
+            queryset = queryset.filter(student_id__in=get_parent_children_ids(self.request))
+        elif role == 'STUDENT':
+            queryset = queryset.filter(student__user_profile__user=self.request.user)
 
         return queryset
 

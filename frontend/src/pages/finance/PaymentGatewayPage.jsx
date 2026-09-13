@@ -2,6 +2,9 @@ import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { paymentApi } from '../../services/api'
 import { useToast } from '../../components/Toast'
+import Spinner from '../../components/ui/Spinner'
+import Badge from '../../components/ui/Badge'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 // ── Gateway metadata ────────────────────────────────────────────────────────
 
@@ -275,6 +278,9 @@ export default function PaymentGatewayPage() {
     setForm({ ...EMPTY_FORM, account_id: '' })
   }
 
+  useEscapeKey(closeModal, showModal)
+  useEscapeKey(() => setDeleteConfirm(null), !!deleteConfirm)
+
   const updateConfigField = (key, value) => {
     setForm(prev => ({ ...prev, config: { ...prev.config, [key]: value } }))
   }
@@ -368,7 +374,7 @@ export default function PaymentGatewayPage() {
       {/* Loading */}
       {isLoading && (
         <div className="text-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+          <Spinner size="md" className="mx-auto" />
           <p className="text-gray-500 mt-2 text-sm">Loading gateway configurations...</p>
         </div>
       )}
@@ -411,9 +417,9 @@ export default function PaymentGatewayPage() {
                     </div>
                     <div className="flex items-center gap-1.5">
                       {gw.is_default && (
-                        <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                        <Badge tone="warning">
                           Default
-                        </span>
+                        </Badge>
                       )}
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                         gw.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'

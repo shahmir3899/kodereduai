@@ -5,6 +5,7 @@ import ClassSelector from './ClassSelector'
 import { useToast } from './Toast'
 import { useSessionClasses } from '../hooks/useSessionClasses'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../utils/classScope'
+import { useEscapeKey } from '../hooks/useEscapeKey'
 
 const FEE_TYPE_OPTIONS = [
   { value: 'ADMISSION', label: 'Admission Fee (one-time)' },
@@ -14,6 +15,7 @@ const FEE_TYPE_OPTIONS = [
 ]
 
 export default function BatchConvertModal({ enquiryIds, onClose, onSuccess }) {
+  useEscapeKey(onClose)
   const { showError, showSuccess } = useToast()
   const queryClient = useQueryClient()
   const [academicYearId, setAcademicYearId] = useState('')
@@ -93,7 +95,7 @@ export default function BatchConvertModal({ enquiryIds, onClose, onSuccess }) {
       <div className="relative bg-white rounded-xl shadow-xl max-w-md w-full mx-4 p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-bold text-gray-900">Convert to Students</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600" aria-label="Close">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>

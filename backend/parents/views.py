@@ -3,6 +3,7 @@ Parent module views for registration, child management, leave requests,
 messaging, and admin-facing parent/child administration.
 """
 
+import logging
 import uuid
 from decimal import Decimal
 
@@ -38,6 +39,8 @@ from .serializers import (
     ParentMessageSerializer,
     ChildOverviewSerializer,
 )
+
+logger = logging.getLogger(__name__)
 
 
 # ── Helpers ──────────────────────────────────────────────────
@@ -352,6 +355,94 @@ class ChildTimetableView(APIView):
             })
 
         return Response(result)
+
+
+class ChildLibraryView(APIView):
+    """
+    GET children/<int:student_id>/library/
+    Book issue history (current + past) for a child.
+    """
+    permission_classes = [IsAuthenticated, IsParentOrAdmin]
+
+    def get(self, request, student_id):
+        if not _verify_child_access(request, student_id):
+            return Response(
+                {'error': 'You do not have access to this child.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        from library.models import BookIssue
+
+        issues = BookIssue.objects.filter(
+            student_id=student_id, borrower_type='STUDENT',
+        ).select_related('book').order_by('-issue_date')
+
+        result = []
+        for issue in issues:
+            result.append({
+                'id': issue.id,
+                'book_title': issue.book.title,
+                'book_author': issue.book.author,
+                'issue_date': issue.issue_date,
+                'due_date': issue.due_date,
+                'return_date': issue.return_date,
+                'status': issue.status,
+                'fine_amount': str(issue.fine_amount),
+            })
+
+        return Response(result)
+
+
+class ChildTransportView(APIView):
+    """
+    GET children/<int:student_id>/transport/
+    Current transport (bus route/stop/vehicle) assignment for a child.
+    """
+    permission_classes = [IsAuthenticated, IsParentOrAdmin]
+
+    def get(self, request, student_id):
+        if not _verify_child_access(request, student_id):
+            return Response(
+                {'error': 'You do not have access to this child.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        from transport.models import TransportAssignment
+
+        assignment = TransportAssignment.objects.filter(
+            student_id=student_id, is_active=True,
+        ).select_related('route', 'stop', 'vehicle').first()
+
+        if not assignment:
+            return Response(None)
+
+        route = assignment.route
+        stop = assignment.stop
+        vehicle = assignment.vehicle
+
+        return Response({
+            'transport_type': assignment.transport_type,
+            'route': {
+                'name': route.name,
+                'start_location': route.start_location,
+                'end_location': route.end_location,
+                'distance_km': str(route.distance_km) if route.distance_km is not None else None,
+                'estimated_duration_minutes': route.estimated_duration_minutes,
+            },
+            'stop': {
+                'name': stop.name,
+                'address': stop.address,
+                'stop_order': stop.stop_order,
+                'pickup_time': str(stop.pickup_time),
+                'drop_time': str(stop.drop_time),
+            },
+            'vehicle': {
+                'vehicle_number': vehicle.vehicle_number,
+                'vehicle_type': vehicle.vehicle_type,
+                'driver_name': vehicle.driver_name,
+                'driver_phone': vehicle.driver_phone,
+            } if vehicle else None,
+        })
 
 
 class ChildExamScheduleView(APIView):
@@ -880,5 +971,17 @@ class AdminLeaveReviewView(APIView):
         leave_request.save(update_fields=[
             'status', 'review_note', 'reviewed_by', 'reviewed_at',
         ])
+
+        # Best-effort in-app notice to the parent — never blocks the review response.
+        try:
+            from notifications.triggers import trigger_leave_decision
+            parent_user = getattr(leave_request.parent, 'user', None)
+            trigger_leave_decision(
+                leave_request.school, parent_user, 'PARENT', leave_request.status,
+                leave_request.start_date, leave_request.end_date,
+                remarks=leave_request.review_note,
+            )
+        except Exception as e:
+            logger.error(f"Leave decision notification failed for request {leave_request.id}: {e}")
 
         return Response(ParentLeaveRequestSerializer(leave_request).data)

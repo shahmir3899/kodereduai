@@ -157,7 +157,7 @@ def generate_exam_questions_task(self, school_id, book_id, content_kind, page_st
     try:
         from groq import Groq
         client = Groq(api_key=settings.GROQ_API_KEY)
-        model_name = getattr(settings, 'GROQ_MODEL', 'llama-3.3-70b-versatile')
+        model_name = settings.GROQ_MODEL
         response = client.chat.completions.create(
             model=model_name,
             messages=[{'role': 'user', 'content': prompt}],

@@ -28,7 +28,27 @@
 
 ## core — Multi-tenancy Infrastructure
 
-**No models.** Provides cross-cutting concerns.
+Provides cross-cutting concerns, plus a few flat audit/tracking tables (not full model versioning — see each model's docstring).
+
+### AdminActionLog
+Audit trail for super-admin actions in the Platform Administration dashboard (school activate/deactivate, org/membership delete, password resets, etc).
+| Field | Type | Notes |
+|-------|------|-------|
+| actor | FK → User | Nullable — whoever performed the action |
+| action | CharField | e.g. `bulk_reassign_org` |
+| target_type, target_id, target_repr | CharField | Denormalized so the entry stays readable after the target is deleted |
+| metadata | JSONField | Nullable |
+| created_at | DateTimeField | Auto |
+
+### LoginEvent
+One row per successful JWT login (web + mobile both hit `CustomTokenObtainPairSerializer`). Generic, not demo-specific — today's only consumer is the SuperAdmin dashboard's `demo_insights` endpoint, which filters `school_id == settings.DEMO_SCHOOL_ID` to report demo-login volume/role-split/frequency (see `docs/DEMO_SHOWCASE_DATA.md`).
+| Field | Type | Notes |
+|-------|------|-------|
+| user | FK → User | Nullable |
+| username, role | CharField | Denormalized — survive user/membership changes |
+| school_id | IntegerField | Nullable |
+| ip_address | GenericIPAddressField | Nullable |
+| created_at | DateTimeField | Auto, indexed with `school_id` |
 
 ### TenantMiddleware (core/middleware.py)
 Resolves school context for every request:
@@ -44,13 +64,15 @@ Populates: `request.tenant_school`, `request.tenant_school_id`, `request.tenant_
 - **HasSchoolAccess** — User has membership in the school
 - **CanConfirmAttendance** — Admin only (confirms AI-processed attendance)
 - **IsParent / IsStudent** — Role via UserSchoolMembership
+- **CanViewStudentRecords** — Read access to Students/Classes limited to ADMIN_ROLES + TEACHER, MANAGER, ACCOUNTANT; blocks STAFF/DRIVER/PARENT/STUDENT reads (replaces `IsSchoolAdminOrReadOnly` on the Students app)
+- **get_parent_children_ids(request)** — Shared helper (lazy-imports `parents.models`) returning the requesting Parent's linked student IDs; used to scope Library/Transport querysets to a parent's own children
 - **ModuleAccessMixin** — Checks school's `enabled_modules`
 
 ### Role Hierarchy
 ```
-SUPER_ADMIN → can create: SCHOOL_ADMIN, PRINCIPAL, HR_MANAGER, ACCOUNTANT, TEACHER, STAFF
-SCHOOL_ADMIN → can create: PRINCIPAL, HR_MANAGER, ACCOUNTANT, TEACHER, STAFF
-PRINCIPAL → can create: HR_MANAGER, ACCOUNTANT, TEACHER, STAFF
+SUPER_ADMIN → can create: SCHOOL_ADMIN, PRINCIPAL, MANAGER, ACCOUNTANT, TEACHER, STAFF, DRIVER
+SCHOOL_ADMIN → can create: PRINCIPAL, MANAGER, ACCOUNTANT, TEACHER, STAFF, DRIVER
+PRINCIPAL → can create: MANAGER, ACCOUNTANT, TEACHER, STAFF, DRIVER
 ```
 
 ### Storage (core/storage.py)
@@ -71,7 +93,7 @@ Path format: `attendance/{school_id}/{class_id}/{timestamp}_{uuid}.ext`
 | username | CharField | Unique |
 | email | EmailField | |
 | first_name, last_name | CharField | |
-| role | CharField | SUPER_ADMIN, SCHOOL_ADMIN, PRINCIPAL, HR_MANAGER, ACCOUNTANT, TEACHER, STAFF |
+| role | CharField | SUPER_ADMIN, SCHOOL_ADMIN, PRINCIPAL, MANAGER, ACCOUNTANT, TEACHER, STAFF, DRIVER |
 | phone | CharField | Optional |
 | profile_photo_url | URLField | Optional |
 | school | FK → School | Legacy link (nullable) |
@@ -261,9 +283,11 @@ school(FK), exam_subject(FK), student(FK), marks_obtained, is_absent, remarks
 school(FK), name, min_percentage, max_percentage, grade_point
 
 ### Question (NEW M2M: tested_topics)
-school(FK), subject(FK), exam_type(FK nullable), question_text, question_image_url(nullable), question_type (MCQ/SHORT/ESSAY/TRUE_FALSE), difficulty_level (EASY/MEDIUM/HARD), marks, option_a, option_b, option_c, option_d, correct_answer, **tested_topics(M2M → lms.Topic)**, created_by(FK), is_active, created_at, updated_at
+school(FK), subject(FK), exam_type(FK nullable), question_text, question_image_url(nullable), question_type (MCQ/SHORT/ESSAY/TRUE_FALSE), difficulty_level (EASY/MEDIUM/HARD), marks, option_a, option_b, option_c, option_d, option_a_image_url(nullable), option_b_image_url(nullable), option_c_image_url(nullable), option_d_image_url(nullable), correct_answer, answer_text, answer_image_url(nullable), **tested_topics(M2M → lms.Topic)**, created_by(FK), is_active, created_at, updated_at
 
 **NEW:** `tested_topics` links each question to the curriculum topics it tests. Supports AI question generation by lesson plan topics.
+
+**Diagram Mode (Paper Builder):** `question_image_url`, `option_a_image_url`…`option_d_image_url`, and `answer_image_url` each hold a Supabase Storage URL for a drawn (canvas) or pasted figure attached to that slot — set only via `POST /questions/{id}/diagram/` (never through the create/update serializer), never embedded inline in `question_text`'s HTML. `question_image_url` and the four option URLs render as their own image in both PDF and DOCX export (`paper_export_layout.py` → `pdf_generator.py`/`docx_generator.py`); `answer_image_url` is stored for a future answer-key export and isn't rendered anywhere yet, matching `answer_text`'s current (also unexported) status. See [FRONTEND_COMPONENTS.md](FRONTEND_COMPONENTS.md) for `DiagramCanvas.jsx`.
 
 ### ExamPaper (NEW M2M: lesson_plans)
 school(FK), exam(FK nullable), exam_subject(FK nullable), class_obj(FK), subject(FK), paper_title, instructions, total_marks, duration_minutes, questions(M2M through PaperQuestion), **lesson_plans(M2M → lms.LessonPlan)**, status (DRAFT/READY/PUBLISHED), generated_by(FK), is_active, created_at, updated_at
@@ -276,6 +300,29 @@ school(FK), exam(FK nullable), exam_subject(FK nullable), class_obj(FK), subject
 exam_paper(FK), question(FK), question_order, marks_override(nullable), created_at
 
 **Unique constraint:** (exam_paper, question)
+
+### Worksheet (NEW — 2026-09)
+school(FK), class_obj(FK), subject(FK, **nullable**), title, tested_topics(M2M → lms.Topic), instructions, structure(JSON), render_options(JSON), status (DRAFT/READY/PUBLISHED), source (MANUAL/SCAN/BANK), questions(M2M through WorksheetItem), created_by(FK), is_active, created_at, updated_at
+
+Deliberate sibling of `ExamPaper`, not a special case of it — a worksheet is practice/homework with no exam-lifecycle semantics, so it carries no `exam`/`exam_subject`/`total_marks`/`duration_minutes` fields at all (not just nullable versions of them). `subject` is nullable to allow cross-subject/general-revision sheets. `structure`/`render_options` use the exact same shape as `ExamPaper.structure`/`render_options`, so PDF/DOCX export (`paper_export_layout.py`) shares its section/numbering logic between the two models via a `_build_blocks()` helper rather than duplicating it. No answer-key export (scoped out deliberately — worksheets are usually ungraded).
+
+**Endpoints:** `GET/POST /api/examinations/worksheets/`, `GET/PATCH/DELETE /worksheets/{id}/`, `POST /worksheets/ensure-draft/`, `POST /worksheets/{id}/autosave/`, `POST /worksheets/{id}/duplicate/`, `GET /worksheets/{id}/generate-pdf/`, `GET /worksheets/{id}/generate-docx/` — same ensure-draft/autosave/export contract as `ExamPaper`, see `docs/API_ENDPOINTS.md`.
+
+**Frontend:** [WorksheetsPage.jsx](../frontend/src/pages/examinations/WorksheetsPage.jsx) (list) and [WorksheetBuilderPage.jsx](../frontend/src/pages/examinations/WorksheetBuilderPage.jsx) (create/edit — manual composer reusing `RichTextEditor`'s Diagram Mode, question-bank attach via `QuestionBankPicker`, and image-scan import), under Content Creation → Worksheets (`/academics/worksheets`).
+
+### WorksheetItem (NEW — 2026-09)
+worksheet(FK), question(FK → examinations.Question, **reused as-is, no separate worksheet-only question model**), item_order, section_key, marks_override(nullable — worksheets are usually ungraded), item_snapshot(JSON), created_at
+
+Through model for `Worksheet.questions`, mirroring `PaperQuestion`'s field names and `get_marks()`/`get_question_data()` methods on purpose, so the shared export-layout code (`paper_export_layout._build_blocks`) can treat either model's rows identically.
+
+**Unique constraint:** (worksheet, question)
+
+### WorksheetUpload (NEW — 2026-09)
+school(FK), worksheet(FK, SET_NULL nullable — linked after confirmation), uploaded_by(FK), image_url, group_id(UUID, nullable), page_number, context_class(FK nullable), context_subject(FK nullable), ai_extracted_json(JSON), extraction_confidence, extraction_notes, status (PENDING/PROCESSING/EXTRACTED/REVIEWED/CONFIRMED/FAILED), error_message, created_at, processed_at
+
+Kept as its own model rather than a nullable `worksheet` FK bolted onto `PaperUpload` (would blur "exam paper capture" and "worksheet capture" in one table). The OCR extraction itself (`PaperOCRProcessor`, Google Vision + Groq) is fully shared with the exam-paper scan pipeline — only this thin Django model and its Celery task (`process_worksheet_upload_ocr`) differ, and deliberately skip the multi-page continuation-context building `process_paper_upload_ocr` does (worksheets are almost always single-page). See `docs/ATTENDANCE_PIPELINE.md` for the unrelated (parked) attendance OCR pipeline — this reuses the *examinations* app's OCR processor, not that one.
+
+**Endpoints:** `POST /api/examinations/worksheet-uploads/upload-image/`, `GET /worksheet-uploads/{id}/` (poll), `POST /worksheet-uploads/{id}/confirm/` — same contract as `paper-uploads/`, minus the feedback-learning-loop write (`PaperFeedback` is scoped to `PaperUpload`; worksheets don't get an equivalent, matching the "no answer key" scoping decision for this feature).
 
 ### StudentTermAssessment
 school(FK), student(FK), academic_year(FK), term(FK nullable — reserved for a future whole-term row, unused by the current monthly workflow), month (1-12), listening/speaking/writing/reading/participation/confidence/social_skills (1-5, nullable), discipline/respect/teamwork/class_participation/responsibility (1-5, nullable), teacher_remark, principal_remark, updated_by(FK, SET_NULL), created_at, updated_at
@@ -384,6 +431,10 @@ school(FK), staff(FK), date, status (PRESENT/ABSENT/LATE/LEAVE), check_in, check
 
 ### PerformanceAppraisal
 school(FK), staff(FK), academic_year(FK), review_period, scores(JSON), comments, overall_rating, reviewed_by(FK), status
+
+### Permissions (hr/permissions.py)
+- **IsManagerOrAdminOrReadOnly** — Full write access for ADMIN_ROLES + MANAGER; read-only otherwise (renamed from `IsHRManagerOrAdminOrReadOnly`)
+- **CanManageOwnLeaveApplication** — Leave self-service: HR_WRITE_ROLES get full CRUD; a TEACHER may only `create`/`cancel` their own `LeaveApplication` (object-level check on `obj.staff_member.user_id`), and cannot approve/reject. `LeaveApplicationViewSet.get_queryset()` additionally scopes a TEACHER to their own applications, and `perform_create()` forces `staff_member` to the requesting teacher's `staff_profile`.
 
 ---
 

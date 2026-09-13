@@ -10,6 +10,8 @@ import { useSessionClasses } from '../../hooks/useSessionClasses'
 import { useClassSubjects } from '../../hooks/useClassSubjects'
 import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
+import { useDebounce } from '../../hooks/useDebounce'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -499,6 +501,7 @@ function TopicPicker({ classId, subjectId, selectedTopics, onChange, initialBook
 // ─── Question Modal ───────────────────────────────────────────────────────────
 
 function QuestionModal({ editQuestion, initialClassFilterId, initialSubject, initialTopicId, initialBookId, initialChapterId, onClose, onSaved }) {
+  useEscapeKey(onClose)
   const isEdit = !!editQuestion
   const { isTeacher } = useAuth()
   const { activeAcademicYear } = useAcademicYear()
@@ -1365,6 +1368,7 @@ function QuestionCard({ question, onEdit, onDelete, onOpenSource, onVerify, isVe
 }
 
 function SourceContentBlockModal({ contentBlockId, onClose }) {
+  useEscapeKey(onClose)
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['source-content-block-modal', contentBlockId],
     queryFn: () => lmsApi.getContentBlock(contentBlockId),
@@ -1424,6 +1428,7 @@ function SourceContentBlockModal({ contentBlockId, onClose }) {
 // ─── Delete Confirm ───────────────────────────────────────────────────────────
 
 function DeleteConfirm({ question, onCancel, onConfirm, isLoading }) {
+  useEscapeKey(onCancel)
   return (
     <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6">
@@ -1475,6 +1480,7 @@ export default function QuestionsPage() {
   const [filterTagId, setFilterTagId] = useState('')
   const [filterTagSearch, setFilterTagSearch] = useState('')
   const [filterSearch, setFilterSearch] = useState('')
+  const debouncedFilterSearch = useDebounce(filterSearch, 300)
   const [searchMode, setSearchMode] = useState('KEYWORD')
   const [semanticSearchTerm, setSemanticSearchTerm] = useState('')
   const [page, setPage] = useState(1)
@@ -1559,7 +1565,7 @@ export default function QuestionsPage() {
     ...(filterSource === 'AI_UNVERIFIED' && { is_ai_generated: 'true', 'verified_by__isnull': 'true' }),
     ...(filterSource === 'AI_VERIFIED' && { is_ai_generated: 'true', 'verified_by__isnull': 'false' }),
     ...(filterTagId && { tag_id: filterTagId }),
-    ...(filterSearch && { search: filterSearch }),
+    ...(debouncedFilterSearch && { search: debouncedFilterSearch }),
     page,
     page_size: 20,
   }

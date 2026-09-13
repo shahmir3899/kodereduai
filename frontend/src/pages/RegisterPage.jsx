@@ -6,6 +6,7 @@ import { useAcademicYear } from '../contexts/AcademicYearContext'
 import { useAuth } from '../contexts/AuthContext'
 import ClassSelector from '../components/ClassSelector'
 import useTeacherScopedClasses from '../hooks/useTeacherScopedClasses'
+import Spinner from '../components/ui/Spinner'
 
 // ─── Utility helpers ───
 function getDaysInMonth(year, month) {
@@ -228,7 +229,7 @@ function RegisterTab() {
         </div>
       ) : isLoading ? (
         <div className="card text-center py-12">
-          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600 mx-auto"></div>
+          <Spinner size="h-10 w-10" className="mx-auto" />
           <p className="mt-4 text-gray-500">Loading register...</p>
         </div>
       ) : (
@@ -469,7 +470,7 @@ function AnalyticsTab({ onGoToConfig }) {
 
       {isLoading ? (
         <div className="card text-center py-12">
-          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600 mx-auto"></div>
+          <Spinner size="h-10 w-10" className="mx-auto" />
           <p className="mt-4 text-gray-500">Loading accuracy data...</p>
         </div>
       ) : !hasData ? (
@@ -659,7 +660,7 @@ function ConfigurationTab() {
       {configTab === 'mappings' && (
         <div className="space-y-4">
           {mappingsLoading ? (
-            <div className="card text-center py-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div></div>
+            <div className="card text-center py-8"><Spinner size="md" className="mx-auto" /></div>
           ) : (
             <>
               {suggestions.length > 0 && (
@@ -741,7 +742,7 @@ function ConfigurationTab() {
       {configTab === 'register' && (
         <div className="card">
           {regConfigLoading ? (
-            <div className="text-center py-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div></div>
+            <div className="text-center py-8"><Spinner size="md" className="mx-auto" /></div>
           ) : (
             <>
               <h3 className="font-medium text-gray-900 mb-4">Register Layout Configuration</h3>

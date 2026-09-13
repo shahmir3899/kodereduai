@@ -6,6 +6,8 @@ import ClassSelector from '../components/ClassSelector'
 import useTeacherScopedClasses from '../hooks/useTeacherScopedClasses'
 import { useSessionClasses } from '../hooks/useSessionClasses'
 import { buildSessionOrMasterClassParams } from '../utils/classScope'
+import Spinner from '../components/ui/Spinner'
+import PageHeader from '../components/ui/PageHeader'
 
 export default function ManualEntryPage() {
   const queryClient = useQueryClient()
@@ -180,7 +182,7 @@ export default function ManualEntryPage() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-4">
-      <h1 className="text-2xl font-bold text-gray-900">Manual Attendance Entry</h1>
+      <PageHeader title="Manual Attendance Entry" />
 
       {/* Selectors */}
       <div className="card">
@@ -236,7 +238,7 @@ export default function ManualEntryPage() {
         </div>
       ) : isDataLoading ? (
         <div className="card text-center py-12">
-          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600 mx-auto"></div>
+          <Spinner size="h-10 w-10" className="mx-auto" />
           <p className="mt-4 text-gray-500">Loading students...</p>
         </div>
       ) : attendanceData.length === 0 ? (

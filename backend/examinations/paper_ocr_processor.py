@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 # Vision provider: 'google' (recommended) or 'groq'
 VISION_PROVIDER = getattr(settings, 'VISION_PROVIDER', 'google')
 GROQ_API_KEY = getattr(settings, 'GROQ_API_KEY', '')
-GROQ_MODEL = getattr(settings, 'GROQ_MODEL', 'llama-3.3-70b-versatile')
+GROQ_MODEL = settings.GROQ_MODEL
 GROQ_VISION_MODEL = getattr(settings, 'GROQ_VISION_MODEL', 'llama-3.2-11b-vision-preview')
 GOOGLE_VISION_API_KEY = getattr(settings, 'GOOGLE_VISION_API_KEY', '')
 

@@ -164,7 +164,7 @@ def create_seed_data():
     user_configs = [
         ('admin', 'SCHOOL_ADMIN', school_a),
         ('principal', 'PRINCIPAL', school_a),
-        ('hr_manager', 'HR_MANAGER', school_a),
+        ('manager', 'MANAGER', school_a),
         ('teacher', 'TEACHER', school_a),
         ('accountant', 'ACCOUNTANT', school_a),
     ]
@@ -332,7 +332,7 @@ def get_seed_data():
     school_a = School.objects.get(name=f"{SEED_PREFIX}School_Alpha")
     school_b = School.objects.get(name=f"{SEED_PREFIX}School_Beta")
 
-    user_names = ['admin', 'principal', 'hr_manager', 'teacher', 'accountant', 'admin_b']
+    user_names = ['admin', 'principal', 'manager', 'teacher', 'accountant', 'admin_b']
     users = {}
     for uname in user_names:
         users[uname] = User.objects.get(username=f"{SEED_PREFIX}{uname}")

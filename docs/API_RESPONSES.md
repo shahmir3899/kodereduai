@@ -1801,7 +1801,13 @@ If neither `academic_year_id` nor `enrollment_id` is provided, the endpoint retu
       "option_b": "2.5",
       "option_c": "3",
       "option_d": "1.5",
+      "option_a_image_url": null,
+      "option_b_image_url": null,
+      "option_c_image_url": null,
+      "option_d_image_url": null,
       "correct_answer": "A",
+      "answer_text": "",
+      "answer_image_url": null,
       "tested_topics": [42, 43],
       "tested_topics_details": [
         {
@@ -1996,6 +2002,101 @@ If neither `academic_year_id` nor `enrollment_id` is provided, the endpoint retu
     }
   ],
   "topic_count": 2
+}
+```
+
+### GET /api/examinations/worksheets/ (NEW — 2026-09)
+No `exam`/`total_marks`/`duration_minutes` fields — worksheets carry no exam-lifecycle or grading semantics. `subject` may be null (cross-subject/general worksheets).
+```json
+{
+  "count": 1,
+  "results": [
+    {
+      "id": 3,
+      "school": 37,
+      "class_obj": 8,
+      "class_name": "Class 4-A",
+      "subject": 15,
+      "subject_name": "Mathematics",
+      "title": "Fractions Practice Sheet",
+      "tested_topics": [42],
+      "tested_topics_details": [
+        { "id": 42, "chapter_number": 2, "topic_number": 3, "title": "Fractions" }
+      ],
+      "instructions": "Show your working.",
+      "structure": [
+        {
+          "key": "sec_1",
+          "type": "question_group",
+          "title": "Section A",
+          "instruction": "Simplify each fraction.",
+          "question_type": "SHORT",
+          "slots_shown": 5,
+          "slots_counted": 5,
+          "marks_per_question": "0"
+        }
+      ],
+      "render_options": { "answer_lines": true },
+      "items": [
+        {
+          "id": 11,
+          "question": 501,
+          "item_order": 1,
+          "section_key": "sec_1",
+          "marks_override": null,
+          "marks": "0.00",
+          "question_text": "Simplify 4/8.",
+          "question_type": "SHORT",
+          "option_a": "", "option_b": "", "option_c": "", "option_d": "",
+          "question_image_url": null,
+          "answer_text": "1/2",
+          "correct_answer": "",
+          "difficulty_level": "EASY",
+          "type_data": {},
+          "item_snapshot": { "question_text": "Simplify 4/8.", "effective_marks": "0.00" },
+          "created_at": "2026-09-12T11:00:00Z"
+        }
+      ],
+      "item_count": 1,
+      "status": "DRAFT",
+      "source": "MANUAL",
+      "created_by": 10,
+      "created_by_name": "admin_user",
+      "is_active": true,
+      "created_at": "2026-09-12T10:55:00Z",
+      "updated_at": "2026-09-12T11:00:00Z"
+    }
+  ]
+}
+```
+
+### POST /api/examinations/worksheets/{id}/duplicate/ (NEW — 2026-09)
+Same shape as GET one worksheet above, with a new `id`, `status` forced back to `"DRAFT"`, and `title` suffixed `" (Copy)"`.
+
+### POST /api/examinations/worksheet-uploads/upload-image/ (NEW — 2026-09)
+Same shape as `POST /api/examinations/paper-uploads/upload-image/`, with `worksheet` in place of `exam_paper`:
+```json
+{
+  "id": 7,
+  "school": 37,
+  "worksheet": null,
+  "worksheet_title": null,
+  "uploaded_by": 10,
+  "uploaded_by_name": "teacher_jane",
+  "image_url": "https://<supabase>/storage/v1/object/public/atten-reg/worksheets/37/worksheet_20260912_...jpg",
+  "group_id": "b3f1...uuid",
+  "page_number": 1,
+  "context_class": 8,
+  "context_class_name": "Class 4-A",
+  "context_subject": 15,
+  "context_subject_name": "Mathematics",
+  "ai_extracted_json": null,
+  "extraction_confidence": null,
+  "extraction_notes": "",
+  "status": "PENDING",
+  "error_message": "",
+  "created_at": "2026-09-12T11:10:00Z",
+  "processed_at": null
 }
 ```
 

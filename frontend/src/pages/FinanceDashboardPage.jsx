@@ -5,6 +5,7 @@ import { financeApi } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 import { useAcademicYear } from '../contexts/AcademicYearContext'
 import TransferModal from '../components/TransferModal'
+import { useEscapeKey } from '../hooks/useEscapeKey'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell,
@@ -37,6 +38,8 @@ export default function FinanceDashboardPage() {
 
   const [showTransferModal, setShowTransferModal] = useState(false)
   const [ledgerPreviewAccount, setLedgerPreviewAccount] = useState(null)
+
+  useEscapeKey(() => setLedgerPreviewAccount(null), !!ledgerPreviewAccount)
   const [periodIdx, setPeriodIdx] = useState(0)
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')

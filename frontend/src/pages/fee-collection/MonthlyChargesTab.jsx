@@ -13,6 +13,7 @@ import {
 } from '../../utils/classScope'
 import ClassSelector from '../../components/ClassSelector'
 import MonthlyChargesCardView from './MonthlyChargesCardView'
+import Spinner from '../../components/ui/Spinner'
 
 export default function MonthlyChargesTab() {
   const [mode, setMode] = useState('class') // 'class' | 'student'
@@ -256,7 +257,7 @@ export default function MonthlyChargesTab() {
             <div className="text-center py-12 text-gray-400 text-sm">Select a class to view and set student-level fees</div>
           ) : studentsLoading || structuresLoading ? (
             <div className="text-center py-12">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600 mx-auto"></div>
+              <Spinner size="sm" className="mx-auto" />
             </div>
           ) : showConfirm ? (
             <>

@@ -276,7 +276,7 @@ The OCR system has already extracted the following structured data:
             )
 
             response = client.chat.completions.create(
-                model="llama-3.3-70b-versatile",  # Text-only model is fine now
+                model=settings.GROQ_MODEL,  # Text-only model is fine now
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.1,
                 max_tokens=2000,

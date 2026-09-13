@@ -9,6 +9,7 @@ import { useSessionClasses } from '../../hooks/useSessionClasses'
 import { useClassSubjects } from '../../hooks/useClassSubjects'
 import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
+import PageHeader from '../../components/ui/PageHeader'
 
 export default function CurriculumCoveragePage() {
   const { isTeacher } = useAuth()
@@ -49,10 +50,7 @@ export default function CurriculumCoveragePage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Curriculum Coverage</h1>
-        <p className="text-sm text-gray-600 mt-1">Track taught vs tested topics by class and subject.</p>
-      </div>
+      <PageHeader title="Curriculum Coverage" subtitle="Track taught vs tested topics by class and subject." />
 
       <div className="card">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">

@@ -56,7 +56,7 @@ try:
     token_principal = seed['tokens']['principal']
     token_teacher = seed['tokens']['teacher']
     token_admin_b = seed['tokens']['admin_b']
-    token_hr = seed['tokens']['hr_manager']
+    token_hr = seed['tokens']['manager']
 
     reset_counters()
 

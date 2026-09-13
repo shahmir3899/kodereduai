@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { lmsApi } from '../../services/api'
 import { isRTLLanguage } from '../../components/RTLWrapper'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 /** Use inside buttons/labels — avoids invalid `<div>` inside `<button>`. */
 function RtlText({ language, className = '', children }) {
@@ -162,6 +163,8 @@ export default function LessonPlanTopicsPickerModal({
     })
     return { chapterMap: cMap, topicMap: tMap, subtopicMap: sMap }
   }, [books])
+
+  useEscapeKey(onClose, open)
 
   if (!open) return null
 

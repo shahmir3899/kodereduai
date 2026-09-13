@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { attendanceApi } from '../../services/api'
 import { useToast } from '../../components/Toast'
+import PageHeader from '../../components/ui/PageHeader'
 
 const SEVERITY_STYLES = {
   HIGH: 'bg-red-100 text-red-800',
@@ -42,12 +43,10 @@ export default function AnomaliesPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Attendance Anomalies</h1>
-        <p className="text-sm text-gray-500 mt-1">
-          Automatically detected unusual patterns. Review and resolve flagged items.
-        </p>
-      </div>
+      <PageHeader
+        title="Attendance Anomalies"
+        subtitle="Automatically detected unusual patterns. Review and resolve flagged items."
+      />
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3">

@@ -7,6 +7,8 @@ import { useToast } from '../components/Toast'
 import SectionAllocator from './sessions/SectionAllocator'
 import { GRADE_PRESETS, GRADE_LEVEL_LABELS } from '../constants/gradePresets'
 import { useSessionClasses } from '../hooks/useSessionClasses'
+import Spinner from '../components/ui/Spinner'
+import { useEscapeKey } from '../hooks/useEscapeKey'
 
 const SECTION_LABELS = ['A', 'B', 'C', 'D', 'E', 'F']
 
@@ -328,6 +330,10 @@ export default function ClassesGradesPage() {
     setClassForm(EMPTY_CLASS)
   }
 
+  useEscapeKey(closeClassModal, showClassModal)
+  useEscapeKey(() => setDeleteConfirm(null), !!deleteConfirm)
+  useEscapeKey(closeLinkPicker, linkPickerModal.open)
+
   const handleGradeLevelChange = (levelStr) => {
     const level = parseInt(levelStr)
     setClassForm(prev => {
@@ -626,7 +632,7 @@ export default function ClassesGradesPage() {
       {/* Main Content */}
       {selectedSchoolId && (isLoading || (classScope === 'session' && sessionClassesLoading) ? (
         <div className="text-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto" />
+          <Spinner size="md" className="mx-auto" />
         </div>
       ) : activeClasses.length === 0 ? (
         <div className="card p-4 sm:p-6">

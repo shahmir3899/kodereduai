@@ -16,7 +16,7 @@ from datetime import datetime
 import requests
 
 from .html_sanitize import sanitize_for_pdf
-from .paper_export_layout import build_export_layout, resolve_exam_paper_class_name
+from .paper_export_layout import build_export_layout, build_worksheet_export_layout, resolve_exam_paper_class_name
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +76,26 @@ def _load_logo_stream(school):
         return io.BytesIO(resp.content)
     except Exception as e:
         logger.warning(f"Could not fetch school logo: {str(e)}")
+        return None
+
+
+def _load_image_stream(url, timeout=8):
+    """Fetch bytes for a Supabase-hosted image URL (a Diagram Mode question/option
+    attachment, or the older OCR-pipeline question_image_url) before handing them
+    to ReportLab -- same reason as _load_logo_stream above: passing the URL string
+    straight to Image() defers the load to build()-time ImageReader, which only
+    does a local open()/PIL read and has no HTTP client, so it reliably raises
+    "Cannot open resource" outside any try/except wrapped around Image() itself
+    and takes down the whole PDF. An unreachable/invalid image degrades to
+    "no image" instead."""
+    if not url:
+        return None
+    try:
+        resp = requests.get(url, timeout=timeout)
+        resp.raise_for_status()
+        return io.BytesIO(resp.content)
+    except Exception as e:
+        logger.warning(f"Could not fetch image {url}: {str(e)}")
         return None
 
 
@@ -270,7 +290,15 @@ class ExamPaperPDFGenerator:
 
             if question.get('question_image_url'):
                 try:
-                    q_image = Image(question['question_image_url'], width=4*inch, height=3*inch)
+                    # Fetch bytes ourselves -- see _load_image_stream's docstring.
+                    # Passing the URL straight to Image() used to defer the load to
+                    # build()-time, which has no HTTP client and reliably raised
+                    # "Cannot open resource" *outside* this try/except, aborting the
+                    # whole paper whenever a question carried an image.
+                    q_image_stream = _load_image_stream(question['question_image_url'])
+                    if not q_image_stream:
+                        raise ValueError('image unreachable')
+                    q_image = Image(q_image_stream, width=4*inch, height=3*inch)
                     q_image.hAlign = 'LEFT'
                     elements.append(Spacer(1, 6))
                     elements.append(q_image)
@@ -474,7 +502,7 @@ class ExamPaperPDFGenerator:
             for item in block['items']:
                 elements.extend(self._build_question_elements(
                     item, question_style, option_style, answer_line_style, true_false_style,
-                    Paragraph, Spacer, Table, TableStyle, colors, inch, show_marks,
+                    Paragraph, Spacer, Table, TableStyle, Image, colors, inch, show_marks,
                 ))
 
         # Internal audit info ("Generated on … | Prepared by …") no longer prints on
@@ -544,9 +572,30 @@ class ExamPaperPDFGenerator:
         from reportlab.platypus import Paragraph
         return Paragraph(text, style)
 
+    def _build_option_cell(self, key, text_value, image_url, Paragraph, Image, option_style):
+        """One MCQ option's table cell -- text, a diagram, both, or (if genuinely
+        empty) ''. ReportLab table cells accept a list of flowables, so a labeled
+        diagram (e.g. "which shape is a rhombus?") stacks its letter and image
+        rather than needing a separate row."""
+        parts = []
+        if text_value:
+            parts.append(Paragraph(f"<b>{key}.</b> {text_value}", option_style))
+        elif image_url:
+            parts.append(Paragraph(f"<b>{key}.</b>", option_style))
+        if image_url:
+            image_stream = _load_image_stream(image_url)
+            if image_stream:
+                try:
+                    option_image = Image(image_stream, width=1.4*inch, height=1*inch)
+                    option_image.hAlign = 'LEFT'
+                    parts.append(option_image)
+                except Exception as e:
+                    logger.warning(f"Could not render option diagram: {str(e)}")
+        return parts or ''
+
     def _build_question_elements(
         self, item, question_style, option_style, answer_line_style, true_false_style,
-        Paragraph, Spacer, Table, TableStyle, colors, inch, show_marks=True,
+        Paragraph, Spacer, Table, TableStyle, Image, colors, inch, show_marks=True,
     ):
         elements = []
         # Number, question text and the True/False marker all flow as one paragraph.
@@ -573,11 +622,24 @@ class ExamPaperPDFGenerator:
             question_parts.append(f" &nbsp;&nbsp;<font color='#6B7280' size='9'>{marks_suffix}</font>")
         elements.append(Paragraph(''.join(question_parts), question_style))
 
+        if item.get('question_image_url'):
+            image_stream = _load_image_stream(item['question_image_url'])
+            if image_stream:
+                try:
+                    q_image = Image(image_stream, width=3*inch, height=2*inch)
+                    q_image.hAlign = 'LEFT'
+                    elements.append(Spacer(1, 4))
+                    elements.append(q_image)
+                    elements.append(Spacer(1, 4))
+                except Exception as e:
+                    logger.warning(f"Could not render question diagram: {str(e)}")
+
         rendered_extra = False
 
         if item['question_type'] == 'MCQ' and item['options']:
             # 2-column grid (A/B on one row, C/D on the next) instead of stacking all
             # four vertically -- halves the vertical space MCQ options take on the page.
+            option_images = item.get('option_images') or {}
             pairs = [('A', 'B'), ('C', 'D')]
             rows = []
             for left_key, right_key in pairs:
@@ -585,8 +647,8 @@ class ExamPaperPDFGenerator:
                 right_value = item['options'].get(right_key)
                 if not left_value and not right_value:
                     continue
-                left_cell = Paragraph(f"<b>{left_key}.</b> {left_value}", option_style) if left_value else ''
-                right_cell = Paragraph(f"<b>{right_key}.</b> {right_value}", option_style) if right_value else ''
+                left_cell = self._build_option_cell(left_key, left_value, option_images.get(left_key), Paragraph, Image, option_style)
+                right_cell = self._build_option_cell(right_key, right_value, option_images.get(right_key), Paragraph, Image, option_style)
                 rows.append([left_cell, right_cell])
             if rows:
                 mcq_table = Table(rows, colWidths=[3.25*inch, 3.25*inch])
@@ -648,6 +710,176 @@ class ExamPaperPDFGenerator:
         # Similar to generate() but includes correct_answer fields
         # Implementation can be added later if needed
         raise NotImplementedError("Answer key generation not yet implemented")
+
+
+class WorksheetPDFGenerator(ExamPaperPDFGenerator):
+    """Generate branded PDF worksheets.
+
+    Subclasses ExamPaperPDFGenerator purely to reuse its section/question
+    rendering helpers (_build_section_heading_table, _build_question_elements,
+    _paragraph) -- none of those touch self.exam_paper/self.school, so they
+    render identically for a worksheet. Header/candidate-info/examiner-marks-box
+    are NOT reused: worksheets have no total_marks/duration_minutes/exam_name,
+    and are usually ungraded, so that whole block is replaced with a leaner
+    header. There is also no legacy flat-list fallback -- a worksheet's
+    structure is never empty (the builder always writes it), unlike ExamPaper.
+    """
+
+    def __init__(self, worksheet):
+        self.worksheet = worksheet
+        self.school = worksheet.school
+
+    def generate(self) -> bytes:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.units import inch
+        from reportlab.platypus import SimpleDocTemplate
+
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(
+            buffer,
+            pagesize=A4,
+            topMargin=0.75 * inch,
+            bottomMargin=0.75 * inch,
+            leftMargin=1 * inch,
+            rightMargin=1 * inch,
+        )
+
+        layout = build_worksheet_export_layout(self.worksheet)
+        elements = self._build_worksheet_elements(layout)
+        doc.build(elements, canvasmaker=_numbered_canvas_class())
+
+        logger.info(f"Generated PDF for Worksheet {self.worksheet.id}")
+        return buffer.getvalue()
+
+    def _build_worksheet_elements(self, layout):
+        from reportlab.lib import colors
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import inch
+        from reportlab.platypus import Paragraph, Spacer, Table, TableStyle, Image
+        from reportlab.lib.enums import TA_CENTER
+
+        header = layout['header']
+        elements = []
+        styles = getSampleStyleSheet()
+
+        logo_stream = _load_logo_stream(self.school)
+        if logo_stream:
+            try:
+                logo = Image(logo_stream, width=1 * inch, height=1 * inch)
+                logo.hAlign = 'CENTER'
+                elements.append(logo)
+                elements.append(Spacer(1, 8))
+            except Exception as e:
+                logger.warning(f"Could not render school logo: {str(e)}")
+
+        school_name_style = ParagraphStyle(
+            'SchoolName', parent=styles['Heading1'], fontSize=16, alignment=TA_CENTER,
+            spaceAfter=4, textColor=colors.HexColor('#1F2937'), fontName='Helvetica-Bold'
+        )
+        title_style = ParagraphStyle(
+            'WorksheetTitle', parent=styles['Heading1'], fontSize=18, alignment=TA_CENTER,
+            spaceAfter=6, textColor=colors.HexColor('#1F2937'), fontName='Helvetica-Bold'
+        )
+        subtitle_style = ParagraphStyle(
+            'WorksheetSubtitle', parent=styles['Normal'], fontSize=12, alignment=TA_CENTER,
+            spaceAfter=8, textColor=colors.HexColor('#4B5563')
+        )
+        instruction_style = ParagraphStyle(
+            'Instructions', parent=styles['Normal'], fontSize=10, spaceAfter=12,
+            textColor=colors.HexColor('#374151'), leftIndent=20, rightIndent=20
+        )
+        section_left_style = ParagraphStyle(
+            'SectionHeadingLeft', parent=styles['Normal'], fontSize=12, fontName='Helvetica-Bold',
+            textColor=colors.HexColor('#111827'),
+        )
+        section_right_style = ParagraphStyle(
+            'SectionHeadingRight', parent=styles['Normal'], fontSize=12, fontName='Helvetica-Bold',
+            alignment=TA_CENTER, textColor=colors.HexColor('#111827'),
+        )
+        question_style = ParagraphStyle(
+            'Question', parent=styles['Normal'], fontSize=11, spaceAfter=4,
+            textColor=colors.HexColor('#111827'), leading=14
+        )
+        option_style = ParagraphStyle(
+            'Option', parent=styles['Normal'], fontSize=10, spaceAfter=4,
+            leftIndent=30, textColor=colors.HexColor('#374151')
+        )
+        answer_line_style = ParagraphStyle(
+            'AnswerLine', parent=styles['Normal'], fontSize=11, spaceAfter=6,
+            textColor=colors.HexColor('#9CA3AF'),
+        )
+        true_false_style = ParagraphStyle(
+            'TrueFalse', parent=styles['Normal'], fontSize=11, spaceAfter=10,
+            textColor=colors.HexColor('#111827'),
+        )
+        divider_style = ParagraphStyle(
+            'SectionDivider', parent=styles['Heading2'], fontSize=14, alignment=TA_CENTER,
+            spaceBefore=10, spaceAfter=10, textColor=colors.HexColor('#1F2937'), fontName='Helvetica-Bold',
+        )
+
+        elements.append(Paragraph(header['school_name'], school_name_style))
+        elements.append(Paragraph(header['paper_title'], title_style))
+        subtitle_bits = [f"Class: {header['class_name']}"]
+        if header['subject_name']:
+            subtitle_bits.append(f"Subject: {header['subject_name']}")
+        elements.append(Paragraph('    '.join(subtitle_bits), subtitle_style))
+        elements.append(Spacer(1, 8))
+
+        # Simple ruled name/date line -- no roll no./total-marks/examiner box, since
+        # a worksheet is usually ungraded practice rather than a scored exam.
+        candidate_table = Table(
+            [[self._paragraph('Name:', section_left_style), '', self._paragraph('Date:', section_left_style), '']],
+            colWidths=[0.75 * inch, 3 * inch, 0.75 * inch, 2 * inch],
+        )
+        candidate_table.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'BOTTOM'),
+            ('LINEBELOW', (1, 0), (1, 0), 0.75, colors.HexColor('#9CA3AF')),
+            ('LINEBELOW', (3, 0), (3, 0), 0.75, colors.HexColor('#9CA3AF')),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ]))
+        elements.append(candidate_table)
+        elements.append(Spacer(1, 10))
+
+        divider_table = Table([['']], colWidths=[6.5 * inch])
+        divider_table.setStyle(TableStyle([
+            ('LINEABOVE', (0, 0), (-1, 0), 1, colors.HexColor('#D1D5DB')),
+        ]))
+        elements.append(divider_table)
+        elements.append(Spacer(1, 12))
+
+        if header['instructions']:
+            elements.append(Paragraph('<b>Instructions:</b>', instruction_style))
+            for line in header['instructions'].split('\n'):
+                if line.strip():
+                    elements.append(Paragraph(f"• {line.strip()}", instruction_style))
+            elements.append(Spacer(1, 12))
+
+        for block in layout['blocks']:
+            if block['type'] == 'divider':
+                elements.append(Paragraph(block['title'], divider_style))
+                continue
+
+            if block['type'] == 'section':
+                elements.append(self._build_section_heading_table(
+                    block, section_left_style, section_right_style, Table, TableStyle, inch,
+                ))
+                elements.append(Spacer(1, 6))
+
+            for item in block['items']:
+                elements.extend(self._build_question_elements(
+                    item, question_style, option_style, answer_line_style, true_false_style,
+                    Paragraph, Spacer, Table, TableStyle, Image, colors, inch, show_marks=False,
+                ))
+
+        footer_text = f"Generated on {datetime.now().strftime('%d %B %Y')} | {self.school.name}"
+        elements.append(Spacer(1, 16))
+        elements.append(Paragraph(footer_text, ParagraphStyle(
+            'Footer', parent=styles['Normal'], fontSize=8, alignment=TA_CENTER,
+            textColor=colors.HexColor('#9CA3AF'),
+        )))
+
+        return elements
 
 
 class DateSheetPDFGenerator:

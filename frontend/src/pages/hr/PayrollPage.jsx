@@ -3,6 +3,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { hrApi } from '../../services/api'
 import { useToast } from '../../components/Toast'
 import { useBackgroundTask } from '../../hooks/useBackgroundTask'
+import Spinner from '../../components/ui/Spinner'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 const statusBadge = {
   DRAFT: 'bg-yellow-100 text-yellow-800',
@@ -26,6 +28,10 @@ export default function PayrollPage() {
   const [generateConfirm, setGenerateConfirm] = useState(false)
   const [detailSlip, setDetailSlip] = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(null) // payslip object or 'bulk'
+
+  useEscapeKey(() => setGenerateConfirm(false), generateConfirm)
+  useEscapeKey(() => setDeleteConfirm(null), !!deleteConfirm)
+  useEscapeKey(() => setDetailSlip(null), !!detailSlip)
   const [selectedIds, setSelectedIds] = useState(new Set())
 
   // Clear selections when filters change
@@ -237,7 +243,7 @@ export default function PayrollPage() {
       {/* Loading */}
       {isLoading ? (
         <div className="text-center py-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+          <Spinner size="md" className="mx-auto" />
         </div>
       ) : filteredPayslips.length === 0 ? (
         <div className="card text-center py-8 text-gray-500">

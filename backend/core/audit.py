@@ -1,5 +1,5 @@
 """
-Helper for writing to core.AdminActionLog from super-admin dashboard actions.
+Helper for writing to core.AdminActionLog from admin-facing actions.
 """
 
 from .models import AdminActionLog
@@ -7,7 +7,13 @@ from .models import AdminActionLog
 
 def log_admin_action(request, action, target, metadata=None):
     """
-    Record one super-admin action.
+    Record one admin action for the audit trail.
+
+    Originally super-admin-only actions (school/org management), now also
+    used by school-level admins (e.g. SCHOOL_ADMIN/PRINCIPAL resetting a
+    staff member's password) — `actor` just records whoever performed it.
+    The feed itself (SuperAdminActionLogViewSet) stays Super-Admin-visible
+    only; school admins don't get a UI for it yet.
 
     `target` is the model instance being acted on (e.g. a School, Organization,
     UserSchoolMembership, or User) — its class name, pk, and str() are captured

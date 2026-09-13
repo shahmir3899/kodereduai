@@ -2,6 +2,9 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../../contexts/AuthContext'
 import { messagingApi } from '../../services/api'
+import Spinner from '../../components/ui/Spinner'
+import Button from '../../components/ui/Button'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 const ROLE_BADGES = {
   SCHOOL_ADMIN: { label: 'Admin', color: 'bg-purple-100 text-purple-700' },
@@ -9,7 +12,7 @@ const ROLE_BADGES = {
   TEACHER: { label: 'Teacher', color: 'bg-blue-100 text-blue-700' },
   PARENT: { label: 'Parent', color: 'bg-green-100 text-green-700' },
   STUDENT: { label: 'Student', color: 'bg-amber-100 text-amber-700' },
-  HR_MANAGER: { label: 'HR', color: 'bg-rose-100 text-rose-700' },
+  MANAGER: { label: 'Manager', color: 'bg-rose-100 text-rose-700' },
   ACCOUNTANT: { label: 'Accountant', color: 'bg-teal-100 text-teal-700' },
   STAFF: { label: 'Staff', color: 'bg-gray-100 text-gray-700' },
 }
@@ -30,6 +33,8 @@ export default function MessagesPage() {
 
   const [selectedThread, setSelectedThread] = useState(null)
   const [showNewMessage, setShowNewMessage] = useState(false)
+
+  useEscapeKey(() => setShowNewMessage(false), showNewMessage)
   const [mobileView, setMobileView] = useState('threads')
   const [messageText, setMessageText] = useState('')
   const [searchText, setSearchText] = useState('')
@@ -167,7 +172,7 @@ export default function MessagesPage() {
       } else if (recipient.role === 'STUDENT') {
         messageType = 'TEACHER_STUDENT'
         studentId = recipient.student_id || ''
-      } else if (['TEACHER', 'STAFF', 'HR_MANAGER', 'ACCOUNTANT'].includes(recipient.role)) {
+      } else if (['TEACHER', 'STAFF', 'MANAGER', 'ACCOUNTANT'].includes(recipient.role)) {
         messageType = 'ADMIN_STAFF'
       }
     }
@@ -208,15 +213,12 @@ export default function MessagesPage() {
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Messages</h1>
           <p className="text-sm text-gray-500 mt-0.5">Send and receive messages</p>
         </div>
-        <button
-          onClick={() => setShowNewMessage(true)}
-          className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors flex items-center gap-2"
-        >
+        <Button onClick={() => setShowNewMessage(true)}>
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
           </svg>
           <span className="hidden sm:inline">New Message</span>
-        </button>
+        </Button>
       </div>
 
       {/* New Message Modal */}
@@ -240,7 +242,7 @@ export default function MessagesPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">To</label>
                 {recipientsLoading ? (
                   <div className="flex items-center gap-2 py-2">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-600" />
+                    <Spinner size="xs" />
                     <span className="text-sm text-gray-400">Loading recipients...</span>
                   </div>
                 ) : (
@@ -354,7 +356,7 @@ export default function MessagesPage() {
 
             {threadsLoading ? (
               <div className="flex items-center justify-center py-12 flex-1">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600" />
+                <Spinner size="sm" />
               </div>
             ) : filteredThreads.length === 0 ? (
               <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
@@ -479,7 +481,7 @@ export default function MessagesPage() {
                 <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50">
                   {threadLoading ? (
                     <div className="flex items-center justify-center py-10">
-                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600" />
+                      <Spinner size="sm" />
                     </div>
                   ) : threadMessages.length === 0 ? (
                     <div className="text-center py-10">

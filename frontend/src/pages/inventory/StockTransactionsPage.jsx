@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { inventoryApi } from '../../services/api'
+import Spinner from '../../components/ui/Spinner'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 function formatDate(dateStr) {
   if (!dateStr) return '-'
@@ -73,6 +75,8 @@ export default function StockTransactionsPage() {
     setShowModal(true)
   }
   const closeModal = () => { setShowModal(false); setTxForm(emptyTxForm) }
+
+  useEscapeKey(closeModal, showModal)
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -164,7 +168,7 @@ export default function StockTransactionsPage() {
       <div className="bg-white rounded-lg shadow-sm">
         {isLoading ? (
           <div className="text-center py-16">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+            <Spinner size="md" className="mx-auto" />
             <p className="text-gray-500 mt-3">Loading transactions...</p>
           </div>
         ) : transactions.length === 0 ? (

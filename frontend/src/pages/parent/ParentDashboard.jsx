@@ -4,6 +4,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { parentsApi, sessionsApi } from '../../services/api'
 import NotificationsFeed from '../../components/dashboard/NotificationsFeed'
 import QuickActionGrid from '../../components/dashboard/QuickActionGrid'
+import Spinner from '../../components/ui/Spinner'
 
 export default function ParentDashboard() {
   const { user } = useAuth()
@@ -61,7 +62,7 @@ export default function ParentDashboard() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" />
+        <Spinner size="md" />
       </div>
     )
   }
@@ -121,15 +122,23 @@ export default function ParentDashboard() {
 function ChildCard({ child }) {
   const today = new Date().toISOString().split('T')[0]
 
+  // ParentChildSerializer's `id` is the ParentChild LINK row's own id, not
+  // the student's — `student` is the actual student id. Using `child.id`
+  // here silently 403'd every per-child API call (overview/attendance/fees/
+  // etc.), which the UI gracefully degraded to "N/A" for, masking it since
+  // no real ParentChild link existed anywhere until now.
   const { data: overviewData, isLoading } = useQuery({
-    queryKey: ['childOverview', child.id],
-    queryFn: () => parentsApi.getChildOverview(child.id),
+    queryKey: ['childOverview', child.student],
+    queryFn: () => parentsApi.getChildOverview(child.student),
     staleTime: 5 * 60 * 1000,
   })
 
+  // ParentChildSerializer doesn't expose a class id (only the display string
+  // class_name), so this always resolves to null and the day-status query
+  // below never fires — a separate, smaller gap left as-is for now.
   const childClassId = child.class_id || child.class_obj || child.class_obj_id || null
   const { data: dayStatusRes } = useQuery({
-    queryKey: ['childTodayDayStatus', child.id, today, childClassId],
+    queryKey: ['childTodayDayStatus', child.student, today, childClassId],
     queryFn: () => sessionsApi.getCalendarDayStatus({
       date_from: today,
       date_to: today,
@@ -153,19 +162,19 @@ function ChildCard({ child }) {
       <div className="px-5 py-4 flex items-center gap-3 border-b border-gray-100">
         <div className="w-11 h-11 rounded-full bg-primary-100 flex items-center justify-center shrink-0">
           <span className="text-lg font-bold text-primary-700">
-            {child.name?.charAt(0)?.toUpperCase() || '?'}
+            {child.student_name?.charAt(0)?.toUpperCase() || '?'}
           </span>
         </div>
         <div className="min-w-0 flex-1">
-          <h3 className="text-base font-semibold text-gray-900 truncate">{child.name}</h3>
+          <h3 className="text-base font-semibold text-gray-900 truncate">{child.student_name}</h3>
           <p className="text-sm text-gray-500">
             {child.class_name || 'Class N/A'}
             {child.section ? ` - ${child.section}` : ''}
-            {child.roll_number ? ` · Roll #${child.roll_number}` : ''}
+            {child.student_roll_number ? ` · Roll #${child.student_roll_number}` : ''}
           </p>
         </div>
         <Link
-          to={`/parent/children/${child.id}`}
+          to={`/parent/children/${child.student}`}
           className="text-sm text-primary-600 hover:text-primary-700 font-medium shrink-0"
         >
           View Details
@@ -262,28 +271,40 @@ function ChildCard({ child }) {
       {/* Action Buttons */}
       <div className="px-5 py-3 border-t border-gray-100 flex flex-wrap gap-2">
         <Link
-          to={`/parent/children/${child.id}/attendance`}
+          to={`/parent/children/${child.student}/attendance`}
           className="text-xs font-medium text-gray-600 hover:text-primary-600 bg-gray-50 hover:bg-primary-50 px-3 py-1.5 rounded-md transition-colors"
         >
           Attendance
         </Link>
         <Link
-          to={`/parent/children/${child.id}/fees`}
+          to={`/parent/children/${child.student}/fees`}
           className="text-xs font-medium text-gray-600 hover:text-primary-600 bg-gray-50 hover:bg-primary-50 px-3 py-1.5 rounded-md transition-colors"
         >
           Fees
         </Link>
         <Link
-          to={`/parent/children/${child.id}/results`}
+          to={`/parent/children/${child.student}/results`}
           className="text-xs font-medium text-gray-600 hover:text-primary-600 bg-gray-50 hover:bg-primary-50 px-3 py-1.5 rounded-md transition-colors"
         >
           Results
         </Link>
         <Link
-          to={`/parent/children/${child.id}/timetable`}
+          to={`/parent/children/${child.student}/timetable`}
           className="text-xs font-medium text-gray-600 hover:text-primary-600 bg-gray-50 hover:bg-primary-50 px-3 py-1.5 rounded-md transition-colors"
         >
           Timetable
+        </Link>
+        <Link
+          to={`/parent/children/${child.student}/library`}
+          className="text-xs font-medium text-gray-600 hover:text-primary-600 bg-gray-50 hover:bg-primary-50 px-3 py-1.5 rounded-md transition-colors"
+        >
+          Library
+        </Link>
+        <Link
+          to={`/parent/children/${child.student}/transport`}
+          className="text-xs font-medium text-gray-600 hover:text-primary-600 bg-gray-50 hover:bg-primary-50 px-3 py-1.5 rounded-md transition-colors"
+        >
+          Transport
         </Link>
         <Link
           to="/parent/leave"

@@ -6,7 +6,7 @@ from lms.models import Topic
 from .models import (
     ExamType, ExamGroup, Exam, ExamSubject, StudentMark, GradeScale,
     Question, ExamPaper, PaperQuestion, StudentResponse, QuestionStats, PaperUpload, PaperFeedback,
-    StudentTermAssessment,
+    StudentTermAssessment, Worksheet, WorksheetItem, WorksheetUpload,
 )
 
 
@@ -548,14 +548,22 @@ class QuestionSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'school', 'subject', 'subject_name', 'exam_type', 'exam_type_name',
             'question_text', 'question_image_url', 'question_type', 'difficulty_level', 'bloom_level',
-            'marks', 'option_a', 'option_b', 'option_c', 'option_d', 'correct_answer',
-            'answer_text', 'type_data', 'tested_topics',
+            'marks', 'option_a', 'option_b', 'option_c', 'option_d',
+            # Diagram Mode -- read-only here too (only /diagram/ and /remove_diagram/
+            # write these; see QuestionCreateUpdateSerializer's own omission of them).
+            'option_a_image_url', 'option_b_image_url', 'option_c_image_url', 'option_d_image_url',
+            'correct_answer', 'answer_text', 'answer_image_url', 'type_data', 'tested_topics',
             'source_content_block', 'paper_use_count', 'last_used_in', 'last_used_at',
             'is_ai_generated', 'verified_by', 'verified_at',
             'tested_topics_details', 'real_difficulty',
             'created_by', 'created_by_name', 'is_active', 'created_at', 'updated_at',
         ]
-        read_only_fields = ['id', 'school', 'created_by', 'created_by_name', 'created_at', 'updated_at', 'tested_topics_details', 'real_difficulty']
+        read_only_fields = [
+            'id', 'school', 'created_by', 'created_by_name', 'created_at', 'updated_at',
+            'tested_topics_details', 'real_difficulty',
+            'option_a_image_url', 'option_b_image_url', 'option_c_image_url', 'option_d_image_url',
+            'answer_image_url',
+        ]
 
 
 class StudentResponseSerializer(serializers.ModelSerializer):
@@ -625,7 +633,13 @@ class QuestionCreateUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Question
         fields = [
-            'subject', 'exam_type', 'question_text', 'question_image_url',
+            # 'id' is required here (not just implicit) -- ModelSerializer only
+            # auto-includes it when `fields` isn't spelled out, and this list is.
+            # Its absence meant a create response never carried the new row's id --
+            # QuestionsPage.jsx's post-create tag-attach (`response.data.id`) was
+            # silently a no-op, and Diagram Mode's "create on first attach" flow
+            # (QuestionSlotEditor.jsx) needs this id immediately after create too.
+            'id', 'subject', 'exam_type', 'question_text', 'question_image_url',
             'question_type', 'difficulty_level', 'bloom_level', 'marks',
             'option_a', 'option_b', 'option_c', 'option_d', 'correct_answer',
             'answer_text', 'type_data', 'tested_topics',
@@ -1073,6 +1087,217 @@ class PaperFeedbackSerializer(serializers.ModelSerializer):
             'confirmed_by_name', 'created_at',
         ]
         read_only_fields = ['id', 'confirmed_by', 'created_at']
+
+
+# ── Worksheets ────────────────────────────────────────────────
+
+class WorksheetItemSerializer(serializers.ModelSerializer):
+    """Serializer for WorksheetItem through model -- mirrors PaperQuestionSerializer's
+    snapshot-first field shape so the frontend's QuestionSlotEditor can render either
+    without a separate mapping layer."""
+    question_text = serializers.SerializerMethodField()
+    question_type = serializers.SerializerMethodField()
+    option_a = serializers.SerializerMethodField()
+    option_b = serializers.SerializerMethodField()
+    option_c = serializers.SerializerMethodField()
+    option_d = serializers.SerializerMethodField()
+    question_image_url = serializers.SerializerMethodField()
+    answer_text = serializers.SerializerMethodField()
+    correct_answer = serializers.SerializerMethodField()
+    difficulty_level = serializers.SerializerMethodField()
+    type_data = serializers.SerializerMethodField()
+    item_snapshot = serializers.JSONField(read_only=True)
+    marks = serializers.SerializerMethodField()
+
+    class Meta:
+        model = WorksheetItem
+        fields = [
+            'id', 'question', 'item_order', 'section_key', 'marks_override', 'marks',
+            'question_text', 'question_type', 'option_a', 'option_b',
+            'option_c', 'option_d', 'question_image_url', 'answer_text',
+            'correct_answer', 'difficulty_level', 'type_data',
+            'item_snapshot', 'created_at',
+        ]
+
+    def get_marks(self, obj):
+        return obj.get_marks()
+
+    def _snapshot_value(self, obj, key, fallback=''):
+        return obj.get_question_data().get(key, fallback)
+
+    def get_question_text(self, obj):
+        return self._snapshot_value(obj, 'question_text')
+
+    def get_question_type(self, obj):
+        return self._snapshot_value(obj, 'question_type')
+
+    def get_option_a(self, obj):
+        return self._snapshot_value(obj, 'option_a')
+
+    def get_option_b(self, obj):
+        return self._snapshot_value(obj, 'option_b')
+
+    def get_option_c(self, obj):
+        return self._snapshot_value(obj, 'option_c')
+
+    def get_option_d(self, obj):
+        return self._snapshot_value(obj, 'option_d')
+
+    def get_question_image_url(self, obj):
+        return self._snapshot_value(obj, 'question_image_url', None)
+
+    def get_answer_text(self, obj):
+        return self._snapshot_value(obj, 'answer_text')
+
+    def get_correct_answer(self, obj):
+        return self._snapshot_value(obj, 'correct_answer')
+
+    def get_difficulty_level(self, obj):
+        return self._snapshot_value(obj, 'difficulty_level')
+
+    def get_type_data(self, obj):
+        return self._snapshot_value(obj, 'type_data', {})
+
+
+class WorksheetSerializer(serializers.ModelSerializer):
+    """Read serializer for Worksheet with nested items."""
+    class_name = serializers.SerializerMethodField()
+    subject_name = serializers.CharField(source='subject.name', read_only=True, allow_null=True)
+    created_by_name = serializers.CharField(source='created_by.username', read_only=True, allow_null=True)
+    items = WorksheetItemSerializer(many=True, read_only=True)
+    item_count = serializers.IntegerField(read_only=True)
+    tested_topics_details = serializers.SerializerMethodField()
+
+    def get_class_name(self, obj):
+        from academic_sessions.utils import resolve_class_display_name, resolve_current_academic_year_id
+        academic_year_id = resolve_current_academic_year_id(obj.school_id)
+        return resolve_class_display_name(obj.school_id, academic_year_id, obj.class_obj)
+
+    def get_tested_topics_details(self, obj):
+        return [
+            {
+                'id': topic.id,
+                'chapter_number': topic.chapter.chapter_number,
+                'topic_number': topic.topic_number,
+                'title': topic.title,
+            }
+            for topic in obj.tested_topics.select_related('chapter').all()
+        ]
+
+    class Meta:
+        model = Worksheet
+        fields = [
+            'id', 'school', 'class_obj', 'class_name', 'subject', 'subject_name',
+            'title', 'tested_topics', 'tested_topics_details', 'instructions',
+            'structure', 'render_options', 'items', 'item_count',
+            'status', 'source', 'created_by', 'created_by_name',
+            'is_active', 'created_at', 'updated_at',
+        ]
+        read_only_fields = [
+            'id', 'school', 'created_by', 'created_by_name', 'created_at', 'updated_at',
+            'tested_topics_details',
+        ]
+
+
+class WorksheetDraftEnsureSerializer(PaperStructureValidationMixin, serializers.ModelSerializer):
+    """Create or refresh a server-backed draft worksheet before autosave begins --
+    mirrors ExamPaperDraftEnsureSerializer, minus the exam-lifecycle fields
+    (exam/exam_subject/total_marks/duration_minutes) worksheets don't have."""
+
+    class Meta:
+        model = Worksheet
+        fields = [
+            'class_obj', 'subject', 'title', 'instructions',
+            'structure', 'render_options', 'status', 'source', 'tested_topics',
+        ]
+
+    def validate(self, data):
+        if 'structure' in data:
+            data['structure'] = self._normalize_structure(data.get('structure'))
+        if 'render_options' in data:
+            data['render_options'] = self._normalize_render_options(data.get('render_options'))
+        return data
+
+
+class WorksheetDraftAutosaveSerializer(PaperStructureValidationMixin, serializers.Serializer):
+    """Autosave draft metadata and manual-entry items -- mirrors
+    ExamPaperDraftAutosaveSerializer."""
+
+    class_obj = serializers.PrimaryKeyRelatedField(
+        queryset=Worksheet._meta.get_field('class_obj').remote_field.model.objects.all(),
+        required=False,
+    )
+    subject = serializers.PrimaryKeyRelatedField(
+        queryset=Question._meta.get_field('subject').remote_field.model.objects.filter(is_active=True),
+        required=False,
+        allow_null=True,
+    )
+    title = serializers.CharField(required=False, allow_blank=False)
+    instructions = serializers.CharField(required=False, allow_blank=True)
+    structure = serializers.JSONField(required=False)
+    render_options = serializers.JSONField(required=False)
+    tested_topics = serializers.PrimaryKeyRelatedField(queryset=Topic.objects.all(), many=True, required=False)
+    manual_items = serializers.ListField(
+        child=serializers.DictField(),
+        required=False,
+        help_text='Full list of manual draft items to upsert into the worksheet and question bank.',
+    )
+
+    def validate(self, data):
+        if 'structure' in data:
+            data['structure'] = self._normalize_structure(data.get('structure'))
+        if 'render_options' in data:
+            data['render_options'] = self._normalize_render_options(data.get('render_options'))
+
+        manual_items = data.get('manual_items')
+        if manual_items is not None:
+            normalized_items = []
+            for item in manual_items:
+                if not isinstance(item, dict):
+                    raise serializers.ValidationError({'manual_items': 'Each manual item must be an object.'})
+                normalized = dict(item)
+                section_key = normalized.get('section_key', '')
+                if section_key is None:
+                    section_key = ''
+                normalized['section_key'] = str(section_key)[:50]
+                normalized_items.append(normalized)
+            data['manual_items'] = normalized_items
+
+        return data
+
+
+class WorksheetUploadSerializer(serializers.ModelSerializer):
+    """Serializer for WorksheetUpload."""
+    uploaded_by_name = serializers.CharField(source='uploaded_by.username', read_only=True, allow_null=True)
+    worksheet_title = serializers.CharField(source='worksheet.title', read_only=True, allow_null=True)
+    context_class_name = serializers.CharField(source='context_class.name', read_only=True, allow_null=True)
+    context_subject_name = serializers.CharField(source='context_subject.name', read_only=True, allow_null=True)
+
+    class Meta:
+        model = WorksheetUpload
+        fields = [
+            'id', 'school', 'worksheet', 'worksheet_title',
+            'uploaded_by', 'uploaded_by_name', 'image_url',
+            'group_id', 'page_number',
+            'context_class', 'context_class_name', 'context_subject', 'context_subject_name',
+            'ai_extracted_json', 'extraction_confidence', 'extraction_notes',
+            'status', 'error_message', 'created_at', 'processed_at',
+        ]
+        read_only_fields = [
+            'id', 'school', 'uploaded_by', 'context_class', 'context_subject',
+            'ai_extracted_json', 'extraction_confidence', 'extraction_notes', 'status',
+            'error_message', 'created_at', 'processed_at',
+            'group_id', 'page_number',
+        ]
+
+
+class WorksheetUploadCreateSerializer(serializers.Serializer):
+    """Serializer for uploading a worksheet image."""
+    image = serializers.ImageField(required=True)
+    class_obj = serializers.IntegerField(required=False, help_text="Class ID for context")
+    subject = serializers.IntegerField(required=False, help_text="Subject ID for context")
+    group_id = serializers.UUIDField(required=False, help_text="Reuse the group_id returned from page 1's upload to add a page to the same multi-page capture.")
+    page_number = serializers.IntegerField(required=False, min_value=1)
 
 
 class QuestionReviewSerializer(serializers.Serializer):

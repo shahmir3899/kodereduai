@@ -13,6 +13,8 @@ import { useSessionClasses } from '../hooks/useSessionClasses'
 import useTeacherScopedClasses from '../hooks/useTeacherScopedClasses'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../utils/classScope'
 import { sortClassOptions } from '../utils/classOrdering'
+import Spinner from '../components/ui/Spinner'
+import { useEscapeKey } from '../hooks/useEscapeKey'
 
 // Compress image before upload - keeps quality high enough for OCR
 const compressImage = (file) => {
@@ -121,6 +123,8 @@ function UploadTab({ onUploadSuccess }) {
   const [crop, setCrop] = useState({ x: 0, y: 0 })
   const [zoom, setZoom] = useState(1)
   const [croppedAreaPixels, setCroppedAreaPixels] = useState(null)
+
+  useEscapeKey(() => { setCropModalIndex(null); setCrop({ x: 0, y: 0 }); setZoom(1) }, cropModalIndex !== null)
 
   // Role-aware class list via shared hook
   const {
@@ -534,6 +538,10 @@ function ReviewDetail({ uploadId, onBack }) {
   const [rollCorrections, setRollCorrections] = useState({})
   const [showPreviewModal, setShowPreviewModal] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null)
+
+  useEscapeKey(() => setShowPreviewModal(false), showPreviewModal)
+  useEscapeKey(() => setShowDeleteConfirm(null), !!showDeleteConfirm)
+
   const [reprocessing, setReprocessing] = useState(false)
   const [reprocessError, setReprocessError] = useState('')
   const [reprocessSuccess, setReprocessSuccess] = useState('')
@@ -601,7 +609,7 @@ function ReviewDetail({ uploadId, onBack }) {
   }
 
   if (isLoading) {
-    return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div></div>
+    return <div className="flex items-center justify-center h-64"><Spinner size="md" /></div>
   }
   if (!upload) {
     return <div className="card text-center py-8"><p className="text-gray-500">Upload not found</p><button onClick={onBack} className="mt-2 text-primary-600">Back to list</button></div>
@@ -941,6 +949,9 @@ function ReviewDetail({ uploadId, onBack }) {
 function PendingReviewTab({ initialReviewId }) {
   const [reviewId, setReviewId] = useState(initialReviewId || null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null)
+
+  useEscapeKey(() => setShowDeleteConfirm(null), !!showDeleteConfirm)
+
   const queryClient = useQueryClient()
   const { activeAcademicYear } = useAcademicYear()
 
@@ -964,7 +975,7 @@ function PendingReviewTab({ initialReviewId }) {
   return (
     <div>
       {isLoading ? (
-        <div className="card text-center py-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div><p className="mt-2 text-gray-500">Loading...</p></div>
+        <div className="card text-center py-8"><Spinner size="md" className="mx-auto" /><p className="mt-2 text-gray-500">Loading...</p></div>
       ) : pendingList?.data?.length === 0 ? (
         <div className="card text-center py-8">
           <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>

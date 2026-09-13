@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { libraryApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
+import Spinner from '../../components/ui/Spinner'
 
 export default function LibraryDashboard() {
   const { user } = useAuth()
@@ -76,7 +77,7 @@ export default function LibraryDashboard() {
           <p className="text-sm sm:text-base text-gray-600">Library management overview</p>
         </div>
         <div className="text-center py-16">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+          <Spinner size="md" className="mx-auto" />
           <p className="text-gray-500 mt-3">Loading library stats...</p>
         </div>
       </div>

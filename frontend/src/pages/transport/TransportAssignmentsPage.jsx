@@ -6,6 +6,8 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
+import Spinner from '../../components/ui/Spinner'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 const TRANSPORT_TYPES = [
   { value: 'PICKUP', label: 'Pickup Only' },
@@ -230,6 +232,9 @@ export default function TransportAssignmentsPage() {
     setShowBulkModal(true)
   }
 
+  useEscapeKey(closeModal, showModal)
+  useEscapeKey(() => setDeleteConfirm(null), !!deleteConfirm)
+
   const closeBulkModal = () => {
     setShowBulkModal(false)
     setSelectedStudents([])
@@ -240,6 +245,8 @@ export default function TransportAssignmentsPage() {
       transport_type: 'BOTH',
     })
   }
+
+  useEscapeKey(closeBulkModal, showBulkModal)
 
   const handleBulkSubmit = () => {
     if (!bulkForm.route || selectedStudents.length === 0) return
@@ -368,7 +375,7 @@ export default function TransportAssignmentsPage() {
 
         {isLoading ? (
           <div className="text-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+            <Spinner size="md" className="mx-auto" />
             <p className="text-gray-500 mt-2">Loading assignments...</p>
           </div>
         ) : assignments.length === 0 ? (

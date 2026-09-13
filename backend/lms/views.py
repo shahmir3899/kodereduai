@@ -23,7 +23,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.throttling import UserRateThrottle
 
 from core.permissions import (
-    IsSchoolAdminOrReadOnly, CanEditCurriculum, HasSchoolAccess, ModuleAccessMixin,
+    CanEditCurriculum, HasSchoolAccess, ModuleAccessMixin,
     get_effective_role, ADMIN_ROLES, STAFF_LEVEL_ROLES,
     get_teacher_combined_scope,
 )
@@ -1777,7 +1777,7 @@ class AssignmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
     ViewSet for managing assignments.
 
     - Admins/Principals have full CRUD access.
-    - Teachers can create and edit their own assignments.
+    - Teachers and Managers can create and edit assignments.
     - Other authenticated users have read-only access.
     - `publish` action changes status to PUBLISHED.
     - `close` action changes status to CLOSED.
@@ -1787,10 +1787,16 @@ class AssignmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVi
         subject_id - filter by subject
         teacher_id - filter by teacher
         status     - filter by status (DRAFT, PUBLISHED, CLOSED)
+
+    Note (2026-09): previously used IsSchoolAdminOrReadOnly, which despite this
+    docstring's long-standing claim never actually gave TEACHER write access
+    (no get_permissions() override existed to grant it). Swapped to
+    CanEditCurriculum, which correctly grants TEACHER/MANAGER write alongside
+    admins — fixing that gap as part of adding MANAGER access here.
     """
     required_module = 'lms'
     queryset = Assignment.objects.all()
-    permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, CanEditCurriculum, HasSchoolAccess]
 
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):

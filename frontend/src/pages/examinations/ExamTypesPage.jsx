@@ -2,6 +2,9 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { examinationsApi } from '../../services/api'
 import { useConfirmModal } from '../../components/ConfirmModal'
+import Spinner from '../../components/ui/Spinner'
+import Badge from '../../components/ui/Badge'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 const EMPTY_FORM = { name: '', weight: '100.00' }
 
@@ -44,6 +47,8 @@ export default function ExamTypesPage() {
   }
   const closeModal = () => { setShowModal(false); setEditId(null); setForm(EMPTY_FORM); setErrors({}) }
 
+  useEscapeKey(closeModal, showModal)
+
   const handleSubmit = (e) => {
     e.preventDefault()
     if (editId) updateMut.mutate({ id: editId, data: form })
@@ -62,7 +67,7 @@ export default function ExamTypesPage() {
 
       {isLoading ? (
         <div className="text-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+          <Spinner size="md" className="mx-auto" />
         </div>
       ) : items.length === 0 ? (
         <div className="card p-4 sm:p-6">
@@ -95,9 +100,7 @@ export default function ExamTypesPage() {
             <div key={item.id} className="card">
               <div className="flex items-start justify-between mb-2">
                 <h3 className="font-semibold text-gray-900">{item.name}</h3>
-                <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">
-                  {item.weight}%
-                </span>
+                <Badge tone="info">{item.weight}%</Badge>
               </div>
               <p className="text-xs text-gray-500">Weight: {item.weight}% toward the overall grade</p>
               <div className="flex gap-2 mt-3 pt-2 border-t border-gray-100">

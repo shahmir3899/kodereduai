@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react'
 import Cropper from 'react-easy-crop'
+import { useEscapeKey } from '../hooks/useEscapeKey'
 
 // Canvas math ported from CaptureReviewPage.jsx's getCroppedImageBlob: draws the
 // rotated image onto a canvas sized to its rotated bounding box, then extracts the
@@ -40,6 +41,7 @@ async function getCroppedImageBlob(imageSrc, pixelCrop, rotation = 0) {
  * Calls onSave(blob) with a cropped, square JPEG blob; onCancel() to dismiss.
  */
 export default function PhotoCropModal({ imageSrc, onCancel, onSave }) {
+  useEscapeKey(onCancel)
   const [crop, setCrop] = useState({ x: 0, y: 0 })
   const [zoom, setZoom] = useState(1)
   const [rotation, setRotation] = useState(0)
@@ -63,7 +65,7 @@ export default function PhotoCropModal({ imageSrc, onCancel, onSave }) {
     <div className="fixed inset-0 z-[60] flex flex-col bg-black bg-opacity-75">
       <div className="flex items-center justify-between p-4 bg-white border-b">
         <h3 className="text-lg font-semibold text-gray-900">Adjust Photo</h3>
-        <button onClick={onCancel} className="p-2 hover:bg-gray-100 rounded-full">
+        <button onClick={onCancel} className="p-2 hover:bg-gray-100 rounded-full" aria-label="Cancel">
           <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>

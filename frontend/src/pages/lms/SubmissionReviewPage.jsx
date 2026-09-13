@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { lmsApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import { useToast } from '../../components/Toast'
+import Spinner from '../../components/ui/Spinner'
 
 const STATUS_BADGES = {
   SUBMITTED: 'bg-blue-100 text-blue-800',
@@ -167,7 +168,7 @@ export default function SubmissionReviewPage() {
 
       {isLoading ? (
         <div className="text-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+          <Spinner size="md" className="mx-auto" />
           <p className="text-gray-500 mt-2">Loading...</p>
         </div>
       ) : !assignment ? (

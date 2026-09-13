@@ -257,10 +257,15 @@ class MessagingViewSet(viewsets.ViewSet):
             ).exclude(user=user).select_related('user', 'department')
 
             for s in staff:
+                # Use the per-school membership role, not the base User.role —
+                # a multi-school user's role can differ per school (e.g. Teacher
+                # at one, Manager at another), and base role would show the
+                # wrong one for whichever school isn't their "home" assignment.
+                recipient_role = (s.user.get_role_for_school(school_id) or s.user.role) if s.user else 'STAFF'
                 recipients.append({
                     'id': s.user_id,
                     'name': s.full_name,
-                    'role': s.user.role if s.user else 'STAFF',
+                    'role': recipient_role,
                     'department': s.department.name if s.department else None,
                     'student_id': None,
                     'student_name': None,

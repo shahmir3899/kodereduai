@@ -2,6 +2,9 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { hrApi } from '../../services/api'
 import { useConfirmModal } from '../../components/ConfirmModal'
+import Spinner from '../../components/ui/Spinner'
+import { useDebounce } from '../../hooks/useDebounce'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 const QUAL_TYPES = [
   { value: 'DEGREE', label: 'Degree', cls: 'bg-blue-100 text-blue-800' },
@@ -32,6 +35,7 @@ export default function StaffDocumentsPage() {
 
   // Qualification state
   const [qualSearch, setQualSearch] = useState('')
+  const debouncedQualSearch = useDebounce(qualSearch, 300)
   const [qualTypeFilter, setQualTypeFilter] = useState('')
   const [showQualModal, setShowQualModal] = useState(false)
   const [editQualId, setEditQualId] = useState(null)
@@ -40,6 +44,7 @@ export default function StaffDocumentsPage() {
 
   // Document state
   const [docSearch, setDocSearch] = useState('')
+  const debouncedDocSearch = useDebounce(docSearch, 300)
   const [docTypeFilter, setDocTypeFilter] = useState('')
   const [showDocModal, setShowDocModal] = useState(false)
   const [docForm, setDocForm] = useState(EMPTY_DOC)
@@ -54,16 +59,16 @@ export default function StaffDocumentsPage() {
 
   // Fetch qualifications
   const { data: qualRes, isLoading: qualLoading } = useQuery({
-    queryKey: ['hrQualifications', qualSearch, qualTypeFilter],
-    queryFn: () => hrApi.getQualifications({ search: qualSearch, qualification_type: qualTypeFilter || undefined, page_size: 200 }),
+    queryKey: ['hrQualifications', debouncedQualSearch, qualTypeFilter],
+    queryFn: () => hrApi.getQualifications({ search: debouncedQualSearch, qualification_type: qualTypeFilter || undefined, page_size: 200 }),
     enabled: tab === 'qualifications',
   })
   const qualifications = qualRes?.data?.results || qualRes?.data || []
 
   // Fetch documents
   const { data: docRes, isLoading: docLoading } = useQuery({
-    queryKey: ['hrDocuments', docSearch, docTypeFilter],
-    queryFn: () => hrApi.getDocuments({ search: docSearch, document_type: docTypeFilter || undefined, page_size: 200 }),
+    queryKey: ['hrDocuments', debouncedDocSearch, docTypeFilter],
+    queryFn: () => hrApi.getDocuments({ search: debouncedDocSearch, document_type: docTypeFilter || undefined, page_size: 200 }),
     enabled: tab === 'documents',
   })
   const documents = docRes?.data?.results || docRes?.data || []
@@ -126,6 +131,9 @@ export default function StaffDocumentsPage() {
   const openDocCreate = () => { setDocForm(EMPTY_DOC); setDocErrors({}); setShowDocModal(true) }
   const closeDocModal = () => { setShowDocModal(false); setDocForm(EMPTY_DOC); setDocErrors({}) }
 
+  useEscapeKey(closeQualModal, showQualModal)
+  useEscapeKey(closeDocModal, showDocModal)
+
   const handleDocSubmit = (e) => {
     e.preventDefault()
     createDocMutation.mutate(docForm)
@@ -182,7 +190,7 @@ export default function StaffDocumentsPage() {
 
           {qualLoading ? (
             <div className="text-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+              <Spinner size="md" className="mx-auto" />
             </div>
           ) : qualifications.length === 0 ? (
             <div className="card text-center py-8 text-gray-500">No qualifications found.</div>
@@ -344,7 +352,7 @@ export default function StaffDocumentsPage() {
 
           {docLoading ? (
             <div className="text-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+              <Spinner size="md" className="mx-auto" />
             </div>
           ) : documents.length === 0 ? (
             <div className="card text-center py-8 text-gray-500">No documents found.</div>

@@ -44,10 +44,18 @@ vi.mock('react-router-dom', async () => {
 })
 
 const mockDetectSingleFace = vi.fn()
+const mockDetectAllFacesQuick = vi.fn()
+const mockGetFramingHint = vi.fn()
+const mockDetectAllFacesWithDescriptors = vi.fn()
+let mockQualityScore = 0.82
 vi.mock('../../../utils/faceApiLoader', () => ({
   loadFaceApiModels: vi.fn(() => Promise.resolve()),
   detectSingleFace: (...args) => mockDetectSingleFace(...args),
-  estimateQualityScore: () => 0.82,
+  detectAllFacesQuick: (...args) => mockDetectAllFacesQuick(...args),
+  getFramingHint: (...args) => mockGetFramingHint(...args),
+  detectAllFacesWithDescriptors: (...args) => mockDetectAllFacesWithDescriptors(...args),
+  estimateQualityScore: () => mockQualityScore,
+  MIN_ENROLL_QUALITY_SCORE: 0.55,
   LIVE_MOBILE_EMBEDDING_VERSION: 'faceapi_v1',
 }))
 
@@ -61,6 +69,14 @@ function mockGetUserMedia(implementation) {
 beforeEach(() => {
   mockNavigate.mockClear()
   mockDetectSingleFace.mockReset()
+  mockQualityScore = 0.82
+  // Default: no faces in the continuous tick scan, so the live "good
+  // framing"/multi-face UI stays inert and tests drive capture manually via
+  // the mocked detectSingleFace above — deliberately not 'good', which
+  // would race the auto-capture behavior tested explicitly below.
+  mockDetectAllFacesQuick.mockReset().mockResolvedValue([])
+  mockGetFramingHint.mockReset().mockReturnValue({ status: 'none', message: null })
+  mockDetectAllFacesWithDescriptors.mockReset().mockResolvedValue([])
 })
 
 describe('FaceEnrollmentPage', () => {
@@ -220,7 +236,9 @@ describe('FaceEnrollmentPage', () => {
       const studentOptionValue = studentSelect.querySelectorAll('option')[1].value
       await user.selectOptions(studentSelect, studentOptionValue)
 
-      await user.click(screen.getByText('Enable Camera'))
+      // LiveEnrollCapture now auto-requests the camera on mount (no manual
+      // "Enable Camera" click needed) — just wait for it to grant and for
+      // Capture Face to become enabled.
       await waitFor(() => expect(screen.getByText('Capture Face')).not.toBeDisabled())
       await user.click(screen.getByText('Capture Face'))
 
@@ -233,6 +251,56 @@ describe('FaceEnrollmentPage', () => {
         expect(postedBody).toMatchObject({ embedding_version: 'faceapi_v1' })
       })
       expect(postedBody.embedding).toHaveLength(128)
+    })
+
+    // Shared setup for the tests below — same three steps as the capture
+    // test above (Live Capture tab, class, student) so the panel is ready
+    // for a face to come into frame.
+    async function selectClassAndStudent(user) {
+      await user.click(await screen.findByText('Live Capture'))
+      await waitFor(() => {
+        const classSelect = screen.getByDisplayValue('All Classes')
+        expect(classSelect.querySelectorAll('option').length).toBeGreaterThan(1)
+      })
+      await user.selectOptions(screen.getByDisplayValue('All Classes'), '1')
+      await waitFor(() => {
+        expect(screen.getByDisplayValue('Select student...').querySelectorAll('option').length).toBeGreaterThan(1)
+      })
+      const studentSelect = screen.getByDisplayValue('Select student...')
+      await user.selectOptions(studentSelect, studentSelect.querySelectorAll('option')[1].value)
+    }
+
+    it('auto-captures once framing is sustained "good", with no manual click', async () => {
+      mockGetUserMedia(vi.fn(() => Promise.resolve({ getTracks: () => [] })))
+      mockDetectAllFacesQuick.mockResolvedValue([{ box: { x: 0, y: 0, width: 10, height: 10 } }])
+      mockGetFramingHint.mockReturnValue({ status: 'good', message: null })
+      mockDetectSingleFace.mockResolvedValue({ descriptor: new Float32Array(128).fill(0.02) })
+
+      const user = userEvent.setup()
+      renderWithProviders(<FaceEnrollmentPage />)
+      await selectClassAndStudent(user)
+
+      // No "Capture Face" click here — two ticks of sustained good framing
+      // (AUTO_CAPTURE_GOOD_STREAK) should fire it automatically.
+      await waitFor(() => {
+        expect(screen.getByText('Confirm & Enroll')).toBeInTheDocument()
+      }, { timeout: 3000 })
+    })
+
+    it('shows a soft low-quality warning without disabling Confirm', async () => {
+      mockGetUserMedia(vi.fn(() => Promise.resolve({ getTracks: () => [] })))
+      mockDetectSingleFace.mockResolvedValue({ descriptor: new Float32Array(128).fill(0.01) })
+      mockQualityScore = 0.2 // below MIN_ENROLL_QUALITY_SCORE (0.55)
+
+      const user = userEvent.setup()
+      renderWithProviders(<FaceEnrollmentPage />)
+      await selectClassAndStudent(user)
+
+      await waitFor(() => expect(screen.getByText('Capture Face')).not.toBeDisabled())
+      await user.click(screen.getByText('Capture Face'))
+
+      await waitFor(() => expect(screen.getByText(/Quality is low/)).toBeInTheDocument())
+      expect(screen.getByText('Confirm & Enroll')).not.toBeDisabled()
     })
   })
 })

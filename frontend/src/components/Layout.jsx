@@ -11,6 +11,8 @@ import { TaskDrawerButton } from './TaskDrawer'
 import SchoolSwitcher from './SchoolSwitcher'
 import AcademicYearSwitcher from './AcademicYearSwitcher'
 import { inventoryApi, aiJobsApi } from '../services/api'
+import { useEscapeKey } from '../hooks/useEscapeKey'
+import { useTheme } from '../contexts/ThemeContext'
 
 // Icons (simple SVG components)
 const RocketIcon = () => (
@@ -165,6 +167,37 @@ const ClockIcon = () => (
   </svg>
 )
 
+const SunIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+  </svg>
+)
+
+const MoonIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+  </svg>
+)
+
+// Sun/moon toggle for the shared chrome's dark-mode infrastructure (Item 5) — flips
+// the `dark` class on <html> via ThemeContext; individual page content is not swept
+// to dark: variants yet, only the primitives every page renders through (nav, buttons,
+// badges, modals).
+function ThemeToggleButton() {
+  const { isDark, toggleTheme } = useTheme()
+  return (
+    <button
+      type="button"
+      onClick={toggleTheme}
+      className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300"
+      aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+      title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+    >
+      {isDark ? <SunIcon /> : <MoonIcon />}
+    </button>
+  )
+}
+
 // Collapsible sidebar group component
 function SidebarGroup({ group, onNavigate }) {
   const location = useLocation()
@@ -209,7 +242,7 @@ function SidebarGroup({ group, onNavigate }) {
       <button
         onClick={() => setExpanded(!expanded)}
         className={`flex items-center justify-between w-full px-4 py-2.5 rounded-lg transition-colors ${
-          hasActiveChild ? 'text-primary-700 bg-primary-50/50' : 'text-gray-600 hover:bg-gray-100'
+          hasActiveChild ? 'text-primary-700 bg-primary-50/50 dark:text-primary-300 dark:bg-primary-900/30' : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
         }`}
       >
         <div className="flex items-center">
@@ -224,7 +257,7 @@ function SidebarGroup({ group, onNavigate }) {
           {group.children.map((child, idx) =>
             child.type === 'divider' ? (
               <div key={child.label || idx} className="pt-2 pb-1 px-4">
-                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">{child.label}</p>
+                <p className="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">{child.label}</p>
               </div>
             ) : (
               <Link
@@ -232,8 +265,8 @@ function SidebarGroup({ group, onNavigate }) {
                 to={child.href}
                 className={`flex items-center px-4 py-2 rounded-lg transition-colors text-sm ${
                   isChildActive(child.href)
-                    ? 'bg-primary-50 text-primary-700'
-                    : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
+                    ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
+                    : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-200'
                 }`}
                 onClick={onNavigate}
               >
@@ -325,6 +358,8 @@ const studentNavGroups = [
   { type: 'item', name: 'Exam Schedule', href: '/student/exam-schedule', icon: CalendarIcon },
   { type: 'item', name: 'Results', href: '/student/results', icon: ChartIcon },
   { type: 'item', name: 'Assignments', href: '/student/assignments', icon: PencilIcon },
+  { type: 'item', name: 'Library', href: '/student/library', icon: LibraryIcon },
+  { type: 'item', name: 'Transport', href: '/student/transport', icon: TruckIcon },
   { type: 'item', name: 'AI Study Helper', href: '/student/study-helper', icon: ChatBotIcon },
   { type: 'item', name: 'My Profile', href: '/student/profile', icon: UsersIcon },
   { type: 'item', name: 'User Guide', href: '/guide', icon: BookOpenIcon },
@@ -353,10 +388,12 @@ const SESSION_AWARE_PREFIXES = [
 ]
 
 export default function Layout() {
-  const { user, logout, activeSchool, effectiveRole, isSuperAdmin, isStaffMember, isPrincipal, isHRManager, isStaffLevel, isParent, isStudent, isModuleEnabled } = useAuth()
+  const { user, logout, activeSchool, effectiveRole, isSuperAdmin, isStaffMember, isPrincipal, isManager, isStaffLevel, isParent, isStudent, isModuleEnabled } = useAuth()
   const { showSuccess } = useToast()
   const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+
+  useEscapeKey(() => setSidebarOpen(false), sidebarOpen)
   const [hasInventoryAssignments, setHasInventoryAssignments] = useState(false)
   const [showAIJobsMenu, setShowAIJobsMenu] = useState(false)
   const previousPendingIdsRef = useRef(new Set())
@@ -453,8 +490,10 @@ export default function Layout() {
     // Dashboard - always visible at top
     { type: 'item', name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
 
-    // Attendance group (consolidated)
-    ...(isModuleEnabled('attendance') ? [{
+    // Attendance group (consolidated) — student/class attendance, not
+    // relevant to Staff (their own attendance lives in the Self Service
+    // hub below, backed by hr.StaffAttendance, not this module).
+    ...(isModuleEnabled('attendance') && !isStaff ? [{
       type: 'group',
       name: 'Attendance',
       icon: ClipboardIcon,
@@ -494,8 +533,11 @@ export default function Layout() {
           ],
     }] : []),
 
-    // Academics navigation split into focused groups to reduce clutter
-    ...(isModuleEnabled('academics') ? [{
+    // Academics navigation split into focused groups to reduce clutter —
+    // none of Curriculum/Assessment/Content Creation/Planning & Delivery is
+    // Staff's business (no backend access to any of it; Staff has no
+    // teaching or curriculum role), so the whole cluster is hidden for them.
+    ...(isModuleEnabled('academics') && !isStaff ? [{
       type: 'group',
       name: 'Academics',
       icon: BookOpenIcon,
@@ -522,7 +564,7 @@ export default function Layout() {
       ],
     }] : []),
 
-    ...(isModuleEnabled('academics') && (isModuleEnabled('examinations') || isModuleEnabled('lms')) ? [{
+    ...(isModuleEnabled('academics') && !isStaff && (isModuleEnabled('examinations') || isModuleEnabled('lms')) ? [{
       type: 'group',
       name: 'Content Creation',
       icon: PencilIcon,
@@ -531,6 +573,7 @@ export default function Layout() {
           { name: 'Question Bank', href: '/academics/questions', icon: PencilIcon },
           { name: 'Paper Builder', href: '/academics/paper-builder', icon: PencilIcon },
           { name: 'Question Papers', href: '/academics/papers', icon: DocumentIcon },
+          { name: 'Worksheets', href: '/academics/worksheets', icon: DocumentIcon },
         ] : []),
         ...(isModuleEnabled('lms') ? [
           { name: 'Curriculum', href: '/academics/curriculum', icon: BookOpenIcon },
@@ -538,7 +581,7 @@ export default function Layout() {
       ],
     }] : []),
 
-    ...(isModuleEnabled('academics') && (isModuleEnabled('examinations') || isModuleEnabled('lms')) ? [{
+    ...(isModuleEnabled('academics') && !isStaff && (isModuleEnabled('examinations') || isModuleEnabled('lms')) ? [{
       type: 'group',
       name: 'Planning & Delivery',
       icon: CalendarIcon,
@@ -566,8 +609,8 @@ export default function Layout() {
       icon: ExclamationIcon,
     }] : []),
 
-    // HR & Staff group (visible to SCHOOL_ADMIN, PRINCIPAL, HR_MANAGER + module check)
-    ...(isModuleEnabled('hr') && (!isStaffLevel || isHRManager)
+    // HR & Staff group (visible to SCHOOL_ADMIN, PRINCIPAL, MANAGER + module check)
+    ...(isModuleEnabled('hr') && (!isStaffLevel || isManager)
       ? [{
           type: 'group',
           name: 'HR & Staff',
@@ -586,6 +629,27 @@ export default function Layout() {
             { name: 'Staff Risk', href: '/hr/risk', icon: ExclamationIcon },
           ],
         }]
+      : []),
+
+    // Standalone self-service items for Teacher — the full "HR & Staff"
+    // group above stays admin/Manager-only; Teacher gets just their own
+    // leave and attendance, not the whole HR toolset (LeaveManagementPage.jsx
+    // and StaffAttendancePage.jsx both render a trimmed self-service view
+    // for TEACHER/STAFF).
+    ...(isModuleEnabled('hr') && isTeacher
+      ? [
+          { type: 'item', name: 'My Leave', href: '/hr/leave', icon: CalendarIcon },
+          { type: 'item', name: 'My Attendance', href: '/hr/attendance', icon: ClipboardCheckIcon },
+        ]
+      : []),
+
+    // Staff gets one consolidated "Self Service" hub (Leave + Attendance
+    // tabs) instead of separate items — Staff sits at the bottom of the
+    // school hierarchy with no teaching/admin surface at all, so a single
+    // entry point is clearer than scattering it across the sidebar. Also
+    // reachable via the dashboard's "Apply Leave"/quick-action links.
+    ...(isModuleEnabled('hr') && isStaff
+      ? [{ type: 'item', name: 'Self Service', href: '/hr/self-service', icon: CalendarIcon }]
       : []),
 
     // Management group
@@ -697,13 +761,13 @@ export default function Layout() {
     ...(!isStaffLevel
       ? [{ type: 'item', name: 'Settings', href: '/settings', icon: CogIcon }]
       : []),
-  ], [isModuleEnabled, isStaffLevel, isHRManager, isTeacher, isStaff, hasInventoryAssignments])
+  ], [isModuleEnabled, isStaffLevel, isManager, isTeacher, isStaff, hasInventoryAssignments])
 
   // SuperAdmin only sees the Admin Panel link — no school-internal nav
   const visibleNavGroups = isSuperAdmin ? [] : (isParent ? parentNavGroups : (isStudent ? studentNavGroups : navigationGroups))
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Mobile sidebar backdrop */}
       {sidebarOpen && (
         <div
@@ -714,12 +778,12 @@ export default function Layout() {
 
       {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-30 w-64 bg-white shadow-lg transform transition-transform duration-200 ease-in-out lg:translate-x-0 flex flex-col ${
+        className={`fixed inset-y-0 left-0 z-30 w-64 bg-white dark:bg-gray-800 shadow-lg transform transition-transform duration-200 ease-in-out lg:translate-x-0 flex flex-col ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
         {/* Logo - School branded for non-super-admin, Platform branded for super-admin */}
-        <div className="flex items-center justify-center h-16 border-b border-gray-200 gap-2 flex-shrink-0 ps-3 pe-3">
+        <div className="flex items-center justify-center h-16 border-b border-gray-200 dark:border-gray-700 gap-2 flex-shrink-0 ps-3 pe-3">
           {isSuperAdmin ? (
             // Super admin sees platform branding
             <>
@@ -739,10 +803,10 @@ export default function Layout() {
                 }}
               />
               <div className="flex flex-col min-w-0 flex-1">
-                <h1 className="text-sm font-bold text-gray-800 whitespace-nowrap overflow-hidden text-ellipsis">
+                <h1 className="text-sm font-bold text-gray-800 dark:text-gray-100 whitespace-nowrap overflow-hidden text-ellipsis">
                   {activeSchool?.name || 'School'}
                 </h1>
-                <p className="text-xs text-gray-500 whitespace-nowrap">{effectiveRole}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">{effectiveRole}</p>
               </div>
             </>
           )}
@@ -763,8 +827,8 @@ export default function Layout() {
                 to={item.href}
                 className={`flex items-center px-4 py-2.5 mb-1 rounded-lg transition-colors text-sm ${
                   isActive(item.href)
-                    ? 'bg-primary-50 text-primary-700'
-                    : 'text-gray-600 hover:bg-gray-100'
+                    ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
+                    : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
                 }`}
                 onClick={() => setSidebarOpen(false)}
               >
@@ -781,8 +845,8 @@ export default function Layout() {
                 to="/admin"
                 className={`flex items-center px-4 py-2.5 mb-1 rounded-lg transition-colors text-sm ${
                   location.pathname === '/admin'
-                    ? 'bg-primary-50 text-primary-700'
-                    : 'text-gray-600 hover:bg-gray-100'
+                    ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
+                    : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
                 }`}
                 onClick={() => setSidebarOpen(false)}
               >
@@ -793,8 +857,8 @@ export default function Layout() {
                 to="/admin/brochure"
                 className={`flex items-center px-4 py-2.5 mb-1 rounded-lg transition-colors text-sm ${
                   isActive('/admin/brochure')
-                    ? 'bg-primary-50 text-primary-700'
-                    : 'text-gray-600 hover:bg-gray-100'
+                    ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
+                    : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
                 }`}
                 onClick={() => setSidebarOpen(false)}
               >
@@ -805,8 +869,8 @@ export default function Layout() {
                 to="/guide"
                 className={`flex items-center px-4 py-2.5 mb-1 rounded-lg transition-colors text-sm ${
                   isActive('/guide')
-                    ? 'bg-primary-50 text-primary-700'
-                    : 'text-gray-600 hover:bg-gray-100'
+                    ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
+                    : 'text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
                 }`}
                 onClick={() => setSidebarOpen(false)}
               >
@@ -818,10 +882,10 @@ export default function Layout() {
         </nav>
 
         {/* User info & logout */}
-        <div className="flex-shrink-0 p-4 border-t border-gray-200">
+        <div className="flex-shrink-0 p-4 border-t border-gray-200 dark:border-gray-700">
           <Link
             to="/profile"
-            className="flex items-center mb-3 p-2 -m-2 rounded-lg hover:bg-gray-50 transition-colors"
+            className="flex items-center mb-3 p-2 -m-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
             onClick={() => setSidebarOpen(false)}
           >
             {user?.profile_photo_url ? (
@@ -831,20 +895,20 @@ export default function Layout() {
                 className="w-10 h-10 rounded-full object-cover"
               />
             ) : (
-              <div className="w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center">
-                <span className="text-primary-700 font-medium">
+              <div className="w-10 h-10 rounded-full bg-primary-100 dark:bg-primary-900/40 flex items-center justify-center">
+                <span className="text-primary-700 dark:text-primary-300 font-medium">
                   {userAvatarInitial}
                 </span>
               </div>
             )}
             <div className="ml-3">
-              <p className="text-sm font-medium text-gray-900">{userDisplayName}</p>
-              <p className="text-xs text-gray-500">{user?.role_display}</p>
+              <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{userDisplayName}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">{user?.role_display}</p>
             </div>
           </Link>
           <button
             onClick={logout}
-            className="flex items-center w-full px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+            className="flex items-center w-full px-4 py-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
           >
             <LogoutIcon />
             <span className="ml-3 font-medium">Logout</span>
@@ -855,14 +919,15 @@ export default function Layout() {
       {/* Main content */}
       <div className="lg:pl-64">
         {/* Top bar */}
-        <header className="sticky top-0 z-10 bg-white shadow-sm">
+        <header className="sticky top-0 z-10 bg-white dark:bg-gray-800 shadow-sm">
           <div className="flex items-center justify-between h-16 px-4">
             {/* Mobile menu button */}
             <button
-              className="lg:hidden p-2 rounded-lg hover:bg-gray-100"
+              className="lg:hidden p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
               onClick={() => setSidebarOpen(true)}
+              aria-label="Open sidebar menu"
             >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-6 h-6 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
               </svg>
             </button>
@@ -870,11 +935,11 @@ export default function Layout() {
             {/* School name / switcher + Academic Year switcher */}
             <div className="flex-1 lg:ml-0 ml-4 flex items-center gap-3">
               {isSuperAdmin ? (
-                <span className="text-sm font-medium text-gray-700">Platform Admin</span>
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Platform Admin</span>
               ) : (
                 <>
                   <SchoolSwitcher />
-                  <div className="hidden sm:block h-5 w-px bg-gray-200" />
+                  <div className="hidden sm:block h-5 w-px bg-gray-200 dark:bg-gray-600" />
                   <div className="hidden sm:block">
                     <AcademicYearSwitcher disabled={!isSessionAwarePage} />
                   </div>
@@ -917,10 +982,11 @@ export default function Layout() {
                   )}
                 </div>
               )}
+              <ThemeToggleButton />
               <TaskDrawerButton />
               {!isSuperAdmin && <NotificationBell />}
               <Link to="/profile" className="hidden lg:flex items-center hover:opacity-80 transition-opacity">
-                <span className="text-sm text-gray-600 mr-3">{userDisplayName}</span>
+                <span className="text-sm text-gray-600 dark:text-gray-300 mr-3">{userDisplayName}</span>
                 {user?.profile_photo_url ? (
                   <img
                     src={user.profile_photo_url}
@@ -928,8 +994,8 @@ export default function Layout() {
                     className="w-8 h-8 rounded-full object-cover"
                   />
                 ) : (
-                  <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center">
-                    <span className="text-primary-700 font-medium text-sm">
+                  <div className="w-8 h-8 rounded-full bg-primary-100 dark:bg-primary-900/40 flex items-center justify-center">
+                    <span className="text-primary-700 dark:text-primary-300 font-medium text-sm">
                       {userAvatarInitial}
                     </span>
                   </div>

@@ -2,6 +2,9 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { hrApi } from '../../services/api'
 import { useToast } from '../../components/Toast'
+import Spinner from '../../components/ui/Spinner'
+import Badge from '../../components/ui/Badge'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 const PRESET_DEPARTMENTS = [
   { name: 'Teaching', description: 'Academic teaching staff' },
@@ -207,6 +210,11 @@ export default function DepartmentsPage() {
     setDesigForm({ name: '', department: '' })
   }
 
+  useEscapeKey(closeDeptModal, showDeptModal)
+  useEscapeKey(closeDesigModal, showDesigModal)
+  useEscapeKey(() => setDeleteDeptConfirm(null), !!deleteDeptConfirm)
+  useEscapeKey(() => setDeleteDesigConfirm(null), !!deleteDesigConfirm)
+
   const handleDesigSubmit = () => {
     if (!desigForm.name) {
       showError('Designation name is required.')
@@ -338,7 +346,7 @@ export default function DepartmentsPage() {
 
         {deptLoading ? (
           <div className="text-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+            <Spinner size="md" className="mx-auto" />
           </div>
         ) : departments.length === 0 ? (
           <div className="card text-center py-8 text-gray-500">
@@ -350,9 +358,9 @@ export default function DepartmentsPage() {
               <div key={dept.id} className="card">
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-base font-semibold text-gray-900">{dept.name}</h3>
-                  <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                  <Badge tone="info">
                     {dept.staff_count || 0} staff
-                  </span>
+                  </Badge>
                 </div>
                 {dept.description && (
                   <p className="text-sm text-gray-500 mb-3">{dept.description}</p>
@@ -419,7 +427,7 @@ export default function DepartmentsPage() {
 
         {desigLoading ? (
           <div className="text-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+            <Spinner size="md" className="mx-auto" />
           </div>
         ) : designations.length === 0 ? (
           <div className="card text-center py-8 text-gray-500">

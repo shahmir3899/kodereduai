@@ -9,6 +9,8 @@ import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/cla
 import ExamWizard from './ExamWizard'
 import BulkTestModal from './BulkTestModal'
 import { useConfirmModal } from '../../components/ConfirmModal'
+import Spinner from '../../components/ui/Spinner'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 const createEmptyForm = (academicYearId = '', termId = '') => ({
   academic_year: academicYearId ? String(academicYearId) : '',
@@ -135,6 +137,7 @@ export function buildSubjectPoolByExam(subjects) {
 // its default mid-edit. Exported (not just module-scoped) so it can be tested
 // directly without mounting all of ExamsPage's other queries/contexts.
 export function DateSheetModal({ groupId, onClose: closeDateSheet, queryClient, setListError }) {
+  useEscapeKey(closeDateSheet)
   const [localRows, setLocalRows] = useState([])
   const [saving, setSaving] = useState(new Set())
   const [savingCells, setSavingCells] = useState(new Set())
@@ -395,7 +398,7 @@ export function DateSheetModal({ groupId, onClose: closeDateSheet, queryClient, 
 
         {dsLoading ? (
           <div className="text-center py-8">
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600 mx-auto"></div>
+            <Spinner size="sm" className="mx-auto" />
           </div>
         ) : localRows.length === 0 ? (
           <p className="text-sm text-gray-500 text-center py-8">No subjects found in this exam group.</p>
@@ -428,7 +431,7 @@ export function DateSheetModal({ groupId, onClose: closeDateSheet, queryClient, 
                         <div className="flex items-center gap-1.5">
                           <span>{date}</span>
                           {rowIsSaving ? (
-                            <span className="animate-spin rounded-full h-2.5 w-2.5 border-b-2 border-primary-600" />
+                            <Spinner size="h-2.5 w-2.5" />
                           ) : rowIsRemovable && (
                             <button
                               type="button"
@@ -465,7 +468,7 @@ export function DateSheetModal({ groupId, onClose: closeDateSheet, queryClient, 
                               className={`w-full min-h-[30px] text-left rounded border px-2 py-1 flex flex-wrap gap-1 items-center text-xs ${isOpen ? 'border-primary-500 ring-1 ring-primary-200 bg-primary-50' : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'}`}
                             >
                               {isSaving ? (
-                                <span className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary-600" />
+                                <Spinner size="h-3 w-3" />
                               ) : selectedIds.length === 0 ? (
                                 <span className="text-gray-300">+ Add subjects</span>
                               ) : selectedIds.map(id => {
@@ -585,7 +588,7 @@ export function DateSheetModal({ groupId, onClose: closeDateSheet, queryClient, 
                           className="input text-sm py-1 w-full" disabled={isSaving} />
                       </td>
                       <td className="px-3 py-2 text-center">
-                        {isSaving && <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary-600 mx-auto" />}
+                        {isSaving && <Spinner size="h-3 w-3" className="mx-auto" />}
                       </td>
                     </tr>
                   )
@@ -914,6 +917,8 @@ export default function ExamsPage() {
   }
   const closeModal = () => { setShowModal(false); setEditId(null); setForm(getDefaultForm()); setErrors({}); setSelectedSubjects([]); setTestScheduleRows([]) }
 
+  useEscapeKey(closeModal, showModal)
+
   // Find editing exam in either standalone list or inside group exams
   const editingExam = useMemo(() => {
     if (!editId) return null
@@ -1141,7 +1146,7 @@ export default function ExamsPage() {
 
       {isLoading ? (
         <div className="text-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+          <Spinner size="md" className="mx-auto" />
         </div>
       ) : (
         <>
@@ -1717,7 +1722,7 @@ export default function ExamsPage() {
                 <div>
                   {classSubjectsLoading ? (
                     <div className="flex items-center gap-2 text-sm text-gray-500">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-600"></div>
+                      <Spinner size="xs" />
                       Checking class subjects...
                     </div>
                   ) : classSubjects.length > 0 ? (

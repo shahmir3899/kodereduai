@@ -3,6 +3,9 @@ import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../../contexts/AuthContext'
 import { parentsApi } from '../../services/api'
+import Spinner from '../../components/ui/Spinner'
+import Button from '../../components/ui/Button'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 export default function ParentMessages() {
   const { user } = useAuth()
@@ -11,6 +14,8 @@ export default function ParentMessages() {
 
   const [selectedThread, setSelectedThread] = useState(null)
   const [showNewMessage, setShowNewMessage] = useState(false)
+
+  useEscapeKey(() => setShowNewMessage(false), showNewMessage)
   const [mobileView, setMobileView] = useState('threads') // 'threads' | 'messages'
   const [messageText, setMessageText] = useState('')
 
@@ -152,15 +157,12 @@ export default function ParentMessages() {
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Messages</h1>
           <p className="text-sm text-gray-500 mt-1">Communicate with teachers</p>
         </div>
-        <button
-          onClick={() => setShowNewMessage(true)}
-          className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors flex items-center gap-2"
-        >
+        <Button onClick={() => setShowNewMessage(true)}>
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
           </svg>
           <span className="hidden sm:inline">New Message</span>
-        </button>
+        </Button>
       </div>
 
       {/* New Message Modal */}
@@ -252,7 +254,7 @@ export default function ParentMessages() {
 
             {threadsLoading ? (
               <div className="flex items-center justify-center py-12 flex-1">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600" />
+                <Spinner size="sm" />
               </div>
             ) : threads.length === 0 ? (
               <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
@@ -357,7 +359,7 @@ export default function ParentMessages() {
                 <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50">
                   {messagesLoading ? (
                     <div className="flex items-center justify-center py-10">
-                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600" />
+                      <Spinner size="sm" />
                     </div>
                   ) : messages.length === 0 ? (
                     <div className="text-center py-10">

@@ -152,6 +152,10 @@ flowchart TD
 - Classification: `question_type`, `difficulty_level`, `bloom_level`, `marks`
 - MCQ fields: `option_a`..`option_d`, `correct_answer`
 - Subjective fields: `answer_text`, `type_data` (JSON)
+- Diagram Mode: `option_a_image_url`..`option_d_image_url`, `answer_image_url` (all
+  nullable, alongside `question_image_url` above) — a drawn/pasted figure per slot,
+  written only via `POST /questions/{id}/diagram/` (see 4.4 and `DiagramCanvas.jsx`).
+  `answer_image_url` has no export consumer yet, same as `answer_text`.
 - Curriculum linkage: `tested_topics` (M2M -> `lms.Topic`)
 - Source/AI metadata: `source_content_block`, `is_ai_generated`, `verified_by`, `verified_at`
 - Embeddings/analytics: `embedding`, `paper_use_count`, `last_used_in`, `last_used_at`
@@ -190,6 +194,25 @@ flowchart TD
 
 ### `examinations.PaperUpload`
 - Stores uploaded paper image and OCR extraction lifecycle.
+
+### `examinations.Worksheet` (NEW — 2026-09)
+- `school`, `class_obj` (FKs), `subject` (FK, **nullable** — cross-subject/general worksheets allowed)
+- Metadata: `title`, `instructions`, `tested_topics` (M2M -> `lms.Topic`)
+- `structure`, `render_options` (JSON) — **same shape as `ExamPaper.structure`/`render_options`**, so PDF/DOCX export shares its section/numbering logic with the paper builder via `paper_export_layout._build_blocks()` instead of duplicating it
+- Questions: M2M through `WorksheetItem`
+- Workflow: `status` (`DRAFT`/`READY`/`PUBLISHED`), `source` (`MANUAL`/`SCAN`/`BANK`), `created_by`, `is_active`, timestamps
+- **Deliberately has no `exam`/`exam_subject`/`total_marks`/`duration_minutes`** — a worksheet carries no exam-lifecycle or grading semantics; this is a sibling model of `ExamPaper`, not a special case of it. No answer-key export either (scoped out — worksheets are usually ungraded).
+
+### `examinations.WorksheetItem` (through model, NEW — 2026-09)
+- `worksheet` (FK), `question` (FK -> `examinations.Question`, the same bank question model — no separate worksheet-only question type)
+- `item_order`, `section_key`, `marks_override` (nullable)
+- `item_snapshot` (frozen JSON, same pattern as `PaperQuestion.question_snapshot`)
+- Unique: `(worksheet, question)`
+- Field names and `get_marks()`/`get_question_data()` methods deliberately mirror `PaperQuestion` so the shared export-layout code can treat either model's rows identically.
+
+### `examinations.WorksheetUpload` (NEW — 2026-09)
+- Stores uploaded worksheet images and OCR extraction lifecycle — same shape as `PaperUpload`, kept as a separate model rather than a nullable `worksheet` FK bolted onto it (would blur exam-paper capture and worksheet capture in one table).
+- The OCR extraction itself (`PaperOCRProcessor`) is fully shared with the paper builder's scan pipeline; only this model and its Celery task (`process_worksheet_upload_ocr`) differ, and skip the multi-page continuation-context building `process_paper_upload_ocr` does (worksheets are almost always single-page).
 
 ---
 
@@ -330,6 +353,14 @@ Step 3: Add Questions + Coverage
   or **Capture from image** (`ImageCapturePaperTab`)
 - Question editor fields: `question_text`, `question_type`, `difficulty_level`,
   `marks`, type-specific options/answers
+- **Diagram Mode**: a "✎ Diagram" toggle in `RichTextEditor.jsx`'s toolbar (question
+  body) and a small square trigger next to each MCQ option / the model-answer field
+  (`QuestionSlotEditor.jsx`) open `DiagramCanvas.jsx` — an inline pen/shapes/eraser
+  canvas plus a paste/drop "Import image" tab, no search UI or API key. A freshly
+  typed question with no `question_id` yet gets one created automatically on first
+  diagram attach (`ensureQuestionId()`), promoting it into the question bank a little
+  earlier than it otherwise would be. `DiagramCanvas` itself is upload-agnostic — it
+  hands the caller a plain `File` via `onInsert`, never calls the API directly.
 - FILL_BLANK no longer requires `accepted_answers`/`answer_text` up front (backend and
   editor both relax this) — a blank can be created before its answer is known and filled
   in later; it just can't auto-grade until then. Same relaxation applies to
@@ -377,7 +408,45 @@ autosave rather than on a timer.
   crash ReportLab's PDF `Paragraph` parser outright, and `strip_tags` in the DOCX path
   would concatenate KaTeX's MathML glyphs, its `<annotation>` LaTeX source, and stray
   visual-tree text into garbled duplicated output. RTL shaping itself is still
-  unsolved — the `dir`/`lang` wrapper is dropped, not rendered right-to-left.
+  unsolved — the `dir`/`lang` wrapper is dropped, not rendered right-to-left. This is
+  also why Diagram Mode images are never embedded inline in `question_text`'s HTML —
+  an `<img>` there would simply be dropped by this sanitizer, same as any other
+  unlisted tag — they're stored as their own `Question.*_image_url` fields instead.
+- Diagram Mode images: `paper_export_layout.py`'s shared render item carries
+  `question_image_url` and a per-option `option_images` dict through to both
+  generators. Neither ReportLab's `Image` nor python-docx's `add_picture` can take a
+  URL directly (both need real bytes), so `pdf_generator._load_image_stream` /
+  `docx_generator._fetch_image_stream` fetch the image first — mirroring the existing
+  school-logo fetch pattern in each file. An unreachable image degrades to "no image"
+  rather than failing the export.
+
+## 3.5 Worksheets page (`/academics/worksheets`) — NEW, 2026-09
+
+Sibling feature of the Paper Builder, reusing its authoring machinery rather than
+duplicating it — deliberately scoped smaller (no answer-key export, no exam-lifecycle
+fields) per the feature's design decisions.
+
+`WorksheetsPage.jsx` (list) — same filter/table/download shell as `ExamPapersPage.jsx`
+(class/subject/status/search filters, PDF/DOCX download), plus a **Duplicate** action
+exam papers don't have (clones a worksheet with its items as a new `DRAFT` — handy for
+reusing one worksheet across sections of the same class).
+
+`WorksheetBuilderPage.jsx` (create/edit) — draft-first persistence like the paper
+builder (`ensure-draft` + debounced `autosave`), with tabs instead of a step wizard:
+- **Sections** — `PaperStructureBuilder.jsx`, reused unmodified (same `structure` shape)
+- **Add Manually** — `RichTextEditor.jsx` with Diagram Mode, reused unmodified; a
+  freshly typed item with no `question_id` yet gets one created on first diagram
+  attach, same `ensureQuestionId()` pattern as the paper builder's `QuestionSlotEditor`
+- **From Bank** — `QuestionBankPicker.jsx`, reused unmodified
+- **Scan Image** — uploads to `worksheet-uploads/upload-image/`, polls extraction
+  status, then "Import into worksheet" maps the AI-extracted sections/questions into
+  `structure`/manual items. Simpler than the paper builder's `ImageCapturePaperTab.jsx`
+  — no multi-page-grouping UI, since worksheets are almost always single-page
+- **Items** — read-only review list of everything added so far, across all three
+  sources above
+
+No total-marks/duration-minutes fields anywhere in this UI (worksheets carry no
+exam-lifecycle data), and no answer-key generation.
 
 ---
 
@@ -445,6 +514,12 @@ Question management:
 - Actions:
   - `POST /api/examinations/questions/{id}/add_tag/`
   - `GET /api/examinations/questions/semantic_search/?q=&limit=`
+  - `POST /api/examinations/questions/{id}/diagram/` — Diagram Mode upload/replace.
+    Multipart `{slot: question|option_a|option_b|option_c|option_d|answer, file}`,
+    returns `{slot, <field>_image_url, message}`. `file` is validated the same as a
+    profile-photo upload (`validate_photo_upload`: jpeg/png/webp, 5MB cap)
+  - `POST /api/examinations/questions/{id}/remove_diagram/` — body `{slot}`, clears
+    that slot and deletes the file from Supabase Storage
 
 Lesson-plan linked question operations:
 - `GET /api/examinations/questions/by_lesson_plan/?lesson_plan_id=`
@@ -481,6 +556,35 @@ Export/review:
 - `GET /api/examinations/exam-papers/{id}/generate-pdf/`
 - `GET /api/examinations/exam-papers/{id}/generate-docx/`
 - `POST /api/examinations/exam-papers/review-questions/`
+
+## 4.4a Worksheets (`/academics/worksheets`) — NEW, 2026-09
+
+Draft/manual flow (same ensure-draft + autosave contract as 4.4, minus exam-lifecycle
+fields — `manual_items` in place of `manual_questions`, `item_order` in place of
+`question_order`):
+- `POST /api/examinations/worksheets/ensure-draft/`
+- `POST /api/examinations/worksheets/{id}/autosave/`
+- `GET /api/examinations/worksheets/{id}/` (resume/read, includes `items`, `item_count`)
+
+Worksheet CRUD and duplication:
+- `GET/POST /api/examinations/worksheets/`
+- `GET/PATCH/DELETE /api/examinations/worksheets/{id}/` — soft-delete via `is_active=False`
+- `POST /api/examinations/worksheets/{id}/duplicate/` — clones the worksheet and its
+  items as a new `DRAFT`
+
+Export (no answer-key action — scoped out for this feature):
+- `GET /api/examinations/worksheets/{id}/generate-pdf/`
+- `GET /api/examinations/worksheets/{id}/generate-docx/`
+
+Image-scan capture (same OCR pipeline as `paper-uploads/`, via the shared
+`PaperOCRProcessor`; the Celery task differs only in skipping multi-page continuation
+context — see 3.5):
+- `POST /api/examinations/worksheet-uploads/upload-image/`
+- `GET /api/examinations/worksheet-uploads/{id}/` (poll extraction status)
+- `POST /api/examinations/worksheet-uploads/{id}/confirm/` — body `{worksheet_id}`,
+  requires upload status `EXTRACTED`; no `PaperFeedback`-equivalent learning-loop row
+  is written (that model is scoped to `PaperUpload`, and worksheets deliberately don't
+  get an equivalent)
 
 OCR paper capture flow:
 - `POST /api/examinations/paper-uploads/upload-image/` — routes through
@@ -534,6 +638,24 @@ OCR paper capture flow:
   (see note 5) before soft-deleting — a gap that previously let any authenticated
   school user delete another teacher's paper.
 
+9. `frontend/src/services/api.js` has two separate exports for this domain.
+- `examinationsApi` (exam types/exams/marks/grade scales) and `questionPaperApi`
+  (questions, exam papers, paper uploads — everything this doc's Question Bank and
+  Paper Builder sections cover, including the Diagram Mode endpoints in 4.3) are
+  distinct objects, not one — `import { examinationsApi }` when you meant
+  `questionPaperApi` fails at call time (`... is not a function`), not at import
+  time, so it's easy to miss until the button is actually clicked.
+
+10. `QuestionCreateUpdateSerializer` and `QuestionSerializer` both had to be told
+    to include `id` (create/update) and the Diagram Mode `*_image_url` fields (both
+    serializers) explicitly.
+- `ModelSerializer` does NOT auto-include `id` (or any field) once `Meta.fields` is
+  spelled out as an explicit list rather than `'__all__'` — an omission here is
+  silent, not an error. `QuestionCreateUpdateSerializer` shipped without `id` in that
+  list, which made `POST /questions/` responses carry no `id` at all; the frontend's
+  post-create tag-attach in `QuestionsPage.jsx` (`response.data.id`) had been quietly
+  failing before this was ever noticed.
+
 9. Question content-completeness validation only applies to newly-authored questions.
 - Attaching an existing bank question to a paper (`review-questions` attach-by-reference)
   skips `QuestionCreateUpdateSerializer` validation entirely and reuses the question's
@@ -548,3 +670,28 @@ OCR paper capture flow:
   the PDF (ReportLab `Paragraph`) or DOCX (`strip_tags`-based) exporter sees it; extend
   it rather than adding ad hoc tag-stripping in either generator.
 - Content and question editing now keeps revision history for restore and traceability.
+
+11. Worksheets (NEW, 2026-09) are a sibling of `ExamPaper`, not a special case of it.
+- Deliberately no `exam`/`exam_subject`/`total_marks`/`duration_minutes` fields at
+  all — not nullable versions of them — because a worksheet has no exam-lifecycle or
+  grading semantics. If a future requirement needs worksheets to carry marks/grading,
+  reconsider the model split rather than bolting exam fields onto `Worksheet`.
+- Export code is shared, not duplicated: `paper_export_layout.py`'s section/numbering
+  body was extracted into `_build_blocks(structure, items, render_options, seed)`,
+  called by both `build_export_layout` (exam papers) and the new
+  `build_worksheet_export_layout` (worksheets). `WorksheetPDFGenerator`/
+  `WorksheetDOCXGenerator` subclass the exam generators purely to reuse their
+  section/question-rendering helpers (none of which touch `self.exam_paper`), with
+  their own leaner header (no candidate total-marks cell, no examiner-marks box).
+- `WorksheetUpload` is its own model, not a nullable `worksheet` FK on `PaperUpload`
+  — kept exam-paper capture and worksheet capture from blurring into one table. The
+  OCR extraction itself (`PaperOCRProcessor`) is still fully shared.
+- No answer-key export and no `PaperFeedback`-equivalent learning-loop row — both
+  deliberately scoped out for this feature (worksheets are usually ungraded).
+- Frontend reuse is direct, not forked: `RichTextEditor.jsx` (+ Diagram Mode),
+  `QuestionBankPicker.jsx`, and `PaperStructureBuilder.jsx` are used unmodified by
+  `WorksheetBuilderPage.jsx` — only `QuestionSlotEditor.jsx`'s exam-specific
+  autosave wiring was *not* reused, in favor of a dedicated, simpler composer.
+- Route mapping: `/academics/worksheets` -> `WorksheetsPage.jsx`,
+  `/academics/worksheets/:worksheetId` -> `WorksheetBuilderPage.jsx` (id `new` shows
+  a class/subject/title picker that creates the draft and redirects).

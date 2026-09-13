@@ -1,6 +1,18 @@
 import { Fragment, useMemo, useState } from 'react'
 import RichTextEditor from '../../components/RichTextEditor'
+import DiagramCanvas from '../../components/DiagramCanvas'
 import QuestionBankPicker, { QUESTION_TYPES, getQuestionReuseCount, toDraftQuestionFromBank } from './QuestionBankPicker'
+import { questionPaperApi } from '../../services/api'
+
+// Maps the composer's option letters to the backend's diagram slot names / model
+// fields (see QuestionViewSet.DIAGRAM_SLOT_FIELDS and Question.option_a_image_url
+// etc. on the backend).
+const OPTION_DIAGRAM_SLOTS = {
+  A: 'option_a',
+  B: 'option_b',
+  C: 'option_c',
+  D: 'option_d',
+}
 
 const QUESTION_TYPE_LABELS = QUESTION_TYPES.reduce((acc, type) => {
   acc[type.value] = type.label
@@ -11,14 +23,20 @@ const EMPTY_QUESTION = {
   local_id: null,
   question_id: null,
   question_text: '',
+  question_image_url: null,
   question_type: 'SHORT',
   difficulty_level: 'MEDIUM',
   bloom_level: '',
   marks: 1,
   correct_answer: '',
   answer_text: '',
+  answer_image_url: null,
   type_data: {},
   options: { A: '', B: '', C: '', D: '' },
+  option_a_image_url: null,
+  option_b_image_url: null,
+  option_c_image_url: null,
+  option_d_image_url: null,
   section_key: '',
 }
 
@@ -57,6 +75,10 @@ export default function QuestionSlotEditor({
   const [composerTarget, setComposerTarget] = useState(null) // { sectionKey, localId }
   const [errors, setErrors] = useState({})
   const [showBankPicker, setShowBankPicker] = useState(false)
+  // Which non-RichTextEditor diagram slot has its panel open -- 'option_A'..'option_D'
+  // or 'answer'. Question-body diagrams are handled inside RichTextEditor itself; these
+  // slots are plain <input>/<textarea> fields so DiagramCanvas is used standalone here.
+  const [diagramSlotOpen, setDiagramSlotOpen] = useState(null)
   const [bankPickerSection, setBankPickerSection] = useState(null) // null = unassigned/global attach
 
   const saveStateLabel = useMemo(() => {
@@ -125,6 +147,102 @@ export default function QuestionSlotEditor({
     setComposerTarget(null)
     resetQuestion()
     setErrors({})
+  }
+
+  // Diagram Mode (question body only for now -- see RichTextEditor's `diagram` prop).
+  // The upload endpoint is question-scoped (POST /questions/{id}/diagram/), but a
+  // manually-typed question in this composer has no id until the paper is confirmed
+  // server-side -- so the first diagram attach on a brand-new question silently
+  // creates its Question row early (via the same bank-create endpoint QuestionsPage
+  // uses), then uploads to it. This promotes the question into the bank a little
+  // earlier than it otherwise would be, which is the intended trade-off: it's the
+  // only way to give it a real id without a second, diagram-only draft-persistence
+  // path. buildQuestionCreatePayload is deliberately separate from handleSaveQuestion's
+  // own normalization below -- that one only ever writes to local draft state, this
+  // one has to match what QuestionCreateUpdateSerializer accepts.
+  const buildQuestionCreatePayload = (question) => {
+    const payload = {
+      subject: subjectId,
+      question_text: question.question_text,
+      question_type: question.question_type,
+      difficulty_level: question.difficulty_level || 'MEDIUM',
+      marks: Number(question.marks) || 1,
+      correct_answer: question.correct_answer || '',
+      answer_text: question.answer_text || '',
+      type_data: question.type_data || {},
+    }
+    if (question.question_type === 'MCQ') {
+      payload.option_a = question.options?.A || ''
+      payload.option_b = question.options?.B || ''
+      payload.option_c = question.options?.C || ''
+      payload.option_d = question.options?.D || ''
+    }
+    if (question.question_type === 'FILL_BLANK') {
+      const items = (question.type_data?.items || []).filter((value) => String(value || '').trim())
+      payload.type_data = { ...payload.type_data, items, accepted_answers: items }
+    }
+    return payload
+  }
+
+  const ensureQuestionId = async () => {
+    if (currentQuestion.question_id) return currentQuestion.question_id
+    if (!subjectId) {
+      throw new Error('Pick a subject for this paper before attaching a diagram.')
+    }
+    const { data } = await questionPaperApi.createQuestion(buildQuestionCreatePayload(currentQuestion))
+    setCurrentQuestion((prev) => ({ ...prev, question_id: data.id }))
+    return data.id
+  }
+
+  const handleQuestionDiagramInsert = async (file) => {
+    try {
+      const questionId = await ensureQuestionId()
+      const { data } = await questionPaperApi.uploadQuestionDiagram(questionId, 'question', file)
+      setCurrentQuestion((prev) => ({ ...prev, question_image_url: data.question_image_url }))
+      setErrors((prev) => ({ ...prev, question_image_url: undefined }))
+    } catch (err) {
+      setErrors((prev) => ({
+        ...prev,
+        question_image_url: err?.response?.data?.error || err?.message || 'Failed to upload diagram.',
+      }))
+    }
+  }
+
+  const handleQuestionDiagramRemove = async () => {
+    if (!currentQuestion.question_id) return
+    try {
+      await questionPaperApi.removeQuestionDiagram(currentQuestion.question_id, 'question')
+      setCurrentQuestion((prev) => ({ ...prev, question_image_url: null }))
+    } catch (err) {
+      setErrors((prev) => ({ ...prev, question_image_url: err?.response?.data?.error || 'Failed to remove diagram.' }))
+    }
+  }
+
+  // Same create-on-first-attach + upload/remove pair as the question body, generalized
+  // over any slot's field name (option_a_image_url..option_d_image_url, answer_image_url).
+  const handleSlotDiagramInsert = async (slot, fieldName, file) => {
+    try {
+      const questionId = await ensureQuestionId()
+      const { data } = await questionPaperApi.uploadQuestionDiagram(questionId, slot, file)
+      setCurrentQuestion((prev) => ({ ...prev, [fieldName]: data[fieldName] }))
+      setErrors((prev) => ({ ...prev, [fieldName]: undefined }))
+    } catch (err) {
+      setErrors((prev) => ({
+        ...prev,
+        [fieldName]: err?.response?.data?.error || err?.message || 'Failed to upload diagram.',
+      }))
+    }
+    setDiagramSlotOpen(null)
+  }
+
+  const handleSlotDiagramRemove = async (slot, fieldName) => {
+    if (!currentQuestion.question_id) return
+    try {
+      await questionPaperApi.removeQuestionDiagram(currentQuestion.question_id, slot)
+      setCurrentQuestion((prev) => ({ ...prev, [fieldName]: null }))
+    } catch (err) {
+      setErrors((prev) => ({ ...prev, [fieldName]: err?.response?.data?.error || 'Failed to remove diagram.' }))
+    }
   }
 
   const openBankPicker = (section) => {
@@ -397,9 +515,23 @@ export default function QuestionSlotEditor({
             setCurrentQuestion({ ...currentQuestion, question_text: html })
           }
           placeholder="Type your question here..."
+          diagram={{
+            imageUrl: currentQuestion.question_image_url,
+            targetLabel: 'Question body',
+            onInsert: handleQuestionDiagramInsert,
+            onRemove: currentQuestion.question_image_url ? handleQuestionDiagramRemove : undefined,
+          }}
         />
         {errors.question_text && (
           <p className="text-red-500 text-sm mt-1">{errors.question_text}</p>
+        )}
+        {errors.question_image_url && (
+          <p className="text-red-500 text-sm mt-1">{errors.question_image_url}</p>
+        )}
+        {!currentQuestion.question_id && (
+          <p className="text-xs text-gray-400 mt-1">
+            Attaching a diagram saves this question to the question bank right away, ahead of the rest of the paper.
+          </p>
         )}
       </div>
 
@@ -407,24 +539,69 @@ export default function QuestionSlotEditor({
       {currentQuestion.question_type === 'MCQ' && (
         <div className="space-y-3 mb-4 bg-white p-4 rounded border border-gray-200">
           <p className="text-sm font-semibold text-gray-700">MCQ Options</p>
-          {['A', 'B', 'C', 'D'].map((option) => (
-            <div key={option} className="flex gap-2">
-              <label className="font-bold text-gray-700 w-6">{option}.</label>
-              <input
-                type="text"
-                value={currentQuestion.options[option]}
-                onChange={(e) =>
-                  setCurrentQuestion({
-                    ...currentQuestion,
-                    options: { ...currentQuestion.options, [option]: e.target.value },
-                  })
-                }
-                placeholder={`Option ${option}`}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-          ))}
+          {['A', 'B', 'C', 'D'].map((option) => {
+            const slot = OPTION_DIAGRAM_SLOTS[option]
+            const fieldName = `${slot}_image_url`
+            const imageUrl = currentQuestion[fieldName]
+            const slotKey = `option_${option}`
+            const isOpen = diagramSlotOpen === slotKey
+            return (
+              <Fragment key={option}>
+                <div className="flex gap-2">
+                  <label className="font-bold text-gray-700 w-6 pt-2">{option}.</label>
+                  <input
+                    type="text"
+                    value={currentQuestion.options[option]}
+                    onChange={(e) =>
+                      setCurrentQuestion({
+                        ...currentQuestion,
+                        options: { ...currentQuestion.options, [option]: e.target.value },
+                      })
+                    }
+                    placeholder={`Option ${option}`}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setDiagramSlotOpen(isOpen ? null : slotKey)}
+                    title={`Draw or paste a diagram for option ${option} (e.g. "which shape is a rhombus?")`}
+                    className={`w-10 h-10 flex-none rounded border overflow-hidden flex items-center justify-center ${isOpen ? 'border-emerald-500 ring-2 ring-emerald-200' : imageUrl ? 'border-gray-300' : 'border-dashed border-gray-300 text-gray-400'}`}
+                  >
+                    {imageUrl ? (
+                      <img src={imageUrl} alt={`Option ${option} diagram`} className="w-full h-full object-contain bg-white" />
+                    ) : (
+                      <span className="text-[9px] leading-tight">Draw</span>
+                    )}
+                  </button>
+                </div>
+                {errors[fieldName] && <p className="text-red-500 text-xs ml-8">{errors[fieldName]}</p>}
+                {isOpen && (
+                  <div className="ml-8">
+                    <DiagramCanvas
+                      targetLabel={`Option ${option}`}
+                      onClose={() => setDiagramSlotOpen(null)}
+                      onInsert={(file) => handleSlotDiagramInsert(slot, fieldName, file)}
+                    />
+                    {imageUrl && (
+                      <button
+                        type="button"
+                        onClick={() => handleSlotDiagramRemove(slot, fieldName)}
+                        className="text-xs text-red-600 hover:underline mt-1"
+                      >
+                        Remove diagram
+                      </button>
+                    )}
+                  </div>
+                )}
+              </Fragment>
+            )
+          })}
           {errors.options && <p className="text-red-500 text-sm">{errors.options}</p>}
+          {!currentQuestion.question_id && (
+            <p className="text-xs text-gray-400">
+              Attaching a diagram saves this question to the question bank right away, ahead of the rest of the paper.
+            </p>
+          )}
         </div>
       )}
 
@@ -551,7 +728,16 @@ export default function QuestionSlotEditor({
       {/* Model answer (used for grading — required by the backend for SHORT/LONG/ESSAY) */}
       {['SHORT', 'LONG', 'ESSAY'].includes(currentQuestion.question_type) && (
         <div className="space-y-2 mb-4 bg-white p-4 rounded border border-gray-200">
-          <p className="text-sm font-semibold text-gray-700">Model Answer / Marking Guide</p>
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold text-gray-700">Model Answer / Marking Guide</p>
+            <button
+              type="button"
+              onClick={() => setDiagramSlotOpen(diagramSlotOpen === 'answer' ? null : 'answer')}
+              className={`text-xs px-2 py-1 rounded border ${diagramSlotOpen === 'answer' ? 'border-emerald-500 text-emerald-700 bg-emerald-50' : 'border-gray-300 text-gray-600'}`}
+            >
+              ✎ {currentQuestion.answer_image_url ? 'Diagram attached' : 'Add diagram'}
+            </button>
+          </div>
           <textarea
             value={currentQuestion.answer_text}
             onChange={(e) => setCurrentQuestion({ ...currentQuestion, answer_text: e.target.value })}
@@ -560,6 +746,39 @@ export default function QuestionSlotEditor({
             className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
           {errors.answer_text && <p className="text-red-500 text-sm">{errors.answer_text}</p>}
+          {errors.answer_image_url && <p className="text-red-500 text-sm">{errors.answer_image_url}</p>}
+
+          {currentQuestion.answer_image_url && diagramSlotOpen !== 'answer' && (
+            <div className="flex items-center gap-2">
+              <div className="w-14 h-14 border border-gray-300 rounded overflow-hidden bg-white flex-none">
+                <img src={currentQuestion.answer_image_url} alt="Model answer diagram" className="w-full h-full object-contain" />
+              </div>
+              <span className="text-xs text-gray-400">Worked-out diagram, teacher-facing only.</span>
+            </div>
+          )}
+          {diagramSlotOpen === 'answer' && (
+            <div>
+              <DiagramCanvas
+                targetLabel="Model answer"
+                onClose={() => setDiagramSlotOpen(null)}
+                onInsert={(file) => handleSlotDiagramInsert('answer', 'answer_image_url', file)}
+              />
+              {currentQuestion.answer_image_url && (
+                <button
+                  type="button"
+                  onClick={() => handleSlotDiagramRemove('answer', 'answer_image_url')}
+                  className="text-xs text-red-600 hover:underline mt-1"
+                >
+                  Remove diagram
+                </button>
+              )}
+            </div>
+          )}
+          {!currentQuestion.question_id && (
+            <p className="text-xs text-gray-400">
+              Attaching a diagram saves this question to the question bank right away, ahead of the rest of the paper.
+            </p>
+          )}
         </div>
       )}
 

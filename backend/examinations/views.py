@@ -10,6 +10,7 @@ from pgvector.django import CosineDistance
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -24,7 +25,7 @@ from lms.models import Tag, QuestionTag
 from .models import (
     ExamType, ExamGroup, Exam, ExamSubject, StudentMark, GradeScale,
     Question, ExamPaper, PaperQuestion, StudentResponse, PaperUpload, PaperFeedback,
-    StudentTermAssessment,
+    StudentTermAssessment, Worksheet, WorksheetItem, WorksheetUpload,
 )
 from .serializers import (
     ExamTypeSerializer, ExamTypeCreateSerializer,
@@ -43,6 +44,8 @@ from .serializers import (
     PaperUploadSerializer, PaperUploadCreateSerializer,
     StudentTermAssessmentSerializer,
     PaperFeedbackSerializer, QuestionReviewSerializer,
+    WorksheetSerializer, WorksheetDraftEnsureSerializer, WorksheetDraftAutosaveSerializer,
+    WorksheetUploadSerializer, WorksheetUploadCreateSerializer,
 )
 from .tasks import recompute_question_stats
 
@@ -162,7 +165,7 @@ def _can_manage_exam_papers(request, class_id=None, subject_id=None, school_id=N
     for subjects they don't teach in that class.
     """
     role = get_effective_role(request)
-    if role in ADMIN_ROLES:
+    if role in ADMIN_ROLES or role == 'MANAGER':
         return True
     if role != 'TEACHER':
         return False
@@ -3157,6 +3160,89 @@ Respond with ONLY a JSON array, no extra text:
         serializer = self.get_serializer(qs, many=True)
         return Response(serializer.data)
 
+    # Diagram Mode (Paper Builder): a drawn/pasted figure attaches to one of these
+    # slots -- the question body, one of the four MCQ options, or the model answer
+    # -- each stored as its own Question.*_image_url field rather than embedded in
+    # question_text, so PDF/DOCX export renders it as an Image flowable (see
+    # pdf_generator.py) instead of it being silently stripped by html_sanitize.py.
+    DIAGRAM_SLOT_FIELDS = {
+        'question': 'question_image_url',
+        'option_a': 'option_a_image_url',
+        'option_b': 'option_b_image_url',
+        'option_c': 'option_c_image_url',
+        'option_d': 'option_d_image_url',
+        'answer': 'answer_image_url',
+    }
+
+    @action(detail=True, methods=['post'], parser_classes=[MultiPartParser, FormParser])
+    def diagram(self, request, pk=None):
+        """Upload (or replace) a Diagram Mode image for one slot on this question."""
+        from core.storage import storage_service, validate_photo_upload
+
+        question = self.get_object()
+
+        slot = request.data.get('slot')
+        field_name = self.DIAGRAM_SLOT_FIELDS.get(slot)
+        if not field_name:
+            return Response(
+                {'error': f"slot must be one of: {', '.join(self.DIAGRAM_SLOT_FIELDS)}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if 'file' not in request.FILES:
+            return Response({'error': 'No file provided.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        file = request.FILES['file']
+        try:
+            validate_photo_upload(file)
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            # Unlike upload_photo's fixed path-per-entity, upload_question_diagram
+            # mints a fresh URL per upload -- so the old file is now orphaned and
+            # needs an explicit delete rather than being overwritten in place.
+            old_url = getattr(question, field_name)
+            if old_url:
+                old_path = storage_service._extract_storage_path(old_url)
+                if old_path:
+                    storage_service.delete_file(old_path)
+
+            url = storage_service.upload_question_diagram(file, question.school_id, question.id, slot)
+            setattr(question, field_name, url)
+            question.save(update_fields=[field_name, 'updated_at'])
+
+            return Response({'slot': slot, field_name: url, 'message': 'Diagram uploaded successfully.'})
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=True, methods=['post'], url_path='remove_diagram')
+    def remove_diagram(self, request, pk=None):
+        """Remove a Diagram Mode image from one slot on this question."""
+        from core.storage import storage_service
+
+        question = self.get_object()
+
+        slot = request.data.get('slot')
+        field_name = self.DIAGRAM_SLOT_FIELDS.get(slot)
+        if not field_name:
+            return Response(
+                {'error': f"slot must be one of: {', '.join(self.DIAGRAM_SLOT_FIELDS)}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        old_url = getattr(question, field_name)
+        if old_url:
+            old_path = storage_service._extract_storage_path(old_url)
+            if old_path:
+                storage_service.delete_file(old_path)
+            setattr(question, field_name, None)
+            question.save(update_fields=[field_name, 'updated_at'])
+
+        return Response({'slot': slot, 'message': 'Diagram removed.'})
+
 
 class ExamPaperViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     """ViewSet for ExamPaper management."""
@@ -4006,6 +4092,450 @@ class PaperUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
                 {'detail': f'Error confirming extraction: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
+class WorksheetViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
+    """ViewSet for Worksheet management -- sibling of ExamPaperViewSet, reusing
+    the same manage-scope check (_can_manage_exam_papers is generic to
+    class/subject, not exam-paper specific) but with no exam-lifecycle fields."""
+    required_module = 'examinations'
+    queryset = Worksheet.objects.all()
+    permission_classes = [IsAuthenticated, HasSchoolAccess]
+
+    def get_serializer_class(self):
+        if self.action in ('create', 'update', 'partial_update'):
+            return WorksheetDraftEnsureSerializer
+        return WorksheetSerializer
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+
+        if get_effective_role(self.request) == 'TEACHER':
+            school_id = _resolve_school_id(self.request)
+            class_subject_map = _get_teacher_class_subject_map(self.request, school_id=school_id)
+            predicates = Q()
+            for class_id, subject_ids in class_subject_map.items():
+                if subject_ids:
+                    predicates |= Q(class_obj_id=class_id, subject_id__in=list(subject_ids))
+                    predicates |= Q(class_obj_id=class_id, subject_id__isnull=True)
+            if not predicates:
+                return qs.none()
+            qs = qs.filter(predicates)
+
+        class_id = self.request.query_params.get('class_obj')
+        if class_id:
+            qs = qs.filter(class_obj_id=class_id)
+
+        subject_id = self.request.query_params.get('subject')
+        if subject_id:
+            qs = qs.filter(subject_id=subject_id)
+
+        worksheet_status = self.request.query_params.get('status')
+        if worksheet_status:
+            qs = qs.filter(status=worksheet_status)
+
+        topic_id = self.request.query_params.get('tested_topics')
+        if topic_id:
+            qs = qs.filter(tested_topics__id=topic_id)
+
+        is_active = self.request.query_params.get('is_active')
+        if is_active is not None:
+            qs = qs.filter(is_active=is_active.lower() == 'true')
+        else:
+            qs = qs.filter(is_active=True)
+
+        search = self.request.query_params.get('search')
+        if search:
+            qs = qs.filter(title__icontains=search)
+
+        return qs.select_related('class_obj', 'subject', 'created_by').prefetch_related(
+            'items__question', 'tested_topics__chapter',
+        ).distinct()
+
+    def _validate_manage_scope(self, class_obj, subject):
+        school_id = _resolve_school_id(self.request)
+        if not _can_manage_exam_papers(
+            self.request,
+            class_id=getattr(class_obj, 'id', None),
+            subject_id=getattr(subject, 'id', None),
+            school_id=school_id,
+        ):
+            raise PermissionDenied('Only School Admin, Principal, or assigned class teachers can create or edit worksheets.')
+        return school_id
+
+    def perform_create(self, serializer):
+        class_obj = serializer.validated_data.get('class_obj')
+        subject = serializer.validated_data.get('subject')
+        school_id = self._validate_manage_scope(class_obj, subject)
+        serializer.save(school_id=school_id, created_by=self.request.user)
+
+    def perform_update(self, serializer):
+        class_obj = serializer.validated_data.get('class_obj', serializer.instance.class_obj)
+        subject = serializer.validated_data.get('subject', serializer.instance.subject)
+        self._validate_manage_scope(class_obj, subject)
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        self._validate_manage_scope(instance.class_obj, instance.subject)
+        instance.is_active = False
+        instance.save()
+
+    def _save_manual_draft_items(self, worksheet, manual_items):
+        existing_assignments = {
+            item.question_id: item
+            for item in worksheet.items.select_related('question').all()
+        }
+        retained_ids = set()
+
+        for index, raw_item in enumerate(manual_items, start=1):
+            item_payload = dict(raw_item)
+            question_id = item_payload.pop('question_id', None)
+            item_order = item_payload.pop('item_order', item_payload.pop('question_order', index))
+            marks_override = item_payload.pop('marks_override', None)
+            section_key = item_payload.pop('section_key', '') or ''
+            item_payload.pop('local_id', None)
+
+            assignment = None
+            question_instance = None
+            if question_id is not None:
+                assignment = existing_assignments.get(question_id)
+                if assignment is not None:
+                    question_instance = assignment.question
+                else:
+                    # Not yet linked to this worksheet (e.g. attached from the question
+                    # bank picker) -- reuse the existing bank question rather than raising
+                    # or creating a duplicate Question row.
+                    question_instance = Question.objects.filter(
+                        id=question_id, school=worksheet.school,
+                    ).first()
+                    if question_instance is None:
+                        raise ValidationError({
+                            'manual_items': [f'question_id {question_id} was not found.']
+                        })
+
+            if question_instance is not None:
+                # Attach-by-reference: never re-validate an already-existing question's
+                # content against today's completeness rules -- see the identical
+                # comment in ExamPaperViewSet._save_manual_draft_questions.
+                question = question_instance
+            else:
+                item_payload['subject'] = item_payload.get('subject') or worksheet.subject_id
+                if not item_payload['subject']:
+                    raise ValidationError({
+                        'manual_items': ['subject is required for a new question when the worksheet has no subject.']
+                    })
+                serializer = QuestionCreateUpdateSerializer(
+                    instance=None,
+                    data=item_payload,
+                    context={'request': self.request},
+                )
+                serializer.is_valid(raise_exception=True)
+                question = serializer.save(
+                    school=worksheet.school,
+                    created_by=self.request.user,
+                )
+
+            if assignment is None:
+                assignment = WorksheetItem(worksheet=worksheet, question=question)
+
+            assignment.item_order = item_order
+            assignment.section_key = str(section_key)[:50]
+            assignment.marks_override = marks_override
+            assignment.save()
+            assignment.sync_item_snapshot()
+            retained_ids.add(assignment.id)
+
+        worksheet.items.exclude(id__in=retained_ids).delete()
+
+    @action(detail=False, methods=['post'], url_path='ensure-draft')
+    def ensure_draft(self, request):
+        """Create or refresh a server-backed draft worksheet before autosave begins."""
+        draft_id = request.data.get('draft_id') or request.data.get('id')
+        worksheet = None
+
+        if draft_id:
+            worksheet = self.get_queryset().filter(pk=draft_id).first()
+            if worksheet is None:
+                return Response({'detail': 'Draft worksheet not found.'}, status=status.HTTP_404_NOT_FOUND)
+            if worksheet.status != Worksheet.Status.DRAFT:
+                return Response(
+                    {'detail': 'Only draft worksheets can be resumed for autosave.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        serializer = WorksheetDraftEnsureSerializer(
+            instance=worksheet,
+            data=request.data,
+            partial=worksheet is not None,
+        )
+        serializer.is_valid(raise_exception=True)
+
+        class_obj = serializer.validated_data.get('class_obj', getattr(worksheet, 'class_obj', None))
+        subject = serializer.validated_data.get('subject', getattr(worksheet, 'subject', None))
+        school_id = self._validate_manage_scope(class_obj, subject)
+
+        with transaction.atomic():
+            if worksheet is None:
+                worksheet = serializer.save(
+                    school_id=school_id,
+                    created_by=request.user,
+                    status=Worksheet.Status.DRAFT,
+                )
+                http_status = status.HTTP_201_CREATED
+            else:
+                worksheet = serializer.save(status=Worksheet.Status.DRAFT)
+                http_status = status.HTTP_200_OK
+
+        return Response(WorksheetSerializer(worksheet).data, status=http_status)
+
+    @action(detail=True, methods=['post'])
+    def autosave(self, request, pk=None):
+        """Autosave draft metadata and manual-entry items into the question bank."""
+        worksheet = self.get_object()
+        if worksheet.status != Worksheet.Status.DRAFT:
+            return Response(
+                {'detail': 'Only draft worksheets can be autosaved.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = WorksheetDraftAutosaveSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        validated = serializer.validated_data
+        manual_items = validated.pop('manual_items', None)
+        tested_topics = validated.pop('tested_topics', None)
+
+        class_obj = validated.get('class_obj', worksheet.class_obj)
+        subject = validated.get('subject', worksheet.subject)
+        self._validate_manage_scope(class_obj, subject)
+
+        with transaction.atomic():
+            for attr, value in validated.items():
+                setattr(worksheet, attr, value)
+            worksheet.save()
+
+            if tested_topics is not None:
+                worksheet.tested_topics.set(tested_topics)
+
+            if manual_items is not None:
+                self._save_manual_draft_items(worksheet, manual_items)
+
+        worksheet.refresh_from_db()
+        return Response(WorksheetSerializer(worksheet).data)
+
+    @action(detail=True, methods=['post'])
+    def duplicate(self, request, pk=None):
+        """Duplicate a worksheet (with its items) as a new draft -- handy for
+        reusing one worksheet across sections of the same class."""
+        source = self.get_object()
+        self._validate_manage_scope(source.class_obj, source.subject)
+
+        with transaction.atomic():
+            clone = Worksheet.objects.create(
+                school=source.school,
+                class_obj=source.class_obj,
+                subject=source.subject,
+                title=f"{source.title} (Copy)",
+                instructions=source.instructions,
+                structure=source.structure,
+                render_options=source.render_options,
+                status=Worksheet.Status.DRAFT,
+                source=source.source,
+                created_by=request.user,
+            )
+            clone.tested_topics.set(source.tested_topics.all())
+            for item in source.items.all():
+                WorksheetItem.objects.create(
+                    worksheet=clone,
+                    question=item.question,
+                    item_order=item.item_order,
+                    section_key=item.section_key,
+                    marks_override=item.marks_override,
+                    item_snapshot=item.item_snapshot,
+                )
+
+        return Response(WorksheetSerializer(clone).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['get'], url_path='generate-pdf')
+    def generate_pdf(self, request, pk=None):
+        """Generate and download PDF for this worksheet."""
+        from .pdf_generator import WorksheetPDFGenerator
+
+        worksheet = self.get_object()
+        try:
+            generator = WorksheetPDFGenerator(worksheet)
+            pdf_bytes = generator.generate()
+
+            filename = f"{worksheet.title.replace(' ', '_')}.pdf"
+            response = HttpResponse(pdf_bytes, content_type='application/pdf')
+            response['Content-Disposition'] = f'attachment; filename="{filename}"'
+            return response
+        except Exception as e:
+            return Response(
+                {'detail': f'Error generating PDF: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    @action(detail=True, methods=['get'], url_path='generate-docx')
+    def generate_docx(self, request, pk=None):
+        """Generate and download DOCX for this worksheet."""
+        from .docx_generator import WorksheetDOCXGenerator
+
+        worksheet = self.get_object()
+        try:
+            generator = WorksheetDOCXGenerator(worksheet)
+            docx_bytes = generator.generate()
+
+            filename = f"{worksheet.title.replace(' ', '_')}.docx"
+            response = HttpResponse(
+                docx_bytes,
+                content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            )
+            response['Content-Disposition'] = f'attachment; filename="{filename}"'
+            return response
+        except Exception as e:
+            return Response(
+                {'detail': f'Error generating DOCX: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class WorksheetUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
+    """ViewSet for WorksheetUpload management (image uploads for OCR) -- mirrors
+    PaperUploadViewSet, minus the exam_paper_id draft-pipeline branch of confirm
+    (worksheets have no answer-key/feedback-learning-loop requirement)."""
+    required_module = 'examinations'
+    queryset = WorksheetUpload.objects.all()
+    permission_classes = [IsAuthenticated, HasSchoolAccess]
+    serializer_class = WorksheetUploadSerializer
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+
+        upload_status = self.request.query_params.get('status')
+        if upload_status:
+            qs = qs.filter(status=upload_status)
+
+        if self.request.query_params.get('my_uploads') == 'true':
+            qs = qs.filter(uploaded_by=self.request.user)
+
+        return qs.select_related('school', 'worksheet', 'uploaded_by').order_by('-created_at')
+
+    @action(detail=False, methods=['post'], url_path='upload-image')
+    def upload_image(self, request):
+        """Upload worksheet image and trigger OCR processing."""
+        from core.storage import SupabaseStorageService
+        from .tasks import process_worksheet_upload_ocr
+
+        serializer = WorksheetUploadCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        image_file = serializer.validated_data['image']
+        context_class_id = serializer.validated_data.get('class_obj')
+        context_subject_id = serializer.validated_data.get('subject')
+        school_id = _resolve_school_id(request)
+
+        if not school_id:
+            return Response(
+                {'detail': 'School ID is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        import uuid as uuid_lib
+        group_id = serializer.validated_data.get('group_id')
+        page_number = serializer.validated_data.get('page_number')
+        if group_id is None:
+            group_id = uuid_lib.uuid4()
+            page_number = 1
+        elif page_number is None:
+            last_page_number = WorksheetUpload.objects.filter(
+                school_id=school_id, group_id=group_id
+            ).order_by('-page_number').values_list('page_number', flat=True).first()
+            page_number = (last_page_number or 0) + 1
+
+        try:
+            storage_service = SupabaseStorageService()
+
+            from datetime import datetime
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            folder_path = f"worksheets/{school_id}"
+
+            image_url = storage_service.upload_file(
+                file=image_file,
+                folder=folder_path,
+                filename=f"worksheet_{timestamp}_{image_file.name}"
+            )
+
+            upload = WorksheetUpload.objects.create(
+                school_id=school_id,
+                uploaded_by=request.user,
+                image_url=image_url,
+                group_id=group_id,
+                page_number=page_number,
+                context_class_id=context_class_id,
+                context_subject_id=context_subject_id,
+                status=WorksheetUpload.Status.PENDING
+            )
+
+            from core.task_utils import call_task
+            call_task(process_worksheet_upload_ocr, upload.id)
+
+            return Response(
+                WorksheetUploadSerializer(upload).data,
+                status=status.HTTP_201_CREATED
+            )
+
+        except Exception as e:
+            return Response(
+                {'detail': f'Error uploading image: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    @action(detail=True, methods=['post'], url_path='confirm')
+    def confirm_extraction(self, request, pk=None):
+        """Confirm extracted questions -- records confirmation and links the
+        worksheet (already created via ensure-draft + autosave, same as the
+        manual-entry path). No feedback-learning-loop row: PaperFeedback is
+        scoped to PaperUpload and worksheets deliberately don't get an
+        equivalent (see the "no answer key" scoping decision for this feature)."""
+        upload = self.get_object()
+
+        if upload.status != WorksheetUpload.Status.EXTRACTED:
+            return Response(
+                {'detail': 'Upload must be in EXTRACTED status'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        worksheet_id = request.data.get('worksheet_id')
+        if not worksheet_id:
+            return Response(
+                {'detail': 'worksheet_id is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        school_id = _resolve_school_id(request)
+        worksheet = Worksheet.objects.filter(id=worksheet_id, school_id=school_id).first()
+        if worksheet is None:
+            return Response(
+                {'detail': 'worksheet_id was not found for this school.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if not _can_manage_exam_papers(
+            request,
+            class_id=worksheet.class_obj_id,
+            subject_id=worksheet.subject_id,
+            school_id=school_id,
+        ):
+            return Response(
+                {'detail': 'Only School Admin, Principal, or assigned class teachers can confirm worksheets.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        upload.status = WorksheetUpload.Status.CONFIRMED
+        upload.worksheet = worksheet
+        upload.save()
+
+        return Response(WorksheetUploadSerializer(upload).data)
 
 
 class PaperFeedbackViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ReadOnlyModelViewSet):

@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { examinationsApi } from '../../services/api'
+import Spinner from '../../components/ui/Spinner'
 
 // Exams list is already teacher-scoped server-side (get_teacher_combined_scope
 // via _apply_teacher_exam_scope in ExamViewSet.get_queryset) to every class the
@@ -35,7 +36,7 @@ export default function TeacherExamSchedule() {
   if (isLoading) {
     return (
       <div className="text-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+        <Spinner size="md" className="mx-auto" />
       </div>
     )
   }

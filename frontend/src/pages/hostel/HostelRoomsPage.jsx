@@ -2,6 +2,9 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { hostelApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
+import Spinner from '../../components/ui/Spinner'
+import Badge from '../../components/ui/Badge'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 const emptyHostelForm = {
   name: '',
@@ -181,6 +184,10 @@ export default function HostelRoomsPage() {
     setRoomForm(emptyRoomForm)
   }
 
+  useEscapeKey(closeHostelModal, showHostelModal)
+  useEscapeKey(closeRoomModal, showRoomModal)
+  useEscapeKey(() => setDeleteConfirm(null), !!deleteConfirm)
+
   const openDeleteConfirm = (item, type) => {
     setDeleteConfirm(item)
     setDeleteType(type)
@@ -296,7 +303,7 @@ export default function HostelRoomsPage() {
         <div className="bg-white rounded-lg shadow-sm">
           {hostelsLoading ? (
             <div className="text-center py-16">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+              <Spinner size="md" className="mx-auto" />
               <p className="text-gray-500 mt-3">Loading hostels...</p>
             </div>
           ) : hostels.length === 0 ? (
@@ -437,7 +444,7 @@ export default function HostelRoomsPage() {
             <div className="bg-white rounded-lg shadow-sm">
               {roomsLoading ? (
                 <div className="text-center py-16">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                  <Spinner size="md" className="mx-auto" />
                   <p className="text-gray-500 mt-3">Loading rooms...</p>
                 </div>
               ) : rooms.length === 0 ? (
@@ -496,9 +503,9 @@ export default function HostelRoomsPage() {
                             <td className="px-4 py-3 text-sm font-medium text-gray-900">{room.room_number}</td>
                             <td className="px-4 py-3 text-sm text-center text-gray-700">{room.floor}</td>
                             <td className="px-4 py-3">
-                              <span className="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700">
+                              <Badge tone="neutral">
                                 {room.room_type}
-                              </span>
+                              </Badge>
                             </td>
                             <td className="px-4 py-3 text-sm text-center text-gray-700">{room.capacity}</td>
                             <td className="px-4 py-3 text-sm text-center text-gray-700">{room.current_occupancy ?? room.occupancy ?? 0}</td>

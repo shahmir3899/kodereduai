@@ -12,6 +12,8 @@ import { useToast } from '../../components/Toast'
 import TeacherScopeSummary from '../../components/teacher/TeacherScopeSummary'
 import TeacherScopeBadge, { TeacherScopeHint, useTeacherScopeLookup } from '../../components/teacher/TeacherScopeBadge'
 import LessonPlanTopicsPickerModal from './LessonPlanTopicsPickerModal'
+import Spinner from '../../components/ui/Spinner'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 const STATUS_BADGES = {
   DRAFT: 'bg-gray-100 text-gray-800',
@@ -404,6 +406,10 @@ export default function AssignmentsPage() {
     setBulkDiaryCurriculumPicker({ open: false, subjectId: null })
   }
 
+  useEscapeKey(closeModal, showModal)
+  useEscapeKey(closeBulkDiaryModal, showBulkDiaryModal)
+  useEscapeKey(() => setDeleteConfirm(null), !!deleteConfirm)
+
   const handleSubmit = () => {
     if (!form.title) {
       showError('Title is required')
@@ -619,7 +625,7 @@ export default function AssignmentsPage() {
       <div className="card">
         {isLoading ? (
           <div className="text-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+            <Spinner size="md" className="mx-auto" />
             <p className="text-gray-500 mt-2">Loading assignments...</p>
           </div>
         ) : assignments.length === 0 ? (

@@ -1,6 +1,6 @@
 """
 Bootstrap endpoint — returns multiple dashboard data sections in a single request.
-Intended for SCHOOL_ADMIN / PRINCIPAL / HR_MANAGER to minimise login-time round trips.
+Intended for SCHOOL_ADMIN / PRINCIPAL / MANAGER to minimise login-time round trips.
 """
 
 from datetime import date, timedelta
@@ -16,7 +16,7 @@ from core.mixins import ensure_tenant_school_id
 from core.permissions import HasSchoolAccess, get_effective_role
 
 
-_ALLOWED_ROLES = {'SCHOOL_ADMIN', 'PRINCIPAL', 'HR_MANAGER'}
+_ALLOWED_ROLES = {'SCHOOL_ADMIN', 'PRINCIPAL', 'MANAGER'}
 
 
 def _get_attendance_section(school_id, date_obj, academic_year_id):
@@ -159,7 +159,7 @@ class AdminDashboardBootstrapView(APIView):
     GET /api/bootstrap/admin-dashboard/
 
     Returns attendance, hr, and finance dashboard sections in one request.
-    Only accessible to SCHOOL_ADMIN, PRINCIPAL, and HR_MANAGER.
+    Only accessible to SCHOOL_ADMIN, PRINCIPAL, and MANAGER.
 
     Query params:
       date            YYYY-MM-DD  (default: today)
@@ -227,7 +227,7 @@ class AdminDashboardBootstrapView(APIView):
                 result['attendance'] = None
                 result['pending_reviews_count'] = None
 
-        if 'hr' in requested and module_on('hr') and role in {'SCHOOL_ADMIN', 'PRINCIPAL', 'HR_MANAGER'}:
+        if 'hr' in requested and module_on('hr') and role in {'SCHOOL_ADMIN', 'PRINCIPAL', 'MANAGER'}:
             try:
                 result['hr'] = _get_hr_section(school_id)
             except Exception:

@@ -6,6 +6,7 @@ from .views import (
     QuestionViewSet, ExamPaperViewSet, PaperUploadViewSet, PaperFeedbackViewSet,
     StudentTermAssessmentView, StudentTermAssessmentRosterView, StudentTermAssessmentBulkSaveView,
     StudentTermAssessmentAIRemarkView, AcademicRiskView,
+    WorksheetViewSet, WorksheetUploadViewSet,
 )
 
 router = DefaultRouter()
@@ -22,6 +23,10 @@ router.register(r'questions', QuestionViewSet, basename='question')
 router.register(r'exam-papers', ExamPaperViewSet, basename='exam-paper')
 router.register(r'paper-uploads', PaperUploadViewSet, basename='paper-upload')
 router.register(r'paper-feedback', PaperFeedbackViewSet, basename='paper-feedback')
+
+# Worksheets
+router.register(r'worksheets', WorksheetViewSet, basename='worksheet')
+router.register(r'worksheet-uploads', WorksheetUploadViewSet, basename='worksheet-upload')
 
 urlpatterns = [
     path('', include(router.urls)),

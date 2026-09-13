@@ -2,6 +2,9 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { libraryApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
+import Spinner from '../../components/ui/Spinner'
+import Badge from '../../components/ui/Badge'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 function getDaysOverdue(dueDateStr) {
   if (!dueDateStr) return 0
@@ -25,6 +28,8 @@ export default function OverdueBooksPage() {
   const queryClient = useQueryClient()
 
   const [returnConfirm, setReturnConfirm] = useState(null)
+
+  useEscapeKey(() => setReturnConfirm(null), !!returnConfirm)
 
   // ---- Queries ----
 
@@ -80,7 +85,7 @@ export default function OverdueBooksPage() {
           <p className="text-sm sm:text-base text-gray-600">Track overdue books and manage fines</p>
         </div>
         <div className="text-center py-16">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+          <Spinner size="md" className="mx-auto" />
           <p className="text-gray-500 mt-3">Loading overdue books...</p>
         </div>
       </div>
@@ -203,9 +208,9 @@ export default function OverdueBooksPage() {
                           </span>
                         </p>
                       </div>
-                      <span className="flex-shrink-0 ml-2 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">
+                      <Badge tone="danger" className="flex-shrink-0 ml-2">
                         {days}d overdue
-                      </span>
+                      </Badge>
                     </div>
                     <div className="text-xs text-gray-500 mt-1">
                       <p>Issued: {formatDate(issue.issue_date)} | Due: {formatDate(issue.due_date)}</p>

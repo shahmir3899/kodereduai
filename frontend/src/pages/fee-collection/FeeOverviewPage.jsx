@@ -6,6 +6,7 @@ import { useFeeOverview } from './useFeeOverview'
 import { MONTHS } from './FeeFilters'
 import FeeSummaryCards, { ClassBreakdown, PendingStudents } from './FeeSummaryCards'
 import FeeCharts from './FeeCharts'
+import Spinner from '../../components/ui/Spinner'
 
 export default function FeeOverviewPage() {
   const { isStaffMember } = useAuth()
@@ -228,7 +229,7 @@ export default function FeeOverviewPage() {
       {/* Loading state */}
       {isLoading && (
         <div className="text-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto mb-3"></div>
+          <Spinner size="md" className="mx-auto mb-3" />
           <p className="text-sm text-gray-500">Loading fee data...</p>
         </div>
       )}

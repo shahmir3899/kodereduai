@@ -202,3 +202,38 @@ class AdminActionLog(models.Model):
     def __str__(self):
         who = self.actor.username if self.actor else 'unknown'
         return f"{who} {self.action} {self.target_type}:{self.target_id}"
+
+
+class LoginEvent(models.Model):
+    """
+    One row per successful JWT login (web + mobile both hit the same
+    CustomTokenObtainPairSerializer). Deliberately generic rather than
+    demo-only — costs nothing extra to record every login, and today's
+    only consumer (the SuperAdmin dashboard's demo_insights endpoint)
+    just filters school_id == settings.DEMO_SCHOOL_ID.
+
+    username/role/school_id are denormalized (not looked up via `user`
+    each time) so the row stays meaningful even if the user or their
+    membership changes later.
+    """
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='login_events',
+    )
+    username = models.CharField(max_length=150, blank=True, default='')
+    school_id = models.IntegerField(null=True, blank=True)
+    role = models.CharField(max_length=30, blank=True, default='')
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['school_id', '-created_at']),
+        ]
+
+    def __str__(self):
+        return f"{self.username or 'unknown'} @ school {self.school_id} ({self.created_at:%Y-%m-%d %H:%M})"

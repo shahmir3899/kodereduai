@@ -882,6 +882,366 @@ def trigger_lesson_plan_published(lesson_plan):
     return sent
 
 
+def trigger_attendance_risk_alerts(school, risk_report):
+    """
+    Send a single aggregated in-app alert to SCHOOL_ADMIN/PRINCIPAL users when
+    the nightly Attendance Risk Predictor snapshot finds HIGH-severity
+    students. Called from academic_sessions.tasks.recompute_attendance_risk_snapshots
+    once per school per night — never from the live dashboard request path.
+    """
+    from .engine import NotificationEngine
+
+    config = _get_config(school)
+    if config and not config.attendance_risk_alert_enabled:
+        return 0
+
+    high_risk = [s for s in risk_report.get('students', []) if s.get('severity') == 'HIGH']
+    if not high_risk:
+        return 0
+
+    today = timezone.localdate()
+    names = ', '.join(s['student_name'] for s in high_risk[:10])
+    if len(high_risk) > 10:
+        names += f', and {len(high_risk) - 10} more'
+    title = f"Attendance Risk Alert — {len(high_risk)} student{'s' if len(high_risk) != 1 else ''} HIGH risk"
+    body = (
+        f"{len(high_risk)} student(s) at {school.name} are at HIGH risk of falling below the "
+        f"attendance threshold: {names}. Review the Attendance Risk Monitor for details."
+    )
+    engine = NotificationEngine(school)
+    sent = 0
+    for admin_user in _get_admin_users(school):
+        try:
+            if _daily_notification_already_sent(
+                school=school, event_type='ATTENDANCE_RISK', channel='IN_APP',
+                recipient_user=admin_user, title=title, body=body, target_date=today,
+            ):
+                continue
+            engine.send(
+                event_type='ATTENDANCE_RISK', channel='IN_APP', context={},
+                recipient_identifier=str(admin_user.id), recipient_type='ADMIN',
+                recipient_user=admin_user, title=title, body=body,
+            )
+            sent += 1
+        except Exception as e:
+            logger.error(f"Attendance risk alert failed for admin {admin_user.id}: {e}")
+    return sent
+
+
+def trigger_attendance_risk_alerts_to_parents(school, risk_report):
+    """
+    Notify each HIGH-risk student's own parents with their child's specific
+    attendance rate/trend — companion to trigger_attendance_risk_alerts, which
+    only sends admins/principals one aggregated summary. Same call site
+    (recompute_attendance_risk_snapshots), same nightly cadence.
+    """
+    from students.models import Student
+    from .engine import NotificationEngine
+
+    config = _get_config(school)
+    if config and not config.attendance_risk_alert_enabled:
+        return 0
+
+    high_risk = [s for s in risk_report.get('students', []) if s.get('severity') == 'HIGH']
+    if not high_risk:
+        return 0
+
+    today = timezone.localdate()
+    engine = NotificationEngine(school)
+    student_ids = [s['student_id'] for s in high_risk if s.get('student_id')]
+    students_by_id = {
+        s.id: s for s in Student.objects.filter(id__in=student_ids, school=school)
+    }
+
+    sent = 0
+    for entry in high_risk:
+        student = students_by_id.get(entry.get('student_id'))
+        if not student:
+            continue
+        rate = entry.get('current_rate')
+        rate_label = f"{rate}%" if rate is not None else 'below the school threshold'
+        suggestion = entry.get('suggested_action') or 'Please encourage regular attendance.'
+        title = f"Attendance Risk — {student.name}"
+        body = (
+            f"Dear Parent, {student.name}'s attendance rate is currently {rate_label}, "
+            f"which is at HIGH risk of falling further. {suggestion}"
+        )
+        for parent_user in get_parent_users_for_student(student):
+            try:
+                if _daily_notification_already_sent(
+                    school=school, event_type='ATTENDANCE_RISK', channel='IN_APP',
+                    recipient_user=parent_user, title=title, body=body,
+                    target_date=today, student=student,
+                ):
+                    continue
+                engine.send(
+                    event_type='ATTENDANCE_RISK', channel='IN_APP', context={},
+                    recipient_identifier=str(parent_user.id), recipient_type='PARENT',
+                    recipient_user=parent_user, student=student, title=title, body=body,
+                )
+                sent += 1
+            except Exception as e:
+                logger.error(f"Attendance risk parent alert failed for student {student.id}: {e}")
+    return sent
+
+
+def trigger_fee_overdue_in_app(school, as_of=None):
+    """
+    Admin on-demand equivalent of trigger_fee_pending_in_app for fees that are
+    overdue rather than merely pending. FeePayment has no per-payment due
+    date, so "overdue" is defined as: unpaid/partial and more than
+    config.fee_overdue_grace_days days past that fee's month-end.
+
+    Recipients mirror trigger_fee_pending_in_app: admin/principal (per class),
+    class teacher (per assigned class), parent + student self (per student) —
+    but grouped per (class_or_student, month, year) since overdue rows can
+    span several months at once.
+    """
+    from calendar import monthrange
+    from datetime import date as date_cls
+    from finance.models import FeePayment
+    from academics.models import ClassTeacherAssignment
+    from .engine import NotificationEngine
+
+    config = _get_config(school)
+    if config and not config.fee_overdue_enabled:
+        logger.info(f"Fee overdue notifications disabled for {school.name}, skipping")
+        return 0
+    grace_days = config.fee_overdue_grace_days if config else 10
+    as_of = as_of or timezone.localdate()
+
+    engine = NotificationEngine(school)
+    candidates = (
+        FeePayment.objects
+        .filter(school=school, status__in=['UNPAID', 'PARTIAL'], month__gte=1, month__lte=12, student__is_active=True)
+        .select_related('student', 'student__class_obj')
+    )
+
+    # class_totals / student_totals keyed by (id, month, year) so different
+    # overdue periods for the same class/student are reported separately.
+    class_totals = {}
+    student_totals = {}
+    student_by_id = {}
+    for payment in candidates:
+        month_end = date_cls(payment.year, payment.month, monthrange(payment.year, payment.month)[1])
+        if (as_of - month_end).days < grace_days:
+            continue
+        student = payment.student
+        balance = max(float(payment.amount_due or 0) - float(payment.amount_paid or 0), 0)
+        if balance <= 0:
+            continue
+        key = (student.class_obj_id, payment.month, payment.year)
+        class_totals.setdefault(key, {'class_name': student.class_obj.name, 'amount': 0.0})
+        class_totals[key]['amount'] += balance
+        skey = (student.id, payment.month, payment.year)
+        student_totals[skey] = student_totals.get(skey, 0.0) + balance
+        student_by_id[student.id] = student
+
+    if not class_totals and not student_totals:
+        return 0
+
+    sent = 0
+    admin_users = _get_admin_users(school)
+    for (class_id, month, year), payload in class_totals.items():
+        class_name = payload['class_name']
+        amount_label = f"{payload['amount']:,.0f}"
+        title = f"Fee Overdue — {class_name} ({month}/{year})"
+        body = f"An overdue amount of Rs {amount_label} remains unpaid for {class_name} ({month}/{year})."
+        for admin_user in admin_users:
+            if _monthly_notification_already_sent(
+                school=school, event_type='FEE_OVERDUE', channel='IN_APP',
+                recipient_user=admin_user, title=title, body=body, month=month, year=year,
+            ):
+                continue
+            engine.send(
+                event_type='FEE_OVERDUE', channel='IN_APP', context={},
+                recipient_identifier=str(admin_user.id), recipient_type='ADMIN',
+                recipient_user=admin_user, title=title, body=body,
+            )
+            sent += 1
+
+    teacher_assignments = (
+        ClassTeacherAssignment.objects
+        .filter(school=school, is_active=True)
+        .filter(Q(academic_year__is_current=True) | Q(academic_year__isnull=True))
+        .select_related('teacher__user', 'class_obj')
+    )
+    for assignment in teacher_assignments:
+        teacher_user = getattr(getattr(assignment, 'teacher', None), 'user', None)
+        if not teacher_user or not assignment.class_obj_id:
+            continue
+        for (class_id, month, year), payload in class_totals.items():
+            if class_id != assignment.class_obj_id:
+                continue
+            class_name = payload['class_name']
+            amount_label = f"{payload['amount']:,.0f}"
+            title = f"Fee Overdue — {class_name} ({month}/{year})"
+            body = f"An overdue amount of Rs {amount_label} remains unpaid for {class_name} ({month}/{year})."
+            if _monthly_notification_already_sent(
+                school=school, event_type='FEE_OVERDUE', channel='IN_APP',
+                recipient_user=teacher_user, title=title, body=body, month=month, year=year,
+            ):
+                continue
+            engine.send(
+                event_type='FEE_OVERDUE', channel='IN_APP', context={},
+                recipient_identifier=str(teacher_user.id), recipient_type='STAFF',
+                recipient_user=teacher_user, title=title, body=body,
+            )
+            sent += 1
+
+    for (student_id, month, year), amount in student_totals.items():
+        student = student_by_id.get(student_id)
+        if not student:
+            continue
+        amount_label = f"{amount:,.0f}"
+        title = f"Fee Overdue — {student.name} ({month}/{year})"
+        body = f"Dear {student.name}, your fee of Rs {amount_label} for {month}/{year} is now overdue."
+        for parent_user in get_parent_users_for_student(student):
+            if _monthly_notification_already_sent(
+                school=school, event_type='FEE_OVERDUE', channel='IN_APP',
+                recipient_user=parent_user, title=title, body=body,
+                month=month, year=year, student=student,
+            ):
+                continue
+            engine.send(
+                event_type='FEE_OVERDUE', channel='IN_APP', context={},
+                recipient_identifier=str(parent_user.id), recipient_type='PARENT',
+                recipient_user=parent_user, student=student, title=title, body=body,
+            )
+            sent += 1
+
+        student_user = get_student_user(student)
+        if student_user and not _monthly_notification_already_sent(
+            school=school, event_type='FEE_OVERDUE', channel='IN_APP',
+            recipient_user=student_user, title=title, body=body,
+            month=month, year=year, student=student,
+        ):
+            engine.send(
+                event_type='FEE_OVERDUE', channel='IN_APP', context={},
+                recipient_identifier=str(student_user.id), recipient_type='PARENT',
+                recipient_user=student_user, student=student, title=title, body=body,
+            )
+            sent += 1
+
+    logger.info(f"Fee overdue in-app notifications sent: {sent} for {school.name}")
+    return sent
+
+
+def trigger_assignment_due_soon(school, window_hours=48):
+    """
+    Admin on-demand: notify students (student portal accounts) whose class has
+    a PUBLISHED assignment due within window_hours and who have not yet
+    submitted it. requires_submission=False assignments (e.g. DIARY) are
+    skipped — there's nothing for the student to be "behind" on.
+    """
+    from datetime import timedelta
+    from lms.models import Assignment, AssignmentSubmission
+    from students.models import Student
+    from .engine import NotificationEngine
+
+    config = _get_config(school)
+    if config and not config.assignment_due_reminder_enabled:
+        logger.info(f"Assignment due reminders disabled for {school.name}, skipping")
+        return 0
+
+    now = timezone.now()
+    window_end = now + timedelta(hours=window_hours)
+    assignments = (
+        Assignment.objects
+        .filter(
+            school=school,
+            status=Assignment.Status.PUBLISHED,
+            is_active=True,
+            requires_submission=True,
+            due_date__gte=now,
+            due_date__lte=window_end,
+        )
+        .select_related('class_obj', 'subject')
+    )
+    if not assignments.exists():
+        return 0
+
+    engine = NotificationEngine(school)
+    today = timezone.localdate()
+    sent = 0
+    for assignment in assignments:
+        submitted_student_ids = set(
+            AssignmentSubmission.objects
+            .filter(assignment=assignment)
+            .values_list('student_id', flat=True)
+        )
+        students = (
+            Student.objects
+            .filter(school=school, class_obj=assignment.class_obj, is_active=True)
+            .exclude(id__in=submitted_student_ids)
+            .select_related('user_profile__user')
+        )
+        if not students.exists():
+            continue
+
+        hours_left = max(round((assignment.due_date - now).total_seconds() / 3600), 0)
+        subject_name = assignment.subject.name if assignment.subject else 'your subject'
+        title = f"Assignment Due Soon: {assignment.title}"
+        body = (
+            f"Your {subject_name} assignment '{assignment.title}' is due in about {hours_left} "
+            f"hour(s) and you haven't submitted it yet."
+        )
+        for student in students:
+            student_user = get_student_user(student)
+            if not student_user:
+                continue
+            try:
+                if _daily_notification_already_sent(
+                    school=school, event_type='ASSIGNMENT_DUE', channel='IN_APP',
+                    recipient_user=student_user, title=title, body=body,
+                    target_date=today, student=student,
+                ):
+                    continue
+                engine.send(
+                    event_type='ASSIGNMENT_DUE', channel='IN_APP', context={},
+                    recipient_identifier=str(student_user.id), recipient_type='PARENT',
+                    recipient_user=student_user, student=student, title=title, body=body,
+                )
+                sent += 1
+            except Exception as e:
+                logger.error(f"Assignment due reminder failed for student {student.id}: {e}")
+
+    logger.info(f"Assignment due-soon notifications sent: {sent} for {school.name}")
+    return sent
+
+
+def trigger_leave_decision(school, recipient_user, recipient_type, status, start_date, end_date, remarks=''):
+    """
+    One-shot transactional notice fired the moment a leave request (staff
+    LeaveApplication or parent-submitted ParentLeaveRequest) is approved or
+    rejected. No dedupe needed -- it's tied to a single approve/reject action,
+    not a periodic scan, so it can't naturally double-fire.
+    """
+    from .engine import NotificationEngine
+
+    if not recipient_user:
+        return None
+
+    verb = 'approved' if status == 'APPROVED' else 'rejected'
+    date_range = f"{start_date} to {end_date}" if start_date and end_date else ''
+    title = f"Leave Request {status.title()}"
+    body = f"Your leave request{f' ({date_range})' if date_range else ''} has been {verb}."
+    if remarks:
+        body += f" Remarks: {remarks}"
+
+    engine = NotificationEngine(school)
+    return engine.send(
+        event_type='LEAVE_DECISION',
+        channel='IN_APP',
+        context={},
+        recipient_identifier=str(recipient_user.id),
+        recipient_type=recipient_type,
+        recipient_user=recipient_user,
+        title=title,
+        body=body,
+    )
+
+
 def trigger_daily_school_report(school, date):
     """
     Build and send a comprehensive daily school report to all SCHOOL_ADMIN

@@ -2,6 +2,10 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { libraryApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
+import Spinner from '../../components/ui/Spinner'
+import Badge from '../../components/ui/Badge'
+import { useDebounce } from '../../hooks/useDebounce'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 function getDaysOverdue(dueDateStr) {
   if (!dueDateStr) return 0
@@ -40,31 +44,36 @@ export default function BookIssuePage() {
   })
 
   const [borrowerSearch, setBorrowerSearch] = useState('')
+  const debouncedBorrowerSearch = useDebounce(borrowerSearch, 300)
   const [bookSearch, setBookSearch] = useState('')
+  const debouncedBookSearch = useDebounce(bookSearch, 300)
 
   // --- Return Tab State ---
   const [returnSearch, setReturnSearch] = useState('')
+  const debouncedReturnSearch = useDebounce(returnSearch, 300)
   const [returnConfirm, setReturnConfirm] = useState(null)
+
+  useEscapeKey(() => setReturnConfirm(null), !!returnConfirm)
 
   // ---- Queries ----
 
   // Search borrowers (students or staff)
   const { data: borrowerResults } = useQuery({
-    queryKey: ['borrowerSearch', issueForm.borrower_type, borrowerSearch],
+    queryKey: ['borrowerSearch', issueForm.borrower_type, debouncedBorrowerSearch],
     queryFn: () => {
       if (issueForm.borrower_type === 'STUDENT') {
-        return libraryApi.searchStudents({ search: borrowerSearch })
+        return libraryApi.searchStudents({ search: debouncedBorrowerSearch })
       }
-      return libraryApi.searchStaff({ search: borrowerSearch })
+      return libraryApi.searchStaff({ search: debouncedBorrowerSearch })
     },
-    enabled: borrowerSearch.length >= 2,
+    enabled: debouncedBorrowerSearch.length >= 2,
   })
 
   // Search books for issue
   const { data: bookResults } = useQuery({
-    queryKey: ['bookSearch', bookSearch],
-    queryFn: () => libraryApi.getBooks({ search: bookSearch }),
-    enabled: bookSearch.length >= 2,
+    queryKey: ['bookSearch', debouncedBookSearch],
+    queryFn: () => libraryApi.getBooks({ search: debouncedBookSearch }),
+    enabled: debouncedBookSearch.length >= 2,
   })
 
   // Active issues list (ISSUED status)
@@ -75,8 +84,8 @@ export default function BookIssuePage() {
 
   // Filtered issues for return tab
   const { data: returnIssuesData, isLoading: returnLoading } = useQuery({
-    queryKey: ['libraryIssues', 'return', returnSearch],
-    queryFn: () => libraryApi.getIssues({ status: 'ISSUED', search: returnSearch || undefined, page_size: 9999 }),
+    queryKey: ['libraryIssues', 'return', debouncedReturnSearch],
+    queryFn: () => libraryApi.getIssues({ status: 'ISSUED', search: debouncedReturnSearch || undefined, page_size: 9999 }),
     enabled: activeTab === 'return',
   })
 
@@ -422,7 +431,7 @@ export default function BookIssuePage() {
             </div>
             {issuesLoading ? (
               <div className="text-center py-12">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                <Spinner size="md" className="mx-auto" />
                 <p className="text-gray-500 mt-3">Loading issues...</p>
               </div>
             ) : activeIssues.length === 0 ? (
@@ -443,9 +452,9 @@ export default function BookIssuePage() {
                         <div className="flex items-start justify-between mb-1">
                           <p className="font-medium text-sm text-gray-900">{issue.book_title || issue.book?.title || '-'}</p>
                           {days > 0 && (
-                            <span className="flex-shrink-0 ml-2 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
+                            <Badge tone="danger" className="flex-shrink-0 ml-2">
                               {days}d overdue
-                            </span>
+                            </Badge>
                           )}
                         </div>
                         <p className="text-xs text-gray-500">
@@ -502,9 +511,9 @@ export default function BookIssuePage() {
                             <td className="px-4 py-3 text-sm text-gray-500">{formatDate(issue.due_date)}</td>
                             <td className="px-4 py-3 text-center">
                               {days > 0 ? (
-                                <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">
+                                <Badge tone="danger">
                                   {days} days
-                                </span>
+                                </Badge>
                               ) : (
                                 <span className="text-xs text-gray-400">-</span>
                               )}
@@ -553,7 +562,7 @@ export default function BookIssuePage() {
 
             {returnLoading ? (
               <div className="text-center py-12">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                <Spinner size="md" className="mx-auto" />
                 <p className="text-gray-500 mt-3">Searching...</p>
               </div>
             ) : returnIssues.length === 0 ? (
@@ -577,9 +586,9 @@ export default function BookIssuePage() {
                         <div className="flex items-start justify-between mb-1">
                           <p className="font-medium text-sm text-gray-900">{issue.book_title || issue.book?.title || '-'}</p>
                           {days > 0 && (
-                            <span className="flex-shrink-0 ml-2 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
+                            <Badge tone="danger" className="flex-shrink-0 ml-2">
                               {days}d overdue
-                            </span>
+                            </Badge>
                           )}
                         </div>
                         <p className="text-xs text-gray-500">
@@ -638,9 +647,9 @@ export default function BookIssuePage() {
                             <td className="px-4 py-3 text-sm text-gray-500">{formatDate(issue.due_date)}</td>
                             <td className="px-4 py-3 text-center">
                               {days > 0 ? (
-                                <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">
+                                <Badge tone="danger">
                                   {days} days
-                                </span>
+                                </Badge>
                               ) : (
                                 <span className="text-xs text-gray-400">-</span>
                               )}

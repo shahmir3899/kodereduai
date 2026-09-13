@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
@@ -179,6 +179,20 @@ export default function FaceBulkEnrollmentPage() {
     refetchEnrollments()
   }
 
+  // 's' skips the current student without leaving the keyboard — mirrors the
+  // space/r shortcuts LiveEnrollCapture already owns for capture/confirm/retake.
+  useEffect(() => {
+    if (phase !== 'queue') return
+    const onKeyDown = (e) => {
+      const tag = document.activeElement?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+      if (e.key === 's' || e.key === 'S') handleSkip()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- handleSkip closes over currentStudent, refreshed each render this effect doesn't re-subscribe for
+  }, [phase, currentStudent])
+
   return (
     <div className="max-w-3xl mx-auto">
       <div className="mb-6">
@@ -277,12 +291,19 @@ export default function FaceBulkEnrollmentPage() {
                 {currentStudent.roll_number || '-'} - {currentStudent.name}
               </h2>
             </div>
-            <button
-              onClick={handleFinishEarly}
-              className="text-xs text-gray-500 hover:text-gray-700 underline"
-            >
-              Stop &amp; view summary
-            </button>
+            <div className="text-right">
+              <button
+                onClick={handleFinishEarly}
+                className="text-xs text-gray-500 hover:text-gray-700 underline"
+              >
+                Stop &amp; view summary
+              </button>
+              <p className="text-xs text-gray-500 mt-1">
+                <span className="text-green-700 font-medium">{tally.captured} captured</span>
+                {' · '}
+                <span className="text-orange-700 font-medium">{tally.skipped} skipped</span>
+              </p>
+            </div>
           </div>
 
           <div className="w-full bg-gray-100 rounded-full h-1.5">
@@ -297,6 +318,8 @@ export default function FaceBulkEnrollmentPage() {
             // camera stream + loaded model across the whole queue instead of
             // re-requesting camera permission for every single student.
             selectedStudent={String(currentStudent.id)}
+            studentPhotoUrl={currentStudent.photo_url}
+            studentName={currentStudent.name}
             onSubmit={handleCaptureSubmit}
             submitting={enrollEmbeddingMutation.isPending}
           />
@@ -304,6 +327,7 @@ export default function FaceBulkEnrollmentPage() {
           <button
             onClick={handleSkip}
             disabled={enrollEmbeddingMutation.isPending}
+            title="Shortcut: S"
             className="w-full py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50"
           >
             Skip this student

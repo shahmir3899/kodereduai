@@ -17,7 +17,7 @@ from django.db.models import OuterRef, Subquery, CharField
 from django.db.models.functions import Coalesce
 
 from core.permissions import (
-    IsSchoolAdmin, IsSchoolAdminOrReadOnly, HasSchoolAccess, ModuleAccessMixin,
+    IsSchoolAdmin, CanViewStudentRecords, HasSchoolAccess, ModuleAccessMixin,
     IsStudent, IsStudentOrAdmin, CanManageStudentPhoto, CanEditStudentRecord,
     CanCreateStudentAccount, get_effective_role, ADMIN_ROLES, ROLE_HIERARCHY,
     get_teacher_combined_scope, get_teacher_session_class_scope, _get_session_class_student_ids,
@@ -58,7 +58,7 @@ def _resolve_school_id(request):
 class ClassViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     required_module = 'students'
     queryset = Class.objects.all()
-    permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, CanViewStudentRecords, HasSchoolAccess]
 
 
     def get_serializer_class(self):
@@ -125,7 +125,7 @@ from django.db import models as db_models
 class StudentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     required_module = 'students'
     queryset = Student.objects.all()
-    permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, CanViewStudentRecords, HasSchoolAccess]
 
     def get_permissions(self):
         if self.action in ('upload_photo', 'remove_photo'):
@@ -1187,6 +1187,84 @@ class StudentTimetableView(APIView):
         ]
 
         return Response({'slots': slot_data, 'entries': entry_data})
+
+
+class StudentLibraryView(APIView):
+    """Student's own book issue history (current + past)."""
+    permission_classes = [IsAuthenticated, IsStudent]
+
+    def get(self, request):
+        student = _get_student_for_request(request)
+        if not student:
+            return Response({'error': 'No student profile linked.'}, status=404)
+
+        from library.models import BookIssue
+
+        issues = BookIssue.objects.filter(
+            student=student, borrower_type='STUDENT',
+        ).select_related('book').order_by('-issue_date')
+
+        result = []
+        for issue in issues:
+            result.append({
+                'id': issue.id,
+                'book_title': issue.book.title,
+                'book_author': issue.book.author,
+                'issue_date': issue.issue_date,
+                'due_date': issue.due_date,
+                'return_date': issue.return_date,
+                'status': issue.status,
+                'fine_amount': str(issue.fine_amount),
+            })
+
+        return Response(result)
+
+
+class StudentTransportView(APIView):
+    """Student's own transport (bus route/stop/vehicle) assignment."""
+    permission_classes = [IsAuthenticated, IsStudent]
+
+    def get(self, request):
+        student = _get_student_for_request(request)
+        if not student:
+            return Response({'error': 'No student profile linked.'}, status=404)
+
+        from transport.models import TransportAssignment
+
+        assignment = TransportAssignment.objects.filter(
+            student=student, is_active=True,
+        ).select_related('route', 'stop', 'vehicle').first()
+
+        if not assignment:
+            return Response(None)
+
+        route = assignment.route
+        stop = assignment.stop
+        vehicle = assignment.vehicle
+
+        return Response({
+            'transport_type': assignment.transport_type,
+            'route': {
+                'name': route.name,
+                'start_location': route.start_location,
+                'end_location': route.end_location,
+                'distance_km': str(route.distance_km) if route.distance_km is not None else None,
+                'estimated_duration_minutes': route.estimated_duration_minutes,
+            },
+            'stop': {
+                'name': stop.name,
+                'address': stop.address,
+                'stop_order': stop.stop_order,
+                'pickup_time': str(stop.pickup_time),
+                'drop_time': str(stop.drop_time),
+            },
+            'vehicle': {
+                'vehicle_number': vehicle.vehicle_number,
+                'vehicle_type': vehicle.vehicle_type,
+                'driver_name': vehicle.driver_name,
+                'driver_phone': vehicle.driver_phone,
+            } if vehicle else None,
+        })
 
 
 class StudentExamScheduleView(APIView):

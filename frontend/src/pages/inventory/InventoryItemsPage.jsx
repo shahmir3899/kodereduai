@@ -2,6 +2,10 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { inventoryApi } from '../../services/api'
 import { useConfirmModal } from '../../components/ConfirmModal'
+import Spinner from '../../components/ui/Spinner'
+import { useDebounce } from '../../hooks/useDebounce'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
+import { SkeletonTable } from '../../components/ui/Skeleton'
 
 function formatCurrency(val) {
   return `Rs ${Number(val || 0).toLocaleString()}`
@@ -34,6 +38,7 @@ export default function InventoryItemsPage() {
 
   // Filters
   const [search, setSearch] = useState('')
+  const debouncedSearch = useDebounce(search, 300)
   const [categoryFilter, setCategoryFilter] = useState('')
   const [stockFilter, setStockFilter] = useState('')
 
@@ -63,9 +68,9 @@ export default function InventoryItemsPage() {
 
   // ---- Queries ----
   const { data: itemsData, isLoading } = useQuery({
-    queryKey: ['inventoryItems', search, categoryFilter, stockFilter],
+    queryKey: ['inventoryItems', debouncedSearch, categoryFilter, stockFilter],
     queryFn: () => inventoryApi.getItems({
-      search: search || undefined,
+      search: debouncedSearch || undefined,
       category: categoryFilter || undefined,
       stock_status: stockFilter || undefined,
       page_size: 9999,
@@ -205,6 +210,11 @@ export default function InventoryItemsPage() {
     setShowAISuggestModal(true)
   }
   const closeAISuggestModal = () => { setShowAISuggestModal(false); setAISuggestions(null) }
+
+  useEscapeKey(closeItemModal, showItemModal)
+  useEscapeKey(closeCategoryModal, showCategoryModal)
+  useEscapeKey(closeVendorModal, showVendorModal)
+  useEscapeKey(closeAISuggestModal, showAISuggestModal)
 
   const handleAddSelected = async () => {
     if (aiAdding) return
@@ -440,9 +450,22 @@ export default function InventoryItemsPage() {
       {/* Items Table */}
       <div className="bg-white rounded-lg shadow-sm">
         {isLoading ? (
-          <div className="text-center py-16">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-            <p className="text-gray-500 mt-3">Loading items...</p>
+          <div className="hidden sm:block overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Item</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">SKU</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Stock</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Unit Price</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Value</th>
+                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Status</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+                </tr>
+              </thead>
+              <SkeletonTable rows={6} cols={8} />
+            </table>
           </div>
         ) : items.length === 0 ? (
           <div className="text-center py-16">
@@ -718,7 +741,7 @@ export default function InventoryItemsPage() {
                 </svg>
                 AI Inventory Suggestions
               </h2>
-              <button onClick={closeAISuggestModal} className="text-gray-400 hover:text-gray-600">
+              <button onClick={closeAISuggestModal} className="text-gray-400 hover:text-gray-600" aria-label="Close">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
@@ -767,7 +790,7 @@ export default function InventoryItemsPage() {
             {/* Loading */}
             {aiSuggestMutation.isPending && (
               <div className="text-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto"></div>
+                <Spinner size="md" className="mx-auto" />
                 <p className="text-gray-500 mt-3 text-sm">AI is generating suggestions...</p>
               </div>
             )}

@@ -1,6 +1,7 @@
 import { useParams, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { parentsApi } from '../../services/api'
+import Spinner from '../../components/ui/Spinner'
 
 function formatTime(time) {
   if (!time) return ''
@@ -34,7 +35,7 @@ export default function ChildExamSchedule() {
           Back to Overview
         </Link>
         <div className="flex items-center justify-center py-20">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" />
+          <Spinner size="md" />
         </div>
       </div>
     )

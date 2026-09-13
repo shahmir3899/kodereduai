@@ -6,6 +6,7 @@ import { useToast } from '../components/Toast'
 import ClassSelector from '../components/ClassSelector'
 import { useAcademicYear } from '../contexts/AcademicYearContext'
 import useTeacherScopedClasses from '../hooks/useTeacherScopedClasses'
+import Spinner from '../components/ui/Spinner'
 
 function getDaysInMonth(year, month) {
   return new Date(year, month + 1, 0).getDate()
@@ -21,7 +22,7 @@ function pad(n) {
 
 export default function AttendanceRecordsPage() {
   const { activeAcademicYear } = useAcademicYear()
-  const { isPrincipal, isHRManager, isTeacher, isSchoolAdmin } = useAuth()
+  const { isPrincipal, isManager, isTeacher, isSchoolAdmin } = useAuth()
   const { showSuccess, showError } = useToast()
   const today = new Date()
   const [year, setYear] = useState(today.getFullYear())
@@ -253,7 +254,7 @@ export default function AttendanceRecordsPage() {
         </div>
       ) : isLoading ? (
         <div className="card text-center py-12">
-          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600 mx-auto"></div>
+          <Spinner size="h-10 w-10" className="mx-auto" />
           <p className="mt-4 text-gray-500">Loading register...</p>
         </div>
       ) : (
@@ -285,7 +286,7 @@ export default function AttendanceRecordsPage() {
           {/* Action Toolbar */}
           {classId && (
             <div className="flex justify-end">
-              {(isSchoolAdmin || isPrincipal || isHRManager || isTeacher) && (
+              {(isSchoolAdmin || isPrincipal || isManager || isTeacher) && (
                 <button
                   onClick={handleDownloadRegister}
                   disabled={downloading}

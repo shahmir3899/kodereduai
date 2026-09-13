@@ -1,5 +1,6 @@
 import { useRef, useMemo } from 'react'
 import { MONTHS } from './FeeFilters'
+import Badge from '../../components/ui/Badge'
 
 const statusBadge = (status) => {
   const styles = {
@@ -187,7 +188,7 @@ export default function FeeTable({
                   <p className="text-xs text-gray-500">{group.class_name} - Roll #{group.student_roll}</p>
                 </div>
                 {statusLabel === 'MIXED' ? (
-                  <span className="px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">MIXED</span>
+                  <Badge tone="warning">MIXED</Badge>
                 ) : statusBadge(statusLabel)}
               </div>
 

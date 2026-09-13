@@ -12,16 +12,39 @@ ADMIN_ROLES = ('SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL')
 
 # Roles that are staff-level (non-admin). These get read-only access to
 # existing modules (finance, attendance) and are subject to sensitive-data filtering.
-STAFF_LEVEL_ROLES = ('STAFF', 'TEACHER', 'HR_MANAGER', 'ACCOUNTANT', 'DRIVER')
+STAFF_LEVEL_ROLES = ('STAFF', 'TEACHER', 'MANAGER', 'ACCOUNTANT', 'DRIVER')
 PARENT_ROLES = ('PARENT',)
 STUDENT_ROLES = ('STUDENT',)
 
 # Which roles each role is allowed to create
 ROLE_HIERARCHY = {
-    'SUPER_ADMIN': ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL', 'HR_MANAGER', 'ACCOUNTANT', 'TEACHER', 'STAFF', 'DRIVER'],
-    'SCHOOL_ADMIN': ['PRINCIPAL', 'HR_MANAGER', 'ACCOUNTANT', 'TEACHER', 'STAFF', 'DRIVER'],
-    'PRINCIPAL': ['HR_MANAGER', 'ACCOUNTANT', 'TEACHER', 'STAFF', 'DRIVER'],
+    'SUPER_ADMIN': ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL', 'MANAGER', 'ACCOUNTANT', 'TEACHER', 'STAFF', 'DRIVER'],
+    'SCHOOL_ADMIN': ['PRINCIPAL', 'MANAGER', 'ACCOUNTANT', 'TEACHER', 'STAFF', 'DRIVER'],
+    'PRINCIPAL': ['MANAGER', 'ACCOUNTANT', 'TEACHER', 'STAFF', 'DRIVER'],
 }
+
+
+def get_parent_children_ids(request):
+    """
+    Return a set of student IDs linked to the requesting parent.
+
+    Shared here (rather than importing parents.views' own copy) so any app
+    can scope a PARENT's reads to their own children without a cross-app
+    view-module import — same convention as the teacher-scope helpers below.
+    Used to close a real gap (2026-09): library/BookIssueViewSet and
+    transport/TransportAssignmentViewSet both used IsSchoolAdminOrReadOnly,
+    which lets any authenticated PARENT/STUDENT read every student's book
+    issues or bus assignment in the school, not just their own child's/self.
+    """
+    from parents.models import ParentProfile, ParentChild
+
+    try:
+        profile = request.user.parent_profile
+    except ParentProfile.DoesNotExist:
+        return set()
+    return set(
+        ParentChild.objects.filter(parent=profile).values_list('student_id', flat=True)
+    )
 
 
 def _resolve_scope_academic_year_id(request, school_id):
@@ -307,6 +330,41 @@ class CanManageStudentPhoto(permissions.BasePermission):
         return role in ADMIN_ROLES or role == 'TEACHER'
 
 
+class CanViewStudentRecords(permissions.BasePermission):
+    """
+    Read/write gate for the general Student and Class rosters (list/retrieve/
+    create/destroy — narrower actions like update, photo, and portal-account
+    creation are re-gated separately via get_permissions() overrides).
+
+    Security fix (2026-09): IsSchoolAdminOrReadOnly used to sit here, which
+    lets SAFE_METHODS through for *any* authenticated user regardless of
+    role — so STAFF/DRIVER (frontend-blocked from /students via
+    canAccessManagementRoute) and even PARENT/STUDENT portal accounts could
+    pull the full student roster, PII included, straight from the API,
+    bypassing the intended lockout entirely. This restricts read access to
+    the roles the frontend actually intends to allow in:
+    - SUPER_ADMIN/SCHOOL_ADMIN/PRINCIPAL: full read + write
+    - TEACHER/MANAGER/ACCOUNTANT: read only
+    - STAFF/DRIVER/PARENT/STUDENT: no access — PARENT/STUDENT already have
+      their own scoped self-service endpoints for their own/child's record
+      and have no legitimate reason to hit the general roster.
+    """
+    message = "You don't have permission to view student records."
+
+    READ_ROLES = ADMIN_ROLES + ('TEACHER', 'MANAGER', 'ACCOUNTANT')
+
+    def has_permission(self, request, view):
+        if not request.user.is_authenticated:
+            return False
+
+        role = get_effective_role(request)
+
+        if request.method in permissions.SAFE_METHODS:
+            return role in self.READ_ROLES
+
+        return role in ADMIN_ROLES
+
+
 class CanEditStudentRecord(permissions.BasePermission):
     """
     Student profile-edit policy for the update/partial_update actions:
@@ -348,10 +406,10 @@ class CanEditCurriculum(permissions.BasePermission):
     """
     Curriculum edit policy:
     - SUPER_ADMIN/SCHOOL_ADMIN/PRINCIPAL: full access
-    - TEACHER: full access for curriculum workflows
+    - TEACHER/MANAGER: full access for curriculum workflows
     - Others: read-only
     """
-    message = "Only admins, principals, or teachers can modify curriculum data."
+    message = "Only admins, principals, teachers, or managers can modify curriculum data."
 
     def has_permission(self, request, view):
         if not request.user.is_authenticated:
@@ -361,7 +419,7 @@ class CanEditCurriculum(permissions.BasePermission):
             return True
 
         role = get_effective_role(request)
-        return role in ADMIN_ROLES or role == 'TEACHER'
+        return role in ADMIN_ROLES or role in ('TEACHER', 'MANAGER')
 
 
 class HasSchoolAccess(permissions.BasePermission):
@@ -440,7 +498,7 @@ class FinanceRoleAccessPermission(permissions.BasePermission):
     """
     Finance access policy:
     - SUPER_ADMIN/SCHOOL_ADMIN/PRINCIPAL: full access
-    - HR_MANAGER/ACCOUNTANT/DRIVER: read-only
+    - MANAGER/ACCOUNTANT/DRIVER: read-only
     - TEACHER: only fee-collection scoped actions
     - STAFF: no finance access
     """
@@ -462,7 +520,7 @@ class FinanceRoleAccessPermission(permissions.BasePermission):
         if role in ADMIN_ROLES:
             return True
 
-        if role in ('HR_MANAGER', 'ACCOUNTANT', 'DRIVER'):
+        if role in ('MANAGER', 'ACCOUNTANT', 'DRIVER'):
             return request.method in permissions.SAFE_METHODS
 
         if role == 'STAFF':
@@ -484,7 +542,7 @@ class InventoryRoleAccessPermission(permissions.BasePermission):
     """
     Inventory access policy:
     - SUPER_ADMIN/SCHOOL_ADMIN/PRINCIPAL: full access
-    - HR_MANAGER/ACCOUNTANT/DRIVER: read-only
+    - MANAGER/ACCOUNTANT/DRIVER: read-only
     - TEACHER/STAFF: only their own assignment reads
     """
     message = "You don't have permission to access this inventory resource."
@@ -501,7 +559,7 @@ class InventoryRoleAccessPermission(permissions.BasePermission):
         if role in ADMIN_ROLES:
             return True
 
-        if role in ('HR_MANAGER', 'ACCOUNTANT', 'DRIVER'):
+        if role in ('MANAGER', 'ACCOUNTANT', 'DRIVER'):
             return request.method in permissions.SAFE_METHODS
 
         if role in ('TEACHER', 'STAFF'):

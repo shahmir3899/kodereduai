@@ -6,6 +6,8 @@ import { useClasses } from '../../hooks/useClasses'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import ClassSelector from '../../components/ClassSelector'
 import { useToast } from '../../components/Toast'
+import { useConfirmModal } from '../../components/ConfirmModal'
+import { useDebounce } from '../../hooks/useDebounce'
 
 // Recommendation badge component
 function RecBadge({ rec }) {
@@ -64,6 +66,7 @@ function getClassOptionLabel(classObj) {
 export default function PromotionPage() {
   const queryClient = useQueryClient()
   const { showError, showSuccess, showWarning } = useToast()
+  const { confirm, ConfirmModalRoot } = useConfirmModal()
 
   // Step state
   const [step, setStep] = useState(1) // 1: Select years, 2: Select class, 3: Review & promote
@@ -79,6 +82,7 @@ export default function PromotionPage() {
   // History tab: pair-based selection + row-level filters
   const [historyPair, setHistoryPair] = useState({ source: '', target: '' })
   const [historyFilters, setHistoryFilters] = useState({ event_type: '', source_class: '', target_class: '', student_search: '' })
+  const debouncedStudentSearch = useDebounce(historyFilters.student_search, 300)
   const [selectedHistoryIds, setSelectedHistoryIds] = useState([])
   const [singleCorrectionModal, setSingleCorrectionModal] = useState(null)
   const [singleCorrectionForm, setSingleCorrectionForm] = useState({ action: 'REPEAT', target_class_id: '', new_roll_number: '', reason: '' })
@@ -90,6 +94,13 @@ export default function PromotionPage() {
   const [isTargetSetupLoading, setIsTargetSetupLoading] = useState(false)
   const [selectedTargetCandidateId, setSelectedTargetCandidateId] = useState('')
   const [isInitializingSessionClasses, setIsInitializingSessionClasses] = useState(false)
+
+  useEscapeKey(() => {
+    setShowTargetSetupModal(false)
+    setTargetSetupPreview(null)
+    setSelectedTargetCandidateId('')
+  }, showTargetSetupModal && !!targetSetupPreview)
+  useEscapeKey(() => setSingleCorrectionModal(null), !!singleCorrectionModal)
 
   // AI Advisor state
   const [showAdvisor, setShowAdvisor] = useState(false)
@@ -151,14 +162,14 @@ export default function PromotionPage() {
   const historyTargetUsesSessionClasses = historyTargetSessionClasses?.length > 0
 
   const { data: promotionHistoryRes, isLoading: historyLoading } = useQuery({
-    queryKey: ['promotion-history', historyPair.source, historyPair.target, historyFilters],
+    queryKey: ['promotion-history', historyPair.source, historyPair.target, { ...historyFilters, student_search: debouncedStudentSearch }],
     queryFn: () => sessionsApi.getPromotionHistory({
       source_academic_year: historyPair.source,
       target_academic_year: historyPair.target,
       ...(historyFilters.event_type ? { event_type: historyFilters.event_type } : {}),
       ...(historyFilters.source_class ? { source_class: historyFilters.source_class } : {}),
       ...(historyFilters.target_class ? { target_class: historyFilters.target_class } : {}),
-      ...(historyFilters.student_search ? { student_search: historyFilters.student_search } : {}),
+      ...(debouncedStudentSearch ? { student_search: debouncedStudentSearch } : {}),
       page_size: 200,
     }),
     enabled: step === 4 && historyPairSelected,
@@ -391,7 +402,7 @@ export default function PromotionPage() {
     return [...new Set(ids)]
   }
 
-  const handleReverseStudents = (studentIds) => {
+  const handleReverseStudents = async (studentIds) => {
     if (!sourceYearId || !targetYearId) {
       showError('Source and target academic year are required for reverse action.')
       return
@@ -401,9 +412,12 @@ export default function PromotionPage() {
       return
     }
 
-    const shouldProceed = window.confirm(
-      `Reverse promotion for ${studentIds.length} student(s)?\n\nThis will remove their target-year enrollment and restore source-year active status.`
-    )
+    const shouldProceed = await confirm({
+      title: 'Reverse promotion?',
+      message: `Reverse promotion for ${studentIds.length} student(s)? This will remove their target-year enrollment and restore source-year active status.`,
+      variant: 'warning',
+      confirmLabel: 'Reverse',
+    })
     if (!shouldProceed) return
 
     reverseMut.trigger({
@@ -709,6 +723,7 @@ export default function PromotionPage() {
 
   return (
     <div>
+      <ConfirmModalRoot />
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Student Promotion</h1>

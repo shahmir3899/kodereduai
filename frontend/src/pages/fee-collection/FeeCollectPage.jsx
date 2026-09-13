@@ -20,6 +20,7 @@ import {
   resolveSessionClassId,
   resolveClassIdToMasterClassId,
 } from '../../utils/classScope'
+import Button from '../../components/ui/Button'
 
 export default function FeeCollectPage() {
   const { user, activeSchool, effectiveRole, isSchoolAdmin, isAccountant, isPrincipal, isSuperAdmin } = useAuth()
@@ -256,12 +257,9 @@ export default function FeeCollectPage() {
               >
                 Create Fee
               </button>
-              <button
-                onClick={() => setShowGenerateModal(true)}
-                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm"
-              >
+              <Button onClick={() => setShowGenerateModal(true)}>
                 Generate Records
-              </button>
+              </Button>
             </>
           )}
         </div>

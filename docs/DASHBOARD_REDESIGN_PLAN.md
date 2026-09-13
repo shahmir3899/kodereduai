@@ -21,7 +21,7 @@
 2. [TEACHER Dashboard](#2-teacher-dashboard)
 3. [STUDENT Dashboard](#3-student-dashboard)
 4. [PARENT Dashboard](#4-parent-dashboard)
-5. [HR_MANAGER Dashboard](#5-hr_manager-dashboard)
+5. [MANAGER Dashboard](#5-manager-dashboard)
 6. [ACCOUNTANT Dashboard](#6-accountant-dashboard)
 7. [STAFF Dashboard](#7-staff-dashboard)
 8. [SUPER_ADMIN Dashboard](#8-super_admin-dashboard)
@@ -286,9 +286,9 @@ Action buttons per child:
 
 ---
 
-## 5. HR_MANAGER Dashboard
+## 5. MANAGER Dashboard
 
-**File**: `frontend/src/pages/HRManagerDashboard.jsx`
+**File**: `frontend/src/pages/ManagerDashboard.jsx`
 **Current state**: 4 KPI cards + quick actions + notifications. Bare minimum.
 **Goal**: Add payroll overview, department breakdown, leave calendar, upcoming events.
 
@@ -688,12 +688,16 @@ parentsApi.getChildExamResults(studentId)     — per child
 notificationsApi.getMyNotifications({limit: 5})
 ```
 
-### HR_MANAGER APIs Used
+### MANAGER APIs Used
 ```
 hrApi.getDashboardStats()
 hrApi.getPayrollSummary({month, year})
 hrApi.getLeaveApplications({status: 'PENDING', page_size: 5})
 hrApi.getAttendanceSummary({date_from, date_to})
+lmsApi.getLessonPlans({page_size: 1})           — count only
+lmsApi.getAssignments({status: 'PUBLISHED', page_size: 1})  — count only
+examinationsApi.getQuestions({page_size: 1})    — count only
+examinationsApi.getExamPapers({page_size: 1})   — count only
 notificationsApi.getMyNotifications({limit: 5})
 ```
 

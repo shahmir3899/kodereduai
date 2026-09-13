@@ -13,9 +13,12 @@ import ClassSelector from '../../components/ClassSelector'
 import SubjectSelector from '../../components/SubjectSelector'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 import { compressImageForTocOcr } from '../../utils/compressImageForUpload'
 import AddBookModal from './AddBookModal'
+import Spinner from '../../components/ui/Spinner'
+import Badge from '../../components/ui/Badge'
 
 const LANGUAGES = [
   { value: 'en', label: 'English' },
@@ -1243,6 +1246,14 @@ export default function CurriculumPage() {
     setOcrElapsedSeconds(0)
     setOcrCanRetry(false)
   }
+
+  useEscapeKey(closeBookModal, showBookModal)
+  useEscapeKey(closeContentRevisionDrawer, showContentRevisionDrawer)
+  useEscapeKey(closeChapterModal, showChapterModal)
+  useEscapeKey(closeTopicModal, showTopicModal)
+  useEscapeKey(closeContentBlockModal, showContentBlockModal)
+  useEscapeKey(closeSubtopicContentModal, showSubtopicContentModal)
+  useEscapeKey(closeTocModal, showTocModal)
 
   const resetTocSelectedImage = () => {
     setTocImageFile(null)
@@ -2872,7 +2883,7 @@ export default function CurriculumPage() {
       {!filtersSelected ? null : booksLoading ? (
         <div className="card">
           <div className="text-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+            <Spinner size="md" className="mx-auto" />
             <p className="text-gray-500 mt-2">Loading books...</p>
           </div>
         </div>
@@ -2912,9 +2923,9 @@ export default function CurriculumPage() {
                               RTL
                             </span>
                           )}
-                          <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                          <Badge tone="info">
                             {getLanguageLabel(book.language)}
-                          </span>
+                          </Badge>
                         </div>
                       </div>
                     </RTLWrapper>
@@ -2963,7 +2974,7 @@ export default function CurriculumPage() {
             ) : treeLoading ? (
               <div className="card">
                 <div className="text-center py-8">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+                  <Spinner size="md" className="mx-auto" />
                   <p className="text-gray-500 mt-2">Loading book details...</p>
                 </div>
               </div>

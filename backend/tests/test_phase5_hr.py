@@ -5,7 +5,7 @@ Tests all 11 HR ViewSets (departments, designations, staff, salary structures,
 payslips, leave policies, leave applications, staff attendance, appraisals,
 qualifications, documents) with role-based access control.
 
-Write access: SCHOOL_ADMIN, PRINCIPAL, HR_MANAGER
+Write access: SCHOOL_ADMIN, PRINCIPAL, MANAGER
 Read-only: TEACHER, ACCOUNTANT
 """
 
@@ -51,12 +51,12 @@ class TestDepartmentsAPI:
         }, seed_data['tokens']['admin'], seed_data['SID_A'])
         assert resp.status_code == 201, "A1 Create department (Admin)"
 
-    def test_a2_create_department_hr_manager(self, seed_data, api):
+    def test_a2_create_department_manager(self, seed_data, api):
         resp = api.post('/api/hr/departments/', {
             'name': f'{P5}IT Dept',
             'description': 'IT department',
-        }, seed_data['tokens']['hr_manager'], seed_data['SID_A'])
-        assert resp.status_code == 201, "A2 Create department (HR Manager)"
+        }, seed_data['tokens']['manager'], seed_data['SID_A'])
+        assert resp.status_code == 201, "A2 Create department (Manager)"
 
     def test_a3_create_department_teacher_forbidden(self, seed_data, api):
         resp = api.post('/api/hr/departments/', {
@@ -313,15 +313,15 @@ class TestStaffAPI:
         }, seed_data['tokens']['admin'], seed_data['SID_A'])
         assert resp.status_code == 201, "C1 Create staff member (Admin)"
 
-    def test_c2_create_staff_hr_manager(self, seed_data, api):
+    def test_c2_create_staff_manager(self, seed_data, api):
         _, dept_it = self._setup_depts(seed_data, api)
         resp = api.post('/api/hr/staff/', {
             'first_name': f'{P5}Fatima', 'last_name': 'Shah',
             'employee_id': f'{P5}E002', 'department': dept_it,
             'employment_status': 'ACTIVE', 'employment_type': 'PART_TIME',
             'date_of_joining': '2024-09-01',
-        }, seed_data['tokens']['hr_manager'], seed_data['SID_A'])
-        assert resp.status_code == 201, "C2 Create staff member (HR Manager)"
+        }, seed_data['tokens']['manager'], seed_data['SID_A'])
+        assert resp.status_code == 201, "C2 Create staff member (Manager)"
 
     def test_c3_create_staff_teacher_forbidden(self, seed_data, api):
         resp = api.post('/api/hr/staff/', {
@@ -974,7 +974,11 @@ class TestLeaveApplicationsAPI:
         }, seed_data['tokens']['admin'], seed_data['SID_A'])
         assert resp.status_code == 201, "G1 Create leave application (Admin)"
 
-    def test_g2_create_leave_application_teacher_forbidden(self, seed_data, api):
+    def test_g2_teacher_without_staff_profile_gets_400(self, seed_data, api):
+        """Self-service (2026-09): TEACHER can now create leave, but only for
+        themselves — seed_data['tokens']['teacher'] has no linked StaffMember,
+        so this now fails validation (400) rather than the old blanket
+        permission denial (403)."""
         staff_1 = seed_data['staff'][0]
         resp = api.post('/api/hr/leave-applications/', {
             'staff_member': staff_1.id,
@@ -982,7 +986,156 @@ class TestLeaveApplicationsAPI:
             'end_date': '2026-04-02',
             'reason': 'Test',
         }, seed_data['tokens']['teacher'], seed_data['SID_A'])
-        assert resp.status_code == 403, "G2 Create leave application (Teacher) -> 403"
+        assert resp.status_code == 400, "G2 Teacher with no staff profile -> 400"
+
+    def test_g2b_teacher_self_service_applies_for_own_leave(self, seed_data, api):
+        """A teacher with a linked StaffMember can create their own leave
+        application, and submitting someone else's staff_member id is
+        silently overridden to their own rather than honored — the actual
+        server-side enforcement behind self-service, not just a UI nicety."""
+        env = self._setup_leave_env(seed_data, api)
+        other_staff = seed_data['staff'][0]
+        own_staff = StaffMember.objects.create(
+            school=seed_data['school_a'],
+            user=seed_data['users']['teacher'],
+            first_name=f"{P5}SelfService", last_name='Teacher',
+            employee_id=f'{P5}TSELF',
+            employment_status='ACTIVE', employment_type='FULL_TIME',
+            date_of_joining='2024-01-01',
+        )
+        resp = api.post('/api/hr/leave-applications/', {
+            'staff_member': other_staff.id,
+            'leave_policy': env['annual'].id,
+            'start_date': '2026-04-01',
+            'end_date': '2026-04-02',
+            'reason': 'Self-service test',
+        }, seed_data['tokens']['teacher'], seed_data['SID_A'])
+        assert resp.status_code == 201, "G2b Teacher self-service create -> 201"
+        assert resp.json()['staff_member'] == own_staff.id, "G2b forced to own staff_member, not the submitted one"
+
+    def test_g2c_teacher_cannot_approve_or_reject(self, seed_data, api):
+        """Self-service create/cancel does not extend to approve/reject —
+        those stay admin/Manager-only even for a teacher's own application."""
+        env = self._setup_leave_env(seed_data, api)
+        api.post('/api/hr/leave-applications/', {
+            'staff_member': env['e001'],
+            'leave_policy': env['annual'].id,
+            'start_date': '2026-04-10',
+            'end_date': '2026-04-11',
+            'reason': 'For approve/reject block test',
+        }, seed_data['tokens']['admin'], seed_data['SID_A'])
+        leave = LeaveApplication.objects.filter(
+            school=seed_data['school_a'], staff_member_id=env['e001'], status='PENDING',
+        ).first()
+        assert leave is not None, "G2c pending application must exist"
+        leave_id = leave.id
+        approve_resp = api.post(f'/api/hr/leave-applications/{leave_id}/approve/', {}, seed_data['tokens']['teacher'], seed_data['SID_A'])
+        assert approve_resp.status_code == 403, "G2c Teacher cannot approve -> 403"
+        reject_resp = api.post(f'/api/hr/leave-applications/{leave_id}/reject/', {}, seed_data['tokens']['teacher'], seed_data['SID_A'])
+        assert reject_resp.status_code == 403, "G2c Teacher cannot reject -> 403"
+
+    def test_g2d_teacher_self_service_without_staff_member_field(self, seed_data, api):
+        """Matches the actual frontend request shape: the Apply Leave form
+        hides the Staff Member picker entirely for TEACHER, so staff_member
+        is never sent at all — the serializer must accept that (it's only
+        required for non-teacher creates) and perform_create fills it in."""
+        env = self._setup_leave_env(seed_data, api)
+        own_staff = StaffMember.objects.create(
+            school=seed_data['school_a'],
+            user=seed_data['users']['teacher'],
+            first_name=f"{P5}NoPicker", last_name='Teacher',
+            employee_id=f'{P5}TNOPICK',
+            employment_status='ACTIVE', employment_type='FULL_TIME',
+            date_of_joining='2024-01-01',
+        )
+        resp = api.post('/api/hr/leave-applications/', {
+            'leave_policy': env['annual'].id,
+            'start_date': '2026-04-05',
+            'end_date': '2026-04-06',
+            'reason': 'No staff_member sent at all',
+        }, seed_data['tokens']['teacher'], seed_data['SID_A'])
+        assert resp.status_code == 201, "G2d Teacher create without staff_member field -> 201"
+        assert resp.json()['staff_member'] == own_staff.id, "G2d assigned to own staff_member"
+
+    def test_g2e_staff_without_staff_profile_gets_400(self, seed_data, api):
+        """Self-service (2026-09): STAFF gets the same self-service leave as
+        TEACHER — seed_data['tokens']['staff'] has no linked StaffMember, so
+        this fails validation (400) rather than the old blanket 403."""
+        staff_1 = seed_data['staff'][0]
+        resp = api.post('/api/hr/leave-applications/', {
+            'staff_member': staff_1.id,
+            'start_date': '2026-04-01',
+            'end_date': '2026-04-02',
+            'reason': 'Test',
+        }, seed_data['tokens']['staff'], seed_data['SID_A'])
+        assert resp.status_code == 400, "G2e Staff with no staff profile -> 400"
+
+    def test_g2f_staff_self_service_applies_for_own_leave(self, seed_data, api):
+        """A Staff user with a linked StaffMember can create their own leave
+        application, and submitting someone else's staff_member id is
+        silently overridden to their own — same enforcement as Teacher."""
+        env = self._setup_leave_env(seed_data, api)
+        other_staff = seed_data['staff'][0]
+        own_staff = StaffMember.objects.create(
+            school=seed_data['school_a'],
+            user=seed_data['users']['staff'],
+            first_name=f"{P5}SelfService", last_name='Staff',
+            employee_id=f'{P5}SSELF',
+            employment_status='ACTIVE', employment_type='FULL_TIME',
+            date_of_joining='2024-01-01',
+        )
+        resp = api.post('/api/hr/leave-applications/', {
+            'staff_member': other_staff.id,
+            'leave_policy': env['annual'].id,
+            'start_date': '2026-04-01',
+            'end_date': '2026-04-02',
+            'reason': 'Self-service test',
+        }, seed_data['tokens']['staff'], seed_data['SID_A'])
+        assert resp.status_code == 201, "G2f Staff self-service create -> 201"
+        assert resp.json()['staff_member'] == own_staff.id, "G2f forced to own staff_member, not the submitted one"
+
+    def test_g2g_staff_cannot_approve_or_reject(self, seed_data, api):
+        """Self-service create/cancel does not extend to approve/reject for
+        Staff either — those stay admin/Manager-only."""
+        env = self._setup_leave_env(seed_data, api)
+        api.post('/api/hr/leave-applications/', {
+            'staff_member': env['e001'],
+            'leave_policy': env['annual'].id,
+            'start_date': '2026-04-12',
+            'end_date': '2026-04-13',
+            'reason': 'For approve/reject block test (staff)',
+        }, seed_data['tokens']['admin'], seed_data['SID_A'])
+        leave = LeaveApplication.objects.filter(
+            school=seed_data['school_a'], staff_member_id=env['e001'], status='PENDING',
+        ).order_by('-id').first()
+        assert leave is not None, "G2g pending application must exist"
+        leave_id = leave.id
+        approve_resp = api.post(f'/api/hr/leave-applications/{leave_id}/approve/', {}, seed_data['tokens']['staff'], seed_data['SID_A'])
+        assert approve_resp.status_code == 403, "G2g Staff cannot approve -> 403"
+        reject_resp = api.post(f'/api/hr/leave-applications/{leave_id}/reject/', {}, seed_data['tokens']['staff'], seed_data['SID_A'])
+        assert reject_resp.status_code == 403, "G2g Staff cannot reject -> 403"
+
+    def test_g2h_staff_self_service_without_staff_member_field(self, seed_data, api):
+        """Matches the actual frontend request shape: the Apply Leave form
+        hides the Staff Member picker for STAFF too, so staff_member is never
+        sent — the serializer accepts that and perform_create fills it in."""
+        env = self._setup_leave_env(seed_data, api)
+        own_staff = StaffMember.objects.create(
+            school=seed_data['school_a'],
+            user=seed_data['users']['staff'],
+            first_name=f"{P5}NoPicker", last_name='Staff',
+            employee_id=f'{P5}SNOPICK',
+            employment_status='ACTIVE', employment_type='FULL_TIME',
+            date_of_joining='2024-01-01',
+        )
+        resp = api.post('/api/hr/leave-applications/', {
+            'leave_policy': env['annual'].id,
+            'start_date': '2026-04-07',
+            'end_date': '2026-04-08',
+            'reason': 'No staff_member sent at all (staff)',
+        }, seed_data['tokens']['staff'], seed_data['SID_A'])
+        assert resp.status_code == 201, "G2h Staff create without staff_member field -> 201"
+        assert resp.json()['staff_member'] == own_staff.id, "G2h assigned to own staff_member"
 
     def test_g3_list_applications(self, seed_data, api):
         env = self._setup_leave_env(seed_data, api)
@@ -1306,6 +1459,125 @@ class TestStaffAttendanceAPI:
             token, sid,
         )
         assert resp.status_code == 200, "H11 Attendance summary"
+
+    def test_h11b_date_range_filter(self, seed_data, api):
+        """The list endpoint didn't support date_from/date_to before — added
+        for the self-service My Attendance page, which needs a range, not a
+        single day."""
+        ids = self._setup_staff(seed_data, api)
+        token = seed_data['tokens']['admin']
+        sid = seed_data['SID_A']
+        api.post('/api/hr/attendance/', {
+            'staff_member': ids['e001'], 'date': self.ATT_DATE, 'status': 'PRESENT',
+        }, token, sid)
+        api.post('/api/hr/attendance/', {
+            'staff_member': ids['e001'], 'date': self.ATT_DATE2, 'status': 'ABSENT',
+        }, token, sid)
+        resp = api.get(f'/api/hr/attendance/?date_from={self.ATT_DATE}&date_to={self.ATT_DATE}', token, sid)
+        assert resp.status_code == 200, "H11b date range filter status"
+        results = resp.json().get('results', resp.json())
+        dates = {r['date'] for r in results}
+        assert self.ATT_DATE in dates and self.ATT_DATE2 not in dates, "H11b date range excludes out-of-range date"
+
+    def test_h13_teacher_self_service_sees_only_own_attendance(self, seed_data, api):
+        """Self-service (2026-09): TEACHER/STAFF reads were never scoped
+        before — any authenticated read-only role could pull the whole
+        school's attendance. Now a Teacher only ever sees their own row."""
+        ids = self._setup_staff(seed_data, api)
+        token = seed_data['tokens']['admin']
+        sid = seed_data['SID_A']
+        api.post('/api/hr/attendance/', {
+            'staff_member': ids['e001'], 'date': self.ATT_DATE, 'status': 'PRESENT',
+        }, token, sid)
+        own_staff = StaffMember.objects.create(
+            school=seed_data['school_a'],
+            user=seed_data['users']['teacher'],
+            first_name=f"{P5}AttSelf", last_name='Teacher',
+            employee_id=f'{P5}TATT',
+            employment_status='ACTIVE', employment_type='FULL_TIME',
+            date_of_joining='2024-01-01',
+        )
+        StaffAttendance.objects.create(
+            school=seed_data['school_a'], staff_member=own_staff,
+            date=self.ATT_DATE2, status='PRESENT', marked_by=seed_data['users']['admin'],
+        )
+        resp = api.get('/api/hr/attendance/', seed_data['tokens']['teacher'], sid)
+        assert resp.status_code == 200, "H13 Teacher can list attendance"
+        results = resp.json().get('results', resp.json())
+        assert len(results) == 1 and results[0]['staff_member'] == own_staff.id, \
+            "H13 Teacher only sees their own attendance row, not the whole school's"
+
+    def test_h14_staff_self_service_sees_only_own_attendance(self, seed_data, api):
+        ids = self._setup_staff(seed_data, api)
+        token = seed_data['tokens']['admin']
+        sid = seed_data['SID_A']
+        api.post('/api/hr/attendance/', {
+            'staff_member': ids['e001'], 'date': self.ATT_DATE, 'status': 'PRESENT',
+        }, token, sid)
+        own_staff = StaffMember.objects.create(
+            school=seed_data['school_a'],
+            user=seed_data['users']['staff'],
+            first_name=f"{P5}AttSelf", last_name='Staff',
+            employee_id=f'{P5}SATT',
+            employment_status='ACTIVE', employment_type='FULL_TIME',
+            date_of_joining='2024-01-01',
+        )
+        StaffAttendance.objects.create(
+            school=seed_data['school_a'], staff_member=own_staff,
+            date=self.ATT_DATE2, status='ABSENT', marked_by=seed_data['users']['admin'],
+        )
+        resp = api.get('/api/hr/attendance/', seed_data['tokens']['staff'], sid)
+        assert resp.status_code == 200, "H14 Staff can list attendance"
+        results = resp.json().get('results', resp.json())
+        assert len(results) == 1 and results[0]['staff_member'] == own_staff.id, \
+            "H14 Staff only sees their own attendance row, not the whole school's"
+
+    def test_h15_teacher_cannot_write_attendance(self, seed_data, api):
+        """Self-service read-only: Teacher still can't mark/edit attendance,
+        even their own — that stays admin/Manager-only (matches test_h3)."""
+        own_staff = StaffMember.objects.create(
+            school=seed_data['school_a'],
+            user=seed_data['users']['teacher'],
+            first_name=f"{P5}AttWrite", last_name='Teacher',
+            employee_id=f'{P5}TATTW',
+            employment_status='ACTIVE', employment_type='FULL_TIME',
+            date_of_joining='2024-01-01',
+        )
+        resp = api.post('/api/hr/attendance/', {
+            'staff_member': own_staff.id, 'date': self.ATT_DATE, 'status': 'PRESENT',
+        }, seed_data['tokens']['teacher'], seed_data['SID_A'])
+        assert resp.status_code == 403, "H15 Teacher cannot create own attendance -> 403"
+
+    def test_h16_staff_summary_scoped_to_self(self, seed_data, api):
+        """The summary action ignored the staff_member filter entirely
+        before — any authenticated user got every staff member's summary
+        row. Now Staff only ever gets their own."""
+        ids = self._setup_staff(seed_data, api)
+        token = seed_data['tokens']['admin']
+        sid = seed_data['SID_A']
+        api.post('/api/hr/attendance/', {
+            'staff_member': ids['e001'], 'date': self.ATT_DATE, 'status': 'PRESENT',
+        }, token, sid)
+        own_staff = StaffMember.objects.create(
+            school=seed_data['school_a'],
+            user=seed_data['users']['staff'],
+            first_name=f"{P5}SumSelf", last_name='Staff',
+            employee_id=f'{P5}SSUM',
+            employment_status='ACTIVE', employment_type='FULL_TIME',
+            date_of_joining='2024-01-01',
+        )
+        StaffAttendance.objects.create(
+            school=seed_data['school_a'], staff_member=own_staff,
+            date=self.ATT_DATE, status='PRESENT', marked_by=seed_data['users']['admin'],
+        )
+        resp = api.get(
+            f'/api/hr/attendance/summary/?date_from={self.ATT_DATE}&date_to={self.ATT_DATE2}',
+            seed_data['tokens']['staff'], sid,
+        )
+        assert resp.status_code == 200, "H16 Staff can read summary"
+        results = resp.json()
+        assert len(results) == 1 and results[0]['staff_member'] == own_staff.id, \
+            "H16 Staff summary scoped to only their own row"
 
     def test_h12_school_b_isolation(self, seed_data, api):
         resp = api.get('/api/hr/attendance/', seed_data['tokens']['admin_b'], seed_data['SID_B'])
@@ -1651,11 +1923,11 @@ class TestCrossCutting:
         test_in_wrong = [s for s in results if s.get('employee_id', '').startswith(P5)]
         assert len(test_in_wrong) == 0, "L3 Wrong school header -> no data"
 
-    def test_l4_hr_manager_write_access(self, seed_data, api):
+    def test_l4_manager_write_access(self, seed_data, api):
         resp = api.post('/api/hr/departments/', {
             'name': f'{P5}HR Test Dept',
-        }, seed_data['tokens']['hr_manager'], seed_data['SID_A'])
-        assert resp.status_code == 201, "L4 HR Manager write access"
+        }, seed_data['tokens']['manager'], seed_data['SID_A'])
+        assert resp.status_code == 201, "L4 Manager write access"
 
     def test_l5a_teacher_can_read_departments(self, seed_data, api):
         resp = api.get('/api/hr/departments/', seed_data['tokens']['teacher'], seed_data['SID_A'])

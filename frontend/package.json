@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "test": "vitest",
     "test:run": "vitest run",
+    "test:run:phased": "node scripts/run-tests-phased.mjs",
     "test:phase3": "vitest run src/components/WorkflowProgressBar.test.jsx src/components/StageTransitionPanel.test.jsx src/components/FeePaymentWidget.test.jsx src/components/WorkflowStageNotes.test.jsx src/pages/admissions/EnquiryDetail.test.jsx",
     "test:phase3:watch": "vitest src/components/WorkflowProgressBar.test.jsx src/components/StageTransitionPanel.test.jsx src/components/FeePaymentWidget.test.jsx src/components/WorkflowStageNotes.test.jsx src/pages/admissions/EnquiryDetail.test.jsx",
     "test:phase3:coverage": "vitest run --coverage src/components/WorkflowProgressBar.test.jsx src/components/StageTransitionPanel.test.jsx src/components/FeePaymentWidget.test.jsx src/components/WorkflowStageNotes.test.jsx src/pages/admissions/EnquiryDetail.test.jsx",

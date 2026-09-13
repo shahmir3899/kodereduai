@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useBackgroundTasks } from '../contexts/BackgroundTaskContext'
 import { downloadGeneratedReport } from '../utils/downloadReport'
+import { useEscapeKey } from '../hooks/useEscapeKey'
 
 const STATUS_CONFIG = {
   PENDING: { color: 'text-gray-500', bg: 'bg-gray-50', label: 'Pending' },
@@ -44,6 +45,7 @@ export function TaskDrawerButton() {
 }
 
 function TaskDrawerPanel({ onClose }) {
+  useEscapeKey(onClose)
   const { tasks, dismissTask, dismissAll, cancelTask } = useBackgroundTasks()
 
   return (
@@ -63,7 +65,7 @@ function TaskDrawerPanel({ onClose }) {
             >
               Clear completed
             </button>
-            <button onClick={onClose} className="p-1 rounded hover:bg-gray-100">
+            <button onClick={onClose} className="p-1 rounded hover:bg-gray-100" aria-label="Close">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>

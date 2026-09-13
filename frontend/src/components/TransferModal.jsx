@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { financeApi } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 import { getErrorMessage } from '../utils/errorUtils'
+import { useEscapeKey } from '../hooks/useEscapeKey'
 
 const buildInitialForm = (transfer = null) => ({
   from_account: transfer?.from_account ? String(transfer.from_account) : '',
@@ -61,6 +62,8 @@ export default function TransferModal({ isOpen, onClose, onSuccess, initialData 
       amount: parseFloat(form.amount),
     })
   }
+
+  useEscapeKey(onClose, isOpen)
 
   if (!isOpen) return null
 

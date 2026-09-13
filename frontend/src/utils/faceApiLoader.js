@@ -68,6 +68,12 @@ export function estimateQualityScore(detection, mediaElement) {
   return Math.max(0, Math.min(1, (sizeScore + score) / 2))
 }
 
+// Below this, a capture is technically usable but risky (small/angled face,
+// low detector confidence) — surfaced as a soft "retake recommended" nudge
+// rather than a hard block, since an operator mid-queue may know the photo
+// is fine (e.g. a naturally small child's face) and want to proceed anyway.
+export const MIN_ENROLL_QUALITY_SCORE = 0.55
+
 /**
  * Cheap "how many faces are in frame" check — box-only detection, no
  * landmarks/descriptor pass, since callers that need this (multi-face
@@ -77,6 +83,21 @@ export function estimateQualityScore(detection, mediaElement) {
 export async function detectAllFacesQuick(mediaElement) {
   const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 })
   return faceapi.detectAllFaces(mediaElement, options)
+}
+
+/**
+ * Full detection pass (landmarks + descriptor) for every face in frame —
+ * only meant to be called once, on demand, when the operator needs to pick
+ * a specific face out of a multi-face frame (see LiveEnrollCapture's
+ * tap-to-select flow). Deliberately not used by the continuous per-tick
+ * scan — detectAllFacesQuick stays box-only there to keep that loop cheap.
+ */
+export async function detectAllFacesWithDescriptors(mediaElement) {
+  const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 })
+  return faceapi
+    .detectAllFaces(mediaElement, options)
+    .withFaceLandmarks()
+    .withFaceDescriptors()
 }
 
 // How much of the frame a well-framed face should occupy, and how far its

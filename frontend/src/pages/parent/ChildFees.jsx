@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { parentsApi } from '../../services/api'
+import Spinner from '../../components/ui/Spinner'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 const STATUS_COLORS = {
   PAID: 'bg-green-100 text-green-800',
@@ -20,6 +22,8 @@ export default function ChildFees() {
   const [payingFeeId, setPayingFeeId] = useState(null)
   const [selectedGateway, setSelectedGateway] = useState('')
   const [showPayModal, setShowPayModal] = useState(false)
+
+  useEscapeKey(() => setShowPayModal(false), showPayModal)
 
   // Fetch available gateways for this child's school
   const { data: gatewayData } = useQuery({
@@ -93,7 +97,7 @@ export default function ChildFees() {
           Back to Overview
         </Link>
         <div className="flex items-center justify-center py-20">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" />
+          <Spinner size="md" />
         </div>
       </div>
     )

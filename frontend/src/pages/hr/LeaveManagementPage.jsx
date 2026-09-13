@@ -2,6 +2,9 @@ import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { hrApi } from '../../services/api'
 import { useToast } from '../../components/Toast'
+import Spinner from '../../components/ui/Spinner'
+import { useAuth } from '../../contexts/AuthContext'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 const statusBadge = {
   PENDING: 'bg-yellow-100 text-yellow-800',
@@ -37,7 +40,14 @@ const EMPTY_POLICY = {
 export default function LeaveManagementPage() {
   const queryClient = useQueryClient()
   const { showError, showSuccess } = useToast()
+  const { isTeacher, isStaffMember } = useAuth()
 
+  // Self-service (2026-09): a Teacher or Staff member only ever sees/applies
+  // for their own leave — the backend already scopes the list and forces
+  // staff_member on create (hr/views.py LeaveApplicationViewSet), this just
+  // matches the UI to what's actually allowed instead of showing controls
+  // that would 403.
+  const isSelfService = isTeacher || isStaffMember
   const [tab, setTab] = useState('applications')
 
   // ── Applications State ──
@@ -172,12 +182,14 @@ export default function LeaveManagementPage() {
   // ── Handlers ──
   const handleApplySubmit = (e) => {
     e.preventDefault()
-    if (!appForm.staff_member || !appForm.leave_policy || !appForm.start_date || !appForm.end_date || !appForm.reason) {
+    // Teacher/Staff applies for themselves — no staff_member to pick; the
+    // backend forces it to their own profile regardless of what's sent.
+    if ((!isSelfService && !appForm.staff_member) || !appForm.leave_policy || !appForm.start_date || !appForm.end_date || !appForm.reason) {
       showError('All fields are required.')
       return
     }
     createAppMutation.mutate({
-      staff_member: parseInt(appForm.staff_member),
+      staff_member: isSelfService ? undefined : parseInt(appForm.staff_member),
       leave_policy: parseInt(appForm.leave_policy),
       start_date: appForm.start_date,
       end_date: appForm.end_date,
@@ -218,6 +230,10 @@ export default function LeaveManagementPage() {
     setPolicyForm(EMPTY_POLICY)
   }
 
+  useEscapeKey(() => { setApplyModal(false); setAppForm(EMPTY_APPLICATION) }, applyModal)
+  useEscapeKey(() => { setActionModal(null); setAdminRemarks('') }, !!actionModal)
+  useEscapeKey(closePolicyModal, policyModal)
+
   const handlePolicySubmit = (e) => {
     e.preventDefault()
     if (!policyForm.name || !policyForm.days_allowed) {
@@ -245,29 +261,31 @@ export default function LeaveManagementPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Leave Management</h1>
-        <p className="text-sm text-gray-600">Manage leave applications and policies</p>
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">{isSelfService ? 'My Leave' : 'Leave Management'}</h1>
+        <p className="text-sm text-gray-600">{isSelfService ? 'Apply for and track your own leave' : 'Manage leave applications and policies'}</p>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 mb-4 bg-gray-100 rounded-lg p-1 w-fit">
-        <button
-          onClick={() => setTab('applications')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-            tab === 'applications' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-800'
-          }`}
-        >
-          Applications
-        </button>
-        <button
-          onClick={() => setTab('policies')}
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-            tab === 'policies' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-800'
-          }`}
-        >
-          Policies
-        </button>
-      </div>
+      {/* Tabs — Policies management is admin/Manager-only */}
+      {!isSelfService && (
+        <div className="flex gap-1 mb-4 bg-gray-100 rounded-lg p-1 w-fit">
+          <button
+            onClick={() => setTab('applications')}
+            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+              tab === 'applications' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-800'
+            }`}
+          >
+            Applications
+          </button>
+          <button
+            onClick={() => setTab('policies')}
+            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+              tab === 'policies' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-800'
+            }`}
+          >
+            Policies
+          </button>
+        </div>
+      )}
 
       {/* ───── APPLICATIONS TAB ───── */}
       {tab === 'applications' && (
@@ -304,7 +322,7 @@ export default function LeaveManagementPage() {
 
           {appsLoading ? (
             <div className="text-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+              <Spinner size="md" className="mx-auto" />
             </div>
           ) : filteredApps.length === 0 ? (
             <div className="card text-center py-8 text-gray-500">
@@ -337,7 +355,7 @@ export default function LeaveManagementPage() {
                       <p className="truncate">{a.reason}</p>
                     </div>
                     <div className="flex justify-end gap-3 mt-3 pt-3 border-t border-gray-100">
-                      {a.status === 'PENDING' && (
+                      {!isSelfService && a.status === 'PENDING' && (
                         <>
                           <button onClick={() => { setActionModal({ type: 'approve', leave: a }); setAdminRemarks('') }} className="text-sm text-green-600 hover:text-green-800 font-medium">Approve</button>
                           <button onClick={() => { setActionModal({ type: 'reject', leave: a }); setAdminRemarks('') }} className="text-sm text-red-600 hover:text-red-800 font-medium">Reject</button>
@@ -389,7 +407,7 @@ export default function LeaveManagementPage() {
                         </td>
                         <td className="py-3 text-right">
                           <div className="flex justify-end gap-3">
-                            {a.status === 'PENDING' && (
+                            {!isSelfService && a.status === 'PENDING' && (
                               <>
                                 <button
                                   onClick={() => { setActionModal({ type: 'approve', leave: a }); setAdminRemarks('') }}
@@ -429,21 +447,23 @@ export default function LeaveManagementPage() {
               <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md mx-4">
                 <h2 className="text-xl font-bold text-gray-900 mb-4">Apply Leave</h2>
                 <form onSubmit={handleApplySubmit} className="space-y-4">
-                  <div>
-                    <label className="label">Staff Member *</label>
-                    <select
-                      className="input"
-                      value={appForm.staff_member}
-                      onChange={(e) => setAppForm({ ...appForm, staff_member: e.target.value })}
-                    >
-                      <option value="">Select Staff</option>
-                      {allStaff.filter((s) => s.is_active).map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.first_name} {s.last_name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  {!isSelfService && (
+                    <div>
+                      <label className="label">Staff Member *</label>
+                      <select
+                        className="input"
+                        value={appForm.staff_member}
+                        onChange={(e) => setAppForm({ ...appForm, staff_member: e.target.value })}
+                      >
+                        <option value="">Select Staff</option>
+                        {allStaff.filter((s) => s.is_active).map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.first_name} {s.last_name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                   <div>
                     <label className="label">Leave Policy *</label>
                     <select
@@ -553,7 +573,7 @@ export default function LeaveManagementPage() {
 
           {policiesLoading ? (
             <div className="text-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+              <Spinner size="md" className="mx-auto" />
             </div>
           ) : allPolicies.length === 0 ? (
             <div className="card text-center py-8 text-gray-500">

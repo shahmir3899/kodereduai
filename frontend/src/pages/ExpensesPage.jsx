@@ -6,6 +6,8 @@ import { financeApi } from '../services/api'
 import TransferModal from '../components/TransferModal'
 import { useConfirmModal } from '../components/ConfirmModal'
 import ExpenseCategoryManagerModal from './ExpenseCategoryManagerModal'
+import Button from '../components/ui/Button'
+import { useEscapeKey } from '../hooks/useEscapeKey'
 
 const COLOR_PALETTE = [
   'bg-blue-100 text-blue-800',
@@ -220,6 +222,8 @@ export default function ExpensesPage() {
     setNewCategoryName('')
   }
 
+  useEscapeKey(closeModal, showModal)
+
   const closeTransferModal = () => {
     setShowTransferModal(false)
     setEditingTransfer(null)
@@ -290,15 +294,15 @@ export default function ExpensesPage() {
               <button onClick={() => setShowCategoryModal(true)} className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm">
                 ⚙ Categories
               </button>
-              <button onClick={() => setShowModal(true)} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm">
+              <Button onClick={() => setShowModal(true)}>
                 Add Expense
-              </button>
+              </Button>
             </>
           )}
           {canWrite && activeTab === 'transfers' && (
-            <button onClick={() => { setEditingTransfer(null); setShowTransferModal(true) }} className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm">
+            <Button onClick={() => { setEditingTransfer(null); setShowTransferModal(true) }}>
               Record Transfer
-            </button>
+            </Button>
           )}
         </div>
       </div>

@@ -184,6 +184,59 @@ class SupabaseStorageService:
             logger.error(f"Failed to upload to Supabase: {error_msg}")
             raise Exception(f"Failed to upload image: {error_msg}")
 
+    def upload_question_diagram(self, file, school_id: int, question_id: int, slot: str) -> str:
+        """
+        Upload a Diagram Mode drawing/pasted image (Paper Builder) to Supabase Storage.
+
+        Args:
+            file: File object from request (PNG from the draw canvas, or whatever
+                image type was pasted/dropped into the import tab)
+            school_id: School ID for organizing files
+            question_id: Question ID for organizing files
+            slot: Which field this attaches to -- 'question', 'option_a'..'option_d',
+                or 'answer'. Kept in the filename (not just the path) so re-uploads
+                for different slots on the same question never collide.
+
+        Returns:
+            str: Public URL of uploaded file -- caller stores it in the matching
+            Question.*_image_url field (question_image_url, option_a_image_url, etc).
+        """
+        if not self.is_configured():
+            raise Exception("Supabase storage not configured")
+
+        valid_slots = {'question', 'option_a', 'option_b', 'option_c', 'option_d', 'answer'}
+        if slot not in valid_slots:
+            raise ValueError(f"Invalid diagram slot: {slot}")
+
+        # Unique filename per upload (not overwrite-in-place like the profile-photo
+        # helpers) -- a teacher can redraw a diagram repeatedly, and each version
+        # needs its own URL so the frontend's <img> preview actually refreshes
+        # instead of serving a stale cached copy of the same path.
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        unique_id = str(uuid.uuid4())[:8]
+        extension = file.name.split('.')[-1].lower() if '.' in getattr(file, 'name', '') else 'png'
+        filename = f"question-diagrams/{school_id}/{question_id}/{slot}_{timestamp}_{unique_id}.{extension}"
+
+        try:
+            file_content = file.read()
+            content_type = getattr(file, 'content_type', 'image/png')
+
+            logger.info(f"Uploading question diagram: {filename} ({len(file_content)} bytes)")
+
+            self.client.storage.from_(self.bucket).upload(
+                path=filename,
+                file=file_content,
+                file_options={"content-type": content_type}
+            )
+
+            public_url = self.client.storage.from_(self.bucket).get_public_url(filename)
+            logger.info(f"Successfully uploaded question diagram: {filename}")
+            return public_url
+
+        except Exception as e:
+            logger.error(f"Failed to upload question diagram {filename}: {e}")
+            raise Exception(f"Failed to upload diagram: {e}")
+
     def upload_school_asset(self, file, school_id: int, asset_type: str) -> str:
         """
         Upload a school asset (logo or letterhead) to Supabase Storage.

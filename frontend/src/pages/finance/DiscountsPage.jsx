@@ -8,6 +8,9 @@ import ClassSelector from '../../components/ClassSelector'
 import { useToast } from '../../components/Toast'
 import { GRADE_PRESETS, GRADE_LEVEL_LABELS } from '../../constants/gradePresets'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
+import Spinner from '../../components/ui/Spinner'
+import Badge from '../../components/ui/Badge'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 // ── Badge color maps ──────────────────────────────────────────────────────────
 
@@ -597,6 +600,14 @@ export default function DiscountsPage() {
     })
   }
 
+  useEscapeKey(closeDiscountModal, showDiscountModal)
+  useEscapeKey(closeScholarshipModal, showScholarshipModal)
+  useEscapeKey(closeAssignModal, showAssignModal)
+  useEscapeKey(closeBulkAssignModal, showBulkAssignModal)
+  useEscapeKey(() => setDeleteDiscountConfirm(null), !!deleteDiscountConfirm)
+  useEscapeKey(() => setDeleteScholarshipConfirm(null), !!deleteScholarshipConfirm)
+  useEscapeKey(() => setRemoveAssignConfirm(null), !!removeAssignConfirm)
+
   const handleBulkAssignSubmit = (e) => {
     e.preventDefault()
     if (!bulkAssignForm.discount_id && !bulkAssignForm.scholarship_id) {
@@ -740,7 +751,7 @@ export default function DiscountsPage() {
           <div className="card">
             {discountsLoading ? (
               <div className="text-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+                <Spinner size="md" className="mx-auto" />
                 <p className="text-gray-500 mt-2">Loading discounts...</p>
               </div>
             ) : filteredDiscounts.length === 0 ? (
@@ -887,7 +898,7 @@ export default function DiscountsPage() {
           <div className="card">
             {scholarshipsLoading ? (
               <div className="text-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+                <Spinner size="md" className="mx-auto" />
                 <p className="text-gray-500 mt-2">Loading scholarships...</p>
               </div>
             ) : filteredScholarships.length === 0 ? (
@@ -1038,7 +1049,7 @@ export default function DiscountsPage() {
           <div className="card">
             {assignmentsLoading ? (
               <div className="text-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+                <Spinner size="md" className="mx-auto" />
                 <p className="text-gray-500 mt-2">Loading assignments...</p>
               </div>
             ) : filteredAssignments.length === 0 ? (
@@ -1071,9 +1082,7 @@ export default function DiscountsPage() {
                       </div>
                       <div className="mt-1.5 flex items-center gap-2 flex-wrap">
                         {a.discount_name && (
-                          <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                            {a.discount_name}
-                          </span>
+                          <Badge tone="info">{a.discount_name}</Badge>
                         )}
                         {a.scholarship_name && (
                           <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
@@ -1115,9 +1124,7 @@ export default function DiscountsPage() {
                           </td>
                           <td className="px-4 py-3">
                             {a.discount_name && (
-                              <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                {a.discount_name}
-                              </span>
+                              <Badge tone="info">{a.discount_name}</Badge>
                             )}
                             {a.scholarship_name && (
                               <span className="px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">

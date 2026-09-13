@@ -1,4 +1,5 @@
 import { useState, useCallback, createContext, useContext } from 'react'
+import { useEscapeKey } from '../hooks/useEscapeKey'
 
 /**
  * Reusable confirmation modal with icon, title, message, and action buttons.
@@ -42,25 +43,26 @@ const VARIANTS = {
 }
 
 function ConfirmModalUI({ show, title, message, variant = 'danger', confirmLabel, pendingLabel, isPending, onConfirm, onCancel }) {
+  useEscapeKey(onCancel, show)
   if (!show) return null
   const v = VARIANTS[variant] || VARIANTS.danger
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" onClick={onCancel}>
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 animate-in fade-in" onClick={e => e.stopPropagation()}>
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-sm p-6 animate-in fade-in" onClick={e => e.stopPropagation()}>
         <div className="flex items-center gap-3 mb-3">
           <div className={`w-10 h-10 rounded-full ${v.iconBg} flex items-center justify-center shrink-0`}>
             {v.icon}
           </div>
           <div>
-            <h3 className="text-base font-semibold text-gray-900">{title || 'Confirm'}</h3>
-            <p className="text-sm text-gray-500">This action cannot be undone.</p>
+            <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">{title || 'Confirm'}</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400">This action cannot be undone.</p>
           </div>
         </div>
-        <p className="text-sm text-gray-600 mb-5">{message}</p>
+        <p className="text-sm text-gray-600 dark:text-gray-300 mb-5">{message}</p>
         <div className="flex gap-3">
           <button
             onClick={onCancel}
-            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 text-sm font-medium text-gray-700"
+            className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 text-sm font-medium text-gray-700 dark:text-gray-200"
           >
             Cancel
           </button>

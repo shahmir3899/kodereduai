@@ -15,6 +15,9 @@ import LoginPage from './pages/LoginPage'
 import ForgotPasswordPage from './pages/ForgotPasswordPage'
 import ResetPasswordPage from './pages/ResetPasswordPage'
 
+// Parent self-registration (public, invite-code based)
+const ParentRegisterPage = lazy(() => import('./pages/ParentRegisterPage'))
+
 // Lazy-loaded pages
 const DashboardRouter = lazy(() => import('./pages/DashboardRouter'))
 // CaptureReviewPage removed 2026-05-13 — Register OCR attendance feature discontinued
@@ -49,6 +52,7 @@ const SalaryManagementPage = lazy(() => import('./pages/hr/SalaryManagementPage'
 const PayrollPage = lazy(() => import('./pages/hr/PayrollPage'))
 const LeaveManagementPage = lazy(() => import('./pages/hr/LeaveManagementPage'))
 const StaffAttendancePage = lazy(() => import('./pages/hr/StaffAttendancePage'))
+const SelfServicePage = lazy(() => import('./pages/hr/SelfServicePage'))
 const PerformanceAppraisalPage = lazy(() => import('./pages/hr/PerformanceAppraisalPage'))
 const StaffDocumentsPage = lazy(() => import('./pages/hr/StaffDocumentsPage'))
 const LetterComposerPage = lazy(() => import('./pages/hr/LetterComposerPage'))
@@ -74,6 +78,8 @@ const GradeScalePage = lazy(() => import('./pages/examinations/GradeScalePage'))
 const AssessmentsPage = lazy(() => import('./pages/academics/AssessmentsPage'))
 const QuestionPaperBuilderPage = lazy(() => import('./pages/examinations/QuestionPaperBuilderPage'))
 const ExamPapersPage = lazy(() => import('./pages/examinations/ExamPapersPage'))
+const WorksheetsPage = lazy(() => import('./pages/examinations/WorksheetsPage'))
+const WorksheetBuilderPage = lazy(() => import('./pages/examinations/WorksheetBuilderPage'))
 const CurriculumCoveragePage = lazy(() => import('./pages/examinations/CurriculumCoveragePage'))
 const QuestionsPage = lazy(() => import('./pages/examinations/QuestionsPage'))
 const StudentResponsePage = lazy(() => import('./pages/examinations/StudentResponsePage'))
@@ -85,6 +91,8 @@ const ChildOverview = lazy(() => import('./pages/parent/ChildOverview'))
 const ChildAttendance = lazy(() => import('./pages/parent/ChildAttendance'))
 const ChildFees = lazy(() => import('./pages/parent/ChildFees'))
 const ChildTimetable = lazy(() => import('./pages/parent/ChildTimetable'))
+const ChildLibrary = lazy(() => import('./pages/parent/ChildLibrary'))
+const ChildTransport = lazy(() => import('./pages/parent/ChildTransport'))
 const ChildExamSchedule = lazy(() => import('./pages/parent/ChildExamSchedule'))
 const ChildExamResults = lazy(() => import('./pages/parent/ChildExamResults'))
 const LeaveApplication = lazy(() => import('./pages/parent/LeaveApplication'))
@@ -111,6 +119,8 @@ const StudentDashboard = lazy(() => import('./pages/student/StudentDashboard'))
 const StudentAttendance = lazy(() => import('./pages/student/StudentAttendance'))
 const StudentFees = lazy(() => import('./pages/student/StudentFees'))
 const StudentTimetable = lazy(() => import('./pages/student/StudentTimetable'))
+const StudentLibrary = lazy(() => import('./pages/student/StudentLibrary'))
+const StudentTransport = lazy(() => import('./pages/student/StudentTransport'))
 const StudentExamSchedule = lazy(() => import('./pages/student/StudentExamSchedule'))
 const StudentResults = lazy(() => import('./pages/student/StudentResults'))
 const StudentAssignments = lazy(() => import('./pages/student/StudentAssignments'))
@@ -332,12 +342,12 @@ function AssessmentManageRoute({ children }) {
 
 function AssessmentAccessRoute({ children }) {
   const { effectiveRole } = useAuth()
-  if (effectiveRole !== 'SCHOOL_ADMIN' && effectiveRole !== 'PRINCIPAL' && effectiveRole !== 'TEACHER' && effectiveRole !== 'SUPER_ADMIN') {
+  if (effectiveRole !== 'SCHOOL_ADMIN' && effectiveRole !== 'PRINCIPAL' && effectiveRole !== 'TEACHER' && effectiveRole !== 'SUPER_ADMIN' && effectiveRole !== 'MANAGER') {
     return (
       <AccessRestrictedRedirect
         to="/dashboard"
         title="Assessment Access Limited"
-        message="This page is available only to teachers and school admins." 
+        message="This page is available only to teachers, managers, and school admins."
       />
     )
   }
@@ -360,12 +370,12 @@ function AdminPrincipalRoute({ children }) {
 
 function PaperBuilderRoute({ children }) {
   const { effectiveRole } = useAuth()
-  if (effectiveRole !== 'SCHOOL_ADMIN' && effectiveRole !== 'PRINCIPAL' && effectiveRole !== 'TEACHER') {
+  if (effectiveRole !== 'SCHOOL_ADMIN' && effectiveRole !== 'PRINCIPAL' && effectiveRole !== 'TEACHER' && effectiveRole !== 'MANAGER') {
     return (
       <AccessRestrictedRedirect
         to="/dashboard"
         title="Paper Builder Access Limited"
-        message="Only School Admin, Principal, and class teachers can create question papers."
+        message="Only School Admin, Principal, Manager, and class teachers can create question papers."
       />
     )
   }
@@ -404,6 +414,9 @@ function App() {
           {/* Password reset public routes */}
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
+
+          {/* Parent self-registration (public, invite-code based) */}
+          <Route path="/parent/register" element={<ParentRegisterPage />} />
 
           {/* Protected routes */}
           <Route
@@ -476,6 +489,7 @@ function App() {
             <Route path="hr/payroll" element={<SchoolRoute><ModuleRoute module="hr"><PayrollPage /></ModuleRoute></SchoolRoute>} />
             <Route path="hr/leave" element={<SchoolRoute><ModuleRoute module="hr"><LeaveManagementPage /></ModuleRoute></SchoolRoute>} />
             <Route path="hr/attendance" element={<SchoolRoute><ModuleRoute module="hr"><StaffAttendancePage /></ModuleRoute></SchoolRoute>} />
+            <Route path="hr/self-service" element={<SchoolRoute><ModuleRoute module="hr"><SelfServicePage /></ModuleRoute></SchoolRoute>} />
             <Route path="hr/appraisals" element={<SchoolRoute><ModuleRoute module="hr"><PerformanceAppraisalPage /></ModuleRoute></SchoolRoute>} />
             <Route path="hr/documents" element={<SchoolRoute><ModuleRoute module="hr"><StaffDocumentsPage /></ModuleRoute></SchoolRoute>} />
             <Route path="hr/letters" element={<SchoolRoute><ModuleRoute module="hr"><LetterComposerPage /></ModuleRoute></SchoolRoute>} />
@@ -501,6 +515,8 @@ function App() {
             <Route path="academics/papers" element={<SchoolRoute><CapabilityRoute module="examinations" capability="paper_builder"><PaperBuilderRoute><ExamPapersPage /></PaperBuilderRoute></CapabilityRoute></SchoolRoute>} />
             <Route path="examinations/papers/:paperId" element={<SchoolRoute><CapabilityRoute module="examinations" capability="paper_builder"><PaperBuilderRoute><QuestionPaperBuilderPage /></PaperBuilderRoute></CapabilityRoute></SchoolRoute>} />
             <Route path="academics/papers/:paperId/responses" element={<SchoolRoute><ModuleRoute module="examinations"><StudentResponsePage /></ModuleRoute></SchoolRoute>} />
+            <Route path="academics/worksheets" element={<SchoolRoute><CapabilityRoute module="examinations" capability="paper_builder"><PaperBuilderRoute><WorksheetsPage /></PaperBuilderRoute></CapabilityRoute></SchoolRoute>} />
+            <Route path="academics/worksheets/:worksheetId" element={<SchoolRoute><CapabilityRoute module="examinations" capability="paper_builder"><PaperBuilderRoute><WorksheetBuilderPage /></PaperBuilderRoute></CapabilityRoute></SchoolRoute>} />
             <Route path="academics/curriculum-coverage" element={<SchoolRoute><ModuleRoute module="examinations"><CurriculumCoveragePage /></ModuleRoute></SchoolRoute>} />
             <Route path="academics/questions" element={<SchoolRoute><ModuleRoute module="examinations"><QuestionsPage /></ModuleRoute></SchoolRoute>} />
 
@@ -534,6 +550,8 @@ function App() {
             <Route path="parent/children/:studentId/attendance" element={<ParentRoute><ChildAttendance /></ParentRoute>} />
             <Route path="parent/children/:studentId/fees" element={<ParentRoute><ChildFees /></ParentRoute>} />
             <Route path="parent/children/:studentId/timetable" element={<ParentRoute><ChildTimetable /></ParentRoute>} />
+            <Route path="parent/children/:studentId/library" element={<ParentRoute><ChildLibrary /></ParentRoute>} />
+            <Route path="parent/children/:studentId/transport" element={<ParentRoute><ChildTransport /></ParentRoute>} />
             <Route path="parent/children/:studentId/exam-schedule" element={<ParentRoute><ChildExamSchedule /></ParentRoute>} />
             <Route path="parent/children/:studentId/results" element={<ParentRoute><ChildExamResults /></ParentRoute>} />
             <Route path="parent/leave" element={<ParentRoute><LeaveApplication /></ParentRoute>} />
@@ -551,6 +569,8 @@ function App() {
             <Route path="student/attendance" element={<StudentRoute><StudentAttendance /></StudentRoute>} />
             <Route path="student/fees" element={<StudentRoute><StudentFees /></StudentRoute>} />
             <Route path="student/timetable" element={<StudentRoute><StudentTimetable /></StudentRoute>} />
+            <Route path="student/library" element={<StudentRoute><StudentLibrary /></StudentRoute>} />
+            <Route path="student/transport" element={<StudentRoute><StudentTransport /></StudentRoute>} />
             <Route path="student/exam-schedule" element={<StudentRoute><StudentExamSchedule /></StudentRoute>} />
             <Route path="student/results" element={<StudentRoute><StudentResults /></StudentRoute>} />
             <Route path="student/assignments" element={<StudentRoute><StudentAssignments /></StudentRoute>} />

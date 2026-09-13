@@ -6,6 +6,9 @@ import { schoolsApi, usersApi } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 import { getErrorMessage } from '../utils/errorUtils'
 import { useConfirmModal } from '../components/ConfirmModal'
+import Spinner from '../components/ui/Spinner'
+import Button from '../components/ui/Button'
+import { useEscapeKey } from '../hooks/useEscapeKey'
 
 export default function SettingsPage() {
   const queryClient = useQueryClient()
@@ -165,6 +168,8 @@ export default function SettingsPage() {
     setUserError('')
   }
 
+  useEscapeKey(closeUserModal, showUserModal)
+
   const openEditUser = (user) => {
     setEditingUser(user)
     setUserForm({
@@ -204,14 +209,21 @@ export default function SettingsPage() {
     }
   }
 
+  // Labels/colors for every role that can appear in a school's user list
+  // (badge rendering falls back to the raw code for anything missing here,
+  // so SUPER_ADMIN stays mapped in case a legacy user.school_id row ever
+  // surfaces one — it's just excluded from the filter dropdown below,
+  // since Super Admin isn't a role that's assignable or filterable at the
+  // school level).
   const ROLE_LABELS = {
     SUPER_ADMIN: 'Super Admin',
     SCHOOL_ADMIN: 'School Admin',
     PRINCIPAL: 'Principal',
-    HR_MANAGER: 'HR Manager',
+    MANAGER: 'Manager',
     ACCOUNTANT: 'Accountant',
     TEACHER: 'Teacher',
     STAFF: 'Staff',
+    DRIVER: 'Driver',
     STUDENT: 'Student',
     PARENT: 'Parent',
   }
@@ -220,13 +232,18 @@ export default function SettingsPage() {
     SUPER_ADMIN: 'bg-red-100 text-red-800',
     SCHOOL_ADMIN: 'bg-purple-100 text-purple-800',
     PRINCIPAL: 'bg-indigo-100 text-indigo-800',
-    HR_MANAGER: 'bg-orange-100 text-orange-800',
+    MANAGER: 'bg-orange-100 text-orange-800',
     ACCOUNTANT: 'bg-cyan-100 text-cyan-800',
     TEACHER: 'bg-green-100 text-green-800',
     STAFF: 'bg-gray-100 text-gray-800',
+    DRIVER: 'bg-teal-100 text-teal-800',
     STUDENT: 'bg-blue-100 text-blue-800',
     PARENT: 'bg-yellow-100 text-yellow-800',
   }
+
+  // Role filter dropdown is school-scoped — Super Admin is a platform-level
+  // role, never assignable or meaningfully filterable from inside a school.
+  const FILTERABLE_ROLES = Object.entries(ROLE_LABELS).filter(([value]) => value !== 'SUPER_ADMIN')
 
   return (
     <div>
@@ -268,7 +285,7 @@ export default function SettingsPage() {
         <div className="space-y-6">
           {schoolLoading ? (
             <div className="card text-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+              <Spinner size="md" className="mx-auto" />
             </div>
           ) : school ? (
             <>
@@ -457,17 +474,17 @@ export default function SettingsPage() {
                 className="input w-full sm:w-40"
               >
                 <option value="">All Roles</option>
-                {Object.entries(ROLE_LABELS).map(([value, label]) => (
+                {FILTERABLE_ROLES.map(([value, label]) => (
                   <option key={value} value={value}>{label}</option>
                 ))}
               </select>
             </div>
-            <button
+            <Button
               onClick={() => { setUserForm({ ...EMPTY_USER_FORM }); setEditingUser(null); setUserError(''); setShowUserModal(true) }}
-              className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm whitespace-nowrap"
+              className="whitespace-nowrap"
             >
               Add User
-            </button>
+            </Button>
           </div>
 
           {/* User List */}

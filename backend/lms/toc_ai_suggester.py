@@ -139,7 +139,7 @@ def suggest_toc_structure(raw_text, language='en'):
         from groq import Groq  # type: ignore[import-not-found]
 
         client = Groq(api_key=api_key)
-        model_name = getattr(settings, 'GROQ_MODEL', 'llama-3.3-70b-versatile')
+        model_name = settings.GROQ_MODEL
 
         prompt = TOC_SUGGESTION_PROMPT.format(raw_text=text)
         def _run_completion():

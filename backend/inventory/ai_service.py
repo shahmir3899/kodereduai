@@ -121,7 +121,7 @@ def suggest_inventory_items(school, user_context=''):
             existing_items=existing_items_text,
         )
 
-        model_name = getattr(settings, 'GROQ_MODEL', 'llama-3.3-70b-versatile')
+        model_name = settings.GROQ_MODEL
 
         response = client.chat.completions.create(
             model=model_name,

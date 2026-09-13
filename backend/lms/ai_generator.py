@@ -133,7 +133,7 @@ def generate_lesson_plan(
             language_instruction=language_instruction,
         )
 
-        model_name = getattr(settings, 'GROQ_MODEL', 'llama-3.3-70b-versatile')
+        model_name = settings.GROQ_MODEL
 
         response = client.chat.completions.create(
             model=model_name,

@@ -604,13 +604,21 @@ export function AuthProvider({ children }) {
           }
         })
       }
-    } else if (effectiveRole === 'HR_MANAGER') {
+    } else if (effectiveRole === 'MANAGER') {
       if (isModuleAvailable({ moduleKey: 'hr', enabledModules, isSuperAdmin })) {
         addPrefetch(['hrDashboardStats'], () => hrApi.getDashboardStats())
         addPrefetch(['pendingLeaves'], () => hrApi.getLeaveApplications({ status: 'PENDING', page_size: 5 }))
         addPrefetch(['payrollSummary', currentMonth, currentYear], () => hrApi.getPayrollSummary({ month: currentMonth, year: currentYear }))
         addPrefetch(['staffAttendanceSummary', monthStart, today], () => hrApi.getAttendanceSummary({ date_from: monthStart, date_to: today }))
-        addPrefetch(['hrManagerDayStatus', today], () => sessionsApi.getCalendarDayStatus({ date_from: today, date_to: today }))
+        addPrefetch(['managerDayStatus', today], () => sessionsApi.getCalendarDayStatus({ date_from: today, date_to: today }))
+      }
+      if (isModuleAvailable({ moduleKey: 'lms', enabledModules, isSuperAdmin })) {
+        addPrefetch(['managerLessonPlansCount'], () => lmsApi.getLessonPlans({ page_size: 1 }))
+        addPrefetch(['managerActiveAssignmentsCount'], () => lmsApi.getAssignments({ status: 'PUBLISHED', page_size: 1 }))
+      }
+      if (isModuleAvailable({ moduleKey: 'examinations', enabledModules, isSuperAdmin })) {
+        addPrefetch(['managerQuestionBankCount'], () => examinationsApi.getQuestions({ page_size: 1 }))
+        addPrefetch(['managerExamPapersCount'], () => examinationsApi.getExamPapers({ page_size: 1 }))
       }
     } else if (effectiveRole === 'ACCOUNTANT') {
       if (isModuleAvailable({ moduleKey: 'finance', enabledModules, isSuperAdmin })) {
@@ -838,7 +846,7 @@ export function AuthProvider({ children }) {
   // Determine role based on active school membership
   const effectiveRole = activeSchool?.role || user?.role
   const isSchoolAdmin = user?.is_super_admin || effectiveRole === 'SCHOOL_ADMIN' || effectiveRole === 'PRINCIPAL'
-  const isStaffLevel = ['STAFF', 'TEACHER', 'HR_MANAGER', 'ACCOUNTANT', 'DRIVER'].includes(effectiveRole)
+  const isStaffLevel = ['STAFF', 'TEACHER', 'MANAGER', 'ACCOUNTANT', 'DRIVER'].includes(effectiveRole)
   const isDriver = effectiveRole === 'DRIVER'
   const isParent = effectiveRole === 'PARENT'
   const isStudent = effectiveRole === 'STUDENT'
@@ -862,9 +870,9 @@ export function AuthProvider({ children }) {
 
   // Role hierarchy: which roles can the current user create?
   const getAllowableRoles = useCallback(() => {
-    if (user?.is_super_admin) return ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL', 'HR_MANAGER', 'ACCOUNTANT', 'TEACHER', 'STAFF', 'DRIVER']
-    if (effectiveRole === 'SCHOOL_ADMIN') return ['PRINCIPAL', 'HR_MANAGER', 'ACCOUNTANT', 'TEACHER', 'STAFF', 'DRIVER']
-    if (effectiveRole === 'PRINCIPAL') return ['HR_MANAGER', 'ACCOUNTANT', 'TEACHER', 'STAFF', 'DRIVER']
+    if (user?.is_super_admin) return ['SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL', 'MANAGER', 'ACCOUNTANT', 'TEACHER', 'STAFF', 'DRIVER']
+    if (effectiveRole === 'SCHOOL_ADMIN') return ['PRINCIPAL', 'MANAGER', 'ACCOUNTANT', 'TEACHER', 'STAFF', 'DRIVER']
+    if (effectiveRole === 'PRINCIPAL') return ['MANAGER', 'ACCOUNTANT', 'TEACHER', 'STAFF', 'DRIVER']
     return []
   }, [user?.is_super_admin, effectiveRole])
 
@@ -882,7 +890,7 @@ export function AuthProvider({ children }) {
     isSchoolAdmin,
     isPrincipal: effectiveRole === 'PRINCIPAL',
     isStaffMember: effectiveRole === 'STAFF',
-    isHRManager: effectiveRole === 'HR_MANAGER',
+    isManager: effectiveRole === 'MANAGER',
     isTeacher: effectiveRole === 'TEACHER',
     isAccountant: effectiveRole === 'ACCOUNTANT',
     isDriver,

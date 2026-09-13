@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { hrApi, sessionsApi } from '../../services/api'
 import { useToast } from '../../components/Toast'
+import Spinner from '../../components/ui/Spinner'
+import { useAuth } from '../../contexts/AuthContext'
 
 const STATUS_OPTIONS = [
   { value: '', label: '-- Select --' },
@@ -24,7 +26,108 @@ function formatDate(date) {
   return date.toISOString().split('T')[0]
 }
 
+// Self-service (2026-09): Teacher/Staff get a read-only view of their own
+// attendance — the admin "mark attendance for everyone" UI below makes no
+// sense for them (they can't submit anyway, the backend now self-scopes
+// their reads to their own record), so this is a separate, much simpler
+// component rather than a trimmed version of the admin table.
+function MyAttendanceView() {
+  const today = formatDate(new Date())
+  const [range, setRange] = useState(() => {
+    const start = new Date()
+    start.setDate(1)
+    return { start: formatDate(start), end: today }
+  })
+
+  const { data: recordsRes, isLoading: recordsLoading } = useQuery({
+    queryKey: ['myAttendanceRecords', range.start, range.end],
+    queryFn: () => hrApi.getStaffAttendance({ date_from: range.start, date_to: range.end, page_size: 100 }),
+  })
+  const { data: summaryRes, isLoading: summaryLoading } = useQuery({
+    queryKey: ['myAttendanceSummary', range.start, range.end],
+    queryFn: () => hrApi.getAttendanceSummary({ date_from: range.start, date_to: range.end }),
+  })
+
+  const records = [...(recordsRes?.data?.results || recordsRes?.data || [])].sort((a, b) => b.date.localeCompare(a.date))
+  const summary = (summaryRes?.data || [])[0] || null
+
+  return (
+    <div>
+      <div className="mb-6">
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">My Attendance</h1>
+        <p className="text-sm text-gray-600">View your own attendance record</p>
+      </div>
+
+      <div className="card mb-4 flex flex-col sm:flex-row items-center gap-3">
+        <label className="text-sm text-gray-600">From:</label>
+        <input type="date" value={range.start} onChange={e => setRange(p => ({ ...p, start: e.target.value }))} className="input w-40" />
+        <label className="text-sm text-gray-600">To:</label>
+        <input type="date" value={range.end} onChange={e => setRange(p => ({ ...p, end: e.target.value }))} className="input w-40" />
+      </div>
+
+      {summaryLoading ? null : summary && (
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 mb-4">
+          {[
+            { label: 'Present', count: summary.PRESENT ?? 0, cls: 'text-green-700 bg-green-50' },
+            { label: 'Absent', count: summary.ABSENT ?? 0, cls: 'text-red-700 bg-red-50' },
+            { label: 'Late', count: summary.LATE ?? 0, cls: 'text-yellow-700 bg-yellow-50' },
+            { label: 'Half Day', count: summary.HALF_DAY ?? 0, cls: 'text-orange-700 bg-orange-50' },
+            { label: 'On Leave', count: summary.ON_LEAVE ?? 0, cls: 'text-blue-700 bg-blue-50' },
+            { label: 'Rate', count: summary.attendance_rate != null ? `${summary.attendance_rate}%` : '-', cls: 'text-gray-900 bg-gray-50' },
+          ].map(s => (
+            <div key={s.label} className={`rounded-lg p-2 text-center ${s.cls}`}>
+              <p className="text-lg font-bold">{s.count}</p>
+              <p className="text-xs">{s.label}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {recordsLoading ? (
+        <div className="text-center py-12"><Spinner size="md" className="mx-auto" /></div>
+      ) : records.length === 0 ? (
+        <div className="card text-center py-8 text-gray-500">No attendance records for this period.</div>
+      ) : (
+        <div className="card overflow-x-auto">
+          <table className="min-w-full">
+            <thead>
+              <tr className="border-b border-gray-200 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="pb-3 pr-4">Date</th>
+                <th className="pb-3 pr-4">Status</th>
+                <th className="pb-3 pr-4">Check In</th>
+                <th className="pb-3 pr-4">Check Out</th>
+                <th className="pb-3">Notes</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {records.map(r => (
+                <tr key={r.id}>
+                  <td className="py-2 pr-4 text-sm text-gray-900">{r.date}</td>
+                  <td className="py-2 pr-4">
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[r.status] || 'bg-gray-100 text-gray-800'}`}>
+                      {r.status_display || r.status}
+                    </span>
+                  </td>
+                  <td className="py-2 pr-4 text-sm text-gray-600">{r.check_in || '-'}</td>
+                  <td className="py-2 pr-4 text-sm text-gray-600">{r.check_out || '-'}</td>
+                  <td className="py-2 text-sm text-gray-600">{r.notes || '-'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function StaffAttendancePage() {
+  const { isTeacher, isStaffMember } = useAuth()
+  if (isTeacher || isStaffMember) return <MyAttendanceView />
+  return <StaffAttendanceAdminView />
+}
+
+function StaffAttendanceAdminView() {
   const queryClient = useQueryClient()
   const { showSuccess, showError, showWarning } = useToast()
   const today = formatDate(new Date())
@@ -374,7 +477,7 @@ export default function StaffAttendancePage() {
 
           {isLoading ? (
             <div className="text-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+              <Spinner size="md" className="mx-auto" />
             </div>
           ) : staffList.length === 0 ? (
             <div className="card text-center py-8 text-gray-500">No active staff members found.</div>
@@ -537,7 +640,7 @@ export default function StaffAttendancePage() {
 
           {summaryLoading ? (
             <div className="text-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+              <Spinner size="md" className="mx-auto" />
             </div>
           ) : summaryData.length === 0 ? (
             <div className="card text-center py-8 text-gray-500">No attendance data for this period.</div>

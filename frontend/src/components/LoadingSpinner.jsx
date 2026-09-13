@@ -1,7 +1,8 @@
+import Spinner from './ui/Spinner'
+
+// Full-viewport loading state (e.g. route-level suspense fallback).
+// Thin wrapper kept for existing call sites — see ui/Spinner.jsx for the
+// underlying primitive and its inline/sized variants.
 export default function LoadingSpinner() {
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
-    </div>
-  )
+  return <Spinner fullScreen size="lg" />
 }

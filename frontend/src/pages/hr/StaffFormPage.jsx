@@ -7,6 +7,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useToast } from '../../components/Toast'
 import WhatsAppTick from '../../components/WhatsAppTick'
 import AvatarUpload from '../../components/AvatarUpload'
+import Spinner from '../../components/ui/Spinner'
 
 function getApiErrorMessage(error, fallback) {
   const data = error?.response?.data
@@ -64,7 +65,7 @@ export default function StaffFormPage() {
   const staffRoleOptions = getAllowableRoles().filter(r => !['SUPER_ADMIN', 'SCHOOL_ADMIN', 'PRINCIPAL'].includes(r))
 
   const ROLE_LABELS = {
-    HR_MANAGER: 'HR Manager', ACCOUNTANT: 'Accountant', TEACHER: 'Teacher', STAFF: 'Staff', DRIVER: 'Driver',
+    MANAGER: 'Manager', ACCOUNTANT: 'Accountant', TEACHER: 'Teacher', STAFF: 'Staff', DRIVER: 'Driver',
   }
 
   // Fetch existing staff member for edit
@@ -269,7 +270,7 @@ export default function StaffFormPage() {
   if (isEdit && staffLoading) {
     return (
       <div className="text-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+        <Spinner size="md" className="mx-auto" />
       </div>
     )
   }

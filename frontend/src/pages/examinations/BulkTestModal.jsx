@@ -5,6 +5,7 @@ import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import ClassSelector from '../../components/ClassSelector'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 const STEPS = [
   { id: 1, label: 'Details' },
@@ -37,6 +38,7 @@ function buildTestName(subjectName, termName, academicYearName) {
 }
 
 export default function BulkTestModal({ onClose, onSuccess }) {
+  useEscapeKey(onClose)
   const queryClient = useQueryClient()
   const { activeAcademicYear, currentTerm } = useAcademicYear()
   const [step, setStep] = useState(1)

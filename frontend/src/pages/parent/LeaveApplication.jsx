@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { parentsApi } from '../../services/api'
+import Spinner from '../../components/ui/Spinner'
 
 const STATUS_COLORS = {
   PENDING: 'bg-yellow-100 text-yellow-800',
@@ -267,7 +268,7 @@ export default function LeaveApplication() {
         <>
           {requestsLoading ? (
             <div className="flex items-center justify-center py-16">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" />
+              <Spinner size="md" />
             </div>
           ) : requests.length === 0 ? (
             <div className="bg-white rounded-xl border border-gray-200 p-10 text-center">

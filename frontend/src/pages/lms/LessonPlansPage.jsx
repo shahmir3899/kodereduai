@@ -3,6 +3,7 @@ import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/rea
 import { lmsApi, hrApi, schoolsApi } from '../../services/api'
 import ClassSelector from '../../components/ClassSelector'
 import { useAuth } from '../../contexts/AuthContext'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import { useClassSubjects } from '../../hooks/useClassSubjects'
@@ -16,6 +17,7 @@ import BulkLessonPlansModal from './BulkLessonPlansModal'
 import LessonPlanTopicsPickerModal from './LessonPlanTopicsPickerModal'
 import { exportLessonPlansPDF } from './lessonPlansExportPdf'
 import { normalizeLessonPlanText, deriveAutoTitleFromCurriculumSummary } from './lessonPlanTextUtils'
+import Spinner from '../../components/ui/Spinner'
 
 const STATUS_BADGES = {
   DRAFT: 'bg-gray-100 text-gray-800',
@@ -478,6 +480,10 @@ export default function LessonPlansPage() {
     setCustomTopicInput('')
   }
 
+  useEscapeKey(closeModal, showModal)
+  useEscapeKey(() => setDeleteConfirm(null), !!deleteConfirm)
+  useEscapeKey(() => setBulkDeleteConfirm(false), bulkDeleteConfirm)
+
   const handleSubmit = () => {
     if (!form.class_obj) {
       showError('Please select a class')
@@ -738,7 +744,7 @@ export default function LessonPlansPage() {
           </div>
         ) : isLoading ? (
           <div className="text-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+            <Spinner size="md" className="mx-auto" />
             <p className="text-gray-500 mt-2">Loading lesson plans...</p>
           </div>
         ) : plans.length === 0 ? (

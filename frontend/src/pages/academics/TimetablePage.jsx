@@ -9,6 +9,8 @@ import ClassSelector from '../../components/ClassSelector'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
+import Spinner from '../../components/ui/Spinner'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 const DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
 const DAY_LABELS = { MON: 'Mon', TUE: 'Tue', WED: 'Wed', THU: 'Thu', FRI: 'Fri', SAT: 'Sat' }
@@ -56,6 +58,13 @@ export default function TimetablePage() {
   const [resolutionData, setResolutionData] = useState(null)
   const [loadingResolution, setLoadingResolution] = useState(false)
   const [showSubstituteModal, setShowSubstituteModal] = useState(false)
+
+  useEscapeKey(() => setEditingCell(null), !!editingCell)
+  useEscapeKey(() => setShowAutoGenConfirm(false), showAutoGenConfirm)
+  useEscapeKey(() => setShowScoreModal(false), showScoreModal)
+  useEscapeKey(() => setShowSubstituteModal(false), showSubstituteModal)
+  useEscapeKey(() => setShowSlotsModal(false), showSlotsModal)
+
   const [subTeacher, setSubTeacher] = useState('')
   const [subDate, setSubDate] = useState(new Date().toISOString().slice(0, 10))
   const [substituteData, setSubstituteData] = useState(null)
@@ -595,7 +604,7 @@ export default function TimetablePage() {
         </div>
       ) : isLoading ? (
         <div className="text-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+          <Spinner size="md" className="mx-auto" />
         </div>
       ) : (
         <>

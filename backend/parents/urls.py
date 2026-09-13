@@ -13,6 +13,8 @@ from .views import (
     ChildFeesView,
     ParentPayFeeView,
     ChildTimetableView,
+    ChildLibraryView,
+    ChildTransportView,
     ChildExamScheduleView,
     ChildExamResultsView,
     ParentLeaveRequestViewSet,
@@ -45,6 +47,8 @@ urlpatterns = [
     path('children/<int:student_id>/fees/', ChildFeesView.as_view(), name='parent-child-fees'),
     path('children/<int:student_id>/pay-fee/', ParentPayFeeView.as_view(), name='parent-pay-fee'),
     path('children/<int:student_id>/timetable/', ChildTimetableView.as_view(), name='parent-child-timetable'),
+    path('children/<int:student_id>/library/', ChildLibraryView.as_view(), name='parent-child-library'),
+    path('children/<int:student_id>/transport/', ChildTransportView.as_view(), name='parent-child-transport'),
     path('children/<int:student_id>/exam-schedule/', ChildExamScheduleView.as_view(), name='parent-child-exam-schedule'),
     path('children/<int:student_id>/exam-results/', ChildExamResultsView.as_view(), name='parent-child-exam-results'),
 

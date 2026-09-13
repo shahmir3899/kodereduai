@@ -316,13 +316,13 @@ try:
     # D5: Update membership role
     if mem_id:
         resp = sa_patch(f'/api/admin/memberships/{mem_id}/', {
-            'role': 'HR_MANAGER',
+            'role': 'MANAGER',
         })
         check("D5: Update membership returns 200", resp.status_code == 200,
               f"got {resp.status_code}")
         if resp.status_code == 200:
             check("D6: Membership role updated",
-                  resp.json().get('role') == 'HR_MANAGER')
+                  resp.json().get('role') == 'MANAGER')
 
     # D7: Create second membership for same user in school B
     resp = sa_post('/api/admin/memberships/', {

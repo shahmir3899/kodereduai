@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { questionPaperApi, examinationsApi } from '../../services/api'
+import { questionPaperApi, examinationsApi, lmsApi } from '../../services/api'
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { useToast } from '../../components/Toast'
+import { useConfirmModal } from '../../components/ConfirmModal'
 import ClassSelector from '../../components/ClassSelector'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useAuth } from '../../contexts/AuthContext'
@@ -230,6 +231,7 @@ export default function QuestionPaperBuilderPage() {
   const resumePaperId = routePaperId || location.state?.paperId || location.state?.draftId || null
   const [activeTab, setActiveTab] = useState(location.state?.lessonPlanId ? 'lesson' : 'manual') // 'manual' | 'image' | 'lesson'
   const { showError, showSuccess } = useToast()
+  const { confirm, ConfirmModalRoot } = useConfirmModal()
   const [draftId, setDraftId] = useState(resumePaperId)
   const [manualDraft, setManualDraft] = useState(MANUAL_DRAFT_DEFAULT)
   const [manualDirty, setManualDirty] = useState(false)
@@ -274,6 +276,13 @@ export default function QuestionPaperBuilderPage() {
     setSelectedClass: (value) => setPaperMetadata((prev) => ({ ...prev, class_obj: value, subject: '' })),
     autoSelectFirst: true,
     queryKey: 'teacherPaperBuilderClasses',
+    // Default fetchClasses (attendanceApi.getMyAttendanceClasses) is
+    // class-teacher-only scope — too narrow here. Paper Builder's backend
+    // permission (_can_manage_exam_papers) allows class-teacher OR
+    // subject-teacher, same combined scope getMyLessonPlanClasses already
+    // exposes for Lesson Plans, so a teacher who only teaches a subject in a
+    // class (not its homeroom teacher) can now select that class too.
+    fetchClasses: () => lmsApi.getMyLessonPlanClasses(),
   })
 
   // Fetch exams — scoped to the current academic year (session) and the selected
@@ -784,19 +793,22 @@ export default function QuestionPaperBuilderPage() {
 
   // Marks mismatch is advisory only — never a hard block — but it should at least
   // interrupt the "Next" click with a confirmation instead of silently sailing past it.
-  const handleGoToAddQuestions = useCallback(() => {
+  const handleGoToAddQuestions = useCallback(async () => {
     const allocated = calculateAllocatedMarks(structure)
     const total = Number(manualDraft.total_marks) || 0
     const isMismatched = total > 0 && allocated !== total
 
     if (isMismatched) {
-      const proceed = window.confirm(
-        `Allocated marks (${allocated}) don't match the paper's total marks (${total}). Continue to Add Questions anyway?`,
-      )
+      const proceed = await confirm({
+        title: 'Marks mismatch',
+        message: `Allocated marks (${allocated}) don't match the paper's total marks (${total}). Continue to Add Questions anyway?`,
+        variant: 'warning',
+        confirmLabel: 'Continue',
+      })
       if (!proceed) return
     }
     setWizardStep(3)
-  }, [structure, manualDraft.total_marks])
+  }, [structure, manualDraft.total_marks, confirm])
 
   const handleManualSubmit = useCallback(async () => {
     if (!(manualDraft.paper_title || '').trim()) {
@@ -950,6 +962,7 @@ export default function QuestionPaperBuilderPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <ConfirmModalRoot />
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-4 sm:px-6 py-4 sm:py-6">
         <div className="max-w-6xl mx-auto">

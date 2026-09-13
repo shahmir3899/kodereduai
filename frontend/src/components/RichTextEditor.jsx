@@ -9,6 +9,7 @@ import TableCell from '@tiptap/extension-table-cell'
 import MathExtension from '@aarkue/tiptap-math-extension'
 import { useState } from 'react'
 import { isRTLLanguage } from './RTLWrapper'
+import DiagramCanvas from './DiagramCanvas'
 import 'katex/dist/katex.min.css'
 
 // Question text is saved as a single HTML string (see question_text in QuestionSlotEditor),
@@ -43,10 +44,18 @@ function wrapLanguage(innerHtml, language) {
  * Provides formatting toolbar for text editing, plus:
  * - inline LaTeX equations (type `$x^2$`, or use the ∑ button) rendered via KaTeX
  * - a language selector so Urdu/Arabic/Pashto/Sindhi questions compose and print right-to-left
+ * - Diagram Mode (draw/paste a figure) when the caller opts in via the `diagram` prop
+ *
+ * `diagram` is intentionally the only Diagram Mode surface here -- this component stays
+ * upload-agnostic (see DiagramCanvas.jsx) and just relays the picked file to the caller:
+ *   { imageUrl, targetLabel, onInsert(file), onRemove }
+ * `imageUrl` is a plain image URL (or object URL for an not-yet-uploaded draft), rendered
+ * as a small attached-diagram preview under the toolbar when the panel is closed.
  */
-export default function RichTextEditor({ value, onChange, placeholder = 'Enter text...' }) {
+export default function RichTextEditor({ value, onChange, placeholder = 'Enter text...', diagram }) {
   const [{ language, inner: initialInner }] = useState(() => unwrapLanguage(value))
   const [currentLanguage, setCurrentLanguage] = useState(language)
+  const [diagramOpen, setDiagramOpen] = useState(false)
   const rtl = isRTLLanguage(currentLanguage)
 
   const editor = useEditor({
@@ -98,6 +107,7 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Enter t
           disabled={!editor.can().undo()}
           className="px-3 py-1 rounded bg-white border border-gray-300 disabled:opacity-30 disabled:cursor-not-allowed"
           title="Undo (Ctrl+Z)"
+          aria-label="Undo"
         >
           ↶
         </button>
@@ -108,6 +118,7 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Enter t
           disabled={!editor.can().redo()}
           className="px-3 py-1 rounded bg-white border border-gray-300 disabled:opacity-30 disabled:cursor-not-allowed"
           title="Redo (Ctrl+Y)"
+          aria-label="Redo"
         >
           ↷
         </button>
@@ -118,8 +129,9 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Enter t
         <button
           type="button"
           onClick={() => editor.chain().focus().toggleBold().run()}
-          className={`px-3 py-1 rounded font-bold ${editor.isActive('bold') ? 'bg-blue-500 text-white' : 'bg-white border border-gray-300'}`}
+          className={`px-3 py-1 rounded font-bold ${editor.isActive('bold') ? 'bg-primary-600 text-white' : 'bg-white border border-gray-300'}`}
           title="Bold (Ctrl+B)"
+          aria-label="Bold"
         >
           B
         </button>
@@ -127,8 +139,9 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Enter t
         <button
           type="button"
           onClick={() => editor.chain().focus().toggleItalic().run()}
-          className={`px-3 py-1 rounded italic ${editor.isActive('italic') ? 'bg-blue-500 text-white' : 'bg-white border border-gray-300'}`}
+          className={`px-3 py-1 rounded italic ${editor.isActive('italic') ? 'bg-primary-600 text-white' : 'bg-white border border-gray-300'}`}
           title="Italic (Ctrl+I)"
+          aria-label="Italic"
         >
           I
         </button>
@@ -136,8 +149,9 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Enter t
         <button
           type="button"
           onClick={() => editor.chain().focus().toggleStrike().run()}
-          className={`px-3 py-1 rounded line-through ${editor.isActive('strike') ? 'bg-blue-500 text-white' : 'bg-white border border-gray-300'}`}
+          className={`px-3 py-1 rounded line-through ${editor.isActive('strike') ? 'bg-primary-600 text-white' : 'bg-white border border-gray-300'}`}
           title="Strikethrough"
+          aria-label="Strikethrough"
         >
           S
         </button>
@@ -145,8 +159,9 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Enter t
         <button
           type="button"
           onClick={() => editor.chain().focus().toggleSubscript().run()}
-          className={`px-3 py-1 rounded text-sm ${editor.isActive('subscript') ? 'bg-blue-500 text-white' : 'bg-white border border-gray-300'}`}
+          className={`px-3 py-1 rounded text-sm ${editor.isActive('subscript') ? 'bg-primary-600 text-white' : 'bg-white border border-gray-300'}`}
           title="Subscript (e.g. H2O)"
+          aria-label="Subscript"
         >
           X<sub>2</sub>
         </button>
@@ -154,8 +169,9 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Enter t
         <button
           type="button"
           onClick={() => editor.chain().focus().toggleSuperscript().run()}
-          className={`px-3 py-1 rounded text-sm ${editor.isActive('superscript') ? 'bg-blue-500 text-white' : 'bg-white border border-gray-300'}`}
+          className={`px-3 py-1 rounded text-sm ${editor.isActive('superscript') ? 'bg-primary-600 text-white' : 'bg-white border border-gray-300'}`}
           title="Superscript (e.g. x2)"
+          aria-label="Superscript"
         >
           X<sup>2</sup>
         </button>
@@ -166,8 +182,9 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Enter t
         <button
           type="button"
           onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-          className={`px-3 py-1 rounded ${editor.isActive('heading', { level: 1 }) ? 'bg-blue-500 text-white' : 'bg-white border border-gray-300'}`}
+          className={`px-3 py-1 rounded ${editor.isActive('heading', { level: 1 }) ? 'bg-primary-600 text-white' : 'bg-white border border-gray-300'}`}
           title="Heading 1"
+          aria-label="Heading 1"
         >
           H1
         </button>
@@ -175,8 +192,9 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Enter t
         <button
           type="button"
           onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-          className={`px-3 py-1 rounded ${editor.isActive('heading', { level: 2 }) ? 'bg-blue-500 text-white' : 'bg-white border border-gray-300'}`}
+          className={`px-3 py-1 rounded ${editor.isActive('heading', { level: 2 }) ? 'bg-primary-600 text-white' : 'bg-white border border-gray-300'}`}
           title="Heading 2"
+          aria-label="Heading 2"
         >
           H2
         </button>
@@ -187,8 +205,9 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Enter t
         <button
           type="button"
           onClick={() => editor.chain().focus().toggleBulletList().run()}
-          className={`px-3 py-1 rounded ${editor.isActive('bulletList') ? 'bg-blue-500 text-white' : 'bg-white border border-gray-300'}`}
+          className={`px-3 py-1 rounded ${editor.isActive('bulletList') ? 'bg-primary-600 text-white' : 'bg-white border border-gray-300'}`}
           title="Bullet List"
+          aria-label="Bullet list"
         >
           •
         </button>
@@ -196,8 +215,9 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Enter t
         <button
           type="button"
           onClick={() => editor.chain().focus().toggleOrderedList().run()}
-          className={`px-3 py-1 rounded ${editor.isActive('orderedList') ? 'bg-blue-500 text-white' : 'bg-white border border-gray-300'}`}
+          className={`px-3 py-1 rounded ${editor.isActive('orderedList') ? 'bg-primary-600 text-white' : 'bg-white border border-gray-300'}`}
           title="Ordered List"
+          aria-label="Ordered list"
         >
           1.
         </button>
@@ -210,6 +230,7 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Enter t
           onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
           className="px-3 py-1 rounded bg-white border border-gray-300"
           title="Insert table"
+          aria-label="Insert table"
         >
           ⊞
         </button>
@@ -221,6 +242,7 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Enter t
               onClick={() => editor.chain().focus().addColumnAfter().run()}
               className="px-3 py-1 rounded bg-white border border-gray-300"
               title="Add column"
+              aria-label="Add column"
             >
               +Col
             </button>
@@ -229,6 +251,7 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Enter t
               onClick={() => editor.chain().focus().addRowAfter().run()}
               className="px-3 py-1 rounded bg-white border border-gray-300"
               title="Add row"
+              aria-label="Add row"
             >
               +Row
             </button>
@@ -237,6 +260,7 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Enter t
               onClick={() => editor.chain().focus().deleteTable().run()}
               className="px-3 py-1 rounded bg-white border border-gray-300"
               title="Delete table"
+              aria-label="Delete table"
             >
               ⊟Table
             </button>
@@ -251,9 +275,25 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Enter t
           onClick={insertEquation}
           className="px-3 py-1 rounded bg-white border border-gray-300"
           title="Insert equation (LaTeX, e.g. \frac{1}{2} or x^2) — type between $ signs"
+          aria-label="Insert equation"
         >
           ∑
         </button>
+
+        {diagram && (
+          <>
+            <div className="w-px bg-gray-300"></div>
+            <button
+              type="button"
+              onClick={() => setDiagramOpen((open) => !open)}
+              className={`px-3 py-1 rounded flex items-center gap-1.5 ${diagramOpen ? 'bg-emerald-600 text-white' : 'bg-white border border-gray-300'}`}
+              title="Draw or paste a diagram (geometry, graphs, sketches)"
+              aria-label="Draw or paste a diagram"
+            >
+              ✎ Diagram
+            </button>
+          </>
+        )}
 
         <div className="w-px bg-gray-300"></div>
 
@@ -263,6 +303,7 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Enter t
           onClick={() => editor.chain().focus().unsetAllMarks().clearNodes().run()}
           className="px-3 py-1 rounded bg-white border border-gray-300"
           title="Clear formatting"
+          aria-label="Clear formatting"
         >
           ✕
         </button>
@@ -275,6 +316,7 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Enter t
           onChange={(e) => handleLanguageChange(e.target.value)}
           className="px-2 py-1 rounded bg-white border border-gray-300 text-sm"
           title="Question language (sets text direction for editing and printing)"
+          aria-label="Question language"
         >
           {LANGUAGE_OPTIONS.map((option) => (
             <option key={option.code} value={option.code}>
@@ -283,6 +325,46 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Enter t
           ))}
         </select>
       </div>
+
+      {/* Diagram Mode panel -- drops open under the toolbar rather than a separate
+          modal, so drawing/pasting a figure stays in the flow of composing the question. */}
+      {diagram && diagramOpen && (
+        <DiagramCanvas
+          targetLabel={diagram.targetLabel}
+          onClose={() => setDiagramOpen(false)}
+          onInsert={(file) => {
+            diagram.onInsert(file)
+            setDiagramOpen(false)
+          }}
+        />
+      )}
+
+      {/* Attached diagram preview -- shown once a diagram exists and the panel is
+          closed, so it doesn't compete with the draw/import UI for space. */}
+      {diagram && !diagramOpen && diagram.imageUrl && (
+        <div className="flex items-center gap-3 px-3 py-2 border-x border-b border-gray-300 bg-gray-50">
+          <div className="w-14 h-14 border border-gray-300 rounded overflow-hidden bg-white flex-none">
+            <img src={diagram.imageUrl} alt="Attached diagram" className="w-full h-full object-contain" />
+          </div>
+          <span className="text-xs text-gray-500 flex-1">Diagram attached{diagram.targetLabel ? ` — ${diagram.targetLabel}` : ''}</span>
+          <button
+            type="button"
+            onClick={() => setDiagramOpen(true)}
+            className="text-xs text-blue-600 hover:underline"
+          >
+            Replace
+          </button>
+          {diagram.onRemove && (
+            <button
+              type="button"
+              onClick={diagram.onRemove}
+              className="text-xs text-red-600 hover:underline"
+            >
+              Remove
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Editor area */}
       <div

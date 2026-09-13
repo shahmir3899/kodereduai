@@ -2,12 +2,24 @@
 User serializers for authentication and user management.
 """
 
+import logging
+
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from schools.models import School
+from core.models import LoginEvent
 
 User = get_user_model()
+logger = logging.getLogger(__name__)
+
+
+def _client_ip(request):
+    forwarded = request.META.get('HTTP_X_FORWARDED_FOR', '')
+    if forwarded:
+        return forwarded.split(',')[0].strip()
+    return request.META.get('REMOTE_ADDR')
 
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
@@ -92,7 +104,55 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             'schools': schools,
         }
 
+        # Login tracking is a side effect of a successful auth, not part of it —
+        # a logging or notification hiccup here must never fail the login itself.
+        try:
+            self._record_login_event(user, data['user']['school_id'], data['user']['role'])
+        except Exception:
+            logger.exception('Failed to record LoginEvent for user_id=%s', user.id)
+
         return data
+
+    def _record_login_event(self, user, school_id, role):
+        request = self.context.get('request')
+        event = LoginEvent.objects.create(
+            user=user,
+            username=user.username,
+            school_id=school_id,
+            role=role or '',
+            ip_address=_client_ip(request) if request else None,
+        )
+
+        if school_id == settings.DEMO_SCHOOL_ID and settings.DEMO_LOGIN_ALERT_EMAIL_ENABLED:
+            self._send_demo_login_alert(event)
+
+    def _send_demo_login_alert(self, event):
+        if not settings.DEMO_LOGIN_ALERT_EMAIL_RECIPIENT:
+            logger.warning('DEMO_LOGIN_ALERT_EMAIL_ENABLED but no recipient configured; skipping alert.')
+            return
+
+        from django.core.mail import EmailMultiAlternatives
+        from django.template.loader import render_to_string
+        from django.utils.html import strip_tags
+
+        context = {
+            'title': 'New Demo Login',
+            'accent_color': '#2563eb',
+            'accent_soft': '#dbeafe',
+            'username': event.username,
+            'role': event.role,
+            'login_time': event.created_at,
+            'ip_address': event.ip_address or 'unknown',
+        }
+        html_body = render_to_string('brochure/emails/demo_login_alert.html', context)
+        email = EmailMultiAlternatives(
+            subject='Education AI - New Demo Login',
+            body=strip_tags(html_body),
+            from_email=settings.DEMO_ACCESS_EMAIL_SENDER or settings.LANDING_FORMS_EMAIL_SENDER,
+            to=[settings.DEMO_LOGIN_ALERT_EMAIL_RECIPIENT],
+        )
+        email.attach_alternative(html_body, 'text/html')
+        email.send(fail_silently=False)
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -156,7 +216,8 @@ class UserUpdateSerializer(serializers.ModelSerializer):
 
 class AdminResetPasswordSerializer(serializers.Serializer):
     """
-    Serializer for a super admin resetting another user's password.
+    Serializer for an admin (Super Admin, or School Admin/Principal within
+    their own school) resetting another user's password.
 
     mode='set' (default): set an explicit password immediately.
     mode='email': send the standard token-based reset-link email instead.

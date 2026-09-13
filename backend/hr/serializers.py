@@ -7,6 +7,7 @@ from .models import (
     StaffAttendance, PerformanceAppraisal,
 )
 from django.utils import timezone
+from core.permissions import get_effective_role
 
 
 # ── Department ────────────────────────────────────────────────────────────────
@@ -349,6 +350,11 @@ class LeaveApplicationCreateSerializer(serializers.ModelSerializer):
         fields = [
             'staff_member', 'leave_policy', 'start_date', 'end_date', 'reason',
         ]
+        # staff_member is required for everyone except a self-service
+        # TEACHER/STAFF create (see validate() below) — the ViewSet's
+        # perform_create forces it to their own profile regardless, so the
+        # frontend doesn't send one.
+        extra_kwargs = {'staff_member': {'required': False}}
 
     def validate(self, data):
         start = data.get('start_date')
@@ -357,6 +363,14 @@ class LeaveApplicationCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {'end_date': 'End date must be on or after start date.'}
             )
+
+        view = self.context.get('view')
+        request = self.context.get('request')
+        if getattr(view, 'action', None) == 'create':
+            role = get_effective_role(request) if request else None
+            if role not in ('TEACHER', 'STAFF') and not data.get('staff_member'):
+                raise serializers.ValidationError({'staff_member': 'This field is required.'})
+
         return data
 
 

@@ -42,6 +42,16 @@ When `DEMO_ACCESS_EMAIL_ENABLED` is true, a successful `POST /api/public/forms/d
 | DEMO_ACCESS_EMAIL_SUBJECT | No | Your Education AI demo access | Subject line for visitor email |
 | DEMO_ACCESS_EMAIL_SENDER | No | same as `LANDING_FORMS_EMAIL_SENDER` | From address for visitor email |
 
+### Demo login tracking & alert (backend)
+
+Every successful login writes a `core.LoginEvent` row; the SuperAdmin dashboard's `demo_insights` endpoint filters those to `DEMO_SCHOOL_ID` to show credential-email and demo-login volume. See [`docs/DEMO_SHOWCASE_DATA.md`](DEMO_SHOWCASE_DATA.md#demo-insights-superadmin-dashboard).
+
+| Variable | Required when enabled | Default | Purpose |
+|----------|----------------------|---------|---------|
+| DEMO_SCHOOL_ID | No | 42 | School ID the demo_insights endpoint treats as "the demo" |
+| DEMO_LOGIN_ALERT_EMAIL_ENABLED | — | false | Email the team whenever someone logs into the demo school |
+| DEMO_LOGIN_ALERT_EMAIL_RECIPIENT | No | same as `LANDING_FORMS_EMAIL_RECIPIENT` | Recipient for the demo-login alert |
+
 ### Frontend (.env)
 
 | Variable | Required | Default | Purpose |

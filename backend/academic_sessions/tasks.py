@@ -317,13 +317,14 @@ def recompute_attendance_risk_snapshots():
     year and caches it in AttendanceRiskSnapshot for the Attendance Risk
     Monitor UI to read.
 
-    No longer fires an in-app alert for HIGH-severity schools — the
-    ATTENDANCE_RISK notification (notifications.triggers.trigger_attendance_risk_alerts)
-    was removed; admins/principals check the Attendance Risk Monitor directly.
+    Also fires an in-app ATTENDANCE_RISK alert for schools with HIGH-severity
+    students: one aggregated summary to admins/principals plus one per-student
+    alert to that student's own parents (notifications.triggers).
     """
     from schools.models import School
     from academic_sessions.models import AcademicYear, AttendanceRiskSnapshot
     from academic_sessions.attendance_risk_service import AttendanceRiskService
+    from notifications.triggers import trigger_attendance_risk_alerts, trigger_attendance_risk_alerts_to_parents
 
     processed_schools = 0
 
@@ -348,6 +349,12 @@ def recompute_attendance_risk_snapshots():
                     'students': report['students'],
                 },
             )
+            if report['risk_levels'].get('HIGH', 0) > 0:
+                try:
+                    trigger_attendance_risk_alerts(school, report)
+                    trigger_attendance_risk_alerts_to_parents(school, report)
+                except Exception as e:
+                    logger.error(f"Attendance risk alert dispatch failed for school {school.id}: {e}")
             processed_schools += 1
         except Exception as e:
             logger.error(f"Attendance risk snapshot failed for school {school.id}: {e}")

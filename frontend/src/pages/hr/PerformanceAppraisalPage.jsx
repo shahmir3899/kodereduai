@@ -2,6 +2,9 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { hrApi } from '../../services/api'
 import { useConfirmModal } from '../../components/ConfirmModal'
+import Spinner from '../../components/ui/Spinner'
+import { useDebounce } from '../../hooks/useDebounce'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 const EMPTY_FORM = {
   staff_member: '',
@@ -48,6 +51,7 @@ export default function PerformanceAppraisalPage() {
   const queryClient = useQueryClient()
   const { confirm, ConfirmModalRoot } = useConfirmModal()
   const [search, setSearch] = useState('')
+  const debouncedSearch = useDebounce(search, 300)
   const [showModal, setShowModal] = useState(false)
   const [editId, setEditId] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
@@ -55,8 +59,8 @@ export default function PerformanceAppraisalPage() {
   const [detailAppraisal, setDetailAppraisal] = useState(null)
 
   const { data: appraisalRes, isLoading } = useQuery({
-    queryKey: ['hrAppraisals', search],
-    queryFn: () => hrApi.getAppraisals({ search, page_size: 100 }),
+    queryKey: ['hrAppraisals', debouncedSearch],
+    queryFn: () => hrApi.getAppraisals({ search: debouncedSearch, page_size: 100 }),
   })
 
   const { data: staffRes } = useQuery({
@@ -120,6 +124,9 @@ export default function PerformanceAppraisalPage() {
     setErrors({})
   }
 
+  useEscapeKey(closeModal, showModal)
+  useEscapeKey(() => setDetailAppraisal(null), !!detailAppraisal)
+
   const handleSubmit = (e) => {
     e.preventDefault()
     if (!form.staff_member || !form.review_period_start || !form.review_period_end || !form.rating) {
@@ -159,7 +166,7 @@ export default function PerformanceAppraisalPage() {
 
       {isLoading ? (
         <div className="text-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+          <Spinner size="md" className="mx-auto" />
         </div>
       ) : appraisals.length === 0 ? (
         <div className="card text-center py-8 text-gray-500">No appraisals found. Create one to get started.</div>

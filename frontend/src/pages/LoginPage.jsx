@@ -51,7 +51,10 @@ export default function LoginPage() {
       } else {
         // Regular school mode: validate user belongs to this school
         if (subdomainSchool) {
-          const userSchools = userData.user?.schools || []
+          // login() (AuthContext) already returns the flat user object —
+          // there's no nested `.user` — this always evaluated to [] before,
+          // rejecting every subdomain-scoped login regardless of role.
+          const userSchools = userData.schools || []
           const hasAccess = userSchools.some(s => s.id === subdomainSchool.id)
           
           if (!hasAccess) {
@@ -62,8 +65,31 @@ export default function LoginPage() {
           }
         }
       }
-      
-      navigate(userData.is_super_admin ? '/admin' : '/dashboard', { replace: true })
+
+      // Role-aware landing page — mirrors RootRedirect's logic (App.jsx),
+      // which LoginPage's own post-login navigate never used. Previously
+      // every non-super-admin landed on /dashboard regardless of role; that
+      // was masked for PARENT/STUDENT by the hasAccess bug above always
+      // rejecting them first, so this never actually ran for those roles
+      // until that fix. Without this, a Parent/Student would reach
+      // /dashboard, which DashboardRouter has no case for — falling through
+      // to the School Admin dashboard shell (its data-fetching calls are
+      // safely blocked server-side, but the UI itself is wrong for them).
+      const userSchools = userData.schools || []
+      const matchedSchool =
+        (subdomainSchool && userSchools.find((s) => s.id === subdomainSchool.id)) ||
+        userSchools.find((s) => s.is_default) ||
+        userSchools[0] ||
+        null
+      const effectiveRole = matchedSchool?.role || userData.role
+
+      if (effectiveRole === 'PARENT') {
+        navigate('/parent/dashboard', { replace: true })
+      } else if (effectiveRole === 'STUDENT') {
+        navigate('/student/dashboard', { replace: true })
+      } else {
+        navigate(userData.is_super_admin ? '/admin' : '/dashboard', { replace: true })
+      }
     } catch (err) {
       console.error('Login failed:', err)
       setError(

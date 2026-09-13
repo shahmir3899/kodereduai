@@ -24,6 +24,7 @@ class NotificationTemplate(models.Model):
         ('LIBRARY_OVERDUE', 'Library Overdue Reminder'),
         ('ASSIGNMENT_DUE', 'Assignment Due Reminder'),
         ('ATTENDANCE_RISK', 'Attendance Risk Alert'),
+        ('LEAVE_DECISION', 'Leave Request Decision'),
     ]
 
     CHANNEL_CHOICES = [
@@ -300,6 +301,22 @@ class SchoolNotificationConfig(models.Model):
     class_teacher_attendance_reminder_enabled = models.BooleanField(
         default=True,
         help_text='Remind class teachers via in-app notification at 11:00 AM if student attendance is not yet marked',
+    )
+    attendance_risk_alert_enabled = models.BooleanField(
+        default=True,
+        help_text='Alert admins/principals (aggregate) and parents (per HIGH-risk child) from the nightly attendance risk snapshot',
+    )
+    fee_overdue_grace_days = models.IntegerField(
+        default=10,
+        help_text='Days past month-end before an unpaid/partial fee counts as overdue (FeePayment has no per-payment due date)',
+    )
+    assignment_due_reminder_enabled = models.BooleanField(
+        default=True,
+        help_text='Remind students in-app when a published assignment is due soon and they have not submitted',
+    )
+    library_due_reminder_enabled = models.BooleanField(
+        default=True,
+        help_text='Remind borrowers (and parents, for student borrowers) when an issued library book is due soon or overdue',
     )
 
     created_at = models.DateTimeField(auto_now_add=True)

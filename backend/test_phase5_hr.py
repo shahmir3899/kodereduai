@@ -5,7 +5,7 @@ Tests all 11 HR ViewSets (departments, designations, staff, salary structures,
 payslips, leave policies, leave applications, staff attendance, appraisals,
 qualifications, documents) with role-based access control.
 
-Write access: SCHOOL_ADMIN, PRINCIPAL, HR_MANAGER
+Write access: SCHOOL_ADMIN, PRINCIPAL, MANAGER
 Read-only: TEACHER, ACCOUNTANT
 
 Run:
@@ -37,7 +37,7 @@ try:
     SID_B = seed['SID_B']
     token_admin = seed['tokens']['admin']
     token_principal = seed['tokens']['principal']
-    token_hr = seed['tokens']['hr_manager']
+    token_hr = seed['tokens']['manager']
     token_teacher = seed['tokens']['teacher']
     token_admin_b = seed['tokens']['admin_b']
     staff_1, staff_2, staff_3 = seed['staff'][:3]

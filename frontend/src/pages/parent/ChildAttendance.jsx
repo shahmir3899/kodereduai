@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { parentsApi, sessionsApi } from '../../services/api'
+import Spinner from '../../components/ui/Spinner'
 
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -221,7 +222,7 @@ export default function ChildAttendance() {
       {/* Calendar */}
       {isLoading ? (
         <div className="flex items-center justify-center py-16">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" />
+          <Spinner size="md" />
         </div>
       ) : (
         <div className="bg-white rounded-xl border border-gray-200 p-4">

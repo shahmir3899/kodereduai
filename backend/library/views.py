@@ -15,6 +15,7 @@ from rest_framework.permissions import IsAuthenticated
 
 from core.permissions import (
     IsSchoolAdmin, IsSchoolAdminOrReadOnly, HasSchoolAccess, ModuleAccessMixin,
+    get_effective_role, get_parent_children_ids,
 )
 from core.mixins import TenantQuerySetMixin, ensure_tenant_school_id
 
@@ -152,6 +153,16 @@ class BookIssueViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
         book_id = self.request.query_params.get('book_id')
         if book_id:
             queryset = queryset.filter(book_id=book_id)
+
+        # Security fix (2026-09): PARENT/STUDENT get read access via
+        # IsSchoolAdminOrReadOnly like everyone else, but with no ownership
+        # scoping that unrestricted read let them see every student's book
+        # issues in the school. Scope to their own child(ren)/self.
+        role = get_effective_role(self.request)
+        if role == 'PARENT':
+            queryset = queryset.filter(student_id__in=get_parent_children_ids(self.request))
+        elif role == 'STUDENT':
+            queryset = queryset.filter(student__user_profile__user=self.request.user)
 
         return queryset
 

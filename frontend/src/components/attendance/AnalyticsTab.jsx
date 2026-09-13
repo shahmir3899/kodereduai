@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { attendanceApi } from '../../services/api'
+import Spinner from '../ui/Spinner'
 
 function getAccuracyColor(accuracy) {
   if (accuracy === null || accuracy === undefined) return 'text-gray-500'
@@ -50,7 +51,7 @@ export default function AnalyticsTab({ onGoToConfig }) {
 
       {isLoading ? (
         <div className="card text-center py-12">
-          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600 mx-auto"></div>
+          <Spinner size="h-10 w-10" className="mx-auto" />
           <p className="mt-4 text-gray-500">Loading accuracy data...</p>
         </div>
       ) : !hasData ? (

@@ -6,6 +6,7 @@ import { AuthProvider } from '../../contexts/AuthContext'
 import { AcademicYearProvider } from '../../contexts/AcademicYearContext'
 import { ToastProvider } from '../../components/Toast'
 import { BackgroundTaskProvider } from '../../contexts/BackgroundTaskContext'
+import { ThemeProvider } from '../../contexts/ThemeContext'
 import Portal from './Portal'
 import '../../index.css'
 
@@ -36,18 +37,20 @@ console.log('✅ Portal mode activated')
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <AuthProvider>
-          <AcademicYearProvider>
-            <ToastProvider>
-              <BackgroundTaskProvider>
-                <Portal />
-              </BackgroundTaskProvider>
-            </ToastProvider>
-          </AcademicYearProvider>
-        </AuthProvider>
-      </BrowserRouter>
-    </QueryClientProvider>
+    <ThemeProvider>
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <AuthProvider>
+            <AcademicYearProvider>
+              <ToastProvider>
+                <BackgroundTaskProvider>
+                  <Portal />
+                </BackgroundTaskProvider>
+              </ToastProvider>
+            </AcademicYearProvider>
+          </AuthProvider>
+        </BrowserRouter>
+      </QueryClientProvider>
+    </ThemeProvider>
   </React.StrictMode>,
 )

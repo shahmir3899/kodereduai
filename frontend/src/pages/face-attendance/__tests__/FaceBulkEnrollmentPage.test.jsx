@@ -37,10 +37,17 @@ vi.mock('react-router-dom', async () => {
 })
 
 const mockDetectSingleFace = vi.fn()
+const mockDetectAllFacesQuick = vi.fn()
+const mockGetFramingHint = vi.fn()
+const mockDetectAllFacesWithDescriptors = vi.fn()
 vi.mock('../../../utils/faceApiLoader', () => ({
   loadFaceApiModels: vi.fn(() => Promise.resolve()),
   detectSingleFace: (...args) => mockDetectSingleFace(...args),
+  detectAllFacesQuick: (...args) => mockDetectAllFacesQuick(...args),
+  getFramingHint: (...args) => mockGetFramingHint(...args),
+  detectAllFacesWithDescriptors: (...args) => mockDetectAllFacesWithDescriptors(...args),
   estimateQualityScore: () => 0.82,
+  MIN_ENROLL_QUALITY_SCORE: 0.55,
   LIVE_MOBILE_EMBEDDING_VERSION: 'faceapi_v1',
 }))
 
@@ -68,6 +75,11 @@ beforeEach(() => {
   mockNavigate.mockClear()
   mockDetectSingleFace.mockReset()
   mockDetectSingleFace.mockResolvedValue({ descriptor: new Float32Array(128).fill(0.01) })
+  // Default: no faces in the continuous tick scan — see the matching note in
+  // FaceEnrollmentPage.test.jsx for why this stays deterministic.
+  mockDetectAllFacesQuick.mockReset().mockResolvedValue([])
+  mockGetFramingHint.mockReset().mockReturnValue({ status: 'none', message: null })
+  mockDetectAllFacesWithDescriptors.mockReset().mockResolvedValue([])
   mockGetUserMedia(vi.fn(() => Promise.resolve({ getTracks: () => [] })))
 })
 
@@ -146,9 +158,9 @@ describe('FaceBulkEnrollmentPage', () => {
     await waitFor(() => expect(screen.getByText(/3 of 3 students will be captured/)).toBeInTheDocument())
     await user.click(screen.getByText('Start Bulk Capture'))
 
-    // Student 1: camera needs to be enabled once.
+    // Student 1: LiveEnrollCapture auto-requests the camera on mount now, so
+    // there's no manual "Enable Camera" click — just wait for it to grant.
     expect(screen.getByText('1 of 3 students captured')).toBeInTheDocument()
-    await user.click(screen.getByText('Enable Camera'))
     await waitFor(() => expect(screen.getByText('Capture Face')).not.toBeDisabled())
     await user.click(screen.getByText('Capture Face'))
     await waitFor(() => expect(screen.getByText('Confirm & Enroll')).toBeInTheDocument())

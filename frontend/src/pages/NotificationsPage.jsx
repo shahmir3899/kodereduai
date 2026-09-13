@@ -7,6 +7,9 @@ import { useAcademicYear } from '../contexts/AcademicYearContext'
 import { useToast } from '../components/Toast'
 import { formatDistanceToNow } from 'date-fns'
 import { useSessionClasses } from '../hooks/useSessionClasses'
+import Spinner from '../components/ui/Spinner'
+import { useEscapeKey } from '../hooks/useEscapeKey'
+import Button from '../components/ui/Button'
 
 // === CONSTANTS (mirrored from backend model choices) ===
 
@@ -44,7 +47,7 @@ const RECIPIENT_TYPES = [
   { value: 'STAFF', label: 'All Staff' },
   { value: 'SCHOOL_ADMIN', label: 'All Admins' },
   { value: 'PRINCIPAL', label: 'Principals' },
-  { value: 'HR_MANAGER', label: 'HR Managers' },
+  { value: 'MANAGER', label: 'Managers' },
   { value: 'ACCOUNTANT', label: 'Accountants' },
   { value: 'STUDENT', label: 'All Students' },
 ]
@@ -68,9 +71,9 @@ const PLACEHOLDER_PATTERN = /\{\{\s*([^}]+)\s*\}\}/g
 
 const TABS = ['Inbox', 'Templates', 'Send', 'Analytics', 'Settings']
 
-const Spinner = () => (
+const SectionSpinner = () => (
   <div className="flex justify-center py-10">
-    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" />
+    <Spinner size="md" />
   </div>
 )
 
@@ -174,7 +177,7 @@ function InboxTab() {
   const totalCount = data?.data?.count || notifications.length
   const totalPages = Math.ceil(totalCount / 20) || 1
 
-  if (isLoading) return <Spinner />
+  if (isLoading) return <SectionSpinner />
 
   return (
     <div className="space-y-4">
@@ -388,7 +391,7 @@ function TemplatesTab() {
     setShowForm(true)
   }
 
-  if (isLoading) return <Spinner />
+  if (isLoading) return <SectionSpinner />
 
   return (
     <div className="space-y-4">
@@ -405,12 +408,9 @@ function TemplatesTab() {
           onChange={(e) => setSearch(e.target.value)}
           className="text-sm border-gray-300 rounded-lg w-64"
         />
-        <button
-          onClick={resetForm}
-          className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm"
-        >
+        <Button onClick={resetForm}>
           New Template
-        </button>
+        </Button>
       </div>
 
       {showForm && (
@@ -665,6 +665,12 @@ function SendTab() {
   const [confirmSendOpen, setConfirmSendOpen] = useState(false)
   const [audiencePreview, setAudiencePreview] = useState(null)
   const [placeholderWarning, setPlaceholderWarning] = useState(null)
+
+  useEscapeKey(() => setConfirmMarkAll(false), confirmMarkAll)
+  useEscapeKey(() => setDeleteConfirm(null), !!deleteConfirm)
+  useEscapeKey(() => setPreviewTemplate(null), !!previewTemplate)
+  useEscapeKey(() => setPlaceholderWarning(null), !!placeholderWarning)
+  useEscapeKey(() => setConfirmSendOpen(false), confirmSendOpen && mode === 'broadcast')
   const [form, setForm] = useState({
     event_type: 'GENERAL', channel: 'IN_APP', title: '', body: '',
     recipient_type: 'PARENT', recipient_identifier: '',
@@ -941,13 +947,9 @@ function SendTab() {
           )}
         </div>
 
-        <button
-          onClick={openConfirm}
-          disabled={isPending || !canSend}
-          className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm disabled:opacity-50"
-        >
+        <Button onClick={openConfirm} disabled={isPending || !canSend}>
           {isPending ? 'Sending...' : mode === 'broadcast' ? 'Review & Send Broadcast' : 'Send Notification'}
-        </button>
+        </Button>
         <button
           onClick={() => testSendMutation.mutate()}
           disabled={testSendMutation.isPending || !user?.id}
@@ -1058,7 +1060,7 @@ function AnalyticsTab() {
     queryFn: () => notificationsApi.getAnalytics({ range: dateRange !== 'all' ? dateRange : undefined }),
   })
 
-  if (isLoading) return <Spinner />
+  if (isLoading) return <SectionSpinner />
 
   const analytics = data?.data || {}
   const channels = analytics.delivery_analytics?.channels || {}
@@ -1223,7 +1225,7 @@ function SettingsTab() {
     onError: () => showError('Failed to save settings'),
   })
 
-  if (isLoading || !config) return <Spinner />
+  if (isLoading || !config) return <SectionSpinner />
 
   const ToggleSwitch = ({ checked, onChange }) => (
     <button

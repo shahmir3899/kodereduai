@@ -32,5 +32,16 @@ export default defineConfig({
     globals: true,
     setupFiles: './src/test/setup.js',
     css: false,
+    // Default pool spins up one worker per CPU core and keeps every
+    // jsdom environment for the whole run resident at once — on this
+    // suite that meant 3GB+ and 40+ minutes for a single `vitest run`.
+    // Capping forks bounds peak memory; see scripts/run-tests-phased.mjs
+    // for splitting a run into smaller sequential batches too.
+    pool: 'forks',
+    poolOptions: {
+      forks: {
+        maxForks: 2,
+      },
+    },
   },
 })

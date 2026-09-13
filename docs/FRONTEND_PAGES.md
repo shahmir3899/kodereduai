@@ -32,8 +32,9 @@ This document primarily covers the authenticated ERP SPA routes below. The landi
 ## Authentication
 | Route | Component | Description | API Calls |
 |-------|-----------|-------------|-----------|
-| /login | LoginPage.jsx | Login form | POST /api/auth/login/ |
+| /login | LoginPage.jsx | Login form. Post-login redirect is role-aware: resolves the effective role from the matched school (subdomain match → default school → first school) and routes PARENT→/parent/dashboard, STUDENT→/student/dashboard, else /admin (super admin) or /dashboard | POST /api/auth/login/ |
 | /register | RegisterPage.jsx | User registration | POST /api/auth/register/ |
+| /parent/register | ParentRegisterPage.jsx | Public parent self-registration via invite code (relation, phone, name, username/password); mirrors LoginPage styling | POST /api/parents/register/ |
 
 ## Main Dashboard & Core
 
@@ -44,9 +45,10 @@ The `/dashboard` route uses **DashboardRouter.jsx** to render a role-specific da
 | SCHOOL_ADMIN | DashboardPage.jsx | Module-aware command center: 4 KPI cards (Students, Attendance, Fees, Staff), AI Insights with module badges, Module Health Grid (10 modules), Attendance bar, Finance snapshot, Session Health, Attendance Risk, Quick Actions, NotificationsFeed. All sections module-gated |
 | PRINCIPAL | DashboardPage.jsx (variant="principal") | Same as admin but quick actions show Lesson Plans, Examinations, Class Management |
 | TEACHER | TeacherDashboard.jsx | 4 KPIs (Classes Today with "Now" indicator, Attendance to Mark, Pending Grading, Upcoming Exams), timetable with current period highlighting, Exams & Marks Entry, Lesson Plans progress bar, Quick Actions, NotificationsFeed |
-| HR_MANAGER | HRManagerDashboard.jsx | 6 KPIs (2 rows), department breakdown bars, pending leave with inline approve/reject, top absentees, payroll overview, Quick Actions, NotificationsFeed |
+| MANAGER | ManagerDashboard.jsx | 6 HR KPIs (2 rows) + 4 content KPIs (Lesson Plans, Active Assignments, Question Bank, Exam Papers), department breakdown bars, pending leave with inline approve/reject, top absentees, payroll overview, Quick Actions (HR + content links), NotificationsFeed |
 | ACCOUNTANT | AccountantDashboard.jsx | 4 KPIs, fee collection by class (color-coded), recent transactions, overdue fees, income vs expense bars, per-account balances, Quick Actions, NotificationsFeed |
 | STAFF | StaffDashboard.jsx | 4 KPIs (Attendance, Leave, Salary, Notifications), mini attendance calendar, leave balance breakdown, recent payslips, assigned inventory, NotificationsFeed |
+| DRIVER | DriverDashboard.jsx | HR self-service section (attendance calendar, leave balance, payslips — same pattern as StaffDashboard) plus a Transport section (assigned vehicle, route, stops) | GET attendance/, leave-applications/, payslips/, transport my-vehicle/, route/{id}/, stops/ |
 
 | Route | Component | Description | API Calls |
 |-------|-----------|-------------|-----------|
@@ -54,7 +56,7 @@ The `/dashboard` route uses **DashboardRouter.jsx** to render a role-specific da
 | /profile | ProfilePage.jsx | User profile edit | GET/PATCH /api/auth/me/ |
 | /settings | SettingsPage.jsx | Tabs: School Profile (logo/letterhead upload, exam weighted average toggle), Users | GET /api/schools/current/, POST upload_asset/, DELETE delete_asset/, PUT /api/schools/exam_config/, GET/POST /api/users/ |
 | /notifications | NotificationsPage.jsx | Notification center with 5 tabs (URL-persisted via `?tab=`): **Inbox** (paginated, mark-read, mark-all-read with confirmation, school + event filters, relative timestamps), **Templates** (CRUD + duplicate + in-UI rendered preview for placeholders), **Send** (broadcast/single mode, template picker, recipient preview + pre-send confirmation, optional class/session/year filters, and test-send-to-me), **Analytics** (channel + event-type performance, trends, top failures, date range filter), **Settings** (module-gated toggles — channels include WhatsApp, Email, and In-App where In-App also controls mobile push; SMS removed) | GET /api/notifications/my/, POST /api/notifications/broadcast/preview/, POST /api/notifications/broadcast/, POST /api/notifications/send/, GET /api/notifications/analytics/, GET/PUT /api/notifications/config/ |
-| /admin | SuperAdminDashboard.jsx | Super admin only — all schools overview | GET /api/admin/schools/, platform_stats/ |
+| /admin | SuperAdminDashboard.jsx | Super admin only — all schools overview. Overview tab includes a "Demo Funnel" stat card (credential emails sent vs. demo-school logins, today/3d/7d, role split) and a "Recent Demo Activity" merged feed — see `docs/DEMO_SHOWCASE_DATA.md` | GET /api/admin/schools/, platform_stats/, demo_insights/ |
 
 ## Attendance
 | Route | Component | Description | API Calls |
@@ -72,7 +74,7 @@ Redirects: /attendance/upload, /attendance/review, /attendance/records, /accurac
 | Route | Component | Description | API Calls |
 |-------|-----------|-------------|-----------|
 | /students | StudentsPage.jsx | Student list with search, multi-select class chip filter (chips show live counts, sourced from classFilterOptions with session awareness), summary stats (shown/gender) in same card as filters, bulk ops. When `academic_year` is selected, class chips and class labels use enrollment-scoped class data for that year. Repeat is treated as a promotion/enrollment history concept, not a standalone record-state filter on this page. | GET/POST /api/students/ |
-| /students/:id | StudentProfilePage.jsx | Student detail (tabs: overview, attendance, fees, academics, **assessment**, history, documents) with AI risk summary, profile metadata, and promotion correction action. Assessment tab: single-student monthly skill/behaviour ratings + remarks, with a month selector (mirrors `/assessments`, scoped to one student) | GET students/{id}/, profile_summary/, ai-profile/, attendance_history/, fee_ledger/, exam_results/, enrollment_history/, documents/, GET/POST student-term-assessment/ |
+| /students/:id | StudentProfilePage.jsx | Student detail (tabs: overview, attendance, fees, academics, **assessment**, history, documents) with AI risk summary, profile metadata, promotion correction action, and a "Generate Parent Invite" chip (gated on lifecycle-management permission) that opens a modal to pick relation + phone and produce a one-time registration link/code for `/parent/register`. Assessment tab: single-student monthly skill/behaviour ratings + remarks, with a month selector (mirrors `/assessments`, scoped to one student) | GET students/{id}/, profile_summary/, ai-profile/, attendance_history/, fee_ledger/, exam_results/, enrollment_history/, documents/, GET/POST student-term-assessment/, POST parents/admin/generate-invite/ |
 | /classes | ClassesGradesPage.jsx | Class management | GET/POST /api/classes/ |
 
 ## Academics
@@ -88,6 +90,9 @@ Redirects: /attendance/upload, /attendance/review, /attendance/records, /accurac
 | /academics/results | ResultsPage.jsx | Results view with expandable AI report card comments. Generate/Regenerate AI Comments button | GET exams/{id}/results/, POST exams/{id}/generate-comments/ |
 | /academics/report-cards | ReportCardPage.jsx | Report cards with class filter (ClassSelector), student search, Download PDF button (school logo + marks table + grade scale). Uses reportCardExport.js | GET report-card/, GET /api/schools/current/, GET /api/classes/ |
 | /academics/grade-scale | GradeScalePage.jsx | Grade scale config | GET/POST grade-scales/ |
+| /academics/worksheets | WorksheetsPage.jsx | **NEW (2026-09):** Worksheets list under Content Creation, sibling of Question Papers. Filter by class/subject/status/search; row actions Resume/Open, Duplicate, Download PDF/DOCX, Delete | GET worksheets/, POST worksheets/{id}/duplicate/, DELETE worksheets/{id}/, GET worksheets/{id}/generate-pdf\|docx/ |
+| /academics/worksheets/new | WorksheetBuilderPage.jsx (NewWorksheetForm) | **NEW (2026-09):** Class/subject/title picker that creates a draft and redirects to /academics/worksheets/:id | POST worksheets/ensure-draft/ |
+| /academics/worksheets/:worksheetId | WorksheetBuilderPage.jsx | **NEW (2026-09):** Draft editor with tabs — Sections (`PaperStructureBuilder`, reused as-is), Add Manually (`RichTextEditor` incl. Diagram Mode, reused as-is), From Bank (`QuestionBankPicker`, reused as-is), Scan Image (upload → OCR poll → import into structure/items), Items (review list). Debounced autosave; no total-marks/duration fields (worksheets carry no exam-lifecycle data) | GET worksheets/{id}/, POST worksheets/{id}/autosave/, POST worksheet-uploads/upload-image/, GET worksheet-uploads/{id}/, POST questions/{id}/diagram/ |
 | /academics/curriculum | CurriculumPage.jsx | **Curriculum management (Book → Chapter → Topic) with AI-assisted TOC import (Phases 1–3)**. Class + Subject filters, book list, chapter accordion with topics, syllabus progress bar. **Multi-mode TOC import**: (1) Paste text, (2) OCR photo upload with Google Vision. **Phase 1: Staged AI Suggestions** — Auto-suggestions via Groq LLM fallback to rule-based parser, per-item Use/Ignore, bulk Use High-Confidence (conf≥0.8). **Phase 2: OCR Line Mapping** — Click extracted lines to highlight, map directly as chapter/topic with visual badges. **Phase 3: Undo/Redo & Line Editing** — Ctrl+Z/Y to undo/redo OCR edits, E-key to edit line text, merge adjacent lines, auto-normalize text (trim/collapse/clean punctuation, preserve Urdu/Arabic). Keyboard shortcuts: C=Chapter, T=Topic, E=Edit, ↑↓=Navigate, Esc=Clear. RTL language support (Urdu, Arabic, Sindhi, Pashto). | GET/POST books/, books/{id}/tree/, books/{id}/bulk_toc/, books/{id}/ocr_toc/, books/{id}/parse_toc/, books/{id}/apply_toc/, books/{id}/suggest_toc/, chapters/, topics/, books/syllabus_progress/ |
 | /academics/lesson-plans | LessonPlansPage.jsx, LessonPlanCreateHub.jsx, LessonPlanWizard.jsx, BulkLessonPlansModal.jsx | Single entry “Add lesson plan” → hub (single vs bulk); wizards | GET/POST lesson-plans/, POST bulk_create/ |
 | /academics/assignments | AssignmentsPage.jsx | Assignments with SubjectSelector filter | GET/POST assignments/ |
@@ -113,13 +118,13 @@ Redirects: /attendance/upload, /attendance/review, /attendance/records, /accurac
 | Route | Component | Description | API Calls |
 |-------|-----------|-------------|-----------|
 | /hr | HRDashboardPage.jsx | HR overview | GET dashboard_stats/ |
-| /hr/staff | StaffDirectoryPage.jsx | Staff list with Create Account, Link Account (existing user), Unlink, bulk convert | GET staff/, POST create-user-account/, link-user-account/, unlink-user-account/, bulk-create-accounts/, GET /api/users/ (for link search) |
+| /hr/staff | StaffDirectoryPage.jsx | Staff list with Create Account, Link Account (existing user), Unlink, Reset Password (school-scoped, linked accounts only), bulk convert | GET staff/, POST create-user-account/, link-user-account/, unlink-user-account/, bulk-create-accounts/, POST /api/users/{id}/reset_password/, GET /api/users/ (for link search) |
 | /hr/staff/new | StaffFormPage.jsx | Create staff | POST staff/ |
 | /hr/staff/:id/edit | StaffFormPage.jsx | Edit staff | PUT staff/{id}/ |
 | /hr/departments | DepartmentsPage.jsx | Departments & designations | GET/POST departments/, designations/ |
 | /hr/salary | SalaryManagementPage.jsx | Salary structures | GET/POST salary-structures/ |
 | /hr/payroll | PayrollPage.jsx | Payslip generation, PDF download, delete | GET/POST/DELETE payslips/, download-pdf/ |
-| /hr/leave | LeaveManagementPage.jsx | Leave policies & applications | GET/POST leave-policies/, leave-applications/ |
+| /hr/leave | LeaveManagementPage.jsx | Leave policies & applications. For TEACHER (self-service mode, `isTeacher`): header/subtitle change, Policies tab hidden, Staff Member picker hidden in Apply modal, Approve/Reject actions hidden (mobile + desktop), and `staff_member` omitted from the create payload (backend resolves it from the teacher's own staff profile) | GET/POST leave-policies/, leave-applications/ |
 | /hr/attendance | StaffAttendancePage.jsx | Staff attendance | GET/POST attendance/ |
 | /hr/appraisals | PerformanceAppraisalPage.jsx | Performance reviews | GET/POST appraisals/ |
 | /hr/documents | StaffDocumentsPage.jsx | Staff documents | GET/POST documents/ |
@@ -187,6 +192,8 @@ Redirects: /attendance/upload, /attendance/review, /attendance/records, /accurac
 | /parent/children/:studentId/fees | ChildFees.jsx | | GET children/{id}/fees/ |
 | /parent/children/:studentId/timetable | ChildTimetable.jsx | | GET children/{id}/timetable/ |
 | /parent/children/:studentId/results | ChildExamResults.jsx | | GET children/{id}/exam-results/ |
+| /parent/children/:studentId/library | ChildLibrary.jsx | Child's book issues (read-only) | GET parents/children/{id}/library/ |
+| /parent/children/:studentId/transport | ChildTransport.jsx | Child's route/vehicle/stop assignment (read-only) | GET parents/children/{id}/transport/ |
 | /parent/leave | LeaveApplication.jsx | Submit leave | POST leave-requests/ |
 | /parent/messages | ParentMessages.jsx | Message teacher | GET messages/threads/ |
 | /parent/payment-result | PaymentResultPage.jsx | Payment confirmation | |
@@ -194,11 +201,13 @@ Redirects: /attendance/upload, /attendance/review, /attendance/records, /accurac
 ## Student Portal
 | Route | Component | Description | API Calls |
 |-------|-----------|-------------|-----------|
-| /student/dashboard | StudentDashboard.jsx | Student home: 4 stat cards (Attendance, Fees, Assignments, Last Exam), two-column layout with timetable (current period highlight), assignments (urgency indicators), recent exam results, quick links (6), NotificationsFeed | GET portal/dashboard/, GET portal/exam-results/ |
+| /student/dashboard | StudentDashboard.jsx | Student home: 4 stat cards (Attendance, Fees, Assignments, Last Exam), two-column layout with timetable (current period highlight), assignments (urgency indicators), recent exam results, quick links (8, incl. Library and Transport), NotificationsFeed | GET portal/dashboard/, GET portal/exam-results/ |
 | /student/attendance | StudentAttendance.jsx | View attendance | GET portal/attendance/ |
 | /student/fees | StudentFees.jsx | View fees | GET portal/fees/ |
 | /student/timetable | StudentTimetable.jsx | View timetable | GET portal/timetable/ |
 | /student/results | StudentResults.jsx | View results | GET portal/results/ |
 | /student/assignments | StudentAssignments.jsx | View assignments | GET portal/assignments/ |
+| /student/library | StudentLibrary.jsx | View own book issues (read-only) | GET portal/library/ |
+| /student/transport | StudentTransport.jsx | View own route/vehicle/stop assignment (read-only) | GET portal/transport/ |
 | /student/profile | StudentProfileView.jsx | View profile | |
 | /student/study-helper | StudentStudyHelper.jsx | AI study assistant | POST portal/study-helper/ |

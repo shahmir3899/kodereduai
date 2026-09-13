@@ -9,7 +9,7 @@ from django.utils import timezone
 
 from core.embeddings import generate_text_embedding
 
-from .models import PaperUpload, Question, QuestionStats, StudentResponse
+from .models import PaperUpload, Question, QuestionStats, StudentResponse, WorksheetUpload
 
 logger = logging.getLogger(__name__)
 
@@ -223,7 +223,101 @@ def process_paper_upload_ocr(self, upload_id: int):
         if self.request.retries < self.max_retries:
             logger.info(f"Retrying PaperUpload {upload_id} (attempt {self.request.retries + 1})")
             raise self.retry(exc=e, countdown=60)  # Retry after 60 seconds
-        
+
+        return {
+            'success': False,
+            'upload_id': upload_id,
+            'error': str(e)
+        }
+
+
+@shared_task(bind=True, max_retries=2)
+def process_worksheet_upload_ocr(self, upload_id: int):
+    """Process an uploaded worksheet image with OCR to extract questions.
+
+    Deliberately skips the multi-page continuation-context building that
+    process_paper_upload_ocr does for exam papers -- worksheets are almost
+    always a single page, so that extra prompt-context plumbing isn't worth
+    duplicating here; group_id/page_number are still stored for the rare
+    multi-page case, they just don't inform this call's extraction prompt.
+    """
+    from .paper_ocr_processor import PaperOCRProcessor
+
+    try:
+        logger.info(f"Starting OCR processing for WorksheetUpload {upload_id}")
+
+        try:
+            upload = WorksheetUpload.objects.select_related(
+                'school', 'context_class', 'context_subject',
+            ).get(id=upload_id)
+        except WorksheetUpload.DoesNotExist:
+            logger.error(f"WorksheetUpload {upload_id} not found")
+            return {'success': False, 'error': 'Upload not found'}
+
+        upload.status = WorksheetUpload.Status.PROCESSING
+        upload.save(update_fields=['status'])
+
+        processor = PaperOCRProcessor()
+        context = {
+            'school_id': upload.school_id,
+            'class_name': upload.context_class.name if upload.context_class_id else None,
+            'subject_name': upload.context_subject.name if upload.context_subject_id else None,
+        }
+
+        result = processor.process_paper_image(upload.image_url, context, None)
+
+        if result.success:
+            upload.ai_extracted_json = result.to_json()
+            upload.extraction_confidence = result.extraction_confidence
+            upload.extraction_notes = result.notes
+            upload.status = WorksheetUpload.Status.EXTRACTED
+            upload.processed_at = timezone.now()
+            upload.save()
+
+            logger.info(
+                f"Successfully processed WorksheetUpload {upload_id}: "
+                f"{len(result.questions)} questions extracted"
+            )
+
+            return {
+                'success': True,
+                'upload_id': upload_id,
+                'questions_count': len(result.questions),
+                'confidence': result.extraction_confidence,
+            }
+        else:
+            upload.status = WorksheetUpload.Status.FAILED
+            upload.error_message = result.error or "Unknown processing error"
+            upload.processed_at = timezone.now()
+            upload.save()
+
+            logger.error(f"Failed to process WorksheetUpload {upload_id}: {result.error}")
+
+            return {
+                'success': False,
+                'upload_id': upload_id,
+                'error': result.error,
+            }
+
+    except Exception as e:
+        logger.error(
+            f"Unexpected error processing WorksheetUpload {upload_id}: {str(e)}",
+            exc_info=True
+        )
+
+        try:
+            upload = WorksheetUpload.objects.get(id=upload_id)
+            upload.status = WorksheetUpload.Status.FAILED
+            upload.error_message = f"Processing error: {str(e)}"
+            upload.processed_at = timezone.now()
+            upload.save()
+        except Exception:
+            pass
+
+        if self.request.retries < self.max_retries:
+            logger.info(f"Retrying WorksheetUpload {upload_id} (attempt {self.request.retries + 1})")
+            raise self.retry(exc=e, countdown=60)
+
         return {
             'success': False,
             'upload_id': upload_id,

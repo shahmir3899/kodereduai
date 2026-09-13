@@ -5,6 +5,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
+import Spinner from '../../components/ui/Spinner'
 
 const COLORS = ['#4f46e5', '#06b6d4', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#ec4899', '#f97316']
 
@@ -124,7 +125,7 @@ export default function AcademicsAnalyticsPage() {
 
       {isLoading ? (
         <div className="text-center py-16">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto mb-3"></div>
+          <Spinner size="md" className="mx-auto mb-3" />
           <p className="text-sm text-gray-500">Analyzing data...</p>
         </div>
       ) : isError ? (

@@ -6,11 +6,14 @@ import { useAuth } from '../../contexts/AuthContext'
 import ClassSelector from '../../components/ClassSelector'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useDebounce } from '../../hooks/useDebounce'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { useToast } from '../../components/Toast'
 import { useConfirmModal } from '../../components/ConfirmModal'
 import {
   buildSessionClassOptions,
 } from '../../utils/classScope'
+import Spinner from '../../components/ui/Spinner'
+import Badge from '../../components/ui/Badge'
 
 const SEVERITY_STYLES = {
   red: { bg: 'bg-red-50', border: 'border-red-200', badge: 'bg-red-100 text-red-700', icon: 'text-red-500' },
@@ -397,6 +400,10 @@ export default function SubjectsPage() {
     setClassTeacherErrors({})
   }
 
+  useEscapeKey(closeSubjectModal, showSubjectModal)
+  useEscapeKey(closeAssignModal, showAssignModal)
+  useEscapeKey(closeClassTeacherModal, showClassTeacherModal)
+
   const handleClassTeacherSubmit = (e) => {
     e.preventDefault()
 
@@ -602,7 +609,7 @@ export default function SubjectsPage() {
 
           {subjectLoading ? (
             <div className="text-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+              <Spinner size="md" className="mx-auto" />
             </div>
           ) : subjectError ? (
             <div className="card text-center py-8">
@@ -779,7 +786,7 @@ export default function SubjectsPage() {
             </div>
           ) : assignLoading ? (
             <div className="text-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+              <Spinner size="md" className="mx-auto" />
             </div>
           ) : assignError ? (
             <div className="card text-center py-8">
@@ -1043,7 +1050,7 @@ export default function SubjectsPage() {
             </div>
           ) : classTeacherLoading ? (
             <div className="text-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+              <Spinner size="md" className="mx-auto" />
             </div>
           ) : classTeacherError ? (
             <div className="card text-center py-8">
@@ -1193,7 +1200,7 @@ export default function SubjectsPage() {
         <>
           {(workloadLoading || gapLoading) ? (
             <div className="text-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto mb-3"></div>
+              <Spinner size="md" className="mx-auto mb-3" />
               <p className="text-sm text-gray-500">Analyzing academic data...</p>
             </div>
           ) : (
@@ -1239,11 +1246,11 @@ export default function SubjectsPage() {
                                 <td className="px-3 py-2 text-sm text-center">{maxDay}</td>
                                 <td className="px-3 py-2 text-center">
                                   {t.overloaded ? (
-                                    <span className="inline-block px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-xs font-medium">Overloaded</span>
+                                    <Badge tone="danger">Overloaded</Badge>
                                   ) : t.underloaded ? (
-                                    <span className="inline-block px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium">Underloaded</span>
+                                    <Badge tone="warning">Underloaded</Badge>
                                   ) : (
-                                    <span className="inline-block px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-medium">Balanced</span>
+                                    <Badge tone="success">Balanced</Badge>
                                   )}
                                 </td>
                               </tr>

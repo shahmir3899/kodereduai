@@ -6,6 +6,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useToast } from '../../components/Toast'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -284,6 +285,9 @@ export default function AcademicCalendarPage() {
     setFormErrors({})
     setEditingEntryId(null)
   }
+
+  useEscapeKey(closeDayDetailsModal, !!selectedDateKey && !!selectedDateInfo)
+  useEscapeKey(closeModal, showModal)
 
   const toggleRangeSelecting = () => {
     setIsRangeSelecting((cur) => !cur)
@@ -617,7 +621,7 @@ export default function AcademicCalendarPage() {
                 <h3 className="text-lg font-semibold text-gray-900">{selectedDateKey}</h3>
                 <p className="text-sm text-gray-600">{selectedDateInfo.is_off_day ? 'Marked OFF' : 'No OFF-day flag'}</p>
               </div>
-              <button onClick={closeDayDetailsModal} className="p-1 rounded hover:bg-gray-100">
+              <button onClick={closeDayDetailsModal} className="p-1 rounded hover:bg-gray-100" aria-label="Close">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>

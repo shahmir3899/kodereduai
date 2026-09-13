@@ -516,7 +516,7 @@ logging.getLogger(__name__).info("REDIS_URL=%r", REDIS_URL)
 # AI / LLM Configuration
 # =============================================================================
 GROQ_API_KEY = os.getenv('EDU_GROQ_API_KEY', '')
-GROQ_MODEL = os.getenv('EDU_GROQ_MODEL', 'llama-3.3-70b-versatile')
+GROQ_MODEL = os.getenv('EDU_GROQ_MODEL', 'openai/gpt-oss-120b')
 
 # Attendance Register OCR — PARKED (2026-05-13)
 # Set OCR_ENABLED=true only to re-activate the AI register scan feature.
@@ -611,6 +611,22 @@ DEMO_ACCESS_EMAIL_SUBJECT = os.getenv(
 DEMO_ACCESS_EMAIL_SENDER = os.getenv(
     'DEMO_ACCESS_EMAIL_SENDER',
     LANDING_FORMS_EMAIL_SENDER,
+).strip()
+
+# School ID of the public demo tenant (see docs/DEMO_SHOWCASE_DATA.md) — used to
+# scope LoginEvent aggregates on the SuperAdmin dashboard's demo_insights endpoint.
+DEMO_SCHOOL_ID = int(os.getenv('DEMO_SCHOOL_ID', '42'))
+
+# Optional: notify the team whenever someone signs into the demo school, so a
+# superadmin knows demo credentials are actually being used, not just sent out.
+DEMO_LOGIN_ALERT_EMAIL_ENABLED = os.getenv('DEMO_LOGIN_ALERT_EMAIL_ENABLED', 'false').lower() in (
+    'true',
+    '1',
+    'yes',
+)
+DEMO_LOGIN_ALERT_EMAIL_RECIPIENT = os.getenv(
+    'DEMO_LOGIN_ALERT_EMAIL_RECIPIENT',
+    LANDING_FORMS_EMAIL_RECIPIENT,
 ).strip()
 
 # =============================================================================

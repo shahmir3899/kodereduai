@@ -78,7 +78,7 @@ def _resolve_recipients_for_broadcast(school, role, filters):
         'STAFF': UserSchoolMembership.Role.STAFF,
         'SCHOOL_ADMIN': UserSchoolMembership.Role.SCHOOL_ADMIN,
         'PRINCIPAL': UserSchoolMembership.Role.PRINCIPAL,
-        'HR_MANAGER': UserSchoolMembership.Role.HR_MANAGER,
+        'MANAGER': UserSchoolMembership.Role.MANAGER,
         'ACCOUNTANT': UserSchoolMembership.Role.ACCOUNTANT,
         'STUDENT': UserSchoolMembership.Role.STUDENT,
     }
@@ -373,7 +373,7 @@ class BroadcastNotificationView(ModuleAccessMixin, APIView):
         'STAFF': 'STAFF',
         'SCHOOL_ADMIN': 'ADMIN',
         'PRINCIPAL': 'ADMIN',
-        'HR_MANAGER': 'STAFF',
+        'MANAGER': 'STAFF',
         'ACCOUNTANT': 'STAFF',
         'STUDENT': 'STAFF',
     }
@@ -652,7 +652,10 @@ class RunNotificationJobView(ModuleAccessMixin, APIView):
     required_module = 'notifications'
     permission_classes = [IsAuthenticated, IsSchoolAdmin, HasSchoolAccess]
 
-    JOBS = ('fee_pending', 'daily_report', 'attendance_reminder')
+    JOBS = (
+        'fee_pending', 'daily_report', 'attendance_reminder',
+        'fee_overdue', 'assignment_due', 'library_due',
+    )
 
     def post(self, request):
         job = request.data.get('job')
@@ -681,6 +684,23 @@ class RunNotificationJobView(ModuleAccessMixin, APIView):
             from .triggers import trigger_daily_school_report
             sent = trigger_daily_school_report(school, today)
             return Response({'job': job, 'sent': sent, 'date': str(today)})
+
+        if job == 'fee_overdue':
+            from .triggers import trigger_fee_overdue_in_app
+            sent = trigger_fee_overdue_in_app(school, today)
+            return Response({'job': job, 'sent': sent, 'date': str(today)})
+
+        if job == 'assignment_due':
+            from .triggers import trigger_assignment_due_soon
+            window_hours = int(request.data.get('window_hours') or 48)
+            sent = trigger_assignment_due_soon(school, window_hours)
+            return Response({'job': job, 'sent': sent, 'window_hours': window_hours})
+
+        if job == 'library_due':
+            from library.triggers import trigger_book_due_reminders
+            due_window_days = int(request.data.get('due_window_days') or 2)
+            sent = trigger_book_due_reminders(school, due_window_days)
+            return Response({'job': job, 'sent': sent, 'due_window_days': due_window_days})
 
         from .triggers import trigger_class_teacher_attendance_pending
         sent = trigger_class_teacher_attendance_pending(school, today)

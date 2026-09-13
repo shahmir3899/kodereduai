@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../../contexts/AuthContext'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 import ClassSelector from '../../components/ClassSelector'
 import { useToast } from '../../components/Toast'
 import { MONTHS } from './FeeFilters'
@@ -303,6 +304,8 @@ export default function FeeGenerationSurface({
 			showError(getErrorMessage(annualMutation.error, 'Failed to generate annual fees'))
 		}
 	}, [isMonthly, annualMutation?.isError, annualMutation?.error, showError])
+
+	useEscapeKey(onClose, isModal && show)
 
 	if (!show) return null
 

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { studentPortalApi } from '../../services/api'
+import Spinner from '../../components/ui/Spinner'
 
 const STATUS_COLORS = {
   PAID: 'bg-green-100 text-green-800',
@@ -37,7 +38,7 @@ export default function StudentFees() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" />
+        <Spinner size="md" />
       </div>
     )
   }

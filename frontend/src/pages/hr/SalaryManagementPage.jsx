@@ -3,6 +3,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { hrApi } from '../../services/api'
 import { useToast } from '../../components/Toast'
 import StatCard from '../../components/dashboard/StatCard'
+import Spinner from '../../components/ui/Spinner'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 const EMPTY_FORM = {
   staff_member: '',
@@ -191,6 +193,8 @@ export default function SalaryManagementPage() {
     setForm(EMPTY_FORM)
   }
 
+  useEscapeKey(closeModal, modalOpen)
+
   const handleSubmit = (e) => {
     e.preventDefault()
     if (!form.staff_member || !form.basic_salary || !form.effective_from) {
@@ -313,7 +317,7 @@ export default function SalaryManagementPage() {
       {/* Loading */}
       {isLoading ? (
         <div className="text-center py-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+          <Spinner size="md" className="mx-auto" />
         </div>
       ) : filteredSalaries.length === 0 ? (
         <div className="card text-center py-8 text-gray-500">

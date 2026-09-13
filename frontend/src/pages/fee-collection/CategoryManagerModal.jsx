@@ -3,6 +3,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { financeApi } from '../../services/api'
 import { useToast } from '../../components/Toast'
 import { getErrorMessage } from '../../utils/errorUtils'
+import Button from '../../components/ui/Button'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 /**
  * Modal for managing annual fee categories (add / rename / delete).
@@ -18,6 +20,8 @@ export default function CategoryManagerModal({ onClose }) {
   const [editName, setEditName] = useState('')
   const [editDesc, setEditDesc] = useState('')
   const [deleteConfirmId, setDeleteConfirmId] = useState(null)
+
+  useEscapeKey(onClose)
 
   const { data: catData, isLoading } = useQuery({
     queryKey: ['annual-categories'],
@@ -179,10 +183,9 @@ export default function CategoryManagerModal({ onClose }) {
                 className="input-field flex-1 text-sm"
                 placeholder="Description (optional)"
               />
-              <button type="submit" disabled={createMutation.isPending || !newName.trim()}
-                className="px-4 py-2 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700 disabled:opacity-50 whitespace-nowrap">
+              <Button type="submit" disabled={createMutation.isPending || !newName.trim()} className="whitespace-nowrap">
                 {createMutation.isPending ? 'Adding…' : '+ Add'}
-              </button>
+              </Button>
             </form>
           </div>
 

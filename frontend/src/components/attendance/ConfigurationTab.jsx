@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { attendanceApi, schoolsApi } from '../../services/api'
+import Spinner from '../ui/Spinner'
 
 export default function ConfigurationTab() {
   const queryClient = useQueryClient()
@@ -108,7 +109,7 @@ export default function ConfigurationTab() {
           </div>
 
           {mappingsLoading ? (
-            <div className="card text-center py-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div></div>
+            <div className="card text-center py-8"><Spinner size="md" className="mx-auto" /></div>
           ) : (
             <>
               {suggestions.length > 0 && (
@@ -201,7 +202,7 @@ export default function ConfigurationTab() {
 
           <div className="card">
             {regConfigLoading ? (
-              <div className="text-center py-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div></div>
+              <div className="text-center py-8"><Spinner size="md" className="mx-auto" /></div>
             ) : (
               <>
                 <h3 className="font-medium text-gray-900 mb-4">Register Layout Configuration</h3>

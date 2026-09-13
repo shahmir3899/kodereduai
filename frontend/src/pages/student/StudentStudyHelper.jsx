@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { studentPortalApi } from '../../services/api'
+import Spinner from '../../components/ui/Spinner'
 
 const SUGGESTIONS = [
   'Help me understand fractions',
@@ -163,7 +164,7 @@ export default function StudentStudyHelper() {
         {historyLoading ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-3" />
+              <Spinner size="md" className="mx-auto mb-3" />
               <p className="text-sm text-gray-400">Loading chat history...</p>
             </div>
           </div>

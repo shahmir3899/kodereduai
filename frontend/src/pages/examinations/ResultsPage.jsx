@@ -6,6 +6,8 @@ import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
+import Spinner from '../../components/ui/Spinner'
+import Badge from '../../components/ui/Badge'
 
 export default function ResultsPage() {
   const queryClient = useQueryClient()
@@ -198,7 +200,7 @@ export default function ResultsPage() {
         </div>
       ) : resultsLoading ? (
         <div className="text-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+          <Spinner size="md" className="mx-auto" />
         </div>
       ) : (
         <>
@@ -294,7 +296,7 @@ export default function ResultsPage() {
                             </td>
                             <td className="px-3 py-2 text-center">
                               {r.grade ? (
-                                <span className="px-2 py-0.5 bg-primary-100 text-primary-700 rounded text-xs font-medium">{r.grade}</span>
+                                <Badge tone="info">{r.grade}</Badge>
                               ) : '—'}
                             </td>
                             <td className="px-3 py-2 text-center">

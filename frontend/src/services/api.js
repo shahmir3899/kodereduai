@@ -227,6 +227,7 @@ export const schoolsApi = {
   updateSchool: (id, data) => api.patch(`/api/admin/schools/${id}/`, data),
   getSchoolStats: (id) => api.get(`/api/admin/schools/${id}/stats/`),
   getPlatformStats: () => api.get('/api/admin/schools/platform_stats/'),
+  getDemoInsights: () => api.get('/api/admin/schools/demo_insights/'),
   activateSchool: (id) => api.post(`/api/admin/schools/${id}/activate/`),
   deactivateSchool: (id) => api.post(`/api/admin/schools/${id}/deactivate/`),
   bulkToggleSchools: (schoolIds, isActive) => api.post('/api/admin/schools/bulk_toggle/', { school_ids: schoolIds, is_active: isActive }),
@@ -882,6 +883,8 @@ export const parentsApi = {
   // getPaymentGateways: (studentId) => api.get(`/api/parents/children/${studentId}/pay-fee/`),
   initiatePayment: (studentId, data) => api.post(`/api/parents/children/${studentId}/pay-fee/`, data),
   getChildTimetable: (studentId) => api.get(`/api/parents/children/${studentId}/timetable/`),
+  getChildLibrary: (studentId) => api.get(`/api/parents/children/${studentId}/library/`),
+  getChildTransport: (studentId) => api.get(`/api/parents/children/${studentId}/transport/`),
   getChildExamSchedule: (studentId) => api.get(`/api/parents/children/${studentId}/exam-schedule/`),
   getChildExamResults: (studentId, params) => api.get(`/api/parents/children/${studentId}/exam-results/`, { params }),
 
@@ -946,6 +949,12 @@ export const studentPortalApi = {
 
   // Timetable
   getTimetable: () => api.get('/api/students/portal/timetable/'),
+
+  // Library
+  getLibrary: () => api.get('/api/students/portal/library/'),
+
+  // Transport
+  getTransport: () => api.get('/api/students/portal/transport/'),
 
   // Exam Schedule (date sheet) -- own class only, visible once a class's
   // schedule is published; separate from results/marks visibility below.
@@ -1418,6 +1427,19 @@ export const questionPaperApi = {
     }),
   search: (params) => api.get('/api/examinations/questions/', { params }),
 
+  // Diagram Mode: slot is 'question' | 'option_a'..'option_d' | 'answer' (see
+  // QuestionViewSet.DIAGRAM_SLOT_FIELDS on the backend).
+  uploadQuestionDiagram: (questionId, slot, file) => {
+    const formData = new FormData()
+    formData.append('slot', slot)
+    formData.append('file', file)
+    return api.post(`/api/examinations/questions/${questionId}/diagram/`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+  removeQuestionDiagram: (questionId, slot) =>
+    api.post(`/api/examinations/questions/${questionId}/remove_diagram/`, { slot }),
+
   // Exam Papers
   getExamPapers: (params) => api.get('/api/examinations/exam-papers/', { params }),
   getExamPaper: (id) => api.get(`/api/examinations/exam-papers/${id}/`),
@@ -1460,6 +1482,37 @@ export const questionPaperApi = {
 
   // Paper Feedback (for learning loop)
   getPaperFeedback: (params) => api.get('/api/examinations/paper-feedback/', { params }),
+}
+
+// Worksheets -- sibling of questionPaperApi's exam-paper group, same shapes
+// (ensure-draft/autosave/generate-pdf/generate-docx/upload-image/confirm) minus
+// exam-lifecycle fields, plus a duplicate action exam papers don't have.
+export const worksheetApi = {
+  getWorksheets: (params) => api.get('/api/examinations/worksheets/', { params }),
+  getWorksheet: (id) => api.get(`/api/examinations/worksheets/${id}/`),
+  ensureDraft: (data) => api.post('/api/examinations/worksheets/ensure-draft/', data),
+  autosaveDraft: (id, data) => api.post(`/api/examinations/worksheets/${id}/autosave/`, data),
+  updateWorksheet: (id, data) => api.patch(`/api/examinations/worksheets/${id}/`, data),
+  deleteWorksheet: (id) => api.delete(`/api/examinations/worksheets/${id}/`),
+  duplicateWorksheet: (id) => api.post(`/api/examinations/worksheets/${id}/duplicate/`, {}),
+  generatePDF: (id) => api.get(`/api/examinations/worksheets/${id}/generate-pdf/`, { responseType: 'blob' }),
+  generateDOCX: (id) => api.get(`/api/examinations/worksheets/${id}/generate-docx/`, { responseType: 'blob' }),
+
+  // Worksheet Uploads (image capture for OCR) -- same contract as paper-uploads.
+  getWorksheetUploads: (params) => api.get('/api/examinations/worksheet-uploads/', { params }),
+  getWorksheetUpload: (id) => api.get(`/api/examinations/worksheet-uploads/${id}/`),
+  uploadWorksheetImage: (file, classObj, subject, groupId, pageNumber) => {
+    const formData = new FormData()
+    formData.append('image', file)
+    if (classObj) formData.append('class_obj', classObj)
+    if (subject) formData.append('subject', subject)
+    if (groupId) formData.append('group_id', groupId)
+    if (pageNumber) formData.append('page_number', pageNumber)
+    return api.post('/api/examinations/worksheet-uploads/upload-image/', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+  confirmWorksheetUpload: (id, data) => api.post(`/api/examinations/worksheet-uploads/${id}/confirm/`, data),
 }
 
 export const aiJobsApi = {

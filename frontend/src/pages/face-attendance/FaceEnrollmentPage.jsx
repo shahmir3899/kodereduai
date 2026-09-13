@@ -13,8 +13,8 @@ import { useSessionClasses } from '../../hooks/useSessionClasses'
 import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
 import { getClassSelectorScope, getResolvedMasterClassId, resolveSessionClassId } from '../../utils/classScope'
 import {
-  loadFaceApiModels, detectSingleFace, detectAllFacesQuick, estimateQualityScore, getFramingHint,
-  LIVE_MOBILE_EMBEDDING_VERSION,
+  loadFaceApiModels, detectSingleFace, detectAllFacesQuick, detectAllFacesWithDescriptors,
+  estimateQualityScore, getFramingHint, MIN_ENROLL_QUALITY_SCORE, LIVE_MOBILE_EMBEDDING_VERSION,
 } from '../../utils/faceApiLoader'
 import useCameraStream, { cameraButtonLabel } from '../../hooks/useCameraStream'
 import CameraPermissionNotice from '../../components/CameraPermissionNotice'
@@ -23,6 +23,16 @@ import CameraPermissionNotice from '../../components/CameraPermissionNotice'
 // is live — faster than FaceLiveCapturePage's match-posting loop since this
 // is a cheap box-only detection with nothing to POST, just UI feedback.
 const LIVE_DETECTION_INTERVAL_MS = 500
+
+// Consecutive "good" ticks required before auto-capture fires — a couple of
+// ticks (~1s) of stable framing rather than 1, so a single lucky frame while
+// the operator is still settling into position doesn't fire a premature
+// capture.
+const AUTO_CAPTURE_GOOD_STREAK = 2
+
+function initials(name) {
+  return String(name || '?').trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() || '').join('') || '?'
+}
 
 export default function FaceEnrollmentPage() {
   const { activeSchool, isTeacher } = useAuth()
@@ -344,6 +354,8 @@ export default function FaceEnrollmentPage() {
             {enrollMode === 'live' ? (
               <LiveEnrollCapture
                 selectedStudent={selectedStudent}
+                studentPhotoUrl={sortedStudents.find((s) => String(s.id) === String(selectedStudent))?.photo_url}
+                studentName={sortedStudents.find((s) => String(s.id) === String(selectedStudent))?.name}
                 onSubmit={(embedding, qualityScore) => enrollEmbeddingMutation.mutate({
                   studentId: parseInt(selectedStudent, 10), embedding, qualityScore,
                 })}
@@ -465,18 +477,37 @@ export default function FaceEnrollmentPage() {
  * component through a whole class roster instead of one manually-selected
  * student — the capture/quality logic itself isn't duplicated there.
  */
-export function LiveEnrollCapture({ selectedStudent, onSubmit, submitting }) {
+export function LiveEnrollCapture({ selectedStudent, studentPhotoUrl, studentName, onSubmit, submitting }) {
   const [modelStatus, setModelStatus] = useState('loading') // loading | ready | error
   const { videoRef, cameraStatus, requestCamera } = useCameraStream({ facingMode: 'user' })
-  const [captured, setCaptured] = useState(null) // { descriptor, qualityScore } | null
+  const [captured, setCaptured] = useState(null) // { descriptor, qualityScore } | error
   const [liveFaceCount, setLiveFaceCount] = useState(0)
   const [liveFramingStatus, setLiveFramingStatus] = useState('none') // none | too-small | off-center | good | multi
+  const [liveFaceBoxes, setLiveFaceBoxes] = useState([]) // raw detection boxes, video-pixel space — only populated while multi
+  const [selectedFaceBox, setSelectedFaceBox] = useState(null) // tapped box, video-pixel space
 
   // Read by handleCapture for a synchronous, up-to-the-moment reject check —
   // the disabled= state on the Capture button already reflects this, but a
   // ref guards against the frame having changed between the last tick and
   // the click (see FaceLiveCapturePage's lastFeedbackRef for the same idea).
   const liveFaceCountRef = useRef(0)
+  const submittingRef = useRef(submitting)
+  submittingRef.current = submitting
+  // handleCapture is called both from the button (always the latest render's
+  // closure) and from inside the tick effect below, whose closure is only
+  // rebuilt when cameraStatus/hasCapturedDescriptor change — modelStatus can
+  // flip to 'ready' well after that, so handleCapture reads this ref instead
+  // of the modelStatus state directly to avoid gating auto-capture on a
+  // frozen, stale value.
+  const modelStatusRef = useRef(modelStatus)
+  modelStatusRef.current = modelStatus
+  // Same staleness concern as modelStatusRef — the camera can be granted
+  // (which is what (re)arms the tick effect below) before a student is even
+  // selected, especially now that the camera auto-requests on mount (#6).
+  // Without this ref, auto-capture's call into handleCapture would forever
+  // see the empty selectedStudent from that first render and bail out.
+  const selectedStudentRef = useRef(selectedStudent)
+  selectedStudentRef.current = selectedStudent
 
   useEffect(() => {
     let cancelled = false
@@ -488,6 +519,16 @@ export function LiveEnrollCapture({ selectedStudent, onSubmit, submitting }) {
 
   const hasCapturedDescriptor = Boolean(captured?.descriptor)
 
+  // Auto-request the camera as soon as this widget mounts, instead of
+  // waiting for a click — browsers only prompt when permission hasn't
+  // already been granted for this origin, so on every mount after the very
+  // first one this silently re-acquires the stream (e.g. each "Run Another
+  // Class" cycle in the bulk queue, which fully unmounts/remounts this
+  // component). The manual button below still covers denied/error recovery.
+  useEffect(() => {
+    if (cameraStatus === 'idle') requestCamera()
+  }, [cameraStatus, requestCamera])
+
   // Continuous lock-on/multi-face check while the preview is live. Runs as
   // its own effect (rather than a setInterval captured once like
   // FaceLiveCapturePage's scan loop) because start/stop here is driven by
@@ -498,9 +539,12 @@ export function LiveEnrollCapture({ selectedStudent, onSubmit, submitting }) {
       liveFaceCountRef.current = 0
       setLiveFaceCount(0)
       setLiveFramingStatus('none')
+      setLiveFaceBoxes([])
+      setSelectedFaceBox(null)
       return
     }
     let cancelled = false
+    let goodStreak = 0
     const tick = async () => {
       if (!videoRef.current) return
       const detections = await detectAllFacesQuick(videoRef.current)
@@ -509,23 +553,63 @@ export function LiveEnrollCapture({ selectedStudent, onSubmit, submitting }) {
       setLiveFaceCount(detections.length)
       if (detections.length === 0) {
         setLiveFramingStatus('none')
+        setLiveFaceBoxes([])
+        goodStreak = 0
       } else if (detections.length > 1) {
         setLiveFramingStatus('multi')
+        setLiveFaceBoxes(detections.map((d) => d.box))
+        goodStreak = 0
       } else {
-        setLiveFramingStatus(getFramingHint(detections[0].box, videoRef.current).status)
+        setLiveFaceBoxes([])
+        const status = getFramingHint(detections[0].box, videoRef.current).status
+        setLiveFramingStatus(status)
+        if (status === 'good') {
+          goodStreak += 1
+          if (goodStreak >= AUTO_CAPTURE_GOOD_STREAK && !submittingRef.current) {
+            goodStreak = 0
+            handleCapture()
+          }
+        } else {
+          goodStreak = 0
+        }
       }
     }
     tick()
     const id = setInterval(tick, LIVE_DETECTION_INTERVAL_MS)
     return () => { cancelled = true; clearInterval(id) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- handleCapture is stable enough here; including it would re-arm the loop on every render
   }, [cameraStatus, hasCapturedDescriptor])
 
   const handleCapture = async () => {
-    if (!videoRef.current) return
+    if (!videoRef.current || modelStatusRef.current !== 'ready' || !selectedStudentRef.current) return
+
     if (liveFaceCountRef.current > 1) {
-      setCaptured({ error: 'Only one person should be in frame — move others out of view and retry.' })
+      if (!selectedFaceBox) {
+        setCaptured({ error: 'Tap the correct face above, then capture.' })
+        return
+      }
+      const detections = await detectAllFacesWithDescriptors(videoRef.current)
+      if (detections.length === 0) {
+        setCaptured({ error: 'Lost track of that face — retry.' })
+        return
+      }
+      const targetCenter = {
+        x: selectedFaceBox.x + selectedFaceBox.width / 2,
+        y: selectedFaceBox.y + selectedFaceBox.height / 2,
+      }
+      const nearest = detections.reduce((best, d) => {
+        const c = { x: d.detection.box.x + d.detection.box.width / 2, y: d.detection.box.y + d.detection.box.height / 2 }
+        const dist = Math.hypot(c.x - targetCenter.x, c.y - targetCenter.y)
+        return !best || dist < best.dist ? { detection: d, dist } : best
+      }, null)
+      setCaptured({
+        descriptor: nearest.detection.descriptor,
+        qualityScore: estimateQualityScore(nearest.detection, videoRef.current),
+      })
+      setSelectedFaceBox(null)
       return
     }
+
     const detection = await detectSingleFace(videoRef.current)
     if (!detection) {
       setCaptured({ error: 'No single face detected — center one face and retry.' })
@@ -538,10 +622,53 @@ export function LiveEnrollCapture({ selectedStudent, onSubmit, submitting }) {
   }
 
   const handleConfirm = () => {
-    if (!captured?.descriptor) return
+    if (!captured?.descriptor || submittingRef.current) return
     onSubmit(Array.from(captured.descriptor), captured.qualityScore)
     setCaptured(null)
   }
+
+  // Space capture-or-confirms, "r" retakes — lets an operator run through a
+  // long bulk queue without reaching for the mouse between students.
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      const tag = document.activeElement?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+      if (e.code === 'Space') {
+        e.preventDefault()
+        if (hasCapturedDescriptor) handleConfirm()
+        else if (cameraStatus === 'granted') handleCapture()
+      } else if (e.key === 'r' || e.key === 'R') {
+        if (hasCapturedDescriptor) setCaptured(null)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- handleCapture/handleConfirm close over state already covered by these deps
+  }, [hasCapturedDescriptor, cameraStatus, selectedFaceBox])
+
+  // Converts a face-api.js box (video's intrinsic pixel space) to the CSS
+  // box needed to overlay it on the displayed <video>, accounting for
+  // object-cover's crop-to-fill scaling (the larger of the two axis ratios,
+  // centered) — a plain width-ratio scale would misplace boxes whenever the
+  // video's aspect ratio doesn't match the aspect-video container.
+  const boxToOverlayStyle = (box) => {
+    const video = videoRef.current
+    if (!video || !video.videoWidth || !video.clientWidth) return null
+    const scale = Math.max(video.clientWidth / video.videoWidth, video.clientHeight / video.videoHeight)
+    const offsetX = (video.clientWidth - video.videoWidth * scale) / 2
+    const offsetY = (video.clientHeight - video.videoHeight * scale) / 2
+    return {
+      left: box.x * scale + offsetX,
+      top: box.y * scale + offsetY,
+      width: box.width * scale,
+      height: box.height * scale,
+    }
+  }
+
+  const isBoxSelected = (box) => selectedFaceBox
+    && Math.abs(box.x - selectedFaceBox.x) < 1 && Math.abs(box.y - selectedFaceBox.y) < 1
+
+  const displayName = studentName || null
 
   return (
     <div className="space-y-3">
@@ -556,6 +683,19 @@ export function LiveEnrollCapture({ selectedStudent, onSubmit, submitting }) {
         </div>
       )}
 
+      {selectedStudent && (
+        <div className="flex items-center gap-2">
+          {studentPhotoUrl ? (
+            <img src={studentPhotoUrl} alt="" className="w-8 h-8 rounded-full object-cover border border-gray-200" />
+          ) : (
+            <div className="w-8 h-8 rounded-full bg-gray-200 text-gray-600 flex items-center justify-center text-[11px] font-semibold">
+              {initials(displayName)}
+            </div>
+          )}
+          <span className="text-xs text-gray-500">Capturing for the selected student — confirm it&apos;s them before capturing.</span>
+        </div>
+      )}
+
       <div className="relative bg-black rounded-lg overflow-hidden aspect-video flex items-center justify-center">
         <video
           ref={videoRef}
@@ -564,7 +704,7 @@ export function LiveEnrollCapture({ selectedStudent, onSubmit, submitting }) {
           muted
           className={`w-full h-full object-cover ${cameraStatus === 'granted' ? '' : 'hidden'}`}
         />
-        {cameraStatus === 'granted' && !hasCapturedDescriptor && (
+        {cameraStatus === 'granted' && !hasCapturedDescriptor && liveFramingStatus !== 'multi' && (
           <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
             <div
               className={`rounded-[50%] w-[46%] h-[80%] transition-colors ${
@@ -573,7 +713,6 @@ export function LiveEnrollCapture({ selectedStudent, onSubmit, submitting }) {
                   'too-small': 'border-2 border-dashed border-amber-400',
                   'off-center': 'border-2 border-dashed border-amber-400',
                   good: 'border-[3px] border-solid border-green-400',
-                  multi: 'border-[3px] border-solid border-red-500',
                 }[liveFramingStatus]
               }`}
             />
@@ -582,11 +721,34 @@ export function LiveEnrollCapture({ selectedStudent, onSubmit, submitting }) {
                 none: 'Fill the oval with your face, then capture',
                 'too-small': 'Move closer',
                 'off-center': 'Center your face',
-                good: 'Face locked — ready to capture',
-                multi: 'Only one person should be in frame',
+                good: 'Hold still — capturing…',
               }[liveFramingStatus]}
             </span>
           </div>
+        )}
+        {cameraStatus === 'granted' && !hasCapturedDescriptor && liveFramingStatus === 'multi' && (
+          <>
+            {liveFaceBoxes.map((box, i) => {
+              const style = boxToOverlayStyle(box)
+              if (!style) return null
+              const selected = isBoxSelected(box)
+              return (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => setSelectedFaceBox(box)}
+                  className={`absolute rounded border-2 transition-colors ${
+                    selected ? 'border-green-400 bg-green-400/10' : 'border-amber-400 bg-amber-400/10 hover:border-white'
+                  }`}
+                  style={style}
+                  aria-label="Select this face to enroll"
+                />
+              )
+            })}
+            <span className="absolute bottom-2 text-[11px] text-white/90 bg-black/50 px-2 py-1 rounded pointer-events-none">
+              {selectedFaceBox ? 'Face selected — capture to continue' : 'Tap the correct face above'}
+            </span>
+          </>
         )}
         <CameraPermissionNotice status={cameraStatus} size="sm" />
       </div>
@@ -597,9 +759,15 @@ export function LiveEnrollCapture({ selectedStudent, onSubmit, submitting }) {
         </div>
       )}
       {captured?.descriptor && (
-        <div className="p-2 bg-green-50 border border-green-200 rounded text-xs text-green-800">
-          Face captured — quality {(captured.qualityScore * 100).toFixed(0)}%. Confirm to save, or retake.
-        </div>
+        captured.qualityScore < MIN_ENROLL_QUALITY_SCORE ? (
+          <div className="p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800">
+            Quality is low ({(captured.qualityScore * 100).toFixed(0)}%) — retake recommended, or confirm anyway.
+          </div>
+        ) : (
+          <div className="p-2 bg-green-50 border border-green-200 rounded text-xs text-green-800">
+            Face captured — quality {(captured.qualityScore * 100).toFixed(0)}%. Confirm to save, or retake.
+          </div>
+        )
       )}
 
       <div className="flex gap-2">
@@ -615,6 +783,7 @@ export function LiveEnrollCapture({ selectedStudent, onSubmit, submitting }) {
           <>
             <button
               onClick={() => setCaptured(null)}
+              title="Shortcut: R"
               className="px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs font-medium"
             >
               Retake
@@ -622,7 +791,10 @@ export function LiveEnrollCapture({ selectedStudent, onSubmit, submitting }) {
             <button
               onClick={handleConfirm}
               disabled={submitting}
-              className="px-3 py-2 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 disabled:opacity-50"
+              title="Shortcut: Space"
+              className={`px-3 py-2 text-white rounded-lg text-xs font-medium disabled:opacity-50 ${
+                captured.qualityScore < MIN_ENROLL_QUALITY_SCORE ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-600 hover:bg-blue-700'
+              }`}
             >
               {submitting ? 'Saving...' : 'Confirm & Enroll'}
             </button>
@@ -630,10 +802,11 @@ export function LiveEnrollCapture({ selectedStudent, onSubmit, submitting }) {
         ) : (
           <button
             onClick={handleCapture}
-            disabled={modelStatus !== 'ready' || !selectedStudent || liveFaceCount > 1}
+            disabled={modelStatus !== 'ready' || !selectedStudent || (liveFaceCount > 1 && !selectedFaceBox)}
+            title="Shortcut: Space"
             className="px-3 py-2 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Capture Face
+            {liveFaceCount > 1 ? 'Capture Selected Face' : 'Capture Face'}
           </button>
         )}
       </div>

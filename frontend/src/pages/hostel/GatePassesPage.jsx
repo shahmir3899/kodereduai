@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { hostelApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
+import Spinner from '../../components/ui/Spinner'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 function formatDate(dateStr) {
   if (!dateStr) return '-'
@@ -124,6 +126,9 @@ export default function GatePassesPage() {
     setActionModal(null)
     setActionRemark('')
   }
+
+  useEscapeKey(closeModal, showModal)
+  useEscapeKey(closeActionModal, !!actionModal)
 
   // ---- Submit Handler ----
 
@@ -256,7 +261,7 @@ export default function GatePassesPage() {
       <div className="bg-white rounded-lg shadow-sm">
         {isLoading ? (
           <div className="text-center py-16">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+            <Spinner size="md" className="mx-auto" />
             <p className="text-gray-500 mt-3">Loading gate passes...</p>
           </div>
         ) : gatePasses.length === 0 ? (

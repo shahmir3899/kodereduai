@@ -22,7 +22,7 @@ interface AuthContextType {
   isSchoolAdmin: boolean;
   isPrincipal: boolean;
   isTeacher: boolean;
-  isHRManager: boolean;
+  isManager: boolean;
   isAccountant: boolean;
   isDriver: boolean;
   isParent: boolean;
@@ -169,7 +169,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     !!user?.is_super_admin ||
     effectiveRole === 'SCHOOL_ADMIN' ||
     effectiveRole === 'PRINCIPAL';
-  const isStaffLevel = ['STAFF', 'TEACHER', 'HR_MANAGER', 'ACCOUNTANT', 'DRIVER'].includes(
+  const isStaffLevel = ['STAFF', 'TEACHER', 'MANAGER', 'ACCOUNTANT', 'DRIVER'].includes(
     effectiveRole || ''
   );
   const isDriver = effectiveRole === 'DRIVER';
@@ -195,7 +195,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isSchoolAdmin,
     isPrincipal: effectiveRole === 'PRINCIPAL',
     isTeacher: effectiveRole === 'TEACHER',
-    isHRManager: effectiveRole === 'HR_MANAGER',
+    isManager: effectiveRole === 'MANAGER',
     isAccountant: effectiveRole === 'ACCOUNTANT',
     isDriver,
     isParent,

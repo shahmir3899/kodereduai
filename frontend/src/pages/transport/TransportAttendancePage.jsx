@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { transportApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
+import Spinner from '../../components/ui/Spinner'
 
 const BOARDING_STATUSES = [
   { value: 'BOARDED', label: 'Boarded', color: 'bg-green-100 text-green-800 border-green-300', activeColor: 'bg-green-500 text-white' },
@@ -186,7 +187,7 @@ export default function TransportAttendancePage() {
         </div>
       ) : isLoading ? (
         <div className="card text-center py-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+          <Spinner size="md" className="mx-auto" />
           <p className="text-gray-500 mt-2">Loading students...</p>
         </div>
       ) : assignments.length === 0 ? (

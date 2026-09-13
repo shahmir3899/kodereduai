@@ -1,6 +1,9 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { inventoryApi } from '../../services/api'
+import Spinner from '../../components/ui/Spinner'
+import { useDebounce } from '../../hooks/useDebounce'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 function formatDate(dateStr) {
   if (!dateStr) return '-'
@@ -26,6 +29,7 @@ export default function ItemAssignmentsPage() {
   // Filters & tab
   const [activeTab, setActiveTab] = useState('active') // 'active' | 'returned'
   const [searchUser, setSearchUser] = useState('')
+  const debouncedSearchUser = useDebounce(searchUser, 300)
 
   // Modals
   const [showAssignModal, setShowAssignModal] = useState(false)
@@ -36,10 +40,10 @@ export default function ItemAssignmentsPage() {
 
   // ---- Queries ----
   const { data: assignmentsData, isLoading } = useQuery({
-    queryKey: ['inventoryAssignments', activeTab, searchUser],
+    queryKey: ['inventoryAssignments', activeTab, debouncedSearchUser],
     queryFn: () => inventoryApi.getAssignments({
       is_active: activeTab === 'active' ? 'true' : 'false',
-      search: searchUser || undefined,
+      search: debouncedSearchUser || undefined,
     }),
   })
 
@@ -84,6 +88,9 @@ export default function ItemAssignmentsPage() {
     setShowAssignModal(true)
   }
   const closeAssignModal = () => { setShowAssignModal(false); setAssignForm(emptyAssignForm) }
+
+  useEscapeKey(closeAssignModal, showAssignModal)
+  useEscapeKey(() => setReturnConfirm(null), !!returnConfirm)
 
   const handleAssignSubmit = (e) => {
     e.preventDefault()
@@ -173,7 +180,7 @@ export default function ItemAssignmentsPage() {
       <div className="bg-white rounded-lg shadow-sm">
         {isLoading ? (
           <div className="text-center py-16">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+            <Spinner size="md" className="mx-auto" />
             <p className="text-gray-500 mt-3">Loading assignments...</p>
           </div>
         ) : assignments.length === 0 ? (

@@ -12,6 +12,7 @@ import PaperStructureBuilder, { calculateAllocatedMarks, makeDefaultSection } fr
 import QuestionSlotEditor from './QuestionSlotEditor'
 import { useAuth } from '../../contexts/AuthContext'
 import { useDebounce } from '../../hooks/useDebounce'
+import Spinner from '../../components/ui/Spinner'
 
 const REVIEW_DRAFT_DEFAULT = {
   paper_title: '',
@@ -422,7 +423,7 @@ export default function ImageCapturePaperTab({ classId, subjectId, readOnly = fa
 
       {(isUploading || isProcessing) && (
         <div className="flex flex-col items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4" />
+          <Spinner size="lg" className="mb-4" />
           <p className="text-gray-600">
             {isUploading ? 'Compressing and uploading image...' : 'Processing with OCR... this can take up to a minute.'}
           </p>

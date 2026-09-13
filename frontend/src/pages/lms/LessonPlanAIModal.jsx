@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { lmsApi } from '../../services/api'
 import { useToast } from '../../components/Toast'
 import { normalizeLessonPlanText } from './lessonPlanTextUtils'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 /**
  * AI lesson plan generation in a dedicated modal.
@@ -19,6 +20,8 @@ export default function LessonPlanAIModal({
 }) {
   const { showSuccess, showError } = useToast()
   const [loading, setLoading] = useState(false)
+
+  useEscapeKey(onClose, open)
 
   if (!open) return null
 

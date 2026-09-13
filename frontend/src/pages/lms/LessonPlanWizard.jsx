@@ -8,9 +8,11 @@ import RTLWrapper, { isRTLLanguage } from '../../components/RTLWrapper'
 import ClassSelector from '../../components/ClassSelector'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import useTeacherScopedClasses from '../../hooks/useTeacherScopedClasses'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../../utils/classScope'
 import LessonPlanAIModal from './LessonPlanAIModal'
 import { normalizeLessonPlanText } from './lessonPlanTextUtils'
+import Spinner from '../../components/ui/Spinner'
 
 const STEPS = [
   { num: 1, label: 'Class & Date' },
@@ -82,6 +84,7 @@ function collectTopicIds(topic) {
 }
 
 export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
+  useEscapeKey(onClose)
   const { activeSchool } = useAuth()
   const { activeAcademicYear } = useAcademicYear()
   const queryClient = useQueryClient()
@@ -664,7 +667,7 @@ export default function LessonPlanWizard({ onClose, onSuccess, editingPlan }) {
 
             {booksLoading ? (
               <div className="text-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto" />
+                <Spinner size="md" className="mx-auto" />
                 <p className="text-gray-500 mt-2 text-sm">Loading curriculum books...</p>
               </div>
             ) : !Array.isArray(books) || books.length === 0 ? (

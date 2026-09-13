@@ -76,3 +76,16 @@ Foundational setup rows (subjects, exam types, grade scales, fee structures, sal
 ## Related: visitor demo email
 
 When `DEMO_ACCESS_EMAIL_ENABLED` is set on the backend, successful demo form submissions also email login instructions to the visitor. See [`docs/ENV_AND_DEPLOYMENT.md`](ENV_AND_DEPLOYMENT.md) and [`LANDING_FORMS_EMAIL_IMPLEMENTATION_PLAN.md`](../LANDING_FORMS_EMAIL_IMPLEMENTATION_PLAN.md).
+
+## Demo insights (SuperAdmin dashboard)
+
+The SuperAdmin dashboard's Overview tab (`/admin`, `SuperAdminDashboard.jsx`) shows two demo-funnel widgets backed by `GET /api/admin/schools/demo_insights/`:
+
+- **Demo Funnel** card — total + today/last_3d/last_7d counts for (a) credential emails sent from the landing page's demo request form (`brochure.DemoRequest.visitor_credentials_email_sent`) and (b) actual logins into the demo school, plus a role breakdown (e.g. `SCHOOL_ADMIN: 4`, `TEACHER: 11`).
+- **Recent Demo Activity** — a merged, time-sorted feed of the last ~15 credential-emails-sent and last ~15 demo logins.
+
+Login counting is generic infrastructure, not demo-only: every successful login (web + mobile) writes a `core.LoginEvent` row (see `docs/BACKEND_APPS.md`) via `CustomTokenObtainPairSerializer`. `demo_insights` just filters those rows to `school_id == settings.DEMO_SCHOOL_ID` (env var `DEMO_SCHOOL_ID`, defaults to `42`).
+
+**Known limitation (by design, Tier 1 only):** demo credentials are a single fixed shared login (`qaisar`/`Abcd1234`, or the shared teacher accounts) — not unique per visitor. So a login can be counted and role-attributed, but it **cannot** be tied back to the specific visitor whose form submission triggered the credentials email. Doing that would need a unique per-request token embedded in each visitor's login link (a bigger change touching the login page and `DemoRequest`), which was deliberately deferred.
+
+Optional real-time alert: set `DEMO_LOGIN_ALERT_EMAIL_ENABLED=true` (and optionally `DEMO_LOGIN_ALERT_EMAIL_RECIPIENT`, defaults to `LANDING_FORMS_EMAIL_RECIPIENT`) to email the team whenever someone logs into the demo school, with account/role/time/IP.

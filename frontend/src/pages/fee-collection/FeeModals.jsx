@@ -14,6 +14,8 @@ import {
   buildStudentClassFilterParams,
   resolveClassIdToMasterClassId,
 } from '../../utils/classScope'
+import Spinner from '../../components/ui/Spinner'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 const PAYMENT_METHODS = [
   { value: 'CASH', label: 'Cash' },
@@ -30,6 +32,7 @@ const SINGLE_CONFLICT_STRATEGIES = [
 
 
 export function PaymentModal({ payment, form, setForm, onSubmit, onClose, isPending, error, accountsList }) {
+  useEscapeKey(onClose, !!payment)
   if (!payment) return null
 
   return (
@@ -264,6 +267,8 @@ export function FeeStructureModal({ show, onClose, classList, bulkEffectiveFrom,
     setStudentFees(grid)
   }, [classStudentsData, classFeeStructures, structureMode, studentClassId, structureFeeType, localEdits])
 
+  useEscapeKey(onClose, show)
+
   if (!show) return null
 
   const currentFees = feesByType[structureFeeType] || {}
@@ -480,7 +485,7 @@ export function FeeStructureModal({ show, onClose, classList, bulkEffectiveFrom,
               </div>
             ) : studentsLoading || structuresLoading ? (
               <div className="flex-1 flex items-center justify-center">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600"></div>
+                <Spinner size="sm" />
               </div>
             ) : studentShowConfirm ? (
               /* Confirmation view */
@@ -605,6 +610,8 @@ export function IncomeModal({ show, onClose, form, setForm, onSubmit, isPending,
     },
   })
 
+  useEscapeKey(onClose, show)
+
   if (!show) return null
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-3 sm:p-4" onClick={onClose}>
@@ -714,6 +721,7 @@ export function IncomeModal({ show, onClose, form, setForm, onSubmit, isPending,
 }
 
 export function StudentFeeModal({ student, amount, setAmount, onSubmit, onClose, isPending, error, isSuccess }) {
+  useEscapeKey(onClose, !!student)
   if (!student) return null
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50 p-4">
@@ -837,6 +845,8 @@ export function CreateSingleFeeModal({ show, onClose, onSubmit, isPending, error
     staleTime: 10_000,
   })
   const hasDuplicate = (dupCheck?.data?.results || dupCheck?.data || []).length > 0
+
+  useEscapeKey(onClose, show)
 
   if (!show) return null
 

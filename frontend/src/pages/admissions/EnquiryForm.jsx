@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { admissionsApi } from '../../services/api'
 import { useToast } from '../../components/Toast'
 import { GRADE_PRESETS } from '../../constants/gradePresets'
+import Spinner from '../../components/ui/Spinner'
 
 const SOURCES = [
   { value: 'WALK_IN', label: 'Walk-in' },
@@ -131,7 +132,7 @@ export default function EnquiryForm() {
   if (isEdit && enquiryLoading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" />
+        <Spinner size="md" />
       </div>
     )
   }

@@ -5,6 +5,9 @@ import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useToast } from '../../components/Toast'
 import { useConfirmModal } from '../../components/ConfirmModal'
 import SessionSetupWizard from './SessionSetupWizard'
+import Spinner from '../../components/ui/Spinner'
+import Badge from '../../components/ui/Badge'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 const EMPTY_YEAR = { name: '', start_date: '', end_date: '' }
 const EMPTY_TERM = { academic_year: '', name: '', term_type: 'TERM', order: 1, start_date: '', end_date: '' }
@@ -215,6 +218,10 @@ export default function AcademicYearsPage() {
     setImportForm(EMPTY_TERM_IMPORT)
   }
 
+  useEscapeKey(closeYearModal, showYearModal)
+  useEscapeKey(closeTermModal, showTermModal)
+  useEscapeKey(closeImportModal, showImportModal)
+
   const handleImportPreview = (e) => {
     e.preventDefault()
     if (!importForm.source_academic_year_id || !importForm.target_academic_year_id) {
@@ -286,7 +293,7 @@ export default function AcademicYearsPage() {
 
           {yearsLoading ? (
             <div className="text-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+              <Spinner size="md" className="mx-auto" />
             </div>
           ) : years.length === 0 ? (
             <div className="card p-4 sm:p-6">
@@ -321,10 +328,10 @@ export default function AcademicYearsPage() {
                     <h3 className="font-semibold text-gray-900">{y.name}</h3>
                     <div className="flex gap-1">
                       {y.id === activeAcademicYear?.id && (
-                        <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">Selected</span>
+                        <Badge tone="info">Selected</Badge>
                       )}
                       {y.is_current && (
-                        <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-medium">Current</span>
+                        <Badge tone="success">Current</Badge>
                       )}
                     </div>
                   </div>
@@ -456,7 +463,7 @@ export default function AcademicYearsPage() {
 
           {termsLoading ? (
             <div className="text-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
+              <Spinner size="md" className="mx-auto" />
             </div>
           ) : terms.length === 0 ? (
             <div className="card text-center py-8 text-gray-500">No terms found.</div>

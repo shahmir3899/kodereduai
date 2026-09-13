@@ -5,6 +5,10 @@ import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/Toast'
 import { getErrorMessage } from '../utils/errorUtils'
 import { useConfirmModal } from '../components/ConfirmModal'
+import Badge from '../components/ui/Badge'
+import { Skeleton, SkeletonTable } from '../components/ui/Skeleton'
+import { useEscapeKey } from '../hooks/useEscapeKey'
+import Button from '../components/ui/Button'
 
 const ACCOUNT_TYPES = [
   { value: 'CASH', label: 'Cash' },
@@ -199,6 +203,10 @@ export default function AccountsPage() {
     setTransferForm({ from_account: '', to_account: '', amount: '', date: new Date().toISOString().split('T')[0], description: '' })
   }
 
+  useEscapeKey(closeAccountModal, showAccountModal)
+  useEscapeKey(closeTransferModal, showTransferModal)
+  useEscapeKey(() => setShowCloseMonthModal(false), showCloseMonthModal)
+
   const openEditAccount = (account) => {
     setEditingAccount(account)
     setAccountForm({
@@ -343,20 +351,14 @@ export default function AccountsPage() {
             </button>
           )}
           {canManageAccounts && (activeTab === 'manage' || activeTab === 'accounts') && (
-            <button
-              onClick={() => setShowAccountModal(true)}
-              className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm"
-            >
+            <Button onClick={() => setShowAccountModal(true)}>
               Add Account
-            </button>
+            </Button>
           )}
           {canRecordTransactions && activeTab === 'transfers' && (
-            <button
-              onClick={() => setShowTransferModal(true)}
-              className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm"
-            >
+            <Button onClick={() => setShowTransferModal(true)}>
               Record Transfer
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -489,7 +491,7 @@ export default function AccountsPage() {
                       <span className="font-medium text-gray-900">{account.name}</span>
                       <div className="flex items-center gap-1">
                         {canManageAccounts && !account.staff_visible && (
-                          <span className="px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">Hidden</span>
+                          <Badge tone="warning">Hidden</Badge>
                         )}
                         <span className={`px-2 py-0.5 rounded text-xs font-medium ${typeColors[account.account_type]}`}>
                           {account.account_type}
@@ -1290,7 +1292,39 @@ function LedgerView({ payload, isLoading, isError, error, accountSelected }) {
     )
   }
 
-  if (isLoading) return <div className="card text-center py-8 text-gray-500">Loading...</div>
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        <div className="card">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-sm">
+            {['Opening Balance', 'Total Credits', 'Total Debits', 'Closing Balance'].map((label) => (
+              <div key={label}>
+                <p className="text-gray-500">{label}</p>
+                <Skeleton className="h-5 w-24 mt-1" />
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="card hidden sm:block overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Account</th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">School</th>
+                <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">Credit</th>
+                <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">Debit</th>
+                <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">Running Balance</th>
+              </tr>
+            </thead>
+            <SkeletonTable rows={6} cols={8} />
+          </table>
+        </div>
+      </div>
+    )
+  }
 
   if (isError) {
     return (

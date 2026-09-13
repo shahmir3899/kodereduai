@@ -3,6 +3,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { letterComposerApi, hrApi } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import { useToast } from '../../components/Toast'
+import Badge from '../../components/ui/Badge'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 // ============================================
 // MARKUP PREVIEW HELPER
@@ -47,6 +49,8 @@ export default function LetterComposerPage() {
 
   // PDF generation
   const [isGenerating, setIsGenerating] = useState(false)
+
+  useEscapeKey(() => setShowUpdateDialog(false), showUpdateDialog && !isGenerating)
 
   // AI Drafting
   const [showAIDrafter, setShowAIDrafter] = useState(false)
@@ -403,9 +407,9 @@ export default function LetterComposerPage() {
       {/* Historical Letter Badge */}
       {selectedLetter && (
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="inline-block px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-medium">
+          <Badge tone="success">
             Viewing letter from {formatDate(selectedLetter.created_at)}
-          </span>
+          </Badge>
           <button onClick={clearForm} className="btn btn-primary text-xs py-1 px-3">
             New Letter
           </button>

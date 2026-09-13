@@ -3,12 +3,15 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { financeApi } from '../services/api'
 import { useToast } from '../components/Toast'
 import { getErrorMessage } from '../utils/errorUtils'
+import Button from '../components/ui/Button'
+import { useEscapeKey } from '../hooks/useEscapeKey'
 
 /**
  * Modal for managing expense categories (add / rename / delete).
  * Mirrors MonthlyCategoryManagerModal pattern but for expense categories.
  */
 export default function ExpenseCategoryManagerModal({ onClose }) {
+  useEscapeKey(onClose)
   const queryClient = useQueryClient()
   const { addToast } = useToast()
 
@@ -172,10 +175,9 @@ export default function ExpenseCategoryManagerModal({ onClose }) {
                   placeholder="Category name (e.g. Utilities)"
                   required
                 />
-                <button type="submit" disabled={createMutation.isPending || !newName.trim()}
-                  className="px-4 py-2 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700 disabled:opacity-50 whitespace-nowrap">
+                <Button type="submit" disabled={createMutation.isPending || !newName.trim()} className="whitespace-nowrap">
                   {createMutation.isPending ? 'Adding…' : '+ Add'}
-                </button>
+                </Button>
               </div>
               {canManageSensitive && (
                 <label className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">

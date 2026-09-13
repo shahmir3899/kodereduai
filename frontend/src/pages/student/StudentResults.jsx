@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { studentPortalApi } from '../../services/api'
+import Spinner from '../../components/ui/Spinner'
+import Badge from '../../components/ui/Badge'
 
 function gradeColor(pct) {
   if (pct >= 80) return 'text-green-700'
@@ -47,7 +49,7 @@ export default function StudentResults() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" />
+        <Spinner size="md" />
       </div>
     )
   }
@@ -106,9 +108,9 @@ export default function StudentResults() {
                       </h2>
                       <div className="flex items-center gap-2 mt-0.5">
                         {exam.exam_type && (
-                          <span className="px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                          <Badge tone="info">
                             {exam.exam_type}
-                          </span>
+                          </Badge>
                         )}
                         {exam.exam_date && (
                           <span className="text-xs text-gray-500">

@@ -308,18 +308,38 @@ class UserViewSet(TenantQuerySetMixin, viewsets.ModelViewSet):
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-    @action(detail=True, methods=['post'], url_path='reset_password', permission_classes=[IsAuthenticated, IsSuperAdmin])
+    @action(detail=True, methods=['post'], url_path='reset_password')
     def reset_password(self, request, pk=None):
         """
-        Super-admin-triggered password reset for another user.
+        Admin-triggered password reset for another user.
 
         No admin-facing way to reset a forgotten password existed before this —
         only self-service change-password (needs the old password) and the
         public email-token flow. mode='set' sets an explicit password
         immediately; mode='email' reuses the same token-based reset link the
         public flow sends, just triggered on the user's behalf.
+
+        Open to SUPER_ADMIN (any user) and to SCHOOL_ADMIN/PRINCIPAL, scoped to
+        their own school: get_queryset() already restricts get_object() to
+        users sharing a school membership with the requester, and the role
+        check below stops a school-level admin reaching outside the roles
+        ROLE_HIERARCHY lets them create (so a PRINCIPAL can't reset a
+        SCHOOL_ADMIN's password, and nobody but SUPER_ADMIN can reset another
+        SUPER_ADMIN's).
         """
         target_user = self.get_object()
+
+        if not request.user.is_super_admin:
+            requester_role = get_effective_role(request)
+            school_id = ensure_tenant_school_id(request) or request.user.school_id
+            target_role = target_user.get_role_for_school(school_id) or target_user.role
+            allowed_roles = ROLE_HIERARCHY.get(requester_role, [])
+            if target_role not in allowed_roles:
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied(
+                    f"You don't have permission to reset a password for the {target_role} role."
+                )
+
         serializer = AdminResetPasswordSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         mode = serializer.validated_data.get('mode', 'set')

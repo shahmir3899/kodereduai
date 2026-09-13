@@ -1,6 +1,9 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { studentPortalApi } from '../../services/api'
+import Spinner from '../../components/ui/Spinner'
+import Badge from '../../components/ui/Badge'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 
 const TYPE_COLORS = {
   HOMEWORK: 'bg-blue-100 text-blue-800',
@@ -22,6 +25,8 @@ const SUBMISSION_STATUS = {
 export default function StudentAssignments() {
   const queryClient = useQueryClient()
   const [showModal, setShowModal] = useState(false)
+
+  useEscapeKey(() => setShowModal(false), showModal)
   const [selectedAssignment, setSelectedAssignment] = useState(null)
   const [submissionText, setSubmissionText] = useState('')
   const [fileUrl, setFileUrl] = useState('')
@@ -91,7 +96,7 @@ export default function StudentAssignments() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" />
+        <Spinner size="md" />
       </div>
     )
   }
@@ -163,9 +168,9 @@ export default function StudentAssignments() {
                         </span>
                       )}
                       {isDiary && (
-                        <span className="px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">
+                        <Badge tone="warning">
                           Diary Entry
-                        </span>
+                        </Badge>
                       )}
                     </div>
 
@@ -342,7 +347,7 @@ export default function StudentAssignments() {
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
                   {submitMutation.isPending && (
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+                    <Spinner size="xs" />
                   )}
                   {submitMutation.isPending ? 'Submitting...' : 'Submit Assignment'}
                 </button>

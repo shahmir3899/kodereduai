@@ -98,7 +98,7 @@ class BroadcastNotificationSerializer(serializers.Serializer):
         ('STAFF', 'All Staff'),
         ('SCHOOL_ADMIN', 'All Admins'),
         ('PRINCIPAL', 'Principals'),
-        ('HR_MANAGER', 'HR Managers'),
+        ('MANAGER', 'Managers'),
         ('ACCOUNTANT', 'Accountants'),
         ('STUDENT', 'All Students'),
     ]
