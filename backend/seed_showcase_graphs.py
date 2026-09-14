@@ -1152,33 +1152,40 @@ def ensure_showcase_graph_data(school_id: int, *, reset: bool = False) -> dict:
     # --- Student portal account (for a demo "student" login) ---
     if students:
         portal_student = students[0]
-        portal_username = f"demostudent{school_id}"
-        portal_user, portal_user_created = User.objects.get_or_create(
-            username=portal_username,
-            defaults={
-                "email": f"{portal_username}@demo.kodereduai.pk",
-                "first_name": portal_student.name.split()[0] if portal_student.name else "Demo",
-                "last_name": " ".join(portal_student.name.split()[1:]) or "Student",
-                "role": "STAFF",  # legacy base role; real role lives on the membership below
-                "school": school,
-                "organization": school.organization,
-            },
-        )
-        if portal_user_created:
-            portal_user.set_password("Abcd1234")
-            portal_user.save()
+        # StudentProfile.student is a OneToOne — the student may already have a
+        # portal account from an earlier run or an unrelated flow, in which
+        # case reuse it instead of colliding on the unique constraint.
+        existing_profile = StudentProfile.objects.filter(student=portal_student).first()
+        if existing_profile:
+            portal_user = existing_profile.user
+        else:
+            portal_username = f"demostudent{school_id}"
+            portal_user, portal_user_created = User.objects.get_or_create(
+                username=portal_username,
+                defaults={
+                    "email": f"{portal_username}@demo.kodereduai.pk",
+                    "first_name": portal_student.name.split()[0] if portal_student.name else "Demo",
+                    "last_name": " ".join(portal_student.name.split()[1:]) or "Student",
+                    "role": "STAFF",  # legacy base role; real role lives on the membership below
+                    "school": school,
+                    "organization": school.organization,
+                },
+            )
+            if portal_user_created:
+                portal_user.set_password("Abcd1234")
+                portal_user.save()
+            _, sp_created = StudentProfile.objects.get_or_create(
+                user=portal_user,
+                student=portal_student,
+                defaults={"school": school},
+            )
+            if sp_created:
+                summary["student_profiles"] += 1
         UserSchoolMembership.objects.get_or_create(
             user=portal_user,
             school=school,
             defaults={"role": "STUDENT", "is_default": True},
         )
-        _, sp_created = StudentProfile.objects.get_or_create(
-            user=portal_user,
-            student=portal_student,
-            defaults={"school": school},
-        )
-        if sp_created:
-            summary["student_profiles"] += 1
 
     # --- Library ---
     fiction_cat, _ = LibraryBookCategory.objects.get_or_create(
