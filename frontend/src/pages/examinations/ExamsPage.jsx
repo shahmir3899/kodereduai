@@ -606,7 +606,7 @@ export function DateSheetModal({ groupId, onClose: closeDateSheet, queryClient, 
 export default function ExamsPage() {
   const queryClient = useQueryClient()
   const { confirm, ConfirmModalRoot } = useConfirmModal()
-  const { showSuccess } = useToast()
+  const { showSuccess, showWarning } = useToast()
   const { activeAcademicYear, currentTerm } = useAcademicYear()
   const { activeSchool } = useAuth()
   const getDefaultForm = () => createEmptyForm(activeAcademicYear?.id, currentTerm?.id)
@@ -777,11 +777,44 @@ export default function ExamsPage() {
   })
   const allSubjects = allSubjectsRes?.data?.results || allSubjectsRes?.data || []
 
-  const { data: testScheduleRes } = useQuery({
+  // Fetches the exam's actual ExamSubject rows -- feeds the per-subject Test
+  // Schedule rows (tests tab only) AND the Exams-tab edit form's "subjects on
+  // this exam vs. subjects on the class" comparison below, so it's not gated
+  // to activeTab === 'tests' the way it used to be.
+  const { data: examSubjectsForEditRes } = useQuery({
     queryKey: ['testScheduleRows', editId],
     queryFn: () => examinationsApi.getExamSubjects({ exam: editId, page_size: 9999 }),
-    enabled: !!showModal && !!editId && activeTab === 'tests',
+    enabled: !!showModal && !!editId,
   })
+  const testScheduleRes = examSubjectsForEditRes
+  const editingExamSubjects = examSubjectsForEditRes?.data?.results || examSubjectsForEditRes?.data || []
+  const editingExamSubjectIds = useMemo(
+    () => new Set(editingExamSubjects.map(es => es.subject)),
+    [editingExamSubjects],
+  )
+  // Class subjects that aren't yet attached to this exam -- what Save can add.
+  // Each gets its own checkbox (full control over which to add, not all-or-nothing)
+  // plus a shared total/passing marks pair (same convention as the exam wizard's
+  // default_total_marks/default_passing_marks -- one pair applied to the batch,
+  // not a per-subject field) since these are new ExamSubject rows and need marks
+  // config, not just a subject link.
+  const missingClassSubjects = useMemo(
+    () => (editId ? classSubjects.filter(cs => !editingExamSubjectIds.has(cs.subject)) : []),
+    [editId, classSubjects, editingExamSubjectIds],
+  )
+  const missingSubjectsKey = missingClassSubjects.map(cs => cs.subject).sort((a, b) => a - b).join(',')
+  const [selectedMissingSubjectIds, setSelectedMissingSubjectIds] = useState([])
+  const [newSubjectTotalMarks, setNewSubjectTotalMarks] = useState('100')
+  const [newSubjectPassingMarks, setNewSubjectPassingMarks] = useState('33')
+  useEffect(() => {
+    // Default to "add everything" (opt-out via unchecking) whenever the exam
+    // being edited changes or the actual set of missing subjects changes --
+    // keyed on the id set (not the array reference) so a background refetch
+    // that returns the same subjects doesn't wipe an in-progress selection.
+    setSelectedMissingSubjectIds(missingClassSubjects.map(cs => cs.subject))
+    setNewSubjectTotalMarks('100')
+    setNewSubjectPassingMarks('33')
+  }, [editId, missingSubjectsKey])
 
   const years = yearsRes?.data?.results || yearsRes?.data || []
   const terms = termsRes?.data?.results || termsRes?.data || []
@@ -905,7 +938,14 @@ export default function ExamsPage() {
       setListError(null)
       queryClient.invalidateQueries({ queryKey: ['examGroups'] })
       queryClient.invalidateQueries({ queryKey: ['exams'] })
-      showSuccess(`Announced results for ${res?.data?.published_count ?? 'all'} exam(s).`)
+      const skipped = res?.data?.skipped || []
+      const publishedCount = res?.data?.published_count ?? 'all'
+      if (skipped.length > 0) {
+        const names = skipped.map(s => s.class_name).filter(Boolean).join(', ')
+        showWarning(`Announced results for ${publishedCount} exam(s). Skipped ${skipped.length} class(es) with marks not fully entered${names ? ` (${names})` : ''}.`)
+      } else {
+        showSuccess(`Announced results for ${publishedCount} exam(s).`)
+      }
     },
     onError: (err) => setListError(err.response?.data?.detail || 'Failed to announce results.'),
   })
@@ -962,16 +1002,25 @@ export default function ExamsPage() {
     if (editId) {
       const isTestEdit = activeTab === 'tests'
       const needsBulkAssign = classSubjects.length === 0 && selectedSubjects.length > 0
-      const needsPopulate = editingExam?.subjects_count === 0 && classSubjects.length > 0
+      // A subject added to the class *after* this exam was created never makes it
+      // onto the exam's own ExamSubject rows on its own -- Save closes that gap,
+      // but only for the subjects the admin actually checked (full control, not
+      // populate-subjects' all-or-nothing add-everything-missing).
+      const subjectsToAdd = !isTestEdit ? selectedMissingSubjectIds : []
+      const totalMarks = parseFloat(newSubjectTotalMarks) || 100
+      const passingMarks = parseFloat(newSubjectPassingMarks) || 33
 
       setIsSubmitting(true)
       setErrors({})
       try {
         if (!isTestEdit && needsBulkAssign) {
           await academicsApi.bulkAssignSubjects({ class_obj: parseInt(resolvedFormClassObj), subjects: selectedSubjects })
-        }
-        if (!isTestEdit && (needsBulkAssign || needsPopulate)) {
           await examinationsApi.populateExamSubjects(editId)
+        }
+        if (subjectsToAdd.length > 0) {
+          await Promise.all(subjectsToAdd.map(subjectId => examinationsApi.createExamSubject({
+            exam: editId, subject: subjectId, total_marks: totalMarks, passing_marks: passingMarks,
+          })))
         }
         let payload = { ...form, class_obj: resolvedFormClassObj, term: form.term || null }
         if (isTestEdit) {
@@ -996,6 +1045,7 @@ export default function ExamsPage() {
           }
         }
         queryClient.invalidateQueries({ queryKey: ['exams'] })
+        queryClient.invalidateQueries({ queryKey: ['examGroups'] })
         queryClient.invalidateQueries({ queryKey: ['testScheduleRows', editId] })
         closeModal()
       } catch (err) {
@@ -1187,6 +1237,19 @@ export default function ExamsPage() {
                 {groups.map(group => {
                   const isExpanded = expandedGroupId === group.id
                   const exams = group.exams || []
+                  // A group spans several classes, each with independent schedule/result
+                  // state -- 'all'/'none' let a button reflect "nothing left to do" the
+                  // same way the per-exam row buttons already toggle; 'mixed' (some
+                  // classes done, some not) leaves the action enabled since there's still
+                  // work for it to do across the group.
+                  const scheduleState = exams.length === 0 ? 'none'
+                    : exams.every(e => e.schedule_published_at) ? 'all'
+                    : exams.every(e => !e.schedule_published_at) ? 'none' : 'mixed'
+                  const resultsState = exams.length === 0 ? 'none'
+                    : exams.every(e => e.status === 'PUBLISHED') ? 'all'
+                    : exams.every(e => e.status !== 'PUBLISHED') ? 'none' : 'mixed'
+                  const examsPendingMarks = exams.filter(e => e.status !== 'PUBLISHED' && !e.marks_entry_complete)
+                  const canAnnounceResults = resultsState !== 'all' && examsPendingMarks.length === 0
                   return (
                     <div key={group.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                       {/* Group Header */}
@@ -1236,30 +1299,37 @@ export default function ExamsPage() {
                           </button>
                           <button
                             onClick={async () => { const ok = await confirm({ title: 'Publish Exam Schedule', message: 'Make this group\'s exam dates visible to students, parents, and teachers for their own classes? They will be notified of the exam dates (not results).', variant: 'warning', confirmLabel: 'Publish Schedule' }); if (ok) publishScheduleAllMut.mutate(group.id) }}
-                            className="text-xs px-2 py-1 text-blue-600 hover:bg-blue-50 rounded"
-                            disabled={publishScheduleAllMut.isPending}
-                            title="Make exam dates visible to students/parents/teachers for their own class"
+                            className="text-xs px-2 py-1 text-blue-600 hover:bg-blue-50 rounded disabled:opacity-40 disabled:pointer-events-none"
+                            disabled={scheduleState === 'all' || publishScheduleAllMut.isPending}
+                            title={scheduleState === 'all' ? 'Schedule is already published for every class in this group' : 'Make exam dates visible to students/parents/teachers for their own class'}
                           >
                             Publish Schedule
                           </button>
                           <button
                             onClick={async () => { const ok = await confirm({ title: 'Unpublish Exam Schedule', message: 'Hide this group\'s exam dates from students, parents, and teachers again?' }); if (ok) unpublishScheduleAllMut.mutate(group.id) }}
-                            className="text-xs px-2 py-1 text-gray-500 hover:bg-gray-100 rounded"
-                            disabled={unpublishScheduleAllMut.isPending}
+                            className="text-xs px-2 py-1 text-gray-500 hover:bg-gray-100 rounded disabled:opacity-40 disabled:pointer-events-none"
+                            disabled={scheduleState === 'none' || unpublishScheduleAllMut.isPending}
+                            title={scheduleState === 'none' ? 'Schedule is not published for any class in this group' : undefined}
                           >
                             Unpublish Schedule
                           </button>
                           <button
                             onClick={async () => { const ok = await confirm({ title: 'Announce All Results', message: 'Announce results for all exams in this group? Results will become visible.', variant: 'warning', confirmLabel: 'Announce Results' }); if (ok) announceResultsAllMut.mutate(group.id) }}
-                            className="text-xs px-2 py-1 text-green-600 hover:bg-green-50 rounded"
-                            disabled={announceResultsAllMut.isPending}
+                            className="text-xs px-2 py-1 text-green-600 hover:bg-green-50 rounded disabled:opacity-40 disabled:pointer-events-none"
+                            disabled={!canAnnounceResults || announceResultsAllMut.isPending}
+                            title={
+                              resultsState === 'all' ? 'Results are already announced for every class in this group'
+                                : examsPendingMarks.length > 0 ? `${examsPendingMarks.length} class(es) still have marks not fully entered -- enter all marks before announcing`
+                                : undefined
+                            }
                           >
                             Announce Results
                           </button>
                           <button
                             onClick={async () => { const ok = await confirm({ title: 'Unpublish Results', message: 'Withdraw announced results for all exams in this group? Results will no longer be visible.' }); if (ok) unpublishResultsAllMut.mutate(group.id) }}
-                            className="text-xs px-2 py-1 text-gray-500 hover:bg-gray-100 rounded"
-                            disabled={unpublishResultsAllMut.isPending}
+                            className="text-xs px-2 py-1 text-gray-500 hover:bg-gray-100 rounded disabled:opacity-40 disabled:pointer-events-none"
+                            disabled={resultsState === 'none' || unpublishResultsAllMut.isPending}
+                            title={resultsState === 'none' ? 'Results are not announced for any class in this group' : undefined}
                           >
                             Unpublish Results
                           </button>
@@ -1328,7 +1398,9 @@ export default function ExamsPage() {
                                               ) : (
                                                 <button
                                                   onClick={async () => { const ok = await confirm({ title: 'Announce Results', message: 'Announce this exam\'s results? Results will become visible.', variant: 'warning', confirmLabel: 'Announce Results' }); if (ok) announceResultsMut.mutate(exam.id) }}
-                                                  className="text-xs text-green-600 hover:underline mr-2"
+                                                  className="text-xs text-green-600 hover:underline mr-2 disabled:opacity-40 disabled:pointer-events-none disabled:no-underline"
+                                                  disabled={!exam.marks_entry_complete}
+                                                  title={!exam.marks_entry_complete ? `Marks not fully entered yet (${exam.marks_entered_count}/${exam.marks_expected_count})` : undefined}
                                                 >Announce Results</button>
                                               )}
                                             </>
@@ -1510,7 +1582,9 @@ export default function ExamsPage() {
                               ) : (
                                 <button
                                   onClick={async () => { const ok = await confirm({ title: 'Announce Results', message: 'Announce this exam\'s results? Results will become visible.', variant: 'warning', confirmLabel: 'Announce Results' }); if (ok) announceResultsMut.mutate(exam.id) }}
-                                  className="text-xs text-green-600 hover:underline mr-2"
+                                  className="text-xs text-green-600 hover:underline mr-2 disabled:opacity-40 disabled:pointer-events-none disabled:no-underline"
+                                  disabled={!exam.marks_entry_complete}
+                                  title={!exam.marks_entry_complete ? `Marks not fully entered yet (${exam.marks_entered_count}/${exam.marks_expected_count})` : undefined}
                                 >Announce Results</button>
                               )}
                             </>
@@ -1573,7 +1647,12 @@ export default function ExamsPage() {
                           {exam.status === 'PUBLISHED' ? (
                             <button onClick={async () => { const ok = await confirm({ title: 'Unpublish Results', message: 'Withdraw this exam\'s announced results?' }); if (ok) unpublishResultsMut.mutate(exam.id) }} className="text-xs text-gray-500 hover:underline">Unpublish Results</button>
                           ) : (
-                            <button onClick={async () => { const ok = await confirm({ title: 'Announce Results', message: 'Announce this exam\'s results? Results will become visible.', variant: 'warning', confirmLabel: 'Announce Results' }); if (ok) announceResultsMut.mutate(exam.id) }} className="text-xs text-green-600 hover:underline">Announce Results</button>
+                            <button
+                              onClick={async () => { const ok = await confirm({ title: 'Announce Results', message: 'Announce this exam\'s results? Results will become visible.', variant: 'warning', confirmLabel: 'Announce Results' }); if (ok) announceResultsMut.mutate(exam.id) }}
+                              className="text-xs text-green-600 hover:underline disabled:opacity-40 disabled:pointer-events-none disabled:no-underline"
+                              disabled={!exam.marks_entry_complete}
+                              title={!exam.marks_entry_complete ? `Marks not fully entered yet (${exam.marks_entered_count}/${exam.marks_expected_count})` : undefined}
+                            >Announce Results</button>
                           )}
                         </>
                       ) : (
@@ -1748,30 +1827,62 @@ export default function ExamsPage() {
                       Checking class subjects...
                     </div>
                   ) : classSubjects.length > 0 ? (
-                    <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
-                      <svg className="w-4 h-4 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                      <span className="text-sm text-green-700">
-                        {classSubjects.length} subject{classSubjects.length !== 1 ? 's' : ''} assigned
-                        <span className="text-green-600 text-xs ml-1">
-                          ({classSubjects.map(cs => cs.subject_name).join(', ')})
+                    editId && missingClassSubjects.length > 0 ? (
+                      // The class has subjects this exam's own ExamSubject rows don't --
+                      // most often because they were added to the class after this exam
+                      // was created (see populate-subjects, examinations/views.py). Full
+                      // control here: each gets its own checkbox rather than an
+                      // all-or-nothing sync, and a shared total/passing marks pair (same
+                      // convention as the exam wizard's default_total_marks) since these
+                      // become real ExamSubject rows, not just links.
+                      <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <div className="flex items-center gap-2 mb-2">
+                          <svg className="w-4 h-4 text-blue-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <span className="text-sm text-blue-700">
+                            {classSubjects.length - missingClassSubjects.length} of {classSubjects.length} class subjects are on this exam. Choose which to add:
+                          </span>
+                        </div>
+                        <div className="space-y-1 mb-2">
+                          {missingClassSubjects.map(cs => (
+                            <label key={cs.subject} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-blue-100 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={selectedMissingSubjectIds.includes(cs.subject)}
+                                onChange={e => setSelectedMissingSubjectIds(prev => e.target.checked ? [...prev, cs.subject] : prev.filter(id => id !== cs.subject))}
+                                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                              />
+                              <span className="text-sm text-blue-800">{cs.subject_name}</span>
+                            </label>
+                          ))}
+                        </div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <button type="button" onClick={() => setSelectedMissingSubjectIds(missingClassSubjects.map(cs => cs.subject))} className="text-xs text-blue-700 hover:underline">Select All</button>
+                          <button type="button" onClick={() => setSelectedMissingSubjectIds([])} className="text-xs text-gray-500 hover:underline">Clear</button>
+                          {selectedMissingSubjectIds.length > 0 && (
+                            <span className="flex items-center gap-2 text-xs text-blue-700 ml-auto">
+                              Total
+                              <input type="number" min="0" step="0.01" value={newSubjectTotalMarks} onChange={e => setNewSubjectTotalMarks(e.target.value)} className="input w-16 py-0.5 text-xs" />
+                              Passing
+                              <input type="number" min="0" step="0.01" value={newSubjectPassingMarks} onChange={e => setNewSubjectPassingMarks(e.target.value)} className="input w-16 py-0.5 text-xs" />
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                        <svg className="w-4 h-4 text-green-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        <span className="text-sm text-green-700">
+                          {classSubjects.length} subject{classSubjects.length !== 1 ? 's' : ''} {editId ? 'on this exam' : 'assigned'}
+                          <span className="text-green-600 text-xs ml-1">
+                            ({classSubjects.map(cs => cs.subject_name).join(', ')})
+                          </span>
                         </span>
-                      </span>
-                      {editId && editingExam?.subjects_count === 0 && (
-                        <button type="button" onClick={async () => {
-                          try {
-                            await examinationsApi.populateExamSubjects(editId)
-                            queryClient.invalidateQueries({ queryKey: ['exams'] })
-                            closeModal()
-                          } catch {
-                            setErrors({ detail: 'Failed to add subjects to exam.' })
-                          }
-                        }} className="ml-auto text-xs font-medium text-green-700 bg-green-200 hover:bg-green-300 px-2 py-1 rounded">
-                          Add to this exam
-                        </button>
-                      )}
-                    </div>
+                      </div>
+                    )
                   ) : (
                     <div>
                       <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg mb-3">

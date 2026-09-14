@@ -9,11 +9,14 @@ from rest_framework.test import APIClient
 import importlib.util
 from decimal import Decimal
 
+from datetime import date
+
+from academic_sessions.models import AcademicYear, StudentEnrollment
 from academics.models import Subject
 from schools.models import Organization, School
-from students.models import Class
+from students.models import Class, Student
 
-from .models import ExamPaper, PaperFeedback, PaperQuestion, PaperUpload, Question, Worksheet, WorksheetItem, WorksheetUpload
+from .models import Exam, ExamGroup, ExamPaper, ExamSubject, ExamType, PaperFeedback, PaperQuestion, PaperUpload, Question, StudentMark, Worksheet, WorksheetItem, WorksheetUpload
 from .paper_ocr_processor import PaperOCRProcessor, _build_continuation_hint, _build_extraction_prompt, _parse_structured_paper
 from .tasks import _build_continuation_context
 
@@ -546,6 +549,298 @@ class ExamPaperDraftRBACTests(TestCase):
         blocked_paper.refresh_from_db()
         self.assertFalse(allowed_paper.is_active)
         self.assertTrue(blocked_paper.is_active)
+
+
+class AnnounceResultsMarksGateTests(TestCase):
+    """announce_results/announce_results_all used to flip Exam.status to PUBLISHED
+    with no regard for whether marks were actually entered. They now hard-block
+    (single-exam) or skip-and-report (group, since a group spans several classes
+    with independent progress) until every active exam-subject has a mark or an
+    absence recorded for every actively-enrolled student."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.school = _make_school()
+        cls.class_obj = Class.objects.create(school=cls.school, name='Class 4', grade_level=4)
+        cls.subject = Subject.objects.create(school=cls.school, name='English', code='ENG')
+        cls.academic_year = AcademicYear.objects.create(
+            school=cls.school, name='2025-2026',
+            start_date=date(2025, 4, 1), end_date=date(2026, 3, 31), is_current=True,
+        )
+        cls.exam_type = ExamType.objects.create(school=cls.school, name='Final', weight=Decimal('100.00'))
+        cls.student_a = Student.objects.create(
+            school=cls.school, class_obj=cls.class_obj, roll_number='1', name='Ayesha',
+        )
+        cls.student_b = Student.objects.create(
+            school=cls.school, class_obj=cls.class_obj, roll_number='2', name='Bilal',
+        )
+        for student in (cls.student_a, cls.student_b):
+            StudentEnrollment.objects.create(
+                school=cls.school, student=student, academic_year=cls.academic_year,
+                class_obj=cls.class_obj, roll_number=student.roll_number,
+            )
+
+        cls.admin_user = get_user_model().objects.create_user(
+            username='announce_admin', email='announce_admin@test.com',
+            password='test12345', role='SCHOOL_ADMIN', school=cls.school,
+        )
+
+    def setUp(self):
+        self.client = APIClient()
+        self.client.force_authenticate(self.admin_user)
+        self.school_header = {'HTTP_X_SCHOOL_ID': str(self.school.id)}
+
+    def _make_exam(self, name='Final Exam', class_obj=None):
+        exam = Exam.objects.create(
+            school=self.school, academic_year=self.academic_year, exam_type=self.exam_type,
+            class_obj=class_obj or self.class_obj, name=name, status=Exam.Status.COMPLETED,
+        )
+        exam_subject = ExamSubject.objects.create(
+            school=self.school, exam=exam, subject=self.subject,
+            total_marks=Decimal('100.00'), passing_marks=Decimal('33.00'),
+        )
+        return exam, exam_subject
+
+    def test_announce_blocked_when_no_marks_entered(self):
+        exam, _ = self._make_exam()
+        response = self.client.post(
+            f'/api/examinations/exams/{exam.id}/announce-results/', **self.school_header,
+        )
+        self.assertEqual(response.status_code, 400, response.data)
+        exam.refresh_from_db()
+        self.assertEqual(exam.status, Exam.Status.COMPLETED)
+
+    def test_announce_blocked_when_marks_partially_entered(self):
+        exam, exam_subject = self._make_exam()
+        StudentMark.objects.create(
+            school=self.school, exam_subject=exam_subject, student=self.student_a,
+            marks_obtained=Decimal('80'),
+        )
+        # student_b has no StudentMark row at all yet.
+        response = self.client.post(
+            f'/api/examinations/exams/{exam.id}/announce-results/', **self.school_header,
+        )
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertEqual(response.data['marks_entered_count'], 1)
+        self.assertEqual(response.data['marks_expected_count'], 2)
+
+    def test_announce_succeeds_when_all_marks_entered(self):
+        exam, exam_subject = self._make_exam()
+        StudentMark.objects.create(
+            school=self.school, exam_subject=exam_subject, student=self.student_a,
+            marks_obtained=Decimal('80'),
+        )
+        StudentMark.objects.create(
+            school=self.school, exam_subject=exam_subject, student=self.student_b,
+            is_absent=True,  # counts as "entered" -- absence is a recorded outcome, not a gap
+        )
+        response = self.client.post(
+            f'/api/examinations/exams/{exam.id}/announce-results/', **self.school_header,
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        exam.refresh_from_db()
+        self.assertEqual(exam.status, Exam.Status.PUBLISHED)
+
+    def test_group_announce_all_skips_incomplete_exam_and_publishes_complete_one(self):
+        # A separate class for the "blocked" exam: StudentEnrollment is unique per
+        # (school, student, academic_year), so student_a/student_b -- already
+        # enrolled in self.class_obj for this academic year -- can't also enroll in
+        # a second class here.
+        other_class = Class.objects.create(school=self.school, name='Class 5', grade_level=5)
+        other_student = Student.objects.create(
+            school=self.school, class_obj=other_class, roll_number='3', name='Zara',
+        )
+        StudentEnrollment.objects.create(
+            school=self.school, student=other_student, academic_year=self.academic_year,
+            class_obj=other_class, roll_number=other_student.roll_number,
+        )
+
+        ready_exam, ready_subject = self._make_exam('Ready Exam')
+        blocked_exam, _ = self._make_exam('Blocked Exam', class_obj=other_class)
+        for student in (self.student_a, self.student_b):
+            StudentMark.objects.create(
+                school=self.school, exam_subject=ready_subject, student=student,
+                marks_obtained=Decimal('70'),
+            )
+
+        group = ExamGroup.objects.create(
+            school=self.school, academic_year=self.academic_year, exam_type=self.exam_type,
+            name='Final Term Group',
+        )
+        Exam.objects.filter(id__in=[ready_exam.id, blocked_exam.id]).update(exam_group=group)
+
+        response = self.client.post(
+            f'/api/examinations/exam-groups/{group.id}/announce-results-all/', **self.school_header,
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['published_count'], 1)
+        self.assertEqual(len(response.data['skipped']), 1)
+        self.assertEqual(response.data['skipped'][0]['id'], blocked_exam.id)
+
+        ready_exam.refresh_from_db()
+        blocked_exam.refresh_from_db()
+        self.assertEqual(ready_exam.status, Exam.Status.PUBLISHED)
+        self.assertEqual(blocked_exam.status, Exam.Status.COMPLETED)
+
+
+class StudentMarkEntryRBACTests(TestCase):
+    """StudentMarkViewSet used to gate every write (including bulk_entry, the
+    endpoint the marks-entry page actually calls) behind IsSchoolAdminOrReadOnly,
+    which excludes TEACHER entirely -- even though the queryset is teacher-scoped
+    for reads and the frontend links teachers straight to this page. Writes now go
+    through the same _can_manage_exam_scope check as exam papers."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.school = _make_school()
+        cls.class_obj = Class.objects.create(school=cls.school, name='Class 7', grade_level=7)
+        cls.subject = Subject.objects.create(school=cls.school, name='Mathematics', code='MATH')
+        cls.academic_year = AcademicYear.objects.create(
+            school=cls.school, name='2025-2026',
+            start_date=date(2025, 4, 1), end_date=date(2026, 3, 31), is_current=True,
+        )
+        exam_type = ExamType.objects.create(school=cls.school, name='Midterm', weight=Decimal('100.00'))
+        cls.exam = Exam.objects.create(
+            school=cls.school, academic_year=cls.academic_year, exam_type=exam_type,
+            class_obj=cls.class_obj, name='Midterm Exam',
+        )
+        cls.exam_subject = ExamSubject.objects.create(
+            school=cls.school, exam=cls.exam, subject=cls.subject,
+            total_marks=Decimal('100.00'), passing_marks=Decimal('33.00'),
+        )
+        cls.student = Student.objects.create(
+            school=cls.school, class_obj=cls.class_obj, roll_number='1', name='Ali Khan',
+        )
+
+        User = get_user_model()
+        cls.principal_user = User.objects.create_user(
+            username='marks_principal', email='marks_principal@test.com',
+            password='test12345', role='PRINCIPAL', school=cls.school,
+        )
+        cls.teacher_user = User.objects.create_user(
+            username='marks_teacher', email='marks_teacher@test.com',
+            password='test12345', role='TEACHER', school=cls.school,
+        )
+
+    def setUp(self):
+        self.client = APIClient()
+        self.school_header = {'HTTP_X_SCHOOL_ID': str(self.school.id)}
+
+    def _bulk_entry_payload(self):
+        return {
+            'exam_subject_id': self.exam_subject.id,
+            'marks': [
+                {'student_id': self.student.id, 'marks_obtained': 78, 'is_absent': False, 'remarks': ''},
+            ],
+        }
+
+    def test_principal_can_bulk_enter_marks(self):
+        self.client.force_authenticate(self.principal_user)
+        response = self.client.post(
+            '/api/examinations/marks/bulk_entry/',
+            self._bulk_entry_payload(),
+            format='json',
+            **self.school_header,
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertTrue(StudentMark.objects.filter(exam_subject=self.exam_subject, student=self.student).exists())
+
+    def test_unassigned_teacher_cannot_bulk_enter_marks(self):
+        self.client.force_authenticate(self.teacher_user)
+        response = self.client.post(
+            '/api/examinations/marks/bulk_entry/',
+            self._bulk_entry_payload(),
+            format='json',
+            **self.school_header,
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(StudentMark.objects.filter(exam_subject=self.exam_subject, student=self.student).exists())
+
+    def test_assigned_subject_teacher_can_bulk_enter_marks(self):
+        """A teacher assigned to this class-subject via ClassSubject (not
+        necessarily the homeroom class-teacher) must be able to save marks --
+        this was the exact gap: previously blocked no matter the assignment."""
+        from academics.models import ClassSubject
+        from hr.models import StaffMember
+
+        staff = StaffMember.objects.create(
+            school=self.school, user=self.teacher_user, first_name='Marks', last_name='Teacher',
+        )
+        ClassSubject.objects.create(
+            school=self.school, class_obj=self.class_obj, subject=self.subject, teacher=staff,
+        )
+
+        self.client.force_authenticate(self.teacher_user)
+        response = self.client.post(
+            '/api/examinations/marks/bulk_entry/',
+            self._bulk_entry_payload(),
+            format='json',
+            **self.school_header,
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        mark = StudentMark.objects.get(exam_subject=self.exam_subject, student=self.student)
+        self.assertEqual(mark.marks_obtained, Decimal('78'))
+
+    def test_teacher_for_other_subject_cannot_bulk_enter_marks(self):
+        from academics.models import ClassSubject
+        from hr.models import StaffMember
+
+        other_subject = Subject.objects.create(school=self.school, name='Physics', code='PHY')
+        staff = StaffMember.objects.create(
+            school=self.school, user=self.teacher_user, first_name='Other', last_name='Teacher',
+        )
+        ClassSubject.objects.create(
+            school=self.school, class_obj=self.class_obj, subject=other_subject, teacher=staff,
+        )
+
+        self.client.force_authenticate(self.teacher_user)
+        response = self.client.post(
+            '/api/examinations/marks/bulk_entry/',
+            self._bulk_entry_payload(),  # targets self.subject (Mathematics), not other_subject
+            format='json',
+            **self.school_header,
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_assigned_teacher_can_update_single_mark_via_create(self):
+        from academics.models import ClassSubject
+        from hr.models import StaffMember
+
+        staff = StaffMember.objects.create(
+            school=self.school, user=self.teacher_user, first_name='Marks', last_name='Teacher',
+        )
+        ClassSubject.objects.create(
+            school=self.school, class_obj=self.class_obj, subject=self.subject, teacher=staff,
+        )
+
+        self.client.force_authenticate(self.teacher_user)
+        response = self.client.post(
+            '/api/examinations/marks/',
+            {
+                'exam_subject': self.exam_subject.id,
+                'student': self.student.id,
+                'marks_obtained': 90,
+                'is_absent': False,
+            },
+            format='json',
+            **self.school_header,
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+
+    def test_unassigned_teacher_cannot_create_single_mark(self):
+        self.client.force_authenticate(self.teacher_user)
+        response = self.client.post(
+            '/api/examinations/marks/',
+            {
+                'exam_subject': self.exam_subject.id,
+                'student': self.student.id,
+                'marks_obtained': 90,
+                'is_absent': False,
+            },
+            format='json',
+            **self.school_header,
+        )
+        self.assertEqual(response.status_code, 403)
 
 
 # A 1x1 transparent PNG — enough to satisfy Django's ImageField validation.

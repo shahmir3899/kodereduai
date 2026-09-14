@@ -141,6 +141,9 @@ class ExamSerializer(serializers.ModelSerializer):
     subjects_count = serializers.IntegerField(read_only=True, default=0)
     exam_group = serializers.PrimaryKeyRelatedField(read_only=True)
     exam_group_name = serializers.CharField(source='exam_group.name', read_only=True, default=None)
+    marks_entered_count = serializers.IntegerField(read_only=True, default=0)
+    marks_expected_count = serializers.SerializerMethodField()
+    marks_entry_complete = serializers.SerializerMethodField()
 
     def get_class_name(self, obj):
         session_name = getattr(obj, 'session_display_name', None)
@@ -149,6 +152,16 @@ class ExamSerializer(serializers.ModelSerializer):
             return f"{session_name} - {section}" if section else session_name
         return obj.class_obj.name if obj.class_obj_id else None
 
+    def get_marks_expected_count(self, obj):
+        # subjects_count/enrolled_count come from the ExamViewSet/ExamGroupViewSet
+        # annotations (_annotate_marks_completion) -- 0 if the instance wasn't
+        # fetched through get_queryset (e.g. a bare unsaved instance).
+        return getattr(obj, 'subjects_count', 0) * getattr(obj, 'enrolled_count', 0)
+
+    def get_marks_entry_complete(self, obj):
+        expected = self.get_marks_expected_count(obj)
+        return expected > 0 and getattr(obj, 'marks_entered_count', 0) >= expected
+
     class Meta:
         model = Exam
         fields = [
@@ -156,7 +169,8 @@ class ExamSerializer(serializers.ModelSerializer):
             'term', 'term_name', 'exam_type', 'exam_type_name',
             'class_obj', 'class_name', 'exam_group', 'exam_group_name',
             'name', 'start_date', 'end_date', 'status', 'schedule_published_at',
-            'subjects_count', 'is_active', 'created_at', 'updated_at',
+            'subjects_count', 'marks_entered_count', 'marks_expected_count',
+            'marks_entry_complete', 'is_active', 'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'school', 'created_at', 'updated_at']
 

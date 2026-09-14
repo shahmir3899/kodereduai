@@ -4,7 +4,8 @@ import re
 from datetime import date
 from decimal import Decimal
 from django.db import IntegrityError, transaction
-from django.db.models import Count, Q
+from django.db.models import Count, IntegerField, OuterRef, Q, Subquery
+from django.db.models.functions import Coalesce
 from django.http import HttpResponse
 from pgvector.django import CosineDistance
 from rest_framework import viewsets, status
@@ -69,6 +70,61 @@ def _resolve_school_id(request):
     if request.user.school_id:
         return request.user.school_id
     return None
+
+
+def _annotate_marks_completion(qs):
+    """Annotate an Exam queryset with `enrolled_count` and `marks_entered_count`,
+    used by ExamSerializer to compute marks_entry_complete (gates Announce Results).
+
+    Both use correlated Subqueries rather than joined Count()s: the queryset already
+    carries a `subjects_count = Count('exam_subjects', ...)` annotation (see
+    ExamViewSet.get_queryset / ExamGroupViewSet's exams_prefetch_qs), and stacking a
+    second Count() over a different join (exam_subjects -> student_marks) on the same
+    query would cross-multiply with that join and inflate both counts.
+
+    - enrolled_count: actively-enrolled students in this exam's (school, class, year).
+      Assumes every enrolled student sits every subject of the exam (no per-subject
+      roster), matching StudentMarkCreateSerializer._resolve_enrollment's lookup.
+    - marks_entered_count: StudentMark rows across this exam's active subjects that
+      have a value (marks_obtained set, or explicitly marked absent) -- a row with
+      neither means "not entered yet".
+    """
+    from academic_sessions.models import StudentEnrollment
+
+    enrolled_subquery = StudentEnrollment.objects.filter(
+        school_id=OuterRef('school_id'),
+        class_obj_id=OuterRef('class_obj_id'),
+        academic_year_id=OuterRef('academic_year_id'),
+        is_active=True,
+    ).order_by().values('class_obj_id').annotate(c=Count('id')).values('c')
+
+    entered_subquery = StudentMark.objects.filter(
+        exam_subject__exam_id=OuterRef('pk'),
+        exam_subject__is_active=True,
+    ).filter(
+        Q(marks_obtained__isnull=False) | Q(is_absent=True)
+    ).order_by().values('exam_subject__exam_id').annotate(c=Count('id')).values('c')
+
+    return qs.annotate(
+        enrolled_count=Coalesce(
+            Subquery(enrolled_subquery[:1], output_field=IntegerField()), 0,
+        ),
+        marks_entered_count=Coalesce(
+            Subquery(entered_subquery[:1], output_field=IntegerField()), 0,
+        ),
+    )
+
+
+def _marks_entry_complete(exam):
+    """True when every active exam-subject has marks entered (or absence noted)
+    for every actively-enrolled student. Requires `exam` to come from a queryset
+    that ran through _annotate_marks_completion (plus the `subjects_count`
+    annotation) -- see ExamViewSet.get_queryset / ExamGroupViewSet.get_queryset.
+    Same formula as ExamSerializer.get_marks_entry_complete; kept here too since
+    announce_results/announce_results_all enforce it server-side, not just display it.
+    """
+    expected = getattr(exam, 'subjects_count', 0) * getattr(exam, 'enrolled_count', 0)
+    return expected > 0 and getattr(exam, 'marks_entered_count', 0) >= expected
 
 
 def _apply_teacher_exam_scope(qs, request, class_field='class_obj_id', subject_field=None):
@@ -153,16 +209,18 @@ def _is_teacher_class_teacher_for_class(request, class_id, school_id=None):
     return class_id in scope.get('full_class_ids', set())
 
 
-def _can_manage_exam_papers(request, class_id=None, subject_id=None, school_id=None):
-    """Return True when role is allowed to create/update exam papers.
+def _can_manage_exam_scope(request, class_id=None, subject_id=None, school_id=None):
+    """Return True when role is allowed to write exam-related data (papers, marks, ...)
+    scoped to a given (class, subject) pair.
 
-    A teacher may manage a paper for (class, subject) either as the class's
+    A teacher may manage a resource for (class, subject) either as the class's
     class-teacher (homeroom-style, covers every subject taught in that class)
     or as the subject teacher specifically assigned to that class-subject
     pairing -- the same dual-layer scope _apply_teacher_exam_scope already
-    grants for read access. Previously only the class-teacher branch was
-    checked here, so any class-teacher could create/edit/autosave exam papers
-    for subjects they don't teach in that class.
+    grants for read access. Generic across exam papers, marks entry, etc.;
+    originally exam-paper-specific (previously only the class-teacher branch
+    was checked, so any class-teacher could create/edit/autosave exam papers
+    for subjects they don't teach in that class).
     """
     role = get_effective_role(request)
     if role in ADMIN_ROLES or role == 'MANAGER':
@@ -505,6 +563,7 @@ class ExamGroupViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
         ).annotate(
             subjects_count=Count('exam_subjects', filter=Q(exam_subjects__is_active=True)),
         )
+        exams_prefetch_qs = _annotate_marks_completion(exams_prefetch_qs)
         if exam_filter is not None:
             exams_prefetch_qs = exams_prefetch_qs.filter(is_active=exam_filter)
 
@@ -956,22 +1015,48 @@ class ExamGroupViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
     @action(detail=True, methods=['post'], url_path='announce-results-all')
     def announce_results_all(self, request, pk=None):
         """Announce results for every exam in the group -- this is what the old
-        'publish-all' action used to do -- see Exam.announce_results."""
+        'publish-all' action used to do -- see Exam.announce_results.
+
+        A group spans several classes (exams), each with independent marks-entry
+        progress, so this can't hard-block the whole request the way the single-exam
+        announce_results does: it publishes whichever exams have complete marks and
+        reports the rest as skipped, mirroring bulk_delete_skips_papers_outside_manage_scope's
+        "do what's allowed, report what's not" shape.
+        """
         from notifications.triggers import trigger_exam_result_published
 
         group = self.get_object()
-        exams = list(
-            group.exams.filter(is_active=True).select_related('school', 'class_obj', 'academic_year')
+        exams_qs = group.exams.filter(is_active=True).select_related(
+            'school', 'class_obj', 'academic_year',
+        ).annotate(
+            subjects_count=Count('exam_subjects', filter=Q(exam_subjects__is_active=True)),
         )
-        Exam.objects.filter(id__in=[exam.id for exam in exams]).update(status=Exam.Status.PUBLISHED)
-        for exam in exams:
+        exams_qs = _annotate_marks_completion(exams_qs)
+        exams = list(exams_qs)
+
+        ready = [exam for exam in exams if _marks_entry_complete(exam)]
+        skipped = [exam for exam in exams if not _marks_entry_complete(exam)]
+
+        Exam.objects.filter(id__in=[exam.id for exam in ready]).update(status=Exam.Status.PUBLISHED)
+        for exam in ready:
             exam.status = Exam.Status.PUBLISHED
             try:
                 trigger_exam_result_published(exam)
             except Exception:
                 # Do not block publish if notification fanout fails.
                 pass
-        return Response({'published_count': len(exams)})
+        return Response({
+            'published_count': len(ready),
+            'skipped': [
+                {
+                    'id': exam.id,
+                    'class_name': exam.class_obj.name if exam.class_obj_id else None,
+                    'marks_entered_count': exam.marks_entered_count,
+                    'marks_expected_count': exam.subjects_count * exam.enrolled_count,
+                }
+                for exam in skipped
+            ],
+        })
 
     @action(detail=True, methods=['post'], url_path='unpublish-results-all')
     def unpublish_results_all(self, request, pk=None):
@@ -1093,6 +1178,7 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
         ).annotate(
             subjects_count=Count('exam_subjects', filter=Q(exam_subjects__is_active=True)),
         )
+        qs = _annotate_marks_completion(qs)
         qs = annotate_session_class_display(qs)
         qs = _apply_teacher_exam_scope(qs, self.request, class_field='class_obj_id')
         scope = resolve_class_scope(
@@ -1287,8 +1373,23 @@ class ExamViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet)
     @action(detail=True, methods=['post'], url_path='announce-results')
     def announce_results(self, request, pk=None):
         """Publish this exam's results/report card. This is what the old
-        'publish' action used to do -- see Exam.Status.PUBLISHED."""
+        'publish' action used to do -- see Exam.Status.PUBLISHED.
+
+        Hard-blocked until marks entry is complete (no force-override): announcing
+        partial results would show students/parents an incomplete report card.
+        """
         exam = self.get_object()
+        if not _marks_entry_complete(exam):
+            expected = exam.subjects_count * exam.enrolled_count
+            return Response(
+                {
+                    'detail': f'Marks entry is incomplete ({exam.marks_entered_count}/{expected} entered). '
+                              'Enter all marks before announcing results.',
+                    'marks_entered_count': exam.marks_entered_count,
+                    'marks_expected_count': expected,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         exam.status = Exam.Status.PUBLISHED
         exam.save(update_fields=['status'])
         try:
@@ -1562,8 +1663,11 @@ class ExamSubjectViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
 class StudentMarkViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     required_module = 'examinations'
     queryset = StudentMark.objects.all()
-    permission_classes = [IsAuthenticated, IsSchoolAdminOrReadOnly, HasSchoolAccess]
-
+    # Write access isn't admin-only: a teacher may enter marks for their own
+    # class-teacher or assigned-subject scope. IsSchoolAdminOrReadOnly would
+    # block that, so scoping is enforced per-action via _can_manage_exam_scope
+    # in perform_create/perform_update/perform_destroy/bulk_entry instead.
+    permission_classes = [IsAuthenticated, HasSchoolAccess]
 
     def get_serializer_class(self):
         if self.action in ('create', 'update', 'partial_update'):
@@ -1574,6 +1678,35 @@ class StudentMarkViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
         ctx = super().get_serializer_context()
         ctx['school_id'] = _resolve_school_id(self.request)
         return ctx
+
+    def _check_exam_subject_scope(self, exam_subject, school_id):
+        if not _can_manage_exam_scope(
+            self.request,
+            class_id=exam_subject.exam.class_obj_id,
+            subject_id=exam_subject.subject_id,
+            school_id=school_id,
+        ):
+            raise PermissionDenied(
+                'Only School Admin, Principal, or assigned class/subject teachers can enter marks for this exam subject.'
+            )
+
+    def perform_create(self, serializer):
+        school_id = _resolve_school_id(self.request)
+        exam_subject = serializer.validated_data.get('exam_subject')
+        self._check_exam_subject_scope(exam_subject, school_id)
+        # TenantQuerySetMixin.perform_create resolves/validates school_id and saves.
+        super().perform_create(serializer)
+
+    def perform_update(self, serializer):
+        school_id = _resolve_school_id(self.request)
+        exam_subject = serializer.validated_data.get('exam_subject', serializer.instance.exam_subject)
+        self._check_exam_subject_scope(exam_subject, school_id)
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        school_id = _resolve_school_id(self.request)
+        self._check_exam_subject_scope(instance.exam_subject, school_id)
+        instance.delete()
 
     def get_queryset(self):
         qs = super().get_queryset().select_related(
@@ -1627,6 +1760,8 @@ class StudentMarkViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
                 {'detail': 'Exam subject not found.'},
                 status=status.HTTP_404_NOT_FOUND,
             )
+
+        self._check_exam_subject_scope(exam_subject, school_id)
 
         created = 0
         updated = 0
@@ -3309,7 +3444,7 @@ class ExamPaperViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
         school_id = _resolve_school_id(self.request)
         class_obj = serializer.validated_data.get('class_obj')
         subject = serializer.validated_data.get('subject')
-        if not _can_manage_exam_papers(
+        if not _can_manage_exam_scope(
             self.request,
             class_id=getattr(class_obj, 'id', None),
             subject_id=getattr(subject, 'id', None),
@@ -3322,7 +3457,7 @@ class ExamPaperViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
         school_id = _resolve_school_id(self.request)
         class_obj = serializer.validated_data.get('class_obj', serializer.instance.class_obj)
         subject = serializer.validated_data.get('subject', serializer.instance.subject)
-        if not _can_manage_exam_papers(
+        if not _can_manage_exam_scope(
             self.request,
             class_id=getattr(class_obj, 'id', None),
             subject_id=getattr(subject, 'id', None),
@@ -3376,7 +3511,7 @@ class ExamPaperViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
 
     def _validate_paper_manage_scope(self, class_obj, subject):
         school_id = _resolve_school_id(self.request)
-        if not _can_manage_exam_papers(
+        if not _can_manage_exam_scope(
             self.request,
             class_id=getattr(class_obj, 'id', None),
             subject_id=getattr(subject, 'id', None),
@@ -3716,7 +3851,7 @@ class ExamPaperViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
             )
 
         school_id = _resolve_school_id(request)
-        if not _can_manage_exam_papers(
+        if not _can_manage_exam_scope(
             request,
             class_id=class_id,
             subject_id=subject_id,
@@ -3970,7 +4105,7 @@ class PaperUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
                         status=status.HTTP_404_NOT_FOUND,
                     )
 
-                if not _can_manage_exam_papers(
+                if not _can_manage_exam_scope(
                     request,
                     class_id=exam_paper.class_obj_id,
                     subject_id=exam_paper.subject_id,
@@ -4009,7 +4144,7 @@ class PaperUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
                 )
 
             # Legacy one-shot flow: no exam_paper_id, so create everything here.
-            if not _can_manage_exam_papers(
+            if not _can_manage_exam_scope(
                 request,
                 class_id=paper_metadata.get('class_obj'),
                 subject_id=paper_metadata.get('subject'),
@@ -4096,7 +4231,7 @@ class PaperUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
 
 class WorksheetViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
     """ViewSet for Worksheet management -- sibling of ExamPaperViewSet, reusing
-    the same manage-scope check (_can_manage_exam_papers is generic to
+    the same manage-scope check (_can_manage_exam_scope is generic to
     class/subject, not exam-paper specific) but with no exam-lifecycle fields."""
     required_module = 'examinations'
     queryset = Worksheet.objects.all()
@@ -4154,7 +4289,7 @@ class WorksheetViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelVie
 
     def _validate_manage_scope(self, class_obj, subject):
         school_id = _resolve_school_id(self.request)
-        if not _can_manage_exam_papers(
+        if not _can_manage_exam_scope(
             self.request,
             class_id=getattr(class_obj, 'id', None),
             subject_id=getattr(subject, 'id', None),
@@ -4520,7 +4655,7 @@ class WorksheetUploadViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mo
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        if not _can_manage_exam_papers(
+        if not _can_manage_exam_scope(
             request,
             class_id=worksheet.class_obj_id,
             subject_id=worksheet.subject_id,
