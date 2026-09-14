@@ -101,6 +101,9 @@ export default function SubjectsPage() {
   const { data: subjectRes, isLoading: subjectLoading, isError: subjectError, error: subjectFetchError, isFetching: subjectFetching } = useQuery({
     queryKey: ['subjects', debouncedSearch],
     queryFn: () => academicsApi.getSubjects({ search: debouncedSearch || undefined, page_size: 9999 }),
+    // Subject list changes occasionally; create/update/delete mutations below
+    // invalidate this key explicitly, so staying stale between edits is safe.
+    staleTime: 2 * 60_000,
   })
 
   const { data: assignRes, isLoading: assignLoading, isError: assignError, error: assignFetchError, isFetching: assignFetching } = useQuery({

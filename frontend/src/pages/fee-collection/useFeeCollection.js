@@ -87,24 +87,26 @@ export function useFeeCollection({ month, year, classFilter, statusFilter, feeTy
     },
   })
 
+  // These four move money in/out of an account (recording, reversing, or bulk
+  // adjusting a payment) — also refresh ['accounts'] so its balance stays live.
   const paymentMutation = useMutation({
     mutationFn: ({ id, data }) => financeApi.recordPayment(id, data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['feePayments'] }); queryClient.invalidateQueries({ queryKey: ['feeSummary'] }) },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['feePayments'] }); queryClient.invalidateQueries({ queryKey: ['feeSummary'] }); queryClient.invalidateQueries({ queryKey: ['accounts'] }) },
   })
 
   const deleteFeePaymentMutation = useMutation({
     mutationFn: (id) => financeApi.deleteFeePayment(id),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['feePayments'] }); queryClient.invalidateQueries({ queryKey: ['feeSummary'] }) },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['feePayments'] }); queryClient.invalidateQueries({ queryKey: ['feeSummary'] }); queryClient.invalidateQueries({ queryKey: ['accounts'] }) },
   })
 
   const bulkUpdateMutation = useMutation({
     mutationFn: (data) => financeApi.bulkUpdatePayments(data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['feePayments'] }); queryClient.invalidateQueries({ queryKey: ['feeSummary'] }) },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['feePayments'] }); queryClient.invalidateQueries({ queryKey: ['feeSummary'] }); queryClient.invalidateQueries({ queryKey: ['accounts'] }) },
   })
 
   const bulkDeleteMutation = useMutation({
     mutationFn: (data) => financeApi.bulkDeletePayments(data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['feePayments'] }); queryClient.invalidateQueries({ queryKey: ['feeSummary'] }) },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['feePayments'] }); queryClient.invalidateQueries({ queryKey: ['feeSummary'] }); queryClient.invalidateQueries({ queryKey: ['accounts'] }) },
   })
 
   const generateOnetimeMutation = useBackgroundTask({

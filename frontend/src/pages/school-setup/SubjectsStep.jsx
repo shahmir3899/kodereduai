@@ -26,12 +26,16 @@ export default function SubjectsStep({ onNext, refetchCompletion }) {
   const { data: subjectsRes } = useQuery({
     queryKey: ['subjects'],
     queryFn: () => academicsApi.getSubjects({ page_size: 200 }),
+    // Shared with the other setup-wizard steps that read the same lists —
+    // avoid refetching on every step navigation.
+    staleTime: 5 * 60_000,
   })
   const subjects = subjectsRes?.data?.results || subjectsRes?.data || []
 
   const { data: classesRes } = useQuery({
     queryKey: ['classes'],
     queryFn: () => classesApi.getClasses({ page_size: 200 }),
+    staleTime: 5 * 60_000,
   })
   const classes = classesRes?.data?.results || classesRes?.data || []
 

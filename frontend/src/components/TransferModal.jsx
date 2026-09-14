@@ -47,6 +47,7 @@ export default function TransferModal({ isOpen, onClose, onSuccess, initialData 
       queryClient.invalidateQueries({ queryKey: ['transfers'] })
       queryClient.invalidateQueries({ queryKey: ['accountBalances'] })
       queryClient.invalidateQueries({ queryKey: ['accountBalancesAll'] })
+      queryClient.invalidateQueries({ queryKey: ['accounts'] })
       setForm(buildInitialForm())
       onSuccess?.()
       onClose()

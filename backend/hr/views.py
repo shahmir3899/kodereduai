@@ -9,6 +9,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 from django.db import transaction
+from django.core.cache import cache
 from django.db.models import Count, Q, Sum
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
@@ -680,10 +681,24 @@ class StaffMemberViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
 
     @action(detail=False, methods=['get'])
     def dashboard_stats(self, request):
-        """HR dashboard summary stats."""
+        """
+        HR dashboard summary stats.
+
+        Cached for 60s — this runs 6+ aggregate queries across staff,
+        payslips, leave, and attendance on every dashboard load. Busted
+        immediately on the relevant model changes via hr/signals.py rather
+        than waiting out the TTL, so the 60s is just a staleness ceiling
+        (e.g. for writes outside the normal view layer), not the expected
+        update latency.
+        """
         school_id = _resolve_school_id(request)
         if not school_id:
             return Response({'detail': 'No school selected.'}, status=400)
+
+        cache_key = f'hr:dashboard_stats:{school_id}'
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return Response(cached)
 
         staff_qs = StaffMember.objects.filter(school_id=school_id)
         today = date.today()
@@ -755,7 +770,7 @@ class StaffMemberViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
             attendance_marked=Count('id'),
         )
 
-        return Response({
+        payload = {
             'total_staff': staff_counts.get('total_staff', 0),
             'active_staff': staff_counts.get('active_staff', 0),
             'total_departments': total_departments,
@@ -769,7 +784,9 @@ class StaffMemberViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
             'staff_on_leave_today': leave_stats.get('staff_on_leave_today', 0),
             'attendance_present_today': attendance_stats.get('attendance_present', 0),
             'attendance_marked_today': attendance_stats.get('attendance_marked', 0),
-        })
+        }
+        cache.set(cache_key, payload, 60)
+        return Response(payload)
 
 
 # ── Salary Structure ViewSet ─────────────────────────────────────────────────

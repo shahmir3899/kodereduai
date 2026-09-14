@@ -85,6 +85,8 @@ export default function AcademicCalendarPage() {
     queryKey: ['calendarClasses', activeAcademicYear?.id],
     queryFn: () => classesApi.getClasses({ is_active: true, page_size: 999 }),
     enabled: !!activeAcademicYear?.id,
+    // Class list rarely changes mid-session — avoid refetching on every focus.
+    staleTime: 5 * 60_000,
   })
 
   const classes = classesRes?.data?.results || classesRes?.data || []

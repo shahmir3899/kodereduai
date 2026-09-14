@@ -188,6 +188,8 @@ export default function ExpensesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['expenses'] })
       queryClient.invalidateQueries({ queryKey: ['expenseCategorySummary'] })
+      // Expense posts against an account — refresh the balance shown alongside it.
+      queryClient.invalidateQueries({ queryKey: ['accounts'] })
       closeModal()
     },
   })
@@ -197,6 +199,7 @@ export default function ExpensesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['expenses'] })
       queryClient.invalidateQueries({ queryKey: ['expenseCategorySummary'] })
+      queryClient.invalidateQueries({ queryKey: ['accounts'] })
       closeModal()
     },
   })
@@ -206,6 +209,7 @@ export default function ExpensesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['expenses'] })
       queryClient.invalidateQueries({ queryKey: ['expenseCategorySummary'] })
+      queryClient.invalidateQueries({ queryKey: ['accounts'] })
     },
   })
 
@@ -215,6 +219,7 @@ export default function ExpensesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['transfers'] })
       queryClient.invalidateQueries({ queryKey: ['accountBalances'] })
+      queryClient.invalidateQueries({ queryKey: ['accounts'] })
     },
   })
 
@@ -726,6 +731,7 @@ export default function ExpensesPage() {
         onSuccess={() => {
           queryClient.invalidateQueries({ queryKey: ['transfers'] })
           queryClient.invalidateQueries({ queryKey: ['accountBalances'] })
+          queryClient.invalidateQueries({ queryKey: ['accounts'] })
         }}
         initialData={editingTransfer}
       />

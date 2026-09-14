@@ -5,3 +5,6 @@ class HrConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'hr'
     verbose_name = 'HR & Staff Management'
+
+    def ready(self):
+        import hr.signals  # noqa: F401

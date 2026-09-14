@@ -29,12 +29,19 @@ export function useOtherIncome({ month, year }) {
 
   const incomeMutation = useMutation({
     mutationFn: (data) => financeApi.createOtherIncome(data),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['otherIncome'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['otherIncome'] })
+      // Income posts against an account — refresh the balance shown alongside it.
+      queryClient.invalidateQueries({ queryKey: ['accounts'] })
+    },
   })
 
   const deleteIncomeMutation = useMutation({
     mutationFn: (id) => financeApi.deleteOtherIncome(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['otherIncome'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['otherIncome'] })
+      queryClient.invalidateQueries({ queryKey: ['accounts'] })
+    },
   })
 
   const createCategoryMutation = useMutation({

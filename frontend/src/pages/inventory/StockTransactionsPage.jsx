@@ -68,6 +68,10 @@ export default function StockTransactionsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inventoryTransactions'] })
       queryClient.invalidateQueries({ queryKey: ['inventoryItems'] })
+      // This page's own item list/dropdown reads ['inventoryItemsAll'], a
+      // separate key from ['inventoryItems'] used elsewhere — refresh it too
+      // so the stock count shown here updates without a reload.
+      queryClient.invalidateQueries({ queryKey: ['inventoryItemsAll'] })
       queryClient.invalidateQueries({ queryKey: ['inventoryDashboard'] })
       closeModal()
     },

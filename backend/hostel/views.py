@@ -4,6 +4,7 @@ Hostel views for hostels, rooms, allocations, gate passes, and dashboard stats.
 
 from datetime import date
 
+from django.core.cache import cache
 from django.db.models import Sum, Count, Q
 from django.utils import timezone
 from rest_framework import viewsets, status
@@ -348,6 +349,14 @@ class HostelDashboardView(ModuleAccessMixin, APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # Cached for 60s, busted immediately on the relevant model changes
+        # via hostel/signals.py — see hr/views.py's dashboard_stats for the
+        # fuller rationale on this pattern.
+        cache_key = f'hostel:dashboard:{school_id}'
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return Response(cached)
+
         total_hostels = Hostel.objects.filter(
             school_id=school_id, is_active=True,
         ).count()
@@ -382,7 +391,7 @@ class HostelDashboardView(ModuleAccessMixin, APIView):
             school_id=school_id, status='USED',
         ).count()
 
-        return Response({
+        payload = {
             'total_hostels': total_hostels,
             'total_rooms': total_rooms,
             'total_capacity': total_capacity,
@@ -392,4 +401,6 @@ class HostelDashboardView(ModuleAccessMixin, APIView):
             'boys_hostels': boys_hostels,
             'girls_hostels': girls_hostels,
             'students_on_leave': students_on_leave,
-        })
+        }
+        cache.set(cache_key, payload, 60)
+        return Response(payload)

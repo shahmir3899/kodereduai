@@ -45,6 +45,9 @@ export default function FinanceStep({ onNext, refetchCompletion }) {
   const { data: classesRes } = useQuery({
     queryKey: ['classes'],
     queryFn: () => classesApi.getClasses({ page_size: 200 }),
+    // Shared with the other setup-wizard steps that read the same class list —
+    // avoid refetching on every step navigation.
+    staleTime: 5 * 60_000,
   })
   const classes = classesRes?.data?.results || classesRes?.data || []
 

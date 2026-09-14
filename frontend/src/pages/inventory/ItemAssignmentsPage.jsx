@@ -70,6 +70,10 @@ export default function ItemAssignmentsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inventoryAssignments'] })
       queryClient.invalidateQueries({ queryKey: ['inventoryItems'] })
+      // This page's own item list/dropdown reads ['inventoryItemsAll'], a
+      // separate key from ['inventoryItems'] used elsewhere — refresh it too
+      // so available quantity shown here updates without a reload.
+      queryClient.invalidateQueries({ queryKey: ['inventoryItemsAll'] })
       queryClient.invalidateQueries({ queryKey: ['inventoryDashboard'] })
       closeAssignModal()
     },
@@ -80,6 +84,7 @@ export default function ItemAssignmentsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inventoryAssignments'] })
       queryClient.invalidateQueries({ queryKey: ['inventoryItems'] })
+      queryClient.invalidateQueries({ queryKey: ['inventoryItemsAll'] })
       queryClient.invalidateQueries({ queryKey: ['inventoryDashboard'] })
       setReturnConfirm(null)
     },

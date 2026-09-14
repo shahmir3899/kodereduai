@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useAuth } from './AuthContext'
 import { sessionsApi } from '../services/api'
 
@@ -6,6 +7,7 @@ const AcademicYearContext = createContext(null)
 
 export function AcademicYearProvider({ children }) {
   const { activeSchool, isAuthenticated, isSuperAdmin } = useAuth()
+  const queryClient = useQueryClient()
   const [academicYears, setAcademicYears] = useState([])
   const [activeAcademicYear, setActiveAcademicYear] = useState(null)
   const [currentTerm, setCurrentTerm] = useState(null)
@@ -35,7 +37,17 @@ export function AcademicYearProvider({ children }) {
     try {
       setLoading(true)
 
-      const yearsRes = await sessionsApi.getAcademicYears()
+      // Routed through the query cache under the same ['academicYears'] key
+      // AuthContext's login preload uses — this context's effect can fire
+      // several times in quick succession as activeSchool settles during
+      // bootstrap, and without this it was issuing a raw uncached axios call
+      // each time (5 duplicate requests observed for one page load).
+      // fetchQuery dedupes concurrent calls and skips ones already fresh.
+      const yearsRes = await queryClient.fetchQuery({
+        queryKey: ['academicYears'],
+        queryFn: () => sessionsApi.getAcademicYears(),
+        staleTime: 5 * 60_000,
+      })
       const years = yearsRes.data
       const yearsList = Array.isArray(years) ? years : years.results || []
       setAcademicYears(yearsList)
@@ -62,7 +74,7 @@ export function AcademicYearProvider({ children }) {
     } finally {
       setLoading(false)
     }
-  }, [activeSchool?.id, isSuperAdmin, fetchTermsForYear])
+  }, [activeSchool?.id, isSuperAdmin, fetchTermsForYear, queryClient])
 
   useEffect(() => {
     if (isAuthenticated && !isSuperAdmin) {

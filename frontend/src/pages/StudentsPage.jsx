@@ -141,6 +141,8 @@ export default function StudentsPage() {
     queryKey: ['classes', selectedSchoolId],
     queryFn: () => classesApi.getClasses({ school_id: selectedSchoolId, page_size: 9999 }),
     enabled: !!selectedSchoolId,
+    // Class list rarely changes mid-session — avoid refetching on every focus.
+    staleTime: 5 * 60_000,
   })
 
   // Fetch ALL students once for this school (client-side filtering)

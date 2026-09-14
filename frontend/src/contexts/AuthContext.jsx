@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useRef, useMemo, useCallback } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQueryClient, useIsRestoring } from '@tanstack/react-query'
 import api, {
   authApi,
   academicsApi,
@@ -32,6 +32,7 @@ import {
   setActiveSchoolId,
   setAuthTokens,
 } from '../services/authStorage'
+import { QUERY_PERSIST_KEY } from '../queryPersistConfig'
 
 const AuthContext = createContext(null)
 
@@ -108,6 +109,34 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
   const [isSwitchingSchool, setIsSwitchingSchool] = useState(false)
   const lastPreloadFingerprintRef = useRef('')
+
+  // Tracks whether the localStorage query persister (queryPersistConfig.js)
+  // is still restoring the cache. Without this, preloadVisibleData below can
+  // fetchQuery/prefetchQuery a reference-data key (e.g. 'academicYears')
+  // before the persisted snapshot lands, always losing that race on a cold
+  // reload and re-fetching data that was already sitting in localStorage.
+  const isRestoring = useIsRestoring()
+  const isRestoringRef = useRef(isRestoring)
+  useEffect(() => {
+    isRestoringRef.current = isRestoring
+  }, [isRestoring])
+
+  const waitForRestore = useCallback(() => {
+    if (!isRestoringRef.current) return Promise.resolve()
+    return new Promise((resolve) => {
+      const start = Date.now()
+      const poll = () => {
+        // 2s cap so a stuck/failed restore (e.g. localStorage unavailable)
+        // can never block login — preload just proceeds and fetches fresh.
+        if (!isRestoringRef.current || Date.now() - start > 2000) {
+          resolve()
+          return
+        }
+        setTimeout(poll, 20)
+      }
+      poll()
+    })
+  }, [])
 
   useEffect(() => {
     const token = getAccessToken()
@@ -238,6 +267,12 @@ export function AuthProvider({ children }) {
     const fingerprint = `${userData.id}:${school.id}:${effectiveRole}`
     if (lastPreloadFingerprintRef.current === fingerprint) return
     lastPreloadFingerprintRef.current = fingerprint
+
+    // Let the persister finish restoring localStorage into the query cache
+    // first, or this preload's own fetchQuery/prefetchQuery calls below
+    // race it and always lose — firing a network request for data that was
+    // about to be restored from the persisted snapshot a moment later.
+    await waitForRestore()
 
     let activeAcademicYearId = null
     if (!isSuperAdmin && effectiveRole !== 'PARENT' && effectiveRole !== 'STUDENT') {
@@ -755,7 +790,7 @@ export function AuthProvider({ children }) {
     }
 
     scheduleTierB(tierBTasks)
-  }, [queryClient])
+  }, [queryClient, waitForRestore])
 
   const logout = useCallback(() => {
     clearAuthState()
@@ -778,6 +813,11 @@ export function AuthProvider({ children }) {
 
     // Clear React Query cache to prevent data leakage between users
     queryClient.clear()
+    // queryClient.clear() only wipes the in-memory cache — the persister
+    // (queryPersistConfig.js) writes reference data to localStorage
+    // independently, so drop that snapshot too or the next person to sign in
+    // on this browser could briefly see this user's cached school data.
+    window.localStorage.removeItem(QUERY_PERSIST_KEY)
 
     setUser(null)
     setActiveSchool(null)
@@ -820,6 +860,10 @@ export function AuthProvider({ children }) {
       // Stop old-school requests and clear stale cache before rehydration.
       await queryClient.cancelQueries()
       queryClient.clear()
+      // Some persisted reference queries (e.g. 'staff', 'academicYears') don't
+      // carry schoolId in their key — without this, switching schools could
+      // briefly rehydrate the previous school's list from localStorage.
+      window.localStorage.removeItem(QUERY_PERSIST_KEY)
 
       const freshUser = await refreshUser()
       const resolvedSchool = resolveActiveSchool(freshUser)

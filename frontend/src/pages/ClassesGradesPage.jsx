@@ -71,6 +71,9 @@ export default function ClassesGradesPage() {
     queryKey: ['classes', selectedSchoolId],
     queryFn: () => classesApi.getClasses({ school_id: selectedSchoolId, page_size: 200, is_active: true }),
     enabled: !!selectedSchoolId,
+    // Class list rarely changes mid-session; create/update/delete mutations
+    // below invalidate this key explicitly, so staying stale between edits is safe.
+    staleTime: 5 * 60_000,
   })
 
   const { data: myClassesRes } = useQuery({

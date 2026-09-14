@@ -37,6 +37,7 @@ export default function StaffStep({ onNext, refetchCompletion }) {
   const { data: staffRes } = useQuery({
     queryKey: ['staff'],
     queryFn: () => hrApi.getStaff({ page_size: 200 }),
+    staleTime: 5 * 60_000,
   })
   const staffList = staffRes?.data?.results || staffRes?.data || []
 
