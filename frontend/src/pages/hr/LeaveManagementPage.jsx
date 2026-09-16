@@ -50,14 +50,15 @@ const EMPTY_POLICY = {
 export default function LeaveManagementPage() {
   const queryClient = useQueryClient()
   const { showError, showSuccess } = useToast()
-  const { isTeacher, isStaffMember } = useAuth()
+  const { isTeacher, isStaffMember, isManager } = useAuth()
 
-  // Self-service (2026-09): a Teacher or Staff member only ever sees/applies
-  // for their own leave — the backend already scopes the list and forces
-  // staff_member on create (hr/views.py LeaveApplicationViewSet), this just
-  // matches the UI to what's actually allowed instead of showing controls
-  // that would 403.
-  const isSelfService = isTeacher || isStaffMember
+  // Self-service (2026-09): a Teacher, Staff member, or Manager only ever
+  // sees/applies for their own leave — the backend already scopes the list
+  // and forces staff_member on create (hr/views.py LeaveApplicationViewSet),
+  // this just matches the UI to what's actually allowed instead of showing
+  // controls (Staff Member picker, Policies tab) that would 403. Manager
+  // joined this tier 2026-09 after losing full HR access.
+  const isSelfService = isTeacher || isStaffMember || isManager
   const [tab, setTab] = useState('applications')
 
   // ── Applications State ──

@@ -33,6 +33,23 @@ from students.models import Student
 logger = logging.getLogger(__name__)
 
 
+class HasSchoolAccessExcludingManager(HasSchoolAccess):
+    """
+    Same as HasSchoolAccess, but blocks MANAGER outright.
+
+    2026-09: Manager's nav access was scoped down to Dashboard/Academics/
+    Content Creation/Management only — student attendance (this module) is
+    no longer part of that set, so the previously-unrestricted read access
+    (any authenticated user with school access) needs an explicit carve-out
+    for Manager specifically. Other staff-level roles are unaffected.
+    """
+
+    def has_permission(self, request, view):
+        if get_effective_role(request) == 'MANAGER':
+            return False
+        return super().has_permission(request, view)
+
+
 def _resolve_session_class_filter(request):
     """Resolve session_class_id into (class_obj_id, academic_year_id, session_class_id).
 
@@ -700,7 +717,7 @@ class AttendanceRecordViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.R
     """
     queryset = AttendanceRecord.objects.all()
     serializer_class = AttendanceRecordSerializer
-    permission_classes = [IsAuthenticated, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, HasSchoolAccessExcludingManager]
 
     def get_queryset(self):
         queryset = AttendanceRecord.objects.select_related(
@@ -1734,7 +1751,7 @@ class AttendanceAnomalyViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.
     POST /api/attendance/anomalies/{id}/resolve/ - Mark as resolved
     """
     required_module = 'attendance'
-    permission_classes = [IsAuthenticated, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, HasSchoolAccessExcludingManager]
 
     def get_queryset(self):
         from .models import AttendanceAnomaly

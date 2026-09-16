@@ -493,7 +493,9 @@ export default function Layout() {
     // Attendance group (consolidated) — student/class attendance, not
     // relevant to Staff (their own attendance lives in the Self Service
     // hub below, backed by hr.StaffAttendance, not this module).
-    ...(isModuleEnabled('attendance') && !isStaff ? [{
+    // Manager removed 2026-09: nav access scoped down to Dashboard/
+    // Academics/Content Creation/Management only.
+    ...(isModuleEnabled('attendance') && !isStaff && !isManager ? [{
       type: 'group',
       name: 'Attendance',
       icon: ClipboardIcon,
@@ -506,8 +508,8 @@ export default function Layout() {
       ],
     }] : []),
 
-    // Finance group
-    ...(isModuleEnabled('finance') && !isStaff ? [{
+    // Finance group — Manager removed 2026-09 (see Attendance comment above).
+    ...(isModuleEnabled('finance') && !isStaff && !isManager ? [{
       type: 'group',
       name: 'Finance',
       icon: CurrencyIcon,
@@ -581,7 +583,8 @@ export default function Layout() {
       ],
     }] : []),
 
-    ...(isModuleEnabled('academics') && !isStaff && (isModuleEnabled('examinations') || isModuleEnabled('lms')) ? [{
+    // Manager removed 2026-09 (see Attendance comment above).
+    ...(isModuleEnabled('academics') && !isStaff && !isManager && (isModuleEnabled('examinations') || isModuleEnabled('lms')) ? [{
       type: 'group',
       name: 'Planning & Delivery',
       icon: CalendarIcon,
@@ -609,8 +612,12 @@ export default function Layout() {
       icon: ExclamationIcon,
     }] : []),
 
-    // HR & Staff group (visible to SCHOOL_ADMIN, PRINCIPAL, MANAGER + module check)
-    ...(isModuleEnabled('hr') && (!isStaffLevel || isManager)
+    // HR & Staff group (visible to SCHOOL_ADMIN, PRINCIPAL only —
+    // 2026-09: Manager removed, dropped to the self-service tier below,
+    // same as Teacher: nav access scoped down to Dashboard/Academics/
+    // Content Creation/Management, with only own leave/attendance/payslip
+    // as an exception, enforced backend-side in hr/permissions.py).
+    ...(isModuleEnabled('hr') && !isStaffLevel
       ? [{
           type: 'group',
           name: 'HR & Staff',
@@ -631,12 +638,12 @@ export default function Layout() {
         }]
       : []),
 
-    // Standalone self-service items for Teacher — the full "HR & Staff"
-    // group above stays admin/Manager-only; Teacher gets just their own
-    // leave and attendance, not the whole HR toolset (LeaveManagementPage.jsx
-    // and StaffAttendancePage.jsx both render a trimmed self-service view
-    // for TEACHER/STAFF).
-    ...(isModuleEnabled('hr') && isTeacher
+    // Standalone self-service items for Teacher/Manager — the full "HR &
+    // Staff" group above stays admin-only; Teacher/Manager get just their
+    // own leave and attendance, not the whole HR toolset
+    // (LeaveManagementPage.jsx and StaffAttendancePage.jsx both render a
+    // trimmed self-service view for TEACHER/STAFF/MANAGER).
+    ...(isModuleEnabled('hr') && (isTeacher || isManager)
       ? [
           { type: 'item', name: 'My Leave', href: '/hr/leave', icon: CalendarIcon },
           { type: 'item', name: 'My Attendance', href: '/hr/attendance', icon: ClipboardCheckIcon },
@@ -691,8 +698,8 @@ export default function Layout() {
       ],
     }] : []),
 
-    // Transport group
-    ...(isModuleEnabled('transport') ? [{
+    // Transport group — Manager removed 2026-09 (see Attendance comment above).
+    ...(isModuleEnabled('transport') && !isManager ? [{
       type: 'group',
       name: 'Transport',
       icon: TruckIcon,
@@ -705,8 +712,8 @@ export default function Layout() {
       ],
     }] : []),
 
-    // Library group
-    ...(isModuleEnabled('library') ? [{
+    // Library group — Manager removed 2026-09 (see Attendance comment above).
+    ...(isModuleEnabled('library') && !isManager ? [{
       type: 'group',
       name: 'Library',
       icon: LibraryIcon,
@@ -718,8 +725,8 @@ export default function Layout() {
       ],
     }] : []),
 
-    // Hostel group
-    ...(isModuleEnabled('hostel') ? [{
+    // Hostel group — Manager removed 2026-09 (see Attendance comment above).
+    ...(isModuleEnabled('hostel') && !isManager ? [{
       type: 'group',
       name: 'Hostel',
       icon: HomeIcon,
@@ -731,8 +738,8 @@ export default function Layout() {
       ],
     }] : []),
 
-    // Inventory group
-    ...(isModuleEnabled('inventory') && (!isTeacher && !isStaff ? true : hasInventoryAssignments) ? [{
+    // Inventory group — Manager removed 2026-09 (see Attendance comment above).
+    ...(isModuleEnabled('inventory') && !isManager && (!isTeacher && !isStaff ? true : hasInventoryAssignments) ? [{
       type: 'group',
       name: 'Inventory',
       icon: ClipboardCheckIcon,

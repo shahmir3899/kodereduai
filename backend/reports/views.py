@@ -27,14 +27,20 @@ logger = logging.getLogger(__name__)
 
 
 class IsSchoolAdminOrHR(drf_permissions.BasePermission):
-    """Allows ADMIN_ROLES + MANAGER to access letter composer."""
-    message = "Only School Admins, Principals, or Managers can perform this action."
+    """
+    Allows ADMIN_ROLES to access letter composer.
+
+    2026-09: Manager removed — Letter Composer sits under the HR & Staff
+    sidebar group, which Manager no longer has access to (scoped down to
+    self-service payslip/leave/attendance only, see hr/permissions.py).
+    """
+    message = "Only School Admins or Principals can perform this action."
 
     def has_permission(self, request, view):
         if not request.user.is_authenticated:
             return False
         role = get_effective_role(request)
-        return role in ADMIN_ROLES or role == 'MANAGER'
+        return role in ADMIN_ROLES
 
 
 STUDENT_SCOPED_REPORT_TYPES = {'STUDENT_COMPREHENSIVE', 'STUDENT_PROGRESS'}

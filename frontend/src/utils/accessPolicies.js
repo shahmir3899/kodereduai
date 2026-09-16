@@ -1,5 +1,7 @@
 export function canAccessFinanceRoute(role, { collectOnly = false } = {}) {
-  if (role === 'STAFF') return false
+  // Manager removed 2026-09: nav access scoped down to Dashboard/Academics/
+  // Content Creation/Management only — Finance is no longer part of that set.
+  if (role === 'STAFF' || role === 'MANAGER') return false
   if (role === 'TEACHER') return !!collectOnly
   return true
 }
@@ -11,6 +13,8 @@ export function canAccessManagementRoute(role, { teacherAllowed = false } = {}) 
 }
 
 export function canAccessInventoryRoute(role, { assignmentsOnly = false } = {}) {
+  // Manager removed 2026-09: same scope-down as Finance above.
+  if (role === 'MANAGER') return false
   if (role === 'TEACHER' || role === 'STAFF') return !!assignmentsOnly
   return true
 }

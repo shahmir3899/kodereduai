@@ -39,7 +39,12 @@ from .serializers import (
     StaffQualificationSerializer, StaffQualificationCreateSerializer,
     StaffDocumentSerializer, StaffDocumentCreateSerializer,
 )
-from .permissions import IsManagerOrAdminOrReadOnly, CanManageOwnLeaveApplication
+from .permissions import (
+    IsManagerOrAdminOrReadOnly,
+    IsAdminOnlyOrReadOnly,
+    CanManageOwnLeaveApplication,
+    HR_SELF_SERVICE_ROLES,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +98,7 @@ class StaffDepartmentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mo
     """CRUD for staff departments."""
     required_module = 'hr'
     queryset = StaffDepartment.objects.all()
-    permission_classes = [IsAuthenticated, IsManagerOrAdminOrReadOnly, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, IsAdminOnlyOrReadOnly, HasSchoolAccess]
 
     def get_serializer_context(self):
         context = super().get_serializer_context()
@@ -140,7 +145,7 @@ class StaffDesignationViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
     """CRUD for staff designations."""
     required_module = 'hr'
     queryset = StaffDesignation.objects.all()
-    permission_classes = [IsAuthenticated, IsManagerOrAdminOrReadOnly, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, IsAdminOnlyOrReadOnly, HasSchoolAccess]
 
 
     def get_serializer_context(self):
@@ -189,7 +194,7 @@ class StaffMemberViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
     """CRUD for staff members with search, filter, and dashboard stats."""
     required_module = 'hr'
     queryset = StaffMember.objects.all()
-    permission_classes = [IsAuthenticated, IsManagerOrAdminOrReadOnly, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, IsAdminOnlyOrReadOnly, HasSchoolAccess]
 
 
     def get_serializer_class(self):
@@ -795,7 +800,7 @@ class SalaryStructureViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mo
     """CRUD for salary structures."""
     required_module = 'hr'
     queryset = SalaryStructure.objects.all()
-    permission_classes = [IsAuthenticated, IsManagerOrAdminOrReadOnly, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, IsAdminOnlyOrReadOnly, HasSchoolAccess]
 
 
     def get_serializer_class(self):
@@ -931,6 +936,12 @@ class PayslipViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         staff_member = self.request.query_params.get('staff_member')
         if staff_member:
             queryset = queryset.filter(staff_member_id=staff_member)
+
+        # Self-service (2026-09): Manager only ever sees their own payslips,
+        # never the whole school's — Manager lost the full HR_WRITE_ROLES
+        # payroll view/generate access it used to have.
+        if get_effective_role(self.request) == 'MANAGER':
+            queryset = queryset.filter(staff_member__user=self.request.user)
 
         return queryset
 
@@ -1097,9 +1108,15 @@ class PayslipViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         payslip.save()
         return Response(PayslipSerializer(payslip).data)
 
-    @action(detail=False, methods=['get'])
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated, IsAdminOnlyOrReadOnly, HasSchoolAccess])
     def payroll_summary(self, request):
-        """Get payroll summary for a given month/year."""
+        """Get payroll summary for a given month/year.
+
+        2026-09: Admin-only override — this is a school-wide aggregate
+        (unlike the rest of PayslipViewSet, which Manager can read self-
+        scoped to their own payslip), so it stays outside Manager's
+        self-service tier.
+        """
         school_id = _resolve_school_id(request)
         if not school_id:
             return Response({'detail': 'No school selected.'}, status=400)
@@ -1287,6 +1304,11 @@ class LeavePolicyViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelV
     """CRUD for leave policies."""
     required_module = 'hr'
     queryset = LeavePolicy.objects.all()
+    # Stays IsManagerOrAdminOrReadOnly (read-only for everyone, not
+    # IsAdminOnlyOrReadOnly): Manager/Teacher/Staff all need to read the
+    # available leave TYPES to apply for their own leave (self-service form),
+    # same as before 2026-09 — only write (defining/editing policies) is
+    # admin-only, enforced by HR_WRITE_ROLES no longer including MANAGER.
     permission_classes = [IsAuthenticated, IsManagerOrAdminOrReadOnly, HasSchoolAccess]
 
 
@@ -1384,10 +1406,11 @@ class LeaveApplicationViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
                 Q(staff_member__employee_id__icontains=search)
             )
 
-        # Self-service: Teacher/Staff only ever see their own leave
+        # Self-service: Teacher/Staff/Manager only ever see their own leave
         # applications, never the whole school's — matches
         # CanManageOwnLeaveApplication's create/cancel-own-only write policy.
-        if get_effective_role(self.request) in ('TEACHER', 'STAFF'):
+        # Manager joined this tier 2026-09 (used to see/approve everyone's).
+        if get_effective_role(self.request) in ('TEACHER', 'STAFF', 'MANAGER'):
             queryset = queryset.filter(staff_member__user=self.request.user)
 
         return queryset
@@ -1480,6 +1503,17 @@ class LeaveApplicationViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.M
         staff_member = request.query_params.get('staff_member')
         if not staff_member:
             return Response({'detail': 'staff_member query param required.'}, status=400)
+
+        # Self-service (2026-09): Teacher/Staff/Manager can only ever ask
+        # for their own leave balance — this action had no ownership check
+        # at all before, so any staff_member id could be passed regardless
+        # of who was asking.
+        if get_effective_role(request) in HR_SELF_SERVICE_ROLES:
+            owns_record = StaffMember.objects.filter(
+                id=staff_member, user_id=request.user.id,
+            ).exists()
+            if not owns_record:
+                return Response({'detail': 'You can only view your own leave balance.'}, status=403)
 
         current_year = date.today().year
         policies = LeavePolicy.objects.filter(school_id=school_id, is_active=True)
@@ -1577,13 +1611,13 @@ class StaffAttendanceViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mo
         if status_filter:
             queryset = queryset.filter(status=status_filter.upper())
 
-        # Self-service (2026-09): Teacher/Staff only ever see their own
-        # attendance record, never the whole school's — this endpoint had no
-        # self-scoping at all before (any authenticated read-only role could
-        # pull every staff member's attendance), same gap Leave had prior to
-        # its own self-service pass. Write access stays admin/Manager-only
-        # via IsManagerOrAdminOrReadOnly, so this is a pure read-scoping fix.
-        if get_effective_role(self.request) in ('TEACHER', 'STAFF'):
+        # Self-service (2026-09): Teacher/Staff/Manager only ever see their
+        # own attendance record, never the whole school's — this endpoint had
+        # no self-scoping at all before (any authenticated read-only role
+        # could pull every staff member's attendance), same gap Leave had
+        # prior to its own self-service pass. Manager joined this tier
+        # 2026-09 after losing full HR write access.
+        if get_effective_role(self.request) in ('TEACHER', 'STAFF', 'MANAGER'):
             queryset = queryset.filter(staff_member__user=self.request.user)
 
         return queryset
@@ -1754,15 +1788,16 @@ class StaffAttendanceViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mo
 
         staff_filter = {'school_id': school_id, 'is_active': True}
 
-        # Self-service (2026-09): Teacher/Staff only ever get their own
-        # summary row — this action previously ignored the `staff_member`
-        # query param entirely and returned every staff member's summary,
-        # same gap as get_queryset had (the Staff dashboard widget already
-        # sends `staff_member=<own id>` and just picks its own row out of
-        # the full-school response client-side). Admin/Manager can still
-        # pass `staff_member` to scope the summary to one person.
+        # Self-service (2026-09): Teacher/Staff/Manager only ever get their
+        # own summary row — this action previously ignored the
+        # `staff_member` query param entirely and returned every staff
+        # member's summary, same gap as get_queryset had (the Staff
+        # dashboard widget already sends `staff_member=<own id>` and just
+        # picks its own row out of the full-school response client-side).
+        # Manager joined this tier 2026-09; admins can still pass
+        # `staff_member` to scope the summary to one person.
         role = get_effective_role(request)
-        if role in ('TEACHER', 'STAFF'):
+        if role in ('TEACHER', 'STAFF', 'MANAGER'):
             staff_filter['user'] = request.user
         else:
             staff_member_param = request.query_params.get('staff_member')
@@ -1845,7 +1880,7 @@ class PerformanceAppraisalViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewse
     required_module = 'hr'
     """CRUD for performance appraisals."""
     queryset = PerformanceAppraisal.objects.all()
-    permission_classes = [IsAuthenticated, IsManagerOrAdminOrReadOnly, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, IsAdminOnlyOrReadOnly, HasSchoolAccess]
 
 
     def get_serializer_class(self):
@@ -1904,7 +1939,7 @@ class StaffQualificationViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets
     required_module = 'hr'
     """CRUD for staff qualifications."""
     queryset = StaffQualification.objects.all()
-    permission_classes = [IsAuthenticated, IsManagerOrAdminOrReadOnly, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, IsAdminOnlyOrReadOnly, HasSchoolAccess]
 
 
     def get_serializer_class(self):
@@ -1965,7 +2000,7 @@ class StaffDocumentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mode
     required_module = 'hr'
     """CRUD for staff documents."""
     queryset = StaffDocument.objects.all()
-    permission_classes = [IsAuthenticated, IsManagerOrAdminOrReadOnly, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, IsAdminOnlyOrReadOnly, HasSchoolAccess]
     # JSON for edits that only touch title/notes/expiry_date; multipart when the
     # request carries a new/replacement file (see create()/update() below).
     parser_classes = [MultiPartParser, FormParser, JSONParser]
@@ -2095,7 +2130,7 @@ class StaffDocumentViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.Mode
 
 class StaffRiskView(APIView):
     """AI Staff Attrition / Leave-Abuse Risk Predictor."""
-    permission_classes = [IsAuthenticated, HasSchoolAccess]
+    permission_classes = [IsAuthenticated, IsAdminOnlyOrReadOnly, HasSchoolAccess]
 
     def get(self, request):
         from .staff_risk_service import StaffRiskService

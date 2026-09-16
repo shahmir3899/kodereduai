@@ -498,9 +498,10 @@ class FinanceRoleAccessPermission(permissions.BasePermission):
     """
     Finance access policy:
     - SUPER_ADMIN/SCHOOL_ADMIN/PRINCIPAL: full access
-    - MANAGER/ACCOUNTANT/DRIVER: read-only
+    - ACCOUNTANT/DRIVER: read-only
     - TEACHER: only fee-collection scoped actions
-    - STAFF: no finance access
+    - STAFF/MANAGER: no finance access (Manager removed 2026-09: nav access
+      scoped down to Dashboard/Academics/Content Creation/Management only)
     """
     message = "You don't have permission to access this finance resource."
 
@@ -520,11 +521,11 @@ class FinanceRoleAccessPermission(permissions.BasePermission):
         if role in ADMIN_ROLES:
             return True
 
-        if role in ('MANAGER', 'ACCOUNTANT', 'DRIVER'):
+        if role in ('ACCOUNTANT', 'DRIVER'):
             return request.method in permissions.SAFE_METHODS
 
-        if role == 'STAFF':
-            self.message = "Staff users are not allowed to access finance endpoints."
+        if role in ('STAFF', 'MANAGER'):
+            self.message = "This role is not allowed to access finance endpoints."
             return False
 
         if role == 'TEACHER':
@@ -542,8 +543,10 @@ class InventoryRoleAccessPermission(permissions.BasePermission):
     """
     Inventory access policy:
     - SUPER_ADMIN/SCHOOL_ADMIN/PRINCIPAL: full access
-    - MANAGER/ACCOUNTANT/DRIVER: read-only
+    - ACCOUNTANT/DRIVER: read-only
     - TEACHER/STAFF: only their own assignment reads
+    - MANAGER: no access (removed 2026-09: nav access scoped down to
+      Dashboard/Academics/Content Creation/Management only)
     """
     message = "You don't have permission to access this inventory resource."
 
@@ -559,7 +562,7 @@ class InventoryRoleAccessPermission(permissions.BasePermission):
         if role in ADMIN_ROLES:
             return True
 
-        if role in ('MANAGER', 'ACCOUNTANT', 'DRIVER'):
+        if role in ('ACCOUNTANT', 'DRIVER'):
             return request.method in permissions.SAFE_METHODS
 
         if role in ('TEACHER', 'STAFF'):

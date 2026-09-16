@@ -15,6 +15,7 @@ export default function NotificationBell() {
     queryKey: ['notificationUnreadCount'],
     queryFn: () => notificationsApi.getUnreadCount(),
     refetchInterval: 30000, // Poll every 30s
+    staleTime: 15000,
   })
 
   // Recent notifications (when dropdown open)
@@ -24,6 +25,7 @@ export default function NotificationBell() {
       page_size: 8,
     }),
     enabled: open,
+    staleTime: 20000,
   })
 
   const markReadMutation = useMutation({

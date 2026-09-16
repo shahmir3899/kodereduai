@@ -122,8 +122,9 @@ function MyAttendanceView() {
 }
 
 export default function StaffAttendancePage() {
-  const { isTeacher, isStaffMember } = useAuth()
-  if (isTeacher || isStaffMember) return <MyAttendanceView />
+  const { isTeacher, isStaffMember, isManager } = useAuth()
+  // Manager joined this self-service tier 2026-09 (see LeaveManagementPage.jsx).
+  if (isTeacher || isStaffMember || isManager) return <MyAttendanceView />
   return <StaffAttendanceAdminView />
 }
 

@@ -157,6 +157,8 @@ class NotificationLog(models.Model):
             models.Index(fields=['school', 'status']),
             models.Index(fields=['recipient_user', 'status']),
             models.Index(fields=['school', 'event_type']),
+            models.Index(fields=['recipient_user', 'channel', 'read_at'], name='notif_recipient_unread_idx'),
+            models.Index(fields=['recipient_user', 'channel', '-created_at'], name='notif_recipient_feed_idx'),
         ]
 
     def __str__(self):

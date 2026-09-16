@@ -24,7 +24,7 @@ export default function NotificationsFeed({ limit = 5 }) {
   const { data, isLoading } = useQuery({
     queryKey: ['dashboardNotifications', limit, activeSchool?.id || 'all'],
     queryFn: () => notificationsApi.getMyNotifications({
-      limit,
+      page_size: limit,
       school_id: activeSchool?.id || undefined,
     }),
     staleTime: 2 * 60 * 1000,

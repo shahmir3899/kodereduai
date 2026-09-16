@@ -383,8 +383,11 @@ export function AuthProvider({ children }) {
       setTimeout(runDeferred, PRELOAD_TIER_B_DELAY_MS)
     }
 
-    addPrefetch(['dashboardNotifications', 5], () => notificationsApi.getMyNotifications({ limit: 5 }))
-    addPrefetch(['unreadCount'], () => notificationsApi.getUnreadCount())
+    addPrefetch(
+      ['dashboardNotifications', 5, school?.id || 'all'],
+      () => notificationsApi.getMyNotifications({ page_size: 5, school_id: school?.id || undefined }),
+    )
+    addPrefetch(['notificationUnreadCount'], () => notificationsApi.getUnreadCount())
 
     // Prime class filter datasets used across ClassSelector/useSessionClasses hooks.
     if (!isSuperAdmin && effectiveRole !== 'PARENT' && effectiveRole !== 'STUDENT') {
@@ -668,13 +671,10 @@ export function AuthProvider({ children }) {
         })
       }
     } else if (effectiveRole === 'MANAGER') {
-      if (isModuleAvailable({ moduleKey: 'hr', enabledModules, isSuperAdmin })) {
-        addPrefetch(['hrDashboardStats'], () => hrApi.getDashboardStats())
-        addPrefetch(['pendingLeaves'], () => hrApi.getLeaveApplications({ status: 'PENDING', page_size: 5 }))
-        addPrefetch(['payrollSummary', currentMonth, currentYear], () => hrApi.getPayrollSummary({ month: currentMonth, year: currentYear }))
-        addPrefetch(['staffAttendanceSummary', monthStart, today], () => hrApi.getAttendanceSummary({ date_from: monthStart, date_to: today }))
-        addPrefetch(['managerDayStatus', today], () => sessionsApi.getCalendarDayStatus({ date_from: today, date_to: today }))
-      }
+      // 2026-09: Manager's nav access scoped down to Dashboard/Academics/
+      // Content Creation/Management only — the HR dashboard/payroll/staff-
+      // attendance prefetches (school-wide, admin-level) were removed along
+      // with backend access (hr/permissions.py, IsAdminOnlyOrReadOnly).
       if (isModuleAvailable({ moduleKey: 'lms', enabledModules, isSuperAdmin })) {
         addPrefetch(['managerLessonPlansCount'], () => lmsApi.getLessonPlans({ page_size: 1 }))
         addPrefetch(['managerActiveAssignmentsCount'], () => lmsApi.getAssignments({ status: 'PUBLISHED', page_size: 1 }))
