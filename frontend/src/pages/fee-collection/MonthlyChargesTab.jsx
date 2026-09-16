@@ -4,7 +4,8 @@ import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
 import { useAuth } from '../../contexts/AuthContext'
 import { useToast } from '../../components/Toast'
-import { financeApi, studentsApi, classesApi } from '../../services/api'
+import { useClasses } from '../../hooks/useClasses'
+import { financeApi, studentsApi } from '../../services/api'
 import { getErrorMessage } from '../../utils/errorUtils'
 import {
   buildSessionClassOptions,
@@ -39,13 +40,7 @@ export default function MonthlyChargesTab() {
   }), [studentClassId, activeAcademicYear?.id, sessionClasses])
 
   // Classes list for selector
-  const { data: classesData } = useQuery({
-    queryKey: ['classes', activeSchool?.id],
-    queryFn: () => classesApi.getClasses({ page_size: 9999 }),
-    enabled: !!activeSchool?.id,
-    staleTime: 5 * 60_000,
-  })
-  const classList = classesData?.data?.results ?? classesData?.data ?? []
+  const { classes: classList } = useClasses(activeSchool?.id)
 
   const classOptions = useMemo(() => {
     if (!activeAcademicYear?.id) return classList

@@ -1,7 +1,9 @@
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { academicsApi, classesApi } from '../../services/api'
+import { academicsApi } from '../../services/api'
 import { useToast } from '../../components/Toast'
+import { useAuth } from '../../contexts/AuthContext'
+import { useClasses } from '../../hooks/useClasses'
 
 const COMMON_SUBJECTS = [
   'English', 'Urdu', 'Mathematics', 'Science', 'Social Studies',
@@ -14,6 +16,7 @@ const EMPTY_SUBJECT = { name: '', code: '', description: '' }
 export default function SubjectsStep({ onNext, refetchCompletion }) {
   const queryClient = useQueryClient()
   const { addToast } = useToast()
+  const { activeSchool } = useAuth()
   const [form, setForm] = useState(EMPTY_SUBJECT)
   const [errors, setErrors] = useState({})
   const [showForm, setShowForm] = useState(false)
@@ -32,12 +35,7 @@ export default function SubjectsStep({ onNext, refetchCompletion }) {
   })
   const subjects = subjectsRes?.data?.results || subjectsRes?.data || []
 
-  const { data: classesRes } = useQuery({
-    queryKey: ['classes'],
-    queryFn: () => classesApi.getClasses({ page_size: 200 }),
-    staleTime: 5 * 60_000,
-  })
-  const classes = classesRes?.data?.results || classesRes?.data || []
+  const { classes } = useClasses(activeSchool?.id)
 
   const { data: classSubjectsRes } = useQuery({
     queryKey: ['classSubjects'],

@@ -572,8 +572,17 @@ export function AuthProvider({ children }) {
             queryClient.setQueryData(['hrDashboardStats'], { data: data.hr })
           }
           if (data.finance != null) {
+            // Two separate consumers read this same payload under different keys:
+            // DashboardPage.jsx's compact finance tile (`financeSummaryDashboard`)
+            // and FinanceDashboardPage.jsx's fuller view (`feeSummaryDashboard`,
+            // note the extra 'MONTHLY' segment). Both must be seeded or one of the
+            // two pages silently cold-fetches on every visit.
             queryClient.setQueryData(
               ['financeSummaryDashboard', currentMonth, currentYear, activeAcademicYearId],
+              { data: data.finance },
+            )
+            queryClient.setQueryData(
+              ['feeSummaryDashboard', currentMonth, currentYear, 'MONTHLY', activeAcademicYearId],
               { data: data.finance },
             )
           }
@@ -613,6 +622,25 @@ export function AuthProvider({ children }) {
       }
       if (isModuleAvailable({ moduleKey: 'inventory', enabledModules, isSuperAdmin })) {
         addPrefetch(['inventoryDashboard'], () => inventoryApi.getDashboard(), 2 * 60 * 1000, 'B')
+      }
+      // Leadership academic insights (admissions/roster + curriculum coverage) — only
+      // fetched by DashboardPage when at least one of these module groups is enabled,
+      // matching the same gate used there (leadershipRosterGate / leadershipCurriculumGate).
+      if (
+        isModuleAvailable({ moduleKey: 'students', enabledModules, isSuperAdmin }) ||
+        isModuleAvailable({ moduleKey: 'admissions', enabledModules, isSuperAdmin }) ||
+        isModuleAvailable({ moduleKey: 'lms', enabledModules, isSuperAdmin }) ||
+        isModuleAvailable({ moduleKey: 'examinations', enabledModules, isSuperAdmin })
+      ) {
+        addPrefetch(
+          ['leadershipAcademicInsights', school.id, activeAcademicYearId, today],
+          () => bootstrapApi.getLeadershipAcademicInsights({
+            reference_date: today,
+            ...(activeAcademicYearId && { academic_year: activeAcademicYearId }),
+          }),
+          2 * 60 * 1000,
+          'B',
+        )
       }
       addPrefetch(['aiInsights'], () => tasksApi.getAIInsights(), 5 * 60 * 1000, 'B')
       // Preload full-month attendance for all classes in one request

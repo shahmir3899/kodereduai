@@ -4,9 +4,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useAcademicYear } from '../contexts/AcademicYearContext'
-import { studentsApi, classesApi, schoolsApi } from '../services/api'
+import { studentsApi, schoolsApi } from '../services/api'
 import { useToast } from '../components/Toast'
 import { useSessionClasses } from '../hooks/useSessionClasses'
+import { useClasses } from '../hooks/useClasses'
 import { getClassSelectorScope, getResolvedMasterClassId } from '../utils/classScope'
 import { canManageStudentLifecycle } from '../utils/accessPolicies'
 import { sortClassOptions } from '../utils/classOrdering'
@@ -137,13 +138,7 @@ export default function StudentsPage() {
   }, [isSuperAdmin, schoolsData, selectedSchoolId])
 
   // Fetch classes
-  const { data: classesData } = useQuery({
-    queryKey: ['classes', selectedSchoolId],
-    queryFn: () => classesApi.getClasses({ school_id: selectedSchoolId, page_size: 9999 }),
-    enabled: !!selectedSchoolId,
-    // Class list rarely changes mid-session — avoid refetching on every focus.
-    staleTime: 5 * 60_000,
-  })
+  const { classes: classesList } = useClasses(selectedSchoolId)
 
   // Fetch ALL students once for this school (client-side filtering)
   const { data: studentsData, isLoading } = useQuery({
@@ -488,7 +483,7 @@ export default function StudentsPage() {
 
   // Download Students Excel (or blank template if no students exist)
   const downloadExcelTemplate = async () => {
-    const dlClasses = classesData?.data?.results || classesData?.data || []
+    const dlClasses = classesList
     const selectedSchool = schools.find(s => s.id === selectedSchoolId)
 
     if (dlClasses.length === 0) {
@@ -651,7 +646,7 @@ export default function StudentsPage() {
           return
         }
 
-        const uploadClasses = classesData?.data?.results || classesData?.data || []
+        const uploadClasses = classesList
         const classMap = {}
         const classMapNoSpace = {} // Fallback for matching without spaces
         uploadClasses.forEach(cls => {
@@ -788,7 +783,7 @@ export default function StudentsPage() {
 
   const allStudents = studentsData?.data?.results || studentsData?.data || []
   const schools = schoolsData?.data?.results || schoolsData?.data || []
-  const classes = classesData?.data?.results || classesData?.data || []
+  const classes = classesList
 
   const occupiedRollsForSelectedClass = useMemo(() => {
     if (!resolvedStudentFormClassId) return []

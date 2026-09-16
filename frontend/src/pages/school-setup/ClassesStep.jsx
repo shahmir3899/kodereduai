@@ -1,7 +1,9 @@
 import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { classesApi } from '../../services/api'
 import { useToast } from '../../components/Toast'
+import { useAuth } from '../../contexts/AuthContext'
+import { useClasses } from '../../hooks/useClasses'
 import { GRADE_PRESETS, GRADE_LEVEL_LABELS } from '../../constants/gradePresets'
 
 const EMPTY_CLASS = { name: '', section: '', grade_level: '' }
@@ -10,26 +12,22 @@ const SECTION_LABELS = ['A', 'B', 'C', 'D', 'E']
 export default function ClassesStep({ onNext, refetchCompletion }) {
   const queryClient = useQueryClient()
   const { addToast } = useToast()
+  const { activeSchool } = useAuth()
   const [form, setForm] = useState(EMPTY_CLASS)
   const [errors, setErrors] = useState({})
   const [showForm, setShowForm] = useState(false)
   const [quickMode, setQuickMode] = useState(false)
   const [selectedPresets, setSelectedPresets] = useState([])
 
-  const { data: classesRes, isLoading } = useQuery({
-    queryKey: ['classes'],
-    queryFn: () => classesApi.getClasses({ page_size: 200 }),
-    // Shared with the other setup-wizard steps that read the same class list —
-    // avoid refetching on every step navigation.
-    staleTime: 5 * 60_000,
-  })
-
-  const classes = classesRes?.data?.results || classesRes?.data || []
+  // Shared with the other setup-wizard steps and the rest of the app that
+  // read the same class list — avoid refetching on every step navigation.
+  const { classes, isLoading } = useClasses(activeSchool?.id)
 
   const createMut = useMutation({
     mutationFn: (data) => classesApi.createClass(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['classes'] })
+      queryClient.invalidateQueries({ queryKey: ['classesManagement'] })
       refetchCompletion()
       addToast('Class added!', 'success')
       setForm(EMPTY_CLASS)
@@ -61,6 +59,7 @@ export default function ClassesStep({ onNext, refetchCompletion }) {
     },
     onSuccess: (results) => {
       queryClient.invalidateQueries({ queryKey: ['classes'] })
+      queryClient.invalidateQueries({ queryKey: ['classesManagement'] })
       refetchCompletion()
       addToast(`${results.length} classes created!`, 'success')
       setQuickMode(false)
@@ -72,6 +71,7 @@ export default function ClassesStep({ onNext, refetchCompletion }) {
     mutationFn: (id) => classesApi.deleteClass(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['classes'] })
+      queryClient.invalidateQueries({ queryKey: ['classesManagement'] })
       refetchCompletion()
       addToast('Class removed', 'success')
     },

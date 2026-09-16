@@ -142,6 +142,19 @@ def _get_finance_section(school_id, month, year, academic_year_id):
     status_counts = payments.values('status').annotate(count=Count('id'))
     counts = {item['status']: item['count'] for item in status_counts}
 
+    # Per-category breakdown (monthly categories) — same shape as
+    # FeePaymentViewSet.monthly_summary's by_category, since FinanceDashboardPage
+    # reads this field from whichever of the two responses populated its cache.
+    by_category = payments.filter(
+        fee_type='MONTHLY', monthly_category__isnull=False
+    ).values(
+        'monthly_category__id', 'monthly_category__name'
+    ).annotate(
+        total_due=Sum('amount_due'),
+        total_collected=Sum('amount_paid'),
+        count=Count('id'),
+    ).order_by('monthly_category__name')
+
     return {
         'month': month,
         'year': year,
@@ -151,6 +164,16 @@ def _get_finance_section(school_id, month, year, academic_year_id):
         'paid_count': counts.get('PAID', 0),
         'partial_count': counts.get('PARTIAL', 0),
         'unpaid_count': counts.get('UNPAID', 0),
+        'by_category': [
+            {
+                'category_id': item['monthly_category__id'],
+                'category_name': item['monthly_category__name'],
+                'total_due': str(item['total_due']),
+                'total_collected': str(item['total_collected']),
+                'count': item['count'],
+            }
+            for item in by_category
+        ],
     }
 
 

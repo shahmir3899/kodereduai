@@ -80,7 +80,7 @@ export default function LetterComposerPage() {
   const loadingSchools = false
 
   const { data: staffRes, isLoading: loadingStaff } = useQuery({
-    queryKey: ['staffList'],
+    queryKey: ['staff', 'letterComposer', 'ACTIVE'],
     queryFn: () => hrApi.getStaff({ page_size: 200, employment_status: 'ACTIVE' }),
     enabled: recipientMode === 'employee' && showPicker,
   })

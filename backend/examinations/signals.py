@@ -1,11 +1,12 @@
 from copy import deepcopy
 
+from django.core.cache import cache
 from django.db.models import F
-from django.db.models.signals import pre_save, post_save
+from django.db.models.signals import pre_save, post_save, post_delete
 from django.dispatch import receiver
 from django.utils import timezone
 
-from examinations.models import PaperQuestion, Question, QuestionRevision
+from examinations.models import GradeScale, PaperQuestion, Question, QuestionRevision
 from examinations.tasks import embed_question
 from core.task_utils import call_task
 from core.task_utils import call_task
@@ -145,3 +146,11 @@ def update_question_reuse_tracking(sender, instance, created, **kwargs):
         last_used_in_id=instance.exam_paper_id,
         last_used_at=timezone.now(),
     )
+
+
+@receiver([post_save, post_delete], sender=GradeScale)
+def bust_grade_scale_list_cache(sender, instance, **kwargs):
+    if not instance.school_id:
+        return
+    cache.delete(f'grade-scales:list:{instance.school_id}:true')
+    cache.delete(f'grade-scales:list:{instance.school_id}:false')

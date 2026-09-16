@@ -68,7 +68,10 @@ export default function ClassesGradesPage() {
   }, [isSuperAdmin, schoolsData, selectedSchoolId])
 
   const { data: classesRes, isLoading } = useQuery({
-    queryKey: ['classes', selectedSchoolId],
+    // Distinct key from the shared `useClasses(schoolId)` hook's ['classes', schoolId] —
+    // this page filters to is_active only and uses a smaller page_size, so it must not
+    // share a cache entry with unfiltered consumers (would silently swap each other's data).
+    queryKey: ['classesManagement', selectedSchoolId],
     queryFn: () => classesApi.getClasses({ school_id: selectedSchoolId, page_size: 200, is_active: true }),
     enabled: !!selectedSchoolId,
     // Class list rarely changes mid-session; create/update/delete mutations
@@ -110,6 +113,7 @@ export default function ClassesGradesPage() {
     mutationFn: (data) => classesApi.createClass(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['classes'] })
+      queryClient.invalidateQueries({ queryKey: ['classesManagement'] })
       closeClassModal()
       showSuccess('Class added!')
     },
@@ -123,6 +127,7 @@ export default function ClassesGradesPage() {
     mutationFn: ({ id, data }) => classesApi.updateClass(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['classes'] })
+      queryClient.invalidateQueries({ queryKey: ['classesManagement'] })
       closeClassModal()
       showSuccess('Class updated!')
     },
@@ -136,6 +141,7 @@ export default function ClassesGradesPage() {
     mutationFn: (id) => classesApi.deleteClass(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['classes'] })
+      queryClient.invalidateQueries({ queryKey: ['classesManagement'] })
       setDeleteConfirm(null)
       showSuccess('Class deleted!')
     },
@@ -1035,6 +1041,7 @@ export default function ClassesGradesPage() {
         <SectionAllocator onClose={() => {
           setShowAllocator(false)
           queryClient.invalidateQueries({ queryKey: ['classes'] })
+          queryClient.invalidateQueries({ queryKey: ['classesManagement'] })
         }} />
       )}
     </div>

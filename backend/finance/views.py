@@ -12,6 +12,7 @@ from io import BytesIO
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
+from django.core.cache import cache
 from django.db import transaction
 from django.db.models import Sum, Count, Q, Prefetch
 from rest_framework import viewsets, status
@@ -23,6 +24,7 @@ from django.http import FileResponse
 
 from core.permissions import IsSchoolAdmin, FinanceRoleAccessPermission, HasSchoolAccess, get_effective_role, ModuleAccessMixin, ADMIN_ROLES, _is_data_restricted_user, get_teacher_class_scope, get_teacher_session_class_scope, _get_session_class_student_ids
 from core.mixins import TenantQuerySetMixin, ensure_tenant_schools, ensure_tenant_school_id
+from .cache_utils import finance_cache_version
 from core.class_scope import resolve_class_scope
 from students.models import Student, Class
 from django.utils import timezone
@@ -102,6 +104,8 @@ def _is_staff_user(request):
     from core.permissions import STAFF_LEVEL_ROLES
     role = get_effective_role(request)
     return role in STAFF_LEVEL_ROLES
+
+
 
 
 def _get_staff_visible_accounts(school_id):
@@ -1868,18 +1872,25 @@ class ExpenseViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         if not school_id:
             return Response({'detail': 'No school associated with your account. Please contact an administrator.'}, status=400)
 
+        date_from = request.query_params.get('date_from')
+        date_to = request.query_params.get('date_to')
+        is_restricted = _is_data_restricted_user(request)
+        version = finance_cache_version(school_id)
+        cache_key = f'finance:expense-category-summary:{version}:{school_id}:{date_from}:{date_to}:{is_restricted}'
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return Response(cached)
+
         queryset = Expense.objects.filter(school_id=school_id).select_related('category')
 
         # Staff + PRINCIPAL: hide sensitive expenses and restrict to visible accounts
-        if _is_data_restricted_user(request):
+        if is_restricted:
             queryset = queryset.filter(is_sensitive=False)
             visible_accounts = _get_staff_visible_accounts(school_id)
             queryset = queryset.filter(
                 Q(account_id__in=visible_accounts) | Q(account__isnull=True)
             )
 
-        date_from = request.query_params.get('date_from')
-        date_to = request.query_params.get('date_to')
         if date_from:
             queryset = queryset.filter(date__gte=date_from)
         if date_to:
@@ -1902,10 +1913,12 @@ class ExpenseViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
 
         total = queryset.aggregate(total=Sum('amount'))['total'] or Decimal('0')
 
-        return Response({
+        payload = {
             'categories': result,
             'total': total,
-        })
+        }
+        cache.set(cache_key, payload, 60)
+        return Response(payload)
 
 
 class OtherIncomeViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewSet):
@@ -2224,6 +2237,14 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         date_from = request.query_params.get('date_from')
         date_to = request.query_params.get('date_to')
 
+        effective_role = get_effective_role(request)
+        is_staff = _is_staff_user(request)
+        version = finance_cache_version(school_id)
+        cache_key = f'finance:balances:{version}:{school_id}:{date_from}:{date_to}:{effective_role}:{is_staff}'
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return Response(cached)
+
         from schools.models import School
         try:
             school_obj = School.objects.select_related('organization').get(id=school_id)
@@ -2233,7 +2254,6 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
 
         # PRINCIPAL sees only their school's accounts (no shared/org-level)
         # SCHOOL_ADMIN and SUPER_ADMIN see all (school + shared)
-        effective_role = get_effective_role(request)
         is_principal = effective_role == 'PRINCIPAL'
 
         q = Q(school_id=school_id, is_active=True)
@@ -2241,7 +2261,6 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             q |= Q(school__isnull=True, organization_id=org_id, is_active=True)
         accounts = Account.objects.filter(q)
 
-        is_staff = _is_staff_user(request)
         if is_staff:
             accounts = accounts.filter(staff_visible=True)
 
@@ -2260,12 +2279,17 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
 
         grand_total = sum(r['net_balance'] for r in results)
 
-        return Response({
+        payload = {
             'accounts': results,
             'grand_total': grand_total,
             'date_from': date_from,
             'date_to': date_to,
-        })
+        }
+        # Short TTL — balances are financial data, so we trade a little staleness
+        # (at most 60s) for avoiding the ~5-6 queries per account on every dashboard
+        # load; finance/signals.py busts this immediately on any relevant write.
+        cache.set(cache_key, payload, 60)
+        return Response(payload)
 
     @action(detail=False, methods=['get'], url_path='ledger')
     def ledger(self, request):
@@ -2793,6 +2817,21 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         if not tenant_schools:
             return Response({'detail': 'No schools accessible.'}, status=400)
 
+        # Spans multiple schools, so (unlike balances() above) this doesn't use
+        # the per-school cache-version bump for exact invalidation — that would
+        # need coordinating a version per involved school. A flat 60s TTL is a
+        # simpler, deliberately-accepted staleness tradeoff for this cross-school
+        # aggregate view, which is hit far less often than the single-school one.
+        is_principal_role = get_effective_role(request) == 'PRINCIPAL'
+        cache_key = (
+            'finance:balances-all:'
+            f'{"-".join(str(sid) for sid in sorted(tenant_schools))}:'
+            f'{date_from}:{date_to}:{is_principal_role}'
+        )
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return Response(cached)
+
         schools = School.objects.filter(id__in=tenant_schools, is_active=True).order_by('name')
 
         # Determine org for shared accounts
@@ -2826,10 +2865,9 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
 
         # Shared (org-level) accounts — PRINCIPAL is branch-scoped and never
         # sees these, same exclusion as balances()/get_queryset().
-        is_principal = get_effective_role(request) == 'PRINCIPAL'
         shared_accounts = Account.objects.filter(
             school__isnull=True, organization_id__in=org_ids, is_active=True
-        ) if (org_ids and not is_principal) else Account.objects.none()
+        ) if (org_ids and not is_principal_role) else Account.objects.none()
 
         shared_results = []
         for account in shared_accounts:
@@ -2840,7 +2878,7 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
         shared_subtotal = sum(r['net_balance'] for r in shared_results)
         grand_total = sum(g['subtotal'] for g in groups) + shared_subtotal
 
-        return Response({
+        payload = {
             'groups': groups,
             'shared': {
                 'accounts': shared_results,
@@ -2849,7 +2887,9 @@ class AccountViewSet(ModuleAccessMixin, TenantQuerySetMixin, viewsets.ModelViewS
             'grand_total': grand_total,
             'date_from': date_from,
             'date_to': date_to,
-        })
+        }
+        cache.set(cache_key, payload, 60)
+        return Response(payload)
 
     @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated, IsSchoolAdmin, HasSchoolAccess])
     def close_month(self, request):
@@ -3274,6 +3314,12 @@ class FinanceReportsView(ModuleAccessMixin, APIView):
         date_to = request.query_params.get('date_to')
         is_staff = _is_staff_user(request)
 
+        version = finance_cache_version(school_id)
+        cache_key = f'finance:reports-summary:{version}:{school_id}:{date_from}:{date_to}:{is_staff}'
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return Response(cached)
+
         # Income from fee payments
         fee_qs = FeePayment.objects.filter(school_id=school_id)
         expense_qs = Expense.objects.filter(school_id=school_id)
@@ -3310,7 +3356,7 @@ class FinanceReportsView(ModuleAccessMixin, APIView):
         total_income = fee_income + other_income
         total_expenses = expense_qs.aggregate(total=Sum('amount'))['total'] or Decimal('0')
 
-        return Response({
+        payload = {
             'total_income': total_income,
             'fee_income': fee_income,
             'other_income': other_income,
@@ -3318,49 +3364,74 @@ class FinanceReportsView(ModuleAccessMixin, APIView):
             'balance': total_income - total_expenses,
             'date_from': date_from,
             'date_to': date_to,
-        })
+        }
+        cache.set(cache_key, payload, 60)
+        return Response(payload)
 
     def _monthly_trend(self, request, school_id):
-        """Get month-by-month income/expense data."""
+        """Get month-by-month income/expense data.
+
+        Grouped into one query per source table instead of one query per
+        month (previously `months_count` iterations x 3 aggregates each —
+        18 queries for the default 6-month trend).
+        """
         months_count = int(request.query_params.get('months', 6))
         today = date.today()
         is_staff = _is_staff_user(request)
         visible_accounts = _get_staff_visible_accounts(school_id) if is_staff else None
 
-        trend = []
+        month_pairs = []
         for i in range(months_count - 1, -1, -1):
-            # Calculate month/year going back
             m = today.month - i
             y = today.year
             while m <= 0:
                 m += 12
                 y -= 1
+            month_pairs.append((y, m))
 
-            fee_qs = FeePayment.objects.filter(
-                school_id=school_id, month=m, year=y
+        range_start = date(month_pairs[0][0], month_pairs[0][1], 1)
+        last_y, last_m = month_pairs[-1]
+        range_end = date(last_y, last_m, calendar.monthrange(last_y, last_m)[1])
+
+        # FeePayment has no continuous date field to range-filter on (just
+        # plain year/month columns), so match the exact set of months instead.
+        fee_month_q = Q()
+        for y, m in month_pairs:
+            fee_month_q |= Q(year=y, month=m)
+        fee_qs = FeePayment.objects.filter(school_id=school_id).filter(fee_month_q)
+        other_qs = OtherIncome.objects.filter(school_id=school_id, date__gte=range_start, date__lte=range_end)
+        expense_qs = Expense.objects.filter(school_id=school_id, date__gte=range_start, date__lte=range_end)
+
+        if is_staff:
+            fee_qs = fee_qs.filter(
+                Q(account_id__in=visible_accounts) | Q(account__isnull=True)
             )
-            other_qs = OtherIncome.objects.filter(
-                school_id=school_id, date__year=y, date__month=m,
+            other_qs = other_qs.filter(is_sensitive=False).filter(
+                Q(account_id__in=visible_accounts) | Q(account__isnull=True)
             )
-            expense_qs = Expense.objects.filter(
-                school_id=school_id, date__year=y, date__month=m,
+            expense_qs = expense_qs.filter(is_sensitive=False).filter(
+                Q(account_id__in=visible_accounts) | Q(account__isnull=True)
             )
 
-            if is_staff:
-                fee_qs = fee_qs.filter(
-                    Q(account_id__in=visible_accounts) | Q(account__isnull=True)
-                )
-                other_qs = other_qs.filter(is_sensitive=False).filter(
-                    Q(account_id__in=visible_accounts) | Q(account__isnull=True)
-                )
-                expense_qs = expense_qs.filter(is_sensitive=False).filter(
-                    Q(account_id__in=visible_accounts) | Q(account__isnull=True)
-                )
+        fee_by_month = {
+            (row['year'], row['month']): row['total']
+            for row in fee_qs.values('year', 'month').annotate(total=Sum('amount_paid'))
+        }
+        other_by_month = {
+            (row['date__year'], row['date__month']): row['total']
+            for row in other_qs.values('date__year', 'date__month').annotate(total=Sum('amount'))
+        }
+        expense_by_month = {
+            (row['date__year'], row['date__month']): row['total']
+            for row in expense_qs.values('date__year', 'date__month').annotate(total=Sum('amount'))
+        }
 
-            fee_income = fee_qs.aggregate(total=Sum('amount_paid'))['total'] or Decimal('0')
-            other_income = other_qs.aggregate(total=Sum('amount'))['total'] or Decimal('0')
+        trend = []
+        for y, m in month_pairs:
+            fee_income = fee_by_month.get((y, m)) or Decimal('0')
+            other_income = other_by_month.get((y, m)) or Decimal('0')
             income = fee_income + other_income
-            expense = expense_qs.aggregate(total=Sum('amount'))['total'] or Decimal('0')
+            expense = expense_by_month.get((y, m)) or Decimal('0')
 
             trend.append({
                 'month': m,

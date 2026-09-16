@@ -237,7 +237,7 @@ class ChapterReadSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at', 'updated_at']
 
     def get_topic_count(self, obj):
-        return obj.topics.count()
+        return len(obj.topics.all())
 
 
 class ChapterCreateSerializer(serializers.ModelSerializer):
@@ -274,7 +274,7 @@ class ChapterSummarySerializer(serializers.ModelSerializer):
         ]
 
     def get_topic_count(self, obj):
-        return obj.topics.count()
+        return len(obj.topics.all())
 
 
 class BookChapterOnlyReadSerializer(serializers.ModelSerializer):

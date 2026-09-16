@@ -89,21 +89,23 @@ export default function FinanceDashboardPage() {
     enabled: hasMultipleSchools,
   })
 
-  // Annual fee collection overview
-  const { data: annualPaymentsData } = useQuery({
+  // Annual fee collection overview — server-aggregated totals + by-category
+  // breakdown (fee_summary), instead of fetching every ANNUAL FeePayment row
+  // with nested student/account data just to sum it client-side.
+  const { data: annualSummaryRes } = useQuery({
     queryKey: ['annualFeeDashboard', currentYear, activeAcademicYear?.id],
-    queryFn: () => financeApi.getFeePayments({
+    queryFn: () => financeApi.getFeeSummary({
       fee_type: 'ANNUAL',
       year: currentYear,
       ...(activeAcademicYear?.id && { academic_year: activeAcademicYear.id }),
-      page_size: 9999,
     }),
   })
 
-  // Recent transfers (last 5)
+  // Recent transfers (last 5) — Transfer's default ordering is -date,-created_at,
+  // so the first page is already "most recent first"; no need to fetch every row.
   const { data: transfersData } = useQuery({
     queryKey: ['recentTransfers'],
-    queryFn: () => financeApi.getTransfers({ page_size: 9999 }),
+    queryFn: () => financeApi.getTransfers({ page_size: 5 }),
   })
 
   // Recent entries (admin only)
@@ -150,45 +152,27 @@ export default function FinanceDashboardPage() {
   const feeCollectionRate = feeTotalDue > 0 ? Math.round((feeTotalCollected / feeTotalDue) * 100) : 0
   const monthlyCategories = feeData?.by_category || []
 
-  const annualPayments = annualPaymentsData?.data?.results || annualPaymentsData?.data || []
+  const annualData = annualSummaryRes?.data
   const annualSummary = useMemo(() => {
-    const byCategory = {}
-    let totalDue = 0
-    let totalCollected = 0
-
-    annualPayments.forEach((payment) => {
-      const due = Number(payment.amount_due || 0)
-      const paid = Number(payment.amount_paid || 0)
-      const categoryId = payment.annual_category || null
-      const categoryName = payment.annual_category_name || 'Uncategorized'
-      const key = categoryId || categoryName
-
-      totalDue += due
-      totalCollected += paid
-
-      if (!byCategory[key]) {
-        byCategory[key] = {
-          category_id: categoryId,
-          category_name: categoryName,
-          total_due: 0,
-          total_collected: 0,
-          count: 0,
-        }
-      }
-
-      byCategory[key].total_due += due
-      byCategory[key].total_collected += paid
-      byCategory[key].count += 1
-    })
+    const totalDue = Number(annualData?.total_due || 0)
+    const totalCollected = Number(annualData?.total_collected || 0)
 
     return {
       total_due: totalDue,
       total_collected: totalCollected,
       total_pending: Math.max(0, totalDue - totalCollected),
       collection_rate: totalDue > 0 ? Math.round((totalCollected / totalDue) * 100) : 0,
-      by_category: Object.values(byCategory).sort((a, b) => (a.category_name || '').localeCompare(b.category_name || '')),
+      by_category: (annualData?.by_category || [])
+        .map((c) => ({
+          category_id: c.category_id,
+          category_name: c.category_name || 'Uncategorized',
+          total_due: Number(c.total_due || 0),
+          total_collected: Number(c.total_collected || 0),
+          count: c.count,
+        }))
+        .sort((a, b) => (a.category_name || '').localeCompare(b.category_name || '')),
     }
-  }, [annualPayments])
+  }, [annualData])
 
   const allTransfers = transfersData?.data?.results || transfersData?.data || []
   const recentTransfers = allTransfers.slice(0, 5)
@@ -436,7 +420,7 @@ export default function FinanceDashboardPage() {
             </Link>
           </div>
 
-          {annualPayments.length === 0 ? (
+          {annualSummary.by_category.length === 0 ? (
             <p className="text-sm text-gray-400 py-4 text-center">No annual fee records for this academic year</p>
           ) : (
             <div>

@@ -3,7 +3,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useAuth } from '../../contexts/AuthContext'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
-import { financeApi, studentsApi, classesApi } from '../../services/api'
+import { useClasses } from '../../hooks/useClasses'
+import { financeApi, studentsApi } from '../../services/api'
 import { getErrorMessage } from '../../utils/errorUtils'
 import {
   buildSessionClassOptions,
@@ -34,12 +35,7 @@ export default function AnnualChargesStudentTab() {
     sessionClasses,
   }), [studentClassId, activeAcademicYear?.id, sessionClasses])
 
-  const { data: classesData } = useQuery({
-    queryKey: ['classes'],
-    queryFn: () => classesApi.getClasses({ page_size: 9999 }),
-    staleTime: 5 * 60_000,
-  })
-  const classList = classesData?.data?.results ?? classesData?.data ?? []
+  const { classes: classList } = useClasses(activeSchool?.id)
 
   const classOptions = useMemo(() => {
     if (!activeAcademicYear?.id) return classList

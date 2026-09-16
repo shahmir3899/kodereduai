@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { financeApi, classesApi, sessionsApi } from '../../services/api'
+import { financeApi, sessionsApi } from '../../services/api'
 import { useToast } from '../../components/Toast'
+import { useAuth } from '../../contexts/AuthContext'
+import { useClasses } from '../../hooks/useClasses'
 
 const ACCOUNT_TYPES = [
   { value: 'CASH', label: 'Cash', color: 'bg-green-100 text-green-800' },
@@ -23,6 +25,7 @@ const EMPTY_FEE = { monthly_amount: '', fee_type: 'MONTHLY', class_obj: '', effe
 export default function FinanceStep({ onNext, refetchCompletion }) {
   const queryClient = useQueryClient()
   const { addToast } = useToast()
+  const { activeSchool } = useAuth()
   const [activeTab, setActiveTab] = useState('accounts')
   const [accountForm, setAccountForm] = useState(EMPTY_ACCOUNT)
   const [feeForm, setFeeForm] = useState(EMPTY_FEE)
@@ -42,14 +45,9 @@ export default function FinanceStep({ onNext, refetchCompletion }) {
   })
   const feeStructures = feeStructuresRes?.data?.results || feeStructuresRes?.data || []
 
-  const { data: classesRes } = useQuery({
-    queryKey: ['classes'],
-    queryFn: () => classesApi.getClasses({ page_size: 200 }),
-    // Shared with the other setup-wizard steps that read the same class list —
-    // avoid refetching on every step navigation.
-    staleTime: 5 * 60_000,
-  })
-  const classes = classesRes?.data?.results || classesRes?.data || []
+  // Shared with the other setup-wizard steps and the rest of the app that
+  // read the same class list — avoid refetching on every step navigation.
+  const { classes } = useClasses(activeSchool?.id)
 
   const { data: yearsRes } = useQuery({
     queryKey: ['academicYears'],

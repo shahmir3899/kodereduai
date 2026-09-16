@@ -470,8 +470,8 @@ function App() {
             <Route path="attendance/upload" element={<Navigate to="/attendance/manual-entry" replace />} />
             <Route path="attendance/review" element={<Navigate to="/attendance/manual-entry" replace />} />
             <Route path="attendance/records" element={<Navigate to="/attendance/register" replace />} />
-            <Route path="settings" element={<SchoolRoute><SettingsPage /></SchoolRoute>} />
-            <Route path="school-setup" element={<SchoolRoute><SchoolSetupPage /></SchoolRoute>} />
+            <Route path="settings" element={<SchoolRoute><AdminPrincipalRoute><SettingsPage /></AdminPrincipalRoute></SchoolRoute>} />
+            <Route path="school-setup" element={<SchoolRoute><AdminPrincipalRoute><SchoolSetupPage /></AdminPrincipalRoute></SchoolRoute>} />
             <Route path="accuracy" element={<Navigate to="/attendance?tab=analytics" replace />} />
 
             <Route path="students" element={<SchoolRoute><ModuleRoute module="students"><ManagementRoute teacherAllowed><StudentsPage /></ManagementRoute></ModuleRoute></SchoolRoute>} />

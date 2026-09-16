@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { financeApi, classesApi, studentsApi } from '../../services/api'
+import { financeApi, studentsApi } from '../../services/api'
 import { useBackgroundTask } from '../../hooks/useBackgroundTask'
+import { useClasses } from '../../hooks/useClasses'
 
 const formatGenerationPeriod = (month, year) => new Date(year, month - 1).toLocaleString('en-US', { month: 'short', year: 'numeric' })
 
@@ -14,11 +15,7 @@ export function useFeeSetup({ academicYearId, feeType, studentClassId, structure
   const [bulkEffectiveFrom, setBulkEffectiveFrom] = useState(new Date().toISOString().split('T')[0])
 
   // Reference data
-  const { data: classes } = useQuery({
-    queryKey: ['classes'],
-    queryFn: () => classesApi.getClasses({ page_size: 9999 }),
-    staleTime: 5 * 60_000,
-  })
+  const { classes: classList } = useClasses()
 
   const { data: accountsData } = useQuery({
     queryKey: ['accounts'],
@@ -121,7 +118,6 @@ export function useFeeSetup({ academicYearId, feeType, studentClassId, structure
   })
 
   // Derived data
-  const classList = classes?.data?.results || classes?.data || []
   const classStudents = classStudentsData?.data?.results || classStudentsData?.data || []
   const classStructures = classFeeStructures?.data?.results || classFeeStructures?.data || []
   const allStructuresList = allStructures?.data?.results || allStructures?.data || []

@@ -1,8 +1,9 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { financeApi, classesApi } from '../../services/api'
+import { financeApi } from '../../services/api'
 import { useAcademicYear } from '../../contexts/AcademicYearContext'
 import { useSessionClasses } from '../../hooks/useSessionClasses'
+import { useClasses } from '../../hooks/useClasses'
 import { useToast } from '../../components/Toast'
 import { getErrorMessage } from '../../utils/errorUtils'
 import {
@@ -38,12 +39,7 @@ export default function MonthlyChargesCardView() {
   const { sessionClasses } = useSessionClasses(activeAcademicYear?.id)
 
   // Fetch all classes
-  const { data: classesData } = useQuery({
-    queryKey: ['classes'],
-    queryFn: () => classesApi.getClasses({ page_size: 9999 }),
-    staleTime: 5 * 60_000,
-  })
-  const classList = classesData?.data?.results ?? classesData?.data ?? []
+  const { classes: classList } = useClasses()
 
   // Build session-labeled class options
   const classOptions = useMemo(() => {

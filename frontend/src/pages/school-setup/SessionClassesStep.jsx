@@ -14,7 +14,10 @@ export default function SessionClassesStep({ refetchCompletion }) {
   const { sessionClasses, isLoading } = useSessionClasses(activeAcademicYear?.id, activeSchool?.id)
 
   const { data: classesRes } = useQuery({
-    queryKey: ['classes', activeSchool?.id],
+    // Distinct from the shared `useClasses(schoolId)` hook's ['classes', schoolId] —
+    // this fetches is_active-only classes, so it must not share a cache entry with
+    // unfiltered consumers.
+    queryKey: ['classes', activeSchool?.id, 'active-only'],
     queryFn: () => classesApi.getClasses({ school_id: activeSchool?.id, page_size: 200, is_active: true }),
     enabled: !!activeSchool?.id,
     staleTime: 5 * 60_000,

@@ -34,6 +34,10 @@ vi.mock('../../../hooks/useBackgroundTask', () => ({
   },
 }))
 
+vi.mock('../../../hooks/useClasses', () => ({
+  useClasses: () => ({ classes: [], isLoading: false, error: null }),
+}))
+
 import { useFeeSetup } from '../useFeeSetup'
 
 describe('useFeeSetup generation invalidation parity', () => {

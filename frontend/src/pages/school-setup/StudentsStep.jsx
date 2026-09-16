@@ -1,7 +1,9 @@
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { studentsApi, classesApi, sessionsApi } from '../../services/api'
+import { studentsApi, sessionsApi } from '../../services/api'
 import { useToast } from '../../components/Toast'
+import { useAuth } from '../../contexts/AuthContext'
+import { useClasses } from '../../hooks/useClasses'
 import { GRADE_LEVEL_LABELS } from '../../constants/gradePresets'
 
 const EMPTY_STUDENT = { first_name: '', last_name: '', roll_number: '', class_obj: '', gender: '' }
@@ -9,6 +11,7 @@ const EMPTY_STUDENT = { first_name: '', last_name: '', roll_number: '', class_ob
 export default function StudentsStep({ onNext, refetchCompletion }) {
   const queryClient = useQueryClient()
   const { addToast } = useToast()
+  const { activeSchool } = useAuth()
   const [form, setForm] = useState(EMPTY_STUDENT)
   const [errors, setErrors] = useState({})
   const [showForm, setShowForm] = useState(false)
@@ -16,15 +19,9 @@ export default function StudentsStep({ onNext, refetchCompletion }) {
   const [bulkText, setBulkText] = useState('')
   const [filterClass, setFilterClass] = useState('')
 
-  // Queries
-  const { data: classesRes } = useQuery({
-    queryKey: ['classes'],
-    queryFn: () => classesApi.getClasses({ page_size: 200 }),
-    // Shared with the other setup-wizard steps that read the same class list —
-    // avoid refetching on every step navigation.
-    staleTime: 5 * 60_000,
-  })
-  const classes = classesRes?.data?.results || classesRes?.data || []
+  // Queries — shared with the other setup-wizard steps and the rest of the
+  // app that read the same class list.
+  const { classes } = useClasses(activeSchool?.id)
 
   const { data: yearsRes } = useQuery({
     queryKey: ['academicYears'],
